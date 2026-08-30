@@ -73,14 +73,13 @@ module.exports = {
     });
 
     // ---------- repOn ----------
-    t.caso("repOn: apagado de fábrica (Default-Off); se enciende con S.reporte=true y GM_xmlhttpRequest", () => {
+    t.caso("repOn: nace ENCENDIDO (política del dueño v17.58.2); el guard del canal sigue siendo real", () => {
       const c = cargar({ silencioso: true, defaultOff: true });
-      t.falso(c.api.repOn(), "de fábrica S.reporte=false (Default-off R1.8)");
+      t.cierto(c.api.repOn(), "de fábrica S.reporte=true: desde v17.58.2 la telemetría es obligatoria (no hay interruptor en Ajustes)");
+      c.api.__S.reporte = false;
+      t.falso(c.api.repOn(), "con el ajuste apagado (estado imposible por UI desde v17.58.2, pero la guarda sigue cortando el 100% de la red)");
       c.api.__S.reporte = true;
       t.cierto(c.api.repOn(), "con el ajuste encendido reporta");
-      c.api.__S.reporte = false;
-      t.falso(c.api.repOn());
-      c.api.__S.reporte = true;
       c.ctx.GM_xmlhttpRequest = undefined; // sin el permiso de Tampermonkey no hay canal
       t.falso(c.api.repOn());
     });

@@ -32,6 +32,10 @@ function crearDom() {
       children: [], attributes: {}, _listeners: {},
       innerHTML: "", textContent: "", value: "", id: "", className: "", href: "", download: "", type: "text", name: "", checked: false, disabled: false,
       appendChild(c) { c._parent = this; this.children.push(c); return c; },
+      // v17.58.2 — `append(...nodos)` (nativo en navegadores modernos): los renders en
+      // lote del modal de agendamiento lo usan para hacer UNA sola actualización de árbol
+      // en vez de un appendChild por nodo (rendimiento INP). El DOM falso lo imita.
+      append(...ns) { ns.forEach((n) => { n._parent = this; this.children.push(n); }); return undefined; },
       insertBefore(c) { c._parent = this; this.children.unshift(c); return c; },
       removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); c._parent = null; return c; },
       remove() { if (this._parent) this._parent.removeChild(this); },
@@ -78,9 +82,11 @@ function crearEntorno(opciones) {
     almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
   }
   // v14.2.0 — La migración de ESTRENO (vgl_v1420_estreno) enciende, una sola vez en el
-  // despliegue real, motorPortado/iaRedaccion/uxTelemetria/reporte. El banco verifica los
-  // valores DE FÁBRICA (todos apagados) y el comportamiento con cada bandera controlada a
-  // mano, así que aquí se marca como YA aplicada: el arnés no debe re-encender banderas.
+  // despliegue real, motorPortado/iaRedaccion (y, hasta v17.58.2, uxTelemetria/reporte —
+  // desde esa versión la telemetría nace encendida por política del dueño y se fuerza en
+  // S, así que la migración ya no la gobierna). El banco verifica los valores de fábrica
+  // y el comportamiento con cada bandera controlada a mano, así que aquí se marca como YA
+  // aplicada: el arnés no debe re-encender banderas.
   if (!("vgl_v1420_estreno" in almacen)) almacen["vgl_v1420_estreno"] = "1";
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),

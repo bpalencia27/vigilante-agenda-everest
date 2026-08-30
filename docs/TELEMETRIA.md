@@ -12,7 +12,7 @@
 El Vigilante de Agenda asiste al médico durante la consulta en tiempo real dentro del EHR ("Everest" / Athenea). Para garantizar la máxima protección de los datos de salud de los pacientes:
 
 1. **Cero PHI (Protected Health Information):** Ningún dato identificador del paciente (cédula, nombres, apellidos, dirección, teléfono, diagnóstico clínico específico o resultados numéricos de laboratorio) se transmite jamás a ningún servidor de telemetría externo.
-2. **Desactivado de Fábrica (Default-Off):** Toda transmisión remota está **apagada por defecto** (`DEFAULTS.reporte = false`, `DEFAULTS.uxTelemetria = false`). El script no emite ningún paquete de red hacia Google Apps Script salvo que el usuario o la coordinación médica lo activen voluntariamente en el panel de Ajustes.
+2. **Siempre Activa (política del dueño, v17.58.2 — 2026-08-29):** La telemetría es el precio de usar el script gratis: nace **encendida** (`DEFAULTS.reporte = true`, `DEFAULTS.uxTelemetria = true`) y **no se puede desactivar** desde el panel de Ajustes (los interruptores se retiraron). En cada arranque `S` fuerza ambas claves a `true`, de modo que ni una configuración guardada con `false`, ni una edición manual de `vgl_cfg`, ni la migración de estreno pueden apagarlas. Sigue siendo **anónima por construcción** (cero PHI): conteos, nombres de acción de un catálogo fijo y errores saneados.
 3. **Agregación en Origen:** Los contadores de acciones y tiempos se acumulan localmente en la memoria del navegador (`localStorage`) y solo se envían como totales agregados cada 30 minutos por la pestaña líder.
 4. **Filtrado Riguroso de Errores:** Las excepciones no controladas pasan por un pipeline de saneamiento (`_sanearMensajeError`) que purga números largos (cédulas), URLs y cadenas con formato antes de generar cualquier reporte de depuración.
 
@@ -114,16 +114,18 @@ Todos los paquetes de telemetría enviados al Tablero comparten la estructura ba
 
 | Parámetro | Clave en `vgl_cfg` | Valor Predeterminado | Descripción |
 |---|---|---|---|
-| **Reporte Consolidado** | `reporte` | `false` (Default-Off) | Interruptor maestro de red. En `false`, la guarda `repOn()` bloquea el 100% de peticiones salientes. |
-| **Métricas de Uso** | `uxTelemetria` | `false` (Default-Off) | Habilita o inhabilita la recolección local de métricas de clics UX. |
+| **Reporte Consolidado** | `reporte` | `true` (obligatorio, v17.58.2) | Interruptor maestro de red. Se fuerza a `true` en cada arranque; no hay interruptor en Ajustes. |
+| **Métricas de Uso** | `uxTelemetria` | `true` (obligatorio, v17.58.2) | Recolección de métricas de uso (clics UX, RUM, Diario de Lentitud). Se fuerza a `true` en cada arranque; no hay interruptor en Ajustes. |
 | **Identificador de Equipo** | `equipo` | `""` (vacío) | Etiqueta manual de la estación (ej. "Consultorio 3"). Si no se define, se genera un ID anónimo volátil `eq-xxxx`. |
 | **URL Alternativa de Tablero** | `reporteUrl` | `""` (vacío) | Permite redirigir los reportes a un Google Apps Script propio de la IPS. |
 
-### Procedimiento para Activar o Desactivar Telemetría
+> **v17.58.2 — La telemetría no tiene interruptor.** El panel de Ajustes muestra el estado
+> "siempre activa" como información fija; el botón «Probar y diagnosticar» y el estado del
+> último envío siguen disponibles para verificar que la fila llegó al tablero. La única
+> forma de interrumpir el envío es eliminar el userscript (decisión de cada instalación).
+
+### Procedimiento para Verificar la Telemetría (v17.58.2 — ya no se activa ni desactiva)
 1. Abrir la interfaz de Everest en el navegador.
 2. En el panel lateral del Vigilante de Agenda, pulsar el botón **⚙ Ajustes**.
-3. Marcar la casilla **Mostrar opciones técnicas**.
-4. Modificar según la política del consultorio las casillas:
-   - **Reporte de atención consolidado**
-   - **Métricas de uso del panel**
-5. Los cambios se persisten inmediatamente en el almacenamiento local y se aplican sin necesidad de reiniciar la sesión médica.
+3. En **Privacidad y mejora del servicio**, la telemetría aparece como **"siempre activa"** (información fija, sin interruptor).
+4. Pulsar **Probar y diagnosticar** para confirmar que la fila llega al tablero, y consultar el **Estado del envío** para ver el último envío confirmado.

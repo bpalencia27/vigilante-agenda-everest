@@ -2804,3 +2804,38 @@ La mutación se aplicó una sola vez, se corrió `TZ=America/Bogota node tests/r
 se confirmó el rojo exacto en la aserción de conteo (el sábado elegido pasa de 2 a 3
 llamadas) y se restauró. El banco completo quedó en **2.307/2.307** tras la restauración
 (la suite 15 ganó 1 caso: 161 → 162).
+
+## v17.58.2 — 29-ago-2026 (telemetría OBLIGATORIA + INP de la UI con atribución)
+
+Dos encargos del dueño en la misma tanda:
+
+1. **Política de telemetría** (decisión explícita del dueño, 29-ago): «necesito que la
+   telemetría esté encendida por defecto y no se pueda desactivar, es el precio de pagar
+   por usar el script gratis». `DEFAULTS.reporte`/`uxTelemetria` pasan a `true` y, sobre
+   todo, **S los fuerza a `true` en cada arranque** (ni una config guardada con `false`,
+   ni una edición manual de `vgl_cfg`, ni la migración de estreno los apagan). Los dos
+   interruptores de Ajustes se retiraron (se muestra «siempre activa» como información
+   fija). Se actualizaron las suites 09, 11, 23 y 31, que verificaban el viejo Default-off.
+2. **INP de la UI** (2.740 `rum.self.inp.poor` + 2.497 `needs_imp` en el export real, sin
+   decir qué interacción): (a) el INP ahora se reporta CON atribución
+   (`rum.self.inp.detalle.<etiqueta>.<cubeta>`, catálogo fijo de `_rageEtiqueta`) para que
+   el próximo export diga qué botón; (b) el render de turnos y los chips de día/labs se
+   montan en lote (`append(...)` = una sola actualización de árbol) en vez de un
+   `appendChild` por nodo; (c) los handlers de apertura, chip de día y especialidad del
+   modal anotan su fase con `_rumTramo` («agm.abrir», «agm.clickDia», «agm.clickEsp») en
+   el Diario de Lentitud — la infraestructura que la v17.6.78 dejó documentada como lista
+   pero sin llamadores.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **forzado de la política** | se retiran `S.reporte = true; S.uxTelemetria = true;` (una config guardada con `false` vuelve a ganar) | `suite_31` | *Telemetría: nace ENCENDIDA por política del dueño (v17.58.2); el forzado gana a una config guardada con false* → `el forzado gana a una config guardada con reporte=false (obtuvo false)` |
+| **atribución del INP** | se retira el `uxTrack("rum.self.inp.detalle…")` dentro del observer de eventos | `suite_23` | *_iniciarRumObserver: la interacción lenta se atribuye por el ELEMENTO que el médico tocó* → `el INP malo nuestro dice qué botón: agm-btn: esperaba 1 y obtuvo undefined` |
+| **render en lote** | en el render de turnos se vuelve a `slotsEl.appendChild(btn)` por turno (además del lote) | `suite_23` | *v17.58.2: los handlers … se montan en lote (INP)* → `y no queda un appendChild por turno (obtuvo true)` |
+| **fase del Diario de Lentitud** | en el handler del chip de día se vuelve a `cargarHoras()` a secas (sin `_rumTramo`) | `suite_23` | *v17.58.2: los handlers … anotan su fase con _rumTramo (INP)* → `el clic en un chip de día anota su fase (agm.clickDia) (obtuvo false)` |
+
+Las 4 mutaciones se aplicaron UNA a la vez, se corrió la suite señalada con
+`TZ=America/Bogota`, se confirmó el rojo exacto y se restauró cada una antes de la
+siguiente. El banco completo quedó en **2.308/2.308** tras la restauración final
+(suite_23 ganó 1 caso; suite_09/11/31 se actualizaron a la nueva política sin cambiar su
+número de casos). El harness ganó `append(...)` en el DOM falso (lo imita el render en
+lote); la doc de política quedó en `docs/TELEMETRIA.md`.

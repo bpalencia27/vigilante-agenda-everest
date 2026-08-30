@@ -7558,7 +7558,11 @@ _vglOfrecerDeshacer(btn);
     recordatorio: "07:30",    // avisa si a esta hora aún no hay PyM cargado ("" = nunca)
     baseAuto: true,           // bajar la base PyM de la sede UNA vez al día (por identificador)
     respaldoId: "",           // opcional: otro archivo de base (enlace o identificador)
-    reporte: false,           // reporte MÍNIMO al tablero (Default-off R1.8)
+    reporte: true,            // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): telemetría SIEMPRE
+                              // encendida, es el precio de usar el script gratis. Se fuerza
+                              // además en S (ver más abajo): ni la config guardada con false
+                              // ni una edición manual de vgl_cfg la apagan. Anónima por
+                              // construcción (cero PHI: ver docs/TELEMETRIA.md).
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
@@ -7576,16 +7580,20 @@ _vglOfrecerDeshacer(btn);
                               // administrador (nunca se adivina). Comodines {citaId} {correo} {eps} {nombre} {usuarioId}.
     sedeLabNombre: "",        // v15.9.0 — nombre de la sede que se imprime en el recordatorio de la toma.
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
-    uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
+    uxTelemetria: true,       // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): métricas de uso
+                              // SIEMPRE encendidas (misma política que `reporte` arriba).
+                              // El RUM, los contadores de acciones y el Diario de Lentitud
+                              // se consideran parte del servicio, no una opción.
     // v17.43.0 — DIARIO DE LENTITUD, y NO es lo mismo que `uxTelemetria`.
     // El médico reportó lentitud real en consulta pero "no sé cuándo" se dispara. El
     // observador LoAF que ya existía (_iniciarRumObserver) sabe atribuir si una tarea
     // larga fue NUESTRA o de Everest, pero solo contaba baldes agregados: perdía el
     // contexto, así que jamás podía responder "¿cuándo?". Esto añade la otra mitad: una
     // línea en la bitácora local por cada tarea larga NUESTRA.
-    // Nace ENCENDIDO, y eso exige justificarse frente a la regla Default-off R1.8:
-    //   · `uxTelemetria` gobierna los CONTADORES que pueden SALIR del equipo (uxTrack →
-    //     vgl_ux → repPost). Sigue apagado de fábrica y NO se toca aquí.
+    // Nace ENCENDIDO. Antes se justificaba frente a la regla Default-off R1.8 porque
+    // `uxTelemetria` (los CONTADORES que salen del equipo) iba apagado de fábrica; desde
+    // v17.58.2 la política del dueño es que la telemetría completa (reporte + uso) está
+    // SIEMPRE encendida, así que el Diario de Lentitud local no contradice nada.
     //   · `perfLog` gobierna solo la bitácora LOCAL (vglLog → localStorage), que nunca
     //     se envía a ninguna parte y ya pasa por sanitizePII en cada campo.
     // Lo que se guarda es el nombre de una fase nuestra y unos milisegundos. Cero PHI:
@@ -7732,6 +7740,17 @@ _vglOfrecerDeshacer(btn);
   // CHANGELOG.
 
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
+  // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago-2026): la telemetría es el precio de usar el
+  // script gratis. Nace ENCENDIDA y NO se puede desactivar: este forzado corre en CADA
+  // arranque, así que ni una config guardada con `false`, ni una edición manual de
+  // vgl_cfg, ni la migración de estreno (que ya no la necesita) pueden dejarla apagada.
+  // Los interruptores correspondientes se retiraron de Ajustes (renderSettings) y los
+  // guards de runtime (`if (S.uxTelemetria === false) return;`) quedan solo como red de
+  // seguridad frente a un estado imposible. La telemetría sigue siendo anónima por
+  // construcción: conteos, nombres de acción de un catálogo fijo y errores saneados —
+  // cero PHI (ver docs/TELEMETRIA.md).
+  S.reporte = true;
+  S.uxTelemetria = true;
   // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): capturada AQUÍ, antes de que
   // corra cualquier migración. La migración "estreno" (más abajo) la usaba para
   // distinguir instalación nueva de actualización, pero la leía DESPUÉS de que las
@@ -7771,11 +7790,11 @@ _vglOfrecerDeshacer(btn);
     // claves que ya no existen como default.
     // Migración v14.2.0 ESTRENO (decisión del médico para el arranque con 3 consultorios).
     // Enciende, UNA sola vez, las funciones nuevas y la telemetría de mejora del servicio.
-    // Los valores de FÁBRICA siguen en false (arranque conservador para instalaciones
-    // limpias sin esta marca); esta migración es el "sí, enciéndelo para mi sede" explícito.
-    // Como es de una sola pasada, si un médico luego lo apaga desde Ajustes, se queda
-    // apagado (la marca ya está puesta y la migración no vuelve a correr). La telemetría es
-    // de conteos anónimos SIN dato de paciente (misma barrera de PHI de todo el reporte).
+    // v17.58.2 — desde esta versión la telemetría completa (reporte + uxTelemetria) nace
+    // encendida y se fuerza SIEMPRE en S (política del dueño), así que esta migración ya
+    // solo es necesaria para motorPortado e iaRedaccion (las dos funciones que siguen
+    // naciendo apagadas y que el médico enciende una a una). Se conserva el resto del
+    // comportamiento original.
     // v17.6.8 — AUDITORÍA 5 MÓDULOS: sin guarda de versión, esta migración corría también
     // en CUALQUIER instalación nueva (sin vgl_cfg previo), activando el envío a Gemini y el
     // reporte remoto sin que el médico los hubiera encendido. Ahora solo aplica a equipos
@@ -9405,7 +9424,7 @@ _vglOfrecerDeshacer(btn);
     const pasos = [];
     const paso = (nombre, ok, detalle) => pasos.push({ paso: nombre, ok: !!ok, detalle: detalle || "" });
     try {
-      paso("Interruptor del envío (Ajustes → Reporte)", !!S.reporte, S.reporte ? "encendido" : "APAGADO en este equipo: nada sale de aquí");
+      paso("Estado del envío (v17.58.2: la telemetría es obligatoria)", !!S.reporte, S.reporte ? "encendido" : "APAGADO (estado imposible por UI desde v17.58.2)");
       const u = repUrl();
       paso("Dirección del panel", !!u && /^https:\/\/script\.google\.com\//.test(u), u ? "" : "sin dirección");
       paso("Permiso de red del navegador", typeof GM_xmlhttpRequest !== "undefined", typeof GM_xmlhttpRequest !== "undefined" ? "" : "falta el permiso del gestor de scripts");
@@ -22528,6 +22547,7 @@ _vglOfrecerDeshacer(btn);
       const centro = (_labFechaTomaElegidaManual && selectedLabDateInfo) ? selectedLabDateInfo.iso : centerIso;
       const range = calcDateRangeAroundIso(centro, 3);
       labChipsEl.innerHTML = "";
+      const _labChipsNodos = [];   // v17.58.2 — montar en lote (append(...) al final)
       const labLblEl = modal.querySelector("#vgl-lab-date-lbl");
 
       range.forEach((item) => {
@@ -22569,9 +22589,11 @@ _vglOfrecerDeshacer(btn);
             }
           } catch (e) {}
         });
-        labChipsEl.appendChild(btn);
+        _labChipsNodos.push(btn);
         if (item.isCenter) selectedLabDateInfo = item;
       });
+      // v17.58.2 — una sola actualización de árbol (rendimiento INP del clic en un chip).
+      labChipsEl.append(..._labChipsNodos);
       cargarHorasLab();
     }
 
@@ -22602,6 +22624,7 @@ _vglOfrecerDeshacer(btn);
       const range = calcRangoSondeoIso(isoBase);
       diaRangeActual = range;
       dayChipsEl.innerHTML = "";
+      const _chipsNodos = [];   // v17.58.2 — montar en lote (append(...) al final)
       const miToken = ++_sweepAgendaToken;
       const botonesPorIso = new Map();
       diaBotonesPorIso = botonesPorIso;
@@ -22640,12 +22663,16 @@ _vglOfrecerDeshacer(btn);
           selectedDateInfo = item;
           _controlElegidoManual = true;   // v15.4.0 — la regla labs-primero ya no lo mueve sola
           _labsAfinarToken++;   // v17.0.3 — el médico ya eligió día de control: no se le pisa después
-          cargarHoras();
+          // v17.58.2 — la fase de este clic se anota en el Diario de Lentitud (mide el
+          // trabajo SÍNCRONO del handler hasta el primer await: justo lo que paga el INP).
+          _rumTramo("agm.clickDia", () => cargarHoras());
         });
-        dayChipsEl.appendChild(btn);
+        _chipsNodos.push(btn);
         botonesPorIso.set(item.iso, btn);
         if (item.isCenter) selectedDateInfo = item;
       });
+      // v17.58.2 — una sola actualización de árbol: los chips del día se montan en lote.
+      dayChipsEl.append(..._chipsNodos);
       cargarHoras();
       _sondearAgendaDeCadaDia(range, botonesPorIso, miToken);
     }
@@ -22680,7 +22707,8 @@ _vglOfrecerDeshacer(btn);
         eb.classList.add("active");
         selectedEspId = parseInt(eb.getAttribute("data-esp") || "12", 10);
         selectedEspName = eb.getAttribute("data-name") || "Especialidad";
-        cargarHoras();
+        // v17.58.2 — fase del clic de especialidad en el Diario de Lentitud (INP).
+        _rumTramo("agm.clickEsp", () => cargarHoras());
       });
     });
 
@@ -23492,7 +23520,10 @@ _vglOfrecerDeshacer(btn);
       }
     });
 
-    cargarHoras((selectedTimeframe || PLAZO_POR_DEFECTO).m, (selectedTimeframe || PLAZO_POR_DEFECTO).d);
+    // v17.58.2 — fase de apertura del modal en el Diario de Lentitud: el montaje síncrono
+    // (HTML + queries + listeners + primer render de chips) es lo que paga el INP del clic
+    // que abre el modal; _rumTramo mide esa parte y la anota si pasa de 50 ms.
+    _rumTramo("agm.abrir", () => cargarHoras((selectedTimeframe || PLAZO_POR_DEFECTO).m, (selectedTimeframe || PLAZO_POR_DEFECTO).d));
   }
 
   // v12.3.28 — Modal ligero para cuando la cita de CONTROL ya se agendó hoy pero la
@@ -23682,6 +23713,7 @@ _vglOfrecerDeshacer(btn);
     function renderLabDayChipsSolo(centerIsoManual) {
       const range = calcDateRangeAroundIso(centerIsoManual || suggestedLab.iso, 3);
       labChipsEl.innerHTML = "";
+      const _labChipsNodosSolo = [];   // v17.58.2 — montar en lote (append(...) al final)
       range.forEach((item) => {
         const btn = document.createElement("button");
         btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
@@ -23693,9 +23725,10 @@ _vglOfrecerDeshacer(btn);
           selectedLabDateInfo = item;
           cargarHorasLabSolo();
         });
-        labChipsEl.appendChild(btn);
+        _labChipsNodosSolo.push(btn);
         if (item.isCenter) selectedLabDateInfo = item;
       });
+      labChipsEl.append(..._labChipsNodosSolo);   // v17.58.2 — una sola actualización de árbol
       cargarHorasLabSolo();
     }
     renderLabDayChipsSolo();
@@ -26121,7 +26154,10 @@ _vglOfrecerDeshacer(btn);
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Privacidad y mejora del servicio</div>
-        <div class="vgl-fld"><label>Ayudar a mejorar el Vigilante<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores, rendimiento, y aciertos/tiempos de la IA. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción. Puede apagarlo cuando quiera.</span></label>${sw("c-uxtel", S.uxTelemetria)}</div>
+        <!-- v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): la telemetría es el precio de usar el
+             script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
+             y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
+        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activa en este equipo</span></div>
       </div>
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
@@ -26168,7 +26204,8 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
 <!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
              arriba, a la sección siempre visible: son operativos, no técnicos. -->
-        <div class="vgl-fld"><label>Reporte de atención consolidado<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento.</span></label>${sw("c-rep", S.reporte)}</div>
+        <!-- v17.58.2 — mismo tratamiento que "Ayudar a mejorar": obligatoria, sin interruptor. -->
+        <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activo en este equipo</span></div>
         <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
@@ -26244,7 +26281,9 @@ _vglOfrecerDeshacer(btn);
     // comportamiento; la credencial compartida se guarda aparte y nunca se registra en
     // consola ni en telemetría.
     bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
-    bind("#c-uxtel", "uxTelemetria", (n) => n.checked);
+    // v17.58.2 — se retiró el interruptor de métricas de uso (política del dueño: la
+    // telemetría es obligatoria y no se apaga); su bind ya no existe. El estado de envío
+    // se muestra fijo en el panel de Ajustes.
     // v15.6.0 — cero ventanas del navegador: el resultado se dice con los avisos propios,
     // y el borrado usa DOBLE TOQUE en el mismo botón (armar → confirmar), sin confirm().
     const athSave = q("#c-athsave");
@@ -26308,7 +26347,8 @@ _vglOfrecerDeshacer(btn);
     bind("#c-base", "baseAuto", (n) => n.checked);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
     const spBtn = q("#c-spabrir"); if (spBtn) spBtn.addEventListener("click", () => { primeShareAccess(true); });
-    bind("#c-rep", "reporte", (n) => n.checked);
+    // v17.58.2 — se retiró el interruptor del reporte (obligatorio, política del dueño);
+    // el botón «Probar y diagnosticar» y el estado de envío siguen disponibles abajo.
     bind("#c-eq", "equipo", (n) => n.value);
     const repBtn = q("#c-repgo"); if (repBtn) repBtn.addEventListener("click", async () => {
       q("#c-repn").textContent = "Probando...";

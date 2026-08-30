@@ -87,12 +87,15 @@ module.exports = {
     const ventana = (c) => { try { c.api._uxVolcarBuffer(); return JSON.parse(c.env.storage.getItem("vgl_ux") || "null"); } catch (e) { return null; } };
 
     // ================= v15.7.0 — EMBUDO DE TELEMETRÍA, de inicio a fin =================
-    t.caso("repDiagnostico: con el envío APAGADO, la primera puerta lo dice sin rodeos", () => {
+    t.caso("repDiagnostico: con el envío APAGADO (estado imposible por UI desde v17.58.2), la primera puerta lo dice sin rodeos", () => {
       const c = cargar(cfgRed);
       c.api.__S.reporte = false;
       const d = c.api.repDiagnostico();
       const p1 = d[0];
-      t.cierto(p1.paso.includes("Interruptor"), "la primera puerta es el interruptor");
+      // v17.58.2 — el paso se llama "Estado del envío" (la telemetría es obligatoria); la
+      // guarda sigue siendo real: si S.reporte llega a false por un estado imposible, la
+      // primera puerta lo dice.
+      t.cierto(p1.paso.includes("Estado del envío"), "la primera puerta es el estado del envío");
       t.falso(p1.ok, "y está cerrada");
       t.cierto(/APAGADO/.test(p1.detalle), "con la causa en claro");
       t.cierto(d.length >= 6, "el embudo completo se revisa igual (" + d.length + " puertas)");
@@ -724,6 +727,11 @@ module.exports = {
       t.igual(ux.acciones["rum.self.inp.poor"], 1, "un botón nuestro lento sí es nuestro");
       t.igual(ux.acciones["rum.self.inp.needs_imp"], 1);
       t.igual(ux.acciones["rum.page.inp.poor"], 1, "y un formulario de Everest lento es de Everest");
+      // v17.58.2 — INP CON ATRIBUCIÓN: además de la cubeta agregada, la clave por etiqueta
+      // (catálogo fijo de _rageEtiqueta) dice QUÉ interacción fue, para poder arreglarla.
+      t.igual(ux.acciones["rum.self.inp.detalle.agm-btn.poor"], 1, "el INP malo nuestro dice qué botón: agm-btn");
+      t.igual(ux.acciones["rum.self.inp.detalle.agm-btn.needs_imp"], 1);
+      t.falso(!!ux.acciones["rum.self.inp.detalle.host.poor"], "un elemento de Everest lento NO fabrica detalle nuestro");
     });
 
     t.caso("_rumTramo: mide una función NUESTRA y devuelve su resultado intacto", () => {
@@ -734,6 +742,23 @@ module.exports = {
       let lanzo = false;
       try { c.api._rumTramo("tick", () => { throw new Error("x"); }); } catch (e) { lanzo = true; }
       t.cierto(lanzo, "ni se traga los errores de la función medida");
+    });
+
+    t.caso("v17.58.2: los handlers de interacción del modal de agendamiento anotan su fase con _rumTramo y el render de turnos se monta en lote (INP)", () => {
+      // v17.58.2 — el export real traía 2.740 rum.self.inp.poor SIN decir qué interacción.
+      // (1) Las fases de las interacciones del modal (lo que paga el INP del clic) se anotan
+      // en el Diario de Lentitud; (2) el render de turnos monta UNA sola actualización de
+      // árbol (append(...)) en vez de un appendChild por turno.
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(src.includes('_rumTramo("agm.abrir"'), "la apertura del modal anota su fase (agm.abrir)");
+      t.cierto(src.includes('_rumTramo("agm.clickDia"'), "el clic en un chip de día anota su fase (agm.clickDia)");
+      t.cierto(src.includes('_rumTramo("agm.clickEsp"'), "el clic de especialidad anota su fase (agm.clickEsp)");
+      const ini = src.indexOf("const _turnosNodos = []");
+      const fin = src.indexOf("_preseleccion.btn.classList.add");
+      t.cierto(ini >= 0 && fin > ini, "el render de turnos declara su lote");
+      const renderTurnos = src.slice(ini, fin);
+      t.cierto(/slotsEl\.append\(\.\.\._turnosNodos\)/.test(renderTurnos), "los turnos se montan en lote con append(...)");
+      t.falso(/slotsEl\.appendChild\(btn\)/.test(renderTurnos), "y no queda un appendChild por turno");
     });
 
     t.caso("_iniciarRumObserver: defensa en profundidad — si falla la construcción del observador de long tasks, el de INP se intenta igual (son independientes)", () => {
