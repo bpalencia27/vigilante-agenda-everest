@@ -18818,31 +18818,73 @@ _vglOfrecerDeshacer(btn);
   //  propio asistente acaba de confirmar. Decisión del médico: SOLO los
   //  datos de la cita —nada clínico sin confirmar—, y la preparación se
   //  consulta en el laboratorio.
+  //  v17.x.x — REFACTOR S+ (30-ago, aprobado en el canvas): tarjeta compacta
+  //  tipo recetario (A5 / media carta). Antes era una hoja genérica en Arial
+  //  con los datos en una tabla plana: la fecha y la hora —lo único que el
+  //  paciente necesita recordar— pesaban lo mismo que el radicado, no había
+  //  instrucciones de llegada y el pie usaba jerga interna. Ahora: franja de
+  //  identidad con la sede, fecha y hora como bloque central, recuadros de
+  //  Llegada y Preparación, y pie sanitizado. Una fila sin dato no se imprime
+  //  (la probó suite_62) y el nombre del paciente va escapado, igual que antes.
   //  Función PURA: devuelve el documento; quien lo abre es imprimirRecordatorioLab.
   // =====================================================================
   function _recordatorioLabHtml(d) {
     const x = d || {};
-    const fila = (rot, val) => val ? `<tr><th>${escapeHtml(rot)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
+    const sede = String(x.sede || "").trim() || "Laboratorio de la IPS";
+    const fecha = x.fechaLegible || x.fechaIso || "";
+    const hora = String(x.hora || "").trim();
+    const esc = (v) => escapeHtml(v == null ? "" : String(v));
+    const fila = (rot, val) => val ? `<div class="rc-row"><span class="rc-k">${esc(rot)}</span><span class="rc-v">${esc(String(val))}</span></div>` : "";
     return `<!doctype html><html lang="es"><head><meta charset="utf-8">`
       + `<title>Recordatorio de toma de laboratorio</title><style>`
-      + `body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:14px}`
-      + `h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;font-weight:normal;color:#444;margin:0 0 18px}`
-      + `table{border-collapse:collapse;margin:12px 0 18px}th,td{text-align:left;padding:6px 14px 6px 0;vertical-align:top}`
-      + `th{color:#444;font-weight:600;white-space:nowrap}.nota{border-top:1px solid #bbb;padding-top:10px;color:#333}`
-      + `.pie{margin-top:22px;color:#666;font-size:11px}@media print{body{margin:12mm}}`
+      + `@page{size:A5 portrait;margin:10mm}`
+      + `*{box-sizing:border-box;margin:0;padding:0}`
+      + `body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:#eef1f4;color:#17212b;display:flex;justify-content:center;padding:20px}`
+      + `.rc-card{width:420px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 18px 50px -20px rgba(15,50,60,.45);display:flex;flex-direction:column}`
+      + `.rc-bar{background:#0d9488;color:#ffffff;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}`
+      + `.rc-bar-l{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:8px}`
+      + `.rc-bar-r{font-size:10.5px;font-weight:700;opacity:.94;text-align:right;line-height:1.35}`
+      + `.rc-body{padding:16px 20px 18px;display:flex;flex-direction:column}`
+      + `.rc-title{font-size:17px;font-weight:800;letter-spacing:-.01em;line-height:1.2}`
+      + `.rc-sub{font-size:11.5px;color:#5b6b7b;margin-top:3px}`
+      + `.rc-fh{display:grid;grid-template-columns:1.35fr 1fr;gap:8px;margin:13px 0 2px}`
+      + `.rc-fh-cell{border:1.5px solid #0d9488;background:#f0fdfa;border-radius:9px;padding:8px 11px}`
+      + `.rc-fh-lbl{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e}`
+      + `.rc-fh-val{font-size:15px;font-weight:800;color:#0f3d3a;margin-top:2px;line-height:1.25}`
+      + `.rc-fh-val small{font-size:10.5px;font-weight:700;color:#0f766e}`
+      + `.rc-sec{margin-top:12px}`
+      + `.rc-sec-t{font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#8a99a8;border-bottom:1px solid #e3e9ef;padding-bottom:4px;margin-bottom:6px}`
+      + `.rc-row{display:flex;gap:8px;align-items:baseline;font-size:12px;padding:3px 0}`
+      + `.rc-k{min-width:96px;color:#5b6b7b;font-weight:600}`
+      + `.rc-v{font-weight:700;color:#17212b}`
+      + `.rc-call{display:flex;gap:8px;align-items:flex-start;margin-top:10px;border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5}`
+      + `.rc-call svg{width:14px;height:14px;flex:none;margin-top:1px}`
+      + `.rc-call.arrive{background:#f0fdfa;border:1px solid #99f6e4;color:#134e4a}`
+      + `.rc-call.arrive svg{color:#0d9488}`
+      + `.rc-call.prep{background:#fffbeb;border:1px solid #fde68a;color:#713f12}`
+      + `.rc-call.prep svg{color:#d97706}`
+      + `.rc-call b{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}`
+      + `.rc-pie{margin-top:auto;padding-top:10px;border-top:1px solid #e3e9ef;font-size:9.5px;color:#8a99a8;line-height:1.45}`
+      + `@media print{body{background:#ffffff;padding:0}.rc-card{width:100%;box-shadow:none;border-radius:0}}`
       + `</style></head><body>`
-      + `<h1>Recordatorio de toma de laboratorio</h1>`
-      + `<h2>Presente este papel el día de su toma de muestras.</h2>`
-      + `<table>`
+      + `<div class="rc-card">`
+      + `<div class="rc-bar"><span class="rc-bar-l">Toma de muestras</span><span class="rc-bar-r">${esc(sede)}</span></div>`
+      + `<div class="rc-body">`
+      + `<div class="rc-title">Recordatorio de toma de laboratorio</div>`
+      + `<div class="rc-sub">Presente este documento el día de la toma de muestras.</div>`
+      + (fecha || hora ? `<div class="rc-fh">`
+        + (fecha ? `<div class="rc-fh-cell"><div class="rc-fh-lbl">Fecha de la toma</div><div class="rc-fh-val">${esc(fecha)}</div></div>` : "")
+        + (hora ? `<div class="rc-fh-cell"><div class="rc-fh-lbl">Hora</div><div class="rc-fh-val">${esc(hora)}</div></div>` : "")
+        + `</div>` : "")
+      + `<div class="rc-sec"><div class="rc-sec-t">Datos de la cita</div>`
       + fila("Paciente", x.nombre)
       + fila("Documento", x.documento)
-      + fila("Fecha", x.fechaLegible || x.fechaIso)
-      + fila("Hora", x.hora)
-      + fila("Lugar", x.sede || "Laboratorio de la IPS")
       + fila("Número de la cita", x.radicado)
-      + `</table>`
-      + `<div class="nota">Consulte en el laboratorio la preparación que requiere su examen (por ejemplo, si necesita ayuno).</div>`
-      + `<div class="pie">Documento generado por el asistente de agenda para su comodidad. La cita quedó registrada en el sistema de laboratorio.</div>`
+      + `</div>`
+      + `<div class="rc-call arrive"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span><b>Llegada</b>Llegue 15 minutos antes de la hora indicada y presente su documento de identidad.</span></div>`
+      + `<div class="rc-call prep"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg><span><b>Preparación</b>Consulte en el laboratorio la preparación que requiere su examen (por ejemplo, si necesita ayuno).</span></div>`
+      + `<div class="rc-pie">Documento de recordatorio de su cita de laboratorio. Si no puede asistir, comuníquese con el laboratorio.</div>`
+      + `</div></div>`
       + `</body></html>`;
   }
 
@@ -19007,8 +19049,8 @@ _vglOfrecerDeshacer(btn);
         .filter(Boolean).join(" ");
       const bloqueLab = !lab ? "" : `
           ${ex.soloLab ? "" : `<div class="vgl-postcita-sep"></div>`}
-          <div class="vgl-postcita-lab">🧪 <b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
-          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">🖨️ Imprimir recordatorio de la toma</button>`;
+          <div class="vgl-postcita-lab"><b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
+          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">Imprimir recordatorio de la toma</button>`;
       panel.innerHTML = `
         <div class="vgl-postcita-card">
           <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
