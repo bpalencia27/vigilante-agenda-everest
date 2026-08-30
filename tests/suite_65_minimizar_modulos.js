@@ -130,9 +130,9 @@ module.exports = {
 
     t.caso("vglMinTituloDe: sin título usable cae en un genérico, nunca en 'undefined'", () => {
       const p = panelFalso(doc, "vgl-riesgo-modal", "   ");
-      t.igual(api.vglMinTituloDe(p), "Módulo del Vigilante", "título en blanco → genérico");
-      t.igual(api.vglMinTituloDe(null), "Módulo del Vigilante", "sin panel tampoco lanza");
-      t.igual(api.vglMinTituloDe({}), "Módulo del Vigilante", "un objeto sin querySelector tampoco");
+      t.igual(api.vglMinTituloDe(p), "Módulo de Centinela", "título en blanco → genérico");
+      t.igual(api.vglMinTituloDe(null), "Módulo de Centinela", "sin panel tampoco lanza");
+      t.igual(api.vglMinTituloDe({}), "Módulo de Centinela", "un objeto sin querySelector tampoco");
     });
 
     // ---------------------------------------------------------------

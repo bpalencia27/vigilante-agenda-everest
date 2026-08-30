@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.58.2
+// @version     18.0.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
-// @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
+// @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.58.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11008,7 +11008,7 @@ _vglOfrecerDeshacer(btn);
         textNode.style.setProperty("font-weight", "600", "important");
         t.insertBefore(textNode, t.firstChild);
       }
-      textNode.textContent = "🛡️ Vigilante PyM · " + msg;
+      textNode.textContent = "🛡️ Centinela PyM · " + msg;
 
       t.classList.add("vgl-sp-visible");
 
@@ -11688,7 +11688,7 @@ _vglOfrecerDeshacer(btn);
       return juntos.length > 40 ? juntos.slice(0, 39) + "…" : juntos;
     }
     if (base) return base.length > 40 ? base.slice(0, 39) + "…" : base;
-    return "Módulo del Vigilante";
+    return "Módulo de Centinela";
   }
 
   function vglMinBarra() {
@@ -27562,7 +27562,7 @@ _vglOfrecerDeshacer(btn);
       const anterior = GM_getValue("vgl_last_ver", "");
       const cambio = anterior !== VERSION;
       if (anterior && cambio) {
-        notify("AZUL", "✅ Vigilante actualizado", `Ya tiene la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
+        notify("AZUL", "✅ Centinela actualizado", `Ya tiene la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
       }
       if (cambio) {
         GM_setValue("vgl_last_ver", VERSION);
@@ -27776,7 +27776,7 @@ _vglOfrecerDeshacer(btn);
 
       const span = document.createElement("span");
       span.style.cssText = "color:var(--c-ambar,#fef3c7) !important;";
-      span.textContent = "⚠️ Atención: Se detectaron dos copias de Vigilante de Agenda activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
+      span.textContent = "⚠️ Atención: Se detectaron dos copias de Centinela activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
       aviso.appendChild(span);
 
       const btn = document.createElement("button");
@@ -28202,7 +28202,7 @@ _vglOfrecerDeshacer(btn);
     try { if (typeof GM_setValue !== "undefined") GM_setValue(OCULTO_KEY, nuevo ? "1" : ""); else localStorage.setItem(OCULTO_KEY, nuevo ? "1" : ""); } catch (e) {}
     _vglModoOcultoAplicar(nuevo);
     try { uxTrack(nuevo ? "vigilante.ocultar" : "vigilante.mostrar"); } catch (e) {}
-    if (!nuevo) { try { showToast("AZUL", "Vigilante visible", "Todo el asistente volvió a la pantalla. Ctrl+Shift+V (o el puntico «V») lo esconde de nuevo.", false); } catch (e) {} }
+    if (!nuevo) { try { showToast("AZUL", "Centinela visible", "Todo el asistente volvió a la pantalla. Ctrl+Shift+V (o el puntico «V») lo esconde de nuevo.", false); } catch (e) {} }
     return nuevo;
   }
   function _vglInstalarModoOculto() {

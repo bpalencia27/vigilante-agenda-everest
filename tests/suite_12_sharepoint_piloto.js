@@ -526,7 +526,7 @@ module.exports = {
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
       t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
-      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
+      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Centinela PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
       c.api.spToast("segundo aviso", 0);

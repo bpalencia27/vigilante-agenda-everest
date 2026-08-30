@@ -682,7 +682,7 @@ module.exports = {
       c.env.gm["vgl_last_ver"] = "1.0.0";
       c.api.avisarSiActualizado();
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Vigilante actualizado"));
+      t.cierto(capturas[0].title.includes("Centinela actualizado"));
       t.igual(c.env.gm["vgl_last_ver"], VERSION);
       t.igual(c.env.gm["vgl_ver_desde"], hoyReal(), "contador de 'desde cuándo' reiniciado");
     });
