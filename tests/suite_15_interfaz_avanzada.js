@@ -738,12 +738,26 @@ module.exports = {
       },
     });
 
+    // v17.x.x — el clic de «Exámenes»/«Examen normal» abre un menú de elección; esta
+    // ayuda dispara la opción elegida atravesando el DOM falso del chooser (createElement
+    // + addEventListener directo, sin querySelectorAll).
+    function elegirOpcionChooser(c, id) {
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-chooser-modal");
+      t.cierto(!!modal, "el menú de elección quedó montado");
+      const card = modal.children[0];
+      const body = card.children.find((n) => n.className === "vgl-chooser-body");
+      const opt = body.children.find((n) => n.className === "vgl-chooser-opt" && n.getAttribute("data-chooser-id") === id);
+      t.cierto(!!opt, "existe la opción " + id + " en el menú");
+      opt._listeners.click[0]({});
+      return opt;
+    }
+
     t.caso("createLabInjectorUI: crea el botón flotante una sola vez", () => {
       const antes = cLab.env.doc.body.children.length;
       cLab.api.createLabInjectorUI();
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       t.cierto(!!btn, "el botón quedó en el body");
-      t.igual(btn.innerHTML, "🧬 Llenar laboratorios");
+      t.igual(btn.innerHTML, "🧪 Exámenes");
       t.cierto(typeof btn.onclick === "function", "el clic queda cableado");
       // Si el botón ya existe, no se duplica
       cLab.env.doc.getElementById = (id) => (id === "vgl-lab-injector" ? btn : null);
@@ -751,7 +765,7 @@ module.exports = {
       t.igual(cLab.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
     });
 
-    await t.casoAsync("createLabInjectorUI: sin token CSRF, getAtheneaLabsAuto da null (fallo de lectura) — el botón lo dice, no inventa 'sin laboratorios'", async () => {
+    await t.casoAsync("createLabInjectorUI: al elegir «Historial por analito» sin token CSRF, getAtheneaLabsAuto da null (fallo de lectura) — el botón lo dice, no inventa 'sin laboratorios'", async () => {
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       // El paciente SÍ se resuelve en la historia clínica (#anamesis + cédula en un
       // .text-muted, el mismo patrón que usa extractPacienteAbierto), pero Athenea no
@@ -767,14 +781,29 @@ module.exports = {
       };
       cLab.env.doc.querySelector = () => null;
       cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
-      // v15.6.0 — sin alert() del navegador: el resultado se cuenta EN el botón y el
-      // detalle va al toast. Lo observable aquí es el rótulo del botón y su restauración.
-      await btn.onclick();
+      // v17.x.x — el clic ya no consulta en vivo de una: abre el menú y la consulta corre
+      // solo al elegir una opción. Aquí se elige «Historial por analito» (la ruta completa).
+      btn.onclick();
+      elegirOpcionChooser(cLab, "historial");
+      await esperar(0); // deja correr la cadena async de _ejecutarLlenadoExamenes
       t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
       t.cierto(btn.innerHTML.includes("No se pudo leer el laboratorio"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
       t.falso(btn.innerHTML.includes("Sin resultados"), "un fallo de lectura no debe presentarse como 'sin resultados' (bug real: se confundían)");
       await esperar(20);
-      t.igual(btn.innerHTML, "🧬 Llenar laboratorios", "el botón vuelve a su rótulo");
+      t.igual(btn.innerHTML, "🧪 Exámenes", "el botón vuelve a su rótulo");
+    });
+
+    t.caso("_mtrLabsSoloUltimaToma: opción 1 deja solo la tanda de la fecha más reciente", () => {
+      const labs = [
+        { NombreParametro: "CREATININA", fechaResultado: "2026-08-01", Resultado: "1.0" },
+        { NombreParametro: "LDL", fechaResultado: "2026-08-20", Resultado: "100" },
+        { NombreParametro: "GLICEMIA", fechaResultado: "2026-08-20", Resultado: "90" },
+        { NombreParametro: "HBA1C", fechaResultado: "2026-07-15", Resultado: "6.5" },
+      ];
+      const solo = cLab.api._mtrLabsSoloUltimaToma(labs);
+      t.igual(solo.length, 2, "solo los dos de la toma del 20-ago");
+      t.cierto(solo.every((l) => l.fechaResultado === "2026-08-20"), "conserva únicamente la fecha máxima");
+      t.igual(cLab.api._mtrLabsSoloUltimaToma([]).length, 0, "lista vacía se devuelve vacía");
     });
 
     // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
@@ -1120,7 +1149,7 @@ module.exports = {
       cv.api.createExamenFisicoInjectorUI();
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
       t.cierto(!!btnN, "el botón quedó en el body");
-      t.igual(btnN.innerHTML, "🩺 Normalidad", "rótulo v17.x: el botón dice «Normalidad» (el nombre completo «Normalidad fija» quedó en el feedback y los toasts)");
+      t.igual(btnN.innerHTML, "🩺 Examen normal", "rótulo v17.x: el botón dice «Examen normal» (el nombre completo quedó en el feedback y los toasts)");
       t.cierto(typeof btnN.onclick === "function", "el clic queda cableado");
       cv.env.doc.getElementById = (id) => (id === "vgl-examen-normalidad" ? btnN : null);
       cv.api.createExamenFisicoInjectorUI();
@@ -1135,6 +1164,7 @@ module.exports = {
       cv.env.doc.querySelectorAll = () => [];
       // v15.6.0 — sin alert() del navegador: el aviso queda EN el botón (feedback) y en el toast.
       t.noLanza(() => btnN.onclick());
+      elegirOpcionChooser(cv, "ambos");
       t.cierto(btnN.innerHTML.includes("Aquí no hay casillas de examen físico"), "el botón explica que en esta pantalla no están las casillas");
     });
 
@@ -1151,6 +1181,7 @@ module.exports = {
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
       btnN.onclick();
+      elegirOpcionChooser(cv, "ambos");
       t.falso(confirmLlamado, "no pide confirmación — un solo clic aplica de una vez");
       t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta");
       t.igual(vacia1.value, "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 vacía recibe la frase fija de SU posición (Oído), no la 0 (Piel, que ya estaba ocupada)");
@@ -1167,9 +1198,23 @@ module.exports = {
       cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? [vacia] : []);
       // v15.6.0 — sin alert() del navegador: el desajuste se cuenta EN el botón.
       btnN.onclick();
+      elegirOpcionChooser(cv, "ambos");
       t.igual(vacia.value, "", "por seguridad (v14.2.2) ante desajuste de casillas no se pega nada");
       t.cierto(btnN.innerHTML.includes("⚠ No pegué nada"), "el botón anuncia el rehúso por seguridad");
       t.cierto(btnN.innerHTML.includes("1 casillas") && btnN.innerHTML.includes("36"), "avisa el desajuste con ambas cifras (las de la pantalla y las de la plantilla)");
+    });
+
+    t.caso("Examen normal: «Revisión por sistemas» llena SOLO las primeras 19 casillas (deja el examen físico intacto)", () => {
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      const revis = Array.from({ length: 19 }, () => campoFalso(""));
+      const fisico = Array.from({ length: 17 }, () => campoFalso(""));
+      const todas = revis.concat(fisico); // 36 visibles, sin Mamas/Genito
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? todas : []);
+      btnN.onclick();
+      elegirOpcionChooser(cv, "revision");
+      t.cierto(revis[0].value.indexOf("NEGATIVO PARA LESIONES") === 0, "la 1.ª de revisión recibe la frase de Piel");
+      t.cierto(revis[18].value.indexOf("NEGATIVO PARA ASTENIA") === 0, "la 19.ª de revisión recibe Síntomas generales");
+      t.igual(fisico[0].value, "", "la 1.ª del examen físico queda intacta (no se llenó)");
     });
 
     t.caso("Normalidad fija: la plantilla trae exactamente 36 frases (19 de revisión por sistema + 17 de examen físico, sin MAMAS ni GENITO/URINARIO)", () => {

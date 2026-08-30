@@ -4610,7 +4610,7 @@
                   _labsAvisoDoc = docId;
                   _labsAvisoTs = Date.now();
                   notify("VERDE", "🧪 Resultados de laboratorio encontrados",
-                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧬 Llenar laboratorios» cuando quiera diligenciarlos.`,
+                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧪 Exámenes» cuando quiera diligenciarlos.`,
                     false, "athenea_listo|" + docId + "|" + todayStamp());
               }
           }
@@ -6354,6 +6354,101 @@
   // _labsAvisoDoc/_labsAvisoTs, que la v17.0.3 puso en el robot de pre-carga por este
   // mismo síntoma y que aquí se quedó sin poner.
   let _autoLabsAvisoDoc = "", _autoLabsAvisoTs = 0;
+
+  // v17.x.x — REFACTOR S+ (30-ago): menú de elección compartido por «Exámenes»
+  // (Auto-Labs) y «Examen normal» (Normalidad). Al pulsar el botón se abre un selector
+  // pequeño con las opciones; elegir una ejecuta su acción y cierra. Se construye por
+  // elementos reales (createElement + addEventListener directo, como el dock) para que
+  // cada opción conserve su listener sin depender de querySelectorAll sobre innerHTML.
+  function _vglChooserModal(o) {
+    o = o || {};
+    try { const prev = document.getElementById("vgl-chooser-modal"); if (prev) prev.remove(); } catch (e) {}
+
+    const modal = document.createElement("div");
+    modal.id = "vgl-chooser-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    if (isLight()) modal.classList.add("light");
+
+    const card = document.createElement("div");
+    card.className = "vgl-agm-card";
+    card.style.maxWidth = "460px";
+
+    const head = document.createElement("div");
+    head.className = "vgl-agm-head";
+    const headTxt = document.createElement("div");
+    headTxt.style.minWidth = "0";
+    const titulo = document.createElement("div");
+    titulo.className = "vgl-chooser-titulo";
+    titulo.textContent = o.titulo || "";
+    headTxt.appendChild(titulo);
+    if (o.descripcion) {
+      const sub = document.createElement("div");
+      sub.className = "vgl-agm-sub";
+      sub.textContent = o.descripcion;
+      headTxt.appendChild(sub);
+    }
+    head.appendChild(headTxt);
+    const close = document.createElement("button");
+    close.className = "vgl-agm-close";
+    close.setAttribute("aria-label", "Cerrar");
+    close.textContent = "\u2715";
+    head.appendChild(close);
+    card.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "vgl-chooser-body";
+    const onPick = o.onPick || function () {};
+    const cerrar = () => { try { modal.remove(); } catch (e) {} };
+    close.addEventListener("click", cerrar);
+    modal.addEventListener("click", (e) => { if (e.target === modal) cerrar(); });
+
+    (o.opciones || []).forEach((op) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "vgl-chooser-opt";
+      b.setAttribute("data-chooser-id", op.id);
+      const ico = document.createElement("span");
+      ico.className = "vgl-chooser-ico";
+      ico.setAttribute("aria-hidden", "true");
+      ico.textContent = op.icono || "";
+      const txt = document.createElement("span");
+      txt.className = "vgl-chooser-txt";
+      const t = document.createElement("span");
+      t.className = "vgl-chooser-t";
+      t.textContent = op.rotulo;
+      txt.appendChild(t);
+      if (op.desc) {
+        const d = document.createElement("span");
+        d.className = "vgl-chooser-d";
+        d.textContent = op.desc;
+        txt.appendChild(d);
+      }
+      b.appendChild(ico); b.appendChild(txt);
+      b.addEventListener("click", () => { const id = op.id; cerrar(); try { onPick(id); } catch (e) {} });
+      body.appendChild(b);
+    });
+
+    card.appendChild(body);
+    modal.appendChild(card);
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  // v17.x.x — REFACTOR S+ (30-ago): opción 1 de «Exámenes» — solo la tanda más reciente.
+  // Dado el labsArray de Athenea, devuelve SOLO los resultados cuya fecha es la MÁXIMA
+  // (la toma más fresca), conservando el objeto intacto para que la escritura no cambie.
+  // Sin fechas resolubles, devuelve la lista tal cual (no se descarta nada a ciegas).
+  function _mtrLabsSoloUltimaToma(labs) {
+    if (!Array.isArray(labs) || !labs.length) return labs;
+    let maxIso = null;
+    for (const lab of labs) {
+      try { const f = _extractAtheneaFecha(lab); const iso = f && f.iso ? f.iso : null; if (iso && (!maxIso || iso > maxIso)) maxIso = iso; } catch (e) {}
+    }
+    if (!maxIso) return labs;
+    return labs.filter((lab) => { try { const f = _extractAtheneaFecha(lab); return f && f.iso === maxIso; } catch (e) { return true; } });
+  }
+
   function createLabInjectorUI() {
       autoFetchAtheneaLabsForActivePatient();
       // v15.5.0 — Solo VISIBLE donde aplica: el botón escribe en la Ruta Crónicos; si la
@@ -6378,15 +6473,27 @@
       // v17.x.x — REFACTOR S+ (30-ago): nombre sanitizado para el médico. «Auto-Labs
       // (Athenea)» mezclaba el nombre del módulo con el del proveedor; el consumidor
       // final ve «Llenar laboratorios», lenguaje de consultorio.
-      btn.innerHTML = "🧬 Llenar laboratorios";
+      btn.innerHTML = "🧪 Exámenes";
       btn.className = "vgl-lab-inj";
 
-      btn.onclick = async () => {
+      btn.onclick = () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
           if (!docId) {
-              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧬 Llenar laboratorios");
+              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧪 Exámenes");
               return;
           }
+          _vglChooserModal({
+              titulo: "Exámenes",
+              descripcion: "¿Qué resultados traigo a la historia?",
+              opciones: [
+                  { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "Solo los resultados de la fecha de laboratorio más reciente." },
+                  { id: "historial", icono: "🗂", rotulo: "Historial por analito", desc: "El último resultado de cada analito, sin importar cuándo se hizo." },
+              ],
+              onPick: (modo) => { _ejecutarLlenadoExamenes(docId, btn, modo); },
+          });
+      };
+
+      async function _ejecutarLlenadoExamenes(docId, btn, modo) {
           btn.innerHTML = "⏳ Buscando resultados de laboratorio...";
           uxTrack("labs.autollenado.click");
           try {
@@ -6397,7 +6504,14 @@
               // pre-carga del robot queda solo para el aviso temprano y para no repetir
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
-              const labs = await getAtheneaLabsAuto(docId);
+              let labs = await getAtheneaLabsAuto(docId);
+              // v17.x.x — REFACTOR S+ (30-ago): opción «Última toma completa» — descarta
+              // los resultados de tomas anteriores y deja solo la fecha más reciente.
+              if (modo === "ultima" && labs && labs.length > 0) {
+                  const _antes = labs.length;
+                  labs = _mtrLabsSoloUltimaToma(labs);
+                  if (labs.length !== _antes) uxTrack("labs.autollenado.solo_ultima_toma", { antes: _antes, despues: labs.length });
+              }
               // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
               // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
               // el robot no repita esta misma consulta 30 s después.
@@ -6411,8 +6525,8 @@
                   if (r.abortadoPorPaciente) {
                       uxTrack("labs.autollenado.abortado_cambio_paciente");
                       showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras Athenea respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Auto-Labs de nuevo.", true);
-                      _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧬 Auto-Labs (Athenea)");
-                      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                      _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧪 Exámenes");
+                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   // v17.1.0 (#136) — Un apagado del kill-switch o del interruptor remoto
@@ -6420,8 +6534,8 @@
                   // se pintaban idénticos: «✓ 0 casillas escritas», en verde, con el visto
                   // bueno. El médico se quedaba creyendo que Auto-Labs había corrido.
                   if (r.abortadoPorKillSwitch || r.desactivadoRemoto) {
-                      _vglFeedbackBoton(btn, "🛑 Auto-Labs está desactivado ahora mismo", "ambar", "🧬 Auto-Labs (Athenea)");
-                      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                      _vglFeedbackBoton(btn, "🛑 Auto-Labs está desactivado ahora mismo", "ambar", "🧪 Exámenes");
+                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   uxTrack("labs.autollenado.casillas", { n: r.count });
@@ -6448,7 +6562,7 @@
                           : (r.respetadas
                               ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
                               : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
-                      _huboEscritura ? "verde" : "ambar", "🧬 Auto-Labs (Athenea)");
+                      _huboEscritura ? "verde" : "ambar", "🧪 Exámenes");
                   _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
 _vglOfrecerDeshacer(btn);
                   // v17.1.0 (#136) — y aunque SÍ haya escrito, el aviso no se repite para el
@@ -6504,7 +6618,8 @@ _vglOfrecerDeshacer(btn);
                       const okl = await atheneaAutoLogin();
                       if (okl) {
                           btn.innerHTML = "⏳ Reintentando…";
-                          const labs2 = await getAtheneaLabsAuto(docId);
+                          let labs2 = await getAtheneaLabsAuto(docId);
+                          if (modo === "ultima" && labs2 && labs2.length > 0) labs2 = _mtrLabsSoloUltimaToma(labs2);
                           if (labs2 && labs2.length > 0) {
                               const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
@@ -6512,15 +6627,15 @@ _vglOfrecerDeshacer(btn);
                                   uxTrack("labs.autollenado.abortado_cambio_paciente");
                                   showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras se iniciaba sesión en Athenea."
                                     + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Auto-Labs de nuevo.");
-                                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                                  btn.innerHTML = "🧪 Exámenes";
                                   return;
                               }
-                              _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧬 Auto-Labs (Athenea)");
+                              _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧪 Exámenes");
                               _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
 _vglOfrecerDeshacer(btn);
                               showToast("VERDE", "Auto-Labs", "Sesión de Athenea iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
                           } else {
-                              _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧬 Auto-Labs (Athenea)");
+                              _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧪 Exámenes");
                           }
                       } else {
                           atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Auto-Labs",
@@ -6528,7 +6643,7 @@ _vglOfrecerDeshacer(btn);
                       }
                   } else {
                       // v15.6.0 — sin confirm() del navegador: el botón mismo explica y actúa.
-                      _vglFeedbackBoton(btn, "Inicie sesión en Athenea y reintente", "ambar", "🧬 Auto-Labs (Athenea)");
+                      _vglFeedbackBoton(btn, "Inicie sesión en Athenea y reintente", "ambar", "🧪 Exámenes");
                       atheneaAvisoSilencioso("athenea_sesion_labs_caducada|" + todayStamp(), "Auto-Labs",
                         "La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página de Athenea en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.");
                       try { window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank"); } catch (e) {}
@@ -6542,7 +6657,7 @@ _vglOfrecerDeshacer(btn);
                   // casos. Un fallo de lectura se presentaba como un hecho clínico
                   // verificado. Se distingue: null es "no pude leer, reintente", nunca
                   // "no tiene".
-                  _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧬 Llenar laboratorios");
+                  _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
                   showToast("AMBAR", "Llenar laboratorios", "No se pudo leer el portal de laboratorios para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
@@ -6552,16 +6667,16 @@ _vglOfrecerDeshacer(btn);
                   // ambos casos no se diligenció nada y hay que revisar a mano.
                   // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
                   // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
-                  _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧬 Auto-Labs (Athenea)");
+                  _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧪 Exámenes");
                   showToast("AMBAR", "Auto-Labs", "Athenea no tiene laboratorios registrados para la cédula " + docId + " en el último año.", false);
               }
           } catch (e) {
-              _vglFeedbackBoton(btn, "❌ Athenea no respondió", "ambar", "🧬 Auto-Labs (Athenea)");
+              _vglFeedbackBoton(btn, "❌ Athenea no respondió", "ambar", "🧪 Exámenes");
               showToast("ROJO", "Auto-Labs", "No se pudo conectar con el Portal de Athenea. Verifique la red o intente desde el portal.", true);
           }
           // v15.5.0 — el rótulo ya no se restaura aquí a la brava: cada rama deja su
           // resultado contado en el botón y _vglFeedbackBoton lo devuelve solo a los 8 s.
-      };
+      }
 
       document.body.appendChild(btn);
   }
@@ -7122,9 +7237,9 @@ _vglOfrecerDeshacer(btn);
   // médico mostró alguna vez), esta función devuelve null y quien llama cae en el rehúso de
   // siempre. Nunca puede ser MENOS seguro que hoy: solo evita un rehúso innecesario cuando
   // la evidencia es clara, y jamás toca una casilla que no sea Mamas/Genito-Urinario.
-  function _excluirMamasGenitoPorTexto(candidatos) {
-      const esperado = EXAMEN_FISICO_NORMALIDAD_FIJA.length;
-      const sobran = candidatos.length - esperado;
+  function _excluirMamasGenitoPorTexto(candidatos, esperado) {
+      const objetivo = esperado != null ? esperado : EXAMEN_FISICO_NORMALIDAD_FIJA.length;
+      const sobran = candidatos.length - objetivo;
       if (sobran !== 1 && sobran !== 2) return null;
 
       const idxMama = [];
@@ -7147,7 +7262,7 @@ _vglOfrecerDeshacer(btn);
 
       const excluirSet = new Set(excluir);
       const filtrados = candidatos.filter((_, i) => !excluirSet.has(i));
-      return filtrados.length === esperado ? filtrados : null;
+      return filtrados.length === objetivo ? filtrados : null;
   }
 
   // =====================================================================
@@ -7369,75 +7484,90 @@ _vglOfrecerDeshacer(btn);
 
       const btnNormalidad = document.createElement("button");
       btnNormalidad.id = "vgl-examen-normalidad";
-      btnNormalidad.innerHTML = "🩺 Normalidad";
-      btnNormalidad.title = "Escribe, casilla por casilla, las frases de normalidad del examen físico — solo en las casillas vacías. Nunca toca una que ya tenga texto suyo.";
+      btnNormalidad.innerHTML = "🩺 Examen normal";
+      btnNormalidad.title = "Llena las frases de normalidad en las casillas vacías. Elige si quieres solo Revisión por sistemas, solo Examen físico o ambos. Nunca toca una casilla que ya tenga texto suyo.";
       btnNormalidad.className = "vgl-exf-btn vgl-exf-btn-normalidad";
 
       btnNormalidad.onclick = () => {
+          _vglChooserModal({
+              titulo: "Examen normal",
+              descripcion: "¿Qué sección lleno?",
+              opciones: [
+                  { id: "revision", icono: "🧠", rotulo: "Revisión por sistemas", desc: "Solo las casillas subjetivas (síntomas referidos)." },
+                  { id: "fisico", icono: "🫀", rotulo: "Examen físico", desc: "Solo los hallazgos objetivos de la exploración." },
+                  { id: "ambos", icono: "🩺", rotulo: "Ambos", desc: "Revisión por sistemas y examen físico completos." },
+              ],
+              onPick: (modo) => { _aplicarNormalidad(btnNormalidad, modo); },
+          });
+      };
+
+      function _aplicarNormalidad(btnNormalidad, modo) {
           uxTrack("examenFisico.normalidadFija.click");
           const candidatos = _casillasExamenFisico();
           if (!candidatos.length) {
-              _vglFeedbackBoton(btnNormalidad, "Aquí no hay casillas de examen físico", "ambar", "🩺 Normalidad");
-              showToast("AMBAR", "Normalidad", "En esta pantalla no están las casillas de Revisión por sistema / Examen físico. Abra esa pestaña de la historia y vuelva a tocar el botón.", false);
+              _vglFeedbackBoton(btnNormalidad, "Aquí no hay casillas de examen físico", "ambar", "🩺 Examen normal");
+              showToast("AMBAR", "Examen normal", "En esta pantalla no están las casillas de Revisión por sistema / Examen físico. Abra esa pestaña de la historia y vuelva a tocar el botón.", false);
               return;
           }
-          // v14.2.0 — Sonda de anclaje (solo conteos, PHI-safe): en cada uso real registra si
-          // las casillas traen name/aria/placeholder/etiqueta propios. Es la evidencia que
-          // hoy falta para cerrar el VGL-003 con un mapeo por etiqueta en vez de por posición.
+          // v14.2.0 — Sonda de anclaje (solo conteos, PHI-safe).
           try { uxTrack("examenFisico.anclas", _examenFisicoAnclas(candidatos)); } catch (e) {}
 
-          // [v14.2.2 — corrección 2026-08-18, reportado en consultorio en vivo: "pega en las
-          // casillas que no corresponden y varias quedan vacías"] _casillasExamenFisico() junta
-          // TODAS las casillas visibles con id="alert_message" (id repetido — mismo patrón de
-          // colisión que resultadoHemoglobina/HbA1c, ver _findHbA1cFields) y las empareja con
-          // EXAMEN_FISICO_NORMALIDAD_FIJA[i] a ciegas, por POSICIÓN — el VGL-003 de la sonda de
-          // arriba sigue abierto, así que no hay ancla confiable todavía. La plantilla EXCLUYE a
-          // propósito Mamas y Genito/Urinario (17 en vez de 19 en la sección de examen físico, a
-          // pedido del médico), pero esas dos casillas SIGUEN en el DOM real y CUENTAN en
-          // candidatos — así que en cualquier pantalla que las traiga (la gran mayoría), TODO lo
-          // que sigue después se corre un puesto: exactamente "pega en la que no corresponde".
-          // Antes esto solo avisaba DESPUÉS de pegar igual. Sin poder identificar cuáles dos
-          // casillas sobran, no hay forma honesta de reordenar sola: se rehúsa entera en vez de
-          // arriesgar un hallazgo clínico mal puesto — "casilla vacía es mejor que una mal puesta".
-          let usar = candidatos;
+          // v17.x.x — REFACTOR S+ (30-ago): el botón deja elegir qué franja llenar. La
+          // plantilla fija está ordenada: [0..19) Revisión por sistemas (19) y [19..36)
+          // Examen físico (17, sin Mamas/Genito). El DOM de Everest trae las casillas en ese
+          // MISMO orden: primero las 19 subjetivas, luego las del examen físico.
+          const N_REVISION = 19;
+          let plantilla, casillasObjetivo;
+          if (modo === "revision") {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(0, N_REVISION);
+              casillasObjetivo = candidatos.slice(0, N_REVISION);
+          } else if (modo === "fisico") {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(N_REVISION);
+              casillasObjetivo = candidatos.slice(N_REVISION);
+          } else {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA;
+              casillasObjetivo = candidatos;
+          }
+
+          // La sección de Examen físico trae 19 casillas en el DOM pero la plantilla solo 17
+          // (se omiten Mamas y Genito/Urinario a pedido del médico). Se excluyen por texto
+          // esas dos antes de emparejar, misma red de seguridad de siempre, acotada a la
+          // franja que se va a llenar. En "Revisión por sistemas" no hay nada que excluir:
+          // si la cuenta no cuadra, se rehúsa entero (nunca se pega a ciegas).
+          let usar = casillasObjetivo;
           let excluidas = 0;
-          if (candidatos.length !== EXAMEN_FISICO_NORMALIDAD_FIJA.length) {
-              // v14.2.4 — antes de rehusar, intenta excluir Mamas/Genito-Urinario por texto
-              // (ver comentario de _excluirMamasGenitoPorTexto). Riesgo asimétrico: si no
-              // resuelve de forma inequívoca, cae exactamente en el mismo rehúso de siempre.
-              const filtrados = _excluirMamasGenitoPorTexto(candidatos);
+          if (casillasObjetivo.length !== plantilla.length) {
+              const filtrados = (modo === "revision") ? null : _excluirMamasGenitoPorTexto(casillasObjetivo, plantilla.length);
               if (!filtrados) {
-                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: candidatos.length, plantilla: EXAMEN_FISICO_NORMALIDAD_FIJA.length });
-                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + candidatos.length + " casillas y la plantilla espera " + EXAMEN_FISICO_NORMALIDAD_FIJA.length, "ambar", "🩺 Normalidad fija");
-                  showToast("AMBAR", "Normalidad fija", "Por seguridad no se escribió nada: esta pantalla tiene " + candidatos.length + " casillas y la plantilla espera exactamente " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
+                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: casillasObjetivo.length, plantilla: plantilla.length, modo });
+                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + casillasObjetivo.length + " casillas y la plantilla espera " + plantilla.length, "ambar", "🩺 Examen normal");
+                  showToast("AMBAR", "Examen normal", "Por seguridad no se escribió nada: esta pantalla tiene " + casillasObjetivo.length + " casillas y la plantilla espera exactamente " + plantilla.length + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
                   return;
               }
               usar = filtrados;
-              excluidas = candidatos.length - filtrados.length;
-              uxTrack("examenFisico.normalidadFija.exclusionTexto", { candidatos: candidatos.length, excluidas });
+              excluidas = casillasObjetivo.length - filtrados.length;
+              uxTrack("examenFisico.normalidadFija.exclusionTexto", { candidatos: casillasObjetivo.length, excluidas, modo });
           }
 
           const porAplicar = [];
           for (let i = 0; i < usar.length; i++) {
               const actual = String(usar[i].value == null ? "" : usar[i].value).trim();
-              if (actual === "") porAplicar.push({ el: usar[i], texto: EXAMEN_FISICO_NORMALIDAD_FIJA[i] });
+              if (actual === "") porAplicar.push({ el: usar[i], texto: plantilla[i] });
           }
           if (!porAplicar.length) {
-              _vglFeedbackBoton(btnNormalidad, "✋ Todas ya tenían texto: no toqué nada", "ambar", "🩺 Normalidad fija");
+              _vglFeedbackBoton(btnNormalidad, "✋ Todas ya tenían texto: no toqué nada", "ambar", "🩺 Examen normal");
               return;
           }
-          // v15.5.0 — foto previa para «Deshacer» (se toma del valor real de cada casilla:
-          // si esta rama cambia algún día, el deshacer nunca miente).
           const fotoPrevia = porAplicar.map(({ el }) => ({ el, prev: String(el.value == null ? "" : el.value) }));
           porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
-          _vglGuardarDeshacer(extractPacienteAbierto(), fotoPrevia, "Normalidad fija");
-          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length });
+          _vglGuardarDeshacer(extractPacienteAbierto(), fotoPrevia, "Examen normal");
+          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, modo });
           const respetadasN = usar.length - porAplicar.length;
           _vglFeedbackBoton(btnNormalidad,
             "✓ " + porAplicar.length + " escritas" + (respetadasN ? " · " + respetadasN + " respetadas" : "") + (excluidas ? " · " + excluidas + " excluidas" : ""),
-            "verde", "🩺 Normalidad fija");
+            "verde", "🩺 Examen normal");
           _vglOfrecerDeshacer(btnNormalidad);
-      };
+      }
 
       document.body.appendChild(btnNormalidad);
   }
@@ -13586,7 +13716,7 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal{
         /* Vidrio frost sobre negro OLED */
         /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
         --bg:rgba(7,10,16,.88);
@@ -13679,7 +13809,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light{
         --bg:rgba(249,250,252,.90);
         --bg-sidebar:rgba(243,246,250,.84);
         --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
@@ -15237,7 +15367,7 @@ _vglOfrecerDeshacer(btn);
          página — consistente con el «no hace nada» reportado en consultorio. Mismo
          esqueleto que los otros modales; la Ficha del paciente nueva entra a la lista.
          Sin blur nuevo: estos cuatro comparten el fondo oscurecido sin backdrop-filter. */
-      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal{
+      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal,#vgl-paquete-modal,#vgl-chooser-modal{
         position:fixed;top:0;left:0;width:100vw;height:100vh;
         background:rgba(2,4,9,.78);z-index:var(--z-modal);
         display:flex;align-items:center;justify-content:center;
@@ -16195,6 +16325,23 @@ _vglOfrecerDeshacer(btn);
       #vgl-paquete-modal .vgl-paq-err{font-size:var(--t-body);color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.08);border:1px solid rgba(var(--rgb-ambar),.28);border-radius:var(--r-chip);padding:10px 12px;line-height:1.5}
       @media (prefers-reduced-motion:reduce){
         #vgl-paquete-modal,#vgl-paquete-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ==== v17.x.x — REFACTOR S+: menú de elección («Exámenes» / «Examen normal») ==== */
+      /* Escudos de color para los textos neutros de los modales nuevos: cuelgan de
+         document.body, así que la Regla E exige !important. */
+      #vgl-paquete-modal .vgl-agm-sub,#vgl-chooser-modal .vgl-agm-sub{color:var(--fg2) !important}
+      #vgl-paquete-modal .vgl-agm-close,#vgl-chooser-modal .vgl-agm-close{color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-titulo{font-size:var(--t-title);font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:8px;color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-body{display:flex;flex-direction:column;gap:8px}
+      #vgl-chooser-modal .vgl-chooser-opt{display:flex;align-items:center;gap:11px;text-align:left;width:100%;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r-chip);padding:12px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s,transform .1s}
+      #vgl-chooser-modal .vgl-chooser-opt:hover{background:var(--bg3);border-color:var(--fg3);transform:translateY(-1px)}
+      #vgl-chooser-modal .vgl-chooser-ico{flex:none;font-size:var(--t-title)}
+      #vgl-chooser-modal .vgl-chooser-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+      #vgl-chooser-modal .vgl-chooser-t{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-d{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-chooser-modal,#vgl-chooser-modal *{animation:none!important;transition:none!important}
       }
 
       /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */

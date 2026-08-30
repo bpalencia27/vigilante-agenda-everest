@@ -325,7 +325,7 @@ module.exports = {
       const paneles = [
         '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
         '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal',
-        '#vgl-paquete-modal'
+        '#vgl-paquete-modal', '#vgl-chooser-modal'
       ];
 
       const infracciones = new Set();
@@ -535,8 +535,11 @@ module.exports = {
       // «Próximo control» (#vgl-paquete-modal) cuelga de document.body, así que sus 14
       // declaraciones de color llevan !important por Regla E, más el par de
       // animation/transition del bloque reduced-motion. Censo verificado.
+      // REFACTOR S+ del menú de elección (30-ago) — 465 -> 472 (+7): los escudos de color
+      // de #vgl-paquete-modal (sub/close) y #vgl-chooser-modal (title/sub/close/chooser-t/
+      // chooser-d) y el par animation/transition del reduced-motion del chooser.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 465, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios y los 16 del REFACTOR S+ de Ordenamiento/Control (esperado 465, salió ${importantTotal})`);
+      t.cierto(importantTotal === 473, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control y los 8 del REFACTOR S+ del menú de elección (esperado 473, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
