@@ -1385,8 +1385,10 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes("1.2"));
       // v12.3.30 — la tabla ahora muestra dd/mm/aaaa (mismo formato que el resto de la UI),
       // no el ISO crudo que devuelve Athenea.
-      t.cierto(contenido.innerHTML.includes("01/08/2026"));
-      t.cierto(contenido.innerHTML.includes("Athenea (Principal)"), "la fila declara su fuente");
+      // REFACTOR S+: la fecha sale compacta («01/08» + año en <small>), el origen en
+      // lenguaje de consultorio («Laboratorio»), y el ISO completo vive en el tooltip.
+      t.cierto(contenido.innerHTML.includes("01/08") && contenido.innerHTML.includes("<small>2026</small>"), "la fecha compacta lleva el año en <small>");
+      t.cierto(contenido.innerHTML.includes("Laboratorio"), "la fila declara su fuente en lenguaje de consultorio");
       t.cierto(contenido.innerHTML.includes("vgl-labs-tr vgl-labs-alert"), "un resultado que la fuente declara Elevado lleva la clase de resalte en rojo (vgl-labs-alert; el color vive en la hoja de estilos, no inline)");
     });
 
@@ -1454,7 +1456,7 @@ module.exports = {
       await cModal.api.openLaboratoriosModal({ doc_id: "87654321", nombre: "PEDRO" });
       const modal = ultimoModal("vgl-labs-modal");
       const contenido = modal.querySelector("#vgl-labs-content");
-      t.cierto(contenido.innerHTML.includes("No pude leer el portal de Athenea"), "el fallo fue del sistema: se dice como tal");
+      t.cierto(contenido.innerHTML.includes("No se pudo leer el portal de laboratorios"), "el fallo fue del sistema: se dice como tal");
       t.cierto(contenido.innerHTML.includes("Esto NO quiere decir que no tenga ninguno"), "y se desarma la lectura peligrosa: no se le ordenan exámenes a ciegas");
       t.falso(contenido.innerHTML.includes("no tiene ningún paraclínico registrado"),
         "jamás se afirma sobre el paciente lo que no se pudo comprobar (Regla D, patrón G del enjambre)");

@@ -13484,7 +13484,7 @@ _vglOfrecerDeshacer(btn);
         #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg,#f8fafc) !important;font-weight:700 !important;font-size:11.5px !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert{color:var(--c-rojo,#f87171) !important;background:rgba(var(--rgb-rojo,248,113,113),.16) !important;border-radius:4px !important;padding:1px 6px !important;font-weight:800 !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert b{color:var(--c-rojo,#f87171) !important;font-weight:800 !important}
-        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-azul,#a78bfa) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
+        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-labs,#818cf8) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
   `;
 
   // v16.2.4 — CAÍDA REAL EN CONSULTORIO (20-ago, consola del médico):
@@ -13539,6 +13539,7 @@ _vglOfrecerDeshacer(btn);
         --c-azul:#a78bfa;
         --c-recordatorio:#54e6d4;
         --c-panel:#2dd4bf;
+        --c-labs:#818cf8;
         --c-pes:#ff9ec4;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
            eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
@@ -13555,6 +13556,7 @@ _vglOfrecerDeshacer(btn);
         --rgb-azul:167,139,250;
         --rgb-recordatorio:84,230,212;
         --rgb-panel:45,212,191;
+        --rgb-labs:129,140,248;
         --rgb-pes:255,158,196;
         --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
@@ -13620,10 +13622,12 @@ _vglOfrecerDeshacer(btn);
         --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
         --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
         --c-panel:#0f766e;
+        --c-labs:#3730a3;
         --c-pes:#9d174d;--c-atendido:#475569;
         --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
         --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
         --rgb-panel:15,118,110;
+        --rgb-labs:55,48,163;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
@@ -14266,7 +14270,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-card,#vgl-ordenar-modal .vgl-agm-card,#vgl-labs-modal .vgl-agm-card{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-kicker{color:var(--c-azul) !important}
       #vgl-ordenar-modal .vgl-agm-kicker{color:var(--c-morado) !important}
-      #vgl-labs-modal .vgl-labs-kicker{color:var(--c-verde) !important}
+      #vgl-labs-modal .vgl-labs-kicker{color:var(--c-labs) !important}
       #vgl-agendar-modal .vgl-agm-patient,#vgl-ordenar-modal .vgl-agm-patient,#vgl-labs-modal .vgl-labs-patient{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-sub,#vgl-ordenar-modal .vgl-agm-sub,#vgl-labs-modal .vgl-agm-sub{color:var(--fg2) !important}
       #vgl-agendar-modal .vgl-agm-close,#vgl-ordenar-modal .vgl-agm-close,#vgl-labs-modal .vgl-agm-close{color:var(--fg) !important}
@@ -15870,39 +15874,49 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.12);
-        border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
-        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
+        color:var(--c-labs) !important;background:rgba(var(--rgb-labs),.12);
+        border:1px solid rgba(var(--rgb-labs),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-labs),.10)
       }
+      #vgl-labs-modal .vgl-labs-kicker svg{width:13px;height:13px}
       #vgl-labs-modal .vgl-labs-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
         color:var(--fg) !important;overflow-wrap:anywhere;
-        text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
+        text-shadow:0 0 30px rgba(var(--rgb-labs),.22)
       }
       #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
       #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
-      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde) !important}
-      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde) !important}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-labs) !important}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-labs) !important}
 
-      /* ---- Celda bento de fuente + botón portal ---- */
+      /* ---- Celda bento de fuente + chip «En línea» + portal al pie ---- */
       #vgl-labs-modal .vgl-labs-srcbar{
         display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;
-        background:linear-gradient(165deg,rgba(var(--rgb-azul),.10),rgba(var(--rgb-azul),.02) 70%),var(--bg2);
-        border:1px solid rgba(var(--rgb-azul),.28);border-radius:var(--r-card);
+        background:linear-gradient(165deg,rgba(var(--rgb-labs),.10),rgba(var(--rgb-labs),.02) 70%),var(--bg2);
+        border:1px solid rgba(var(--rgb-labs),.28);border-radius:var(--r-card);
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
-      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0}
+      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-labs),.06)}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0;display:inline-flex;align-items:center;gap:7px}
       #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg) !important;font-weight:800}
+      #vgl-labs-modal .vgl-labs-srclbl svg{flex:none;width:14px;height:14px;color:var(--c-labs) !important}
+      #vgl-labs-modal .vgl-labs-srconline{
+        flex:none;display:inline-flex;align-items:center;gap:6px;
+        font-size:var(--t-micro);font-weight:800;color:var(--c-verde) !important;
+        background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.30);
+        border-radius:var(--r-pill);padding:5px 12px
+      }
+      #vgl-labs-modal .vgl-labs-srconline svg{width:13px;height:13px}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
-        background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul) !important;font-size:var(--t-micro);font-weight:800;
+        background:linear-gradient(135deg,rgba(var(--rgb-labs),.30),rgba(var(--rgb-labs),.15));
+        color:var(--c-labs) !important;font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-labs),.40),0 6px 18px rgba(var(--rgb-labs),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
       #vgl-labs-modal .vgl-labs-portal:hover{transform:translateY(-1px);filter:brightness(1.08)}
+      #vgl-labs-modal .vgl-labs-portal svg{width:14px;height:14px}
 
       /* ---- Contenedor de resultados ---- */
       #vgl-labs-modal #vgl-labs-content{background:rgba(0,0,0,.22);border-color:var(--line);padding:0 10px 10px}
@@ -15950,6 +15964,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
       #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3) !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-date small{display:block;font-size:10px;color:var(--fg3) !important;opacity:.72;font-variant-numeric:tabular-nums}
       #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
         font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg) !important;
@@ -16052,14 +16067,18 @@ _vglOfrecerDeshacer(btn);
         background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
       }
-      /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
+      /* v12.5.4 — Botón "Ver informe" (PDF real del laboratorio) */
       #vgl-labs-modal .vgl-labs-pdfcol{text-align:center;width:1%}
       #vgl-labs-modal .vgl-labs-pdf{
-        all:unset;cursor:pointer;font-size:var(--t-lead);padding:4px 8px;border-radius:var(--r-chip);
+        all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+        color:var(--c-labs) !important;padding:6px 9px;border-radius:var(--r-chip);
         transition:transform .15s var(--ease-out),background .15s var(--ease-out)
       }
+      #vgl-labs-modal .vgl-labs-pdf svg{width:15px;height:15px}
       #vgl-labs-modal .vgl-labs-pdf:hover{background:var(--bg3);transform:scale(1.12)}
       #vgl-labs-modal .vgl-labs-pdf:disabled{opacity:.5;cursor:wait}
+      /* REFACTOR S+: iconografía SVG en el acordeón de uroanálisis y sus subcolumnas */
+      #vgl-labs-modal .vgl-uro-badge svg,#vgl-labs-modal .vgl-labs-uro-btn svg,#vgl-labs-modal .vgl-uro-subcol-t svg{width:13px;height:13px;vertical-align:-2px}
 
       /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
@@ -19468,28 +19487,40 @@ _vglOfrecerDeshacer(btn);
     const docSeguro = encodeURIComponent(String(apt.doc_id || "").trim());
     const atheneaUrl = escapeHtml(`https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${docSeguro}`);
 
+    // v17.x.x — REFACTOR S+ (30-ago, aprobado en canvas): identidad índigo propia
+    // (--c-labs), kicker con iconografía SVG, y nombres sanitizados para el médico:
+    // se retira la jerga interna («Everest», «Athenea Soluciones API», «Portal Athenea
+    // (Auto-Login)», «Paraclínicos», «Agendamiento», «Ordenamiento») y el portal oficial
+    // se mueve al pie del modal.
+    const MTR_ICONO_FLASK = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>';
+    const MTR_ICONO_PORTAL = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+    const MTR_ICONO_CHECK = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const MTR_ICONO_PDF = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>';
+    const MTR_ICONO_ALERTA = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+    const MTR_ICONO_OK = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>';
+    const MTR_ICONO_LUPA = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+    const MTR_ICONO_BARRAS = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>';
+
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:880px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">🧪 Exámenes de Laboratorio (Últimos 365 días)</div>
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">${MTR_ICONO_FLASK} Laboratorios</div>
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
-            <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Últimos 365 días</div>
           </div>
           <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
         </div>
 
-        <div class="vgl-ux-caption">Los resultados de laboratorio del paciente en los últimos 365 días. Aquí solo se consultan — nada se modifica en Everest. Para agendar la toma de muestras use Agendamiento; para pedir un examen nuevo, Ordenamiento.</div>
+        <div class="vgl-ux-caption">Resultados del paciente en los últimos 365 días. Aquí solo se consultan: nada se modifica en la plataforma. Para programar la toma de muestras use Programación de cita; para pedir exámenes nuevos, Ordenar.</div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
-          <span class="vgl-labs-srclbl"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b>${vglTip("Estos resultados se traen solos del sistema del laboratorio (Athenea), sin que tenga que buscarlos. El botón de la derecha abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
-          <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
-            🌐 Abrir en Portal Athenea (Auto-Login)
-          </a>
+          <span class="vgl-labs-srclbl">${MTR_ICONO_FLASK} <b>Origen:</b> consulta automática al sistema del laboratorio, sin buscarlo a mano${vglTip("Estos resultados se traen solos del sistema del laboratorio, sin que tenga que buscarlos. El botón del pie abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
+          <span class="vgl-labs-srconline">${MTR_ICONO_CHECK} En línea</span>
         </div>
 
         <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">⚡ Historial de Paraclínicos (Últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en Everest, no es un error del Vigilante. La etiqueta junto a cada resultado dice si vino directo del laboratorio (Athenea) o quedó registrado a mano.")}</label>
+          <label class="vgl-agm-lbl">Historial de resultados (últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en la plataforma, no es un error del asistente. La etiqueta junto a cada resultado dice si vino directo del sistema del laboratorio o quedó registrado a mano.")}</label>
           <!-- v17.25.0 — AUDITORÍA DE LABORATORIOS: _renderEstadioRenalHtml (R1b, v14.1.1)
                calculaba el recuadro de función renal — TFG, estadio, discordancia entre
                fórmulas, paciente pediátrico, creatinina fuera de rango — con su propio CSS
@@ -19505,12 +19536,15 @@ _vglOfrecerDeshacer(btn);
                puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
           <div id="vgl-labs-renal" aria-live="polite"></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
-            <div class="vgl-agm-loading">⏳ Consultando automáticamente exámenes de laboratorio en Portal Athenea Soluciones...</div>
+            <div class="vgl-agm-loading">⏳ Consultando resultados de laboratorio...</div>
           </div>
         </div>
 
         <div class="vgl-agm-foot">
-          <button class="vgl-agm-btn sec" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
+          <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
+            ${MTR_ICONO_PORTAL} Abrir el portal oficial del laboratorio
+          </a>
+          <button class="vgl-agm-btn pri" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
         </div>
       </div>
     `;
@@ -19638,8 +19672,8 @@ _vglOfrecerDeshacer(btn);
       // portal» hace que se vuelva a intentar o se mire a mano.
       const _noSePudoLeer = (_labsAtheneaCrudos === null) || _labsSolicitudesNoLeidas > 0;
       if (contentEl) contentEl.innerHTML = _noSePudoLeer
-        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No pude leer el portal de Athenea</b>, así que no sé qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón azul de arriba.</div>`
-        : `<div class="vgl-agm-err vgl-labs-empty">ℹ Athenea respondió y <b>no tiene ningún paraclínico registrado</b> de los últimos 365 días para este paciente. Tampoco Annar ni Citi.<br><br>Verifique directamente en el portal con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No se pudo leer el portal de laboratorios</b>, así que no se sabe qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón del portal, al pie.</div>`
+        : `<div class="vgl-agm-err vgl-labs-empty">ℹ El sistema de laboratorios respondió y <b>no tiene ningún resultado</b> de los últimos 365 días para este paciente, ni en los otros orígenes consultados.<br><br>Verifique directamente en el portal con el botón del pie. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
       return;
     }
 
@@ -19676,12 +19710,20 @@ _vglOfrecerDeshacer(btn);
         _labViejasOcultas++; return false;
       } catch (e) { return true; }
     });
+    // v17.x.x — REFACTOR S+: el médico ve «Laboratorio» como origen, nunca el nombre
+    // interno del proveedor (Athenea/Annar/Citi son nombres de sistema).
+    const _origenVisible = (o) => (/athenea|annar|citi/i.test(String(o || ""))) ? "Laboratorio" : String(o || "");
     let rowsHtml = _agruparUroanalisisParaTabla(_labsVentana).map((lab, idx) => {
       const esGrupoUro = Array.isArray(lab.__vglGrupoUroComponentes);
       const fechaInfo = _extractAtheneaFecha(lab);
       const fecha = fechaInfo
-        ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}` + (fechaInfo.hora ? ` · ${fechaInfo.hora}` : ""); })()
+        ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}` + (fechaInfo.hora ? ` · ${fechaInfo.hora}` : ""); })()
         : "Sin fecha";
+      // v17.x.x — REFACTOR S+: el año y la hora de la toma viajan al tooltip de la celda
+      // (el mockup aprobado pide fecha compacta «12/08» + año en <small>).
+      const fechaTitle = fechaInfo
+        ? fechaInfo.iso.split("-").reverse().join("/") + (fechaInfo.hora ? ` a las ${fechaInfo.hora}` : "")
+        : "";
       if (fecha === "Sin fecha" && !diagFechaModalLogged && String(lab.origen || "").includes("Athenea")) {
         diagFechaModalLogged = true;
         console.warn("[Vigilante Labs] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en la tabla del modal. Claves disponibles:", Object.keys(lab));
@@ -19708,7 +19750,7 @@ _vglOfrecerDeshacer(btn);
         : (String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal"));
 
       const btnInforme = (lab.__vglHash && lab.__vglToken)
-        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real del laboratorio">${MTR_ICONO_PDF}</button>`
         : "";
 
       // v14.6.0 — Renderizado de Uroanálisis en 1 fila compacta con resumen clínico y acordeón
@@ -19721,7 +19763,7 @@ _vglOfrecerDeshacer(btn);
         const uRes = _resumenClinicoUro(comps);
         const targetId = `vgl-uro-acc-${idx}`;
         const badgeCls = uRes.esPatologico ? "warn" : "ok";
-        const badgeIcon = uRes.esPatologico ? "⚠️" : "🟢";
+        const badgeIcon = uRes.esPatologico ? MTR_ICONO_ALERTA : MTR_ICONO_OK;
         const badgeText = uRes.esPatologico ? "Alteraciones detectadas" : "Sin hallazgos patológicos (Normal)";
         const chipsText = uRes.chips.join(" · ");
 
@@ -19740,14 +19782,14 @@ _vglOfrecerDeshacer(btn);
               <span class="vgl-uro-badge ${badgeCls}">${badgeIcon} ${escapeHtml(badgeText)}</span>
               <span class="vgl-uro-chips">${escapeHtml(chipsText)}</span>
               <button type="button" class="vgl-labs-uro-btn" data-target="${targetId}">
-                🔍 Ver ${comps.length} analitos <span class="vgl-uro-arrow">▾</span>
+                ${MTR_ICONO_LUPA} Ver ${comps.length} analitos <span class="vgl-uro-arrow">▾</span>
               </button>
             </div>
             <div class="vgl-labs-uro-panel" id="${targetId}" style="display:none">
               <div class="vgl-labs-uro">
-                ${fqItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">🧪 Físico - Químico</div>${fqItems}</div>` : ""}
-                ${sedItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">🔬 Sedimento Microscópico</div>${sedItems}</div>` : ""}
-                ${otrosItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">📊 Otros Analitos</div>${otrosItems}</div>` : ""}
+                ${fqItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_FLASK} Físico - Químico</div>${fqItems}</div>` : ""}
+                ${sedItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_ACTIVITY} Sedimento Microscópico</div>${sedItems}</div>` : ""}
+                ${otrosItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_BARRAS} Otros Analitos</div>${otrosItems}</div>` : ""}
               </div>
             </div>
           </div>
@@ -19764,11 +19806,11 @@ _vglOfrecerDeshacer(btn);
 
       return `
         <tr class="vgl-labs-tr${esAlerta ? " vgl-labs-alert" : ""}">
-          <td class="vgl-labs-date">${escapeHtml(String(fecha))}</td>
+          <td class="vgl-labs-date" title="${escapeHtml(fechaTitle)}">${fechaInfo ? escapeHtml(fecha) + `<small>${escapeHtml(fechaInfo.iso.split("-")[0])}</small>` : escapeHtml(String(fecha))}</td>
           <td class="vgl-labs-exam">${escapeHtml(String(examen))}</td>
           <td class="vgl-labs-val">${resultadoHtml}</td>
           <td class="vgl-labs-ref">${referenciaHtml}</td>
-          <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(lab.origen)}</span></td>
+          <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(_origenVisible(lab.origen))}</span></td>
           <td class="vgl-labs-pdfcol">${btnInforme}</td>
         </tr>
       `;
@@ -19781,9 +19823,9 @@ _vglOfrecerDeshacer(btn);
           <thead>
             <tr>
               <th>Fecha</th>
-              <th>Examen / Paraclínico</th>
+              <th>Examen</th>
               <th>Resultado</th>
-              <th>Ref. / Rango</th>
+              <th>Rango</th>
               <th>Fuente</th>
               <th>Informe</th>
             </tr>
