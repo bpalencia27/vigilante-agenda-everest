@@ -536,8 +536,12 @@ module.exports = {
       // sus 14 !important de color (Regla E) y el par animation/transition del
       // reduced-motion, 16 en total. El menú de elección (#vgl-chooser-modal) y sus
       // escudos de color se conservan.
+      // REFACTOR S+ del aviso universal (30-ago) — 457 -> 459 (+2): el modal «Pendientes
+      // de este paciente» (aviso al abrir la historia por primera vez) pasa a tarjetas de
+      // sección (.vgl-pym-sec-t con su acento por variante y .vgl-pym-sec-b), cuyos colores
+      // cuelgan de document.body (Regla E) y llevan !important.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 457, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios y los escudos del menú de elección; el modal «Próximo control» retirado descuenta 16 (esperado 457, salió ${importantTotal})`);
+      t.cierto(importantTotal === 459, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los escudos del menú de elección, los 2 del REFACTOR S+ del aviso universal, menos 16 del modal «Próximo control» retirado (esperado 459, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del

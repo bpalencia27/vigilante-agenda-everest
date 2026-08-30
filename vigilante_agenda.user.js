@@ -12131,7 +12131,10 @@ _vglOfrecerDeshacer(btn);
       const ico = abandono ? "🫀" : (labs.length && !pym.length ? "🧪" : "🩺");
       const secciones = [];
       if (abandono) {
-        secciones.push('<div class="vgl-au-prio" style="background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.45);color:var(--fg);font-weight:800;font-size:var(--t-micro);padding:9px 12px;border-radius:11px;margin-bottom:12px;line-height:1.45;text-align:left">🫀 <b>Abandono Programa RCV.</b> Priorice el control de riesgo cardiovascular en esta consulta.</div>');
+        secciones.push('<div class="vgl-pym-sec-pes">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🫀</span><span class="vgl-pym-sec-t">Abandono Programa RCV</span></div>' +
+          '<div class="vgl-pym-sec-b">Priorice el control de riesgo cardiovascular en esta consulta.</div>' +
+        '</div>');
       }
       if (pym.length) {
         // v17.6.18 — REPORTE DE CAMPO (24-ago-2026): "los botones para ordenar
@@ -12140,19 +12143,27 @@ _vglOfrecerDeshacer(btn);
         // es un recordatorio al abrir la historia, no un atajo de flujo — el médico ya
         // tiene 🗓️/📋/🧪 en el dock de acciones para eso.
         const chipPym = (a) => '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>";
-        const chips = pym.map(chipPym).join("");
-        secciones.push('<div class="vgl-pym-lead">Actividades preventivas por solicitar:</div><div class="vgl-pym-list">' + chips + "</div>");
+        secciones.push('<div class="vgl-pym-sec">' +
+          '<div class="vgl-pym-lead">Actividades preventivas por solicitar</div>' +
+          '<div class="vgl-pym-list">' + pym.map(chipPym).join("") + "</div>" +
+        '</div>');
       }
       if (labs.length) {
         const chipLab = (f) => '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
-        const chips = labs.map(chipLab).join("");
-        secciones.push('<div style="font-size:var(--t-micro);color:var(--c-rojo);font-weight:600;margin-bottom:10px;text-align:center">Laboratorios RCV sin resultado vigente:</div><div class="vgl-pym-list">' + chips + "</div>");
+        secciones.push('<div class="vgl-pym-sec-rojo">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🧪</span><span class="vgl-pym-sec-t">Laboratorios RCV sin resultado vigente</span></div>' +
+          '<div class="vgl-pym-list">' + labs.map(chipLab).join("") + "</div>" +
+        '</div>');
       }
       ov.innerHTML = '<div class="vgl-pym-card">' +
-        '<div class="vgl-pym-ic">' + ico + "</div>" +
-        '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
-        '<div class="vgl-pym-n"></div>' +
-        secciones.join("") +
+        '<div class="vgl-pym-head">' +
+          '<div class="vgl-pym-ic">' + ico + '</div>' +
+          '<div class="vgl-pym-headtxt">' +
+            '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
+            '<div class="vgl-pym-n"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="vgl-pym-body">' + secciones.join("") + '</div>' +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
         '<button class="vgl-pym-ok">Entendido</button>' +
         "</div>";
@@ -15205,25 +15216,41 @@ _vglOfrecerDeshacer(btn);
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
       .vgl-pym-card{
-        background:linear-gradient(165deg,rgba(var(--rgb-recordatorio),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
-        border:1px solid rgba(var(--rgb-recordatorio),.50);
-        border-radius:var(--r-surface);padding:28px 32px;
-        max-width:420px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 36px rgba(var(--rgb-recordatorio),.09),inset 0 1px 0 rgba(255,255,255,.10);
+        background:linear-gradient(170deg,rgba(var(--rgb-recordatorio),.13),rgba(0,0,0,0) 46%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-recordatorio),.42);
+        border-radius:var(--r-surface);padding:0;overflow:hidden;
+        max-width:460px;width:min(92vw,460px);text-align:left;
+        box-shadow:var(--shadow-float),0 0 42px rgba(var(--rgb-recordatorio),.10),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
+      .vgl-pym-head{
+        display:flex;align-items:center;gap:14px;
+        padding:22px 24px 16px;
+        border-bottom:1px solid rgba(var(--rgb-recordatorio),.16)
+      }
       .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
-        width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
+        width:46px;height:46px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:var(--t-hero);
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
+      .vgl-pym-headtxt{min-width:0}
+      .vgl-pym-t{font-size:11.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:3px;letter-spacing:1.3px;text-transform:uppercase}
+      .vgl-pym-n{font-size:20px;font-weight:800;color:var(--fg) !important;line-height:1.18;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.28);overflow-wrap:anywhere}
+      .vgl-pym-body{padding:16px 24px 6px;display:flex;flex-direction:column;gap:12px}
+      .vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo{
+        border-radius:var(--r-card);padding:12px 14px
+      }
+      .vgl-pym-sec{border:1px solid var(--edge);background:var(--bg2);--sec-accent:var(--c-recordatorio)}
+      .vgl-pym-sec-pes{border:1px solid rgba(var(--rgb-pes),.42);background:rgba(var(--rgb-pes),.08);--sec-accent:var(--c-pes)}
+      .vgl-pym-sec-rojo{border:1px solid rgba(var(--rgb-rojo),.36);background:rgba(var(--rgb-rojo),.07);--sec-accent:var(--c-rojo)}
+      .vgl-pym-sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .vgl-pym-sec-ic{font-size:var(--t-strong);line-height:1}
+      .vgl-pym-sec-t{font-size:12.5px;font-weight:800;letter-spacing:.2px;color:var(--sec-accent) !important}
+      .vgl-pym-sec-b{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+      .vgl-pym-lead{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--fg2) !important;margin-bottom:9px}
       .vgl-pym-list{
-        display:flex;flex-wrap:wrap;gap:7px;
-        justify-content:center;margin-bottom:16px
+        display:flex;flex-wrap:wrap;gap:7px
       }
       .vgl-pym-chip{
         font-size:var(--t-micro);font-weight:700;padding:6px 13px;
@@ -15231,15 +15258,16 @@ _vglOfrecerDeshacer(btn);
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin:4px 24px 18px;text-align:center} /* [UI-CSS] */
       .vgl-pym-ok{
-        border:0;border-radius:var(--r-chip);padding:10px 26px;
+        display:block;width:calc(100% - 48px);margin:0 24px 22px;
+        border:0;border-radius:var(--r-chip);padding:11px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
         cursor:pointer;font-family:inherit;background:var(--c-recordatorio);
         box-shadow:0 6px 18px rgba(var(--rgb-recordatorio),.25);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
-      .vgl-pym-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
+      .vgl-pym-ok:hover{transform:scale(1.02);filter:brightness(1.06)}
       #vgl-pes-modal{
         position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
