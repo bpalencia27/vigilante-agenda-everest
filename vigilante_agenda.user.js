@@ -19857,12 +19857,13 @@ _vglOfrecerDeshacer(btn);
           </div>
           <button class="vgl-agm-close" id="vgl-paquete-x" aria-label="Cerrar">✕</button>
         </div>
-        <div class="vgl-ux-caption">Revisión del paquete que le corresponde al paciente según su programa. Aquí solo se consulta: la orden la genera usted con el botón «Paquetes» de la historia o con «Ordenar pendientes» — el asistente nunca lo hace por su cuenta.</div>
+        <div class="vgl-ux-caption">Revisión del paquete que le corresponde al paciente según su programa. Con «Ordenar pendientes» el asistente simula los botones de la historia y agrega SOLO los exámenes que tocan para la próxima visita (los que ya calculó este motor), nunca el paquete completo de Everest.</div>
         <div id="vgl-paquete-body" class="vgl-agm-slots" aria-live="polite" style="max-height:440px;overflow-y:auto;display:block">
           <div class="vgl-agm-loading">⏳ Revisando el programa y las vigencias del paciente...</div>
         </div>
         <div class="vgl-agm-foot">
-          <button class="vgl-agm-btn pri" id="vgl-paquete-close">Cerrar</button>
+          <button class="vgl-agm-btn pri" id="vgl-paquete-ordenar">📋 Ordenar pendientes</button>
+          <button class="vgl-agm-btn sec" id="vgl-paquete-close">Cerrar</button>
         </div>
       </div>
     `;
@@ -19878,20 +19879,76 @@ _vglOfrecerDeshacer(btn);
     modal.addEventListener("click", bgClick);
 
     const body = modal.querySelector("#vgl-paquete-body");
+    const ordenarBtn = modal.querySelector("#vgl-paquete-ordenar");
+    let d = null;       // tablero clínico, compartido con el botón «Ordenar pendientes»
+    let resumen = null;
+    const repintar = () => { if (body) body.innerHTML = mtrPaqueteProgramaHtml(d); };
+
+    // v17.x.x — REFACTOR S+ (30-ago): «Ordenar pendientes» DENTRO del propio modal. Simula
+    // los botones nativos de Everest pero agrega SOLO los analitos que el motor ya calculó
+    // para la próxima visita (mtrItemsOrdenarConducta sobre d.ordenar), nunca el paquete
+    // completo (que arrastra el hemograma prohibido 902210). Misma lógica que el botón
+    // «Ordenar pendientes» de Conducta (_cwoClic), con el mismo candado _cwoEnCurso.
+    if (ordenarBtn) ordenarBtn.addEventListener("click", async (e) => {
+      try { e.stopPropagation(); } catch (e2) {}
+      if (!apt || !apt.doc_id) return;
+      if (_cwoEnCurso) return;
+      const docId = apt.doc_id;
+      try {
+        const items = mtrItemsOrdenarConducta(d ? d.ordenar : []);
+        const total = items.paquete.length + items.individuales.length;
+        if (!total) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
+        _cwoEnCurso = true;
+        ordenarBtn.disabled = true;
+        const textoPrevio = ordenarBtn.textContent;
+        ordenarBtn.textContent = "⏳ Agregando...";
+        try {
+          uxTrack("widget.paquete.ordenar.clic");
+          const r = await mtrConductaAgregarPendientes(items, undefined, docId);
+          const todos = items.paquete.concat(items.individuales);
+          if (r.agregados.length) {
+            markOrdenLabsConductaHoy(docId, r.agregados);
+            const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+            if (r.fallidos.length) {
+              const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
+              showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
+            } else {
+              showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
+            }
+          } else if (!_pacienteSigueAbierto(docId)) {
+            showToast("AMBAR", "Se canceló para no equivocar la historia", "Se cambió de paciente mientras se agregaban los exámenes, así que se detuvo: nada se escribió en la historia de otra persona. Vuelva a abrir al paciente y púlselo de nuevo.", true);
+          } else {
+            showToast("ROJO", "No se pudo agregar", "No se encontraron los botones o la lista de exámenes en la pantalla. Inténtelo de nuevo, o agréguelo a mano.", true);
+          }
+          // Refresca la revisión: lo ya agregado deja de figurar como pendiente.
+          try { repintar(); } catch (e2) {}
+        } catch (e2) {
+          showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
+        } finally {
+          _cwoEnCurso = false;
+          ordenarBtn.disabled = false;
+          ordenarBtn.textContent = textoPrevio;
+          try { mtrWidgetOrdenarConductaTick(); } catch (e2) {}
+        }
+      } catch (e2) {
+        showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
+      }
+    });
+
     try {
-      let resumen = null;
       try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
       if (!resumen) {
         if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo leer el resumen del paciente. Abra la historia un momento (ahí se carga solo) y vuelva a abrir este módulo.</div>';
+        if (ordenarBtn) ordenarBtn.style.display = "none";
         return;
       }
-      let d = null;
       try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
-      if (body) body.innerHTML = mtrPaqueteProgramaHtml(d);
+      repintar();
       _fnCompletado = true;
       try { uxTrack("fn.paquete.complete"); } catch (e) {}
     } catch (e) {
       if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo revisar el paquete en este momento. Inténtelo de nuevo.</div>';
+      if (ordenarBtn) ordenarBtn.style.display = "none";
     }
   }
 
