@@ -53,19 +53,10 @@ con todo lo necesario para terminarlo sin re-investigar de cero.
 
 ## ⏸ PENDIENTE (relacionado, sin empezar) — Sección «Laboratorios RCV» del aviso universal
 
-Requisito del médico sobre `avisoUniversal` (`#vgl-pym-modal`), distinto del módulo anterior
-pero también sobre laboratorios:
-
-- La sección **«Laboratorios RCV sin resultado vigente»** solo debe verse:
-  - **Médicos autorizados:** tal como está hoy (con su lógica actual de vigencias).
-  - **No autorizados:** solo si el script detecta que el paciente está en un **programa de
-    Ruta Crónicos** Y tiene laboratorios vencidos **juzgados por sus vigencias ORIGINALES
-    sin reducción**.
-- Para no autorizados, el resto de notificaciones (abandono RCV, PyM) se mantienen igual.
-
-Nota técnica a confirmar al retomarlo: qué constituye exactamente la «reducción» en
-`_analitosRcvVencidos` (opciones `aplicar50` / estadio / `categoriaRiesgo`) y cómo se detecta
-«programa de Ruta Crónicos» (`resumen.programa.rector` vía `mtrTableroClinico`).
+**RESUELTO** (commit `6fe09b1`, 30-ago): gating por médico autorizado implementado y
+probado. Solo los autorizados ven la sección «normal» (tabla por estadio + 50 % fuera de
+meta); los no autorizados la ven solo si el paciente está en un programa de Ruta Crónicos
+(programa rector presente) y tiene labs vencidos por su vigencia original SIN el 50 %.
 
 ---
 
