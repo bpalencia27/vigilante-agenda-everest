@@ -968,6 +968,13 @@ module.exports = {
       c.api.checkAvisoUniversal();
       t.cierto(c.api.avisoYaVisto(uid),
         "en Ruta Crónicos con labs vencidos (vigencia original, sin 50 %), la sección aparece y el aviso dispara");
+      // mockPacienteAbierto deja getElementById devolviendo null para todo salvo
+      // #anamesis, así que se busca el modal entre los hijos del body.
+      const m = c.env.doc.body.children.find((n) => n.id === "vgl-pym-modal");
+      t.cierto(!!m && /Priorice riesgo cardiovascular/.test(m.innerHTML || ""),
+        "el no autorizado ve el mensaje de prioridad cardiovascular, no la lista cruda");
+      t.falso(!!m && /Laboratorios RCV sin resultado vigente/.test(m.innerHTML || ""),
+        "y NO ve el encabezado de la lista de analitos (eso es solo del autorizado)");
     });
 
     // Variante de planLabsVencidos que ECHA DE VUELTA la cédula que de verdad se buscó (en

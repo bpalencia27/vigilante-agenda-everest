@@ -12134,6 +12134,11 @@ _vglOfrecerDeshacer(btn);
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
+      // v17.x.x — REFACTOR S+ (30-ago): para médicos NO autorizados, en vez de la lista
+      // cruda de analitos vencidos se muestra un mensaje de prioridad cardiovascular. Es
+      // la señal que a ese perfil le importa: "este paciente necesita atención de riesgo
+      // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
+      const prioridadRcv = !!datos.prioridadRcv;
       if (!abandono && !pym.length && !labs.length) return; // nada que mostrar
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
@@ -12142,7 +12147,7 @@ _vglOfrecerDeshacer(btn);
       ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
       if (abandono) { ov.classList.add("pes"); ov.style.setProperty("--rgb-recordatorio", "var(--rgb-pes)"); ov.style.setProperty("--c-recordatorio", "var(--c-pes)"); }
-      const ico = abandono ? "🫀" : (labs.length && !pym.length ? "🧪" : "🩺");
+      const ico = (abandono || prioridadRcv) ? "🫀" : (labs.length && !pym.length ? "🧪" : "🩺");
       const secciones = [];
       if (abandono) {
         secciones.push('<div class="vgl-pym-sec-pes">' +
@@ -12162,7 +12167,14 @@ _vglOfrecerDeshacer(btn);
           '<div class="vgl-pym-list">' + pym.map(chipPym).join("") + "</div>" +
         '</div>');
       }
-      if (labs.length) {
+      if (prioridadRcv) {
+        const n = labs.length;
+        const plural = n === 1 ? "" : "es";
+        secciones.push('<div class="vgl-pym-sec-pes">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🫀</span><span class="vgl-pym-sec-t">Priorice riesgo cardiovascular</span></div>' +
+          '<div class="vgl-pym-sec-b">Este paciente tiene ' + n + ' examen' + plural + ' de laboratorio vencido' + (n === 1 ? "" : "s") + ' más allá de su vigencia según el programa. Priorice la atención de riesgo cardiovascular en esta consulta.</div>' +
+        '</div>');
+      } else if (labs.length) {
         const chipLab = (f) => '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
         secciones.push('<div class="vgl-pym-sec-rojo">' +
           '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🧪</span><span class="vgl-pym-sec-t">Laboratorios RCV sin resultado vigente</span></div>' +
@@ -12186,7 +12198,7 @@ _vglOfrecerDeshacer(btn);
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
-      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length });
+      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, pr: prioridadRcv ? 1 : 0 });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
       // v15.4.0 — Sin tono: el propio modal en pantalla ES el aviso (un canal por función).
@@ -12229,6 +12241,10 @@ _vglOfrecerDeshacer(btn);
       } : undefined;
       let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
       if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
+      // v17.x.x — REFACTOR S+ (30-ago): para no autorizados, los labs vencidos (ya acotados
+      // a pacientes en Ruta Crónicos con vigencia original) se comunican como mensaje de
+      // prioridad cardiovascular, no como lista de analitos a pedir.
+      const prioridadRcv = !_autorizado && faltantes.length > 0;
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 
@@ -12238,7 +12254,7 @@ _vglOfrecerDeshacer(btn);
         if (labsListos && faltantes.length && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes });
+          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, prioridadRcv: prioridadRcv });
         }
         return;
       }
@@ -12267,7 +12283,7 @@ _vglOfrecerDeshacer(btn);
       // Labs resueltos: aviso completo si hay algo.
       if (!abandono && !pym.length && !faltantes.length) return;
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes });
+      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, prioridadRcv: prioridadRcv });
       avisoMarcarVisto(uid);
     } catch (e) {}
   }
