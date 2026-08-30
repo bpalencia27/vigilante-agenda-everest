@@ -26127,12 +26127,6 @@ _vglOfrecerDeshacer(btn);
           <select id="c-fz"><option value="normal">Normal</option><option value="grande">Grande</option><option value="muygrande">Muy grande</option></select></div>
         <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Si este computador se siente lento, enciéndalo: la pantalla se ve más sencilla y todo responde más rápido.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
       </div>
-      <!-- [v17.6.7] Cierre de turno: todo APAGADO por defecto; el médico elige. Avisos suaves, nunca críticos. -->
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-morado"><i></i>Turno (avanzado)</div>
-        <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
-        <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
-      </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
         <div class="vgl-fld"><label>Sonido<span class="vgl-hint">Encendido, los avisos urgentes suenan. Apagado, todo llega en silencio.</span></label>${sw("c-snd", S.sonido)}</div>
@@ -26166,12 +26160,6 @@ _vglOfrecerDeshacer(btn);
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
         <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
-        <!-- v15.5.0 — Barrido de Ajustes (decidido en entrevista): controles técnicos y de identidad manual retirados; los valores quedan en fábrica y la identidad se detecta sola. -->
-        <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
-        <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
-        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
-        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
-        <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
       <div class="vgl-grp vgl-grp-tec ${isDevMode ? '' : 'vgl-d-none'}">
