@@ -860,12 +860,12 @@ module.exports = {
       const btns = dock.children.find((n) => n.className === "vgl-dock-btns");
       t.cierto(!!btns, "existe el contenedor de botones");
       const accs = btns.children.map((b) => b.getAttribute("data-accion"));
-      // v17.x.x — el dock creció a propósito: ✍ Redactar (texto libre). El botón de
-      // «riesgo» se retiró en v16.8.0 (su contenido vive en el Panel) y «Próximo control»
-      // se eliminó por decisión del médico. El Panel del paciente («ficha») se OCULTA hasta
+      // v17.x.x — el dock creció a propósito: ✍ Redactar (texto libre) y 📦 control
+      // (Próximo control, solo autorizados). El botón de «riesgo» se retiró en v16.8.0
+      // (su contenido vive en el Panel). El Panel del paciente («ficha») se OCULTA hasta
       // cumplir los requisitos (con este mock no hay resumen cacheado → queda bloqueado e
       // invisible), y los atajos «Ir a…» se retiraron por completo.
-      t.igual(accs, ["agendar", "ordenar", "labs", "redactar"]);
+      t.igual(accs, ["agendar", "ordenar", "labs", "redactar", "control"]);
       t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
 
       // Segunda llamada: no duplica el contenedor del dock.
@@ -874,7 +874,7 @@ module.exports = {
       t.igual(c.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro dock");
     });
 
-    t.caso("createAccionesDockUI: médico NO autorizado solo ve PyM y laboratorios (sin agendar cita, panel ni redactor)", () => {
+    t.caso("createAccionesDockUI: médico NO autorizado solo ve PyM y laboratorios (sin agendar cita, panel, redactor ni control)", () => {
       const c = cargar({ silencioso: true });
       mockPacienteDock(c, "555666777");
       c.api.__state.activeDoctor = { id: 909, name: "ANA MARIA PEREZ" }; // no está en la lista autorizada
@@ -882,8 +882,8 @@ module.exports = {
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
       // Sin nada hecho, el no autorizado pierde el botón de agendar cita (solo le quedaría
-      // la toma de muestras si faltara el laboratorio); ficha, atajos y redactor quedan
-      // ocultos. PyM (ordenar) y laboratorios se conservan.
+      // la toma de muestras si faltara el laboratorio); ficha, atajos, redactor y control
+      // quedan ocultos. PyM (ordenar) y laboratorios se conservan.
       t.igual(accs, ["ordenar", "labs"]);
     });
 
@@ -1025,8 +1025,8 @@ module.exports = {
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
       // v17.x.x — sin agendar/ordenar, y sin el Panel (oculto hasta cumplir requisitos) ni
-      // los atajos «Ir a…» (retirados). Labs y Redactar se conservan.
-      t.igual(accs, ["labs", "redactar"]);
+      // los atajos «Ir a…» (retirados). Labs, Redactar y control se conservan.
+      t.igual(accs, ["labs", "redactar", "control"]);
     });
 
     t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {
