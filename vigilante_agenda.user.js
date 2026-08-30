@@ -6705,6 +6705,12 @@ _vglOfrecerDeshacer(btn);
     // el mensaje es «aún cargando», no una pestaña concreta que podría estar equivocada.
     const _panelBloqueado = !_resumenListoParaGate || !_factoresParaGate || _pendientesPanel.length > 0;
 
+    // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico. `_autorizado` decide
+    // qué botones existen en el dock. Los no autorizados solo ven: agendamiento de
+    // laboratorios, Psicología/Odontología, laboratorios y PyM. Ocultos para ellos:
+    // agendamiento de citas médicas, Panel del paciente, Redactor IA y Control.
+    const _autorizado = mtrEsMedicoAutorizado();
+
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
     // provocando reflow + GC cada 5 s en la vista de historia. Ahora, si la firma de estado
@@ -6716,7 +6722,7 @@ _vglOfrecerDeshacer(btn);
       // v17.5.0 — la compuerta del Panel del paciente: si el resumen termina de calcularse o
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
       // para reflejarlo (habilitar el botón, quitar/actualizar el atajo «Ir a…»).
-      _panelBloqueado ? "PB" : "pb", _pendientesPanel.map((p) => p.pestania).join(",")].join("|");
+      _panelBloqueado ? "PB" : "pb", _pendientesPanel.map((p) => p.pestania).join(","), _autorizado ? "AU" : "no"].join("|");
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -6751,6 +6757,10 @@ _vglOfrecerDeshacer(btn);
     // la tarjeta, no de existencia: isCitaAgendadaHoy/isLabAgendadaHoy siguen siendo las
     // mismas funciones, con las mismas pruebas).
     if (S.agendamientoRapido !== false) {
+      // v17.x.x — REFACTOR S+ (30-ago): los no autorizados solo agendan la TOMA DE
+      // MUESTRAS (openLabSoloModal); la cita de control general y su recordatorio
+      // quedan ocultos para ellos.
+      if (_autorizado || soloFaltaLab) {
       const bAg = document.createElement("button");
       bAg.className = "vgl-dock-btn" + (soloFaltaLab ? " vgl-dock-btn-ambar" : "");
       bAg.setAttribute("data-accion", "agendar");
@@ -6794,7 +6804,7 @@ _vglOfrecerDeshacer(btn);
       // labs» y «Recordatorio». Cada uno con una sola cosa que hacer, los dos a la vista.
       // Antes, con la cita hecha y el laboratorio pendiente, el recordatorio era
       // inalcanzable — que es exactamente lo que reportó el médico.
-      if (soloFaltaLab && citaDetalleHoy(docId)) {
+      if (_autorizado && soloFaltaLab && citaDetalleHoy(docId)) {
         const bRec = document.createElement("button");
         bRec.className = "vgl-dock-btn";
         bRec.setAttribute("data-accion", "recordatorio");
@@ -6803,6 +6813,7 @@ _vglOfrecerDeshacer(btn);
         _vglDockRotulo(bRec, "\uD83D\uDDA8", "Recordatorio");
         bRec.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.recordatorio.abrir"); abrirRecordatorioCita(apt); });
         btns.appendChild(bRec);
+      }
       }
 
       const bOrd = document.createElement("button");
@@ -6838,6 +6849,9 @@ _vglOfrecerDeshacer(btn);
     // juzgar a un paciente ya no hay que abrir dos ventanas y compararlas de memoria.
     // v17.5.0 — DESHABILITADO (orden explícita del médico, no solo con aviso) mientras
     // falte lo mínimo por documentar o el resumen automático todavía no termine de calcular.
+    // v17.x.x — REFACTOR S+ (30-ago): el Panel del paciente solo existe para los
+    // médicos autorizados.
+    if (_autorizado) {
     const bFicha = document.createElement("button");
     bFicha.className = "vgl-dock-btn";
     bFicha.setAttribute("data-accion", "ficha");
@@ -6859,10 +6873,12 @@ _vglOfrecerDeshacer(btn);
     }
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
+    }
 
     // v17.5.0 — atajos «Ir a [pestaña]»: uno por cada pestaña con algo pendiente, solo
     // mientras haya algo concreto que el médico pueda ir a hacer (no durante la sola espera
     // del resumen automático, donde ningún clic suyo la acelera).
+    if (_autorizado) {
     _pendientesPanel.forEach((pend) => {
       const bIr = document.createElement("button");
       bIr.className = "vgl-dock-btn vgl-dock-btn-ambar";
@@ -6878,10 +6894,14 @@ _vglOfrecerDeshacer(btn);
       });
       btns.appendChild(bIr);
     });
+    }
 
     // v15.6.0 — Redactor de texto libre con IA (Propuesta 3): módulo propio, separado
     // del Riesgo CV (que sigue en beta). Escribe borradores para las casillas de texto
     // libre de la historia; el médico revisa, edita e inserta — nunca se escribe solo.
+    // v17.x.x — REFACTOR S+ (30-ago): solo autorizado Y con la API (Gemini) configurada.
+    // Sin API configurada, el botón ni se muestra (pedido explícito del médico).
+    if (_autorizado && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini()) {
     const bRedactar = document.createElement("button");
     bRedactar.className = "vgl-dock-btn";
     bRedactar.setAttribute("data-accion", "redactar");
@@ -6894,6 +6914,21 @@ _vglOfrecerDeshacer(btn);
       abrirRedactorTextoLibre(apt);
     });
     btns.appendChild(bRedactar);
+    }
+
+    // v17.x.x — REFACTOR S+ (30-ago): Ordenamiento de exámenes · próximo control
+    // (simula el botón Paquetes de HTA/DM/ERC en revisión de solo-lectura). Solo
+    // médicos autorizados.
+    if (_autorizado) {
+    const bControl = document.createElement("button");
+    bControl.className = "vgl-dock-btn";
+    bControl.setAttribute("data-accion", "control");
+    bControl.setAttribute("aria-label", "Ordenamiento de exámenes del próximo control");
+    bControl.title = "📦 Revisar el paquete del programa del paciente y qué toca pedir en el próximo control.";
+    _vglDockRotulo(bControl, "📦", "Próximo control");
+    bControl.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.control.abrir"); openPaquetesModal(apt); });
+    btns.appendChild(bControl);
+    }
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
     // v16.8.0 — RETIRADO DEL DOCK. Su contenido (clasificación con su porqué, función
@@ -8585,6 +8620,35 @@ _vglOfrecerDeshacer(btn);
   }
   function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
   function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  // =====================================================================
+  //  v17.x.x — REFACTOR S+ (30-ago): CONTROL DE ACCESO POR MÉDICO.
+  //  ------------------------------------------------------------------
+  //  Lista FIJA de los médicos con acceso completo. Se compara el NOMBRE COMPLETO
+  //  normalizado (sin tildes, sin mayúsculas, sin espacios dobles) contra
+  //  `state.activeDoctor.name`. Los demás médicos ven solo el panel del Centinela,
+  //  agendamiento de laboratorios, Psicología/Odontología, laboratorios y PyM.
+  //  Restringido para los demás: agendamiento de citas médicas, Panel del paciente,
+  //  Redactor IA y Ordenamiento de exámenes (Control).
+  // =====================================================================
+  const MTR_MEDICOS_AUTORIZADOS = [
+    "ELISETH MARGARITA ESTRADA MORENO",
+    "BRANDON JESUS PALENCIA MARTINEZ",
+    "MARIA EDINETH PINO",
+    "SINAI MIJARES",
+  ];
+  function mtrNormalizarNombre(n) {
+    return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
+  }
+  // Pura y cacheable: devuelve true si el médico activo está en la lista autorizada.
+  // Sin nombre detectado todavía -> false (máxima restricción: ante la duda, ocultar).
+  function mtrEsMedicoAutorizado() {
+    try {
+      const nombre = (state && state.activeDoctor && state.activeDoctor.name) || "";
+      const n = mtrNormalizarNombre(nombre);
+      if (!n) return false;
+      return MTR_MEDICOS_AUTORIZADOS.some((x) => mtrNormalizarNombre(x) === n);
+    } catch (e) { return false; }
+  }
   function isExcludedActivity(header, label) {
     const hay = stripAccents((header + " " + label).toLowerCase());
     if (hay.includes("vih")) return false; // VIH siempre se conserva
@@ -13540,6 +13604,7 @@ _vglOfrecerDeshacer(btn);
         --c-recordatorio:#54e6d4;
         --c-panel:#2dd4bf;
         --c-labs:#818cf8;
+        --c-paquete:#38bdf8;
         --c-pes:#ff9ec4;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
            eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
@@ -13557,6 +13622,7 @@ _vglOfrecerDeshacer(btn);
         --rgb-recordatorio:84,230,212;
         --rgb-panel:45,212,191;
         --rgb-labs:129,140,248;
+        --rgb-paquete:56,189,248;
         --rgb-pes:255,158,196;
         --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
@@ -13623,11 +13689,13 @@ _vglOfrecerDeshacer(btn);
         --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
         --c-panel:#0f766e;
         --c-labs:#3730a3;
+        --c-paquete:#0369a1;
         --c-pes:#9d174d;--c-atendido:#475569;
         --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
         --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
         --rgb-panel:15,118,110;
         --rgb-labs:55,48,163;
+        --rgb-paquete:3,105,161;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
@@ -16090,6 +16158,43 @@ _vglOfrecerDeshacer(btn);
 
       @media (prefers-reduced-motion:reduce){
         #vgl-labs-modal,#vgl-labs-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ==== v17.x.x — REFACTOR S+: modal «Ordenamiento de exámenes · próximo control» ==== */
+      /* Solo-lectura: revisa el paquete del programa, jamás dispara el Paquetes nativo. */
+      #vgl-paquete-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:14px}
+      #vgl-paquete-modal .vgl-paquete-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-paquete) !important;background:rgba(var(--rgb-paquete),.12);
+        border:1px solid rgba(var(--rgb-paquete),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-paquete),.10)
+      }
+      #vgl-paquete-modal .vgl-paquete-kicker svg{width:13px;height:13px}
+      #vgl-paquete-modal .vgl-agm-patient{font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;color:var(--fg) !important;overflow-wrap:anywhere;text-shadow:0 0 30px rgba(var(--rgb-paquete),.20)}
+      #vgl-paquete-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-paquete-modal #vgl-paquete-body{background:rgba(0,0,0,.18);border-color:var(--line);padding:8px 10px;border-radius:var(--r-card)}
+      #vgl-paquete-modal.light #vgl-paquete-body{background:rgba(15,23,42,.03)}
+      #vgl-paquete-modal .vgl-paq-programa{margin-bottom:12px}
+      #vgl-paquete-modal .vgl-paq-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+      #vgl-paquete-modal .vgl-paq-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--fg2) !important;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r-pill);padding:5px 12px}
+      #vgl-paquete-modal .vgl-paq-chip.active{color:var(--c-paquete) !important;background:rgba(var(--rgb-paquete),.12);border-color:rgba(var(--rgb-paquete),.45)}
+      #vgl-paquete-modal .vgl-paq-porque{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.5}
+      #vgl-paquete-modal .vgl-paq-sec{margin-top:12px}
+      #vgl-paquete-modal .vgl-paq-t{font-size:var(--t-micro);font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--c-paquete) !important;margin-bottom:7px}
+      #vgl-paquete-modal .vgl-paq-lista{display:flex;flex-direction:column;gap:6px}
+      #vgl-paquete-modal .vgl-paq-fila{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-chip);padding:8px 12px}
+      #vgl-paquete-modal .vgl-paq-nom{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;min-width:0;flex:1}
+      #vgl-paquete-modal .vgl-paq-que{font-size:var(--t-micro);color:var(--fg3) !important}
+      #vgl-paquete-modal .vgl-paq-badge{flex:none;font-size:10.5px;font-weight:800;border-radius:var(--r-pill);padding:3px 9px}
+      #vgl-paquete-modal .vgl-paq-aldia{color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.30)}
+      #vgl-paquete-modal .vgl-paq-vence{color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.10);border:1px solid rgba(var(--rgb-ambar),.30)}
+      #vgl-paquete-modal .vgl-paq-vencido{color:var(--c-rojo) !important;background:rgba(var(--rgb-rojo),.10);border:1px solid rgba(var(--rgb-rojo),.30)}
+      #vgl-paquete-modal .vgl-paq-sinhist,#vgl-paquete-modal .vgl-paq-sinfecha{color:var(--fg3) !important;background:var(--bg3);border:1px solid var(--edge)}
+      #vgl-paquete-modal .vgl-paq-okmsg{font-size:var(--t-body);color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.08);border:1px solid rgba(var(--rgb-verde),.25);border-radius:var(--r-chip);padding:10px 12px}
+      #vgl-paquete-modal .vgl-paq-err{font-size:var(--t-body);color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.08);border:1px solid rgba(var(--rgb-ambar),.28);border-radius:var(--r-chip);padding:10px 12px;line-height:1.5}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-paquete-modal,#vgl-paquete-modal *{animation:none!important;transition:none!important}
       }
 
       /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
@@ -19464,6 +19569,171 @@ _vglOfrecerDeshacer(btn);
       if (max != null) return "≤ " + max;
     } catch (e) {}
     return "";
+  }
+
+  // =====================================================================
+  //  v17.x.x — REFACTOR S+ (30-ago): «Ordenamiento de exámenes · próximo control»
+  //  ------------------------------------------------------------------
+  //  Nuevo módulo, pedido por el médico: simular la EXPERIENCIA del botón «Paquetes»
+  //  nativo de HTA/DM/ERC (programa → paquete → qué vence → qué sigue vigente), pero
+  //  como una REVISIÓN DE SOLO-LECTURA. NO dispara el paquete nativo: ese gesto
+  //  arrastra SIEMPRE el hemograma (902210), un analito que el médico prohibió pedir
+  //  por arrastre (decisión v17.37.0 — «jamás ordenar lo que no se debe»). Aquí el
+  //  médico revisa qué toca pedir y lo ordena con su propio botón «Paquetes» o con
+  //  «Ordenar pendientes» (que solo agrega analitos permitidos). Cero clics simulados,
+  //  cero red nueva: se sirve del resumen ya en caché, igual que el Panel.
+  // =====================================================================
+
+  // Pura: del analito del tablero a su estado de vigencia para la tarjeta.
+  function mtrPaqueteEstadoDe(a) {
+    const x = a || {};
+    if (x.subestado === "vencido" || x.vencidoBase) return "vencido";
+    if (x.subestado === "sin_historial") return "sin_historial";
+    if (x.subestado === "sin_fecha") return "sin_fecha";
+    if (x.vence) return "vence";
+    return "al_dia";
+  }
+
+  // Pura: del tablero clínico (mtrTableroClinico) al HTML de la revisión del paquete.
+  // No lee red ni DOM; solo formatea lo que el motor ya calculó. Si no hay programa
+  // rector, se declara y NO se ofrece ningún paquete (regla D de la casa).
+  function mtrPaqueteProgramaHtml(d) {
+    if (!d) return '<div class="vgl-paq-err">No se pudo evaluar el programa del paciente todavía.</div>';
+    const prog = d.programa || {};
+    const ordenar = Array.isArray(d.ordenar) ? d.ordenar : [];
+    const vigentes = Array.isArray(d.vigentes) ? d.vigentes : [];
+
+    if (!prog.rector) {
+      return '<div class="vgl-paq-err">'
+        + escapeHtml(prog.porQue || "Sin programa de crónicos identificado: no se ofrece ningún paquete.")
+        + '</div>';
+    }
+
+    const badge = {
+      vencido: { rotulo: "Vencido", clase: "vgl-paq-vencido" },
+      vence: { rotulo: "Vence", clase: "vgl-paq-vence" },
+      sin_historial: { rotulo: "Sin tomas", clase: "vgl-paq-sinhist" },
+      sin_fecha: { rotulo: "Sin fecha", clase: "vgl-paq-sinfecha" },
+      al_dia: { rotulo: "Al día", clase: "vgl-paq-aldia" },
+    };
+
+    const filaOrden = ordenar.map((a) => {
+      const e = mtrPaqueteEstadoDe(a);
+      const b = badge[e] || badge.al_dia;
+      return '<div class="vgl-paq-fila">'
+        + '<span class="vgl-paq-nom">' + escapeHtml(a.nombre) + '</span>'
+        + '<span class="vgl-paq-que">' + escapeHtml(a.quePasa || "") + '</span>'
+        + '<span class="vgl-paq-badge ' + b.clase + '">' + escapeHtml(b.rotulo) + '</span>'
+        + '</div>';
+    }).join("");
+
+    const filaVigente = vigentes.map((a) => {
+      return '<div class="vgl-paq-fila vgl-paq-ok">'
+        + '<span class="vgl-paq-nom">' + escapeHtml(a.nombre) + '</span>'
+        + '<span class="vgl-paq-que">' + escapeHtml(a.quePasa || "") + '</span>'
+        + '<span class="vgl-paq-badge vgl-paq-aldia">Al día</span>'
+        + '</div>';
+    }).join("");
+
+    const chips = ["HTA", "DM2", "ERC"].map((p) => {
+      const activo = prog.rector === p;
+      const rotulo = MTR_PROGRAMA_ROTULO[p] || p;
+      return '<span class="vgl-paq-chip' + (activo ? " active" : "") + '">'
+        + (activo ? "● " : "") + escapeHtml(rotulo) + '</span>';
+    }).join("");
+
+    let html = '<div class="vgl-paq-programa">'
+      + '<div class="vgl-paq-chips">' + chips + '</div>'
+      + '<div class="vgl-paq-porque">' + escapeHtml(prog.porQue || "") + '</div>'
+      + '</div>';
+
+    if (ordenar.length) {
+      html += '<div class="vgl-paq-sec">'
+        + '<div class="vgl-paq-t">Para el próximo control</div>'
+        + '<div class="vgl-paq-lista">' + filaOrden + '</div>'
+        + '</div>';
+    } else {
+      html += '<div class="vgl-paq-sec"><div class="vgl-paq-okmsg">Al día con el programa de '
+        + escapeHtml(prog.rotulo || prog.rector) + ': nada vence para la próxima toma.</div></div>';
+    }
+
+    if (vigentes.length) {
+      html += '<div class="vgl-paq-sec">'
+        + '<div class="vgl-paq-t">Sigue vigente</div>'
+        + '<div class="vgl-paq-lista">' + filaVigente + '</div>'
+        + '</div>';
+    }
+
+    return html;
+  }
+
+  async function openPaquetesModal(apt) {
+    if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
+    let _fnCompletado = false;
+    try { uxTrack("fn.paquete.open"); } catch (e) {}
+
+    let existing = document.getElementById("vgl-paquete-modal");
+    if (existing) existing.remove();
+
+    const patientName = apt.nombre || apt.name || "Paciente Everest";
+    const modal = document.createElement("div");
+    modal.id = "vgl-paquete-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-paquete-title");
+    if (isLight()) modal.classList.add("light");
+
+    const ICO = {
+      pkg: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+      info: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    };
+
+    modal.innerHTML = `
+      <div class="vgl-agm-card" style="max-width:720px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-paquete-kicker" id="vgl-paquete-title">${ICO.pkg} Ordenamiento de exámenes · Próximo control</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b></div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-paquete-x" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="vgl-ux-caption">Revisión del paquete que le corresponde al paciente según su programa. Aquí solo se consulta: la orden la genera usted con el botón «Paquetes» de la historia o con «Ordenar pendientes» — el asistente nunca lo hace por su cuenta.</div>
+        <div id="vgl-paquete-body" class="vgl-agm-slots" aria-live="polite" style="max-height:440px;overflow-y:auto;display:block">
+          <div class="vgl-agm-loading">⏳ Revisando el programa y las vigencias del paciente...</div>
+        </div>
+        <div class="vgl-agm-foot">
+          <button class="vgl-agm-btn pri" id="vgl-paquete-close">Cerrar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const xBtn = modal.querySelector("#vgl-paquete-x");
+    const closeBtn = modal.querySelector("#vgl-paquete-close");
+    let cerrado = false;
+    const closeMod = () => { cerrado = true; try { if (!_fnCompletado) uxTrack("fn.paquete.abandon"); } catch (e) {} try { if (xBtn) xBtn.removeEventListener("click", closeMod); if (closeBtn) closeBtn.removeEventListener("click", closeMod); } catch (e) {} modal.innerHTML = ""; modal.remove(); };
+    if (xBtn) xBtn.addEventListener("click", closeMod);
+    if (closeBtn) closeBtn.addEventListener("click", closeMod);
+    const bgClick = (e) => { if (e.target === modal) closeMod(); };
+    modal.addEventListener("click", bgClick);
+
+    const body = modal.querySelector("#vgl-paquete-body");
+    try {
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
+      if (!resumen) {
+        if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo leer el resumen del paciente. Abra la historia un momento (ahí se carga solo) y vuelva a abrir este módulo.</div>';
+        return;
+      }
+      let d = null;
+      try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
+      if (body) body.innerHTML = mtrPaqueteProgramaHtml(d);
+      _fnCompletado = true;
+      try { uxTrack("fn.paquete.complete"); } catch (e) {}
+    } catch (e) {
+      if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo revisar el paquete en este momento. Inténtelo de nuevo.</div>';
+    }
   }
 
   async function openLaboratoriosModal(apt) {

@@ -797,6 +797,12 @@ module.exports = {
       c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
       c.env.doc.querySelector = () => null;
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC " + doc, closest: () => null }] : []);
+      // v17.x.x — control de acceso: el caso base del dock ejercita el flujo de un médico
+      // AUTORIZADO (acceso completo). Se fija un nombre de la lista fija y se habilita el
+      // Redactor IA (bandera + clave Gemini), porque ese botón solo existe si ambas se cumplen.
+      c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      c.api.__S.iaRedaccion = true;
+      c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
     }
 
     t.caso("createAccionesDockUI: fuera del módulo HCHealth no crea el widget", () => {
@@ -829,13 +835,27 @@ module.exports = {
       // «Ir a [pestaña]» (uno por pestaña con algo pendiente por documentar — con el
       // mock de esta suite son 2: Antecedentes y Hábitos) y ✍ Redactar (texto libre).
       // El botón de «riesgo» se retiró en v16.8.0 (su contenido vive en el Panel).
-      t.igual(accs, ["agendar", "ordenar", "labs", "ficha", "ir-pestana", "ir-pestana", "redactar"]);
+      // v17.x.x — el dock suma «control» (Próximo control, solo autorizados) al final.
+      t.igual(accs, ["agendar", "ordenar", "labs", "ficha", "ir-pestana", "ir-pestana", "redactar", "control"]);
       t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
 
       // Segunda llamada: no duplica el contenedor del dock.
       c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "anamesis" ? { id: "anamesis" } : null));
       c.api.createAccionesDockUI();
       t.igual(c.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro dock");
+    });
+
+    t.caso("createAccionesDockUI: médico NO autorizado solo ve PyM y laboratorios (sin agendar cita, panel, redactor ni control)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "555666777");
+      c.api.__state.activeDoctor = { id: 909, name: "ANA MARIA PEREZ" }; // no está en la lista autorizada
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
+      // Sin nada hecho, el no autorizado pierde el botón de agendar cita (solo le quedaría
+      // la toma de muestras si faltara el laboratorio); ficha, atajos, redactor y control
+      // quedan ocultos. PyM (ordenar) y laboratorios se conservan.
+      t.igual(accs, ["ordenar", "labs"]);
     });
 
     t.caso("createAccionesDockUI: se autolimpia al salir del módulo HCHealth", () => {
@@ -976,7 +996,8 @@ module.exports = {
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
       // v16.8.0+ — sin el botón de «riesgo» (retirado); el resto del dock se conserva completo.
-      t.igual(accs, ["labs", "ficha", "ir-pestana", "ir-pestana", "redactar"]);
+      // v17.x.x — suma «control» (Próximo control, solo autorizados).
+      t.igual(accs, ["labs", "ficha", "ir-pestana", "ir-pestana", "redactar", "control"]);
     });
 
     t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {

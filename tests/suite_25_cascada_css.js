@@ -324,7 +324,8 @@ module.exports = {
       // quedan fuera de alcance a propósito (son propiedades que Everest no pisa).
       const paneles = [
         '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
-        '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal'
+        '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal',
+        '#vgl-paquete-modal'
       ];
 
       const infracciones = new Set();
@@ -530,8 +531,12 @@ module.exports = {
       // (.vgl-labs-srclbl svg), el chip «En línea» (.vgl-labs-srconline), el botón de
       // informe (.vgl-labs-pdf) y el año compacto de la fecha (.vgl-labs-date small) —
       // identidad índigo, Regla E. Censo verificado.
+      // REFACTOR S+ de Ordenamiento/Control (30-ago) — 449 -> 465 (+16): el modal
+      // «Próximo control» (#vgl-paquete-modal) cuelga de document.body, así que sus 14
+      // declaraciones de color llevan !important por Regla E, más el par de
+      // animation/transition del bloque reduced-motion. Censo verificado.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 449, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel y los 4 del REFACTOR S+ de Laboratorios (esperado 449, salió ${importantTotal})`);
+      t.cierto(importantTotal === 465, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios y los 16 del REFACTOR S+ de Ordenamiento/Control (esperado 465, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
