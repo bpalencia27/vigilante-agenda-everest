@@ -467,11 +467,11 @@ module.exports = {
       const cuerpo = modal.querySelector("#vgl-panel-cuerpo");
       const html = String(cuerpo.innerHTML || "");
       // v16.8.0 — las cuatro zonas siguen estando, repartidas en dos secciones del Panel.
-      // Entrando por openTableroModal se aterriza en «Riesgo y función renal».
+      // Entrando por openTableroModal se aterriza en «Riesgo y renal» (rótulo del REFACTOR S+).
       t.cierto(html.includes("Riesgo cardiovascular"), "zona 1: el riesgo");
       t.cierto(html.includes("Cockcroft-Gault") && html.includes("CKD-EPI 2021"), "zona 2: las dos fórmulas");
       const nav = String((modal.querySelector("#vgl-panel-nav-slot") || {}).innerHTML || "");
-      t.cierto(nav.includes("Exámenes y vigencias"), "y la sección de exámenes está a un clic, en la navegación");
+      t.cierto(nav.includes("Exámenes"), "y la sección de exámenes está a un clic, en la navegación");
       const dTab = c2.api.mtrTableroClinico(resumenBase);
       const htmlEx = String(c2.api.mtrPanelExamenesHtml(dTab));
       t.cierto(htmlEx.includes("Qué ordenar en la próxima toma"), "zona 3: qué pedir");

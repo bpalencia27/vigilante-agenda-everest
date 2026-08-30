@@ -13535,6 +13535,7 @@ _vglOfrecerDeshacer(btn);
         --c-verde:#4ff0b8;
         --c-azul:#a78bfa;
         --c-recordatorio:#54e6d4;
+        --c-panel:#2dd4bf;
         --c-pes:#ff9ec4;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
            eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
@@ -13550,6 +13551,7 @@ _vglOfrecerDeshacer(btn);
         --rgb-verde:79,240,184;
         --rgb-azul:167,139,250;
         --rgb-recordatorio:84,230,212;
+        --rgb-panel:45,212,191;
         --rgb-pes:255,158,196;
         --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
@@ -13614,9 +13616,11 @@ _vglOfrecerDeshacer(btn);
         /* Triaje profundo — AAA sobre cerámica clara */
         --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
         --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
+        --c-panel:#0f766e;
         --c-pes:#9d174d;--c-atendido:#475569;
         --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
         --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
+        --rgb-panel:15,118,110;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
@@ -14160,6 +14164,10 @@ _vglOfrecerDeshacer(btn);
       #vgl-ficha-modal,#vgl-tablero-modal,#vgl-panel-modal{color:var(--fg) !important}
       #vgl-ficha-modal .vgl-agm-card,#vgl-tablero-modal .vgl-agm-card,#vgl-panel-modal .vgl-agm-card{color:var(--fg) !important}
       #vgl-ia-modal .vgl-agm-kicker,#vgl-ficha-modal .vgl-agm-kicker,#vgl-tablero-modal .vgl-agm-kicker,#vgl-panel-modal .vgl-agm-kicker{color:var(--fg) !important}
+      /* v17.x.x — REFACTOR S+ (Panel): identidad esmeralda del kicker. El rótulo lleva las
+         DOS clases (.vgl-agm-title .vgl-agm-kicker), así que esta regla (0,3,0) gana sobre
+         la compartida de arriba (0,2,0) sin colisionar con la Regla A del banco. */
+      #vgl-panel-modal .vgl-agm-title.vgl-agm-kicker{color:var(--c-panel) !important}
       #vgl-ficha-modal .vgl-agm-patient,#vgl-tablero-modal .vgl-agm-patient,#vgl-panel-modal .vgl-agm-patient{color:var(--fg) !important}
       #vgl-ia-modal .vgl-agm-sub,#vgl-ficha-modal .vgl-agm-sub,#vgl-tablero-modal .vgl-agm-sub,#vgl-panel-modal .vgl-agm-sub{color:var(--fg2) !important}
       #vgl-ficha-modal .vgl-agm-close,#vgl-tablero-modal .vgl-agm-close,#vgl-panel-modal .vgl-agm-close{color:var(--fg2) !important}
@@ -15249,9 +15257,18 @@ _vglOfrecerDeshacer(btn);
       }
       #vgl-panel-modal .vgl-panel-tab:hover{background:var(--bg3);border-color:var(--bg4)}
       #vgl-panel-modal .vgl-panel-tab.active{
-        background:rgba(var(--rgb-azul),.22) !important;color:var(--c-azul) !important;
-        border-color:rgba(var(--rgb-azul),.55) !important;font-weight:800
+        background:rgba(var(--rgb-panel),.22) !important;color:var(--c-panel) !important;
+        border-color:rgba(var(--rgb-panel),.55) !important;font-weight:800
       }
+      /* v17.x.x — REFACTOR S+ (Panel): punto de estado por pestaña (al día / revisar /
+         sin dato). Regla E: cuelga de document.body, todo color con !important. */
+      #vgl-panel-modal .vgl-panel-dot{
+        display:inline-block;width:7px;height:7px;border-radius:50%;
+        margin-left:5px;vertical-align:1px;background:var(--fg3) !important
+      }
+      #vgl-panel-modal .vgl-panel-dot.ok{background:var(--c-verde) !important}
+      #vgl-panel-modal .vgl-panel-dot.pend{background:var(--c-ambar) !important}
+      #vgl-panel-modal .vgl-panel-dot.nd{background:var(--fg3) !important}
       #vgl-panel-modal .vgl-tend-fila{
         border:1px solid var(--edge);border-radius:var(--r-field);
         padding:10px 12px;margin-bottom:8px;background:var(--bg2)
@@ -15287,11 +15304,16 @@ _vglOfrecerDeshacer(btn);
       }
       #vgl-panel-modal .vgl-meta-fila.ok{border-color:rgba(var(--rgb-verde),.45);background:rgba(var(--rgb-verde),.07)}
       #vgl-panel-modal .vgl-meta-fila.falla{border-color:rgba(var(--rgb-ambar),.45);background:rgba(var(--rgb-ambar),.07)}
+      /* v17.x.x — REFACTOR S+ (Panel): SEMÁFORO COMPLETO en metas. El rojo es la «falla
+         grave» que ya calcula el motor (riesgo alto con eGFR < 45 en menor de 75, D10);
+         el ámbar queda para la «falla leve» (por encima de la meta). Regla E: !important. */
+      #vgl-panel-modal .vgl-meta-fila.grave{border-color:rgba(var(--rgb-rojo),.55);background:rgba(var(--rgb-rojo),.09)}
       #vgl-panel-modal .vgl-meta-rot{font-size:var(--t-body);font-weight:800;color:var(--fg) !important;min-width:64px}
       #vgl-panel-modal .vgl-meta-obj{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
       #vgl-panel-modal .vgl-meta-act{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-panel-modal .vgl-meta-fila.ok .vgl-meta-act{color:var(--c-verde) !important}
       #vgl-panel-modal .vgl-meta-fila.falla .vgl-meta-act{color:var(--c-ambar) !important}
+      #vgl-panel-modal .vgl-meta-fila.grave .vgl-meta-act{color:var(--c-rojo) !important}
       /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color.
          v17.24.0 — se suma #vgl-cw-farmaco (widget de Conducta, Fase 2): mismo contenido
          (mtrRenderDuplicidadesHtml), misma disciplina de !important por colgar de
@@ -19896,10 +19918,10 @@ _vglOfrecerDeshacer(btn);
     const f = r.factores || {};
     const erc = r.erc || {};
     const ult = r.ultimos || r._ultimos || {};
-    const F_LAB = "Laboratorios (Athenea/Annar/Citi)";
-    const F_EVE = "Everest (datos del paciente)";
-    const F_DOM = "Historia de hoy (lo escrito en las pestañas)";
-    const F_ORD = "Órdenes de Everest (medicamentos)";
+    const F_LAB = "Laboratorios";
+    const F_EVE = "Datos del paciente";
+    const F_DOM = "Historia de hoy";
+    const F_ORD = "Órdenes de la plataforma";
     const F_CAL = "Calculado por el asistente";
     const fila = (etiqueta, valor, fuente, extra) => {
       const falta = valor === null || valor === undefined || valor === "" || valor === "--";
@@ -20075,11 +20097,29 @@ _vglOfrecerDeshacer(btn);
   // defecto de v17.1.0 con el conteo de medicamentos, ahora evitado por diseño).
   // mtrPanelSeccionValida sigue cayendo a "resumen" ante cualquier id desconocido, así
   // que un llamador viejo con seccion:"medicamentos" no se rompe.
+  // Iconos SVG del modal del Panel (mismos paths Lucide que el resto del refactor S+).
+  const MTR_ICONO_HOJA = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
+  const MTR_ICONO_REFRESH = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+  const MTR_ICONO_ACTIVITY = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>';
+
+  // v17.x.x — REFACTOR S+ (30-ago, aprobado en canvas): las cuatro secciones con
+  // iconos emoji pasan a iconografía SVG (Lucide) con identidad esmeralda, y se
+  // RESTAURA la quinta pestaña «Medicamentos» (mtrPanelMedicamentosHtml quedó
+  // huérfana desde v17.28.0: construida, probada y sin llamador). Los rótulos
+  // se acortan a lenguaje de consultorio.
+  const MTR_PANEL_ICONOS = {
+    resumen: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>',
+    renal: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>',
+    examenes: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></svg>',
+    tendencias: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>',
+    medicamentos: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>',
+  };
   const MTR_PANEL_SECCIONES = [
-    { id: "resumen",      icono: "🧾", rotulo: "Resumen" },
-    { id: "renal",        icono: "❤️", rotulo: "Riesgo y función renal" },
-    { id: "examenes",     icono: "🧪", rotulo: "Exámenes y vigencias" },
-    { id: "tendencias",   icono: "📈", rotulo: "Tendencias" },
+    { id: "resumen",      icono: MTR_PANEL_ICONOS.resumen,      rotulo: "Resumen" },
+    { id: "renal",        icono: MTR_PANEL_ICONOS.renal,        rotulo: "Riesgo y renal" },
+    { id: "examenes",     icono: MTR_PANEL_ICONOS.examenes,     rotulo: "Exámenes" },
+    { id: "tendencias",   icono: MTR_PANEL_ICONOS.tendencias,   rotulo: "Tendencias" },
+    { id: "medicamentos", icono: MTR_PANEL_ICONOS.medicamentos, rotulo: "Medicamentos" },
   ];
   // Los puntos de entrada viejos siguen existiendo (el agendamiento abre el
   // tablero, el dock abría la ficha): cada uno aterriza en SU sección.
@@ -20090,13 +20130,20 @@ _vglOfrecerDeshacer(btn);
     return MTR_PANEL_SECCIONES.some((x) => x.id === s) ? s : "resumen";
   }
 
-  function mtrPanelNavHtml(activa) {
+  // v17.x.x — REFACTOR S+: las pestañas llevan un punto de estado (al día / revisar /
+  // sin dato) cuando el llamador pasa `estados` ({seccion: "ok"|"pend"|"nd"}). Sin
+  // estados, se pintan sin punto — los llamadores viejos (y sus pruebas) no cambian.
+  function mtrPanelNavHtml(activa, estados) {
     const act = mtrPanelSeccionValida(activa);
+    const est = (estados && typeof estados === "object") ? estados : null;
     return '<div class="vgl-panel-nav" role="tablist">'
-      + MTR_PANEL_SECCIONES.map((s) =>
-          '<button type="button" role="tab" class="vgl-panel-tab' + (s.id === act ? " active" : "") + '"'
-          + ' data-panel-sec="' + s.id + '" aria-selected="' + (s.id === act ? "true" : "false") + '">'
-          + s.icono + ' ' + escapeHtml(s.rotulo) + '</button>').join("")
+      + MTR_PANEL_SECCIONES.map((s) => {
+          const e = est && est[s.id];
+          const dot = e ? '<span class="vgl-panel-dot ' + escapeHtml(e) + '" aria-hidden="true"></span>' : "";
+          return '<button type="button" role="tab" class="vgl-panel-tab' + (s.id === act ? " active" : "") + '"'
+            + ' data-panel-sec="' + s.id + '" aria-selected="' + (s.id === act ? "true" : "false") + '">'
+            + s.icono + ' ' + escapeHtml(s.rotulo) + dot + '</button>';
+        }).join("")
       + '</div>';
   }
 
@@ -20205,7 +20252,7 @@ _vglOfrecerDeshacer(btn);
       ? '<div class="vgl-ord-vigwarn" style="margin:8px 0">Faltan ' + datos.faltantes + ' dato(s). El asistente NO los inventa: donde diga «sin dato», sus conclusiones van sin ese insumo.</div>'
       : "";
     return bento + aviso + filas
-      + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y órdenes de Everest, y lo escrito hoy en la historia.</div>';
+      + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y las órdenes de la plataforma, y lo escrito hoy en la historia.</div>';
   }
 
   // ---------- SECCIÓN 2: RIESGO Y FUNCIÓN RENAL ----------
@@ -20323,21 +20370,41 @@ _vglOfrecerDeshacer(btn);
   }
 
   // Las metas del paciente, con su valor actual al lado. Pura: recibe lo ya calculado.
+  // v17.x.x — REFACTOR S+ (decisión del médico, 30-ago): SEMÁFORO COMPLETO. El motor ya
+  // calculaba la gravedad de cada falla (mtrEvaluarFalla: «falla leve» vs «falla grave»
+  // por la regla renal de riesgo alto con eGFR < 45 en menor de 75) y el Panel la
+  // ignoraba: solo pintaba verde/ámbar/gris. Ahora la fila consume mtrEvaluarFalla y el
+  // rojo existe en Metas — sin umbrales nuevos, es la regla que el médico ya decidió.
   function mtrPanelMetasHtml(d) {
     const metas = [];
     const m = d && d.meta;
+    const _ctxFalla = {
+      categoriaRiesgo: (d && d.riesgo && d.riesgo.categoria) || null,
+      egfr: (d && d.renal && d.renal.ckd && d.renal.ckd.tfg != null) ? d.renal.ckd.tfg : null,
+      edad: (d && d.factores && d.factores.edad != null) ? d.factores.edad : null,
+    };
+    const _estadoMeta = (actual, metaN) => {
+      if (actual === null || actual === undefined) return { estado: "nd", motivo: "" };
+      try {
+        const f = mtrEvaluarFalla("", actual, metaN, _ctxFalla);
+        if (f && f.gravedad === "grave") return { estado: "grave", motivo: f.motivo || "" };
+        if (f && f.falla) return { estado: "falla", motivo: f.motivo || "" };
+      } catch (e) {}
+      return { estado: "ok", motivo: "" };
+    };
+    const _conMotivo = (base, motivo) => (base && motivo ? base + " · " + motivo : (base || motivo));
     if (m && m.metas) {
       const act = (m.ldlActual !== null && m.ldlActual !== undefined) ? m.ldlActual : null;
-      const enMeta = act !== null ? act < m.metas.ldl : null;
+      const est = _estadoMeta(act, m.metas.ldl);
       metas.push({
         rotulo: "LDL", meta: "< " + m.metas.ldl + " mg/dL",
         actual: act === null ? "sin dato" : act + " mg/dL",
-        estado: act === null ? "nd" : (enMeta ? "ok" : "falla"),
-        extra: (m.metas.reduccion !== null && m.metas.reduccion !== undefined)
+        estado: est.estado,
+        extra: _conMotivo((m.metas.reduccion !== null && m.metas.reduccion !== undefined)
           ? (m.reduccionPct !== null && m.reduccionPct !== undefined
               ? "reducción " + m.reduccionPct + " % desde " + m.ldlBasal + (m.reduccionPct >= m.metas.reduccion ? " ✓" : " (exige ≥" + m.metas.reduccion + " %)")
               : "reducción ≥" + m.metas.reduccion + " % no evaluable: sin LDL previo del último año")
-          : "",
+          : "", est.motivo),
       });
     }
     // v17.0.0 — HbA1c: solo se muestra cuando el paciente es diabético. Enseñarle una
@@ -20352,13 +20419,14 @@ _vglOfrecerDeshacer(btn);
     const h = d && d.esDm2 && d.hba1c;
     if (h && h.actual !== null && h.actual !== undefined) {
       const metaH = (h.meta !== null && h.meta !== undefined) ? h.meta : mtrMetaHba1cGeneral();
+      const estH = _estadoMeta(h.actual, metaH);
       metas.push({
         rotulo: "HbA1c", meta: "< " + metaH + " %",
         actual: h.actual + " %",
-        estado: h.actual < metaH ? "ok" : "falla",
-        extra: (h.meta !== null && h.meta !== undefined && h.meta !== mtrMetaHba1cGeneral())
+        estado: estH.estado,
+        extra: _conMotivo((h.meta !== null && h.meta !== undefined && h.meta !== mtrMetaHba1cGeneral())
           ? "meta individual de este paciente, no la general de " + mtrMetaHba1cGeneral() + " %"
-          : "",
+          : "", estH.motivo),
         // v17.6.0 — la tubería para una meta de HbA1c individual quedó lista desde
         // v16.4.0 ("meta individual de este paciente" ya sabía mostrarse), pero nunca
         // se construyó el campo para fijarla. `data-accion` lo recoge openPanelPacienteModal.
@@ -20366,13 +20434,14 @@ _vglOfrecerDeshacer(btn);
       });
     }
     if (!metas.length) return "";
-    // v17.6.1 — DEFENSA EN PROFUNDIDAD: `x.estado` es siempre uno de "nd"/"ok"/"falla",
-    // fijados dos funciones más arriba en este mismo archivo — nunca texto libre ni un
-    // valor que pueda llegar de fuera — así que hoy no hay forma real de colar HTML por
-    // aquí. Pero era el único campo de esta fila sin `escapeHtml`, mientras todos sus
-    // vecinos (rótulo, meta, actual, extra, editable) sí lo llevan: una auditoría de
-    // producción lo señaló por esa inconsistencia. Blindarlo cuesta nada y evita que un
-    // futuro estado nuevo, agregado sin pensar en esto, abra la puerta sin que nadie lo note.
+    // v17.6.1 — DEFENSA EN PROFUNDIDAD: `x.estado` es siempre uno de "nd"/"ok"/"falla"
+    // (y desde el refactor S+ también "grave"), fijados dos funciones más arriba en este
+    // mismo archivo — nunca texto libre ni un valor que pueda llegar de fuera — así que
+    // hoy no hay forma real de colar HTML por aquí. Pero era el único campo de esta fila
+    // sin `escapeHtml`, mientras todos sus vecinos (rótulo, meta, actual, extra, editable)
+    // sí lo llevan: una auditoría de producción lo señaló por esa inconsistencia.
+    // Blindarlo cuesta nada y evita que un futuro estado nuevo, agregado sin pensar en
+    // esto, abra la puerta sin que nadie lo note.
     return '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">Metas terapéuticas</span>'
       + metas.map((x) => '<div class="vgl-meta-fila ' + escapeHtml(x.estado) + '"' + (x.editable ? ' id="vgl-meta-fila-' + escapeHtml(x.editable) + '"' : '') + '>'
@@ -20988,7 +21057,7 @@ _vglOfrecerDeshacer(btn);
     };
     modal.innerHTML = '<div class="vgl-agm-card" style="max-width:900px">'
       + '<div class="vgl-agm-head"><div style="min-width:0">'
-      + '<div class="vgl-agm-title vgl-agm-kicker">🧾 Panel del paciente</div>'
+      + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_ICONO_ACTIVITY + 'Panel del paciente</div>'
       + '<div class="vgl-agm-patient">' + escapeHtml(apt.nombre || apt.name || "Paciente") + '</div>'
       + '<div class="vgl-agm-sub">Todo lo del paciente en un solo sitio: lo que leí y de dónde, el riesgo y la función renal, qué ordenar, cómo viene evolucionando y sus medicamentos.</div>'
       + '</div><button class="vgl-agm-close" id="vgl-panel-x" aria-label="Cerrar">✕</button></div>'
@@ -21001,12 +21070,41 @@ _vglOfrecerDeshacer(btn);
 
     let _resumen = null;
     let _firma = _tableroFirmaDom(apt.doc_id);
+    // v17.x.x — REFACTOR S+ (sincronización, aprobado en canvas): la vigilancia de 20 s
+    // solo miraba la pantalla. Prescribir u ordenar desde Conducta con el Panel abierto
+    // no se reflejaba hasta reabrir. Esta firma del resumen CACHEADO detecta cuando OTRO
+    // módulo invalidó la caché y recalculó medicamentos/órdenes: el Panel se repinta solo.
+    let _firmaMeds = (() => {
+      try {
+        const r = mtrCacheResumenLeer(apt.doc_id);
+        return (r && Array.isArray(r.medicamentos))
+          ? r.medicamentos.length + "|" + (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function" ? r.medicamentosFrecuencia.size : 0)
+          : "";
+      } catch (e) { return ""; }
+    })();
 
     const pintar = (aviso) => {
       const cuerpo = modal.querySelector("#vgl-panel-cuerpo");
       const nav = modal.querySelector("#vgl-panel-nav-slot");
       if (!cuerpo || !vivo()) return;
-      if (nav) nav.innerHTML = mtrPanelNavHtml(seccion);
+      // v17.x.x — REFACTOR S+: punto de estado por pestaña (al día / revisar / sin dato),
+      // derivado de los MISMOS datos que el tablero de «Estado de un vistazo» del Resumen
+      // (mtrPanelResumenBentoDatos): misma regla de no-divergencia de v17.24.0.
+      let _estados = null;
+      if (_resumen) {
+        try {
+          const dE = mtrTableroClinico(_resumen);
+          const bento = mtrPanelResumenBentoDatos(_resumen, dE);
+          const estados = {};
+          (bento || []).forEach((c) => { estados[c.id] = c.estado; });
+          const vals = Object.keys(estados).map((k) => estados[k]);
+          estados.resumen = vals.indexOf("pend") >= 0 ? "pend" : (vals.indexOf("ok") >= 0 ? "ok" : "nd");
+          const meds = Array.isArray(_resumen.medicamentos) ? _resumen.medicamentos : null;
+          estados.medicamentos = (meds === null || !meds.length) ? "nd" : "ok";
+          _estados = estados;
+        } catch (e) { _estados = null; }
+      }
+      if (nav) nav.innerHTML = mtrPanelNavHtml(seccion, _estados);
 
       let dentro;
       if (!_resumen) {
@@ -21015,6 +21113,11 @@ _vglOfrecerDeshacer(btn);
         dentro = mtrPanelResumenHtml(_resumen);
       } else if (seccion === "tendencias") {
         dentro = mtrPanelTendenciasHtml(_resumen);
+      } else if (seccion === "medicamentos") {
+        // v17.x.x — REFACTOR S+: la sección restaurada. mtrPanelMedicamentosHtml ya
+        // estaba construida y probada (lista con frecuencia, avisos de dosis renal,
+        // duplicidades); solo le faltaba un llamador desde que v17.28.0 la retiró.
+        dentro = mtrPanelMedicamentosHtml(_resumen);
       } else {
         const d = mtrTableroClinico(_resumen);
         dentro = (seccion === "examenes")
@@ -21032,12 +21135,12 @@ _vglOfrecerDeshacer(btn);
       const frescura = (edadMin === null)
         ? "de esta consulta (no puedo precisar de hace cuánto)"
         : (edadMin < 1 ? "recién leídos" : "leídos hace " + edadMin + " min");
-      cuerpo.innerHTML = (aviso ? '<div class="vgl-tab-aviso">🔄 ' + escapeHtml(aviso) + '</div>' : "")
+      cuerpo.innerHTML = (aviso ? '<div class="vgl-tab-aviso">' + escapeHtml(aviso) + '</div>' : "")
         + dentro
         + '<div class="vgl-agm-foot" style="margin-top:14px">'
         + '<span class="vgl-agm-dinfo" style="margin:0">Datos ' + escapeHtml(frescura) + ' · se revisa solo mientras el panel esté abierto</span>'
-        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente">🖨 Hoja educativa</button>' : "")
-        + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">🔄 Buscar laboratorios nuevos</button>'
+        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente">' + MTR_ICONO_HOJA + 'Hoja educativa</button>' : "")
+        + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">' + MTR_ICONO_REFRESH + 'Buscar laboratorios nuevos</button>'
         + '<button type="button" class="vgl-agm-btn pri" id="vgl-panel-cerrar">Cerrar</button>'
         + '</div>';
 
@@ -21219,6 +21322,23 @@ _vglOfrecerDeshacer(btn);
       try {
         if (!vivo()) { clearInterval(_timer); return; }
         if (minimizado()) return;                 // v17.0.2 — dormido: no se recalcula nada
+        // v17.x.x — REFACTOR S+ (sincronización): primero se mira la firma del resumen
+        // cacheado. Si otro módulo (Conducta, Ordenar, Agendar) invalidó la caché y
+        // recalcularon medicamentos/órdenes, el Panel se repinta con lo nuevo — sin
+        // tocar la clasificación, que solo depende de la pantalla.
+        try {
+          const _resC = mtrCacheResumenLeer(apt.doc_id);
+          const _firmaMedsN = (_resC && Array.isArray(_resC.medicamentos))
+            ? _resC.medicamentos.length + "|" + (_resC.medicamentosFrecuencia && typeof _resC.medicamentosFrecuencia.get === "function" ? _resC.medicamentosFrecuencia.size : 0)
+            : "";
+          if (_firmaMeds !== "" && _firmaMedsN !== _firmaMeds && _resC) {
+            _firmaMeds = _firmaMedsN;
+            _resumen = _resC;
+            pintar("Se actualizó la lista de medicamentos (cambió en otro módulo): la pestaña Medicamentos quedó al día.");
+            return;
+          }
+          if (_firmaMeds === "") _firmaMeds = _firmaMedsN;
+        } catch (eM) {}
         const ahora = _tableroFirmaDom(apt.doc_id);
         if (!ahora || ahora === _firma) return;
         const cambios = _tableroQueCambio(_firma, ahora);

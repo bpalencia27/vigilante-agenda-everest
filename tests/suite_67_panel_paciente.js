@@ -8,7 +8,8 @@
 //  paciente había que abrir las dos y compararlas de memoria.
 //
 //  Lo que hay que defender aquí:
-//   · que las cuatro secciones existan y que cambiar de una a otra no
+//   · que las cinco secciones existan (la pestaña Medicamentos fue
+//     restaurada en el REFACTOR S+) y que cambiar de una a otra no
 //     pida NADA por red (una sola lectura alimenta el módulo entero);
 //   · que los dos puntos de entrada viejos aterricen donde el médico
 //     espera, sin romperle el camino a los llamadores internos;
@@ -55,29 +56,29 @@ module.exports = {
 
   async pruebas(t, api, env, cargar) {
     // ---------------- Navegación ----------------
-    // v17.28.0 — la sección «Medicamentos» salió del panel (sus chips viven en la Ficha;
-    // el médico los movió de ahí al rediseño del PR #101). MTR_PANEL_SECCIONES quedó con
-    // CUATRO: resumen, renal, exámenes y tendencias.
-    t.caso("mtrPanelSeccionValida: acepta las cuatro secciones y cae en Resumen ante cualquier cosa rara", () => {
-      ["resumen", "renal", "examenes", "tendencias"].forEach((s) => {
+    // v17.28.0 — la sección «Medicamentos» salió del panel; el REFACTOR S+ (30-ago,
+    // aprobado en canvas) la RESTAURA: mtrPanelMedicamentosHtml quedó construida,
+    // probada y huérfana desde v17.28.0, y el médico la pidió de vuelta como quinta
+    // pestaña. MTR_PANEL_SECCIONES quedó con CINCO: resumen, renal, exámenes,
+    // tendencias y medicamentos, con rótulos acortados a lenguaje de consultorio.
+    t.caso("mtrPanelSeccionValida: acepta las cinco secciones y cae en Resumen ante cualquier cosa rara", () => {
+      ["resumen", "renal", "examenes", "tendencias", "medicamentos"].forEach((s) => {
         t.igual(api.mtrPanelSeccionValida(s), s, "sección válida: " + s);
       });
-      t.igual(api.mtrPanelSeccionValida("medicamentos"), "resumen", "la sección retirada v17.28.0 ya no navega a ninguna parte");
       t.igual(api.mtrPanelSeccionValida("inventada"), "resumen", "una sección que no existe no deja el panel en blanco");
       t.igual(api.mtrPanelSeccionValida(null), "resumen", "null tampoco");
       t.igual(api.mtrPanelSeccionValida(undefined), "resumen", "ni undefined");
     });
 
-    t.caso("mtrPanelNavHtml: las cuatro secciones, con la activa marcada para el lector de pantalla", () => {
+    t.caso("mtrPanelNavHtml: las cinco secciones, con la activa marcada para el lector de pantalla", () => {
       const html = api.mtrPanelNavHtml("tendencias");
-      ["Resumen", "Riesgo y función renal", "Exámenes y vigencias", "Tendencias"].forEach((r) => {
+      ["Resumen", "Riesgo y renal", "Exámenes", "Tendencias", "Medicamentos"].forEach((r) => {
         t.cierto(html.indexOf(r) >= 0, "está la sección: " + r);
       });
-      t.falso(html.indexOf("Medicamentos") >= 0, "y la sección retirada v17.28.0 ya no se ofrece");
       t.cierto(html.indexOf('data-panel-sec="tendencias"') >= 0, "cada chip sabe a qué sección lleva");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="tendencias"/.test(html), "la pedida sale activa");
       t.igual((html.match(/aria-selected="true"/g) || []).length, 1, "solo UNA está seleccionada");
-      t.igual((html.match(/role="tab"/g) || []).length, 4, "las cuatro son pestañas de verdad para accesibilidad");
+      t.igual((html.match(/role="tab"/g) || []).length, 5, "las cinco son pestañas de verdad para accesibilidad");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="resumen"/.test(api.mtrPanelNavHtml("cualquiera")),
         "una sección inválida no deja la navegación sin activa");
     });
@@ -85,7 +86,7 @@ module.exports = {
     // ---------------- Sección 1: resumen ----------------
     t.caso("mtrPanelResumenHtml: muestra lo leído CON su fuente y cuenta lo que falta", () => {
       const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
-      t.cierto(html.indexOf("Órdenes de Everest") >= 0, "cada dato declara de dónde salió");
+      t.cierto(html.indexOf("Órdenes de la plataforma") >= 0, "cada dato declara de dónde salió");
       t.cierto(html.indexOf("LOSARTAN 50MG") >= 0, "los medicamentos leídos se listan");
       t.cierto(html.indexOf("lo LEÍDO, nunca lo supuesto") >= 0, "y el pie recuerda la regla de la casa");
       const vacio = api.mtrPanelResumenHtml({});
@@ -445,7 +446,7 @@ module.exports = {
     });
 
     // ---------------- El módulo entero ----------------
-    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cuatro secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
+    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cinco secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
       const c = await cargar({ silencioso: true });
       // El DOM del arnés devuelve null en querySelector: se le presta uno memoizado por
       // selector, igual que hacen las suites de los otros modales.
@@ -465,7 +466,7 @@ module.exports = {
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-panel-modal");
       t.cierto(!!modal, "el módulo unificado abre");
       const nav = String((modal.querySelector("#vgl-panel-nav-slot") || {}).innerHTML || "");
-      t.igual((nav.match(/data-panel-sec=/g) || []).length, 4, "con sus cuatro secciones (v17.28.0 retiró Medicamentos)");
+      t.igual((nav.match(/data-panel-sec=/g) || []).length, 5, "con sus cinco secciones (Medicamentos restaurada en el REFACTOR S+)");
       t.cierto(/data-panel-sec="tendencias"[^>]*aria-selected="true"|active" data-panel-sec="tendencias"/.test(nav),
         "y aterriza en la sección pedida");
       const cuerpo = String((modal.querySelector("#vgl-panel-cuerpo") || {}).innerHTML || "");

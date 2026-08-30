@@ -521,8 +521,13 @@ module.exports = {
       // los modales de flujo y sus variantes .light, el aviso de versión y los chips del
       // nuevo tablero — todo colgado de document.body, así que la Regla E exige su
       // !important. Censo verificado sobre la hoja real de producción.
+      // REFACTOR S+ del Panel (30-ago, aprobado en canvas) — 437 -> 445 (+8): el kicker
+      // esmeralda (#vgl-panel-modal .vgl-agm-title.vgl-agm-kicker), la pestaña activa
+      // (.vgl-panel-tab.active: background y color + border-color), el punto de estado
+      // (.vgl-panel-dot base + sus variantes ok/pend/nd) y la fila «grave» de las metas
+      // (.vgl-meta-fila.grave .vgl-meta-act). Censo verificado sobre la hoja real.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 437, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y los 88 de la línea v17.6.83–v17.56.0 (esperado 437, salió ${importantTotal})`);
+      t.cierto(importantTotal === 445, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0 y los 8 del REFACTOR S+ del Panel de 30-ago (esperado 445, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
