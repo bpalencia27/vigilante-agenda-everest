@@ -8110,8 +8110,11 @@ _vglOfrecerDeshacer(btn);
     },
   };
   // [UI-CSS] Paleta clínica suavizada (WCAG compliant, tono no estresante)
-  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#2563EB", MORADO: "#9333EA" };
-  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(37,99,235,.16)", MORADO: "rgba(147,51,234,.16)" };
+  // v18.0.0 — rebrand "Centinela": el acento primario pasa de azul a VIOLETA (marca) y
+  // la pre-alerta pasa de morado a CIAN para no chocar con la marca. VERDE/ÁMBAR/ROJO
+  // conservan su semántica clínica intacta.
+  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#7C3AED", MORADO: "#0891B2" };
+  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(124,58,237,.16)", MORADO: "rgba(8,145,178,.16)" };
   // v7.8.1: etiquetas ACCIONABLES, confirmadas por el médico del programa (no adivinadas):
   //  - Tamización CMB = riesgo cardiometabólico según Resolución 3280/2018 (el nombre del
   //    archivo "Agenda_Dia_CMB" es la sede/contrato, NO la prueba — se aclaró a propósito).
@@ -11874,7 +11877,7 @@ _vglOfrecerDeshacer(btn);
       ov.setAttribute("role", "alertdialog");
       ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250)">
           <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
           <button class="vgl-modal-ok">Entendido</button>
@@ -12143,7 +12146,7 @@ _vglOfrecerDeshacer(btn);
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
@@ -13492,12 +13495,12 @@ _vglOfrecerDeshacer(btn);
         --bg3:rgba(255,255,255,.095);
         --bg4:rgba(255,255,255,.17);
         --bg-solid:#0b0e15;
-        /* Triaje neón-pastel — AAA (>=7:1) sobre fondo OLED */
+        /* Triaje neón-pastel — AAA (>=7:1) sobre fondo OLED. v18: azul→violeta (marca), morado→cian (pre-alerta). */
         --c-rojo:#ff8177;
-        --c-morado:#c9a2ff;
+        --c-morado:#22d3ee;
         --c-ambar:#ffc46b;
         --c-verde:#4ff0b8;
-        --c-azul:#7cb8ff;
+        --c-azul:#a78bfa;
         --c-recordatorio:#54e6d4;
         --c-pes:#ff9ec4;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
@@ -13509,10 +13512,10 @@ _vglOfrecerDeshacer(btn);
         --c-atendido:#9aa7c7;
         /* Canales RGB para veladuras y glows: rgba(var(--rgb-x),alfa) */
         --rgb-rojo:255,129,119;
-        --rgb-morado:201,162,255;
+        --rgb-morado:34,211,238;
         --rgb-ambar:255,196,107;
         --rgb-verde:79,240,184;
-        --rgb-azul:124,184,255;
+        --rgb-azul:167,139,250;
         --rgb-recordatorio:84,230,212;
         --rgb-pes:255,158,196;
         --rgb-atendido:154,167,199;
@@ -13554,7 +13557,7 @@ _vglOfrecerDeshacer(btn);
           0 12px 32px rgba(0,0,0,.45),
           0 42px 110px rgba(2,4,10,.78),
           inset 0 1px 0 rgba(255,255,255,.13),
-          inset 0 0 36px rgba(124,184,255,.05);
+          inset 0 0 36px rgba(167,139,250,.05);
         --shadow-card:
           0 1px 2px rgba(0,0,0,.28),
           0 6px 18px rgba(0,0,0,.26),
@@ -13577,11 +13580,11 @@ _vglOfrecerDeshacer(btn);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
         --bg-solid:#f6f7fb;
         /* Triaje profundo — AAA sobre cerámica clara */
-        --c-rojo:#991b1b;--c-morado:#5b21b6;--c-ambar:#92400e;
-        --c-verde:#065f46;--c-azul:#1e40af;--c-recordatorio:#115e59;
+        --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
+        --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
         --c-pes:#9d174d;--c-atendido:#475569;
-        --rgb-rojo:153,27,27;--rgb-morado:91,33,182;--rgb-ambar:146,64,14;
-        --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
+        --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
+        --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
@@ -13631,7 +13634,7 @@ _vglOfrecerDeshacer(btn);
         overflow:hidden;
         border-radius:var(--r-surface);
         background:
-          linear-gradient(165deg,rgba(124,184,255,.07),rgba(201,162,255,.035) 42%,rgba(0,0,0,0) 72%),
+          linear-gradient(165deg,rgba(167,139,250,.07),rgba(34,211,238,.035) 42%,rgba(0,0,0,0) 72%),
           var(--bg);
         -webkit-backdrop-filter:var(--glass-deep);
         backdrop-filter:var(--glass-deep);
@@ -13647,8 +13650,8 @@ _vglOfrecerDeshacer(btn);
       #vgl-root::before{
         content:"";position:absolute;inset:-30%;z-index:-1;pointer-events:none;
         background:
-          radial-gradient(42% 34% at 16% 6%,rgba(124,184,255,.11),transparent 62%),
-          radial-gradient(36% 30% at 90% 10%,rgba(201,162,255,.09),transparent 64%),
+          radial-gradient(42% 34% at 16% 6%,rgba(167,139,250,.11),transparent 62%),
+          radial-gradient(36% 30% at 90% 10%,rgba(34,211,238,.09),transparent 64%),
           radial-gradient(46% 40% at 80% 98%,rgba(79,240,184,.06),transparent 66%);
         filter:blur(28px);
       }
@@ -26164,6 +26167,14 @@ _vglOfrecerDeshacer(btn);
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
       <div class="vgl-grp vgl-grp-tec ${isDevMode ? '' : 'vgl-d-none'}">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Modo programador (Ctrl+Shift+D)</div>
+        <!-- v18.0.0 — poda a "mínimo clínico": los controles avanzados (clínicos o de
+             instalación) salen del menú visible y viven aquí, tras el modo programador. -->
+        <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
+        <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
+        <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
+        <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
+        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.6.1 — Esta fila era PURAMENTE informativa (sin interruptor) y vivía en la
              sección visible: el médico no tiene nada que decidir ahí (reporte del 20-08,
              pantallazo). Se conserva aquí como referencia de comportamiento. -->
