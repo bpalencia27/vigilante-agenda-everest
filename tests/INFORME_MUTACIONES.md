@@ -2854,7 +2854,8 @@ sigue siendo la única fuente para las LLEGADAS (impredecibles, sin canal push).
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
+| **ventana crítica del sondeo** | en `_hayCitaCritica` (línea 27068), `VENTANA_CRITICA_MS` pasa de `90000` a `90000000` (toda cita "Sin presentarse" se vuelve crítica) | `suite_04` | *_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia…* → `2 min antes de la gracia -> no crítica (obtuvo true)` |
 
-La mutación se aplicó UNA vez, se corrió el banco con `TZ=America/Bogota`, se confirmaron
-los 2 rojos exactos y se restauró. El banco completo quedó en **2.312/2.312** (suite_04
-ganó 4 casos nuevos para `_proximoDeadlineTiempo`).
+Las 2 mutaciones se aplicaron UNA a la vez, se corrió el banco con `TZ=America/Bogota`, se
+confirmó el rojo exacto de cada una y se restauró. El banco completo quedó en **2.314/2.314**
+(suite_04 ganó 6 casos: 4 de `_proximoDeadlineTiempo` y 2 del polling adaptativo).

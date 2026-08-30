@@ -27058,6 +27058,37 @@ _vglOfrecerDeshacer(btn);
       _deadlineTimer = setTimeout(() => { _deadlineTimer = null; try { tick(); } catch (e) {} }, ms);
     } catch (e) {}
   }
+  // v18.0.0 — FASE 3 (polling adaptativo para LLEGADAS). Las llegadas son impredecibles y
+  // Everest no tiene canal push: solo se ven leyendo la agenda. Para no pagar un sondeo
+  // veloz TODO el tiempo, se acelera a 2 s SOLO cuando hay una cita "Sin presentarse" a
+  // menos de 90 s de vencer la gracia — la ventana donde una llegada decide si es "a
+  // tiempo" o "extemporánea". Fuera de esa ventana vuelve a la cadencia base (CONFIG.POLL_MS).
+  let _tickMsActual = 0;
+  function _hayCitaCritica(processed, now) {
+    try {
+      const grace = CONFIG.TOLERANCIA_MIN || 6.0;
+      const VENTANA_CRITICA_MS = 90000;   // 90 s antes de vencer la gracia
+      for (const p of processed) {
+        if (!p || !p.hora_texto) continue;
+        const min = parseHoraMin(p.hora_texto);
+        if (min == null) continue;
+        const est = (p.estado || "").toLowerCase();
+        if (est.includes("en sala") || est.includes("atendido")) continue;
+        const apt = new Date(now); apt.setHours(0, min, 0, 0);
+        const hastaGra = apt.getTime() + grace * 60000 - now.getTime();
+        if (hastaGra > 0 && hastaGra <= VENTANA_CRITICA_MS) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+  function _ajustarSondeo(processed) {
+    try {
+      const deseado = _hayCitaCritica(processed, new Date()) ? 2000 : CONFIG.POLL_MS;
+      if (deseado === _tickMsActual) return;
+      _tickMsActual = deseado;
+      _relojCada("tick", deseado, tick);
+    } catch (e) {}
+  }
   function tick() {
     try {
       if (state.killed) return;
@@ -27324,7 +27355,7 @@ _vglOfrecerDeshacer(btn);
           processed.forEach(maybeNotify);
         }
         state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) { share(processed); _reprogramarDeadline(processed); }
+        if (leader) { share(processed); _reprogramarDeadline(processed); _ajustarSondeo(processed); }
         if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
         // v17.0.0 — PRODUCTIVIDAD: se registran las atendidas de la agenda propia. Solo
         // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del
@@ -27344,6 +27375,8 @@ _vglOfrecerDeshacer(btn);
       if (leader) {
         if (!API.url) apiSniffPerf(window);
         tickApi();
+        // v18.0.0 — Fase 3: si este tick no trajo agenda, se devuelve el sondeo a la cadencia base.
+        if (!data || !data.citas.length) _ajustarSondeo([]);
         // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
         // reportado en consultorio, deja margen para que la expiración deslizante nunca
         // llegue a cumplirse mientras el navegador siga abierto.

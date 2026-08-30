@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita", "_proximoDeadlineTiempo"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita", "_proximoDeadlineTiempo", "_hayCitaCritica", "_ajustarSondeo"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -196,6 +196,36 @@ module.exports = {
       t.igual(c.api._proximoDeadlineTiempo([], now), null, "lista vacía -> null");
       t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "sin-hora", estado: "Sin presentarse" }], now), null, "hora ilegible -> null");
       t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "08:00 AM", estado: "En sala" }], now), null, "todas llegaron -> null");
+    });
+
+    // ---------- _hayCitaCritica / _ajustarSondeo (Fase 3: polling adaptativo) ----------
+    t.caso("_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia es crítica; fuera de la ventana o llegada no", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      t.cierto(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }], new Date(2026, 7, 10, 8, 5, 30)), "30 s antes de la gracia -> crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }], new Date(2026, 7, 10, 8, 4, 0)), "2 min antes de la gracia -> no crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "En sala" }], new Date(2026, 7, 10, 8, 5, 30)), "ya llegó -> no crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Atendido" }], new Date(2026, 7, 10, 8, 5, 30)), "atendido -> no crítica");
+    });
+
+    t.caso("_ajustarSondeo: acelera a 2 s con cita crítica y vuelve a la cadencia base sin ella", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api.__CONFIG.POLL_MS = 5000;
+      const fixed = new Date(2026, 7, 10, 8, 5, 30);
+      const FechaFija = class extends Date {
+        constructor(...a) { if (a.length === 0) { super(); this.setTime(fixed.getTime()); } else { super(...a); } }
+        static now() { return fixed.getTime(); }
+      };
+      c.env.win.Date = FechaFija; c.ctx.Date = FechaFija;
+
+      c.api._ajustarSondeo([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }]);
+      const rapido = (c.api._relojEstadoParaTest().locales || []).find((x) => x.id === "tick");
+      t.cierto(rapido && rapido.ms === 2000, "con cita crítica el sondeo del tick baja a 2 s (obtuvo " + (rapido && rapido.ms) + ")");
+
+      c.api._ajustarSondeo([{ hora_texto: "08:00 AM", estado: "En sala" }]);
+      const base = (c.api._relojEstadoParaTest().locales || []).find((x) => x.id === "tick");
+      t.cierto(base && base.ms === 5000, "sin cita crítica vuelve a la cadencia base (obtuvo " + (base && base.ms) + ")");
     });
 
     t.caso("muted / muteFor / unmute controlan el estado de silencio temporal", () => {
