@@ -10009,6 +10009,15 @@ _vglOfrecerDeshacer(btn);
               if (!cubeta) continue;
               const mio = _rumNodoEsNuestro(entries[i].target);
               uxTrack((mio ? "rum.self.inp." : "rum.page.inp.") + cubeta);
+              // v17.58.2 — INP CON ATRIBUCIÓN. El export real traía 2.740 `rum.self.inp.poor`
+              // y 2.497 `needs_imp` SIN decir qué interacción era: un contador dice cuántas
+              // veces pasó, nunca qué botón. Además de la cubeta agregada (que el tablero
+              // ya suma), se guarda la etiqueta del elemento tocado — catálogo fijo de
+              // _rageEtiqueta, jamás un id/URL ajeno — para que el próximo export pueda
+              // decir «el INP malo es el chip de día del modal», no solo que existe.
+              if (mio) {
+                try { uxTrack("rum.self.inp.detalle." + _rageEtiqueta(entries[i].target) + "." + cubeta); } catch (eInpD) {}
+              }
             }
           } catch (e) {}
         });
@@ -22282,6 +22291,7 @@ _vglOfrecerDeshacer(btn);
       }
 
       slotsEl.innerHTML = "";
+      const _turnosNodos = [];   // v17.58.2 — los turnos se montan en lote (append(...) al final)
       const turnosLibres = turnosAcumulados.filter((x) => {
         const e = String((x.turno && x.turno.estado) || "ACT").toUpperCase().trim();
         return e === "" || e === "ACT";
@@ -22425,8 +22435,12 @@ _vglOfrecerDeshacer(btn);
           if (step2Next) step2Next.disabled = false;
           markAgendamientoPendiente(apt.doc_id);
         });
-        slotsEl.appendChild(btn);
+        _turnosNodos.push(btn);
       });
+      // v17.58.2 — una sola actualización de árbol en vez de un appendChild por turno: el
+      // render de la agenda es el mayor bloque síncrono del modal y cada append invalidaba
+      // el layout por separado (INP de 2.740 interacciones >500 ms en la flota real).
+      slotsEl.append(..._turnosNodos);
       if (_preseleccion) {
         _preseleccion.btn.classList.add("active");
         selectedTurnoObj = _preseleccion.t;
