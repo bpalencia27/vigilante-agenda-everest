@@ -7377,6 +7377,19 @@ _vglOfrecerDeshacer(btn);
 
   function createIaInjectorUI() {
     try {
+      // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico. Igual que el botón
+      // «Redactar» del dock, estos inyectores forman parte del Redactor IA: solo se pintan
+      // para médico autorizado CON la redacción activada y su clave Gemini configurada.
+      // Si no toca, se esconde lo que ya estuviera pintado (el permiso puede cambiar entre
+      // ticks, p. ej. al cambiar de médico) y no se crea nada.
+      const permitido = mtrEsMedicoAutorizado() && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini();
+      if (!permitido) {
+        VGL_IA_INJECTORES.forEach((def) => {
+          const ya = document.getElementById(def.id);
+          if (ya) { try { ya.style.display = "none"; } catch (e) {} }
+        });
+        return;
+      }
       VGL_IA_INJECTORES.forEach((def) => {
         const ya = document.getElementById(def.id);
         // ¿Está la casilla de este botón en pantalla, y medible? Las dos cosas: la pestaña
