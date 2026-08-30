@@ -6524,7 +6524,7 @@
                   // historia quedó diligenciada.
                   if (r.abortadoPorPaciente) {
                       uxTrack("labs.autollenado.abortado_cambio_paciente");
-                      showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras Athenea respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Auto-Labs de nuevo.", true);
+                      showToast("AMBAR", "Exámenes", "No se diligenció nada: la historia abierta cambió mientras el laboratorio respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Exámenes de nuevo.", true);
                       _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧪 Exámenes");
                       btn.innerHTML = "🧪 Exámenes";
                       return;
@@ -6534,7 +6534,7 @@
                   // se pintaban idénticos: «✓ 0 casillas escritas», en verde, con el visto
                   // bueno. El médico se quedaba creyendo que Auto-Labs había corrido.
                   if (r.abortadoPorKillSwitch || r.desactivadoRemoto) {
-                      _vglFeedbackBoton(btn, "🛑 Auto-Labs está desactivado ahora mismo", "ambar", "🧪 Exámenes");
+                      _vglFeedbackBoton(btn, "🛑 El llenado de exámenes está desactivado ahora mismo", "ambar", "🧪 Exámenes");
                       btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
@@ -6563,7 +6563,7 @@
                               ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
                               : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                       _huboEscritura ? "verde" : "ambar", "🧪 Exámenes");
-                  _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
+                  _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
 _vglOfrecerDeshacer(btn);
                   // v17.1.0 (#136) — y aunque SÍ haya escrito, el aviso no se repite para el
                   // mismo paciente dentro del mismo minuto: es el mismo remedio que la
@@ -6571,7 +6571,7 @@ _vglOfrecerDeshacer(btn);
                   // por este mismo síntoma, y que al clic manual se le quedó sin aplicar.
                   if (_huboEscritura && !(_autoLabsAvisoDoc === docId && (Date.now() - _autoLabsAvisoTs) < 60000)) {
                       _autoLabsAvisoDoc = docId; _autoLabsAvisoTs = Date.now();
-                      showToast("VERDE", "Llenar laboratorios", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
+                      showToast("VERDE", "Exámenes", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
                   }
                   // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
                   // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
@@ -6586,7 +6586,7 @@ _vglOfrecerDeshacer(btn);
                           const w = WHITELIST_13_LABS.find((x) => x.key === k);
                           return (w && w.names && w.names[0]) ? w.names[0] : String(k).replace(/_/g, " ");
                       });
-                      showToast("AMBAR", "Auto-Labs",
+                      showToast("AMBAR", "Exámenes",
                           "Llegaron resultados de " + _nombresSc.join(", ") + " pero esta pantalla no tiene la casilla donde escribirlos. "
                           + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false);
                       try { uxTrack("labs.autollenado.sincasilla", { n: r.sinCasilla.length }); } catch (e) {}
@@ -6598,7 +6598,7 @@ _vglOfrecerDeshacer(btn);
                       const _bloq = r.implausibles.slice(0, 4).map((o) => o.key + " = " + o.valor).join(", ");
                       const _resto = r.implausibles.length - 4;
                       const _prim = r.implausibles[0];
-                      showToast("AMBAR", "Auto-Labs",
+                      showToast("AMBAR", "Exámenes",
                           "NO se escribieron: " + _bloq + (_resto > 0 ? " y " + _resto + " más" : "")
                           + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false);
                       try { uxTrack("labs.autollenado.implausibles", { n: r.implausibles.length }); } catch (e) {}
@@ -6614,7 +6614,7 @@ _vglOfrecerDeshacer(btn);
                   // v12.3.16 — Si el médico configuró el auto-inicio, se intenta aquí mismo y
                   // se reintenta la búsqueda una vez, sin abrir otra pestaña ni pedir nada.
                   if (S.atheneaAutoLogin && atheneaCredsGet()) {
-                      btn.innerHTML = "🔑 Iniciando sesión en Athenea…";
+                      btn.innerHTML = "🔑 Iniciando sesión en el laboratorio…";
                       const okl = await atheneaAutoLogin();
                       if (okl) {
                           btn.innerHTML = "⏳ Reintentando…";
@@ -6625,27 +6625,27 @@ _vglOfrecerDeshacer(btn);
                   const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
                               if (r2.abortadoPorPaciente) {
                                   uxTrack("labs.autollenado.abortado_cambio_paciente");
-                                  showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras se iniciaba sesión en Athenea."
-                                    + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Auto-Labs de nuevo.");
+                                  showToast("AMBAR", "Exámenes", "No se diligenció nada: la historia abierta cambió mientras se iniciaba sesión en el laboratorio."
+                                    + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Exámenes de nuevo.");
                                   btn.innerHTML = "🧪 Exámenes";
                                   return;
                               }
                               _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧪 Exámenes");
-                              _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
+                              _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
 _vglOfrecerDeshacer(btn);
-                              showToast("VERDE", "Auto-Labs", "Sesión de Athenea iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                              showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
                           } else {
-                              _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧪 Exámenes");
+                              _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
                           }
                       } else {
-                          atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Auto-Labs",
-                            "No se pudo iniciar sesión automáticamente en Athenea. Inicie sesión a mano; si sigue pasando, avise al administrador del asistente.");
+                          atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Exámenes",
+                            "No se pudo iniciar sesión automáticamente en el laboratorio. Inicie sesión a mano; si sigue pasando, avise al administrador del asistente.");
                       }
                   } else {
                       // v15.6.0 — sin confirm() del navegador: el botón mismo explica y actúa.
-                      _vglFeedbackBoton(btn, "Inicie sesión en Athenea y reintente", "ambar", "🧪 Exámenes");
-                      atheneaAvisoSilencioso("athenea_sesion_labs_caducada|" + todayStamp(), "Auto-Labs",
-                        "La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página de Athenea en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.");
+                      _vglFeedbackBoton(btn, "Inicie sesión en el laboratorio y reintente", "ambar", "🧪 Exámenes");
+                      atheneaAvisoSilencioso("athenea_sesion_labs_caducada|" + todayStamp(), "Exámenes",
+                        "La sesión del laboratorio no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página del laboratorio en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.");
                       try { window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank"); } catch (e) {}
                   }
               } else if (labs === null) {
@@ -6658,7 +6658,7 @@ _vglOfrecerDeshacer(btn);
                   // verificado. Se distingue: null es "no pude leer, reintente", nunca
                   // "no tiene".
                   _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
-                  showToast("AMBAR", "Llenar laboratorios", "No se pudo leer el portal de laboratorios para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
+                  showToast("AMBAR", "Exámenes", "No se pudo leer el portal de laboratorios para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
                   // historia clínica los resultados de CUALQUIER otro paciente, sin
@@ -6667,12 +6667,12 @@ _vglOfrecerDeshacer(btn);
                   // ambos casos no se diligenció nada y hay que revisar a mano.
                   // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
                   // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
-                  _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧪 Exámenes");
-                  showToast("AMBAR", "Auto-Labs", "Athenea no tiene laboratorios registrados para la cédula " + docId + " en el último año.", false);
+                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                  showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
               }
           } catch (e) {
-              _vglFeedbackBoton(btn, "❌ Athenea no respondió", "ambar", "🧪 Exámenes");
-              showToast("ROJO", "Auto-Labs", "No se pudo conectar con el Portal de Athenea. Verifique la red o intente desde el portal.", true);
+              _vglFeedbackBoton(btn, "❌ El laboratorio no respondió", "ambar", "🧪 Exámenes");
+              showToast("ROJO", "Exámenes", "No se pudo conectar con el portal de laboratorios. Verifique la red o intente desde el portal.", true);
           }
           // v15.5.0 — el rótulo ya no se restaura aquí a la brava: cada rama deja su
           // resultado contado en el botón y _vglFeedbackBoton lo devuelve solo a los 8 s.
@@ -20985,7 +20985,7 @@ _vglOfrecerDeshacer(btn);
     const series = (resumen && resumen._series) || {};
     const claves = Object.keys(series).filter((k) => (series[k] || []).length >= 1);
     if (!claves.length) {
-      return '<div class="vgl-agm-sec"><div class="vgl-agm-dinfo">Todavía no hay serie de laboratorios para este paciente. Las tendencias aparecen solas cuando haya al menos dos controles con fecha en Athenea.</div></div>';
+      return '<div class="vgl-agm-sec"><div class="vgl-agm-dinfo">Todavía no hay serie de laboratorios para este paciente. Las tendencias aparecen solas cuando haya al menos dos controles con fecha en el laboratorio.</div></div>';
     }
     // v17.1.0 (#123) — El nombre bonito cuando existe. RCV_VIGENCIA_NOMBRES solo tiene 8
     // de las 12 claves, así que HbA1c, PTH, fósforo, albúmina y hemoglobina salían en
@@ -37331,7 +37331,7 @@ _vglOfrecerDeshacer(btn);
     if (meta) {
       meta.ldlBasal = (_ldlBasal === undefined ? null : _ldlBasal);
       meta.ldlBasalFecha = _ldlBasalInfo ? _ldlBasalInfo.fecha : null;
-      meta.ldlBasalOrigen = _ldlBasalInfo ? "el más alto del último año en Athenea" : (mtrEsFalsy(c.ldlBasal) ? null : "entregado por el llamador");
+      meta.ldlBasalOrigen = _ldlBasalInfo ? "el más alto del último año en el laboratorio" : (mtrEsFalsy(c.ldlBasal) ? null : "entregado por el llamador");
     }
 
     // El programa rector lo decide la norma: ERC > DM2 > HTA.
