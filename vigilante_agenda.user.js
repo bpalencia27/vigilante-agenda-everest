@@ -12212,15 +12212,23 @@ _vglOfrecerDeshacer(btn);
       // hay resumen en caché (tabla por estadio + 50% por fuera de meta). Sin resumen,
       // cae al tamizaje plano de siempre — nunca inventa un estadio.
       const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
+      // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico en la sección de
+      // laboratorios RCV del aviso. Solo los AUTORIZADOS descuentan el 50 % por fuera de
+      // meta (aplicar50). Los no autorizados juzgan con la vigencia original (tabla por
+      // estadio/programa) SIN esa reducción, y además solo si el paciente está en un
+      // programa de Ruta Crónicos (programa rector presente); si no, la sección se
+      // silencia (máxima restricción: ante la duda, ocultar).
+      const _autorizado = mtrEsMedicoAutorizado();
       const _optsAviso = _resAviso ? {
         programa: _resAviso.programa || null,
         estadio: _resAviso.erc && _resAviso.erc.estadioAdministrativo || null,
         esDM2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
-        aplicar50: true,
+        aplicar50: _autorizado,
       } : undefined;
-      const faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
+      let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
+      if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 

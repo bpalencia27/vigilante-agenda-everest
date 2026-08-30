@@ -608,6 +608,12 @@ module.exports = {
       c.env.doc.querySelector = () => null;
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
     }
+    // v17.x.x — control de acceso por médico en la sección de labs del aviso universal.
+    // Los casos que ejercitan el comportamiento de "labs" (vencidos/al día/parcial) fijan
+    // un médico AUTORIZADO, que es la ruta "normal" que sigue vigente. El gating para no
+    // autorizados se prueba aparte.
+    const AUTHORIZED = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+    function autorizar(c) { c.api.__state.activeDoctor = AUTHORIZED; }
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).
@@ -809,6 +815,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: si el aviso salió SIN labs y luego llegan labs con vencidos, sale UN único aviso de labs (no se pierde en silencio)", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       const OriginalDate = c.ctx.Date || Date;
       let mockIso = "2026-08-11T12:00:00.000";
@@ -839,6 +846,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: paciente al día (sin PyM, sin abandono, labs vigentes) -> ningún aviso, jamás", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsAlDia("2026-08-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
@@ -849,6 +857,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: si ya hay un aviso en pantalla, se pospone y sale al siguiente tick", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
@@ -924,6 +933,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: con labs RCV vencidos (Athenea resuelto) dispara UN aviso y lo marca; no repite", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       await c.api.autoFetchAtheneaLabsForActivePatient();   // _labsPrefetch resuelto (7 faltantes)
       const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
@@ -931,6 +941,33 @@ module.exports = {
       c.api.checkAvisoUniversal();
       t.cierto(c.api.avisoYaVisto(uid), "labs vencidos -> aviso único, marcado una vez por paciente");
       t.noLanza(() => c.api.checkAvisoUniversal(), "un segundo tick no repite ni revienta");
+    });
+
+    // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico en la sección de labs
+    // RCV del aviso universal. Solo los autorizados la ven "normal" (con 50 % por fuera de
+    // meta); los no autorizados la ven SOLO si el paciente está en un programa de Ruta
+    // Crónicos, juzgando vencidos con la vigencia original (tabla por estadio, sin 50 %).
+    await t.casoAsync("checkAvisoUniversal: médico NO autorizado sin programa de Ruta Crónicos no ve la sección de labs RCV", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      // Sin autorizar(): el médico activo es no autorizado (o aún no detectado).
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto(uid),
+        "sin programa de crónicos detectado, la sección de labs se silencia para el no autorizado (no hay aviso de labs)");
+    });
+
+    await t.casoAsync("checkAvisoUniversal: médico NO autorizado SÍ ve labs RCV vencidos si el paciente está en Ruta Crónicos", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
+      // Siembra un resumen con programa rector: el paciente está en Ruta Crónicos (HTA).
+      c.api.mtrCacheResumenGuardar(DOC_LABSV, { programa: "HTA", erc: {}, factores: {}, riesgo: {} });
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid),
+        "en Ruta Crónicos con labs vencidos (vigencia original, sin 50 %), la sección aparece y el aviso dispara");
     });
 
     // Variante de planLabsVencidos que ECHA DE VUELTA la cédula que de verdad se buscó (en
