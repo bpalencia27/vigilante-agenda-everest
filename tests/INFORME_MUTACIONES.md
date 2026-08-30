@@ -2855,7 +2855,8 @@ sigue siendo la única fuente para las LLEGADAS (impredecibles, sin canal push).
 |---|---|---|---|
 | **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
 | **ventana crítica del sondeo** | en `_hayCitaCritica` (línea 27068), `VENTANA_CRITICA_MS` pasa de `90000` a `90000000` (toda cita "Sin presentarse" se vuelve crítica) | `suite_04` | *_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia…* → `2 min antes de la gracia -> no crítica (obtuvo true)` |
+| **marca de onboarding** | en `_onboardingColores` (línea 27027), `setItem("vgl_onb_colores", "1")` pasa a `"2"` (la marca nunca queda válida) | `suite_17` | *_onboardingColores: la leyenda de colores se muestra UNA sola vez…* → `la marca queda guardada en localStorage: esperaba "1" y obtuvo "2"` |
 
-Las 2 mutaciones se aplicaron UNA a la vez, se corrió el banco con `TZ=America/Bogota`, se
-confirmó el rojo exacto de cada una y se restauró. El banco completo quedó en **2.314/2.314**
-(suite_04 ganó 6 casos: 4 de `_proximoDeadlineTiempo` y 2 del polling adaptativo).
+Las 3 mutaciones se aplicaron UNA a la vez, se corrió el banco con `TZ=America/Bogota`, se
+confirmó el rojo exacto de cada una y se restauró. El banco completo quedó en **2.315/2.315**
+(suite_04 ganó 6 casos del tiempo real; suite_17 ganó 1 caso del onboarding de colores).

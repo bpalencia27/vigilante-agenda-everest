@@ -40,7 +40,7 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia",
+    "heartbeat", "share", "helloOncePerDay", "_onboardingColores", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
@@ -340,6 +340,21 @@ module.exports = {
       t.cierto(capturas[0].body.includes("(1 con tiempo de tolerancia transcurrido)"), "las vencidas (AMBAR) se cuentan aparte");
       c.api.helloOncePerDay(lista);
       t.igual(capturas.length, 1, "segunda llamada el mismo día: silencio total");
+    });
+
+    // ---------- _onboardingColores ----------
+    t.caso("_onboardingColores: la leyenda de colores se muestra UNA sola vez por navegador", () => {
+      const c = cargar({ silencioso: true });
+      const capturas = [];
+      instalarNotificacion(c, capturas);
+      c.env.doc.visibilityState = "hidden";
+      c.api._onboardingColores();
+      t.igual(c.env.almacen["vgl_onb_colores"], "1", "la marca queda guardada en localStorage");
+      t.igual(capturas.length, 1, "primera vez: muestra la leyenda");
+      t.cierto(capturas[0].title.includes("Centinela activo"), "título de bienvenida");
+      t.cierto(capturas[0].body.includes("Verde") && capturas[0].body.includes("Cian") && capturas[0].body.includes("Rojo") && capturas[0].body.includes("Violeta"), "la leyenda trae los colores de la agenda");
+      c.api._onboardingColores();
+      t.igual(capturas.length, 1, "segunda vez: ya no se repite");
     });
 
     // ---------- tick ----------

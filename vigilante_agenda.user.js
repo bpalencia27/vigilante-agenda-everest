@@ -13430,7 +13430,7 @@ _vglOfrecerDeshacer(btn);
         .vgl-bento-card:hover,.vgl-bento-card:focus-visible{transform:translateY(-2px);border-color:var(--edge)}
         .vgl-bento-card:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
         .vgl-bento-card.full{grid-column:1 / -1}
-        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#38bdf8) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
+        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#a78bfa) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
         .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--t-micro);color:var(--fg2,#94a3b8) !important;line-height:1.4}
         .vgl-bento-row b{color:var(--fg,#f8fafc) !important;font-weight:700}
         .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
@@ -13445,11 +13445,11 @@ _vglOfrecerDeshacer(btn);
 
         /* Aislamiento CSS estricto para Uroanálisis y Tablas de Laboratorios */
         #vgl-labs-modal .vgl-labs-uro-panel{background:var(--bg2,#121826) !important;border:1px solid var(--edge,rgba(255,255,255,.16)) !important;border-radius:var(--r-card,12px) !important;padding:12px 14px !important;color:var(--fg,#f8fafc) !important}
-        #vgl-labs-modal .vgl-labs-uro-i{color:var(--c-azul,#38bdf8) !important;font-weight:600 !important;font-size:11px !important}
+        #vgl-labs-modal .vgl-labs-uro-i{color:var(--c-azul,#a78bfa) !important;font-weight:600 !important;font-size:11px !important}
         #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg,#f8fafc) !important;font-weight:700 !important;font-size:11.5px !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert{color:var(--c-rojo,#f87171) !important;background:rgba(var(--rgb-rojo,248,113,113),.16) !important;border-radius:4px !important;padding:1px 6px !important;font-weight:800 !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert b{color:var(--c-rojo,#f87171) !important;font-weight:800 !important}
-        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-azul,#38bdf8) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
+        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-azul,#a78bfa) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
   `;
 
   // v16.2.4 — CAÍDA REAL EN CONSULTORIO (20-ago, consola del médico):
@@ -13744,7 +13744,7 @@ _vglOfrecerDeshacer(btn);
         font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
       }
-      .vgl-lab-inj{bottom:70px;background:var(--c-morado, #8b5cf6)}
+      .vgl-lab-inj{bottom:70px;background:var(--c-morado, #22d3ee)}
       .vgl-exf-btn{background:var(--c-verde, #16a34a)}
       .vgl-exf-btn-normalidad{bottom:116px}
       /* v17.1.0 (#73) — los dos botones de redacción, uno por casilla, cada uno en SU
@@ -13755,7 +13755,7 @@ _vglOfrecerDeshacer(btn);
          Azul de acento propio, distinto del morado de Auto-Labs y del verde de Normalidad,
          para distinguirlos de un vistazo. Los dos van a la misma altura porque NUNCA
          coinciden en pantalla: cada uno vive en su pestaña. */
-      .vgl-ia-inj{background:var(--c-azul, #2563eb)}
+      .vgl-ia-inj{background:var(--c-azul, #a78bfa)}
       .vgl-ia-inj:hover{opacity:.88}
       .vgl-ia-inj-ea,.vgl-ia-inj-an{bottom:162px}
 
@@ -27019,6 +27019,26 @@ _vglOfrecerDeshacer(btn);
       (vencidas ? ` (${vencidas} con tiempo de tolerancia transcurrido)` : "") +
       `.\nMonitoreo activo para eventos en tiempo real.`, false);
   }
+  // v18.0.0 — ONBOARDING de primera vez: la leyenda de colores, una sola vez por navegador.
+  // Los compañeros no técnicos necesitan saber qué significa cada color AHORA que la
+  // pre-alerta pasó de morado a CIAN y el estado normal es VIOLETA (rebrand "Centinela").
+  // Se muestra solo la primera vez y queda guardado para no molestar de nuevo.
+  function _onboardingColores() {
+    try {
+      if (localStorage.getItem("vgl_onb_colores") === "1") return;
+      localStorage.setItem("vgl_onb_colores", "1");
+    } catch (e) {}
+    try {
+      notify("AZUL", "🛡️ Centinela activo",
+        "Colores de cada cita:\n" +
+        "· Verde — llegó a tiempo.\n" +
+        "· Cian — última llamada (queda ~1 minuto de gracia).\n" +
+        "· Ámbar — no se presentó.\n" +
+        "· Rojo — confirmó después del tiempo de gracia.\n" +
+        "· Violeta — normal, sin novedad.\n\n" +
+        "Centinela avisa y sugiere; usted decide.", true);
+    } catch (e) {}
+  }
   // v18.0.0 — FASE 3 (notificaciones en tiempo real). Las transiciones POR TIEMPO de la
   // leyenda ("última llamada" MORADO en prealert y "inasistencia" ÁMBAR en grace) son
   // deterministas: ocurren en hora_cita + prealert y hora_cita + grace. En vez de esperar
@@ -27347,7 +27367,7 @@ _vglOfrecerDeshacer(btn);
           // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña
           // esté en HCHealth, aunque la pestaña líder (la que sondea el API) esté en otro
           // módulo de Everest en ese momento.
-          if (_enModuloHCHealth()) helloOncePerDay(processed);
+          if (_enModuloHCHealth()) { helloOncePerDay(processed); _onboardingColores(); }
         } else if (leader) {
           // v17.1.0 (#126) — la sincronización del relevo se mudó ARRIBA, junto a
           // heartbeat(): aquí solo se ejecutaba cuando el tick traía agenda, y en una
