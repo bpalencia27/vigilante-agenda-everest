@@ -653,8 +653,8 @@
      re-búsqueda PARA (debeBuscarPymDiario) — pedido explícito; «Abrir PyM» siempre manda.
   6. PUNTUALIDAD RESCATADA (semántica original v8.2.0, decisión A): siembra silenciosa +
      VERDE solo en llegada EN VIVO (a.arrival por fin se consume); textos precisos y
-     neutros — ROJO "Confirmación extemporánea", MORADO "última llamada ~1 min", ÁMBAR
-     "venció el tiempo de gracia".
+     neutros — ROJO "Llegada confirmada fuera del tiempo de confirmación", MORADO "última
+     llamada ~1 min", ÁMBAR "venció el tiempo de confirmación".
   7. HORA DE ATHENEA DE PUNTA A PUNTA: _parseFechaHoraLike conserva {fecha, hora} en ISO,
      /Date(ms)/ y dd/mm/aaaa (cuyo ancla $ hacía que "11/08/2026 07:35" cayera a "Sin
      fecha" — bug real corregido); el raspado de la tarjeta captura la hora del portal
@@ -12299,9 +12299,9 @@ _vglOfrecerDeshacer(btn);
   // _renderToast (el cartel dentro de la página) y osNotify (la notificación de Windows),
   // que ahora lo tratan con la misma prioridad que ROJO/MORADO.
   const NOTIFY = {
-    ROJO: { icon: "⛔", label: "Confirmación extemporánea: ingreso después del tiempo de gracia", sound: true, persist: true },
+    ROJO: { icon: "⛔", label: "Llegada confirmada fuera del tiempo de confirmación", sound: true, persist: true },
     MORADO: { icon: "⏳", label: "Última llamada: ~1 minuto para confirmar la llegada", persist: false },
-    AMBAR: { icon: "⚠", label: "Inasistencia: venció el tiempo de gracia sin confirmar", persist: true },
+    AMBAR: { icon: "⚠", label: "Venció el tiempo de confirmación", persist: true },
     VERDE: { icon: "✅", label: "Paciente confirmó a tiempo (En Sala)", persist: false },
   };
   // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
@@ -24011,6 +24011,32 @@ _vglOfrecerDeshacer(btn);
     }
   ];
 
+  // v17.26.0 — REFACTOR APROBADO por el médico (módulo Ordenar PyM): nombres clínicos
+  // naturales para el usuario final, paquete RCV exprés retirado del módulo y títulos
+  // cortos para progreso/impresión. Solo afecta la capa de presentación del modal; el
+  // catálogo (PYM_CATALOG) no se toca porque lo siguen usando el banner y el motor RCV.
+  const PYM_EXCLUIDOS_MODAL = ["I10X"]; // RCV exprés: se retira del módulo de Ordenar.
+  const PYM_TITULO_CLINICO = {
+    "Z124": "Prevención de cáncer de cuello uterino (citología y prueba de VPH)",
+    "Z113": "VIH (prueba de anticuerpos VIH 1 y 2)",
+    "Z108": "Tamización cardiometabólica (lípidos, glicemia, creatinina y parcial de orina)",
+    "Z123": "Mamografía (detección de cáncer de mama)",
+    "Z125": "PSA (antígeno de próstata)",
+    "Z121": "Sangre oculta en materia fecal (detección de cáncer de colon)",
+    "Z103": "Hemoglobina y hematocrito"
+  };
+  const PYM_TITULO_CORTO = {
+    "Z124": "citología",
+    "Z113": "VIH",
+    "Z108": "tamización cardiometabólica",
+    "Z123": "mamografía",
+    "Z125": "PSA",
+    "Z121": "sangre oculta",
+    "Z103": "hemoglobina"
+  };
+  function pymTituloClinico(pkg) { return (pkg && PYM_TITULO_CLINICO[pkg.cie10]) || (pkg && pkg.titulo) || ""; }
+  function pymTituloCorto(pkg) { return (pkg && PYM_TITULO_CORTO[pkg.cie10]) || (pkg && pkg.cie10) || ""; }
+
   // v14.0.0 (T7) — Extraído de dentro de openOrdenamientoModal (donde vivía desde v12.3.x,
   // inline): la MISMA lógica de emparejamiento por palabra clave que decide qué paquetes de
   // PYM_CATALOG le corresponden a las etiquetas del Excel de PyM de un paciente. Ahora la
@@ -24110,13 +24136,13 @@ _vglOfrecerDeshacer(btn);
   // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
     if (state.killed) {
-      showToast("ROJO", "Pausa de seguridad", "El asistente está en pausa de seguridad para proteger la historia clínica. No se realizó ningún cambio.", true);
+      showToast("ROJO", "Asistente en pausa por seguridad", "El asistente está en pausa de seguridad para proteger la historia clínica. No se realizó ningún cambio.", true);
       return null;
     }
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
     // órdenes clínicas a nombre de otro profesional.
-    if (!uId) { showToast("ROJO", "Órdenes NO generadas", "No se pudo identificar al médico en sesión. Abra la agenda del día un momento (ahí el asistente lo reconoce solo) y vuelva a intentar.", true); return null; }
+    if (!uId) { showToast("ROJO", "Órdenes no generadas", "No se pudo identificar al médico en la sesión. Abra la agenda del día por un momento para que el asistente lo reconozca y vuelva a intentar.", true); return null; }
     const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento`;
     const payload = {
       DiagnosticoId: dxId,
@@ -24335,7 +24361,7 @@ _vglOfrecerDeshacer(btn);
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -24408,25 +24434,42 @@ _vglOfrecerDeshacer(btn);
     // entero para marcar a mano es justo el riesgo de sobre-ordenar que se quería evitar.
     // Sin coincidencia, no se ofrece nada; el aviso honesto explica por qué y remite al
     // catálogo institucional real (Ordenamientos de Everest) si de verdad corresponde algo.
-    const hayCoincidencia = matchedPackages && matchedPackages.length > 0;
-    const pkgsToRender = hayCoincidencia ? matchedPackages : [];
+    let hayCoincidencia = matchedPackages && matchedPackages.length > 0;
+    let pkgsToRender = hayCoincidencia ? matchedPackages : [];
     // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. Los tres motivos ya se podían
     // distinguir con lo que el estado guarda; hasta hoy los tres salían con la misma frase,
     // que además afirmaba algo sobre el paciente en los dos casos en que no se sabe nada
     // de él. `pymTodos` es null mientras no se haya indexado ninguna base: entonces no se
     // puede afirmar que el paciente no esté en la lista, y el primer motivo ya manda.
-    const _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades({
+    const _pymSinActOpts = {
       listaCargada: !!state.pymFile,
       esBasePiloto: state.pymFallback === true,
       diaDistinto: !!state.pymFile && state.pymDia !== todayStamp(),
       pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
         ? state.pymTodos.has(normalizeKey(apt.doc_id))
         : null,
-    });
+    };
+    let _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades(_pymSinActOpts);
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
     const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
+
+    // v17.26.0 — REFACTOR APROBADO por el médico: el paquete RCV exprés (I10X) se retira
+    // del módulo de Ordenar y las actividades de otro sexo ya no se muestran (antes solo
+    // se avisaban en rojo). Si tras el filtro no queda ninguna actividad, el modal cae al
+    // mismo estado honesto de "sin actividades para este paciente".
+    pkgsToRender = pkgsToRender.filter((p) => {
+      if (!p) return false;
+      if (PYM_EXCLUIDOS_MODAL.indexOf(p.cie10) >= 0) return false;
+      const sexoReq = SEXO_PKG[p.cie10] || "";
+      if (sexoReq && sexoPaciente && sexoReq !== sexoPaciente) return false;
+      return true;
+    });
+    if (!pkgsToRender.length) {
+      hayCoincidencia = false;
+      _pymSinAct = pymMotivoSinActividades(_pymSinActOpts);
+    }
 
     // v16.2.5 — CRUCE ANTIDUPLICADO CONTRA ATHENEA (pedido explícito del médico): "CON LA
     // MISMA LÓGICA QUE SE REVISAN LOS EXÁMENES DE RIESGO CARDIOVASCULAR Y SUS VENCIMIENTOS...
@@ -24518,7 +24561,7 @@ _vglOfrecerDeshacer(btn);
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -24531,11 +24574,11 @@ _vglOfrecerDeshacer(btn);
              suite_25 sobre VGL_UX_CSS (Regla B lo señaló). Se retira lo muerto; el
              margin-bottom SÍ tenía efecto (la clase no lo lleva con !important) y se
              conserva para no mover ni un píxel lo que sí se veía. -->
-        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
+        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, las órdenes quedan registradas en el sistema de órdenes médicas de Everest y se abre la orden lista para imprimir.</div>
 
         <div class="vgl-agm-sec">
-          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
-          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">⚠ No pude consultar Athenea para este paciente, así que <b>no comprobé si alguno de estos exámenes ya se lo hicieron</b>. La lista sale completa a propósito (ante la duda se ofrece, nunca se esconde): revísela antes de ordenar.</div>` : ""}
+          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico (CIE-10) y los códigos de procedimiento (CUPS). Al ordenar, quedan registrados automáticamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
+          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">No fue posible consultar el sistema de laboratorio para este paciente, por lo que <b>no pudimos verificar si alguno de estos exámenes ya se realizó</b>. Mostramos la lista completa a propósito: revísela antes de generar las órdenes.</div>` : ""}
           <div id="vgl-ord-list">
             ${pkgsToRender.map((pkg, idx) => {
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
@@ -24553,21 +24596,25 @@ _vglOfrecerDeshacer(btn);
               // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
               const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
               const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
-              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
+              // v17.26.0 — REFACTOR APROBADO: cuando ya hay una orden vigente, un resultado
+              // vigente en el laboratorio o un resultado reciente, la actividad queda
+              // BLOQUEADA (checkbox deshabilitado) con su aviso visible. La lista de la
+              // sede (mandaPym) sigue mandando: no se bloquea.
+              const bloqueada = !mandaPym && (yaVigente || yaHechoAthenea || hechoYReciente);
+              const marcar = hayCoincidencia && !chocaSexo && !bloqueada && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
               <div class="vgl-ord-item${prio.nivel === "alta" ? " vgl-ord-item-prio" : ""}">
                 ${prio.nivel === "alta" ? `<div class="vgl-ord-prio">⚑ Prioritario — ${escapeHtml(prio.motivo)}</div>` : ""}
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
+                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}${bloqueada ? " disabled" : ""}>
                   <div class="vgl-ord-content">
-                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
-                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según la lista de prevención (PyM): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
-                    ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
-                    ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
-                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). ${mandaPym ? "Aquí manda la lista de PyM de la sede, no este resultado: si ahí figura pendiente, se premarca. Descárquelo usted si no corresponde." : "No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto" + (hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde.")}</div>` : ""}
-                    ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
+                    <div class="vgl-ord-title">${escapeHtml(pymTituloClinico(pkg))} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
+                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">Según la lista de prevención de la sede: <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Ya existe una orden vigente en Everest para esta actividad. Si considera que debe repetirse, comuníquese con el servicio de órdenes.</div>` : ""}
+                    ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">Este examen ya se realizó y el resultado está vigente en el sistema de laboratorio. No es necesario repetirlo.</div>` : ""}
+                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">${mandaPym ? "Se realizó hace poco, pero la lista de prevención de la sede la tiene pendiente; por eso la dejamos marcada." : (hechoYReciente ? `Se realizó hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}; por ser tan reciente no la marcamos. Si considera que debe repetirse, selecciónela manualmente.` : "El último resultado es de hace más de 2 años; la dejamos marcada para que pueda solicitarla de nuevo.")}</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}${idx === 0 ? vglTip("Códigos oficiales de procedimiento asignados automáticamente.") : ""}
                     </div>
@@ -24580,7 +24627,7 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista que consultar")}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
         </div>
       </div>
     `;
@@ -24602,8 +24649,8 @@ _vglOfrecerDeshacer(btn);
       // "hay opciones pero ninguna marcada todavía": el primero ya no debe invitar a
       // seleccionar algo que no existe.
       confirmBtn.textContent = count > 0
-        ? `✓ Generar la(s) Orden(es) (${count})`
-        : (chks.length === 0 ? "Sin actividades para ordenar" : "Seleccione al menos una orden");
+        ? `Generar ${count} ${count === 1 ? "orden" : "órdenes"}`
+        : (chks.length === 0 ? "Sin actividades para ordenar" : "Seleccione al menos una actividad");
     };
 
     // El primer cambio de seleccion es el escalon intermedio del embudo: dice cuantos
@@ -24629,15 +24676,15 @@ _vglOfrecerDeshacer(btn);
       const _cerrarPestanaImpresion = () => { try { if (pestanaImpresion && !pestanaImpresion.closed) pestanaImpresion.close(); } catch (e) {} pestanaImpresion = null; };
 
       confirmBtn.disabled = true;
-      confirmBtn.textContent = "⏳ Obteniendo datos del paciente en el sistema de órdenes...";
+      confirmBtn.textContent = "Consultando la información del paciente...";
 
       const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
       if (!pacienteIdOrd) {
         _cerrarPestanaImpresion();
-        showToast("AMBAR", "Órdenes", "No se encontró al paciente en el sistema de órdenes con la cédula " + apt.doc_id + ". Verifique la cédula en Everest e inténtelo de nuevo.", false);
+        showToast("AMBAR", "Paciente no encontrado", "No se encontró al paciente en el sistema de órdenes con el documento " + apt.doc_id + ". Verifique el documento en Everest e inténtelo de nuevo.", false);
         if (!vivo()) return;
         confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        confirmBtn.textContent = "Reintentar";
         return;
       }
 
@@ -24656,7 +24703,7 @@ _vglOfrecerDeshacer(btn);
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
         if (!pkg) continue;
-        if (vivo()) confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
+        if (vivo()) confirmBtn.textContent = `Generando ${pymTituloCorto(pkg)}... (${creadasCount + fallidasCount + 1} de ${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
@@ -24678,7 +24725,7 @@ _vglOfrecerDeshacer(btn);
         if (resOrd && !resOrd.error && agpReal) {
           creadasCount++;
           agrupadores.push(agpReal);
-          if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pkg.titulo || pkg.cie10 || String(agpReal));
+          if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pymTituloCorto(pkg) || String(agpReal));
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false;
@@ -24725,8 +24772,8 @@ _vglOfrecerDeshacer(btn);
         if (vivo()) {
           if (!parcial) confirmBtn.classList.add("vgl-bg-success");
           confirmBtn.textContent = parcial
-            ? `↻ Reintentar las ${fallidasCount} que faltaron`
-            : `✅ ¡${creadasCount} Orden(es) Generada(s)!`;
+            ? `Reintentar las ${fallidasCount} que faltaron`
+            : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
@@ -24736,12 +24783,12 @@ _vglOfrecerDeshacer(btn);
           successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
           successMsg.innerHTML = parcial
             ? `
-            <div style="font-size:14px;font-weight:600;margin-bottom:4px">⚠️ Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
-            <div style="font-size:12px;opacity:0.9">Las ${creadasCount} que sí quedaron están abajo para imprimir (agrupador <b>${escapeHtml(agrupadores.join(", "))}</b>) y ya cuentan como ordenadas: <b>no las vuelva a generar</b>. Las ${fallidasCount} marcadas en rojo son las que faltan — el botón de arriba reintenta solo esas.</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
+            <div style="font-size:12px;opacity:0.9">Las ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} creadas quedaron listas para imprimir y quedan registradas como generadas: <b>no las vuelva a generar</b>. ${fallidasCount === 1 ? "La que falta está marcada en rojo; el botón de arriba reintenta solo esa." : `Las ${fallidasCount} que faltan están marcadas en rojo; el botón de arriba reintenta solo esas.`}</div>
           `
             : `
-            <div style="font-size:14px;font-weight:600;margin-bottom:4px">✅ ${creadasCount} Orden(es) PyM Generada(s) con Éxito</div>
-            <div style="font-size:12px;opacity:0.9">Agrupador oficial: <b>${escapeHtml(agrupadores.join(", "))}</b>${pestanaImpresion ? " · La orden se abrió en otra pestaña, lista para imprimir (Ctrl+P)." : ""}</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"} correctamente</div>
+            <div style="font-size:12px;opacity:0.9">Número de la orden: <b>${escapeHtml(agrupadores.join(", "))}</b>${pestanaImpresion ? " · Se abrió la orden en otra pestaña, lista para imprimir." : ""}</div>
           `;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
@@ -24765,7 +24812,7 @@ _vglOfrecerDeshacer(btn);
           // orden vieja de otra sesión ni de otro paciente.
           const printBox = document.createElement("div");
           printBox.className = "vgl-ord-printbox";
-          printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">🖨️ Imprimir la(s) orden(es)</label>`;
+          printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">Imprimir las órdenes generadas</label>`;
           const printRow = document.createElement("div");
           printRow.className = "vgl-agm-fieldrow";
           agrupadoresUnicos.forEach((agp) => {
@@ -24773,7 +24820,7 @@ _vglOfrecerDeshacer(btn);
             printBtn.className = "vgl-agm-btn sec";
             // v17.6.76 — rotulado con la actividad real (VIH, PSA…), no con el id crudo
             // del agrupador: con eso el médico no podía distinguir un botón de otro.
-            printBtn.textContent = "🖨️ " + (_tituloPorAgrupador.get(agp) || ("Orden " + agp));
+            printBtn.textContent = "Imprimir orden de " + (_tituloPorAgrupador.get(agp) || ("Orden " + agp));
             printBtn.addEventListener("click", async () => {
               uxTrack("ordenes.imprimir");
               // v12.6.2 — pestaña en blanco SÍNCRONA en el clic real (evita el bloqueador de
@@ -24804,7 +24851,7 @@ _vglOfrecerDeshacer(btn);
           const mailBox = document.createElement("div");
           mailBox.className = "vgl-ord-mailbox";
           mailBox.innerHTML = `
-            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <label class="vgl-agm-lbl" style="margin-top:14px">Enviar las órdenes al correo del paciente (opcional)</label>
             <div class="vgl-agm-fieldrow">
               <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
               <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
@@ -24817,8 +24864,8 @@ _vglOfrecerDeshacer(btn);
           const mailStatus = mailBox.querySelector("#vgl-ord-mail-status");
           mailBtn.addEventListener("click", async () => {
             const correo = (mailInput.value || "").trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "⚠ Escriba un correo válido."; return; }
-            mailBtn.disabled = true; mailBtn.textContent = "⏳ Enviando...";
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "Escriba un correo válido."; return; }
+            mailBtn.disabled = true; mailBtn.textContent = "Enviando...";
             // v12.6.6 — CORREGIDO: `UsuarioId` aquí es el id del PACIENTE, no el del médico.
             // Confirmado en la grabación real del consultorio (12-08-2026): en la MISMA
             // corrida, GenerarLinksImpresionOrdenamientos va con PacienteId=801848 y acto
@@ -24839,8 +24886,8 @@ _vglOfrecerDeshacer(btn);
             if (!vivo()) return;
             mailBtn.disabled = false; mailBtn.textContent = "Enviar";
             mailStatus.textContent = okCount === agrupadoresUnicos.length
-              ? `✅ Orden(es) enviada(s) a ${correo}.`
-              : (okCount > 0 ? `⚠ Se enviaron ${okCount} de ${agrupadoresUnicos.length} orden(es). Verifique en el portal de Everest.` : "❌ No se pudo enviar la orden por correo. Verifique el correo o inténtelo desde el portal.");
+              ? `Órdenes enviadas al correo del paciente.`
+              : (okCount > 0 ? `Se enviaron ${okCount} de ${agrupadoresUnicos.length} órdenes. Verifique en la plataforma de Everest.` : "No fue posible enviar las órdenes por correo. Verifique el correo o inténtelo desde la plataforma de Everest.");
           });
         }
 
@@ -24855,9 +24902,9 @@ _vglOfrecerDeshacer(btn);
         // corridas parciales. El color y el texto ahora dicen la verdad, que es lo
         // único que el médico puede usar para decidir si le falta algo por ordenar.
         if (parcial) {
-          notify("AMBAR", "⚠️ Órdenes PyM incompletas", `Paciente: ${patientName}\n${creadasCount} de ${creadasCount + fallidasCount} orden(es) quedaron creadas. Faltan ${fallidasCount}: reintente SOLO esas en el módulo, ya abierto.`, true); // [COPY-UX]
+          notify("AMBAR", "Órdenes incompletas", `${patientName} · ${creadasCount} de ${creadasCount + fallidasCount} órdenes quedaron creadas. ${fallidasCount === 1 ? "Falta 1: reintente solo esa" : `Faltan ${fallidasCount}: reintente solo esas`} en el módulo.`, true); // [COPY-UX]
         } else {
-          notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
+          notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]
         }
         // v17.1.0 (#146) — RETIRADO `bumpStat("atiempo")`, misma razón que en el
         // agendamiento: generar órdenes de PyM no es una llegada puntual, y estaba
@@ -27089,8 +27136,8 @@ _vglOfrecerDeshacer(btn);
         "Colores de cada cita:\n" +
         "· Verde — llegó a tiempo.\n" +
         "· Cian — última llamada (queda ~1 minuto de gracia).\n" +
-        "· Ámbar — no se presentó.\n" +
-        "· Rojo — confirmó después del tiempo de gracia.\n" +
+        "· Ámbar — no se presentó (venció el tiempo de confirmación).\n" +
+        "· Rojo — llegada confirmada fuera del tiempo de confirmación.\n" +
         "· Violeta — normal, sin novedad.\n\n" +
         "· Alt+V — muestra u oculta el asistente.\n\n" +
         "Centinela avisa y sugiere; usted decide.", true);

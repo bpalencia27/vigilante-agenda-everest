@@ -2556,20 +2556,22 @@ module.exports = {
       const modalSinLista = ultimoOrd();
       t.cierto(modalSinLista.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
         "sin lista, el modal lo dice: el hueco es del sistema, no del paciente");
-      t.cierto(modalSinLista.innerHTML.includes("No hay lista que consultar"),
+      t.cierto(modalSinLista.innerHTML.includes("No hay lista de prevención"),
         "y el botón no invita a ordenar nada (antes decía 'Sin actividades', afirmando lo que no se sabía)");
       t.igual(modalSinLista.innerHTML.split("vgl-ord-item").length - 1, 0, "tampoco aquí se ofrece ningún ítem");
     });
 
-    await t.casoAsync("openOrdenamientoModal: con coincidencia, el choque de sexo desmarca y advierte", async () => {
-      // Mujer con mamografía y PSA en su PyM: la mamografía se premarca, el PSA no
+    await t.casoAsync("openOrdenamientoModal: con coincidencia, la actividad de otro sexo se OCULTA (v17.26.0)", async () => {
+      // v17.26.0 — REFACTOR APROBADO: el choque de sexo ya no se avisa en rojo: la
+      // actividad simplemente no se muestra. Mujer con mamografía y PSA en su PyM: la
+      // mamografía se premarca, el PSA no aparece.
       await cOrd.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía", "PSA prostata"] });
       const modal = ultimoOrd();
-      t.cierto(modal.innerHTML.includes("Mamografía (Mamografía Bilateral)"));
-      t.cierto(modal.innerHTML.includes("PSA (antígeno de próstata)"));
+      t.cierto(modal.innerHTML.includes("Mamografía (detección de cáncer de mama)"));
+      t.falso(modal.innerHTML.includes("PSA (antígeno de próstata)"), "el PSA se oculta para una paciente de sexo F");
       t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "la mamografía (compatible) sale premarcada");
       t.igual(modal.innerHTML.split(" checked").length - 1, 1, "solo una casilla premarcada");
-      t.cierto(modal.innerHTML.includes("Actividad propia del sexo M"), "el PSA advierte el choque con el sexo F registrado");
+      t.falso(modal.innerHTML.includes("Actividad propia del sexo"), "ya no se muestra el aviso rojo de choque de sexo");
       t.falso(modal.innerHTML.includes("No se detectaron actividades pendientes"), "con coincidencia no sale el aviso de sin-coincidencia");
     });
 
@@ -2594,7 +2596,11 @@ module.exports = {
       d.setDate(d.getDate() - n);
       return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     };
-    await t.casoAsync("openOrdenamientoModal v14: un paquete YA vigente en Everest (RCV exprés, orden reciente) no se premarca y avisa", async () => {
+    await t.casoAsync("openOrdenamientoModal v14/v17.26: el paquete RCV exprés se RETIRÓ del módulo", async () => {
+      // v17.26.0 — REFACTOR APROBADO: el paquete I10X (RCV exprés) ya no se ofrece en el
+      // módulo de Ordenar. Antes este test verificaba que una orden vigente de RCV no se
+      // premarcaba; ahora el paquete ni siquiera aparece, y si era el único match el modal
+      // cae al aviso honesto de "sin actividades para este paciente".
       const cVig = cargar({
         silencioso: true,
         fetch: async (url) => {
@@ -2602,8 +2608,6 @@ module.exports = {
           if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
           if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
           if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
-            // v14.1.4 — Con la regla `every` (decisión del médico), el paquete solo cuenta
-            // como vigente si TODOS sus exámenes lo están. Antes bastaba el 903818 suelto.
             // Los diez CUPS del RCV exprés, todos ordenados hace 30 días.
             const CUPS_RCV = ["903815", "903817", "903818", "903868", "903895", "903841", "907106", "903876", "903026", "903426"];
             return respuestaJson(CUPS_RCV.map((c) => ({ cup: { codigo: c }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) })));
@@ -2617,9 +2621,10 @@ module.exports = {
       await cVig.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["RCV Exprés"] });
       const modal = ultimoOrdVig();
       t.cierto(!!modal, "el modal se pinta igual, con o sin cruce antiduplicado");
-      t.cierto(modal.innerHTML.includes("PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS"), "el paquete RCV exprés se ofrece");
-      t.falso(modal.innerHTML.includes(" checked"), "con una orden vigente de hace 30 días (dentro de los 180), NO se premarca");
-      t.cierto(modal.innerHTML.includes("Ya existe una orden vigente en Everest"), "el aviso verde explica por qué no se premarcó");
+      t.falso(modal.innerHTML.includes("PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS"), "el paquete RCV exprés ya no se ofrece en el módulo");
+      t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "al ser el único match, no queda ninguna tarjeta por ofrecer");
+      t.falso(modal.innerHTML.includes(" checked"), "sin tarjetas no hay nada premarcado");
+      t.cierto(modal.innerHTML.includes("no tiene pendientes") || modal.innerHTML.includes("No tengo cargada la lista"), "el modal avisa con honestidad por qué no hay nada que ordenar");
     });
 
     await t.casoAsync("openOrdenamientoModal v14: un fallo de red al verificar vigentes NO bloquea el premarcado normal", async () => {
@@ -2636,7 +2641,7 @@ module.exports = {
       });
       enriquecerDom(cVigFalla);
       const ultimoOrdF = () => cVigFalla.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
-      await cVigFalla.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["RCV Exprés"] });
+      await cVigFalla.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["VIH"] });
       const modal = ultimoOrdF();
       t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "sin poder verificar vigentes, el paquete se premarca como siempre — un fallo de red no bloquea nada");
       t.falso(modal.innerHTML.includes("Ya existe una orden vigente en Everest"), "sin verificación exitosa, tampoco se avisa un falso 'ya vigente'");
