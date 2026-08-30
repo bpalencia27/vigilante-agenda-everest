@@ -860,12 +860,12 @@ module.exports = {
       const btns = dock.children.find((n) => n.className === "vgl-dock-btns");
       t.cierto(!!btns, "existe el contenedor de botones");
       const accs = btns.children.map((b) => b.getAttribute("data-accion"));
-      // v16.8.0+ — el dock creció a propósito: 🧾 Panel del paciente (ficha), atajos
-      // «Ir a [pestaña]» (uno por pestaña con algo pendiente por documentar — con el
-      // mock de esta suite son 2: Antecedentes y Hábitos) y ✍ Redactar (texto libre).
-      // El botón de «riesgo» se retiró en v16.8.0 (su contenido vive en el Panel).
-      // v17.x.x — el dock suma «control» (Próximo control, solo autorizados) al final.
-      t.igual(accs, ["agendar", "ordenar", "labs", "ficha", "ir-pestana", "ir-pestana", "redactar", "control"]);
+      // v17.x.x — el dock creció a propósito: ✍ Redactar (texto libre) y 📦 control
+      // (Próximo control, solo autorizados). El botón de «riesgo» se retiró en v16.8.0
+      // (su contenido vive en el Panel). El Panel del paciente («ficha») se OCULTA hasta
+      // cumplir los requisitos (con este mock no hay resumen cacheado → queda bloqueado e
+      // invisible), y los atajos «Ir a…» se retiraron por completo.
+      t.igual(accs, ["agendar", "ordenar", "labs", "redactar", "control"]);
       t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
 
       // Segunda llamada: no duplica el contenedor del dock.
@@ -1024,9 +1024,9 @@ module.exports = {
       c.api.createAccionesDockUI();
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
-      // v16.8.0+ — sin el botón de «riesgo» (retirado); el resto del dock se conserva completo.
-      // v17.x.x — suma «control» (Próximo control, solo autorizados).
-      t.igual(accs, ["labs", "ficha", "ir-pestana", "ir-pestana", "redactar", "control"]);
+      // v17.x.x — sin agendar/ordenar, y sin el Panel (oculto hasta cumplir requisitos) ni
+      // los atajos «Ir a…» (retirados). Labs, Redactar y control se conservan.
+      t.igual(accs, ["labs", "redactar", "control"]);
     });
 
     t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {

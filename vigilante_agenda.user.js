@@ -6836,8 +6836,9 @@ _vglOfrecerDeshacer(btn);
       citaReal ? "R" : "n",
       // v17.5.0 — la compuerta del Panel del paciente: si el resumen termina de calcularse o
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
-      // para reflejarlo (habilitar el botón, quitar/actualizar el atajo «Ir a…»).
-      _panelBloqueado ? "PB" : "pb", _pendientesPanel.map((p) => p.pestania).join(","), _autorizado ? "AU" : "no"].join("|");
+      // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
+      // así que la firma solo necesita saber si sigue bloqueado o no.
+      _panelBloqueado ? "PB" : "pb", _autorizado ? "AU" : "no"].join("|");
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -6964,51 +6965,21 @@ _vglOfrecerDeshacer(btn);
     // juzgar a un paciente ya no hay que abrir dos ventanas y compararlas de memoria.
     // v17.5.0 — DESHABILITADO (orden explícita del médico, no solo con aviso) mientras
     // falte lo mínimo por documentar o el resumen automático todavía no termine de calcular.
-    // v17.x.x — REFACTOR S+ (30-ago): el Panel del paciente solo existe para los
-    // médicos autorizados.
-    if (_autorizado) {
+    // v17.x.x — REFACTOR S+ (30-ago): el Panel del paciente solo existe para los médicos
+    // autorizados, y ahora se OCULTA POR COMPLETO (no se muestra ni bloqueado) hasta que
+    // el paciente cumpla todos los requisitos. El resumen automático se sigue calculando
+    // en segundo plano (autoCalcularResumenSiNecesario), así que el botón aparece solo
+    // cuando de verdad se puede abrir. Sin atajos «Ir a…»: el médico entra a esas
+    // pestañas cuando corresponde, en su flujo natural.
+    if (_autorizado && !_panelBloqueado) {
     const bFicha = document.createElement("button");
     bFicha.className = "vgl-dock-btn";
     bFicha.setAttribute("data-accion", "ficha");
-    bFicha.disabled = _panelBloqueado;
-    if (bFicha.classList) bFicha.classList.toggle("vgl-dock-btn-disabled", _panelBloqueado);
-    if (!_panelBloqueado) {
-      bFicha.setAttribute("aria-label", "Abrir el panel del paciente: lo leído, riesgo, función renal, exámenes, tendencias y medicamentos");
-      bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
-      _vglDockRotulo(bFicha, "🧾", "Panel del paciente");
-    } else if (_pendientesPanel.length > 0) {
-      const _faltaTxt = _pendientesPanel.map((p) => p.etiqueta).join("; ");
-      bFicha.setAttribute("aria-label", "Panel del paciente bloqueado: falta documentar " + _faltaTxt);
-      bFicha.title = "🔒 Panel del paciente bloqueado — aún falta documentar: " + _faltaTxt + ". Se habilita solo apenas quede registrado en Everest (use los atajos de al lado).";
-      _vglDockRotulo(bFicha, "🔒", "Panel del paciente");
-    } else {
-      bFicha.setAttribute("aria-label", "Panel del paciente: recopilando datos automáticamente");
-      bFicha.title = "⏳ Panel del paciente — recopilando laboratorios y función renal automáticamente… se habilita solo en unos segundos.";
-      _vglDockRotulo(bFicha, "⏳", "Panel del paciente");
-    }
+    bFicha.setAttribute("aria-label", "Abrir el panel del paciente: lo leído, riesgo, función renal, exámenes, tendencias y medicamentos");
+    bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
+    _vglDockRotulo(bFicha, "🧾", "Panel del paciente");
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
-    }
-
-    // v17.5.0 — atajos «Ir a [pestaña]»: uno por cada pestaña con algo pendiente, solo
-    // mientras haya algo concreto que el médico pueda ir a hacer (no durante la sola espera
-    // del resumen automático, donde ningún clic suyo la acelera).
-    if (_autorizado) {
-    _pendientesPanel.forEach((pend) => {
-      const bIr = document.createElement("button");
-      bIr.className = "vgl-dock-btn vgl-dock-btn-ambar";
-      bIr.setAttribute("data-accion", "ir-pestana");
-      bIr.setAttribute("aria-label", "Ir a la pestaña " + pend.pestania + " para documentar " + pend.nombres.join(" y "));
-      bIr.title = "📍 Ir a « " + pend.pestania + " » para documentar: " + pend.nombres.join(", ") + ". El Panel del paciente se habilita apenas quede registrado.";
-      const _corto = pend.pestania === "Hábitos y Gestión de Riesgo" ? "Hábitos" : pend.pestania;
-      _vglDockRotulo(bIr, "📍", "Ir a " + _corto);
-      bIr.addEventListener("click", (e) => {
-        e.stopPropagation();
-        uxTrack("widget.panel.iraPestana");
-        mtrIrAPestanaPorNombre(pend.pestania, document);
-      });
-      btns.appendChild(bIr);
-    });
     }
 
     // v15.6.0 — Redactor de texto libre con IA (Propuesta 3): módulo propio, separado
