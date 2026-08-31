@@ -14804,8 +14804,11 @@ _vglOfrecerDeshacer(btn);
         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         display:inline-block;max-width:100%;vertical-align:bottom;
       }
+      /* v-S+ (refactor panel, mockup 30-ago): el resaltado de búsqueda pasa del ámbar al
+         cian — el ámbar queda reservado para alertas y el cian (--c-morado) es el acento
+         de resaltado del panel. color:inherit se mantiene para adaptarse al tema. */
       .vgl-name mark{
-        background:rgba(var(--rgb-ambar),.30);color:inherit;
+        background:rgba(var(--rgb-morado),.30);color:inherit;
         border-radius:6px;padding:0 3px
       }
       .vgl-doc{color:var(--fg3);font-size:var(--t-micro);font-weight:500;flex-shrink:0} /* Mínimo 12px */
@@ -14824,13 +14827,22 @@ _vglOfrecerDeshacer(btn);
         line-height:1.3;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
+      /* v-S+ (refactor panel, mockup canvas 30-ago): las banderas dejan el relleno SÓLIDO
+         (texto oscuro sobre bloque de color + glow) por el estilo "outline" del mockup:
+         texto del color de su semáforo sobre fondo tintado al 10% con borde interior al
+         32%. El estado se lee igual de inequívoco (texto + borde de color) y la fila de
+         banderas deja de competir con el dot/borde/badge de la tarjeta. Contraste AA en
+         ambos temas (p. ej. rojo #ff8177 sobre #0d1219 = 7,8:1; rojo claro #991b1b sobre
+         #f6f7fb = 7,7:1). Sin la palabra clave important: viven dentro de #vgl-root, no
+         aplica la Regla E. */
       .vgl-flag{
         font-size:var(--t-micro);font-weight:800;padding:3px 9px; /* Mínimo 12px */
-        border-radius:var(--r-pill);background:var(--c-rojo);
-        color:var(--bg-solid);white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
-        box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
+        border-radius:var(--r-pill);
+        background:rgba(var(--rgb-rojo),.10);color:var(--c-rojo);
+        white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.32);
       }
-      .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
+      .vgl-flag.pes{background:rgba(var(--rgb-pes),.10);color:var(--c-pes);box-shadow:inset 0 0 0 1px rgba(var(--rgb-pes),.32)}
       /* v17.8.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #1 (gravedad alta). Estas dos reglas
          NO EXISTÍAN. Sin ellas, la bandera «agpend» (🗓️ SIN TERMINAR) y la bandera «adic»
          («➕ CANDIDATO ADICIONAL») heredaban el fondo ROJO de la regla base — y ninguna de
@@ -14841,8 +14853,8 @@ _vglOfrecerDeshacer(btn);
          programa. Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa
          todos los demás. La suite_70 (REGLA A) impide que vuelva a pasar con cualquier
          bandera nueva. */
-      .vgl-flag.agpend{background:var(--c-ambar);box-shadow:0 0 12px rgba(var(--rgb-ambar),.30)}
-      .vgl-flag.adic{background:var(--c-azul);box-shadow:0 0 12px rgba(var(--rgb-azul),.28)}
+      .vgl-flag.agpend{background:rgba(var(--rgb-ambar),.10);color:var(--c-ambar);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.32)}
+      .vgl-flag.adic{background:rgba(var(--rgb-azul),.10);color:var(--c-azul);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.32)}
 
       .vgl-cd{
         font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
@@ -14925,14 +14937,28 @@ _vglOfrecerDeshacer(btn);
         gap:5px;
         padding-bottom:2px;
       }
+      /* v-S+ (refactor panel, mockup canvas 30-ago): los chips PyM pasan de la pastilla
+         violeta rellena al chip NEUTRO del mockup (fondo blanco 5% + borde --line + texto
+         --fg2). El color deja de competir con dot/borde/badge de la tarjeta; el sobrante
+         "+N más" y la remisión AV/OD llevan el acento cian, igual que .pym.mas del mockup.
+         El refuerzo #vgl-root:not(.light) se conserva con el nuevo color (misma
+         especificidad que antes) para no perder contra el hostil en tema oscuro; las
+         variantes cian lo blindan con un selector compuesto de mayor peso. */
       .vgl-chip{
         font-size:11.5px;font-weight:750;padding:4px 10px;
         border-radius:var(--r-pill);letter-spacing:.1px;
-        background:rgba(var(--rgb-azul),.14);color:var(--c-azul);
+        background:rgba(255,255,255,.05);color:var(--fg2);
         white-space:normal;line-height:1.35;
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.18);
+        border:1px solid var(--line);
       }
-      #vgl-root:not(.light) .vgl-chip{color:var(--c-azul)}
+      #vgl-root:not(.light) .vgl-chip{color:var(--fg2)}
+      .vgl-chip.vgl-chip-mas,.vgl-chip.vgl-chip-ocultas{
+        color:var(--c-morado);
+        border-color:rgba(var(--rgb-morado),.35);
+        background:rgba(var(--rgb-morado),.08);
+      }
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado)}
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado)}
       .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2) !important;font-style:italic} /* Mínimo 12px */
       .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:700}
 
