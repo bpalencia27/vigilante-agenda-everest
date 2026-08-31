@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.7
+// @version      18.0.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8429,6 +8429,11 @@ _vglOfrecerDeshacer(btn);
     // v18.0.7 — cédulas cuya historia clínica abrió el médico HOY (ver _consultorioMarcar).
     // Se hidrata perezosamente desde el almacén del día la primera vez que se consulta.
     enConsultorio: null,
+    // v18.0.8 — CUÁNDO se confirmó cada estado de `historical`. El antirrebote de v17.6.21
+    // necesita saber si la lectura anterior es de HACE UN INSTANTE (dos ticks seguidos, que
+    // es el parpadeo que existe para absorber) o de hace media hora (una memoria vieja, que
+    // no es un competidor legítimo de la lectura fresca). Ver colorAndAlert.
+    historicalAt: new Map(),
     // v17.1.0 (#72/#146) — «ya conté esta cita en este color». Los cuatro indicadores del
     // Resumen del turno (extemporáneas, inasistencias, a tiempo, última llamada) contaban
     // TRANSICIONES, no citas: la clave era `state.notified`, un mapa de «último color
@@ -8716,8 +8721,48 @@ _vglOfrecerDeshacer(btn);
   let _ultimoBeatOculta = null;
   function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
   function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
+  // v18.0.8 — QUIEN NO PUEDE EVALUAR NO PUEDE MANDAR.
+  //
+  // REPORTE EN VIVO (31-ago, dos capturas): dos avisos ÁMBAR de citas distintas (9:30 y
+  // 10:00) llegaron con EL MISMO sello «Visto 10:20:44», con +50,7 y +20,7 min. Esa
+  // diferencia es exactamente 30,0 — la distancia entre las dos citas. O sea: las dos se
+  // evaluaron en el MISMO tick, ~45 minutos tarde. No es que el aviso saliera tarde: es que
+  // nadie MIRÓ la agenda en todo ese rato (el sello se pone al evaluar, no al notificar).
+  //
+  // LA CAUSA. `heartbeat()` lo dispara el canal "latido" (_relojCada("latido", 5000, …)),
+  // que vive en el NIVEL SUPERIOR del IIFE y corre en toda pestaña de Everest. Pero el que
+  // de verdad evalúa la agenda es el canal "tick", que solo se registra en
+  // `restartPolling()` — y esa función empieza con `if (!el || !el.root) return`. Una
+  // pestaña sin panel construido (fuera de HCHealth, instancia duplicada, o un boot que
+  // abortó) NO tiene canal "tick"… y sin embargo seguía latiendo cada 5 s, ganando y
+  // RETENIENDO el mando. Las demás pestañas veían un latido ajeno y fresco y se ponían
+  // `state.leader = false`. Resultado: había líder, y el líder no miraba nada. Cuando por
+  // fin soltaba el mando, la pestaña real evaluaba TODA la agenda de una vez — de ahí el
+  // sello idéntico al segundo y los `elapsed` inflados.
+  //
+  // Es exactamente la regla que el médico dejó escrita: «siempre debe estar analizando
+  // citas del día con esa pestaña líder; las demás no tienen por qué generar
+  // notificaciones». Una pestaña que no puede analizar no tiene por qué mandar.
+  //
+  // La guarda va ANTES de leer y de escribir el latido, a propósito: si solo impidiera
+  // liderar pero dejara escribir, la pestaña ciega seguiría publicando un latido fresco y
+  // seguiría bloqueando a las demás — el mismo daño por la puerta de al lado.
+  //
+  // Orden de arranque comprobado: boot() hace buildOverlay() -> applySettings() (que llama
+  // restartPolling() y registra "tick") -> heartbeat(). Cuando la pestaña legítima llega
+  // aquí, su canal ya existe.
+  //
+  // COSTE EN EVIDENCIA, dicho en voz alta: este defecto no solo retrasaba avisos, estaba
+  // ENSUCIANDO la auditoría. La fila INASISTENCIA se escribe con el `min` del momento en
+  // que se evaluó, así que una cita que venció a los 6 minutos quedó registrada con 51. Eso
+  // es lo que sustenta una reclamación. El arreglo lo corrige de aquí en adelante; las
+  // filas ya escritas NO se tocan — reescribirlas sería inventar un dato que nadie observó.
+  function _puedoEvaluarLaAgenda() {
+    try { return !!(_reloj && _reloj.canales && _reloj.canales.has("tick")); } catch (e) { return false; }
+  }
   function heartbeat() {
     try {
+      if (!_puedoEvaluarLaAgenda()) { state.leader = false; return false; }
       const ahora = Date.now();
       let beat = null;
       try { beat = JSON.parse(localStorage.getItem(LEADER_KEY) || "null"); } catch (e) {}
@@ -9571,6 +9616,26 @@ _vglOfrecerDeshacer(btn);
   const STATS_KEY = "vgl_stats", EVENTS_KEY = "vgl_events", KEEP_DAYS = 30;
   function allStats() { return readJSON(STATS_KEY, {}) || {}; }
   function statsToday() { const a = allStats(); return a[todayStamp()] || { fraude: 0, inasistencia: 0, atiempo: 0, ultima: 0 }; }
+  // v18.0.8 — RECTIFICAR UN CONTEO QUE RESULTÓ FALSO.
+  //
+  // Decisión del médico (31-ago), tras ver que un aviso ÁMBAR falso además ENSUCIABA el
+  // contador: «no es posible que un paciente aparezca sin presentarse y que ya haya
+  // confirmado su cita; o vino o no vino» — y eligió corregirlo retroactivamente.
+  //
+  // No se BORRA la fila original de la auditoría: eso sería reescribir la historia. Se
+  // descuenta el contador del día y se añade una fila de RECTIFICACIÓN que dice qué se
+  // había anotado, qué se vio después y por qué ya no vale. Quien lea el CSV después ve las
+  // dos cosas y puede seguir el razonamiento; borrar la primera dejaría un hueco mudo.
+  function rectificarStat(kind) {
+    try {
+      const a = allStats(), d = todayStamp();
+      if (!a[d] || !a[d][kind]) return false;
+      a[d][kind] = Math.max(0, a[d][kind] - 1);
+      purgeOld(a); writeJSON(STATS_KEY, a);
+      frCache.dia = "";
+      return true;
+    } catch (e) { return false; }
+  }
   function bumpStat(kind) {
     const a = allStats(), d = todayStamp();
     a[d] = a[d] || { fraude: 0, inasistencia: 0, atiempo: 0, ultima: 0 };
@@ -11747,12 +11812,57 @@ _vglOfrecerDeshacer(btn);
     // cambio real sigue avisando en el siguiente tick (unos segundos); un parpadeo de una
     // sola lectura queda absorbido sin generar ruido. La primera vez que se ve una cita
     // (esNueva) nunca se demora: no hay "confirmado" previo con qué comparar.
+    // =====================================================================
+    // v18.0.8 — EL ANTIRREBOTE NO PUEDE RESUCITAR UN ESTADO VIEJO
+    //
+    // REPORTE EN VIVO (31-ago, dos capturas): dos avisos ÁMBAR «Sin presentarse» de dos
+    // pacientes que el médico YA HABÍA ATENDIDO, los dos con el sello «Visto 10:20:44» y
+    // desfases de +50,7 y +20,7 min. El médico lo dijo mejor que ningún análisis: «no es
+    // posible que un paciente aparezca sin presentarse y que ya haya confirmado su cita; o
+    // vino o no vino», y «por lo general el script es el del problema, no Everest».
+    //
+    // Tenía razón, y esto es exactamente eso. REPRODUCIDO con el arnés: a las 10:20:44 la
+    // agenda decía «Atendido», y colorAndAlert devolvía estado «Sin presentarse», color
+    // AMBAR y elapsed 20,7 — la cifra literal de su captura. El script no leyó mal Everest:
+    // descartó la lectura buena y evaluó con una memoria de 45 minutos antes.
+    //
+    // POR QUÉ. El antirrebote de v17.6.21 existe para absorber un parpadeo real entre dos
+    // fuentes (API y raspado del DOM) que no coinciden EN EL MISMO INSTANTE: exige ver la
+    // lectura nueva DOS VECES SEGUIDAS antes de aceptarla, y mientras tanto sigue usando la
+    // anterior. Eso es correcto cuando las dos lecturas están separadas por un tick (~5 s).
+    // Pero si entre medias hubo un apagón —el líder ciego de v18.0.8, un API caído, la
+    // pestaña congelada—, la lectura «anterior» ya no es un competidor: es un recuerdo. Y el
+    // antirrebote lo imponía igual, calculando encima el desfase contra la hora ACTUAL. De
+    // ahí un ÁMBAR falso, con un `elapsed` inflado, sobre un paciente ya atendido.
+    //
+    // LA GUARDA: el antirrebote solo se aplica si la lectura anterior es RECIENTE. Pasado
+    // ese hueco, la lectura fresca manda de inmediato — que es lo único honesto: entre un
+    // dato que acabo de leer y uno que recuerdo de hace media hora, manda el que leí.
+    // El corte se ata a la cadencia real de sondeo (cuatro vueltas, mínimo 30 s), no a un
+    // número suelto: si el médico pone el refresco a 2 s o a 120 s, la ventana lo acompaña.
+    // =====================================================================
+    const prevTs = state.historicalAt.get(key) || 0;
+    const huecoMax = Math.max(30000, 4 * (CONFIG.POLL_MS || 5000));
+    const huecoLargo = !prevTs || (now - prevTs) > huecoMax;
     let stRaw = stCrudoRaw, st = stCrudo;
-    if (!esNueva && stCrudo !== prev) {
+    if (!esNueva && stCrudo !== prev && !huecoLargo) {
       if (state.estadoPendiente.get(key) === stCrudo) { state.estadoPendiente.delete(key); stRaw = stCrudoRaw; st = stCrudo; }
       else { state.estadoPendiente.set(key, stCrudo); stRaw = prevRaw; st = prev; }
     } else state.estadoPendiente.delete(key);
     const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false, callar = false;
+    // v18.0.8 — RECTIFICACIÓN RETROACTIVA. Si de esta cita ya se contó una INASISTENCIA y
+    // ahora la agenda dice que el paciente está EN SALA o ATENDIDO, aquella inasistencia no
+    // ocurrió: o vino o no vino, y vino. Se descuenta y se deja constancia. Es el remate del
+    // arreglo del antirrebote: aquel evita que vuelva a pasar, esto limpia lo que ya pasó
+    // hoy —incluido el caso del 31-ago, que se contó antes de que existiera la guarda—.
+    if ((st.includes("en sala") || st.includes("atendido")) && state.contadas.has("inasistencia@" + key)) {
+      state.contadas.delete("inasistencia@" + key);
+      if (rectificarStat("inasistencia")) {
+        logEvent({ t: new Date().toLocaleTimeString(), ev: "RECTIFICACION_INASISTENCIA", hora: a.hora_texto,
+          doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+      }
+      _fraudeCompartidoGuardar();
+    }
     if (st.includes("en sala")) {
       if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
@@ -11823,10 +11933,11 @@ _vglOfrecerDeshacer(btn);
     // forma de saber a qué hora se confirmó realmente. Pedido textual: "no me dice a qué
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
-    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
+    if (!state.leader) { state.historical.set(key, stRaw); state.historicalAt.set(key, now); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
     if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
     else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
     state.historical.set(key, stRaw);
+    state.historicalAt.set(key, now);
     // [v17.6.7] Checklist de cierre: al pasar a Atendido, si el plan del paciente tiene
     // exámenes pendientes (vencidos o nunca tomados), aviso suave UNA vez por cita. Solo
     // líder, solo transiciones observadas (no el estado inicial del arranque tardío) y
@@ -13273,6 +13384,14 @@ _vglOfrecerDeshacer(btn);
     // re-armaba. La fila de auditoría se escribe SOLO si de verdad se contó, para que
     // el número de la cabecera del CSV y el número de filas del cuerpo cuadren siempre
     // (hay una prueba de conciliación en suite_10 que lo exige).
+    // v18.0.8 — CORRECCIÓN DEL MÉDICO (31-ago): «no puede ser inasistencia porque el
+    // paciente sí llegó a tiempo y se atendió normalmente». La v18.0.7 callaba la
+    // interrupción pero SEGUÍA contando y escribiendo la fila INASISTENCIA — ensuciando
+    // justo la evidencia que sostiene las reclamaciones. Si sabemos que el paciente estuvo
+    // en consulta, no hay inasistencia que contar: se sale antes de contar y de registrar.
+    // (El ROJO con `callar` es otra cosa y NO entra aquí: ahí sí hubo confirmación
+    // extemporánea y su conteo es la evidencia que el médico quiere conservar — v16.2.8.)
+    if (a.color === "AMBAR" && a.callar) return;
     const _conto = bumpStatCita(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima", a.key);
     if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00
@@ -13292,7 +13411,7 @@ _vglOfrecerDeshacer(btn);
     // médico sobre dos pacientes que ya había atendido (ver _consultorioTiene en
     // colorAndAlert). Sigue siendo SOLO la interrupción: el conteo y la fila de auditoría
     // de arriba ya corrieron, y la evidencia para reclamaciones queda intacta.
-    if (a.callar && (a.color === "ROJO" || a.color === "AMBAR")) return;
+    if (a.color === "ROJO" && a.callar) return;
     // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
     // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
     // ya quedaron registrados; aquí solo se frena el cartel/sonido repetido.
@@ -28559,7 +28678,17 @@ _vglOfrecerDeshacer(btn);
       // y no lo está. Un aviso HONESTO, una sola vez por día (avisoYaVisto ya está
       // fechado por día), solo dentro del módulo clínico y solo cuando de verdad no hay
       // ninguna fuente viva.
-      if (leader && _enModuloHCHealth() && !enVistaVigilada && (!data || !data.citas.length)) {
+      // v18.0.8 — EL AVISO DE CEGUERA NO PODÍA SALIR DONDE EL MÉDICO PASA LA JORNADA.
+      // La guarda de v17.6.15 decía `!enVistaVigilada`, y `enVistaVigilada` es
+      // `secc !== "otra"` — o sea, VERDADERO también dentro de una historia clínica. Pero
+      // el respaldo que justifica la guarda (el scrape del DOM, unas líneas arriba) solo
+      // funciona en «Citas del día»: dentro de una historia NO hay scrape que valga, así
+      // que si el API está caído el Vigilante está igual de ciego que en «otra» pantalla
+      // — y encima ahí es donde el médico está el 90 % del tiempo. Resultado real
+      // (reporte del 31-ago): 45 minutos sin evaluar la agenda, sin una sola señal.
+      // La condición correcta no es «no estoy en una vista vigilada» sino «aquí no puedo
+      // leer la agenda del DOM», que es exactamente `secc !== "agenda"`.
+      if (leader && _enModuloHCHealth() && secc !== "agenda" && (!data || !data.citas.length)) {
         osNotify("AMBAR", "⚠ Vigilante sin lectura de la agenda",
           "Aún no aprendió la conexión de 'Citas del día' esta sesión: mientras tanto NO puede avisar llegadas ni confirmaciones. Pase un momento por esa pantalla para que se active.",
           false, "vgl-sin-datos-agenda");

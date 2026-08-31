@@ -481,6 +481,44 @@ module.exports = {
       t.igual(notifs.length, 1, "NO se repite en el mismo día: un aviso, no un martilleo");
     });
 
+    // =====================================================================
+    //  v18.0.8 — Y AHORA TAMBIÉN DENTRO DE LA HISTORIA CLÍNICA, QUE ES DONDE FALTABA
+    //
+    //  La guarda de v17.6.15 decía `!enVistaVigilada`, y eso es `secc !== "otra"`: VERDADERO
+    //  también dentro de una historia. Pero el respaldo que justifica todo el aviso —leer la
+    //  agenda del DOM— solo funciona en «Citas del día». Dentro de una historia, con el API
+    //  caído, el Vigilante está exactamente igual de ciego… y ahí es donde el médico pasa la
+    //  jornada. Reporte del 31-ago: 45 minutos sin evaluar una sola cita, sin ninguna señal,
+    //  y los dos avisos saliendo de golpe con el mismo sello «Visto» cuando el API volvió.
+    // =====================================================================
+    t.caso("v18.0.8: dentro de una HISTORIA CLÍNICA, sin API sano, también avisa que está ciego", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Historia";
+      const getByIdReal = c.env.doc.getElementById.bind(c.env.doc);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : getByIdReal(id));  // sección 'historia'
+      c.env.doc.querySelectorAll = () => [];
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "en la historia también se dice: antes esta rama era inalcanzable");
+      t.cierto(/sin lectura/i.test(notifs[0].title), "mismo aviso honesto");
+    });
+
+    t.caso("v18.0.8: en «Citas del día» NO se avisa de ceguera — ahí el respaldo del DOM sí existe", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Citas";
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+      // seccionActiva() === "agenda" exige hora Y estado juntos en el DOM.
+      c.env.doc.querySelector = (sel) => ({ textContent: "07:30 a. m." });
+      c.api.tick();
+      t.igual(notifs.length, 0,
+        "estando en la agenda no se declara ciego: el scrape del DOM es la fuente, y decir lo contrario sería un falso aviso");
+    });
+
     t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
@@ -1002,5 +1040,60 @@ module.exports = {
         "tVerMin está en state.timers: si se omite del push, el kill-switch no lo cancela y sigue consultando la red con la interfaz retirada");
     });
 
+
+    // =====================================================================
+    //  v18.0.8 — QUIEN NO PUEDE EVALUAR NO PUEDE MANDAR
+    //
+    //  REPORTE EN VIVO (31-ago, dos capturas): dos avisos ÁMBAR de citas distintas (9:30 y
+    //  10:00) llegaron con EL MISMO sello «Visto 10:20:44», con +50,7 y +20,7 min de
+    //  desfase. La diferencia entre los dos desfases es exactamente 30,0 — la distancia
+    //  entre las dos citas. Las dos se evaluaron en el MISMO tick, unos 45 minutos tarde.
+    //
+    //  El sello se pone al EVALUAR (colorAndAlert), no al notificar, así que esto no es un
+    //  aviso que salió tarde: es que nadie miró la agenda en 45 minutos. La causa: el canal
+    //  "latido" que dispara heartbeat() vive en el nivel superior del IIFE y corre en TODA
+    //  pestaña de Everest, pero el canal "tick" —el que de verdad evalúa— solo se registra
+    //  en restartPolling(), que empieza con `if (!el || !el.root) return`. Una pestaña sin
+    //  panel (fuera de HCHealth, instancia duplicada, boot abortado) latía igual, ganaba el
+    //  mando y no miraba nada; las demás se ponían leader=false y callaban.
+    //
+    //  Es la regla que el médico dejó escrita: «siempre debe estar analizando citas del día
+    //  con esa pestaña líder; las demás no tienen por qué generar notificaciones».
+    // =====================================================================
+    t.caso("v18.0.8: una pestaña SIN reloj de evaluación no puede ser líder", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__reloj.canales.delete("tick");        // como una pestaña sin panel construido
+      t.igual(c.api.heartbeat(), false, "no toma el mando");
+      t.falso(c.api.__state.leader, "y se declara no-líder");
+    });
+
+    t.caso("v18.0.8: la pestaña ciega tampoco PUBLICA latido — si no, seguiría bloqueando a las demás", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      c.api.__reloj.canales.delete("tick");
+      c.api.heartbeat();
+      const beat = c.env.storage.getItem("vgl_leader_beat");
+      t.cierto(beat === null || beat === undefined || beat === "",
+        "sin latido publicado: es la mitad que impedía a la pestaña buena tomar el mando");
+    });
+
+    t.caso("v18.0.8: con reloj de evaluación, el liderazgo funciona exactamente igual que antes", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      t.igual(c.api.heartbeat(), true, "una pestaña arrancada sí toma el mando");
+      t.cierto(c.api.__state.leader, "y queda como líder");
+      t.cierto(!!c.env.storage.getItem("vgl_leader_beat"), "publicando su latido");
+    });
+
+    t.caso("v18.0.8: la pestaña ciega SUELTA el mando y la que sí evalúa se lo queda", () => {
+      // Reproducción del 31-ago: A es la pestaña sin panel (la que retenía el mando),
+      // B es la pestaña clínica. Con la guarda, B puede liderar aunque A siga latiendo.
+      const A = cargar({ silencioso: true });
+      A.api.__reloj.canales.delete("tick");
+      A.api.heartbeat();
+      const B = cargar({ almacen: A.env.almacen, storage: A.env.storage, silencioso: true });
+      t.igual(B.api.heartbeat(), true, "la pestaña que SÍ evalúa toma el mando");
+      t.falso(A.api.__state.leader, "y la ciega no lo tiene");
+    });
   },
 };

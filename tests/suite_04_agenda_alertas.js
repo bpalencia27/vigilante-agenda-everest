@@ -1234,7 +1234,13 @@ module.exports = {
       t.cierto(r.callar === true, "lo que se apaga es la interrupción");
     });
 
-    t.caso("v18.0.7: LA EVIDENCIA NO SE PIERDE — se sigue contando y se sigue escribiendo la fila de auditoría", () => {
+    // v18.0.8 — CORRECCIÓN DEL MÉDICO, y es una corrección de fondo. La v18.0.7 callaba la
+    // interrupción pero SEGUÍA contando la inasistencia «para no perder evidencia». Él lo
+    // desmontó en una frase: «no puede ser inasistencia porque el paciente sí llegó a tiempo
+    // y se atendió normalmente». Una fila INASISTENCIA sobre un paciente que vino no es
+    // evidencia: es una evidencia FALSA, y ensucia justo el CSV con el que reclama. La
+    // prueba de abajo afirmaba lo contrario y por eso se reescribe entera.
+    t.caso("v18.0.8: si el paciente estuvo en consulta, NO se cuenta ni se registra inasistencia", () => {
       const c = cargar();
       const refDate = new Date("2026-08-10T08:10:00").getTime();
       c.api.__state.leader = true;
@@ -1249,11 +1255,10 @@ module.exports = {
       const filasAud = () => { const e = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]"); return (Array.isArray(e) ? e : []).filter((x) => x && x.ev === "INASISTENCIA"); };
       const antes = cuenta();
       c.api.maybeNotify(r);
-      t.cierto(cuenta() > antes, "la inasistencia SE CUENTA igual (" + antes + " -> " + cuenta() + ")");
+      t.igual(cuenta(), antes, "el contador del día NO se mueve: no hubo inasistencia");
       c.api.evFlush();   // la auditoría se escribe por tandas; se fuerza el volcado
-      const filas = filasAud();
-      t.igual(filas.length, 1, "y la fila INASISTENCIA queda escrita en la auditoría");
-      t.igual(filas[0].doc, "5150076", "con su documento, que es lo que sostiene la reclamación");
+      t.igual(filasAud().length, 0,
+        "y NO se escribe la fila INASISTENCIA: sobre un paciente que vino, esa fila es evidencia falsa");
     });
 
     t.caso("v18.0.7: la memoria del consultorio es DEL DÍA y se comparte entre pestañas", () => {
@@ -1283,6 +1288,74 @@ module.exports = {
       t.cierto(c.api._consultorioTiene("5150076"), "marcada con ceros, se reconoce sin ellos");
       c.api._consultorioMarcar("7654321");
       t.cierto(c.api._consultorioTiene("0007654321"), "marcada sin ceros, se reconoce con ellos");
+    });
+
+    // =====================================================================
+    //  v18.0.8 — EL ANTIRREBOTE NO PUEDE RESUCITAR UN ESTADO VIEJO
+    //
+    //  Esta es LA causa del reporte del 31-ago, reproducida con el arnés antes de tocar
+    //  nada: a las 10:20:44 la agenda decía «Atendido» y colorAndAlert devolvía «Sin
+    //  presentarse», AMBAR y elapsed 20,7 — la cifra literal de la captura del médico.
+    //
+    //  El antirrebote de v17.6.21 existe para absorber un parpadeo entre dos fuentes (API y
+    //  DOM) que discrepan en el MISMO instante: exige ver la lectura nueva dos veces
+    //  seguidas. Correcto cuando las dos lecturas están separadas por un tick (~5 s).
+    //  Después de un apagón de 45 minutos, la lectura «anterior» no es un competidor: es un
+    //  recuerdo — y el antirrebote lo imponía igual, calculando el desfase contra la hora
+    //  actual. Resultado: ÁMBAR falso, elapsed inflado, sobre un paciente ya atendido.
+    //
+    //  Las dos mitades importan y las dos se prueban: la lectura fresca manda tras un hueco
+    //  largo, Y el parpadeo real de 5 s se sigue absorbiendo como siempre.
+    // =====================================================================
+    t.caso("v18.0.8: tras un apagón largo, la lectura FRESCA manda (el caso exacto del 31-ago)", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "10:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      // 10:03 — la agenda dice «Sin presentarse» y queda confirmado.
+      c.api.colorAndAlert(cita("Sin presentarse"), new Date("2026-08-31T10:03:00").getTime());
+      // ...45 minutos sin un solo tick (líder ciego, API caído)...
+      // 10:20:44 — la agenda YA dice «Atendido». Primera lectura tras el apagón.
+      const r = c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-31T10:20:44").getTime());
+      t.igual(r.estado, "Atendido", "se evalúa con lo que Everest dice AHORA, no con lo que se recordaba");
+      t.falso(r.color === "AMBAR", "y por tanto NO sale el ámbar falso de «venció el tiempo de confirmación»");
+    });
+
+    t.caso("v18.0.8: el parpadeo REAL de un tick sigue absorbido — no se desarma v17.6.21", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "10:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const t0 = new Date("2026-08-31T10:03:00").getTime();
+      c.api.colorAndAlert(cita("Sin presentarse"), t0);
+      const p = c.api.colorAndAlert(cita("Atendido"), t0 + 5000);   // 5 s después: un tick
+      t.igual(p.estado, "Sin presentarse",
+        "una lectura discrepante a 5 s sigue esperando confirmación: es justo el parpadeo API↔DOM que v17.6.21 absorbe");
+      const q = c.api.colorAndAlert(cita("Atendido"), t0 + 10000);  // segunda vez seguida
+      t.igual(q.estado, "Atendido", "y a la segunda lectura igual, se acepta — el mecanismo queda intacto");
+    });
+
+    t.caso("v18.0.8: una inasistencia ya contada se RECTIFICA al ver al paciente en sala o atendido", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "08:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const cuenta = () => { const a = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}"); return (a[c.api.todayStamp()] || {}).inasistencia || 0; };
+      // Se cuenta una inasistencia (el camino normal).
+      const r = c.api.colorAndAlert(cita("Sin presentarse"), new Date("2026-08-10T08:10:00").getTime());
+      t.igual(r.color, "AMBAR");
+      c.api.__state.notified.set(r.key, "siembra");
+      c.api.maybeNotify(r);
+      t.igual(cuenta(), 1, "queda contada (control del caso)");
+      // Más tarde, la agenda dice que el paciente sí estaba: aquella inasistencia no ocurrió.
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:30:00").getTime());
+      t.igual(cuenta(), 0, "se descuenta: o vino o no vino, y vino");
+      c.api.evFlush();
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
+      t.cierto(filas.some((x) => x && x.ev === "RECTIFICACION_INASISTENCIA"),
+        "y queda constancia de la rectificación");
+      t.cierto(filas.some((x) => x && x.ev === "INASISTENCIA"),
+        "sin borrar la fila original: se añade el porqué, no se reescribe la historia");
     });
   }
 };

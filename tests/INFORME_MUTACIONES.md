@@ -6080,3 +6080,77 @@ toma no se adelanta y, por construcción, nada puede vencer antes de ella. Hay u
 lo comprueba recorriendo todo el plan.
 
 Banco completo al cerrar: **2.716 comprobaciones pasan, 0 fallan.**
+
+## v18.0.8 — 31-ago-2026 · LA CAUSA REAL DEL AVISO FALSO, Y LA CORRECCIÓN DEL MÉDICO
+
+La v18.0.7 había tratado el síntoma: callaba el aviso ÁMBAR de un paciente ya atendido pero
+**seguía contando la inasistencia**, «para no perder evidencia». El médico lo desmontó en una
+frase: *«no puede ser inasistencia porque el paciente sí llegó a tiempo y se atendió
+normalmente»*, y añadió lo que resultó ser la clave del diagnóstico: *«no es posible que un
+paciente aparezca sin presentarse y que ya haya confirmado su cita; o vino o no vino»* y *«por
+lo general el script es el del problema, no Everest»*.
+
+Tenía razón en las dos cosas. Una fila `INASISTENCIA` sobre un paciente que vino no es
+evidencia: es evidencia FALSA, y ensucia justo el CSV con el que reclama.
+
+### La causa, reproducida antes de tocar nada
+
+```
+1) 10:03  la agenda dice «Sin presentarse»  -> se confirma
+   ...45 minutos sin un solo tick...
+2) 10:20:44 la agenda dice «Atendido» -> colorAndAlert devuelve:
+   estado "Sin presentarse" · color AMBAR · elapsed 20,7
+```
+
+**20,7 es la cifra literal de su captura.** El script no leyó mal Everest: **descartó la
+lectura buena y evaluó con una memoria de 45 minutos antes.** El antirrebote de v17.6.21
+existe para absorber un parpadeo entre dos fuentes (API y raspado del DOM) que discrepan en el
+MISMO instante: exige ver la lectura nueva dos veces seguidas. Es correcto con dos lecturas
+separadas por un tick (~5 s). Tras un apagón, la lectura «anterior» ya no es un competidor: es
+un recuerdo — y se imponía igual, calculando encima el desfase contra la hora actual.
+
+Y el apagón tenía su propia causa, encontrada en el mismo barrido: `heartbeat()` lo dispara el
+canal «latido», que vive en el nivel superior del IIFE y corre en TODA pestaña de Everest;
+pero el canal «tick», el que evalúa, solo se registra en `restartPolling()`, que empieza con
+`if (!el || !el.root) return`. **Una pestaña sin panel construido latía, ganaba el mando y no
+miraba nada**, mientras las demás se ponían `leader = false`. Es exactamente la regla que el
+médico tenía escrita: *«siempre debe estar analizando citas del día con esa pestaña líder».*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | el antirrebote vuelve a imponerse tras un hueco largo (se quita `!huecoLargo`) | *tras un apagón largo, la lectura FRESCA manda (el caso exacto del 31-ago)* + *una inasistencia ya contada se RECTIFICA…* (`suite_04`) | Sí — 71/71 |
+| 2 | `huecoMax` a 999999999 (ningún hueco se considera largo) | las mismas dos (`suite_04`) | Sí — 71/71 |
+| 3 | se quita la rectificación retroactiva | *una inasistencia ya contada se RECTIFICA al ver al paciente en sala o atendido* (`suite_04`) | Sí — 71/71 |
+| 4 | el ÁMBAR callado vuelve a contarse | *si el paciente estuvo en consulta, NO se cuenta ni se registra inasistencia* (`suite_04`) | Sí — 71/71 |
+| 5 | se quita la guarda de liderazgo (`_puedoEvaluarLaAgenda`) | *una pestaña SIN reloj de evaluación no puede ser líder*, *la pestaña ciega tampoco PUBLICA latido* y *la pestaña ciega SUELTA el mando…* (`suite_17`) | Sí — 48/48 |
+
+La mutación 2 merece una nota: es la que prueba que la ventana está **atada a la cadencia
+real de sondeo** (`max(30 s, 4 × POLL_MS)`) y no a un número suelto. Si el médico pone el
+refresco en 2 s o en 120 s, la ventana lo acompaña sola.
+
+### Lo que NO se rompió, y también se prueba
+
+`el parpadeo REAL de un tick sigue absorbido`: una lectura discrepante a 5 s sigue esperando
+confirmación, y se acepta a la segunda. El mecanismo de v17.6.21 queda intacto; lo único que
+cambia es que deja de aplicarse donde nunca tuvo sentido.
+
+### Rectificación retroactiva (decisión del médico)
+
+Si de una cita ya se contó una `INASISTENCIA` y después la agenda dice EN SALA o ATENDIDO, se
+descuenta del contador del día y se escribe una fila `RECTIFICACION_INASISTENCIA`. **La fila
+original NO se borra**: se añade el porqué. Borrarla dejaría un hueco mudo en el CSV; quien lo
+lea después tiene que poder seguir el razonamiento completo.
+
+### El aviso de ceguera, que no podía salir donde el médico trabaja
+
+`if (leader && _enModuloHCHealth() && !enVistaVigilada && …)` — y `enVistaVigilada` es
+`secc !== "otra"`, o sea VERDADERO también dentro de una historia clínica. Pero el respaldo
+que justifica el aviso (el raspado del DOM) solo funciona en «Citas del día». Dentro de una
+historia, con el API caído, el Vigilante está igual de ciego… y ahí es donde el médico pasa la
+jornada. La condición correcta no era «no estoy en una vista vigilada» sino «aquí no puedo
+leer la agenda del DOM»: `secc !== "agenda"`. Con su prueba, y con la contraria (en «Citas del
+día» NO se declara ciego, que sería un falso aviso).
+
+Banco completo: **2.725 comprobaciones pasan, 0 fallan.**

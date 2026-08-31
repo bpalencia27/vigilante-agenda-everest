@@ -249,6 +249,11 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
+    // v18.0.8 — `_reloj` se publica para las pruebas del liderazgo. Desde v18.0.8 una
+    // pestaña sin canal "tick" NO puede ser líder (quien no evalúa no manda): sin acceso a
+    // esta estructura no habría forma de simular las dos caras —pestaña arrancada y
+    // pestaña ciega— y el banco no podría fijar la regla.
+    "\n;try{ globalThis.__VGL__.__reloj = _reloj; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}" +
     // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
     // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
@@ -268,6 +273,15 @@ function cargar(opciones) {
   vm.runInContext(src, ctx, { filename: "vigilante_agenda.user.js", timeout: 20000 });
 
   const api = ctx.__VGL__ || {};
+  // v18.0.8 — POR DEFECTO, UNA PESTAÑA ARRANCADA. En el navegador, boot() construye el
+  // panel y applySettings() -> restartPolling() registra el canal "tick", que es el reloj
+  // que de verdad evalúa la agenda. El arnés impide a propósito que boot() corra (ver la
+  // cabecera de este fichero), así que sin esto TODA pestaña de prueba parecería una
+  // pestaña ciega y, desde v18.0.8, no podría liderar — rompiendo decenas de pruebas de
+  // liderazgo que nada tienen que ver con eso. Se registra el canal SIN temporizador (se
+  // escribe el mapa directamente, no se llama a _relojCada) para no dejar intervalos vivos
+  // que mantengan node despierto. Las pruebas de la guarda lo BORRAN a propósito.
+  try { if (api.__reloj && api.__reloj.canales && !api.__reloj.canales.has("tick")) api.__reloj.canales.set("tick", function () {}); } catch (e) {}
   return { api, env: ent, ctx, totalDeclaradas: nombres.length, expuestas: Object.keys(api).filter(k => !k.startsWith("__")).length };
 }
 
