@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     18.0.2
+// @version     18.0.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -17106,6 +17106,9 @@ _vglOfrecerDeshacer(btn);
       state.turnoInicio = _tTs;
     } catch (e) { state.turnoInicio = Date.now(); }
     actualizarRelojCabecera();
+    // v18.0.3 — se monta el canal "reloj" (1 s) al terminar de construir el overlay. El
+    // canal se detiene solo si el panel se cierra de verdad (removeOverlay), como el resto.
+    _relojSegundosMontar();
     // El tema "auto" sigue al modo claro/oscuro de Windows en vivo.
     try { if (PAGEWIN.matchMedia) PAGEWIN.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.tema === "auto") applyTheme(); }); } catch (e) {}
   }
@@ -27561,6 +27564,21 @@ _vglOfrecerDeshacer(btn);
   // [v17.6.5] Reloj del turno en la cabecera: hora actual + tiempo de jornada. Si la última
   // lectura real de la agenda pasa de 30 s, el reloj se pone ámbar (datos viejos) y el tooltip
   // dice a qué hora fue. Sin ultimaLectura (arranque) no alarma: todavía no hay nada que medir.
+  // v18.0.3 — el reloj ya no depende de que el panel repinte (render() solo corre en Citas del
+  // día / historia): ahora tiene SU PROPIO temporizador de 1 s (canal "reloj" del mismo motor
+  // _relojCada, Web Worker con degradación a setInterval), así que la hora avanza en CUALQUIER
+  // pantalla de Everest. El aviso de datos viejos (ámbar vgl-stale) se conserva intacto.
+  let _relojSegundosMontado = false;   // sello de "intenté montar el canal" (no afecta a la lógica)
+  function _relojSegundosMontar() {
+    if (_relojSegundosMontado || !el || !el.root) return;
+    _relojSegundosMontado = true;
+    _relojCada("reloj", 1000, () => {
+      try {
+        if (!document.getElementById("vgl-clock")) { _relojDetener("reloj"); return; }   // el panel ya no existe: no tiene sentido seguir latiendo
+        actualizarRelojCabecera();
+      } catch (e) {}
+    });
+  }
   function actualizarRelojCabecera() {
     try {
       const c = document.getElementById("vgl-clock");
