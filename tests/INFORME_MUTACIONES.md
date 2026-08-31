@@ -7034,3 +7034,72 @@ la memoria del paciente, y esta). Ninguna habría fallado nunca; las tres se hab
 en verde.
 
 Banco completo: **2.761 comprobaciones pasan, 0 fallan.**
+
+## v18.0.23 — 31-ago-2026 · UN PUNTO VERDE SOBRE UN «CONTRAINDICADO», Y DOS FÁRMACOS QUE NO EXISTEN
+
+### 1. El punto de «Medicamentos» salía verde «al día» sobre avisos CRÍTICOS
+
+Se calculaba así: `estados.medicamentos = (meds === null || !meds.length) ? "nd" : "ok"`. La
+**mera existencia** de fármacos pintaba el punto de verde.
+
+Reproducido con el arnés — enalapril + losartán + espironolactona + ibuprofeno, TFG 45 y
+potasio 5,4:
+
+```
+avisos+interacciones: 4
+por severidad: {"CRITICAL":2,"HIGH":2}
+ejemplo: "Espironolactona: CONTRAINDICADA con potasio sérico 5.4 mEq/L (>= 5.0 mEq/L)"
+
+punto de la pestaña HOY: ok  <-- verde «al día»
+```
+
+El médico que recorre la tira de pestañas veía **verde en Medicamentos** y no tenía ningún
+motivo para abrirla. El estado `pend` (ámbar, «revisar») ya existía y estaba declarado en la
+hoja; aquí nadie lo usaba.
+
+El cálculo se **extrajo a `mtrEstadoPuntoMedicamentos`** por dos motivos: dentro del cierre del
+render no había forma de que el banco lo ejercitara, y así usa **exactamente el mismo contexto**
+que arma la pestaña (misma deduplicación, mismo Cockcroft-Gault, mismo potasio) — si leyeran
+datos distintos, volverían a poder discrepar. Devuelve `nd` cuando el motor no puede opinar:
+no se afirma «al día» sobre algo que no se pudo revisar.
+
+### 2. «Otros medicamentos: 2» sobre dos fármacos que el paciente no toma
+
+La cifra salía de **restar dos listas deduplicadas con claves distintas**:
+`mtrMedicamentosUnicos` conserva la dosis y `mtrMedicamentosRcv` la ignora desde la v17.6.74
+—a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus longitudes atribuye ese
+agrupamiento a «medicamentos que no son del programa».
+
+Un paciente con LOSARTAN 100 y 50 MG, METFORMINA 850 MG y ATORVASTATINA 40 y 20 MG —5
+renglones, **3 fármacos, todos cardiovasculares**— veía «Medicamentos del programa
+cardiovascular (3)» y debajo «Otros medicamentos: 2».
+
+Es el **mismo defecto que la v17.1.0 ya corrigió una vez en este mismo renglón** (las fórmulas
+postfechadas), y que volvió por otra puerta cuando `medsRcv` cambió de clave. Ahora se cuenta
+lo que se quiere contar en vez de deducirlo de una resta.
+
+### 3. Una clase que la hoja no declara
+
+El chip del sábado que el médico **sí** trabaja recibía `vgl-agm-pbtn-sabado-mio`; la regla
+existe con otro nombre (`…-suyo`). Los dos sábados salían idénticos en pantalla y la única
+diferencia era el `title`, que obliga a pasar el ratón chip por chip. El dato tenía dos estados
+y la pantalla uno.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 18 | el punto vuelve a salir de la mera existencia de la lista | *el punto de Medicamentos avisa cuando hay avisos CRÍTICOS* (`suite_67`) | Sí — 2.767 |
+| 19 | vuelve la resta de listas con claves distintas | *«Otros medicamentos» no inventa fármacos* (`suite_67`) | Sí — 2.767 |
+| 20 | la clase del sábado vuelve a desparejarse | *la clase del sábado propio existe en la hoja* (`suite_67`) | Sí — 2.767 |
+
+**Nota de proceso — la mutación 19 destapó la CUARTA prueba hueca del día.** La primera versión
+calculaba la cuenta buena *en la propia prueba* (`unicos.filter(...)`) en vez de ejercitar la
+línea de producción: al revertir el arreglo seguía verde. Se reescribió llamando a
+`mtrFichaVivaFilas`, que es quien arma de verdad ese renglón, y leyendo **lo que el médico
+vería en pantalla**.
+
+El patrón de las cuatro es el mismo y conviene dejarlo escrito: **una prueba que reimplementa
+la lógica que quiere vigilar no vigila nada.** Tiene que llamar al código de producción.
+
+Banco completo: **2.767 comprobaciones pasan, 0 fallan.**

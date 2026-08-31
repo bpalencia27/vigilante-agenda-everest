@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.22
+// @version      18.0.23
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.22";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.23";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -21326,7 +21326,20 @@ _vglOfrecerDeshacer(btn);
     const medsTodos = mtrMedicamentosUnicos(Array.isArray(r.medicamentos) ? r.medicamentos.filter(Boolean) : []);
     // v17.2.0 (#114) — la frecuencia real, cuando el histórico la trajo.
     const medsRcv = mtrMedicamentosRcv(medsTodos, r.medicamentosFrecuencia);
-    const otros = medsTodos.length - medsRcv.length;
+    // v18.0.23 — «OTROS MEDICAMENTOS» INVENTABA FÁRMACOS QUE EL PACIENTE NO TOMA.
+    // La resta es entre dos listas deduplicadas con claves DISTINTAS: `medsTodos`
+    // (mtrMedicamentosUnicos) conserva la dosis, y `medsRcv` (mtrMedicamentosRcv) la
+    // ignora desde la v17.6.74, a propósito, para agrupar ROSUVASTATINA 40 MG con la de
+    // 20 MG. Restar sus longitudes atribuye ese agrupamiento a «medicamentos que no son
+    // del programa». Un paciente con LOSARTAN 100 y 50 MG, METFORMINA 850 MG y
+    // ATORVASTATINA 40 y 20 MG —5 renglones, 3 fármacos, TODOS cardiovasculares— salía
+    // como «Medicamentos del programa cardiovascular (3)» y debajo «Otros medicamentos: 2».
+    // Dos fármacos que no existen.
+    // Es el mismo defecto que la v17.1.0 ya corrigió una vez en este mismo renglón (las
+    // fórmulas postfechadas) y que volvió por otra puerta cuando medsRcv cambió de clave.
+    // Se cuenta lo que se quiere contar, en vez de deducirlo de una resta: cuántos de los
+    // medicamentos únicos NO son del programa cardiovascular.
+    const otros = medsTodos.filter((m) => !mtrClasificarMedicamento(String(m)).esRcv).length;
     secciones.push({ titulo: "Medicamentos del programa cardiovascular (" + medsRcv.length + ")", filas: medsRcv.length
       ? medsRcv.slice(0, 14).map((m) => fila("•", m.texto, F_ORD))
         .concat(otros > 0 ? [fila("Otros medicamentos", otros + " (no son del programa: no se listan ni se usan para las sugerencias)", F_ORD)] : [])
@@ -21905,6 +21918,49 @@ _vglOfrecerDeshacer(btn);
   }
 
   // ---------- SECCIÓN 5: MEDICAMENTOS ----------
+  // v18.0.23 — EL PUNTO DE LA PESTAÑA «MEDICAMENTOS» SALÍA VERDE «AL DÍA» SOBRE AVISOS
+  // CRÍTICOS DE SEGURIDAD FARMACOLÓGICA.
+  //
+  // Se calculaba como «¿hay lista de medicamentos? -> ok»: la mera EXISTENCIA de fármacos
+  // pintaba el punto de verde. Reproducido con el arnés — enalapril + losartán +
+  // espironolactona + ibuprofeno, TFG 45 y potasio 5,4 — el motor devuelve 2 avisos
+  // CRITICAL («DOBLE BLOQUEO SRAA … Contraindicado», «Espironolactona: CONTRAINDICADA con
+  // potasio 5,4») y 2 HIGH, y el punto salía "ok". El médico que recorre la tira de
+  // pestañas veía verde en Medicamentos y no tenía ningún motivo para abrirla. El estado
+  // "pend" (ámbar, «revisar») ya existía y estaba declarado en la hoja; aquí nadie lo usaba.
+  //
+  // Vive como función propia y no en línea dentro del render por dos motivos: para que el
+  // banco pueda ejercitarla —dentro del cierre no había forma— y para que use EXACTAMENTE
+  // el mismo contexto que mtrPanelMedicamentosHtml arma unas líneas más abajo (misma
+  // deduplicación, mismo Cockcroft-Gault, mismo potasio). Si el punto y la pestaña leyeran
+  // datos distintos, volverían a poder discrepar.
+  //
+  // Devuelve "nd" cuando el motor no puede opinar: no se afirma «al día» sobre algo que no
+  // se pudo revisar — la misma regla de «casilla vacía antes que dato inventado».
+  function mtrEstadoPuntoMedicamentos(resumen) {
+    try {
+      const crudos = (resumen && Array.isArray(resumen.medicamentos)) ? resumen.medicamentos : null;
+      if (crudos === null || !crudos.length) return "nd";
+      const meds = mtrMedicamentosUnicos(crudos);
+      const r = mtrAvisosFarmacologicos({
+        medicamentos: meds,
+        tfgCkdEpi: (resumen.erc && resumen.erc.egfr != null) ? resumen.erc.egfr : null,
+        tfgCockcroftGault: (resumen.erc && resumen.erc.crcl != null) ? resumen.erc.crcl : null,
+        potasio: (resumen._ultimos && resumen._ultimos.POTASIO && resumen._ultimos.POTASIO.valor) || null,
+        medicamentosFrecuencia: resumen.medicamentosFrecuencia || undefined,
+      }) || {};
+      if (r.motivo === "SIN_LISTA_DE_MEDICAMENTOS") return "nd";
+      const todos = [].concat(r.avisos || [], r.interacciones || []);
+      const grave = todos.some((x) => {
+        const sev = String((x && (x.severidad || x.severity || x.nivel)) || "").toUpperCase();
+        return sev === "CRITICAL" || sev === "HIGH";
+      });
+      const dups = (typeof mtrDuplicidadesTerapeuticas === "function")
+        ? (mtrDuplicidadesTerapeuticas(meds) || []).length : 0;
+      return (grave || dups) ? "pend" : "ok";
+    } catch (e) { return "nd"; }
+  }
+
   function mtrPanelMedicamentosHtml(resumen) {
     // v17.1.0 (#113) — La pestaña mostraba la lista CRUDA: cada fármaco repetido hasta
     // tres veces por las fórmulas postfechadas, mientras el Resumen —dos pestañas más
@@ -22428,7 +22484,7 @@ _vglOfrecerDeshacer(btn);
           const vals = Object.keys(estados).map((k) => estados[k]);
           estados.resumen = vals.indexOf("pend") >= 0 ? "pend" : (vals.indexOf("ok") >= 0 ? "ok" : "nd");
           const meds = Array.isArray(_resumen.medicamentos) ? _resumen.medicamentos : null;
-          estados.medicamentos = (meds === null || !meds.length) ? "nd" : "ok";
+          estados.medicamentos = mtrEstadoPuntoMedicamentos(_resumen);
           _estados = estados;
         } catch (e) { _estados = null; }
       }
@@ -24198,7 +24254,13 @@ _vglOfrecerDeshacer(btn);
             const info = (typeof mtrSabadoTrabajaEsteMedico === "function")
               ? mtrSabadoTrabajaEsteMedico(state.activeDoctor && state.activeDoctor.id) : null;
             if (info && info.habilitado) {
-              btn.classList.add("vgl-agm-pbtn-sabado-mio");
+              // v18.0.23 — SE AÑADÍA UNA CLASE QUE LA HOJA NO DECLARA. La regla existe con
+              // otro nombre («…-suyo», línea ~16631) y pinta el borde verde continuo que
+              // distingue el sábado que el médico SÍ trabaja del que no consta. Con el
+              // nombre desparejado, los dos sábados salían EXACTAMENTE iguales en pantalla
+              // y la única diferencia era el `title`, que obliga a pasar el ratón chip por
+              // chip. El dato tenía dos estados y la pantalla uno.
+              btn.classList.add("vgl-agm-pbtn-sabado-suyo");
               btn.title = "Sábado — consta que usted atiende sábados ("
                 + (info.origen === "manual" ? "fijado por usted" : info.observados.length + " visto(s) en su agenda")
                 + "). Se verifica igual contra los turnos reales antes de confirmar.";

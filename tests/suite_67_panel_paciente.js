@@ -796,5 +796,126 @@ module.exports = {
     // editor arranca en ESE valor…"). Son byte a byte los mismos que ya están más arriba
     // en este archivo (líneas ~484, ~549 y ~596), con su comentario de cabecera. Se retiran
     // los ejemplares repetidos: no aportaban una sola aserción nueva y falseaban el conteo.
+
+    // =====================================================================
+    // v18.0.23 — EL PUNTO VERDE «AL DÍA» SOBRE AVISOS CRÍTICOS DE SEGURIDAD
+    //
+    // El punto de la pestaña «Medicamentos» del Panel del paciente se calculaba como
+    // «¿hay lista de medicamentos? -> ok»: la mera EXISTENCIA de fármacos lo pintaba de
+    // verde. Reproducido con el arnés —enalapril + losartán + espironolactona + ibuprofeno,
+    // TFG 45 y potasio 5,4— el motor devuelve 2 avisos CRITICAL («DOBLE BLOQUEO SRAA …
+    // Contraindicado», «Espironolactona: CONTRAINDICADA con potasio 5,4») y 2 HIGH, y el
+    // punto salía "ok". El médico que recorre la tira de pestañas veía verde en
+    // Medicamentos y no tenía ningún motivo para abrirla.
+    //
+    // El estado "pend" (ámbar, «revisar») ya existía y estaba declarado en la hoja; aquí
+    // nadie lo usaba. El cálculo se extrajo a mtrEstadoPuntoMedicamentos para que el banco
+    // pueda ejercitarlo —dentro del cierre del render no había forma— y para que use el
+    // MISMO contexto que arma la pestaña, y no puedan discrepar.
+    // =====================================================================
+    t.caso("v18.0.23: el punto de Medicamentos avisa cuando hay avisos CRÍTICOS, no se queda verde", () => {
+      const c = cargar({ silencioso: true });
+      const resumen = {
+        medicamentos: ["ENALAPRIL 20 MG", "LOSARTAN 50 MG", "ESPIRONOLACTONA 25 MG", "IBUPROFENO 400 MG"],
+        erc: { egfr: 45, crcl: 42 },
+        _ultimos: { POTASIO: { valor: 5.4 } },
+      };
+      // Control del caso: el motor de verdad tiene algo grave que decir de este paciente.
+      const r = c.api.mtrAvisosFarmacologicos({
+        medicamentos: c.api.mtrMedicamentosUnicos(resumen.medicamentos),
+        tfgCkdEpi: 45, tfgCockcroftGault: 42, potasio: 5.4,
+      });
+      const todos = [].concat(r.avisos || [], r.interacciones || []);
+      t.cierto(todos.some((x) => String((x && (x.severidad || x.severity || x.nivel)) || "").toUpperCase() === "CRITICAL"),
+        "control: este paciente tiene al menos un aviso CRITICAL");
+
+      t.igual(c.api.mtrEstadoPuntoMedicamentos(resumen), "pend",
+        "el punto tiene que mandar a revisar: verde sobre un «Contraindicado» es peor que no tener punto");
+    });
+
+    t.caso("v18.0.23: y no se sobre-corrige — una revisión limpia sigue en verde", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({
+        medicamentos: ["ACETAMINOFEN 500 MG"], erc: { egfr: 90, crcl: 95 }, _ultimos: {},
+      }), "ok", "un fármaco sin nada que señalar sigue pintando verde");
+    });
+
+    t.caso("v18.0.23: lo que no se pudo revisar NO se afirma «al día»", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({ medicamentos: null, erc: { egfr: 80 } }), "nd",
+        "«no se pudo leer la lista» no es «está al día» — casilla vacía antes que dato inventado");
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({ medicamentos: [], erc: { egfr: 80 } }), "nd",
+        "y «Everest no reporta medicamentos» tampoco es una revisión limpia");
+    });
+
+    // v18.0.23 — «OTROS MEDICAMENTOS» INVENTABA FÁRMACOS QUE EL PACIENTE NO TOMA.
+    // La cifra salía de restar dos listas deduplicadas con claves DISTINTAS:
+    // mtrMedicamentosUnicos conserva la dosis y mtrMedicamentosRcv la ignora desde la
+    // v17.6.74 —a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus
+    // longitudes atribuye ese agrupamiento a «medicamentos que no son del programa».
+    // v18.0.23 — «OTROS MEDICAMENTOS» INVENTABA FÁRMACOS QUE EL PACIENTE NO TOMA.
+    // La cifra salía de restar dos listas deduplicadas con claves DISTINTAS:
+    // mtrMedicamentosUnicos conserva la dosis y mtrMedicamentosRcv la ignora desde la
+    // v17.6.74 —a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus
+    // longitudes atribuye ese agrupamiento a «medicamentos que no son del programa».
+    //
+    // OJO AL MÉTODO: la primera versión de esta prueba era HUECA y lo destapó su mutación.
+    // Calculaba la cuenta buena EN LA PROPIA PRUEBA (`unicos.filter(...)`) en vez de
+    // ejercitar la línea de producción, así que al revertir el arreglo seguía verde. Ahora
+    // se llama a mtrFichaVivaFilas, que es quien arma de verdad ese renglón, y se lee lo
+    // que el médico vería en pantalla.
+    const otrosDeLaFicha = (c, meds) => {
+      const txt = JSON.stringify(c.api.mtrFichaVivaFilas({ medicamentos: meds, erc: { egfr: 80 } }));
+      const prog = /Medicamentos del programa cardiovascular \((\d+)\)/.exec(txt);
+      const otros = /(\d+) \(no son del programa/.exec(txt);
+      return { programa: prog ? Number(prog[1]) : null, otros: otros ? Number(otros[1]) : 0 };
+    };
+
+    t.caso("v18.0.23: «Otros medicamentos» no inventa fármacos al agrupar dosis distintas", () => {
+      const c = cargar({ silencioso: true });
+      // 5 renglones, 3 fármacos, TODOS cardiovasculares.
+      const meds = ["LOSARTAN 100 MG", "LOSARTAN 50 MG", "METFORMINA 850 MG",
+                    "ATORVASTATINA 40 MG", "ATORVASTATINA 20 MG"];
+
+      // Control del caso: la resta de longitudes SÍ daría 2 aunque no sobre ningún fármaco.
+      const unicos = c.api.mtrMedicamentosUnicos(meds);
+      const rcv = c.api.mtrMedicamentosRcv(unicos);
+      t.igual(unicos.length - rcv.length, 2,
+        "control: por la resta vieja saldrían 2 «otros» — dos fármacos que el paciente no toma");
+
+      const r = otrosDeLaFicha(c, meds);
+      t.igual(r.programa, 3, "los tres fármacos del programa se cuentan bien");
+      t.igual(r.otros, 0,
+        "y NO se afirma que haya otros: los tres son cardiovasculares, lo que sobraba era el agrupamiento de dosis");
+    });
+
+    t.caso("v18.0.23: y sí cuenta los que de verdad no son del programa", () => {
+      const c = cargar({ silencioso: true });
+      const r = otrosDeLaFicha(c, ["LOSARTAN 50 MG", "ACETAMINOFEN 500 MG", "OMEPRAZOL 20 MG"]);
+      t.igual(r.programa, 1, "solo el losartán es del programa cardiovascular");
+      t.igual(r.otros, 2,
+        "acetaminofén y omeprazol sí quedan fuera, y se dicen: no se sobre-corrigió hasta callarlo todo");
+    });
+
+    // v18.0.23 — SE AÑADÍA UNA CLASE QUE LA HOJA NO DECLARA. El chip del sábado que el
+    // médico SÍ trabaja recibía `vgl-agm-pbtn-sabado-mio`, y la regla existe con otro
+    // nombre («…-suyo»). Los dos sábados salían idénticos en pantalla y la única diferencia
+    // era el `title`, que obliga a pasar el ratón chip por chip.
+    // Regresión de código fuente: lo que hay que fijar es que las dos mitades —quien añade
+    // la clase y quien la declara— usen el mismo nombre.
+    t.caso("v18.0.23: la clase del sábado propio existe en la hoja de estilos", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const anadidas = (src.match(/classList\.add\("(vgl-agm-pbtn-sabado-[\w-]+)"\)/g) || [])
+        .map((m) => /"([^"]+)"/.exec(m)[1]);
+      t.cierto(anadidas.length > 0, "sigue habiendo un chip de sábado con clase propia");
+      for (const cls of anadidas) {
+        t.cierto(src.includes("." + cls + "{"),
+          `la clase «${cls}» se añade desde JS pero la hoja no la declara: el realce no se pinta nunca`);
+      }
+    });
+
   },
 };
