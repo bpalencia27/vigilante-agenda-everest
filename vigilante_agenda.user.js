@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.12
+// @version      18.0.13
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.12";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.13";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12020,7 +12020,19 @@ _vglOfrecerDeshacer(btn);
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
     if (!state.leader) { state.historical.set(key, stRaw); state.historicalAt.set(key, now); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
-    if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
+    // v18.0.13 — LA FILA DEL FRAUDE SE MUDA A maybeNotify, JUNTO A SU CONTEO.
+    // Vivía aquí, y el conteo (bumpStatCita) vive allá. Dos funciones distintas, y `tick()`
+    // puede llamar a una sin la otra: en el PRIMER sondeo de una pestaña hace
+    // `_sembrarEstadoInicial(processed)` en vez de `processed.forEach(maybeNotify)`. Una
+    // pestaña que hereda `fraudWatch` de otra (se comparte entre pestañas) y ve «En Sala»
+    // en su primer sondeo escribía la fila y NO la contaba. Medido:
+    //     CABECERA del CSV -> Confirmaciones extemporáneas: 0
+    //     CUERPO   del CSV -> filas FRAUDE_EXTEMPORANEO   : 1
+    // Es la misma grieta que la v18.0.12 cerró por el otro lado (contar sin fila), y la
+    // encontró una auditoría adversarial de esa misma entrega. Juntas, las dos direcciones
+    // rompían el cuadre del informe con el que el médico reclama.
+    // Ahora la fila se escribe exactamente donde se cuenta y solo si se contó: contar y
+    // registrar dejan de poder separarse.
     else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
     state.historical.set(key, stRaw);
     state.historicalAt.set(key, now);
@@ -13415,9 +13427,25 @@ _vglOfrecerDeshacer(btn);
     // transición: la misma llegada volvía a sumar cada vez que `state.notified` se
     // re-armaba. La fila de auditoría se escribe SOLO si de verdad se contó, para que
     // el número de la cabecera del CSV y el número de filas del cuerpo cuadren siempre
-    // (hay una prueba de conciliación en suite_10 que lo exige).
+    // v18.0.13 — este comentario afirmaba «hay una prueba de conciliación en suite_10 que lo
+    // exige». NO EXISTÍA: el único caso de suite_10 que toca exportAudit inyecta a mano
+    // {fraude:3} junto a DOS filas y solo comprueba el formateo — un ejemplo deliberadamente
+    // no conciliado. Lo encontró una auditoría adversarial. Un comentario que inventa una
+    // red de seguridad es peor que no tener red: quien lo lee deja de mirar. La prueba ya
+    // existe de verdad, en suite_10 («el cuadre del CSV»), y compara la cabecera contra las
+    // filas del cuerpo para las tres categorías.
     const _conto = bumpStatCita(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima", a.key);
     if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
+    // v18.0.13 — y el ROJO, aquí mismo: una sola condición decide el número Y la fila, así
+    // que el cuadre del CSV deja de depender de qué función llegó a correr. `a.sound` es la
+    // marca de que se observó la transición de verdad (v16.2.8: el rojo heredado por
+    // relectura no vuelve a sonar ni a registrarse). La bitácora del fraude se vuelca en el
+    // acto (ver logEvent): son pocos al día y es la evidencia que justifica todo esto.
+    if (_conto && a.color === "ROJO" && a.sound) {
+      logEvent({ t: a.visto || new Date().toLocaleTimeString(), ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto,
+        doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
+      try { reportarFraude(a.hora_texto, a.elapsed); } catch (e) {}
+    }
     // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00
     // volvió a notificar a las 9:03. El parpadeo API↔DOM ya documentado en v17.6.21 saca
     // la cita de ÁMBAR y la vuelve a meter, y state.notified solo recuerda el ÚLTIMO

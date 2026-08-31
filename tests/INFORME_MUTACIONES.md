@@ -6361,3 +6361,59 @@ misma línea.
 siendo alcanzable y hay que fijar su conducta— reescrito a lo que ahora debe pasar.
 
 Banco completo: **2.732 comprobaciones pasan, 0 fallan.**
+
+## v18.0.13 — 31-ago-2026 · EL CUADRE DEL CSV, POR EL OTRO LADO
+
+Lo encontró una **auditoría adversarial de mi propia entrega v18.0.12**, lanzada para
+intentar refutarla. Confirmó el arreglo… y destapó dos cosas más, una de ellas peor.
+
+### 1. Un comentario que inventaba una red de seguridad
+
+`maybeNotify` afirmaba: *«la fila de auditoría se escribe SOLO si de verdad se contó, para
+que el número de la cabecera del CSV y el número de filas del cuerpo cuadren siempre (hay una
+prueba de conciliación en suite_10 que lo exige)»*.
+
+**Esa prueba no existía.** El único caso de `suite_10` que toca `exportAudit` inyecta a mano
+`{fraude:3}` junto a DOS filas y solo comprueba el formateo — un ejemplo deliberadamente no
+conciliado. Un comentario que inventa una red de seguridad es peor que no tener red: quien lo
+lee deja de mirar. Por ese hueco pasaron **dos** defectos, uno en cada dirección.
+
+### 2. Fila SIN contar (la dirección contraria a la de v18.0.12)
+
+`logEvent(FRAUDE_EXTEMPORANEO)` vivía en `colorAndAlert` y `bumpStatCita("fraude")` en
+`maybeNotify`. Y `tick()` llama a la primera sin la segunda en el **primer sondeo de cada
+pestaña**: `if (!state.summarized) { _sembrarEstadoInicial(processed) } else if (leader) {
+processed.forEach(maybeNotify) }`. Una pestaña que hereda `fraudWatch` de otra —se comparte
+entre pestañas— y ve «En Sala» en su primer sondeo escribía la fila y no la contaba. Medido:
+
+```
+CABECERA del CSV -> Confirmaciones extemporáneas: 0
+CUERPO   del CSV -> filas FRAUDE_EXTEMPORANEO   : 1
+```
+
+La fila se muda a `maybeNotify`, atada al mismo `_conto` que decide el número: contar y
+registrar dejan de poder separarse. Verificado en tres escenarios (primer sondeo sin
+`maybeNotify`, camino completo, y repeticiones): los tres cuadran.
+
+### 3. La prueba que faltaba, escrita de verdad
+
+`suite_10` gana **el cuadre del CSV**: recorre el motor real (`colorAndAlert` +
+`maybeNotify`, sin inyectar contadores a mano), exporta el CSV y compara cabecera contra
+cuerpo en las tres categorías. Detalle que la prueba dejó al descubierto y que conviene
+tener escrito: **«En Sala» hay que leerlo DOS veces** para que el antirrebote de v17.6.21 lo
+confirme; con una sola lectura el fraude no se detecta. Escribir el escenario con una sola
+lectura habría sido probar algo que no ocurre en la cadencia real.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | la fila del fraude vuelve a `colorAndAlert`, separada del conteo | *cuadra TAMBIÉN en el primer sondeo de una pestaña, que no llama a maybeNotify* (`suite_10`) | Sí — 28/28 |
+| 2 | se cuenta el fraude pero no se escribe la fila | *EL CUADRE DEL CSV — la cabecera y las filas del cuerpo dicen lo mismo* (`suite_10`) | Sí — 28/28 |
+
+Una mutación por dirección, y cada una tumba exactamente la prueba de su lado.
+
+**Nota de proceso.** El caso de v18.0.12 *«el FRAUDE REAL … sigue dejando su fila»* se puso
+rojo con este cambio: comprobaba la fila llamando solo a `colorAndAlert`. Se corrigió para
+recorrer el camino entero —que es el real— y se le añadió la comprobación del contador. Una
+prueba que solo mira media tubería es justo cómo se coló el defecto.
+
+Banco completo: **2.734 comprobaciones pasan, 0 fallan.**

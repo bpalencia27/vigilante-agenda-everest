@@ -123,10 +123,17 @@ module.exports = {
       const r = c.api.colorAndAlert(a, refDate);
       t.igual(r.color, "ROJO", "esta es la transición que el médico SÍ quiere vigilada");
       t.cierto(r.sound, "y esta sí suena");
+      // v18.0.13 — la fila del fraude se escribe DONDE SE CUENTA (maybeNotify), no en
+      // colorAndAlert: así el número de la cabecera del CSV y las filas del cuerpo no pueden
+      // separarse. Por eso esta prueba recorre ahora el camino entero, que es el real.
+      c.api.__state.notified.set(r.key, "siembra");
+      c.api.maybeNotify(r);
       c.api.evFlush();
       const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
       t.igual(filas.filter((x) => x && x.ev === "FRAUDE_EXTEMPORANEO").length, 1,
         "con su fila de evidencia, que es la que sustenta la reclamación");
+      const cont = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}")[c.api.todayStamp()] || {};
+      t.igual(cont.fraude || 0, 1, "y contado exactamente una vez: fila y número van juntos");
     });
 
     t.caso("colorAndAlert: el paso a EN SALA fuera de gracia SÍ suena — es el aviso que el médico sí quiere", () => {

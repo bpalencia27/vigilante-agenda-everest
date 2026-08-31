@@ -418,5 +418,105 @@ module.exports = {
       t.cierto(csv.indexOf("Confirmaciones extemporáneas;0") >= 0);
       t.cierto(csv.indexOf("Eventos registrados;0") >= 0);
     });
+
+    // =====================================================================
+    //  v18.0.13 — EL CUADRE DEL CSV: la prueba que el código decía tener y NO tenía
+    //
+    //  `maybeNotify` afirmaba en un comentario: «la fila de auditoría se escribe SOLO si de
+    //  verdad se contó, para que el número de la cabecera del CSV y el número de filas del
+    //  cuerpo cuadren siempre (hay una prueba de conciliación en suite_10 que lo exige)».
+    //  Esa prueba NO existía. El único caso de esta suite que toca exportAudit inyecta a
+    //  mano {fraude:3} junto a DOS filas y solo comprueba el formateo — un ejemplo
+    //  deliberadamente no conciliado. Lo encontró una auditoría adversarial, y por ese
+    //  hueco pasaron DOS defectos reales, uno en cada dirección:
+    //
+    //    · contar SIN fila (v18.0.12): la rama «sin presentarse → atendido» subía el
+    //      contador de fraude y no escribía FRAUDE_EXTEMPORANEO;
+    //    · fila SIN contar (v18.0.13): logEvent vivía en colorAndAlert y bumpStatCita en
+    //      maybeNotify, y tick() llama a la primera sin la segunda en el PRIMER sondeo de
+    //      cada pestaña — una pestaña que hereda fraudWatch y ve «En Sala» de entrada
+    //      escribía la fila sin contarla.
+    //
+    //  Esta prueba recorre el motor de VERDAD (colorAndAlert + maybeNotify, sin inyectar
+    //  contadores a mano), exporta el CSV real y compara la cabecera con el cuerpo. Un
+    //  comentario que inventa una red de seguridad es peor que no tener red: quien lo lee
+    //  deja de mirar.
+    // =====================================================================
+    t.caso("v18.0.13: EL CUADRE DEL CSV — la cabecera y las filas del cuerpo dicen lo mismo", () => {
+      const c = cargar({ silencioso: true });
+      const blobs = [];
+      c.ctx.Blob = function (parts, opts) { this.parts = parts; this.opts = opts; blobs.push(this); };
+      c.ctx.URL = { createObjectURL: () => "blob:csv", revokeObjectURL() {} };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+
+      const T = new Date("2026-08-10T08:20:00").getTime();
+      const cita = (doc, hora, estado) => ({ hora_texto: hora, estado, nombre: "PACIENTE PRUEBA", index: 1, doc_id: doc });
+      const sembrados = new Set();
+      const pasar = (a, dt) => {
+        const r = c.api.colorAndAlert(a, T + dt);
+        if (!sembrados.has(r.key)) { c.api.__state.notified.set(r.key, "siembra"); sembrados.add(r.key); }
+        c.api.maybeNotify(r);
+        return r;
+      };
+
+      // 1) un fraude REAL: sin presentarse pasada la tolerancia y luego En Sala.
+      //    OJO: «En Sala» se lee DOS veces a propósito. El antirrebote de v17.6.21 exige ver
+      //    la lectura nueva dos veces seguidas antes de aceptarla (absorbe el parpadeo entre
+      //    el API y el raspado del DOM), así que con una sola lectura el estado no se
+      //    confirma y el fraude no se detecta. Escribirlo con una sola sería un escenario
+      //    que no existe en la cadencia real de sondeo.
+      pasar(cita("111111", "08:00 AM", "Sin presentarse"), 0);
+      pasar(cita("111111", "08:00 AM", "En Sala"), 5000);
+      pasar(cita("111111", "08:00 AM", "En Sala"), 10000);
+      // 2) una inasistencia que se queda así.
+      pasar(cita("222222", "07:30 AM", "Sin presentarse"), 0);
+      // 3) una llegada a tiempo (dentro de la tolerancia).
+      pasar(cita("333333", "08:19 AM", "Sin presentarse"), 0);
+      pasar(cita("333333", "08:19 AM", "En Sala"), 5000);
+      pasar(cita("333333", "08:19 AM", "En Sala"), 10000);
+
+      c.api.evFlush();
+      const dia = c.api.todayStamp();
+      c.api.exportAudit(dia);
+      t.igual(blobs.length, 1, "se generó el CSV");
+      const csv = blobs[0].parts[0];
+
+      const cabecera = (rot) => {
+        const m = new RegExp(rot + ";(\\d+)").exec(csv);
+        return m ? parseInt(m[1], 10) : null;
+      };
+      const filasDe = (ev) => (csv.match(new RegExp(";" + ev + ";", "g")) || []).length;
+
+      t.igual(cabecera("Confirmaciones extemporáneas"), filasDe("FRAUDE_EXTEMPORANEO"),
+        "fraude: la cabecera y las filas del cuerpo tienen que decir lo mismo");
+      t.igual(cabecera("Inasistencias registradas"),
+        filasDe("INASISTENCIA") - filasDe("RECTIFICACION_INASISTENCIA"),
+        "inasistencias: las contadas menos las rectificadas");
+      t.igual(cabecera("Ingresos a tiempo"), filasDe("INGRESO_A_TIEMPO"),
+        "a tiempo: cabecera contra cuerpo");
+      t.cierto(cabecera("Confirmaciones extemporáneas") >= 1,
+        "y el caso de prueba produjo al menos un fraude real (si no, esto pasaría en el vacío)");
+    });
+
+    t.caso("v18.0.13: cuadra TAMBIÉN en el primer sondeo de una pestaña, que no llama a maybeNotify", () => {
+      // tick() hace `_sembrarEstadoInicial(processed)` en el primer sondeo en vez de
+      // `processed.forEach(maybeNotify)`. Una pestaña que hereda fraudWatch de otra (se
+      // comparte entre pestañas) y ve «En Sala» de entrada pasaba SOLO por colorAndAlert.
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const a = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "P", index: 1, doc_id: "5150076" };
+      c.api.__state.fraudWatch.add(c.api.apptKey(a));
+
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:20:00").getTime());
+      t.igual(r.color, "ROJO", "se detecta el fraude (control del caso)");
+      c.api.evFlush();
+      const dia = c.api.todayStamp();
+      const cont = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}")[dia] || {};
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(dia)) || "[]");
+      t.igual(filas.filter((x) => x && x.ev === "FRAUDE_EXTEMPORANEO").length, cont.fraude || 0,
+        "sin maybeNotify no hay ni fila ni número: lo que no se puede hacer es una cosa sin la otra");
+    });
   },
 };
