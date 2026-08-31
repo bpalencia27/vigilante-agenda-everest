@@ -3,6 +3,13 @@
 //  Sin dependencias externas: se ejecuta con  node tests/runner.js
 //  Cada archivo tests/suite_*.js exporta { nombre, cubre: [...], pruebas(t, api, env) }
 // =====================================================================
+// El script en producción corre siempre en equipos médicos con hora local
+// de Colombia (UTC-05:00) y toda su lógica de "hoy"/fechas de negocio se
+// apoya en el reloj local del sistema (sin offset explícito en el código
+// fuente). Para que los tests reproduzcan ese mismo contexto sin importar
+// la zona horaria del entorno donde se ejecute `node tests/runner.js`,
+// fijamos aquí la zona horaria por defecto ANTES de cualquier `new Date()`.
+process.env.TZ = "America/Bogota";
 const fs = require("fs");
 const path = require("path");
 const { cargar } = require("./harness.js");
