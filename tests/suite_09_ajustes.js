@@ -309,5 +309,42 @@ module.exports = {
         c.ctx.setInterval = setIntervalReal;
       }
     });
+
+    // ===================================================================
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): la migración "estreno"
+    // (v14.2.0) solo debe encender motorPortado/iaRedaccion/uxTelemetria/reporte en
+    // equipos que YA tenían vgl_cfg guardado — v17.6.8 documenta ese arreglo. Pero
+    // `_habiaConfigPrevia` se leía DESPUÉS de que otras cuatro migraciones (v7.3,
+    // v14.2-notif, v15.4, v15.0-banner) ya habían escrito vgl_cfg con writeJSON: en
+    // TODA instalación limpia, localStorage.getItem("vgl_cfg") ya daba truthy para
+    // cuando la migración de estreno lo comprobaba, y las 4 banderas se encendían
+    // solas donde no debían. Se corrige capturando la marca ANTES de la primera
+    // migración. Nota: el harness pre-siembra vgl_v1420_estreno="1" por defecto
+    // (línea ~84 de tests/harness.js) para que el resto del banco no dispare esta
+    // migración sin querer — aquí se anula ese preseteo a propósito con
+    // `almacen: { vgl_v1420_estreno: null }` para poder observar la migración real.
+    // ===================================================================
+    t.caso("v17.6.27/v17.58.2: instalación LIMPIA (sin vgl_cfg previo): la migración de estreno NO enciende motorPortado/iaRedaccion; reporte/uso nacen encendidos por política", () => {
+      // almacen sin vgl_cfg (instalación limpia) y con vgl_v1420_estreno=null para
+      // anular el preseteo por defecto del harness y dejar correr la migración real.
+      const fresco = cargar({ silencioso: true, defaultOff: true, almacen: { vgl_v1420_estreno: null } });
+      t.igual(fresco.api.__S.motorPortado, false, "de fábrica, no por una migración que no debía correr");
+      t.igual(fresco.api.__S.iaRedaccion, false);
+      // v17.58.2 — política del dueño: la telemetría nace ENCENDIDA (DEFAULTS + forzado en S),
+      // no por la migración de estreno. Las dos banderas que esta prueba vigila (motor/ia)
+      // siguen apagadas, que es lo que la v17.6.27 corregía.
+      t.igual(fresco.api.__S.uxTelemetria, true, "v17.58.2 — la telemetría nace encendida por política, no por la migración");
+      t.igual(fresco.api.__S.reporte, true, "idem");
+      t.igual(fresco.env.almacen["vgl_v1420_estreno"], "1", "la migración SÍ se marca como corrida (no vuelve a intentarlo), pero no tocó las banderas");
+    });
+
+    t.caso("v17.6.27/v17.58.2: equipo con vgl_cfg PREVIO (la ruta de actualización real) enciende motorPortado/iaRedaccion; la telemetría ya viene encendida", () => {
+      const previo = JSON.stringify({ reporte: false, uxTelemetria: false });
+      const actualizado = cargar({ silencioso: true, almacen: { vgl_cfg: previo, vgl_v1420_estreno: null } });
+      t.igual(actualizado.api.__S.motorPortado, true, "equipo que YA tenía configuración: la migración de estreno SÍ aplica");
+      t.igual(actualizado.api.__S.iaRedaccion, true);
+      t.igual(actualizado.api.__S.uxTelemetria, true);
+      t.igual(actualizado.api.__S.reporte, true);
+    });
   },
 };

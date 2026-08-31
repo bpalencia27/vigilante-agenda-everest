@@ -1,6 +1,31 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.10.13 — 29-08-2026: auditoría contra un export real (XLSX + CSV). Dos problemas
+ * ESTRUCTURALES en la Hoja, ambos del lado del receptor:
+ *
+ *  1. LA HOJA `uso` ESTÁ DESALINEADA. La migración de encabezados de v12.6.9 añadió
+ *     `lote` al FINAL del encabezado (col 10, _hoja() añade las columnas que faltan al
+ *     final) mientras que doPost escribe las filas con `lote` en la posición 6. Medido
+ *     en el export real: 10.290 de 10.327 filas (99,6 %) con el total `n` y el JSON de
+ *     `acciones` desplazados una columna — el acumulado «Acciones de uso (ux, acum.)»
+ *     del tablero de flota se leía como 0 para TODO equipo actual. Arreglo en dos
+ *     piezas: `_appendFila()` escribe cada valor en la columna que SU encabezado ocupa
+ *     HOY (por nombre, no por orden fijo) y el menú «Reparar encabezados de telemetría»
+ *     restaura el encabezado canónico de `uso` y `resumen` una sola vez (los DATOS ya
+ *     están en orden; solo el encabezado está mal).
+ *  2. LA VERSIÓN SIGUE CORROMPIÉNDOSE COMO FECHA. El export real confirma el patrón
+ *     documentado en v12.10.11: "14.2.2001" (era 14.2.1), "12.6.2009" (era 12.6.9),
+ *     seriales como "36755.0". La hoja está en locale es-CO y Sheets auto-parsea
+ *     "N.N.N" como fecha. El apóstrofo de `_celdaVersion` y `_forzarTextoColumnaVer`
+ *     existen en ESTE archivo pero el desplegado en producción NO los tiene (o los
+ *     tiene a medias): hay que volver a desplegar este Codigo.gs y correr el menú
+ *     «Reparar columna 'ver' corrupta en fecha».
+ *
+ * ORDEN DE DESPLIEGUE (imprescindible): reemplazar Código.gs → Implementar → Nueva
+ * versión → ejecutar UNA vez el menú «Reparar encabezados de telemetría» → ejecutar
+ * «Reparar columna 'ver' corrupta en fecha» → «Actualizar resumen de flota».
+ *
  * v12.10.12 — 13-08-2026: armarResumen() gana tres cosas, TODAS derivadas de datos que
  * ya llegaban por `uso_detalle` (cero cambios de esquema): (1) en la tabla por equipo,
  * "Errores (volumen real)" y "Errores (huellas distintas)" — antes la única columna de
@@ -158,7 +183,8 @@ function doPost(e) {
       for (var kt in limpio) if (kt !== "_recortadas") totalLimpio += limpio[kt];
 
       var hoja = _hoja(ss, "uso", COMUNES_HD.concat(["deDia", "desde", "n", "acciones"]));
-      hoja.appendRow(comunes.concat([_celda(body.deDia, 10), _celda(body.desde, 30), totalLimpio, _celda(JSON.stringify(limpio), 4000)]));
+      _appendFila(hoja, COMUNES_HD.concat(["deDia", "desde", "n", "acciones"]),
+        comunes.concat([_celda(body.deDia, 10), _celda(body.desde, 30), totalLimpio, _celda(JSON.stringify(limpio), 4000)]));
 
       var filas = [];
       for (var k in limpio) filas.push([new Date(), _celda(body.deDia, 10), _celda(body.equipo, 40), _celdaVersion(body.ver), _celda(k, 60), limpio[k]]);
@@ -167,11 +193,13 @@ function doPost(e) {
         largo.getRange(largo.getLastRow() + 1, 1, filas.length, 6).setValues(filas); // un solo golpe
       }
     } else if (ev === "resumen") {
-      _hoja(ss, "resumen", COMUNES_HD.concat(["deDia", "fraude", "inasistencia", "atiempo", "ultima"]))
-        .appendRow(comunes.concat([_celda(body.deDia, 10), toNumero(body.fraude), toNumero(body.inasistencia), toNumero(body.atiempo), toNumero(body.ultima)]));
+      _appendFila(_hoja(ss, "resumen", COMUNES_HD.concat(["deDia", "fraude", "inasistencia", "atiempo", "ultima"])),
+        COMUNES_HD.concat(["deDia", "fraude", "inasistencia", "atiempo", "ultima"]),
+        comunes.concat([_celda(body.deDia, 10), toNumero(body.fraude), toNumero(body.inasistencia), toNumero(body.atiempo), toNumero(body.ultima)]));
     } else if (ev === "fraude") {
-      _hoja(ss, "fraude", COMUNES_HD.concat(["hora", "min"]))
-        .appendRow(comunes.concat([_celda(body.hora, 20), toNumero(body.min)]));
+      _appendFila(_hoja(ss, "fraude", COMUNES_HD.concat(["hora", "min"])),
+        COMUNES_HD.concat(["hora", "min"]),
+        comunes.concat([_celda(body.hora, 20), toNumero(body.min)]));
     } else if (ev === "error") {
       // El mensaje ya viene saneado del userscript; se vuelve a sanear porque el
       // servidor JAMÁS confía en el emisor: una tira de 6+ dígitos podría ser una
@@ -179,13 +207,15 @@ function doPost(e) {
       // v12.10.12 — "migas": las acciones (nombres fijos, sin datos de paciente) que
       // pasaron justo antes del error — mismo saneo que el resto: nunca se confía en
       // el emisor.
-      _hoja(ss, "error", COMUNES_HD.concat(["origen", "msg", "donde", "migas"]))
-        .appendRow(comunes.concat([_celda(body.origen, 12), _celda(_sinDigitosLargos(body.msg), 180), _celda(_sinDigitosLargos(body.donde), 60), _celda(_sinDigitosLargos(body.migas), 160)]));
+      _appendFila(_hoja(ss, "error", COMUNES_HD.concat(["origen", "msg", "donde", "migas"])),
+        COMUNES_HD.concat(["origen", "msg", "donde", "migas"]),
+        comunes.concat([_celda(body.origen, 12), _celda(_sinDigitosLargos(body.msg), 180), _celda(_sinDigitosLargos(body.donde), 60), _celda(_sinDigitosLargos(body.migas), 160)]));
     } else if (ev === "entorno") {
-      _hoja(ss, "entorno", COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"]))
-        .appendRow(comunes.concat([_celda(body.nav, 20), _celda(body.so, 20), _celda(body.zona, 40), _celda(body.pantalla, 20), _celda(body.gestor, 20)]));
+      _appendFila(_hoja(ss, "entorno", COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"])),
+        COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"]),
+        comunes.concat([_celda(body.nav, 20), _celda(body.so, 20), _celda(body.zona, 40), _celda(body.pantalla, 20), _celda(body.gestor, 20)]));
     } else { // "prueba"
-      _hoja(ss, "prueba", COMUNES_HD).appendRow(comunes);
+      _appendFila(_hoja(ss, "prueba", COMUNES_HD), COMUNES_HD, comunes);
     }
     return _txt("ok");
   } catch (err) {
@@ -199,6 +229,7 @@ function onOpen() {
       .addItem("Actualizar resumen de flota", "armarResumen")
       .addItem("Limpiar filas duplicadas", "limpiarDuplicados")
       .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
+      .addItem("Reparar encabezados de telemetría", "repararEncabezadosTelemetria")
       .addToUi();
   } catch (e) {}
 }
@@ -252,6 +283,64 @@ function repararVersionesCorruptas() {
 }
 
 // =====================================================================
+//  v12.10.13 — ESCRITURA POR NOMBRE DE COLUMNA y REPARACIÓN DE ENCABEZADOS
+//  La causa raíz de la hoja `uso` desalineada (auditoría 29-08-2026): doPost escribía
+//  las filas en un ORDEN FIJO de columnas, pero `_hoja()` —cuando una hoja YA EXISTÍA
+//  sin las columnas nuevas— las AÑADE AL FINAL del encabezado. En el export real,
+//  `lote` quedó en la columna 10 (migrado al final) mientras las filas lo escribían en
+//  la 6: 10.290/10.327 filas de `uso` salieron con `n` (total) y `acciones` (JSON)
+//  desplazados una columna, y el acumulado de UX del tablero de flota se leyó como 0.
+// =====================================================================
+function _appendFila(hoja, encabezados, valores) {
+  var actuales = [];
+  try { actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), 1)).getValues()[0] || []; } catch (e) { actuales = []; }
+  var fila = [];
+  for (var i = 0; i < encabezados.length; i++) {
+    var col = actuales.indexOf(encabezados[i]);
+    if (col < 0) { col = actuales.length; actuales.push(encabezados[i]); } // defensa: _hoja ya migró, esto no debería pasar
+    while (fila.length <= col) fila.push("");
+    fila[col] = valores[i];
+  }
+  hoja.appendRow(fila);
+}
+
+// Restaura el encabezado canónico de las hojas cuyo orden quedó histórico. Idempotente:
+// con el encabezado ya correcto no toca nada. Los DATOS no se mueven (ya están en el
+// orden correcto): solo se reescribe la fila 1 y se limpia lo que sobra a la derecha.
+function repararEncabezadosTelemetria() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var detalle = [];
+
+  var HD_USO = ["recibido", "ts", "dia", "equipo", "ver", "lote", "deDia", "desde", "n", "acciones"];
+  var shUso = ss.getSheetByName("uso");
+  if (shUso) {
+    var actualUso = (shUso.getLastRow() >= 1 ? shUso.getRange(1, 1, 1, Math.max(shUso.getLastColumn(), 1)).getValues()[0] : []) || [];
+    var okUso = HD_USO.every(function (h, i) { return actualUso[i] === h; });
+    if (!okUso) {
+      shUso.getRange(1, 1, 1, HD_USO.length).setValues([HD_USO]);
+      if (actualUso.length > HD_USO.length) shUso.getRange(1, HD_USO.length + 1, 1, actualUso.length - HD_USO.length).clearContent();
+      detalle.push("uso: encabezado restaurado (" + actualUso.length + " columnas -> " + HD_USO.length + ")");
+    }
+  }
+
+  var HD_RES = ["recibido", "ts", "dia", "equipo", "ver", "lote", "deDia", "fraude", "inasistencia", "atiempo", "ultima"];
+  var shRes = ss.getSheetByName("resumen");
+  if (shRes) {
+    var actualRes = (shRes.getLastRow() >= 1 ? shRes.getRange(1, 1, 1, Math.max(shRes.getLastColumn(), 1)).getValues()[0] : []) || [];
+    var okRes = HD_RES.every(function (h, i) { return actualRes[i] === h; });
+    if (!okRes) {
+      shRes.getRange(1, 1, 1, HD_RES.length).setValues([HD_RES]);
+      if (actualRes.length > HD_RES.length) shRes.getRange(1, HD_RES.length + 1, 1, actualRes.length - HD_RES.length).clearContent();
+      detalle.push("resumen: encabezado restaurado (el de una versión vieja de armarResumen ocupaba la fila 1)");
+    }
+  }
+
+  SpreadsheetApp.getActive().toast(detalle.length
+    ? "Encabezados reparados — " + detalle.join(" · ") + ". Vuelve a ejecutar 'Actualizar resumen de flota'."
+    : "Encabezados de telemetría ya correctos.");
+}
+
+// =====================================================================
 //  VISTA DE FLOTA (heredada de v7.8.4, adaptada a las hojas separadas)
 //  ¿Qué consultorio tiene qué versión? ¿Cuáles están atrasados frente a la más
 //  alta vista? Conteos acumulados de puntualidad, de uso del panel Y —desde
@@ -295,8 +384,17 @@ function armarResumen() {
         fraudesVivo: 0, fraudeAcum: 0, inasistAcum: 0, atiempoAcum: 0, ultimaAcum: 0, uxAcum: 0, errores: 0 });
       f.nReportes++; totalReportes++;
       var cuando = ci.rec >= 0 ? r[ci.rec] : "";
-      if (cuando) { if (!f.primero) f.primero = cuando; f.ultimo = cuando; }
-      if (ci.ver >= 0 && r[ci.ver]) {
+      // v1.1.0 — auditoría 25-ago (1.23): esto sobrescribía f.ultimo/f.ver SIN comparar
+      // contra el valor ya guardado — el resultado dependía de qué hoja se procesó de
+      // ÚLTIMA en el bucle `fuentes` (orden fijo: resumen, fraude, uso, error, entorno,
+      // prueba), no de la fecha real más reciente. Un equipo que probó la conexión una vez
+      // hace semanas (hoja "prueba", la última del arreglo) y desde entonces manda
+      // telemetría normal podía aparecer 🔴 ATRASADO de forma falsa, con la versión vieja
+      // de esa prueba pisando la real. Ahora solo se actualiza cuando la fecha de ESTA fila
+      // es de verdad más reciente que la ya guardada.
+      var esMasReciente = !!cuando && (!f.ultimo || new Date(cuando).getTime() > new Date(f.ultimo).getTime());
+      if (cuando) { if (!f.primero) f.primero = cuando; if (esMasReciente) f.ultimo = cuando; }
+      if (ci.ver >= 0 && r[ci.ver] && (esMasReciente || !f.ver)) {
         f.ver = r[ci.ver];
         // Solo una versión con forma REAL puede convertirse en "la más alta vista": en la
         // Hoja hay valores imposibles ("12.6.2000") que, al ganar la comparación numérica,
@@ -585,6 +683,7 @@ function _sinDigitosLargos(v) {
   return String(v == null ? "" : v)
     .replace(/https?:\/\/[^\s)]+/g, "<url>")
     .replace(/\d{6,}/g, "")
+    .replace(/\d{1,3}(?:[.\s-]\d{3}){1,3}/g, "")   // v18.0.4 — cédulas formateadas "1.111.111.111" (el cliente ya las borra; el servidor no confía en el emisor)
     .replace(/["'`]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

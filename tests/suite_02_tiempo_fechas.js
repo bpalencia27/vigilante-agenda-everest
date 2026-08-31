@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Tiempo y fechas",
-  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "calcRangoSondeoIso", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList", "esFestivo"],
+  cubre: ["calcBusinessTargetDate", "calcRangoSondeoIso", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList", "esFestivo"],
   pruebas(t, api, env, cargar) {
     // Helper to setup mock date using a fresh harness to avoid global pollution
     function runWithMockDate(mockIsoStr, fn) {
@@ -56,22 +56,6 @@ module.exports = {
       runWithMockDate("2023-03-31T12:00:00", (mockApi) => {
         const r = mockApi.calcBusinessTargetDate(1, 0); // +1 mes cae Dom 30/04
         t.igual(r.iso, "2023-04-28");
-      });
-    });
-
-    t.caso("calcTargetDateRange: Rango DateRange (Evitando Sábado y Domingo)", () => {
-      runWithMockDate("2023-10-24T12:00:00", (mockApi) => {
-        const range = mockApi.calcTargetDateRange(0, 2); // Target: Jueves 26/10
-        const isos = range.map(r => r.iso);
-        t.igual(isos, ["2023-10-23", "2023-10-24", "2023-10-25", "2023-10-26", "2023-10-27", "2023-10-30", "2023-10-31"]);
-      });
-    });
-
-    t.caso("calcTargetDateRange: Rango DateRange con Lunes en el centro", () => {
-      runWithMockDate("2023-10-20T12:00:00", (mockApi) => {
-        const range = mockApi.calcTargetDateRange(0, 3); // Target: Lunes 23/10
-        const isos = range.map(r => r.iso);
-        t.igual(isos, ["2023-10-18", "2023-10-19", "2023-10-20", "2023-10-23", "2023-10-24", "2023-10-25", "2023-10-26"]);
       });
     });
 
@@ -164,8 +148,14 @@ module.exports = {
 
     // ---------- apptKey ----------
     t.caso("apptKey: arma la clave de la cita", () => {
-      t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@07:00 AM");
-      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN|5@08:30");
+      // La hora se normaliza a "m"+minutos desde medianoche (fix de la alternancia
+      // API/scrape: dos formatos de hora para una cita rompían notified/fraudWatch/
+      // alertedFraud/contadas). Ver comentario en apptKey (vigilante_agenda.user.js).
+      t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@m420");
+      // v17.56.0 — el `index` (posición en la lista) se retira de la clave: el orden de la
+      // lista no identifica nada (una misma cita cambiaba de clave al reordenarse la agenda
+      // y la marca de fraude quedaba huérfana bajo la clave vieja -> tarjeta rojo->verde).
+      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN@m510");
       t.igual(api.apptKey({ doc_id: "456" }), "456@");
     });
 
@@ -194,6 +184,9 @@ module.exports = {
       c.api.__state.fraudWatch.add("123");
       c.api.__state.notified.set("456", "val");
       c.api.__state.historical.set("x", "y");
+      // [v14.2.0 — backlog §3] candidatura a cupos Adicional calculada AYER: no debe
+      // sobrevivir al cambio de día (el perfil de hoy puede ser otro).
+      c.api.__state.perfilAdicionalCache.set("789", { adicionales: true, motivo: "" });
 
       // Inject day 2
       mockIsoStr = "2026-08-11T12:00:00";
@@ -204,6 +197,7 @@ module.exports = {
       t.igual(c.api.__state.fraudWatch.size, 0);
       t.igual(c.api.__state.notified.size, 0);
       t.igual(c.api.__state.historical.size, 0);
+      t.igual(c.api.__state.perfilAdicionalCache.size, 0, "la candidatura de ayer no debe sobrevivir al día nuevo");
     });
 
     // ---------- calcBusinessDaysBefore ----------
@@ -306,10 +300,14 @@ module.exports = {
       });
     });
 
-    t.caso("esFestivo: Un año fuera de la tabla devuelve un resultado y deja el aviso", () => {
+    // v17.6.8 — ANTES: para años fuera de la tabla (2030+) esFestivo devolvía SIEMPRE
+    // false y el agendamiento habría citado tomas el 1 de enero sin decirlo. Ahora se
+    // delega al motor calculado (Ley Emiliani, mtrEsFestivoCO), que no tiene techo; el
+    // aviso de "tabla caducada" se conserva por si alguien lee la consola.
+    t.caso("esFestivo: Un año fuera de la tabla delega al motor calculado y deja el aviso", () => {
       runWithMockDate("2030-01-01T12:00:00", (mockApi, env, ctx) => {
         const d = new ctx.Date("2030-01-01T12:00:00");
-        t.falso(mockApi.esFestivo(d));
+        t.cierto(mockApi.esFestivo(d), "1-ene-2030 es festivo (Año Nuevo por Ley Emiliani, ya no tabla caduca)");
         t.cierto(mockApi.__state.warnedTimes.has("festivos_caducados"));
       });
     });

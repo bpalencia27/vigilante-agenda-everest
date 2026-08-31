@@ -73,14 +73,13 @@ module.exports = {
     });
 
     // ---------- repOn ----------
-    t.caso("repOn: apagado de fábrica (Default-Off); se enciende con S.reporte=true y GM_xmlhttpRequest", () => {
+    t.caso("repOn: nace ENCENDIDO (política del dueño v17.58.2); el guard del canal sigue siendo real", () => {
       const c = cargar({ silencioso: true, defaultOff: true });
-      t.falso(c.api.repOn(), "de fábrica S.reporte=false (Default-off R1.8)");
+      t.cierto(c.api.repOn(), "de fábrica S.reporte=true: desde v17.58.2 la telemetría es obligatoria (no hay interruptor en Ajustes)");
+      c.api.__S.reporte = false;
+      t.falso(c.api.repOn(), "con el ajuste apagado (estado imposible por UI desde v17.58.2, pero la guarda sigue cortando el 100% de la red)");
       c.api.__S.reporte = true;
       t.cierto(c.api.repOn(), "con el ajuste encendido reporta");
-      c.api.__S.reporte = false;
-      t.falso(c.api.repOn());
-      c.api.__S.reporte = true;
       c.ctx.GM_xmlhttpRequest = undefined; // sin el permiso de Tampermonkey no hay canal
       t.falso(c.api.repOn());
     });
@@ -158,15 +157,17 @@ module.exports = {
       t.igual(JSON.parse(c.env.gm["vgl_repq"]), [{ evento: "primero" }, { evento: "segundo" }]);
     });
 
-    t.caso("repQSave: recorta la cola a las últimas 30 entradas", () => {
+    t.caso("repQSave: recorta la cola al tope de 80 filas (v17.1.0), descartando las MÁS VIEJAS", () => {
       const c = cargar({ silencioso: true });
-      const treintaYCinco = Array.from({ length: 35 }, (_, i) => ({ evento: "e" + i }));
-      c.env.gm["vgl_repq"] = JSON.stringify(treintaYCinco);
+      const noventacinco = Array.from({ length: 95 }, (_, i) => ({ evento: "e" + i }));
+      c.env.gm["vgl_repq"] = JSON.stringify(noventacinco);
       c.api.repQLoad(); c.api.repQSave();
       const guardada = JSON.parse(c.env.gm["vgl_repq"]);
-      t.igual(guardada.length, 30, "la cola persistida no pasa de 30");
-      t.igual(guardada[0].evento, "e5", "se descartan las MÁS VIEJAS");
-      t.igual(guardada[29].evento, "e34");
+      // v17.1.0 (#148) — el tope subió de 30 a 80 y el recorte por cabeza salta las filas
+      // de error (las más viejas se sacrifican solo si no queda otra).
+      t.igual(guardada.length, 80, "la cola persistida no pasa de 80 (TOPE_COLA v17.1.0)");
+      t.igual(guardada[0].evento, "e15", "se descartan las MÁS VIEJAS");
+      t.igual(guardada[79].evento, "e94");
     });
 
     // ---------- repFlush ----------

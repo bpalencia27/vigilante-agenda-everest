@@ -612,6 +612,37 @@ module.exports = {
       t.igual(c.api.atheneaCredsGet(), null);
     });
 
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): atheneaCredsSet guardaba la
+    // contraseña institucional compartida EN CLARO en CUATRO sitios extra (GM
+    // vgl_ath_user/vgl_ath_pass y localStorage de los dos orígenes en los que corre este
+    // módulo), al lado de la copia ofuscada en ATH_CRED_KEY — anulando la protección que
+    // el propio comentario del código promete. La prueba de arriba ("en el almacén crudo
+    // NUNCA queda el texto plano") solo miraba vgl_ath_creds (la clave CORRECTA) y nunca
+    // comprobó que las claves EN CLARO no existieran — por eso el bug sobrevivió.
+    // =================================================================
+    t.caso("v17.6.28: atheneaCredsSet NO deja ninguna copia en claro (ni GM ni localStorage)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.atheneaCredsSet(USR, PWD);
+      t.falso(c.env.gm["vgl_ath_user"], "GM vgl_ath_user no debe existir tras guardar");
+      t.falso(c.env.gm["vgl_ath_pass"], "GM vgl_ath_pass no debe existir tras guardar");
+      t.falso(c.env.almacen["vgl_ath_user"], "localStorage vgl_ath_user no debe existir tras guardar");
+      t.falso(c.env.almacen["vgl_ath_pass"], "localStorage vgl_ath_pass no debe existir tras guardar");
+      // La credencial sigue siendo recuperable con normalidad, solo que por la vía ofuscada.
+      t.igual(c.api.atheneaCredsGet(), { u: USR, p: PWD });
+    });
+
+    t.caso("v17.6.28: una credencial EN CLARO heredada de una versión vieja se migra y se borra al leerse", () => {
+      const c = cargar({ silencioso: true, almacen: { vgl_ath_user: USR, vgl_ath_pass: PWD } });
+      const leido = c.api.atheneaCredsGet();
+      t.igual(leido, { u: USR, p: PWD }, "se sigue leyendo correctamente la primera vez (fallback heredado)");
+      t.falso(c.env.almacen["vgl_ath_user"], "y queda MIGRADA: la copia en claro de localStorage se borra");
+      t.falso(c.env.almacen["vgl_ath_pass"], "las dos claves en claro, no solo una");
+      t.igual(c.api.atheneaCredsGet(), { u: USR, p: PWD }, "y sigue siendo recuperable después, ya por la vía ofuscada");
+      const crudo = JSON.stringify(c.env.gm["vgl_ath_creds"]);
+      t.falso(crudo.includes(PWD) || crudo.includes(USR), "la migración guardó la credencial ofuscada, no en claro");
+    });
+
     // =====================================================================
     // atheneaAutoLogin — v12.5.2: ya NO depende de un médico identificado en
     // Everest (la cuenta es la misma para cualquiera que use el equipo).
@@ -1012,11 +1043,12 @@ module.exports = {
       t.igual(glucosa.__vglToken, "TOK-DOS");
     });
 
-    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> [] sin llegar nunca a pedir detalle", async () => {
+    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> null sin llegar nunca a pedir detalle (v16.2.8)", async () => {
       const e = entornoAthenea();
       e.setPlan((o) => o.onload({ status: 200, responseText: `<input type="password" /> Iniciar sesión` }));
       const labs = await e.c.api.getAtheneaLabsAuto(DOC);
-      t.igual(labs, []);
+      // v16.2.8 — «no se pudo leer el portal» NO es «no tiene laboratorios»: null ≠ [].
+      t.igual(labs, null, "sesión caída = no se pudo leer (null), no una lista vacía");
       t.falso(e.llamadas.some((o) => String(o.url).includes("consultaDetalleSolicitud")));
     });
 

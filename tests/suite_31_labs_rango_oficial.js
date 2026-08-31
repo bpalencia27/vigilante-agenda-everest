@@ -20,7 +20,7 @@
 module.exports = {
   nombre: "Auto-Labs contra rangos oficiales (v14.1.8)",
   cubre: [
-    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
+    "_objecionOficialAlValor", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
     "_guardarTablaOficialVista", "_tablaOficialVigente", "_instalarOyenteTablaOficial",
     "_base64SinRelleno", "apiAccesoBuscarPaciente",
   ],
@@ -183,28 +183,12 @@ module.exports = {
     });
 
     // ---------- lo que se le dice al médico ----------
-
-    t.caso("el aviso dice qué llegó y qué se esperaba, y NUNCA propone el valor convertido", () => {
-      const txt = api._textoImplausibles([
-        { key: "CREATININA", valor: "88", estado: "alto", unidad: "mg/dL", min: 0.2, max: 20, mensaje: "" },
-      ]);
-      t.cierto(txt.indexOf("CREATININA") !== -1, "nombra el analito");
-      t.cierto(txt.indexOf("88") !== -1, "dice qué llegó");
-      t.cierto(txt.indexOf("mg/dL") !== -1, "dice en qué unidad esperaba la casilla");
-      t.cierto(txt.indexOf("0.2") !== -1 && txt.indexOf("20") !== -1, "dice el rango que la IPS espera");
-      // La prohibición, fijada como prueba: 88 µmol/L equivalen a ~1,0 mg/dL. Ese número
-      // NO puede aparecer, porque sugerirlo es convertir unidades a espaldas del
-      // laboratorio y acabaría escrito en una historia clínica sin comprobarse.
-      t.igual(/\b1[.,]0\b/.test(txt), false, "no se propone el valor convertido: la sospecha de unidad es una sospecha, no un hecho");
-      t.igual(api._textoImplausibles([]), "", "sin objeciones, el aviso no dice nada");
-      t.igual(api._textoImplausibles(null), "");
-      t.igual(api._textoImplausibles("no es lista"), "");
-    });
-
-    t.caso("un rango abierto por un lado se muestra como abierto, no como un cero inventado", () => {
-      const txt = api._textoImplausibles([{ key: "PTH", valor: "0.1", estado: "bajo", unidad: "pg/ml", min: 1, max: null, mensaje: "" }]);
-      t.cierto(txt.indexOf("?") !== -1, "sin máximo declarado se muestra '?', no un número que la IPS nunca dijo");
-    });
+    // v17.6.10 — El texto del aviso por implausibles se construye EN LÍNEA en el
+    // manejador del botón Auto-Labs (showToast "NO se escribieron...", con la regla de
+    // "nunca proponer el valor convertido" preservada allá); la vieja función
+    // _textoImplausibles se retiró por no tener llamador. La prohibición de conversión
+    // sigue viva: el aviso muestra clave, valor y rango oficial, nunca el número
+    // "corregido".
 
     // ---------- la tabla vista, y su caducidad ----------
 
@@ -218,6 +202,27 @@ module.exports = {
       t.igual(c.api._tablaOficialVigente(), null, "y ninguna de esas dejó nada guardado");
       t.igual(c.api._guardarTablaOficialVista(TABLA), true);
       t.igual(c.api._tablaOficialVigente().length, TABLA.length);
+    });
+
+    // =====================================================================
+    // v17.6.0 — RELOJES DE FRESCURA UNIFICADOS A 10 MIN: el de la tabla oficial
+    // bajó de 30 a 10 (aprobado el 22-ago junto con el resto de la lista del
+    // 20-ago) — era el más largo de los cuatro, porque "es configuración de la
+    // IPS, no del paciente", pero podía quedar sirviendo una tabla que el resto
+    // del script ya consideraba vieja según otro reloj. A los 15 minutos, el
+    // reloj VIEJO la seguía sirviendo; el NUEVO ya no. El gancho
+    // __envejecerTablaOficial vive solo en el cargador de pruebas (harness.js ya
+    // declara que no toca el archivo de producción).
+    // =====================================================================
+    t.caso("v17.6.0 — el TTL de la tabla oficial bajó de 30 a 10 min: a los 15 min ya no se sirve (con el reloj viejo sí se habría servido)", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._guardarTablaOficialVista(TABLA), true);
+      t.igual(c.api._tablaOficialVigente().length, TABLA.length, "recién vista: vigente");
+      c.api.__envejecerTablaOficial(9 * 60000 + 30000); // 9m30s atrás: dentro de los 10 min nuevos
+      t.cierto(!!c.api._tablaOficialVigente(), "a los 9m30s sigue vigente con el TTL nuevo");
+      c.api.__envejecerTablaOficial(15 * 60000); // 15 min atrás: dentro de los 30 viejos, fuera de los 10 nuevos
+      t.igual(c.api._tablaOficialVigente(), null,
+        "a los 15 min: con el TTL viejo (30 min) todavía se habría servido; con el nuevo (10 min) ya no");
     });
 
     t.caso("el oyente no puede romper Everest, y no se instala dos veces", () => {

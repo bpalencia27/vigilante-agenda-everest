@@ -1,9 +1,20 @@
 module.exports = {
   nombre: "Excel, caché y SharePoint",
-  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
+  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
+    t.caso("todayTokens retorna tokens de fecha con formatos numericos y mes en letras", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const toks = c.api.todayTokens();
+      t.cierto(Array.isArray(toks), "retorna arreglo");
+      t.cierto(toks.includes("20260810"), "incluye formato YYYYMMDD");
+      t.cierto(toks.includes("10082026"), "incluye formato DDMMYYYY");
+      t.cierto(toks.some(t => t.includes("agosto")), "incluye mes en letras");
+    });
+
     t.caso("normName normaliza el nombre del archivo", () => {
       t.igual(api.normName("Agenda_Dia_CMB_20260810.xlsx"), "agendadiacmb20260810xlsx");
       t.igual(api.normName(" 2026-08-10.xls "), "20260810xls");
@@ -55,6 +66,26 @@ module.exports = {
         { Name: "~$Agenda_20260810.xlsx" }
       ];
       t.igual(api.pickTodaysFile(files), null);
+    });
+
+    // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): TimeLastModified llega en
+    // UTC; comparar su string crudo (startsWith) contra la fecha LOCAL rompía en
+    // Colombia (UTC-5): un archivo modificado entre las 19:00 y las 24:00 hora local ya
+    // cae en el día UTC SIGUIENTE, así que al día siguiente (hora local) ese archivo
+    // pasaba el startsWith y se tomaba como "el de hoy", apagando la re-búsqueda del
+    // archivo real durante toda esa jornada.
+    t.caso("v17.6.39: un archivo modificado anoche (hora local, tarde) NO se confunde con el de hoy, aunque su UTC ya sea de hoy", () => {
+      const c = cargar();
+      // "Ahora": 25-ago-2026, 09:00 hora local (Colombia, UTC-5).
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-25T09:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-25T09:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        // Modificado a las 19:30 hora local del 24-ago (AYER) — en UTC eso ya es
+        // 25-ago 00:30, el día de "ahora". El código viejo comparaba ese string UTC
+        // crudo contra "2026-08-25" (hoy) y coincidía por error.
+        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-25T00:30:00Z" },
+      ];
+      t.igual(c.api.pickTodaysFile(files), null, "el archivo es de AYER en hora local: no debe tomarse como el de hoy");
     });
 
     t.caso("xlsViejoDeHoy identifica un .xls antiguo de hoy", () => {
@@ -217,6 +248,26 @@ module.exports = {
       // Pero como SP.folders tiene un solo item, y primeShareAccess hace algo, al final falla.
       // Si todo funcionó, `fetchCalls.length` será 2 (un intento original + un reintento).
       t.cierto(fetchCalls.length >= 2, "debería reintentar y hacer al menos 2 llamadas");
+    });
+
+    // ===== v16.7.0, auditoría #11: no poder mirar la carpeta NO es «hoy no hay lista» =====
+    t.caso("pymDiarioMensajeFallo: distingue «no pude mirar» de «miré y no está»", () => {
+      const c = cargar();
+      const caido = c.api.pymDiarioMensajeFallo(true, true);
+      t.falso(/Aún no aparece la lista de prevención/.test(caido),
+        "ESTE era el bug: con la carpeta ilegible se afirmaba que el archivo de hoy no estaba subido");
+      t.cierto(/No pude revisar la carpeta/.test(caido), "dice lo único que se sabe");
+      t.cierto(/NO sé si la lista de hoy ya está subida/.test(caido), "y lo dice sin rodeos");
+      t.cierto(/puede no ser lo último/.test(caido),
+        "con la piloto cargada avisa de que lo que el médico está viendo puede estar viejo");
+      t.cierto(/Abrir PyM/.test(c.api.pymDiarioMensajeFallo(true, false)),
+        "y sin nada cargado le da la salida manual");
+
+      const listado = c.api.pymDiarioMensajeFallo(false, true);
+      t.cierto(/Aún no aparece la lista de prevención/.test(listado),
+        "cuando SÍ se pudo listar, el hecho sigue siendo un hecho");
+      t.falso(/conexión con SharePoint falló/.test(listado), "y no se culpa a la red de lo que no fue la red");
+      t.cierto(/base piloto/.test(c.api.pymDiarioMensajeFallo(false, false)), "sin nada cargado, sigue prometiendo la piloto");
     });
 
     await t.casoAsync("fetchSpFilesMultiFolder lista múltiples carpetas hasta hallar el de hoy", async () => {

@@ -12,6 +12,7 @@ module.exports = {
   cubre: [
     "identidadDesdeCliente", "invalidarApiSiCambioMedico", "purgarApiUrl",
     "hayVentanaCritica", "vivoElapsed", "purgaPorCuota",
+    "resolverMedicoPorPerfil", "_identidadMedicoCacheLeer", "_identidadMedicoCacheGuardar",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -82,15 +83,15 @@ module.exports = {
 
     await t.casoAsync("identidadDesdeCliente: 'user' con username + userIdIdentity == sub del jwt -> resuelve por GetUsuarioPerfil", async () => {
       const { c, fetches, setFetch } = entorno();
-      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. B Palencia", perfilCodigo: "PROFESIONAL" } }), text: async () => "{}" }));
-      c.env.almacen["user"] = JSON.stringify({ username: "bpalencia", userIdIdentity: "515" });
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. J Moreno", perfilCodigo: "PROFESIONAL" } }), text: async () => "{}" }));
+      c.env.almacen["user"] = JSON.stringify({ username: "jmoreno", userIdIdentity: "515" });
       c.env.almacen["jwt"] = fakeJwt("515");
       c.api.identidadDesdeCliente();
       await espera(30);
       t.igual(fetches.length, 1);
-      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/bpalencia"), "consulta la puerta autoritativa con el login del cliente");
+      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/jmoreno"), "consulta la puerta autoritativa con el login del cliente");
       t.igual(c.api.__state.activeDoctor.id, 515);
-      t.igual(c.api.__state.activeDoctor.name, "Dr. B Palencia");
+      t.igual(c.api.__state.activeDoctor.name, "Dr. J Moreno");
     });
 
     await t.casoAsync("identidadDesdeCliente: sin jwt en absoluto, se acepta 'user'.username directamente (coherencia solo aplica si hay jwt)", async () => {
@@ -119,11 +120,11 @@ module.exports = {
     await t.casoAsync("identidadDesdeCliente: sin 'user' pero con cookie UsuarioMedico, usa el login de la cookie", async () => {
       const { c, fetches, setFetch } = entorno();
       setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 77, nombreCompleto: "Dra. Cookie" } }), text: async () => "{}" }));
-      c.env.doc.cookie = "UsuarioMedico=bpalencia2; otraCookie=1";
+      c.env.doc.cookie = "UsuarioMedico=jmoreno2; otraCookie=1";
       c.api.identidadDesdeCliente();
       await espera(30);
       t.igual(fetches.length, 1);
-      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/bpalencia2"));
+      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/jmoreno2"));
       t.igual(c.api.__state.activeDoctor.id, 77);
     });
 
@@ -132,6 +133,71 @@ module.exports = {
       c.env.almacen["user"] = "{esto no es json";
       c.env.almacen["jwt"] = "no-es-un-jwt-valido";
       t.noLanza(() => c.api.identidadDesdeCliente());
+    });
+
+    // =====================================================================
+    //  resolverMedicoPorPerfil + caché de identidad — v17.6.81: REPORTE EN VIVO
+    //  (26-ago) "no aparece mi nombre donde dice Médico, y por eso no me salen las
+    //  agendas". GetUsuarioPerfil (la única puerta que da id+nombre, hasta para el
+    //  login leído de localStorage) llevaba TODA la sesión devolviendo 503. Con la
+    //  caché por LOGIN exacto, un login ya validado antes por el backend se fija de
+    //  inmediato aunque la red esté caída — sin abrir la puerta que v12.3.2 cerró a
+    //  propósito (un equipo compartido no puede firmar solo con lo que quedó local).
+    // =====================================================================
+
+    await t.casoAsync("resolverMedicoPorPerfil: sin caché y GetUsuarioPerfil cae (503) -> activeDoctor sigue en 0, no revienta", async () => {
+      const { c, fetches, setFetch } = entorno();
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      t.noLanza(() => c.api.resolverMedicoPorPerfil("bpalencia"));
+      await espera(30);
+      t.cierto(fetches.length >= 1, "sí lo intentó por red (pageFetchJson reintenta internamente sobre 503, cuenta > 1)");
+      t.igual(c.api.__state.activeDoctor.id, 0, "sin caché y sin red, sigue sin identificar — como antes de esta versión");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: CON caché para ESE login, fija id+nombre de inmediato aunque GetUsuarioPerfil siga caído", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 515, name: "Dr. Brandon Palencia", ts: Date.now() } };
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      // Se fija SÍNCRONO, antes de que la red siquiera responda — el médico no espera nada.
+      t.igual(c.api.__state.activeDoctor.id, 515, "de caché, de inmediato");
+      t.igual(c.api.__state.activeDoctor.name, "Dr. Brandon Palencia");
+      await espera(30);
+      t.cierto(fetches.length >= 1, "aun con caché, SIGUE intentando confirmar por red en segundo plano");
+      t.igual(c.api.__state.activeDoctor.id, 515, "la red cayó, pero lo de la caché no se deshace");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: caché de OTRO login (equipo compartido) NO se usa — exige red para ese login nuevo", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { drmartinez: { id: 99, name: "Dra. Martínez", ts: Date.now() } };
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. Brandon Palencia" } }), text: async () => "{}" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      t.falso(c.api.__state.activeDoctor.id === 99, "NUNCA hereda la identidad de otro login cacheado — la garantía de v12.3.2 sigue intacta");
+      await espera(30);
+      t.igual(fetches.length, 1, "sí exigió validación fresca de backend para el login nuevo");
+      t.igual(c.api.__state.activeDoctor.id, 515, "y terminó identificado por la vía normal");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: entrada de caché vencida (>12h) se ignora, igual que si no existiera", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 515, name: "Dr. Brandon Palencia", ts: Date.now() - 13 * 60 * 60 * 1000 } };
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      t.igual(c.api.__state.activeDoctor.id, 0, "caché de más de 12h no cuenta: se trata como ausente");
+      await espera(30);
+      t.cierto(fetches.length >= 1);
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: al validar por red con éxito, guarda en caché para la próxima carga de página", async () => {
+      const { c, setFetch } = entorno();
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. Brandon Palencia" } }), text: async () => "{}" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      await espera(30);
+      t.igual(c.api.__state.activeDoctor.id, 515);
+      const guardado = c.env.gm["vgl_identidad_medico_cache"];
+      t.cierto(!!(guardado && guardado.bpalencia), "quedó una entrada de caché para ese login");
+      t.igual(guardado.bpalencia.id, 515);
+      t.igual(guardado.bpalencia.name, "Dr. Brandon Palencia");
     });
 
     // =====================================================================
@@ -148,16 +214,24 @@ module.exports = {
       t.igual(c.env.almacen["vgl_api_medico"], undefined, "sin id válido, ni siquiera se toca la etiqueta");
     });
 
+    // v17.6.14 — H4: la URL aprendida se persiste OFUSCADA en localStorage (antes en
+    // claro, legible para cualquier script de la página de Athenea, mismo origen).
+    const asertarUrlOfuscada = (c, t, tag) => {
+      const persistida = c.env.almacen["vgl_api_url"];
+      t.falso(String(persistida || "").includes("ObtenerConsultas"), "v17.6.14 (" + tag + "): la URL no viaja en claro por localStorage");
+      t.igual(c.api._vglDesofusca(persistida), ABS_AGENDA, "v17.6.14 (" + tag + "): se recupera idéntica al desofuscar");
+    };
+
     t.caso("invalidarApiSiCambioMedico: MISMO médico -> no purga la URL aprendida (pero re-etiqueta igual)", () => {
       const { c } = entorno();
       c.api.__state.activeDoctor.id = 100;
       c.api.apiRecordar(URL_AGENDA);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      asertarUrlOfuscada(c, t, "aprendida");
       t.igual(c.env.almacen["vgl_api_medico"], "100");
       c.api.__state.apiCitas = [{ x: 1 }];
       c.api.__state.apiEn = 12345;
       c.api.invalidarApiSiCambioMedico(100);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA, "misma sesión de médico: la URL sigue aprendida");
+      asertarUrlOfuscada(c, t, "misma sesión");
       t.cierto(c.api.apiUtil(), "el API sigue utilizable");
       t.igual(c.api.__state.apiCitas, [{ x: 1 }], "no se tocan las citas ya cargadas");
       t.igual(c.api.__state.apiEn, 12345);
@@ -170,8 +244,27 @@ module.exports = {
       c.api.apiRecordar(URL_AGENDA);
       t.igual(c.env.almacen["vgl_api_medico"], "0");
       c.api.invalidarApiSiCambioMedico(300); // primera identidad que se resuelve
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA, "medicoId=0 (sin dueño conocido): la rama de purga no aplica");
+      asertarUrlOfuscada(c, t, "medicoId=0");
       t.igual(c.env.almacen["vgl_api_medico"], "300", "de aquí en más ya queda protegida frente al próximo cambio");
+    });
+
+    await t.casoAsync("v17.6.14: la URL vieja en claro y la nueva ofuscada se cargan y sirven para leer la agenda (migración)", async () => {
+      const sembradas = [
+        { valor: ABS_AGENDA, tag: "en claro (versión vieja)" },
+        { valor: cargar({ silencioso: true }).api._vglOfusca(ABS_AGENDA), tag: "ofuscada (v17.6.14+)" },
+      ];
+      for (const s of sembradas) {
+        const llamadas = [];
+        const c = cargar({
+          silencioso: true,
+          almacen: { vgl_api_url: s.valor, vgl_api_medico: "100" },
+          fetch: (url) => { llamadas.push(String(url)); return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => JSON.stringify([{ horaCita: "07:00", estado: "EN SALA" }]) }); },
+          gmxhr: (o) => { if (o.onerror) o.onerror(new Error("GM no configurado")); },
+        });
+        const citas = await c.api.apiLeerAgenda();
+        t.cierto(Array.isArray(citas) && citas.length === 1, "con la URL " + s.tag + ": se lee la agenda");
+        t.igual(llamadas[0], ABS_AGENDA, "y la llamada usa la URL completa recuperada");
+      }
     });
 
     await t.casoAsync("invalidarApiSiCambioMedico: médico DISTINTO -> purga URL/fallos/ok/medicoId al estado inicial y re-etiqueta con el nuevo id", async () => {

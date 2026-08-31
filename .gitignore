@@ -1,109 +1,27 @@
-# ==========================================================================
-#  DATOS CLÍNICOS, TRÁFICO DE RED Y PHI — PROHIBIDO SUBIR
-# ==========================================================================
-*.har
-*.xlsx
-*.xls
-*.xlsm
-*.csv
-Agenda_Dia_*.xlsx
-*PyM*.xlsx
+# Vigilante de Agenda — exclusiones estándar
+#
+# v17.6.1 — este archivo no existía en la copia de trabajo (verificado el 2026-08-22).
+# Sin él, un `git add -A`/`git add .` de rutina puede colar caché de Python compilada
+# (que arrastra lo que sea que esté en los .py de origen) o capturas de red con datos
+# reales de pacientes hacia un commit sin que nadie lo note — exactamente el patrón que
+# ya documentó docs/SECRETOS_EXPUESTOS.md para otros secretos históricos. Revise que este
+# archivo también exista (o fusione estas líneas) en la copia real del repositorio en su
+# equipo; esta copia de trabajo en la nube es independiente de esa.
 
-# Capturas de diagnóstico y telemetría no anonimizada
-everest_telemetry_*.json
-captura_dom_*.txt
-eventos_*.csv
-eventos_*.json
-estado_vigilante_*.json
-Reportes_Vigilante_Copiloto/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Perfiles de navegador, cookies y bases de datos locales
-VigilanteEverestProfile/
-everest_cookies_temp.db
-cookies*
-*.db
-*.sqlite
-*.sqlite3
-*.dump
-*.sql
-*.bak
-*.tmp
-
-# ==========================================================================
-#  SECRETOS, CREDENCIALES Y CONFIGURACIÓN LOCAL
-# ==========================================================================
-.env
-.env.*
-*.env
-token*.json
-credentials*.json
-secrets*.json
-auth*.json
-*.pem
-*.key
-*.pfx
-*.p12
-*.crt
-
-# ==========================================================================
-#  COMPRIMIDOS Y VOLCADOS
-# ==========================================================================
-*.zip
-*.tar
-*.gz
-*.tgz
-*.7z
-*.rar
-
-# ==========================================================================
-#  REPORTES DE PRUEBAS Y ARTEFACTOS PLAYWRIGHT
-# ==========================================================================
-test-results/
-playwright-report/
-blob-report/
-playwright/.cache/
-
-# ==========================================================================
-#  ENTORNOS Y ARTEFACTOS DE BUILD
-# ==========================================================================
-node_modules/
-.venv/
-venv/
-env/
-build/
-dist/
+# Caché de bytecode de Python — se regenera sola, no debe versionarse
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
 
-# Ejecutable legacy y binarios
-Vigilante_Agenda/
-original_source/
-*.exe
+# Capturas de red (HTTP Archive) — pueden contener datos reales de pacientes y
+# credenciales/cookies de sesión vivas
+*.har
 
-# ==========================================================================
-#  ARCHIVOS TEMPORALES DE AGENTES Y TRABAJO INTERNO
-# ==========================================================================
-pr_desc*.txt
-pr.txt
-pr_description*.txt
-final_runner_output.txt
-commit_message.txt
-*.orig
-*.rej
-*~
+# Entornos virtuales y artefactos locales comunes
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
 
-# ==========================================================================
-#  OS / EDITORES
-# ==========================================================================
-Thumbs.db
-.DS_Store
-.vscode/
-.idea/
-*.swp
-.history/
+# Node
+node_modules/

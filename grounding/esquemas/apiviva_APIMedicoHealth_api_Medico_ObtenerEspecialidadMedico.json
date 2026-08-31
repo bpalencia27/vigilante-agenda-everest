@@ -1,0 +1,55 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIMedicoHealth/api/Medico/ObtenerEspecialidadMedico",
+  "parametros": [
+    "login"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 1,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 12
+      },
+      "descripcion": {
+        "tipo": "string(16 car)",
+        "ejemplo": "MEDICINA GENERAL"
+      },
+      "observacion": "string(0 car)",
+      "fechaCreacion": "string(fecha)",
+      "fechaFin": "string(fecha)",
+      "estado": {
+        "tipo": "string(3 car)",
+        "ejemplo": "ACT"
+      },
+      "appId": {
+        "tipo": "number",
+        "ejemplo": 999
+      },
+      "cupId": {
+        "tipo": "number",
+        "ejemplo": 1
+      },
+      "tipoMarcacionId": {
+        "tipo": "number",
+        "ejemplo": 4
+      },
+      "swPermiteFechaConsulta": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "cup": "null",
+      "swControlaLlamadosSimultaneos": {
+        "tipo": "boolean",
+        "ejemplo": false
+      }
+    }
+  }
+}

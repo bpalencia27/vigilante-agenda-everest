@@ -1,0 +1,9068 @@
+{
+ "funcion": "vigencia_dias",
+ "modulo": "motor_vigencias.py",
+ "sha256_origen": "f7612f81cb65fd1ab1e4b1d1e64866186b9c91e2e1e47a51d65166958272e1bd",
+ "bloque": "vigencias",
+ "vectores": [
+  {
+   "entrada": [
+    "ERC",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    90,
+    121
+   ]
+  },
+  {
+   "entrada": [
+    "ERC",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    60,
+    93
+   ]
+  },
+  {
+   "entrada": [
+    "ERC",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    60,
+    93
+   ]
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "ERC",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "ERC",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 365
+  },
+  {
+   "entrada": [
+    "ERC",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "ERC",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "ERC",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "HTA",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "HTA",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    90,
+    121
+   ]
+  },
+  {
+   "entrada": [
+    "erc",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    60,
+    93
+   ]
+  },
+  {
+   "entrada": [
+    "erc",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": [
+    60,
+    93
+   ]
+  },
+  {
+   "entrada": [
+    "erc",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "erc",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "erc",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "erc",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "erc",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "erc",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 365
+  },
+  {
+   "entrada": [
+    "erc",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "erc",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "erc",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "erc",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "erc",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "creatinina",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "creatinina",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "creatinina",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "creatinina",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "creatinina",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ldl",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ldl",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ldl",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ldl",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ldl",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hba1c",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hba1c",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hba1c",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "pth",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "pth",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "pth",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "pth",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "pth",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "rac",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "rac",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "rac",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "glicemia",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "glicemia",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "glicemia",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "glicemia",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "glicemia",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "uroanalisis",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "uroanalisis",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "uroanalisis",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "uroanalisis",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "uroanalisis",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ekg",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ekg",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "ekg",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hemograma",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hemograma",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hemograma",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hemograma",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "hemograma",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "potasio",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "potasio",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "potasio",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "potasio",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "potasio",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "NO_EXISTE",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "NO_EXISTE",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "NO_EXISTE",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "NO_EXISTE",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "NO_EXISTE",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "  LDL  ",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "  LDL  ",
+    "G1",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "  LDL  ",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "  LDL  ",
+    "G4",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "OTRO",
+    "  LDL  ",
+    "G5",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    null,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    null,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    30,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    30,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    44,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    44,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    45,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    45,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    46,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    46,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    true,
+    80,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    true,
+    80,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    null,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    null,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    30,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    30,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    44,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    44,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    45,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    45,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    46,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    46,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    null
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    0
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    29
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    30
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    30
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    31
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    31
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "hba1c",
+    "G3a",
+    false,
+    80,
+    300
+   ],
+   "salida": "BLOQ"
+  },
+  {
+   "entrada": [
+    "DM2",
+    "hba1c",
+    null,
+    false,
+    80,
+    300
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    null,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    null,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    30,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    30,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    44,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    44,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    45,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    45,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    46,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    46,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    true,
+    80,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    true,
+    80,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    null,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    null,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    30,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    30,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    44,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    44,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    45,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    45,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    46,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    46,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    29
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    30
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    31
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "ekg",
+    "G3a",
+    false,
+    80,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DM2",
+    "ekg",
+    null,
+    false,
+    80,
+    300
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    null,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    null,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    30,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    30,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    44,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    44,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    45,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    45,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    46,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    46,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    true,
+    80,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    true,
+    80,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    null,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    null,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    30,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    30,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    44,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    44,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    45,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    45,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    46,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    46,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    null
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    0
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    29
+   ],
+   "salida": 180
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    30
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    31
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "ERC",
+    "rac",
+    "G3a",
+    false,
+    80,
+    300
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "DM2",
+    "rac",
+    null,
+    false,
+    80,
+    300
+   ],
+   "salida": 90
+  }
+ ]
+}

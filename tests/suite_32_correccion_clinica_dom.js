@@ -14,18 +14,42 @@
 const fs = require("fs");
 const path = require("path");
 
+// DOM de prueba: un par de radios SI/NO por cada campo en `marcas` (mismo contrato que
+// mtrLeerRadioSiNo espera: input[name="..."][value="true"/"false"].checked).
+function domRadios(marcas) {
+  const nodos = [];
+  for (const nombre of Object.keys(marcas)) {
+    const v = marcas[nombre];
+    nodos.push({ name: nombre, value: "true", checked: v === true, type: "radio" });
+    nodos.push({ name: nombre, value: "false", checked: v === false, type: "radio" });
+  }
+  return {
+    querySelectorAll(sel) {
+      const m = /^input\[name="(.*)"\]$/.exec(sel);
+      if (!m) return [];
+      const buscado = m[1].replace(/\\"/g, '"');
+      return nodos.filter((n) => n.name === buscado);
+    },
+    querySelector(sel) {
+      const r = this.querySelectorAll(sel);
+      return r.length ? r[0] : null;
+    },
+  };
+}
+
 module.exports = {
   nombre: "Corrección Clínica, Frontera DOM y Límites (M2)",
   cubre: [
-    "cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG",
+    "cockcroftGault", "ckdEpi2021", "estadioKDIGO",
     "estadioRenalDelPaciente", "calcularEstadioRenal", "_renderEstadioRenalHtml",
     "_creatininaDeLabs", "_esSexoFemenino", "_matchLabInWhitelist", "_esAnalitoDeOrina",
-    "_matchUroComponente", "_findHbA1cFields", "_findLabField", "_findUroInput",
-    "_marcarUroanalisisSi", "_conductaBuscarYAgregarExamen", "esFestivo",
-    "todayStamp", "horaBonita", "parseHoraMin", "elapsedMin", "apptKey",
-    "colorAndAlert", "diaNuevo", "pymCubiertoPorOrdenVigente",
-    "_ordenesVigentesInvalidar", "_demograficosInvalidar", "_bannerPymInvalidar",
-    "apiAccesoObtenerDemograficos", "exportAudit"
+    "_matchUroComponente", "_findHbA1cFields",
+    "esFestivo",
+    "todayStamp", "horaBonita", "parseHoraMin", "apptKey",
+    "colorAndAlert", "pymCubiertoPorOrdenVigente",
+    "_ordenesVigentesInvalidar", "_demograficosInvalidar",
+    "apiAccesoObtenerDemograficos", "exportAudit",
+    "_vglCosecharFactoresVisibles", "_vglCosechaGuardar", "_vglCosechaLeer",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -381,29 +405,33 @@ module.exports = {
 
       const res = c.api.colorAndAlert(appt, refDate.getTime());
       t.igual(res.color, "AMBAR");
-      t.cierto(c.api.__state.fraudWatch.has("1098765432@07:00 AM"), "debe entrar a fraudWatch");
+      // apptKey v17.x: la clave es doc_id@m+minutos (07:00 = m420), no la hora_texto cruda.
+      t.cierto(c.api.__state.fraudWatch.has("1098765432@m420"), "debe entrar a fraudWatch");
       t.falso(res.sound, "AMBAR no emite sonido");
     });
 
-    t.caso("R2.5: Transición Sin presentarse -> Atendido (salto de sala) dispara ROJO con sonido de flanco", () => {
+    t.caso("R2.5: Transición Sin presentarse -> Atendido (salto de sala) dispara ROJO sin sonido (v16.2.8)", () => {
       const c = cargar();
       c.api.__state.leader = true;
-      const key = "1098765432@07:00 AM";
+      const key = "1098765432@m420"; // apptKey v17.x: doc_id@m+minutos
       c.api.__state.fraudWatch.add(key);
 
       const appt = { doc_id: "1098765432", hora_texto: "07:00 AM", estado: "Atendido", index: 0 };
       const now = Date.now();
 
-      // Primer tick: salta sonido
+      // v16.2.8 — decisión del médico (20-ago, con pantallazo): «para sin presentarse a
+      // atendido no es necesario generar ninguna notificación». El ROJO se CONSERVA (el
+      // panel lo pinta y la auditoría lo registra: la evidencia para reclamaciones), pero
+      // sound se queda en false, que es lo único que dispara tono/notificación/cartel.
       const res1 = c.api.colorAndAlert(appt, now);
       t.igual(res1.color, "ROJO");
-      t.cierto(res1.sound, "primer aviso de fraude debe sonar");
+      t.falso(res1.sound, "v16.2.8: Atendido ya no notifica — el paciente lleva rato en el consultorio");
       t.cierto(c.api.__state.alertedFraud.has(key), "debe quedar en alertedFraud");
 
-      // Segundo tick: ya en alertedFraud, NO repite sonido
+      // Segundo tick: sigue ROJO (el color persiste para el panel y la auditoría).
       const res2 = c.api.colorAndAlert(appt, now);
       t.igual(res2.color, "ROJO");
-      t.falso(res2.sound, "sonido es de flanco único (edge-triggered)");
+      t.falso(res2.sound);
     });
 
     t.caso("R2.5: apptKey distingue citas del mismo paciente a distinta hora", () => {
@@ -413,8 +441,9 @@ module.exports = {
 
       const k1 = c.api.apptKey(a1);
       const k2 = c.api.apptKey(a2);
-      t.igual(k1, "12345@07:00 AM");
-      t.igual(k2, "12345@09:00 AM");
+      // apptKey v17.x: doc_id@m+minutos (07:00 = 420, 09:00 = 540), no la hora_texto cruda.
+      t.igual(k1, "12345@m420");
+      t.igual(k2, "12345@m540");
       t.cierto(k1 !== k2, "citas a diferente hora deben tener claves distintas");
 
       // Si falta a la de las 7, no afecta a la de las 9
@@ -503,7 +532,8 @@ module.exports = {
     t.caso("R2.9: Invalidadores de caché reinician el estado de memoria", () => {
       t.noLanza(() => api._ordenesVigentesInvalidar());
       t.noLanza(() => api._demograficosInvalidar());
-      t.noLanza(() => api._bannerPymInvalidar());
+      // [v14.2.0 — auditoría pre-producción 2026-08-18] _bannerPymInvalidar se retiró con
+      // el resto del bloque T7 (código muerto, ver CHANGELOG).
     });
 
     t.caso("R2.9: exportAudit genera CSV válido con UTF-8 BOM", () => {
@@ -525,6 +555,58 @@ module.exports = {
       t.cierto(csv.charCodeAt(0) === 0xFEFF, "debe iniciar con UTF-8 BOM para Excel");
       t.cierto(csv.includes("Fecha;2026-08-01"), "debe incluir la fecha");
       t.cierto(csv.includes("Hora;Evento;Hora cita;Documento;Estado;Estado previo;Minutos;Paciente"), "debe incluir cabecera");
+    });
+
+    // =================================================================
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): la cosecha de factores por
+    // pestaña se PISABA en cada guardado. _vglCosecharFactoresVisibles decía en su propio
+    // comentario que "mapa fusiona lo ya archivado con lo nuevo", pero arrancaba de un
+    // objeto vacío y solo veía lo visible en la pantalla ACTUAL; _vglCosechaGuardar fusiona
+    // PLANO, así que {factores: mapa} reemplazaba entero el archivo. El médico abría
+    // Antecedentes (diabetes/HTA quedaban archivados) y al pasar a Hábitos, esos dos
+    // factores desaparecían del archivo del paciente — riesgo cardiovascular falsamente
+    // bajo con la compuerta de contexto abierta.
+    // =================================================================
+    t.caso("v17.6.27: la cosecha de factores por pestaña SE ACUMULA — visitar Hábitos no borra lo visto en Antecedentes", () => {
+      const c = cargar({ silencioso: true });
+      const docId = "999";
+
+      // 1) El médico abre Antecedentes: diabetes=Sí, HTA=Sí.
+      const domAntecedentes = domRadios({
+        "AntecedentePatologicos.Diabetes": true,
+        "AntecedentePatologicos.Hipertension": true,
+      });
+      const v1 = c.api._vglCosecharFactoresVisibles(domAntecedentes, docId);
+      t.cierto(v1 && v1.n === 2, "ve los 2 radios de Antecedentes en pantalla");
+      c.api._vglCosechaGuardar(docId, { factores: v1.mapa, factoresIso: "2026-08-24" });
+      t.cierto(c.api._vglCosechaLeer(docId).factores.diabetes.v === true, "diabetes archivada tras Antecedentes");
+      t.cierto(c.api._vglCosechaLeer(docId).factores.hta.v === true, "HTA archivada tras Antecedentes");
+
+      // 2) El médico pasa a Hábitos: tabaquismo=Sí, alcohol=No. Diabetes/HTA NO están en
+      // esta pantalla — antes del arreglo, el archivo las perdía aquí.
+      const domHabitos = domRadios({
+        "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador": true,
+        "hs.HabitosGestionRiesgo.alcohol": false,
+      });
+      const v2 = c.api._vglCosecharFactoresVisibles(domHabitos, docId);
+      t.cierto(v2 && v2.n === 2, "ve los 2 radios de Hábitos en pantalla (n cuenta SOLO lo visible ahora)");
+      c.api._vglCosechaGuardar(docId, { factores: v2.mapa, factoresIso: "2026-08-24" });
+
+      const archivado = c.api._vglCosechaLeer(docId).factores;
+      t.cierto(archivado.diabetes && archivado.diabetes.v === true, "diabetes SIGUE archivada tras visitar Hábitos (antes se perdía)");
+      t.cierto(archivado.hta && archivado.hta.v === true, "HTA SIGUE archivada tras visitar Hábitos (antes se perdía)");
+      t.cierto(archivado.tabaquismo && archivado.tabaquismo.v === true, "y tabaquismo, lo nuevo de Hábitos, también quedó");
+      t.cierto(archivado.alcohol && archivado.alcohol.v === false, "y alcohol=No, lo nuevo de Hábitos, también quedó");
+
+      // 3) Si el médico corrige algo que ya estaba (vuelve a Antecedentes y marca
+      // diabetes=No), lo de HOY debe ganarle a lo archivado — la fusión no debe congelar
+      // el primer valor visto para siempre.
+      const domCorreccion = domRadios({ "AntecedentePatologicos.Diabetes": false });
+      const v3 = c.api._vglCosecharFactoresVisibles(domCorreccion, docId);
+      c.api._vglCosechaGuardar(docId, { factores: v3.mapa, factoresIso: "2026-08-24" });
+      const final = c.api._vglCosechaLeer(docId).factores;
+      t.igual(final.diabetes.v, false, "la corrección de HOY le gana a lo archivado ayer");
+      t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
     });
 
   }

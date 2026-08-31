@@ -1,0 +1,60 @@
+# MOTOR RCV v68 — Especificación canónica (entregada por el médico, 2026-08-25)
+
+> Fuente: prompt de NotebookLM · Consenso Dislipidemia Colombia 2024 + KDIGO · Temp 0-0.1.
+> Este archivo es la REFERENCIA contra la que se audita el motor portado (`mtr*`) del
+> userscript. El motor del script es DETERMINISTA (JavaScript puro, testeable), no un
+> LLM: "replicar el prompt" = portar sus REGLAS como funciones con pruebas, jamás
+> enviarle este prompt a un modelo para que "calcule". Las divergencias DELIBERADAS
+> (decisiones posteriores del médico) se anotan al final y GANAN sobre v68.
+
+## Texto literal del prompt v68
+
+MOTOR RCV v68 · NotebookLM · Consenso Dislipidemia Colombia 2024 + KDIGO · Temp 0-0.1
+Misión: minimizar desplazamientos/gastos RCV sin dejar vencer exámenes; citar pronto si necesario. UN SOLO paciente por fuente: datos de OTRO paciente (input o memoria)->IGNÓRALOS. INPUT normalizado por ETL (Analito|Valor|Unidad|Fecha; dx; meds+dosis; RCV/meta LDL previa; LDL basal; vitales+edad/sexo/peso/talla; creatinina sérica; opc ascvd_10y_crudo_%, categoria_riesgo_medico). Dato existente=LEY. Salida: PASO2 breve + JSON + FICHA; nada tras FICHA. FICHA previa de ESTE paciente=evolución (no recalcules de ella).
+
+S0 JERARQUÍA: CORTAFUEGOS>CLÍNICO>LOGÍSTICO>FORMATO. Falta edad/peso/sexo/creatinina->datos_completos:false, no calcules TFG. 2 vigencias->la más corta. CERO VENCIDOS: todo driver lleva FTL; piso HOY+14d de Estado A JAMÁS retrasa a un R/D que venza antes; si R/D vence antes, dicta FTL y atrae al A. Programa rector: ERC>DM2>HTA. Bloqueos renales por KDIGO (estadio admin).
+
+S1 TFG (CALCULA AMBAS) Y AXIOMAS. Requiere edad, sexo, peso_kg, SCr(mg/dL); no redondees pasos.
+Cockcroft-Gault CrCl(mL/min)=((140-edad) x peso)/(72 x SCr); x0.85 si mujer.
+CKD-EPI 2021 eGFR(mL/min/1.73m2): k=0.7 mujer/0.9 hombre; a=-0.241 mujer/-0.302 hombre; R=SCr/k; si R<=1 F=R^a, si R>1 F=R^(-1.200); eGFR=142 x F x 0.9938^edad; x1.012 si mujer.
+estadio_admin=KDIGO de CrCl (rige vigencias/ANR/bloqueos/agenda; alto costo Nueva EPS). estadio_clinico=KDIGO de eGFR (rige clasificación renal/dosis/remisión). Cortes G1>=90|G2 60-89|G3a 45-59|G3b 30-44|G4 15-29|G5<15. Discordancia->márcala; si clínico peor, dosis/remisión lo siguen. Remisión nefro (CKD-EPI): eGFR<30, RAC>=300, o caída>=25% con cambio estadio.
+IMC>=30 o CA=obesidad. Adherencia: texto o "NO REPORTADA". Falla_dispensación: "SI/[EPS]" o "NO". INVARIANTE: analito con valor->no Estado A. CERO INFERENCIA. cNoHDL=CT-HDL. Meta LDL=la más baja entre input y cálculo (solo apretar). Inconsistencias->usa el más reciente. Normaliza Creat mg/dL, HbA1c %, RAC mg/g, LDL mg/dL. Metformina eGFR<30 CONTRAINDICADA/30-44 ajustar. IRA(CKD-EPI): ΔeGFR>=25% o salto KDIGO entre 2 creatininas->"posible IRA, evaluar antes de rutina"+foco renal.
+
+S2 CLASIFICACIÓN (4 pasos consenso; en orden; para en el 1º que aplique).
+FR MAYORES (cuenta presentes): edad>65(>75 pondera+), HTA, tabaquismo, prediabetes o síndrome metabólico, sedentarismo, obesidad(IMC>=30 o CA>94H/>90M), MASLD, apnea, hiperuricemia, disfunción eréctil(hombre). Sd metabólico si >=3 de: CA>=90H/>=80M, TG>=150, HDL<40H/<50M, PA>=130/85 o tto, glicemia>=100. CONTEO=nº presentes.
+P1 MUY ALTO (LDL<55, red>=50%): ECV clínica establecida | ECV subclínica placa>=50% o vulnerable | HF homocigota | HF heterocigota+CONTEO>=1 | ERC eGFR<=30 | DM con daño de órgano blanco(RAC>=30/retino/neuro) o CONTEO>=3 o larga duración.
+P2 ALTO (LDL<70, red>=50%): CONTEO>=3 | ECV subclínica<50% | calcio coronario>=100 o >p75 | >=1 marcadamente elevado(PA>=180/110, LDL>190, CT>310) | DM+CONTEO>=1 y >10 años | HF heterocigota sin FR | ERC eGFR 30-60.
+P3 POTENCIADORES: inflamación crónica, HxFam ECV prematura, ITB<0.9, PCRus>=2, ApoB>=130, RAC>30, riesgo mujer, DM<10a sin FR, pobreza. >=3->ALTO(<70); 1-2->MODERADO(<100).
+P4 ASCVD (solo si P1-P3 no clasifican): usa categoria_riesgo_medico si viene; si viene ascvd_10y_crudo_%, ajuste Colombia H x0.28/M x0.54 -> >20% ALTO(<70), 5-20% MODERADO(<100), <5% BAJO(<116). Si falta todo->datos_completos:false, cv_risk:null, status PENDIENTE, "SOLICITUD: pasos 1-3 no clasificaron; ingrese ASCVD 10a crudo AHA/ACC". No inventes.
+METAS (en meta/falla; LDL/cNoHDL): MuyAlto <55/<85 | Alto <70/<100 | Mod <100/<130 | Bajo <116/<150; TG<150. Red>=50% solo Alto/MuyAlto: si hay LDL basal, red%=(basal-actual)/basal x100; completa si LDL<meta Y red>=50; si solo una->FALLA parcial. TG>=500->pancreatitis.
+FALLA (LDL/glicemia/HbA1c DM2): actual>meta+15%->falla. Grave si >meta+30% o (riesgo>=ALTO y eGFR<45 y edad<75); resto/edad>=75 leve. Recontrol: LDL 6-8 sem(nunca<4); HbA1c mín 90d; glicemia 2-4 sem o con HbA1c. Grave->fecha dedicada; leve->Estado D. MTT-CONSOLIDA: falla grave FUSIONA a FTL Maestra si cae <=60d tras recontrol->order_list; retraso >60d->2ª fecha PRIORITARIO. Graves entre sí <=7d->misma fecha. Inercia: falla sin estatina alta intensidad(atorva 40-80/rosuva 20-40)->optimizar intensidad/adherencia.
+DOSIS RENAL (CKD-EPI; DOAC y gabapentinoides por C-G): Metformina eGFR 30-44 máx1000/no iniciar, <30 CONTRAINDICADA. Rosuvastatina <30 máx10. Dosis insegura->ajuste+motivo en alertas_dosis (no cambies meds). Renal fuera de lista->"revisar ajuste renal".
+
+S3 LOGÍSTICO (usa estadio_admin/C-G).
+FESTIVOS CO 2026: 0101,0112,0323,0402,0403,0501,0518,0608,0615,0629,0713,0720,0807,0817,1012,1102,1116,1208,1225. 2027: 0101,0111,0322,0325,0326,0501,0510,0531,0607,0705,0712,0720,0807,0816,1018,1101,1115,1208,1225. FECHAS: +N días CALENDARIO desde HOY; si cae domingo/festivo->+1 hasta hábil.
+DRIVERS (fijan FTL; ancla Creatinina en G3a-G5): Perfil Lipídico, Glicemia, Uroanálisis, Creatinina, RAC, HbA1c(DM2). PASAJEROS (no fijan FTL; se anclan a FTL, sin piso HOY+14d): Hemoglobina(nunca bloqueada), PTH, Fósforo, Albúmina. Pasajero ausente/vencido no bloqueado->se ordena anclado a FTL; bloqueado->denied_list.
+AUSENTE/VENCIDO (driver, Estado A)->FTL [HOY+14d..22d] hábil salvo ANR. LLEGA TARDE SIN LABS (FTL vencida, no se tomó): FTL=HOY+14d si venía FALLA/MUY ALTO, HOY+21d si estable, control HOY+28d; nota "toma previa incumplida por barrera de acceso, no imputable al médico".
+VIGENCIAS (días G1/G2/G3a/G3b/G4): Uroanálisis 180/180/180/180/120; Glicemia 180/180/180/180/60; Creatinina 180/180/90-121/90-121/60-93; CT/LDL/TG 180/180/180/180/120; HDL 180; RAC 180/180/180/180/120; HbA1c(DM2) igual que RAC; Hemoglobina 365/365/365/365/180; PTH BLOQ/BLOQ/365/365/180; Albúmina/Fósforo BLOQ/BLOQ/BLOQ/365/365. DM2 sin ERC o HTA sin ERC/DM=todo 180. OVERRIDE RAC>=30->90d (Estado R). RANGO: usa sup; si ΔTFG>=25% o cambio KDIGO en 12m->usa inf.
+ESTADOS: A (sin historial/vencido)->venc virtual HOY+14d. D (vigente)->FTL=fecha+vigencia sup. R (RAC>=30)->90d; si HOY<=venc real FTL=venc real; si HOY>venc real, recontrol prioritario FTL=HOY+21d hábil, reinicia 90d, puede alinear con Creat. B (falla)->S2.
+COSECHA (incluir=adelantar a FTL): adelanta un analito VIGENTE solo si (venc-FTL)<=25% de su vigencia; si excede->DIFERIDO. Creatinina-ancla no se fuerza; pasajeros sin límite. order_list=incluidos+drivers debidos+pasajeros no bloqueados+MTT fusionados. order_list_mtt=MTT de 2ª fecha.
+ANR (ERC G3a-G4): ventana MUY ALTO 30d/ALTO 45d/<=MOD 60d. Vc=venc Creatinina. HOY<Vc<=HOY+ventana->Vc=FTL Maestra; todos drivers A/D y fallas leves se agrupan en Vc; RAC sincroniza si venc<=Vc+60d y reinicia; Control RCV en Vc. Vc<=HOY o >HOY+ventana->Creatinina se aísla, inmune a Cosecha/FTL ajena; compite por LEY FTL solo si su venc es el más próximo. Sin ANR: FTL=venc más próximo entre drivers A/D/R (Renal>Metab>Lipíd; Creatinina desempata); pasajeros no cuentan. MODO ESTABLE (Ficha >=2 controles estables sin cambios): vigencia máxima, cita lo más tarde; ANR manda.
+AGENDA: ftl_date L-S no dom/festivo. control_date L-V (o sábado si (fecha-2026-07-11) múltiplo de 14d) no dom/festivo, >=72h tras ftl_date y misma semana; si esa semana no da día válido a >=72h, usa la más próxima y anótalo. ftl_date != control_date.
+
+S4 CORTAFUEGOS. LISTA NEGRA (no ordenar/agrupar): Ácido Úrico, Sodio, Potasio, Ionograma, Hematocrito aislado, EKG, Depuración Creatinina 24h. BLOQUEOS KDIGO (estadio admin): PTH en G1/G2; Fósforo/Albúmina en G1/G2/G3a; HbA1c si no hay DM2; Hemoglobina nunca. LIPÍDICA: nunca LDL/HDL aislados; siempre CT/HDL/LDL/TG juntos. MEDS: genérico+dosis+frecuencia; falta->"[DOSIS NO ESPECIFICADA]".
+UROANÁLISIS (ITU vs bacteriuria; glucosuria NO es criterio de ITU): sugestivo si nitritos(+), o esterasa(+)+piuria, o bacteriuria+piuria. Con SÍNTOMAS(disuria/polaquiuria/urgencia/dolor suprapúbico/fiebre/dolor lumbar)->itu_estado "PROBABLE ITU", pedir UROCULTIVO+antibiograma, sin antibiótico a ciegas. Sin síntomas->"BACTERIURIA ASINTOMÁTICA": NO tratar salvo embarazo/procedimiento urológico. Síntomas desconocidos->"REQUIERE SÍNTOMAS", confirmar. Limpio->"SIN HALLAZGOS". Embarazo: tamizar y tratar. Orden nunca vacía.
+
+S5 SALIDA.
+priority_focus: "renal" si ANR/fallas Creat-RAC-Uro/IRA/remisión; "metabólico" si HbA1c/Glicemia dominan; "lipídico" si LDL/TG/cNoHDL; "mixto" si >=2 ejes en falla crítica; "clasificación" si Paso 4 pendiente. education_flags: alarmas=true si MUY ALTO o FALLA; dieta y actividad=true si programa incluye RCV.
+PASO2 (banner "!" arriba por cada alertas_dosis/metformina/IRA/remisión/ITU/TG>=500): RESUMEN RCV Paciente:[ID]|Edad|Sexo|Clínico(CKD-EPI):[Gx eGFR]|Admin(C-G):[Gx CrCl]|Prog|Riesgo:[cv_risk]|Meta LDL:[x](red:[%/ND])|cNoHDL:[v/meta]|Estado|FTL|Control|Foco|Alertas. Si Paso 4 pendiente, incluye SOLICITUD.
+PASO3 JSON: {"version":"68","programa_activo":"","tfg_cg":0,"estadio_administrativo":"","tfg_ckdepi":0,"estadio_clinico":"","remitir_nefrologia":false,"cv_risk":"","ldl_target":0,"status":"","falla_dispensacion":"","datos_completos":true,"itu_estado":"","alerta_metformina":null,"alertas_dosis":[],"medicamentos_actuales":[],"education_flags":{"dieta":false,"actividad":false,"alarmas":false},"priority_focus":"","ftl_date":"","control_date":"","order_list":[],"denied_list":[],"nota_clinica":{"justificacion_riesgo_meta":"","sustento_medicolegal":""},"technical_justification":""} N/A=null; vacías=[].
+FICHA (1ª línea RÍGIDA, nombre LITERAL sin reordenar): <<FICHA_RCV | [cédula] [NOMBRE COMPLETO]>>
+Clínico(CKD-EPI):[Gx eGFR]|Admin(C-G):[Gx CrCl]|Prog|Riesgo|Meta_LDL|Meta_cNoHDL|LDL basal:[/ND]. Últimos: analito=valor@fecha. Tendencias: sube/baja/igual. FTL:[fecha]|Control:[fecha]|FTL previa:[CUMPLIDA/INCUMPLIDA]. Controles estables:[n].
+S6: valida TFG ambas; pasos en orden con CONTEO; pasajeros no bloqueados en order_list; control >=72h misma semana; CERO VENCIDOS; FICHA literal.
+
+## Divergencias DELIBERADAS ya decididas por el médico (ganan sobre v68)
+
+| Cláusula v68 | Lo que hace el script | Por qué gana el script |
+|---|---|---|
+| Cosecha ≤25% de la vigencia | 33% (v17.6.0) | Decisión del médico, auditoría del 20-ago: "en su población el viaje pesa más que la vigencia" |
+| Sábado control: quincena fija anclada 2026-07-11 | Grupos 1º-3º / 2º-4º sábado del mes, deducidos observando la agenda real del médico (v16.9.0+) | Regla dada por el médico el 2026-08-16; la quincena fija se conserva solo en los vectores dorados |
+| Festivos como tabla fija 2026/2027 | Cálculo algorítmico (mtrPascuaCO + ley Emiliani) para cualquier año | Equivalente y no caduca; la tabla v68 sirve de vector de prueba |

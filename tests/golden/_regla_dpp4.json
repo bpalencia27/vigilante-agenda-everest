@@ -1,0 +1,7218 @@
+{
+ "funcion": "_regla_dpp4",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "SITAGLIPTINA 100 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "SITAGLIPTINA 100 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "vildagliptina 50",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "vildagliptina 50",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    5.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    10.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    14.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    15.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    16.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    20.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    25.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    29.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LINAGLIPTINA 5 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "dpp4",
+    "medicamento_detectado": "saxagliptina",
+    "conducta": "REDUCIR",
+    "mensaje": "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "saxagliptina",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}

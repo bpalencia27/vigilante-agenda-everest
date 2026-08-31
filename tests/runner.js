@@ -3,6 +3,13 @@
 //  Sin dependencias externas: se ejecuta con  node tests/runner.js
 //  Cada archivo tests/suite_*.js exporta { nombre, cubre: [...], pruebas(t, api, env) }
 // =====================================================================
+// El script en producción corre siempre en equipos médicos con hora local
+// de Colombia (UTC-05:00) y toda su lógica de "hoy"/fechas de negocio se
+// apoya en el reloj local del sistema (sin offset explícito en el código
+// fuente). Para que los tests reproduzcan ese mismo contexto sin importar
+// la zona horaria del entorno donde se ejecute `node tests/runner.js`,
+// fijamos aquí la zona horaria por defecto ANTES de cualquier `new Date()`.
+process.env.TZ = "America/Bogota";
 const fs = require("fs");
 const path = require("path");
 const { cargar } = require("./harness.js");
@@ -73,6 +80,54 @@ function crearT() {
   return { t, res };
 }
 
+// v14.2.0 — COBERTURA POR ACCESO EN EJECUCIÓN, no por texto.
+//
+// `nuncaNombradas` (más abajo) es un grep: si el nombre aparece como palabra en el
+// archivo de la suite, la da por cubierta. Es deliberadamente laxo (un nombre puede
+// probarse de verdad sin escribirse literal, p.ej. disparado por un `.onclick()`), pero
+// esa misma laxitud es la puerta por la que se coló el patrón de los 28 nombres huecos
+// de la suite 42: un `cubre` puede mencionar un nombre en un comentario o en otra prueba
+// vecina y colar como "nombrado" sin que NINGUNA prueba lo haya tocado jamás.
+//
+// Primer intento (revertido): envolver cada función en un wrapper que anotara su
+// nombre al ser LLAMADA. Se descartó porque NO es transparente de verdad pese al
+// cuidado puesto en conservar `.length`/`.name`/`this`/argumentos — rompió dos pruebas
+// reales por razones distintas: (1) `c.api.apiAccesoObtenerTurnos.constructor.name ===
+// "AsyncFunction"` (Suite 34) — un wrapper `function(...args)` nunca es "AsyncFunction"
+// aunque reenvíe una promesa; (2) el test de `boot` (Núcleo) compara por IDENTIDAD la
+// función que `setInterval` registró de verdad (la de la clausura interna) contra
+// `api.checkVersionMinimum` — y el wrapper es, a propósito, un objeto DISTINTO. No hay
+// forma de envolver-y-seguir-siendo-la-misma-función; son objetivos contradictorios.
+//
+// Así que esto usa un `Proxy` con SOLO un `get`, que devuelve la propiedad SIN TOCARLA
+// (mismo objeto función, mismo `.constructor`, misma identidad) y únicamente anota que
+// se LEYÓ. Es más débil que "llamada de verdad" — leer no es invocar — pero es
+// estrictamente más fuerte que el grep textual: detecta cuando el nombre aparece en el
+// texto de la suite (p.ej. dentro de un comentario o de otra prueba vecina) SIN que
+// ninguna prueba haya tocado `api.ese_nombre` ni una vez en tiempo de ejecución. Y, al
+// no modificar ningún valor, es imposible que altere el comportamiento de una prueba:
+// no hay wrapper que romper.
+//
+// NO se sustituye el `api` que carga el runner (`cargado.api` de la línea de abajo):
+// solo se envuelve la COPIA que cada suite recibe como parámetro, así que un fallo en
+// el Proxy no puede alterar el `todosSet`/`cubiertas` que sí gobiernan el porcentaje
+// publicado ni el código de salida.
+//
+// Sigue siendo, a propósito, informativo y no compuerta (igual que "nunca nombradas"):
+// puede dar FALSOS positivos legítimos — cobertura de verdad por integración, disparada
+// por un evento del DOM en vez de por `api.nombre` directo — así que cada hallazgo se
+// lee a mano contra la suite antes de tocar nada, nunca se actúa a ciegas sobre la lista.
+function envolverApiParaCobertura(api, invocadas) {
+  return new Proxy(api, {
+    get(target, prop, receiver) {
+      if (typeof prop === "string" && prop.indexOf("__") !== 0 && typeof target[prop] === "function") {
+        invocadas.add(prop);
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
 // v14.1.9 — EL EJECUTOR NO PUEDE SALIR VERDE SIN HABER TERMINADO.
 //
 // Hermano del arreglo de 2026-08-11 (el `exit(0)` incondicional que hacía CONSULTIVO todo
@@ -120,6 +175,7 @@ async function main() {
   let tp = 0, tf = 0;
   const cubiertas = new Set();
   const fallosGlobales = [];
+  const huecosPorEjecucion = [];   // {suite, fn} — declarado en `cubre`, jamás invocado vía api.·(...)
 
   // El array `cubre` de cada suite se VALIDA contra la API real antes de sumarlo:
   // sin esto, un nombre inventado o mal escrito inflaba el porcentaje en silencio.
@@ -136,10 +192,21 @@ async function main() {
       }
     }
     const { t, res } = crearT();
-    try { await suite.pruebas(t, api, env, cargar); }
+    // Cobertura por ejecución (ver comentario junto a `envolverApiParaCobertura`): se le
+    // pasa a la suite una copia envuelta del api Y una copia envuelta de `cargar`, para
+    // que también quede anotada la invocación cuando la suite carga su propia instancia
+    // (patrón de mocking de red que usan, entre otras, suite_29 y suite_39).
+    const invocadas = new Set();
+    const apiEnvuelta = envolverApiParaCobertura(api, invocadas);
+    const cargarEnvuelto = (...args) => {
+      const r = cargar(...args);
+      return Object.assign({}, r, { api: envolverApiParaCobertura(r.api, invocadas) });
+    };
+    try { await suite.pruebas(t, apiEnvuelta, env, cargarEnvuelto); }
     catch (e) { res.falla++; res.fallos.push({ desc: "(la suite lanzó)", msg: e.message }); }
     await Promise.all(res.pendientes);
     (suite.cubre || []).forEach(n => cubiertas.add(n));
+    (suite.cubre || []).forEach(n => { if (!invocadas.has(n)) huecosPorEjecucion.push({ suite: suite.nombre || arch, fn: n }); });
     tp += res.pasa; tf += res.falla;
     const marca = res.falla ? COL.mal + "✗" : COL.ok + "✓";
     console.log(marca + COL.fin + " " + (suite.nombre || arch).padEnd(42) + COL.dim + res.pasa + " ok" + (res.falla ? COL.mal + "  " + res.falla + " FALLAN" : "") + COL.fin);
@@ -148,12 +215,18 @@ async function main() {
 
   // cobertura real de funciones
   const sinCubrir = todas.filter(n => !cubiertas.has(n));
-  const pct = (cubiertas.size / cargado.totalDeclaradas * 100);
+  // v15.6.2 — El porcentaje se mide contra la SUPERFICIE PÚBLICA (las funciones
+  // alcanzables vía api), no contra el conteo crudo de declaraciones: ese conteo
+  // incluye funciones ANIDADAS dentro de otras (inalcanzables una a una desde afuera),
+  // que se prueban a través de sus dueñas. Con el denominador viejo, el 100% era
+  // matemáticamente imposible aunque cada función pública tuviera prueba — el número
+  // mentía hacia abajo. Ambos conteos se siguen imprimiendo.
+  const pct = (cubiertas.size / todas.length * 100);
 
   console.log("");
   console.log(COL.tit + "─".repeat(64) + COL.fin);
   console.log("  comprobaciones : " + COL.ok + tp + " pasan" + COL.fin + (tf ? "  " + COL.mal + tf + " fallan" + COL.fin : ""));
-  console.log("  funciones cubiertas: " + cubiertas.size + " / " + cargado.totalDeclaradas + "  (" + pct.toFixed(1) + "%)");
+  console.log("  funciones cubiertas: " + cubiertas.size + " / " + todas.length + " públicas  (" + pct.toFixed(1) + "%)  ·  " + (cargado.totalDeclaradas - todas.length) + " anidadas se prueban a través de sus dueñas");
   if (sinCubrir.length) {
     console.log("");
     console.log(COL.ama + "  sin cubrir (" + sinCubrir.length + "):" + COL.fin);
@@ -190,6 +263,16 @@ async function main() {
     console.log("");
     console.log(COL.ama + "  declaradas pero nunca nombradas (" + nuncaNombradas.length + "):" + COL.fin);
     for (let i = 0; i < nuncaNombradas.length; i += 6) console.log("    " + COL.dim + nuncaNombradas.slice(i, i + 6).join(", ") + COL.fin);
+  }
+
+  // Cobertura por ejecución (ver `envolverApiParaCobertura` más arriba). Estrictamente
+  // más fuerte que "nunca nombradas" pero, a propósito, TAMBIÉN informativo: puede haber
+  // falsos positivos legítimos (cobertura por integración vía DOM/evento, no vía
+  // `api.nombre(...)`). Cada hallazgo se lee a mano contra su suite antes de actuar.
+  if (huecosPorEjecucion.length) {
+    console.log("");
+    console.log(COL.ama + "  declaradas en cubre pero JAMÁS invocadas vía api.·(...) (" + huecosPorEjecucion.length + "):" + COL.fin);
+    for (const h of huecosPorEjecucion) console.log("    " + COL.dim + h.suite + " → " + h.fn + COL.fin);
   }
 
   console.log(COL.tit + "─".repeat(64) + COL.fin);

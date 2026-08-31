@@ -293,6 +293,7 @@ module.exports = {
       t.igual(st.pymFallback, true);
       t.igual(st.pymFile, "BASE PILOTO.xlsx (base piloto — aún no llega la de hoy)");
       // v12.10.12 — visibilidad: caer a la base piloto (desde caché, sin red) queda contado.
+      c.api._uxVolcarBuffer(); // v15.6.0: uxTrack acumula en memoria y vuelca en tandas de 2 s
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.igual(w.acciones["pym.fallback.cache"], 1);
     });
@@ -525,7 +526,7 @@ module.exports = {
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
       t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
-      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
+      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Centinela PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
       c.api.spToast("segundo aviso", 0);

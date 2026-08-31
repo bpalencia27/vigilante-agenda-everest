@@ -5,10 +5,11 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_resumenClinicoUro", "_esUroComponenteAlterado",
+    "_ultimaFechaPorAnalito", "_nuevoReemplazaCandidato", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen"
+    "_resolverLdlPorTrigliceridos",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -38,6 +39,14 @@ module.exports = {
     };
 
     const testApi = c.api;
+
+    t.caso("_valorCrudoLab: conserva valores legitimos y descarta vacios", () => {
+      t.igual(testApi._valorCrudoLab(0), 0);
+      t.igual(testApi._valorCrudoLab("120"), "120");
+      t.igual(testApi._valorCrudoLab(""), undefined);
+      t.igual(testApi._valorCrudoLab(null), undefined);
+      t.igual(testApi._valorCrudoLab(undefined), undefined);
+    });
 
     t.caso("_matchLabInWhitelist: El código manda sobre el nombre (Incidente v11.0.1)", () => {
       const labHbA1c = { CodigoParametro: "903843", nombre: "GLUCOSA EN SUERO (TRUCO)" };
@@ -231,6 +240,44 @@ module.exports = {
       t.cierto(res.sinCasilla[0].includes("HEMOGLOBINA GLICOSILADA") || res.sinCasilla[0].includes("HBA1C"));
     });
 
+    // v17.6.45 — AUDITORÍA S+ (barrido total, 24-ago-2026): AUDITORÍA #6 (v16.7.0) blindó
+    // el conteo de "resultado llevado" contra un rechazo silencioso del navegador (casilla
+    // type=number que descarta un valor con coma) SOLO en la ruta de componentes de
+    // orina — el camino sérico PRINCIPAL (la whitelist de 13 laboratorios) seguía sumando
+    // count++ sin comprobar si setNgValue de verdad escribió algo.
+    t.caso("v17.6.45: injectLabsIntoCronicos NO cuenta un resultado que el navegador rechazó (camino sérico principal)", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      // Casilla que rechaza CUALQUIER valor (simula un input type=number descartando "1,2"
+      // con coma): tras asignarla, value sigue vacío — exactamente lo que setNgValue mide.
+      c.env.doc.getElementById = (id) => {
+        if (id !== "resultadoColesterolTotal") return null;
+        return {
+          id: id, tagName: "INPUT",
+          dispatchEvent: (evt) => { eventsDispatched.push({ id, type: evt.type }); },
+          get value() { return ""; }, set value(v) { /* el navegador rechaza: no queda nada */ },
+        };
+      };
+      try {
+        const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "1,2", Fecha: "2023-01-01" }];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(res.count, 0, "el rechazo del navegador NO debe contar como resultado llevado");
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
+    // v17.6.45 — mismo blindaje en el reintento de las casillas de componente de
+    // uroanálisis (300/900 ms tras marcar SI, cuando Angular tarda en montar el *ngIf):
+    // corre dentro de un setTimeout, no es una unidad aislable — se protege por fuente.
+    t.caso("v17.6.45: el reintento de casillas de uroanálisis también comprueba setNgValue antes de contar 'escritas'", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/if \(actual === ""\) \{ setNgValue\(el, r\.resultVal\); escritas\+\+; \}/.test(src), "ya no debe contar sin comprobar el retorno de setNgValue");
+      t.cierto(/if \(actual === "" && setNgValue\(el, r\.resultVal\)\) escritas\+\+;/.test(src), "debe exigir que setNgValue haya devuelto true");
+    });
+
     t.caso("_parseFechaLike: reconoce ISO, dd/mm/aaaa y fecha .NET /Date(ms)/, y descarta lo que no es fecha", () => {
       t.igual(testApi._parseFechaLike("2026-08-01"), "2026-08-01");
       t.igual(testApi._parseFechaLike("2026-08-01T00:00:00"), "2026-08-01", "corta la parte de hora");
@@ -369,6 +416,27 @@ module.exports = {
       t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS EN ORINA" }));
       t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS" }), "LEUCOCITOS a secas es del hemograma en sangre");
       t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA" }), "HEMOGLOBINA a secas es la sérica");
+    });
+
+    // v17.6.68 — [informe de laboratorio real y captura de pantalla reales, aportados en
+    // consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel CUANTITATIVO (creatinina en
+    // orina espontánea, microalbuminuria, relación microalbuminuria/creatinina — el
+    // estudio de la RAC) DISTINTO del uroanálisis/parcial de orina cualitativo. Su nombre
+    // contiene "URINARIA", y el patrón amplio /URINAR/ (pensado para "SEDIMENTO
+    // URINARIO"/"CITOQUIMICO URINARIO", sinónimos REALES del parcial) lo confundía con
+    // orina — mezclando dos exámenes de fechas distintas en el mismo bloque "Uroanálisis"
+    // de la tabla de Historial de Paraclínicos (_agruparUroanalisisParaTabla).
+    t.caso("_esAnalitoDeOrina: QUIMICA URINARIA NO es el uroanálisis/parcial de orina (bug real reportado en consultorio, con informe de laboratorio)", () => {
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "creatinina en orina espontánea es de Química Urinaria, no del parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "microalbuminuria de Química Urinaria tampoco es el parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "ni la relación microalbuminuria/creatinina (el estudio de la RAC)");
+      // Los sinónimos REALES del parcial (SEDIMENTO URINARIO, CITOQUIMICO URINARIO) siguen
+      // reconociéndose: la exclusión es específica de "QUIMICA URINARIA", no de /URINAR/ entero.
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "NITRITOS", NombreParametroPadre: "SEDIMENTO URINARIO" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "CITOQUIMICO URINARIO" }));
     });
 
     t.caso("_matchUroComponente: sinónimos del LIS y exclusión de cocientes (RPC/microalbuminuria NO son la proteinuria del parcial)", () => {
@@ -665,98 +733,11 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
     });
 
-    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (Conducta nativa) =================
-    // Reproduce el clic <li>→espera→"Agregar" capturado en consultorio el 12-08-2026
-    // (captura_ordenamiento_paquete_HTA_20260812.json) para PTH/Fósforo/Albúmina/Hemoglobina/
-    // HbA1c. Nunca llama a la red — solo dispara los mismos clics que el médico ya hace a mano.
-    function crearLi(texto) {
-      return { textContent: texto, clicked: false, click() { this.clicked = true; } };
-    }
-    function crearBotonAgregar({ texto = "Agregar", disabled = false } = {}) {
-      return { textContent: texto, disabled, clicked: false, click() { this.clicked = true; } };
-    }
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: <li> exacto encontrado + botón Agregar habilitado -> clickea ambos y devuelve true", async () => {
-      const li = crearLi("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      const otroLi = crearLi("ALBUMINA EN SUERO U OTROS FLUIDOS");
-      const btnAgregar = crearBotonAgregar();
-      const btnCancelar = crearBotonAgregar({ texto: "Cancelar" });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [otroLi, li] : sel === "button" ? [btnCancelar, btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r, "reporta éxito");
-      t.cierto(li.clicked, "el <li> del examen correcto recibe el clic");
-      t.falso(otroLi.clicked, "el otro <li> del listado no se toca");
-      t.cierto(btnAgregar.clicked, "el botón Agregar recibe el clic");
-      t.falso(btnCancelar.clicked, "Cancelar no se toca");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: coincidencia EXACTA de texto, nunca por substring — un examen parecido no debe clickearse", async () => {
-      // 'FOSFORO EN SUERO U OTROS FLUIDOS' es substring de un <li> más largo hipotético —
-      // si la búsqueda no fuera exacta, esto clickearía el examen EQUIVOCADO en un catálogo
-      // clínico real. La coincidencia parcial debe fallar limpio, no acertar por casualidad.
-      const liParecido = crearLi("FOSFORO EN SUERO U OTROS FLUIDOS (PANEL AMPLIADO)");
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [liParecido] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-      t.falso(liParecido.clicked, "sin coincidencia exacta, no se clickea el parecido");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: tildes/mayúsculas no importan (mismo _canonTexto que el resto del script)", async () => {
-      const li = crearLi("Fósforo en Suero u Otros Fluidos");
-      const btnAgregar = crearBotonAgregar();
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r);
-      t.cierto(li.clicked);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el examen no está en esta pantalla -> no clickea nada, devuelve false (fallo seguro)", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => [];
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el <li> aparece pero Angular nunca habilita Agregar -> devuelve false, no lanza", async () => {
-      const li = crearLi("HEMOGLOBINA");
-      const btnDeshabilitado = crearBotonAgregar({ disabled: true });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnDeshabilitado] : []);
-      // La propia llamada no debe lanzar (no se envuelve en try/catch aquí a propósito: si
-      // _conductaBuscarYAgregarExamen lanzara, casoAsync lo reportaría como fallo solo).
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(li.clicked, "el <li> sí se clickeó — el fallo es solo en el paso del botón");
-      t.falso(r);
-      t.falso(btnDeshabilitado.clicked, "un botón deshabilitado nunca se clickea");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: DOM roto (querySelectorAll lanza) -> no propaga la excepción, devuelve false", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => { throw new Error("DOM no disponible"); };
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    t.caso("CONDUCTA_LI_TEXTO_POR_ANALITO: los 5 textos son los capturados LITERALMENTE en consultorio (no una paráfrasis del catálogo del Copiloto)", () => {
-      const tabla = testApi.__CONDUCTA_LI_TEXTO_POR_ANALITO;
-      t.igual(tabla.PTH, "HORMONA PARATIROIDEA MOLECULA INTACTA");
-      t.igual(tabla.ALBUMINA, "ALBUMINA EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.FOSFORO, "FOSFORO EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.HEMOGLOBINA, "HEMOGLOBINA");
-      // El catálogo del Copiloto dice solo "HEMOGLOBINA GLICOSILADA" — el <li> real de
-      // Everest capturado en consultorio trae además "AUTOMATIZADA", y es ese texto exacto
-      // el que hace falta para que el clic case.
-      t.igual(tabla.HBA1C, "HEMOGLOBINA GLICOSILADA AUTOMATIZADA");
-    });
+    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (RETIRADA) =================
+    // Deuda muerta documentada en docs/cambios-pendientes/001-retiro-codigo-muerto.md:
+    // el mecanismo de clic <li>→"Agregar" y su tabla CONDUCTA_LI_TEXTO_POR_ANALITO se
+    // retiraron del script (grep en producción: sin coincidencias). Se retiran también
+    // sus casos y la declaración en `cubre`.
 
     t.caso("injectLabsIntoCronicos v12.5.11: un componente REAL del parcial de orina marca \"SI\" en ¿Uroanálisis? y lo reporta en uroanalisisMarcado", () => {
       mockDOM = {};
@@ -859,7 +840,7 @@ module.exports = {
       t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10", "y también la fecha, porque estaba vacía");
     });
 
-    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si el interruptor SI YA estaba elegido antes (no se marcó en esta corrida), NO se programa reintento", async () => {
+    await t.casoAsync("injectLabsIntoCronicos v17.1.0 (#71): aunque el interruptor ya estuviera en SI (no se marcó en esta corrida), el reintento SÍ corre", async () => {
       mockDOM = {};
       const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
       const { lista: radios } = crearRadiosUro({ siChecked: true }); // el médico ya lo había puesto en SI antes
@@ -875,7 +856,10 @@ module.exports = {
       mockDOM.resultadoUroanalisis = { value: "" }; // aparece igual, por otra razón cualquiera
       await new Promise((r) => setTimeout(r, 15));
       c.env.doc.querySelectorAll = prevQSA;
-      t.igual(mockDOM.resultadoUroanalisis.value, "", "sin reintento programado, la casilla queda vacía hasta el próximo click de Auto-Labs");
+      // v17.1.0 (#71) — el reintento ya NO exige haber marcado SI en esta corrida: al
+      // segundo clic del día (o con SI marcado a mano) el bloque igual se intenta, con
+      // las mismas guardas (paciente abierto, casilla vacía).
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL", "el reintento corre aunque el SI ya estuviera elegido antes");
     });
 
     await t.casoAsync("injectLabsIntoCronicos v12.5.12: si entre el click y el reintento el médico YA escribió algo, se respeta (no se pisa)", async () => {
@@ -1127,6 +1111,87 @@ module.exports = {
       t.igual(r.candidatos.size, 0);
     });
 
+    // =====================================================================
+    // v17.6.67 — [reportado en consultorio, 26-ago-2026, con consola completa] "Auto-Labs
+    // no reconoció el uroanálisis nuevo, solo uno viejo". Entre DOS candidatos de respaldo
+    // por componente (viaComponente: true — el caso normal de UROANALISIS, Athenea manda
+    // componentes sueltos, casi nunca una fila del panel completo), la regla 2
+    // ("numérico gana a no-numérico, sin importar fecha") no debía aplicar: es casi
+    // arbitrario que un componente cualitativo de orina traiga o no un número limpio.
+    // Antes del fix, un componente NUMÉRICO viejo ganaba PARA SIEMPRE contra uno
+    // cualitativo (p. ej. "NEGATIVO", o un rango con guion "0-2" — ambos no-numéricos para
+    // _labNumerico) más reciente. Ahora, entre dos respaldos, manda la fecha, siempre.
+    // =====================================================================
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente (UROANALISIS), la FECHA manda aunque el viejo sea 'numérico' y el nuevo no (bug real reportado en consultorio)", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoCualitativo),
+        "el componente nuevo (agosto, NEGATIVO) debe reemplazar al viejo (enero, '5') aunque el viejo sea numérico");
+      // Y la dirección contraria: el nuevo NO debe reemplazar a un candidato ya más reciente.
+      t.falso(testApi._nuevoReemplazaCandidato(nuevoCualitativo, viejoNumerico),
+        "un componente MÁS VIEJO nunca desplaza a uno más reciente, aunque el viejo sea numérico y el reciente no");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente, un rango con guion ('0-2', que _labNumerico rechaza) tampoco bloquea la fecha", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoRango = { viaComponente: true, resultVal: "0-2", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoRango),
+        "'0-2' no es numérico para _labNumerico (el guion lo rechaza), pero sigue siendo el componente más reciente y debe ganar");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos, si el NUEVO es numérico y el viejo no, también gana por fecha (dirección ya cubierta antes, pero confirma que no se rompió)", () => {
+      const viejoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-01-15" };
+      const nuevoNumerico = { viaComponente: true, resultVal: "6", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoCualitativo, nuevoNumerico), "más reciente y numérico: gana, como antes");
+    });
+
+    t.caso("_ultimaFechaPorAnalito (integración end-to-end): el componente de orina de AGOSTO gana sobre el de ENERO, en cualquier orden de llegada (bug real reportado en consultorio)", () => {
+      const enOrden = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+      ], { uroanalisisPorComponentes: true });
+      const candA = enOrden.candidatos.get("UROANALISIS");
+      t.cierto(!!candA, "UROANALISIS entra como candidato vía componente");
+      t.igual(candA.resultDate, "2026-08-20", "gana el componente de agosto, el más reciente");
+      t.igual(candA.resultVal, "NEGATIVO");
+
+      // Orden invertido: el componente viejo llega DESPUÉS del nuevo. No debe desplazarlo.
+      const ordenInvertido = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+      ], { uroanalisisPorComponentes: true });
+      const candB = ordenInvertido.candidatos.get("UROANALISIS");
+      t.igual(candB.resultDate, "2026-08-20", "el orden de llegada no debe importar: sigue ganando agosto");
+      t.igual(candB.resultVal, "NEGATIVO");
+    });
+
+    // v17.8.2 (27-ago, REPORTE EN CONSULTA recurrente) — REGLA 1 NUEVA: la fila REAL del
+    // panel ya no le gana a un respaldo por componentes sin mirar la fecha. Preferir la
+    // fila real valía ENTRE IGUALES de fecha, no para pisar un examen tres meses más nuevo
+    // (reproducido con el arnés: fila real «NORMAL» de mayo sobre un parcial de agosto con
+    // «Alteraciones detectadas» — un falso negativo firmado por el médico). El respaldo
+    // gana cuando TIENE fecha y la fila real es más vieja (o no tiene fecha con que
+    // defenderse).
+    t.caso("_nuevoReemplazaCandidato: REGLA 1 v17.8.2 — la fila real gana entre IGUALES de fecha; un respaldo MÁS RECIENTE con fecha la desplaza", () => {
+      const respaldoReciente = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      const filaRealVieja = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-01-01" };
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
+        "el respaldo de agosto NO es desplazado por la fila real de enero (v17.8.2: no pisar un examen más nuevo)");
+      t.cierto(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
+        "y un respaldo con fecha más reciente SÍ desplaza a la fila real vieja");
+      // Entre iguales de fecha, la fila real del panel sigue mandando (su razón original).
+      const filaRealMismaFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealMismaFecha),
+        "a la MISMA fecha, la fila real manda sobre el respaldo");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: REGLA 2 intacta — cuando NINGUNO es viaComponente (analitos séricos normales), numérico usable sigue ganando sin importar fecha", () => {
+      const numericoViejo = { viaComponente: false, resultVal: "> 300", resultDate: "2026-01-01" };
+      const textoReciente = { viaComponente: false, resultVal: "PENDIENTE REVISION", resultDate: "2026-08-20" };
+      t.falso(testApi._nuevoReemplazaCandidato(numericoViejo, textoReciente),
+        "un texto sin número, aunque más reciente, no debe desplazar un número real ya asentado (RAC > 300, ver v16.7.0)");
+    });
+
     t.caso("_analitosRcvVencidos: un resultado 0 vigente NO dispara el aviso de faltante (v12.5.7)", () => {
       const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" }];
       const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
@@ -1245,6 +1310,25 @@ module.exports = {
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "45,5"), 90, "también reconoce coma decimal (formato de Athenea)");
     });
 
+    // [auditoría 25-ago, hallazgo 1.7] con contexto clínico (opts.programa/estadio, el
+    // caso normal del aviso de entrada y del antiduplicado de "Ordenar"), `base` siempre
+    // sale no-null desde vigenciaPorEstadio — el recorte de RAC≥30 vivía DESPUÉS del
+    // "if (base != null) return base;" y nunca se alcanzaba: un RAC 350 en DM2/HTA salía
+    // "vigente" 180 días en vez de 90. El recorte debe ser un TOPE sobre la base
+    // (Math.min), no una rama alternativa a ella — mismo criterio que ya usa la vía
+    // correcta (mtrVigenciaDiasNorma).
+    t.caso("_vigenciaDiasParaAnalito: el recorte de RAC≥30 se aplica IGUAL con contexto de programa/estadio (antes solo sin contexto)", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "HTA" }), 90,
+        "con contexto DM2/HTA, un RAC franco (350) debe acortar a 90 días, no quedarse en los 180 de la tabla");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "DM2" }), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "10", { programa: "HTA" }), 180,
+        "con contexto pero SIN albuminuria franca, la base normal (180) no cambia");
+      // ERC G4: la base por estadio ya es 120 (más corta que 180) — el recorte de RAC no
+      // debe ALARGARLA a 90 si 90 fuera mayor que la base; en este caso 90 < 120, así que
+      // sigue ganando el menor de los dos (90), nunca por encima de la base.
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "ERC", estadio: "G4" }), 90);
+    });
+
     t.caso("_vigenciaDiasParaAnalito: analitos distintos de RAC, y un valor no numérico, conservan 180 días", () => {
       t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_TOTAL", "999"), 180, "el umbral es exclusivo de RAC");
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "no-numerico"), 180, "sin poder leer el valor, nunca se acorta por prudencia");
@@ -1329,6 +1413,28 @@ module.exports = {
       ];
       const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
       t.cierto(faltantes.some((f) => f.key === "UROANALISIS"), "un componente PENDIENTE no es evidencia de un examen ya resuelto");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.4] _matchUroComponente solo mira el NOMBRE del
+    // analito, sin su padre/panel: "SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización de
+    // colon) casa con el componente SANGRE, y "PROTEINA C REACTIVA" casa con PROTEINURIA.
+    // Sin exigir _esAnalitoDeOrina primero, un SOMF/PCR reciente podía declarar el
+    // uroanálisis "vigente" por su fecha — silenciando el aviso justo cuando el parcial de
+    // orina real SÍ está vencido.
+    t.caso("_analitosRcvVencidos: un SOMF (sangre oculta en heces) o una PCR NO cuentan como componente de uroanálisis", () => {
+      const labsSomf = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "SANGRE OCULTA EN MATERIA FECAL", NombreParametroPadre: "COPROLOGICO", Resultado: "NEGATIVO", Fecha: "2026-08-01" },
+      ];
+      const faltantesSomf = testApi._analitosRcvVencidos(labsSomf, "2026-08-11");
+      t.cierto(faltantesSomf.some((f) => f.key === "UROANALISIS"), "un SOMF no es evidencia de un uroanálisis: sigue faltando");
+
+      const labsPcr = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "PROTEINA C REACTIVA", NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "3.2", Fecha: "2026-08-01" },
+      ];
+      const faltantesPcr = testApi._analitosRcvVencidos(labsPcr, "2026-08-11");
+      t.cierto(faltantesPcr.some((f) => f.key === "UROANALISIS"), "una PCR no es evidencia de un uroanálisis: sigue faltando");
     });
 
     t.caso("injectLabsIntoCronicos: el respaldo por componentes de _analitosRcvVencidos NO se activa aquí — la casilla de resultado general sigue sin recibir el valor de un componente suelto", () => {
@@ -1685,6 +1791,78 @@ module.exports = {
       const hba1cEnPaquete = i10x.cups.find((x) => x.desc.toUpperCase().includes("GLICOSILADA"));
       t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
       t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
+    });
+
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): cuando la heurística de
+    // patológico no marcaba nada, _resumenClinicoUro pintaba SIEMPRE los chips fijos
+    // "Límpido · Leucocitos (-) · Nitritos (-)" — un dato inventado que no reflejaba el
+    // informe real. Un aspecto "TURBIO" (que _esUroComponenteAlterado no reconoce: no está
+    // en su lista de valores negativos ni positivos, y parseFloat da NaN) salía como
+    // "Límpido" fabricado junto al badge "Sin hallazgos patológicos" — justo lo que la
+    // regla de oro #1 del proyecto prohíbe (sin dato real = sin suposición).
+    t.caso("v17.6.27: _resumenClinicoUro NUNCA inventa chips fijos — usa los valores reales del informe", () => {
+      const componente = (nombre, resultado) => ({ nombre, resultado });
+      // Caso A: aspecto realmente alterado ("Turbio") que la heurística de altered no
+      // reconoce (esPatologico queda false) — el chip debe decir la verdad, no "Límpido".
+      const turbio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Turbio"),
+        componente("Color", "Amarillo"),
+      ]);
+      t.falso(turbio.esPatologico, "precondición: la heurística de 'alterado' no reconoce 'turbio'");
+      t.falso(turbio.chips.includes("Límpido"), "jamás debe afirmar 'Límpido' cuando el informe dice 'Turbio'");
+      t.cierto(turbio.chips.some((x) => x.includes("Turbio")), "el chip refleja el aspecto REAL del informe: " + turbio.chips.join(" | "));
+
+      // Caso B: informe realmente limpio — los chips deben venir de los componentes reales
+      // entregados, no de un literal que coincida por casualidad.
+      const limpio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Límpido"),
+        componente("Nitritos", "Negativo"),
+      ]);
+      t.falso(limpio.esPatologico);
+      t.cierto(limpio.chips.some((x) => x.includes("Límpido")) && limpio.chips.some((x) => x.includes("Nitritos")), "los chips citan los componentes reales presentes: " + limpio.chips.join(" | "));
+
+      // Caso C: sin patología y sin ninguno de los 4 componentes que se suelen resumir —
+      // nunca debe fabricar un dato; texto neutro en su lugar.
+      const sinDatos = c.api._resumenClinicoUro([componente("pH", "6.0")]);
+      t.falso(sinDatos.esPatologico);
+      t.falso(sinDatos.chips.includes("Límpido") || sinDatos.chips.includes("Nitritos (-)"), "sin aspecto/color/leucocitos/nitritos en el informe, no debe inventarlos");
+      t.igual(sinDatos.chips[0], "Sin alteraciones reconocidas");
+    });
+
+    // v17.6.44 — AUDITORÍA S+ (barrido total, 24-ago-2026): _resolverLdlPorTrigliceridos
+    // usaba Number() crudo, que da NaN con coma decimal ("436,2") o desigualdad ("> 400")
+    // — justo los dos formatos que _labNumerico existe para sanear. Con NaN, la regla del
+    // médico (TG>400 invalida Friedewald: usar el LDL directo, no el calculado) quedaba
+    // invertida para cualquier informe de laboratorio con coma decimal.
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG>400 aunque venga con coma decimal", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      // Con Number() crudo, Number("436,2") es NaN -> tgMayor400 siempre false (bug).
+      const tgComaAlto = { resultVal: "436,2" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaAlto), directo,
+        "TG=436,2 (coma decimal) > 400: debe preferir el LDL DIRECTO, no el calculado");
+
+      const tgComaBajo = { resultVal: "180,5" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaBajo), normal,
+        "TG=180,5 (coma decimal), normal: debe preferir el LDL calculado (normal), regla de siempre");
+    });
+
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG fuera de rango con desigualdad ('> 400')", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "110", resultDate: misma };
+      const normal = { resultVal: "102", resultDate: misma };
+      const tgDesigualdad = { resultVal: "> 450" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgDesigualdad), directo,
+        "TG '> 450' (desigualdad del LIS, claramente por encima de 400): debe preferir el LDL directo");
+    });
+
+    t.caso("_resolverLdlPorTrigliceridos: sin triglicéridos legibles, se queda con la regla general (normal)", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, null), normal, "sin dato de TG, no hay razón para preferir el directo");
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, { resultVal: "nota de laboratorio" }), normal, "TG ilegible (ni número ni desigualdad): tratado igual que sin dato");
     });
   }
 };

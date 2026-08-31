@@ -40,12 +40,11 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia", "_urlDiagnostico", "_tituloDiagnostico",
+    "heartbeat", "share", "helloOncePerDay", "_onboardingColores", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
-    "_pestanaOculta", "_getUltimoRelevoParaTest", "_setUltimoRelevoParaTest",
-    "_dispararAvisoAudible", "_dispararAvisoCartel",
+    "_setUltimoRelevoParaTest",
     "boot",
   ],
 
@@ -325,6 +324,9 @@ module.exports = {
       const c = cargar({ silencioso: true });
       const capturas = [];
       instalarNotificacion(c, capturas);
+      // v15.4.0 — política de un solo canal: con la pestaña VISIBLE el aviso va al toast;
+      // la notificación del sistema (lo que aquí se captura) solo sale con pestaña oculta.
+      c.env.doc.visibilityState = "hidden";
       const lista = [
         { estado: "Atendido" },
         { estado: "En Sala de Espera" },
@@ -338,6 +340,21 @@ module.exports = {
       t.cierto(capturas[0].body.includes("(1 con tiempo de tolerancia transcurrido)"), "las vencidas (AMBAR) se cuentan aparte");
       c.api.helloOncePerDay(lista);
       t.igual(capturas.length, 1, "segunda llamada el mismo día: silencio total");
+    });
+
+    // ---------- _onboardingColores ----------
+    t.caso("_onboardingColores: la leyenda de colores se muestra UNA sola vez por navegador", () => {
+      const c = cargar({ silencioso: true });
+      const capturas = [];
+      instalarNotificacion(c, capturas);
+      c.env.doc.visibilityState = "hidden";
+      c.api._onboardingColores();
+      t.igual(c.env.almacen["vgl_onb_colores"], "1", "la marca queda guardada en localStorage");
+      t.igual(capturas.length, 1, "primera vez: muestra la leyenda");
+      t.cierto(capturas[0].title.includes("Centinela activo"), "título de bienvenida");
+      t.cierto(capturas[0].body.includes("Verde") && capturas[0].body.includes("Cian") && capturas[0].body.includes("Rojo") && capturas[0].body.includes("Violeta"), "la leyenda trae los colores de la agenda");
+      c.api._onboardingColores();
+      t.igual(capturas.length, 1, "segunda vez: ya no se repite");
     });
 
     // ---------- tick ----------
@@ -372,7 +389,7 @@ module.exports = {
       t.igual(c.api.__state.lastSeccion, "agenda");
       t.igual(c.api.__state.summarized, true, "el arranque tardío queda resumido, no alertado");
       t.igual(c.api.__state.notified.size, 1, "la cita se SIEMBRA en notified sin avisar");
-      t.igual(c.api.__state.notified.get("12345678@07:00 AM"), "VERDE", "sembrada con su clave y color reales");
+      t.igual(c.api.__state.notified.get("12345678@m420"), "VERDE", "sembrada con su clave y color reales");
       t.cierto(c.api.__state.lastSnapshot && c.api.__state.lastSnapshot.source === "pagina", "la fuente fue la página (el API aún no está sano)");
       t.igual(c.api.__state.lastSnapshot.list.length, 1);
       t.igual(c.env.almacen["vgl_hello"], hoyReal(), "el saludo diario salió porque esta pestaña es líder");
@@ -422,8 +439,8 @@ module.exports = {
     t.caso("tick: en HCHealth (aunque la sección sea 'otra') pinta los carteles que quedaron en cola, sin volver a notificar", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
-      let notifCount = 0;
-      c.env.win.Notification = class { constructor() { notifCount++; } };
+      let notifTitles = [];
+      c.env.win.Notification = class { constructor(title) { notifTitles.push(title); } };
       c.env.win.Notification.permission = "granted";
       c.api.__S.cartel = true;   // el cartel de pantalla (bigAlert) monta #vgl-modal
       // Sin `ts`: es un aviso encolado por una versión anterior. No debe caducar por eso.
@@ -432,9 +449,36 @@ module.exports = {
       c.api.tick();
       t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
       t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "el cartel pendiente se pinta, porque la pestaña SÍ está en HCHealth");
-      t.igual(notifCount, 0, "y NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
+      // v17.6.15 — este escenario (Ordenamiento, sin agenda en el DOM, API nunca aprendido)
+      // ahora SÍ dispara una notificación distinta: el aviso honesto de "sin lectura de la
+      // agenda" (ver caso siguiente). No es el mismo aviso que reenvía el cartel encolado
+      // ("t"), así que se filtra por título en vez de subir a ciegas el contador a 1.
+      t.falso(notifTitles.includes("t"), "el cartel encolado NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(cola.length, 0, "la cola quedó vacía");
+    });
+
+    // v17.6.15 — REPORTE DE CAMPO (23-ago-2026): "los avisos llegan tarde si no estoy
+    // directamente en Citas del día". Causa real: fuera de esa vista, el modo API en
+    // segundo plano es la ÚNICA fuente posible — y si esa pestaña nunca aprendió la
+    // llamada de agenda (apiSano()===false), no queda NINGUNA fuente viva. Antes esto
+    // fallaba en silencio total; ahora avisa UNA vez al médico, honestamente, en vez de
+    // dejarlo creer que está vigilado sin estarlo.
+    t.caso("tick: sin API sano y fuera de agenda/historia (pero dentro de HCHealth), avisa UNA vez que está ciego", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // dentro del módulo, sección 'otra'
+      c.env.doc.querySelectorAll = () => [];                          // sin agenda en el DOM
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "avisa una vez que no tiene lectura de la agenda");
+      t.cierto(/sin lectura/i.test(notifs[0].title), "el título es honesto sobre el estado ciego");
+      t.cierto(/no puede avisar/i.test(notifs[0].body), "el cuerpo explica qué implica: ningún aviso mientras tanto");
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "NO se repite en el mismo día: un aviso, no un martilleo");
     });
 
     t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
@@ -599,6 +643,8 @@ module.exports = {
       c.api.__state.leader = true;
       const capturas = [];
       instalarNotificacion(c, capturas);
+      // v15.4.0 — política de un solo canal: pestaña oculta para capturar la vía del sistema.
+      c.env.doc.visibilityState = "hidden";
       const OriginalDate = c.ctx.Date || Date;
       let mockIso = "2026-08-10T06:00:00";
       c.ctx.Date = class extends OriginalDate {
@@ -634,6 +680,8 @@ module.exports = {
       const c = cargar({ silencioso: true });
       const capturas = [];
       instalarNotificacion(c, capturas);
+      // v15.4.0 — política de un solo canal: pestaña oculta para capturar la vía del sistema.
+      c.env.doc.visibilityState = "hidden";
       // primera instalación: guarda la versión pero NO avisa
       c.api.avisarSiActualizado();
       const VERSION = c.env.gm["vgl_last_ver"];
@@ -649,7 +697,7 @@ module.exports = {
       c.env.gm["vgl_last_ver"] = "1.0.0";
       c.api.avisarSiActualizado();
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Vigilante actualizado"));
+      t.cierto(capturas[0].title.includes("Centinela actualizado"));
       t.igual(c.env.gm["vgl_last_ver"], VERSION);
       t.igual(c.env.gm["vgl_ver_desde"], hoyReal(), "contador de 'desde cuándo' reiniciado");
     });
@@ -922,6 +970,36 @@ module.exports = {
       c.api.boot();
 
       t.igual(registeredIntervals.length, prevIntervals, "boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)");
+    });
+
+    // v17.6.3 — Hueco documentado en INFORME_MUTACIONES ("timer escalonado sin
+    // registrar"): ninguna prueba comprobaba que TODOS los timers que boot() crea
+    // quedan en `state.timers` — la lista EXACTA que emergencyTeardown() cancela con
+    // el kill-switch. La mutación que omitía `tVerMin` del push sobrevivió por eso.
+    // Este caso la caza: el conteo de handles debe subir en 14 (los once del push
+    // principal —tRepBoot incluido, ver v17.6.83+— + tSonda + tPymDiario +
+    // tPymCaptador) y el handle del chequeo de versión escalonado (setTimeout 4 s)
+    // tiene que estar entre ellos.
+    await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      const _si = c.env.win.setInterval;
+      const _st = c.env.win.setTimeout;
+      const handles = [];
+      c.env.win.setInterval = (fn, ms) => { const h = _si(fn, ms); handles.push({ fn, ms, h }); return h; };
+      c.env.win.setTimeout = (fn, ms) => { const h = _st(fn, ms); handles.push({ fn, ms, h }); return h; };
+
+      const antes = c.api.__state.timers.length;
+      c.api.boot();
+      const timers = c.api.__state.timers;
+
+      t.igual(timers.length, antes + 14,
+        "boot registra los 14 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
+
+      const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
+      t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");
+      t.cierto(timers.indexOf(verMin.h) >= 0,
+        "tVerMin está en state.timers: si se omite del push, el kill-switch no lo cancela y sigue consultando la red con la interfaz retirada");
     });
 
   },

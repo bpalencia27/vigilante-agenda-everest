@@ -181,7 +181,7 @@ module.exports = {
     //  5. SEMÁNTICA ARIA EN DIÁLOGOS Y CONTROLES (R6.4)
     // ===================================================================
 
-    t.caso("R6.4: Alertas modales declaran role='alertdialog' o 'dialog' y aria-modal='true'", () => {
+    t.caso("R6.4: Alertas modales declaran role='alertdialog' y aria-modal='true'", () => {
       const c = cargar({
         silencioso: true,
         almacen: { vgl_v73: "1", vgl_cfg: JSON.stringify({ cartel: true, reporte: true, uxTelemetria: true }) }
@@ -194,26 +194,13 @@ module.exports = {
       t.igual(mAlert.getAttribute("role"), "alertdialog", "bigAlert tiene role='alertdialog'");
       t.igual(mAlert.getAttribute("aria-modal"), "true", "bigAlert tiene aria-modal='true'");
 
-      // pymAlert
-      c.api.pymAlert("Paciente Prueba", ["VIH"], false, true);
-      const mPym = c.env.doc.getElementById("vgl-pym-modal");
-      t.cierto(!!mPym, "pymAlert insertó el modal");
-      t.igual(mPym.getAttribute("role"), "dialog", "pymAlert tiene role='dialog'");
-      t.igual(mPym.getAttribute("aria-modal"), "true", "pymAlert tiene aria-modal='true'");
-
-      // abandonoPESAlert
-      c.api.abandonoPESAlert("Paciente Prueba", true);
-      const mPes = c.env.doc.getElementById("vgl-pes-modal");
-      t.cierto(!!mPes, "abandonoPESAlert insertó el modal");
-      t.igual(mPes.getAttribute("role"), "alertdialog", "abandonoPESAlert tiene role='alertdialog'");
-      t.igual(mPes.getAttribute("aria-modal"), "true", "abandonoPESAlert tiene aria-modal='true'");
-
-      // labsVencidosAlert
-      c.api.labsVencidosAlert("Paciente Prueba", [{ nombre: "Creatinina" }], true);
-      const mLabsv = c.env.doc.getElementById("vgl-labsv-modal");
-      t.cierto(!!mLabsv, "labsVencidosAlert insertó el modal");
-      t.igual(mLabsv.getAttribute("role"), "alertdialog", "labsVencidosAlert tiene role='alertdialog'");
-      t.igual(mLabsv.getAttribute("aria-modal"), "true", "labsVencidosAlert tiene aria-modal='true'");
+      // avisoUniversal (reemplaza a pymAlert/abandonoPESAlert/labsVencidosAlert, retirados
+      // en la auditoría 2026-08-18 por código muerto — ver CHANGELOG)
+      c.api.avisoUniversal("Paciente Prueba", { pym: ["VIH"] }, true);
+      const mUniv = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!mUniv, "avisoUniversal insertó el modal");
+      t.igual(mUniv.getAttribute("role"), "alertdialog", "avisoUniversal tiene role='alertdialog'");
+      t.igual(mUniv.getAttribute("aria-modal"), "true", "avisoUniversal tiene aria-modal='true'");
     });
 
     t.caso("R6.4: Regiones dinámicas declaran aria-live='polite' para lectores de pantalla", () => {
@@ -223,11 +210,13 @@ module.exports = {
       t.cierto(code.includes('slotsEl.setAttribute("aria-live", "polite")'), "Slots de agendamiento tienen aria-live='polite'");
     });
 
-    t.caso("R6.4: Dock accesible como botón de teclado y Banner PyM como región accesible", () => {
+    // Banner PyM (createPymBannerUI y su role="region"/aria-expanded) se retiró en la
+    // auditoría pre-producción 2026-08-18 junto con el resto del bloque T7 — código muerto,
+    // sin llamadores vivos, reemplazado por avisoUniversal (ver CHANGELOG). Cobertura de
+    // accesibilidad de avisoUniversal (role="alertdialog"/aria-modal) está arriba, en R6.4.
+    t.caso("R6.4: Dock accesible como botón de teclado", () => {
       t.cierto(code.includes('dock.setAttribute("role", "button")'), "Dock tiene role='button'");
       t.cierto(code.includes('dock.setAttribute("tabindex", "0")'), "Dock es navegable por teclado (tabindex='0')");
-      t.cierto(code.includes('banner.setAttribute("role", "region")'), "Banner PyM tiene role='region'");
-      t.cierto(code.includes('banner.setAttribute("aria-expanded"'), "Banner PyM gestiona aria-expanded");
     });
 
     t.caso("R6.4: Hoja lateral (#vgl-sheet) y panel postcita responden a Escape", () => {

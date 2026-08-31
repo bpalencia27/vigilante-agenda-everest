@@ -1,0 +1,6098 @@
+{
+ "funcion": "_regla_insulina",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "INSULINA GLARGINA 20 UI",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA 20 UI",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "insulina NPH",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "insulina",
+    "medicamento_detectado": "lispro",
+    "conducta": "REDUCIR",
+    "mensaje": "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "lispro",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}

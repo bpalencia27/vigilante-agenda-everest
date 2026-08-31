@@ -1,0 +1,6518 @@
+{
+ "funcion": "_regla_gabapentinoide",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "GABAPENTINA 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "GABAPENTINA 300 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "pregabalina 75",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "pregabalina 75",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 30.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 31.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 44.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 45.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 46.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 50.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "gabapentinoide",
+    "medicamento_detectado": "amitriptilina",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 59.0,
+    "severidad": "INFO",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": false
+   }
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amitriptilina",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}

@@ -1,4 +1,4 @@
-# Lista de Verificación Previa al Uso en Consulta — Vigilante de Agenda v14.1.6
+# Lista de Verificación Previa al Uso en Consulta — Vigilante de Agenda v18.0.4
 
 **Para:** Médico responsable de validar la nueva versión del asistente  
 **Tiempo estimado:** 15 minutos  
@@ -14,10 +14,10 @@
 
 1. Abra Google Chrome y navegue a Everest como lo hace normalmente.
 2. Mire la esquina superior derecha del panel del Vigilante (el recuadro flotante que aparece sobre Everest).
-3. Busque el número de versión. Debe leer: **v14.1.6**
+3. Busque el número de versión. Debe leer: **v18.0.4**
 4. Si el número es diferente, no continúe: el asistente no se actualizó correctamente. Contacte soporte técnico.
 
-☐ La versión visible en el panel es **14.1.6**
+☐ La versión visible en el panel es **18.0.4**
 
 ---
 

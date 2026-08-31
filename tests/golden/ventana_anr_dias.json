@@ -1,0 +1,1944 @@
+{
+ "funcion": "ventana_anr_dias",
+ "modulo": "motor_vigencias.py",
+ "sha256_origen": "f7612f81cb65fd1ab1e4b1d1e64866186b9c91e2e1e47a51d65166958272e1bd",
+ "bloque": "vigencias",
+ "vectores": [
+  {
+   "entrada": [
+    null,
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G1",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G2",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3a",
+    null,
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3a",
+    "",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3a",
+    "muy alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "muy alto",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G3a",
+    "alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G3a",
+    "moderado",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "moderado",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G3a",
+    "bajo",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "bajo",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G3a",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G3a",
+    "Alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "Alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G3a",
+    "intermedio",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3a",
+    "desconocido",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3a",
+    "  muy alto  ",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3a",
+    "  muy alto  ",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G3b",
+    null,
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3b",
+    "",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3b",
+    "muy alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "muy alto",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G3b",
+    "alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G3b",
+    "moderado",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "moderado",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G3b",
+    "bajo",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "bajo",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G3b",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G3b",
+    "Alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "Alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G3b",
+    "intermedio",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3b",
+    "desconocido",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G3b",
+    "  muy alto  ",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G3b",
+    "  muy alto  ",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G4",
+    null,
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G4",
+    "",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G4",
+    "muy alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "muy alto",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G4",
+    "alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G4",
+    "moderado",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "moderado",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G4",
+    "bajo",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "bajo",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G4",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G4",
+    "Alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "Alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G4",
+    "intermedio",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G4",
+    "desconocido",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G4",
+    "  muy alto  ",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G4",
+    "  muy alto  ",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G5",
+    null,
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G5",
+    "",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G5",
+    "muy alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "muy alto",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G5",
+    "alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G5",
+    "moderado",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "moderado",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G5",
+    "bajo",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "bajo",
+    false
+   ],
+   "salida": 90
+  },
+  {
+   "entrada": [
+    "G5",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "G5",
+    "Alto",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "Alto",
+    false
+   ],
+   "salida": 60
+  },
+  {
+   "entrada": [
+    "G5",
+    "intermedio",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G5",
+    "desconocido",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "G5",
+    "  muy alto  ",
+    true
+   ],
+   "salida": 30
+  },
+  {
+   "entrada": [
+    "G5",
+    "  muy alto  ",
+    false
+   ],
+   "salida": 45
+  },
+  {
+   "entrada": [
+    "g1",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "g1",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    " G2 ",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    null,
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    null,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "muy alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "muy alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "moderado",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "moderado",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "bajo",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "bajo",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "MUY_ALTO",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "MUY_ALTO",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "Alto",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "Alto",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "intermedio",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "intermedio",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "desconocido",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "desconocido",
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "  muy alto  ",
+    true
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "XX",
+    "  muy alto  ",
+    false
+   ],
+   "salida": null
+  }
+ ]
+}

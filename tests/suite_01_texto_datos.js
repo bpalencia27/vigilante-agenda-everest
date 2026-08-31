@@ -6,7 +6,7 @@ module.exports = {
   cubre: ["limpio", "normalizeKey", "extractDoc", "isPending", "esSi", "stripAccents",
     "friendly", "activityLabel", "isExcludedActivity", "detalleTipoCervix", "escapeHtml",
     "csvCell", "clampNum", "unescXml", "colToIdx", "normName", "nameHasToken",
-    "sanitizePII", "debounceVgl", "fuzzyMatch"],
+    "sanitizePII", "debounceVgl", "fuzzyMatch", "mtrTextoOpinaSobre"],
 
   pruebas(t, api) {
     // ---------- limpio ----------
@@ -225,7 +225,7 @@ module.exports = {
     });
     t.caso("fuzzyMatch tolera erratas en palabras largas", () => {
       t.cierto(api.fuzzyMatch("uribbe", "MARIA LUZ DARY URIBE TORRES"), "una letra de más");
-      t.cierto(api.fuzzyMatch("palencai", "BRANDON JESUS PALENCIA MARTINEZ"), "transposición");
+      t.cierto(api.fuzzyMatch("moreon", "JUAN CARLOS MORENO RUIZ"), "transposición");
     });
     t.caso("fuzzyMatch no tolera erratas en palabras muy cortas", () => {
       t.falso(api.fuzzyMatch("xyz", "MARIA LUZ DARY URIBE TORRES"));
@@ -236,6 +236,43 @@ module.exports = {
     });
     t.caso("fuzzyMatch exige que TODAS las palabras casen", () => {
       t.falso(api.fuzzyMatch("uribe inexistente", "MARIA LUZ DARY URIBE TORRES"));
+    });
+
+    // ---------- mtrTextoOpinaSobre ----------
+    // v17.6.30 — AUDITORÍA S+ (barrido total, 24-ago-2026): la negación "no + verbo"
+    // simple ("no fuma", "no es diabético") no calzaba con ninguna frase de la lista de
+    // negaciones (niega/no refiere/sin antecedente/descarta/no presenta/no tiene/nunca
+    // ha), así que el texto libre que NIEGA un hecho terminaba usándose como fuente que
+    // lo AFIRMA — justo lo opuesto de lo que decía.
+    const RE_FUMA = /\bfumador|tabaquism|\bfuma\b/i;
+    const RE_HTA = /\bhta\b|hipertens/i;
+    t.caso("v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo', no solo las frases largas", () => {
+      t.igual(api.mtrTextoOpinaSobre("Paciente no fuma.", RE_FUMA), false, "'no fuma' debe negar, no afirmar");
+      t.igual(api.mtrTextoOpinaSobre("No es hipertenso, tensión normal en consulta.", RE_HTA), false, "'no es hipertenso' debe negar");
+      // Las negaciones ya reconocidas antes de esta versión siguen funcionando igual.
+      t.igual(api.mtrTextoOpinaSobre("Niega tabaquismo activo.", RE_FUMA), false, "negación ya soportada: 'niega'");
+      // Y una afirmación limpia SIGUE afirmando (no se sobre-corrigió a negar todo).
+      t.igual(api.mtrTextoOpinaSobre("Paciente fumador activo, un paquete/día.", RE_FUMA), true, "una afirmación real sigue devolviendo true");
+      t.igual(api.mtrTextoOpinaSobre("Refiere ser hipertenso de larga data.", RE_HTA), true);
+    });
+
+    t.caso("mtrTextoOpinaSobre descarta antecedentes de terceros (no del propio paciente)", () => {
+      t.igual(api.mtrTextoOpinaSobre("Padre hipertenso, madre diabética.", RE_HTA), null, "antecedente FAMILIAR, no del paciente: sin veredicto");
+    });
+
+    t.caso("mtrTextoOpinaSobre: sin texto o sin coincidencia, null (conservador)", () => {
+      t.igual(api.mtrTextoOpinaSobre("", RE_FUMA), null);
+      t.igual(api.mtrTextoOpinaSobre(null, RE_FUMA), null);
+      t.igual(api.mtrTextoOpinaSobre("Consulta de control por hipertensión.", RE_FUMA), null, "el texto no menciona el hecho buscado");
+    });
+
+    t.caso("v17.6.31: mtrTextoOpinaSobre reconoce el hecho aunque la frase real lleve tilde y el patrón no", () => {
+      const RE_DIABETES = /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i;
+      // "diabético" lleva tilde; el patrón exige "diabet" literal (sin tilde) — antes del
+      // fix, re.test(frase) fallaba contra la frase CRUDA y la frase entera se descartaba.
+      t.igual(api.mtrTextoOpinaSobre("No es diabético, controles normales.", RE_DIABETES), false, "'no es diabético' debe negar (antes daba null: la frase ni pasaba el filtro inicial)");
+      t.igual(api.mtrTextoOpinaSobre("Refiere ser diabético de larga data.", RE_DIABETES), true, "una afirmación con tilde también debe reconocerse");
+      t.igual(api.mtrTextoOpinaSobre("Padre diabético, madre sana.", RE_DIABETES), null, "antecedente familiar con tilde: sigue sin veredicto");
     });
   },
 };

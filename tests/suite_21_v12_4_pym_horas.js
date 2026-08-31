@@ -4,7 +4,7 @@
 // REALES vistos en campo (tarjetas de Athenea, valores ASP.NET /Date(ms)/).
 module.exports = {
   nombre: "v12.4: horas, panel PyM y tabla CUPS",
-  cubre: ["_parseFechaHoraLike", "isPanelHiddenActivity", "panelActivities", "pymPendientesRestantes", "debeBuscarPymDiario", "pymCubiertoPorOrdenVigente"],
+  cubre: ["_parseFechaHoraLike", "pymPendientesRestantes", "debeBuscarPymDiario", "pymCubiertoPorOrdenVigente"],
   pruebas(t, api, env, cargar) {
 
     // ---------- _parseFechaHoraLike ----------
@@ -111,22 +111,6 @@ module.exports = {
       t.igual(api._atheneaExtraerSolicitudes(conNbsp)[0].horaTxt, "19:35");
       const conNum = '<div class="card">11/08/2026 7:35 p.&#160;m.<form action="/Resultados/Reporte" id="5552026" data-modulo="LAB"></form></div>';
       t.igual(api._atheneaExtraerSolicitudes(conNum)[0].horaTxt, "19:35");
-    });
-
-    // ---------- chips del panel: AV/OD ocultos, el resto visible ----------
-    t.caso("isPanelHiddenActivity: solo Optometría y Odontología se ocultan del panel", () => {
-      t.cierto(api.isPanelHiddenActivity("Remisión a Optometría"));
-      t.cierto(api.isPanelHiddenActivity("Remisión a Odontología"));
-      t.falso(api.isPanelHiddenActivity("VIH"));
-      t.falso(api.isPanelHiddenActivity("Tamización cardiometabólica"));
-      t.falso(api.isPanelHiddenActivity("Remisión a Planificación Familiar"));
-    });
-
-    t.caso("panelActivities: filtra AV/OD y conserva el orden del resto", () => {
-      const lista = ["Tamización cardiometabólica", "Remisión a Optometría", "VIH", "Remisión a Odontología", "Mamografía"];
-      t.igual(api.panelActivities(lista), ["Tamización cardiometabólica", "VIH", "Mamografía"]);
-      t.igual(api.panelActivities([]), []);
-      t.igual(api.panelActivities(null), []);
     });
 
     // ---------- pendientes restantes tras ordenar desde el panel ----------

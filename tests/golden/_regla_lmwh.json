@@ -1,0 +1,5048 @@
+{
+ "funcion": "_regla_lmwh",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "ENOXAPARINA 40 MG",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ENOXAPARINA 40 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "clexane",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "clexane",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "lmwh",
+    "medicamento_detectado": "warfarina",
+    "conducta": "REDUCIR",
+    "mensaje": "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+    "formula_tfg": "Cockcroft-Gault (CrCl)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "warfarina",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}

@@ -32,6 +32,10 @@ function crearDom() {
       children: [], attributes: {}, _listeners: {},
       innerHTML: "", textContent: "", value: "", id: "", className: "", href: "", download: "", type: "text", name: "", checked: false, disabled: false,
       appendChild(c) { c._parent = this; this.children.push(c); return c; },
+      // v17.58.2 — `append(...nodos)` (nativo en navegadores modernos): los renders en
+      // lote del modal de agendamiento lo usan para hacer UNA sola actualización de árbol
+      // en vez de un appendChild por nodo (rendimiento INP). El DOM falso lo imita.
+      append(...ns) { ns.forEach((n) => { n._parent = this; this.children.push(n); }); return undefined; },
       insertBefore(c) { c._parent = this; this.children.unshift(c); return c; },
       removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); c._parent = null; return c; },
       remove() { if (this._parent) this._parent.removeChild(this); },
@@ -77,6 +81,13 @@ function crearEntorno(opciones) {
   if (!o.defaultOff && !("vgl_cfg" in almacen)) {
     almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
   }
+  // v14.2.0 — La migración de ESTRENO (vgl_v1420_estreno) enciende, una sola vez en el
+  // despliegue real, motorPortado/iaRedaccion (y, hasta v17.58.2, uxTelemetria/reporte —
+  // desde esa versión la telemetría nace encendida por política del dueño y se fuerza en
+  // S, así que la migración ya no la gobierna). El banco verifica los valores de fábrica
+  // y el comportamiento con cada bandera controlada a mano, así que aquí se marca como YA
+  // aplicada: el arnés no debe re-encender banderas.
+  if (!("vgl_v1420_estreno" in almacen)) almacen["vgl_v1420_estreno"] = "1";
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),
     setItem: (k, v) => { almacen[k] = String(v); },
@@ -87,9 +98,11 @@ function crearEntorno(opciones) {
   };
   const gm = {};
   const doc = crearDom();
+  let _intervalSeq = 0;
+  const _intervalos = new Map();
 
   const win = {
-    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/HCHealth/", search: "", hash: "" },
+    location: { href: "https://neps.everestintelligent.com/viva/EverHealth/HCHealth", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/EverHealth/HCHealth", search: "", hash: "" },
     navigator: { userAgent: "node-test", locks: null },
     document: doc,
     localStorage: storage,
@@ -100,7 +113,14 @@ function crearEntorno(opciones) {
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     addEventListener() {}, removeEventListener() {},
     setTimeout: (f, ms) => setTimeout(() => { try { f(); } catch (e) {} }, Math.min(ms || 0, 1)),
-    clearTimeout, setInterval: () => 0, clearInterval: () => {},
+    clearTimeout,
+    // Los intervalos NO disparan (igual que siempre: antes era `setInterval: () => 0`),
+    // pero ahora devuelven un identificador REAL y se llevan en un registro. Sin esto no
+    // se podia probar nada del reloj de segundo plano ni de state.timers: con un 0 de
+    // vuelta, `if (loc.timer)` daba falso siempre y las pruebas no podian distinguir
+    // "se creo un temporizador de pagina" de "no se creo ninguno".
+    setInterval: (f, ms) => { const id = ++_intervalSeq; _intervalos.set(id, { f, ms, vivo: true }); return id; },
+    clearInterval: (id) => { const r = _intervalos.get(id); if (r) r.vivo = false; },
     requestIdleCallback: () => 0,
     fetch: o.fetch || (async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } })),
     XMLHttpRequest: function () { this.open = () => {}; this.send = () => {}; this.addEventListener = () => {}; },
@@ -120,8 +140,13 @@ function crearEntorno(opciones) {
     crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }),
     console: o.silencioso ? { log() {}, warn() {}, error() {}, info() {} } : console,
     DecompressionStream: undefined,
-    Worker: undefined,
+    Worker: o.Worker,          // inyectable: sin el, el reloj cae al de la pagina (ruta por defecto)
     MutationObserver: function () { this.observe = () => {}; this.disconnect = () => {}; },
+    // Un navegador real SIEMPRE tiene Event; el userscript lo usa sin guarda (setNgValue y
+    // el autologin de Athenea hacen `new Event('input',…)`). Sin esto, cualquier prueba que
+    // ejerza una escritura real por setNgValue caía en el catch y devolvía "no se pudo".
+    Event: function (type, opts) { this.type = type; this.bubbles = !!(opts && opts.bubbles); this.cancelable = !!(opts && opts.cancelable); },
+    CustomEvent: function (type, opts) { this.type = type; this.detail = opts ? opts.detail : undefined; this.bubbles = !!(opts && opts.bubbles); },
   };
   win.top = win; win.self = win;             // no sale por el guard de frames
   win.unsafeWindow = win;
@@ -167,7 +192,7 @@ function crearEntorno(opciones) {
       catch (e) { /* el stub jamás propaga */ }
     }, 0);
   });
-  return { win, storage, gm, doc, almacen };
+  return { win, storage, gm, doc, almacen, intervalos: _intervalos };
 }
 
 // Detecta `const/let NOMBRE = ... =>` contando paréntesis en vez de con una sola
@@ -216,7 +241,14 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}\n";
+    "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}" +
+    // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
+    // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
+    // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la
+    // variable `_mtrCacheResumen` es alcanzable. (Mismo patrón que __uxVolcarBuffer.)
+    "\n;try{ globalThis.__VGL__.__envejecerCacheResumen = function(msAtras){ _mtrCacheResumen.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__envejecerCacheMeds = function(msAtras){ _mtrMedsCache.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}\n";
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");
