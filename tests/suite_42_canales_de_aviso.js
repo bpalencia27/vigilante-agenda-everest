@@ -636,5 +636,45 @@ module.exports = {
         "y con URL aprendida hace falta al menos un intento —correcto o fallido— antes de declarar ceguera");
     });
 
+
+    // =====================================================================
+    // v18.0.19 — EL AVISO DE ACTUALIZACIÓN LEÍA OTRO ARCHIVO QUE EL QUE SE INSTALA
+    //
+    // `VGL_UPDATE_GIST_URL` apuntaba a gistfile2.txt con el comentario «= @updateURL del
+    // encabezado», mientras el encabezado apunta a gistfile1.txt desde el commit 62c09c2
+    // («canal real de los equipos»). Tampermonkey instalaba bien —lee el encabezado— pero
+    // el aviso proactivo «⬆ Actualización disponible» consultaba OTRO archivo: si ése se
+    // quedó congelado, el aviso no sale nunca y los equipos solo se actualizan si
+    // Tampermonkey completa su ciclo diario por su cuenta.
+    //
+    // Lo respalda la telemetría real del 31-ago: de 23 equipos activos, 12 seguían en la
+    // v17.0.2 — sin ninguno de los arreglos de la jornada.
+    //
+    // La prueba fija el invariante, no el literal: el encabezado y la constante tienen que
+    // apuntar al MISMO archivo. Así el día que se cambie el canal, cambiarlo en un sitio y
+    // no en el otro pone el banco en rojo — que es justo lo que no pasó la última vez.
+    // =====================================================================
+    t.caso("v18.0.19: el aviso de actualización consulta el MISMO archivo que Tampermonkey instala", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const cab = /^\/\/\s*@updateURL\s+(\S+)/m.exec(src);
+      t.cierto(!!cab, "el encabezado sigue declarando @updateURL");
+
+      const bloque = src.slice(src.indexOf("const VGL_UPDATE_GIST_URL"), src.indexOf("function mtrCheckActualizacionGist"));
+      const literales = bloque.match(/https:\/\/gist\.githubusercontent\.com\/\S+?\.txt/g) || [];
+      t.cierto(literales.length >= 1, "la constante conserva una URL de respaldo por si GM_info no la expone");
+      for (const u of literales) {
+        t.igual(u, cab[1],
+          `el respaldo de VGL_UPDATE_GIST_URL debe ser EXACTAMENTE el @updateURL del encabezado (encabezado: ${cab[1]})`);
+      }
+
+      // Y la defensa que impide que vuelvan a separarse: la URL se toma de GM_info cuando
+      // está, que es la misma cadena que usa el gestor para instalar.
+      t.cierto(/GM_info/.test(bloque),
+        "la constante debe derivarse de GM_info, no ser solo un literal que alguien pueda olvidar de actualizar");
+    });
+
   },
 };

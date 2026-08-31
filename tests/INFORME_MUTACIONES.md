@@ -6817,3 +6817,59 @@ segunda vez hoy que una mutación encuentra un fallo en una prueba mía — y la
 prueba se habría entregado verde y vacía.
 
 Banco completo: **2.751 comprobaciones pasan, 0 fallan.**
+
+## v18.0.19 — 31-ago-2026 · EL AVISO DE ACTUALIZACIÓN LEÍA UN ARCHIVO DISTINTO DEL QUE SE INSTALA
+
+Encontrado leyendo la telemetría real de la flota que el médico subió, no auditando código.
+
+### El dato que lo destapó
+
+De **74 equipos** en el histórico, **23 activos** en los últimos tres días. Repartidos así:
+
+| rama | equipos activos |
+|---|---|
+| v18.0 | 10 |
+| v17.28 | 1 |
+| **v17.0** | **12** |
+
+Doce equipos en producción, reportando hoy mismo, **sin ninguno de los arreglos de la
+jornada** — incluido el del libro de PyM equivocado que los compañeros del médico reportaron.
+
+### La causa
+
+`VGL_UPDATE_GIST_URL` apuntaba a `gistfile2.txt` con el comentario **«= @updateURL del
+encabezado»**. El encabezado apunta a `gistfile1.txt` desde el commit `62c09c2` («alinear
+@updateURL con gistfile1, canal real de los equipos»). Se movió el canal y la constante se
+quedó atrás, con su comentario jurando lo contrario.
+
+Tampermonkey seguía instalando bien —lee el encabezado— pero el aviso proactivo
+**«⬆ Actualización disponible» consultaba otro archivo**. Si ése se quedó congelado, el aviso
+no sale nunca y un equipo solo se actualiza si Tampermonkey completa su ciclo diario por su
+cuenta.
+
+Es la misma clase de defecto que la v18.0.13: **un comentario que inventa una red de
+seguridad**. Quien lo lee deja de comprobar.
+
+**Lo que no pude verificar y hay que decirlo:** el proxy de la sesión bloquea
+`gist.githubusercontent.com` (`CONNECT tunnel failed, 403`), así que no pude leer los dos
+archivos para confirmar cuál está vivo. La corrección se apoya en lo que el propio código
+declara —el encabezado es lo que el gestor usa para instalar— y en el mensaje del commit que
+movió el canal. Conviene que el médico lo confirme de un vistazo en el Gist.
+
+### El arreglo
+
+No es cambiar el literal: es que **no pueda volver a separarse**. La URL se toma de `GM_info`,
+que expone la misma cadena que el gestor usa para instalar — imposible que difieran. El
+literal queda solo de respaldo, y ahora sí coincide con el encabezado.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 11 | el respaldo vuelve a apuntar a `gistfile2.txt` | *el aviso de actualización consulta el MISMO archivo que Tampermonkey instala* (`suite_42`) | Sí — 2.752 |
+
+La prueba fija el **invariante**, no el literal: encabezado y constante deben apuntar al mismo
+archivo. El día que se cambie el canal, cambiarlo en un sitio y no en el otro pone el banco en
+rojo — que es exactamente lo que no pasó la última vez.
+
+Banco completo: **2.752 comprobaciones pasan, 0 fallan.**

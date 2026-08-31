@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.18
+// @version      18.0.19
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.18";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.19";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -29213,7 +29213,33 @@ _vglOfrecerDeshacer(btn);
   // este (acaba de salir). Coste de red: UN GET pequeño al día, y solo lee los primeros
   // bytes del encabezado para el @version — dentro del presupuesto (PRESUPUESTO_RED.md).
   // Requiere el @connect gist.githubusercontent.com añadido en esta misma versión.
-  const VGL_UPDATE_GIST_URL = "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt"; // = @updateURL del encabezado
+  // v18.0.19 — ESTE COMENTARIO AFIRMABA ALGO FALSO, Y ESO DEJÓ MUDO EL AVISO DE
+  // ACTUALIZACIÓN. Decía «= @updateURL del encabezado» y apuntaba a gistfile2.txt,
+  // mientras el encabezado —que es el que Tampermonkey usa de verdad para instalar—
+  // apunta a gistfile1.txt desde el commit 62c09c2 («alinear @updateURL con gistfile1,
+  // canal real de los equipos»). Se movió el canal y esta constante se quedó atrás, con
+  // su comentario jurando lo contrario: exactamente la misma clase de comentario-que-
+  // inventa-una-red-de-seguridad que ya costó dos defectos en la v18.0.13.
+  //
+  // Qué se rompía: Tampermonkey seguía instalando bien (lee el encabezado), pero el aviso
+  // proactivo «⬆ Actualización disponible» leía OTRO archivo. Si gistfile2 se quedó
+  // congelado, el aviso no sale nunca y los equipos solo se actualizan si Tampermonkey
+  // completa su ciclo diario por su cuenta. La telemetría del 31-ago lo respalda: de 23
+  // equipos activos, 12 seguían en la v17.0.2 — sin ninguno de los arreglos de la
+  // jornada, incluido el del libro de PyM equivocado que los compañeros reportaron.
+  //
+  // El arreglo no es cambiar el literal: es que NO PUEDA volver a separarse. Se toma la
+  // URL del propio encabezado a través de GM_info, que es la misma cadena que Tampermonkey
+  // usa para instalar — imposible que difieran. El literal queda solo de respaldo para
+  // cuando GM_info no la exponga, y ahora sí coincide con el encabezado.
+  const VGL_UPDATE_GIST_URL = (function () {
+    try {
+      const h = (typeof GM_info !== "undefined" && GM_info && GM_info.script) || null;
+      const u = h && (h.updateURL || h.downloadURL);
+      if (typeof u === "string" && /^https:\/\/gist\.githubusercontent\.com\//.test(u)) return u;
+    } catch (e) {}
+    return "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt";
+  })();
   function mtrCheckActualizacionGist() {
     try {
       if (state.killed) return;
