@@ -15724,6 +15724,11 @@ _vglOfrecerDeshacer(btn);
          cambio de casilla a mitad de generación entregue el borrador en el chip equivocado)
          y contador de palabras del borrador (N palabras · N caracteres · modelo). */
       .vgl-ia-lock{opacity:.45;pointer-events:none}
+      /* v-S+ — ícono Lucide dentro del Redactor IA: se alinea a la línea de base del texto
+         sin tocar el layout compartido de .vgl-agm-btn (inline). Hereda currentColor del
+         botón/título, cuyo color ya está blindado por la Regla E (no requiere la palabra
+         clave important). */
+      .vgl-ia-ico{display:inline-block;vertical-align:-2px;margin-right:7px;flex:0 0 auto}
       #vgl-ia-modal .vgl-ia-meta{color:var(--fg2) !important}
       #vgl-ia-modal .vgl-ia-meta b{color:var(--c-verde) !important}
       /* v15.3 — GAP 1: aviso de la fecha de control sugerida por el motor. */
@@ -37790,7 +37795,7 @@ _vglOfrecerDeshacer(btn);
     const fallaHtml = mtrRenderFallaHtml(r);
 
     const iaBtn = (!ocultarCabeceraRiesgoEIA && typeof S !== "undefined" && S.iaRedaccion === true && r && r._docId)
-      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">✍ Redactar con IA (enfermedad actual y análisis)</button>`
+      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">${MTR_IA_ICONOS.pluma}Redactar con IA (enfermedad actual y análisis)</button>`
       : "";
 
     return `<div class="vgl-rcv-bloque" role="region" aria-label="Resumen clínico del paciente">
@@ -37876,6 +37881,17 @@ _vglOfrecerDeshacer(btn);
   // llamadores vivos pasan modos de MTR_IA_MODOS; un modo desconocido cae en
   // "enfermedad_actual" (modoInicial), nunca revienta.
   const MTR_IA_MODOS = ["enfermedad_actual", "analisis_plan", "recomendaciones", "consulta"];
+  // v-S+ (refactor panel, mockup canvas 30-ago): iconografía Lucide del Redactor IA,
+  // consistente con el resto del refactor S+. Los botones cuyo rótulo se REESCRIBE por
+  // textContent (chips de casilla con «✓ insertado» y el estado del modal) conservan su
+  // emoji funcional; estos íconos viven en títulos y botones de rótulo estable.
+  const MTR_IA_ICONOS = {
+    pluma: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>',
+    chispa: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
+    tablero: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
+    descargar: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>',
+    ayuda: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  };
   function mtrAbrirPanelRedaccion(resumen, opts) {
     try {
       if (!resumen) { setSummary("No hay resumen clínico para redactar.", "warn"); return; }
@@ -37925,7 +37941,7 @@ _vglOfrecerDeshacer(btn);
       modal.innerHTML =
         '<div class="vgl-agm-card" style="max-width:760px">'
         + '<div class="vgl-agm-head"><div style="min-width:0">'
-        + '<div class="vgl-agm-title vgl-agm-kicker">✍ Redacción asistida (IA)</div>'
+        + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_IA_ICONOS.pluma + 'Redacción asistida (IA)</div>'
         + '<div class="vgl-agm-sub">Borrador desde los datos de la historia. Usted lo revisa, edita y firma.</div>'
         + '</div><button class="vgl-agm-close" id="vgl-ia-x" aria-label="Cerrar">✕</button></div>'
         + (hayClave ? '' : '<div class="vgl-ord-vigwarn" style="margin:8px 0">Falta la clave de Gemini. Configúrela en Ajustes → Redacción IA para generar. Mientras tanto se muestran los hechos para copiar a mano.</div>')
@@ -37940,15 +37956,15 @@ _vglOfrecerDeshacer(btn);
         /* v16.5.0 — decisión del médico: Motivo, Nota clínica y Resumen previo se
            eliminan (Análisis y plan ES la nota); Preguntar queda como opción claramente
            visible y rotulada opcional, no escondida entre chips. */
-        + '<button class="vgl-agm-btn sec" id="vgl-ia-btn-preguntar" data-modo="consulta" style="font-weight:700">❓ Preguntar sobre este paciente <span style="font-weight:400;opacity:.75">(opcional)</span></button>'
+        + '<button class="vgl-agm-btn sec" id="vgl-ia-btn-preguntar" data-modo="consulta" style="font-weight:700">' + MTR_IA_ICONOS.ayuda + 'Preguntar sobre este paciente <span style="font-weight:400;opacity:.75">(opcional)</span></button>'
         + vglTip("Responde una duda puntual sobre este paciente usando SOLO sus datos — no escribe en la historia. Es opcional: las tres casillas de arriba son el trabajo principal.")
         + '</div>'
         + '<input type="text" id="vgl-ia-pregunta" class="vgl-agm-input' + (modoInicial === "consulta" ? '' : ' vgl-d-none') + '" placeholder="Escriba su pregunta sobre este paciente…" style="width:100%;margin-bottom:8px">'
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
-        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
-        + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
-        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button></div>'
+        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">' + MTR_IA_ICONOS.chispa + 'Generar</button>'
+        + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.tablero + 'Copiar</button>'
+        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.descargar + '<span id="vgl-ia-ins-lbl">Insertar en la historia</span></button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
         + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
@@ -38034,8 +38050,10 @@ _vglOfrecerDeshacer(btn);
       // v15.6.0 — TODAS las casillas del registro se pueden insertar; nota/briefing/consulta
       // se copian (no tienen casilla propia).
       const puedeInsertar = () => !!MTR_CASILLAS_REDACTOR[modo];
-      const rotuloInsertar = () => "⬇ Insertar en " + ((MTR_CASILLAS_REDACTOR[modo] || {}).etiqueta || "la casilla");
-      const pintarRotuloInsertar = () => { try { btnIns.textContent = puedeInsertar() ? rotuloInsertar() : "⬇ Insertar"; } catch (e) {} };
+      // v-S+ — el rótulo se escribe sobre el <span id="vgl-ia-ins-lbl"> interno para no
+      // borrar el SVG de descarga que ahora abre el botón (antes, textContent completo).
+      const rotuloInsertar = () => "Insertar en " + ((MTR_CASILLAS_REDACTOR[modo] || {}).etiqueta || "la casilla");
+      const pintarRotuloInsertar = () => { try { const lbl = btnIns.querySelector("#vgl-ia-ins-lbl"); if (lbl) lbl.textContent = puedeInsertar() ? rotuloInsertar() : "Insertar"; } catch (e) {} };
       const habilitarPost = (texto) => {
         const hay = !!String(texto || "").trim();
         btnCop.disabled = !hay;
