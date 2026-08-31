@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     18.0.1
+// @version     18.0.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13036,14 +13036,25 @@ _vglOfrecerDeshacer(btn);
       return;
     }
     if (Notification.permission !== "granted") { setSummary("Pulse «Permitir» en el aviso del navegador…"); enableOsNotifications(); return; }
-    // UN SOLO CANAL A LA VEZ: la prueba usa la misma cascada que las alertas reales
-    // (Windows y, solo si Windows no la muestra, el aviso dentro del navegador).
-    // NO es persistente: se cierra sola a los 20 s y no deja fantasmas en Windows.
+    // UN SOLO CANAL A LA VEZ — y el canal se elige como en las alertas REALES (v15.4.0):
+    // con la pestaña VISIBLE el aviso sale DENTRO de la página (toast), nada va a
+    // Windows; con la pestaña OCULTA, el canal es la notificación del sistema (y el
+    // toast solo queda de respaldo si Windows no puede mostrarla). Antes esta prueba
+    // mandaba SIEMPRE a Windows aunque la pestaña estuviera a la vista: el médico
+    // pulsaba «Probar avisos», oía el tono y no veía NINGÚN toast en la página (el
+    // aviso quedaba en el Centro de actividades de Windows) — reportado en campo.
+    // NO es persistente: en Windows se cierra a los 20 s y no deja fantasmas.
     const t = new Date().toLocaleTimeString();
+    const titulo = "⛔ Prueba " + t + " · En Sala";
+    const cuerpo = "PACIENTE DE PRUEBA\nConfirmación extemporánea (NO CONFIRMADO)\n" + (_pestanaSinAtencion() ? "(Este aviso se cierra solo)" : "Cierre este aviso con un clic, igual que los avisos reales.");
     // v15.4.0 — La prueba ejercita EXACTAMENTE la política real: un solo canal + un tono.
-    osNotify("ROJO", "⛔ Prueba " + t + " · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (NO CONFIRMADO)\n(Este aviso se cierra solo)", false, "prueba|" + t);
+    if (_pestanaSinAtencion()) {
+      osNotify("ROJO", titulo, cuerpo, false, "prueba|" + t);
+    } else {
+      showToast("ROJO", titulo, cuerpo, false, "prueba|" + t);
+    }
     playTone("ROJO");
-    setSummary("Prueba enviada. Debe verse UNA notificación de Windows (+ sonido). Se cierra sola: no queda pegada en el Centro de actividades.");
+    setSummary("Prueba enviada: " + (_pestanaSinAtencion() ? "notificación de Windows" : "aviso dentro de la página") + " + sonido." + (_pestanaSinAtencion() ? " Se cierra sola: no queda pegada en el Centro de actividades." : " Cierre el aviso con un clic."));
   }
   function enableOsNotifications() {
     try {
