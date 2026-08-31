@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.16
+// @version      18.0.17
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.16";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.17";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5129,6 +5129,30 @@
         // nunca ha, así que caía en la afirmación de la línea de abajo: el texto libre que
         // NIEGA un hecho terminaba usándose como fuente que lo AFIRMA.
         if (/\b(niega|no refiere|sin antecedente|descarta|no presenta|no tiene|nunca ha|no es|no fue|no fuma|no consume|no padece|no usa|no ha)\b/.test(f)) { if (veredicto === null) veredicto = false; continue; }
+        // v18.0.17 — NEGACIÓN POR SUSTANTIVO O ADJETIVO, no solo por verbo.
+        // La lista de arriba (v17.6.30) cubre «no + VERBO»: «no fuma», «no es diabético».
+        // No cubre la forma en que el médico escribe de verdad, que es sin verbo:
+        // «Paciente no diabético, no fumador», «sin diabetes conocida», «nunca fumador»,
+        // «sin tabaquismo». Todas caían en el `return true` de abajo y el texto que NIEGA
+        // un hecho se usaba como fuente que lo AFIRMA. Medido con el arnés: 6 de 12 frases
+        // clínicas normales mal clasificadas. El daño no era cosmético: mtrDiscrepanciasDeFuentes
+        // devolvía una discrepancia de severidad ALTA, mtrDiscrepanciasQueFrenan la ponía a
+        // frenar, y el Panel del paciente no abría hasta que el médico respondiera un cuadro
+        // «Las fuentes no coinciden» sobre un dato que él mismo acababa de negar por escrito.
+        //
+        // Se resuelve por PROXIMIDAD, no con una lista de enfermedades: se mira si hay un
+        // negador justo ANTES de donde casó el término clínico. Así vale para cualquier `re`
+        // que se le pase, hoy y en el futuro, sin tener que mantener un catálogo paralelo.
+        //   · `[^,;.]{0,20}` — el negador tiene que estar cerca Y en la misma cláusula. La
+        //     coma es la frontera que evita el falso positivo real «sin control, diabético
+        //     descompensado», que es una AFIRMACIÓN y debe seguir siéndolo.
+        //   · `f.search(re)` y no `re.exec` — `re` puede venir con la marca /g, y exec
+        //     guardaría lastIndex entre llamadas; search la ignora y siempre empieza en 0.
+        const donde = f.search(re);
+        if (donde > 0 && /\b(?:no|sin|nunca|jamas)\b[^,;.]{0,20}$/.test(f.slice(Math.max(0, donde - 30), donde))) {
+          if (veredicto === null) veredicto = false;
+          continue;
+        }
         return true;   // una afirmación limpia manda sobre cualquier negación previa
       }
       return veredicto;
@@ -11910,7 +11934,22 @@ _vglOfrecerDeshacer(btn);
     // ocurrió: o vino o no vino, y vino. Se descuenta y se deja constancia. Es el remate del
     // arreglo del antirrebote: aquel evita que vuelva a pasar, esto limpia lo que ya pasó
     // hoy —incluido el caso del 31-ago, que se contó antes de que existiera la guarda—.
-    if ((st.includes("en sala") || st.includes("atendido")) && state.contadas.has("inasistencia@" + key)) {
+    // v18.0.17 — SOLO EL LÍDER RECTIFICA. Este bloque estaba 112 líneas ANTES del
+    // `if (!state.leader) … return` de más abajo, así que lo ejecutaban TODAS las pestañas.
+    // Y desde la v18.0.4 `_fraudeCompartidoFusionar` copia `contadas` a las no líderes cada
+    // 10 s, con lo que todas llegaban aquí con la marca puesta: con tres pestañas abiertas
+    // el contador del día bajaba 3→0 en vez de 3→2, y se escribían tres filas
+    // RECTIFICACION_INASISTENCIA por un único hecho. Una inasistencia falsa borraba dos
+    // verdaderas. Son los números que el médico usa para reclamar, así que la asimetría
+    // importaba: CONTAR ya era exclusivo del líder y estaba deduplicado por `contadas`
+    // (bumpStatCita); DESCONTAR no tenía ni lo uno ni lo otro.
+    //
+    // La guarda va sobre el bloque ENTERO, no solo sobre el descuento. Si una pestaña no
+    // líder borrase su marca local y llamara a `_fraudeCompartidoGuardar()`, empujaría esa
+    // borradura al almacén compartido y el líder ya no vería la marca: no descontaría nunca.
+    // El arreglo a medias sería peor que el defecto. Las demás pestañas recogen el resultado
+    // por la fusión de siempre.
+    if (state.leader && (st.includes("en sala") || st.includes("atendido")) && state.contadas.has("inasistencia@" + key)) {
       state.contadas.delete("inasistencia@" + key);
       if (rectificarStat("inasistencia")) {
         logEvent({ t: new Date().toLocaleTimeString(), ev: "RECTIFICACION_INASISTENCIA", hora: a.hora_texto,
@@ -28800,7 +28839,26 @@ _vglOfrecerDeshacer(btn);
       // (reporte del 31-ago): 45 minutos sin evaluar la agenda, sin una sola señal.
       // La condición correcta no es «no estoy en una vista vigilada» sino «aquí no puedo
       // leer la agenda del DOM», que es exactamente `secc !== "agenda"`.
-      if (leader && _enModuloHCHealth() && secc !== "agenda" && (!data || !data.citas.length)) {
+      // v18.0.17 — EL AVISO SE QUEMABA SOLO EN EL PRIMER TICK, Y ERA EL ÚNICO DEL DÍA.
+      // Al recargar (F5) o abrir Everest dentro de una historia clínica —que es donde el
+      // médico pasa el 90 % de la jornada— boot() llama a tick(), y en ese primer tick
+      // `state.apiCitas` todavía es null: nace null y `tickApi()` solo se invoca AL FINAL
+      // del propio tick. Así que `data === null` y esta guarda se cumplía SIEMPRE.
+      // Dos daños, y el segundo es el grave:
+      //   1. se le afirma al médico «Aún no aprendió la conexión de Citas del día esta
+      //      sesión», cosa que es FALSA cuando API.url ya está aprendida y persistida (se
+      //      restaura en la línea ~13607) y el sondeo funciona un segundo después;
+      //   2. osNotify marca el aviso como visto, y `avisoYaVisto` es POR DÍA y vive en
+      //      localStorage compartido entre pestañas: ese disparo espurio del arranque
+      //      consumía el ÚNICO aviso del día. Si a media mañana el Vigilante se quedaba
+      //      ciego de verdad, el aviso ya no salía. Es decir: el arreglo de v18.0.8, que
+      //      existe para que la ceguera no pase en silencio, quedaba anulado por el propio
+      //      arranque de la pestaña.
+      // La condición que faltaba: que ESTA pestaña haya INTENTADO leer el API al menos una
+      // vez. Con la URL aprendida y cero intentos, no se sabe nada todavía y no hay nada
+      // honesto que avisar. Sin URL aprendida, el mensaje sí es cierto y sale igual.
+      const _intentoLeerApi = !API.url || (API.ok + API.fallos) > 0;
+      if (leader && _enModuloHCHealth() && secc !== "agenda" && _intentoLeerApi && (!data || !data.citas.length)) {
         osNotify("AMBAR", "⚠ Vigilante sin lectura de la agenda",
           "Aún no aprendió la conexión de 'Citas del día' esta sesión: mientras tanto NO puede avisar llegadas ni confirmaciones. Pase un momento por esa pantalla para que se active.",
           false, "vgl-sin-datos-agenda");

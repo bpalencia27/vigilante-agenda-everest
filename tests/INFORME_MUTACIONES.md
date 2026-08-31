@@ -6660,3 +6660,97 @@ salidas son seguras; lo inseguro es el término medio, que es lo que había.
 | 5 | se le devuelve el `color:#8b1a1a` en línea a la caja de cifras y se le quita la clase | *Regla R* (`suite_25`) | Sí — 2.742 |
 
 Banco completo: **2.742 comprobaciones pasan, 0 fallan.**
+
+## v18.0.17 — 31-ago-2026 · TRES DEL BARRIDO: LA NEGACIÓN SIN VERBO, EL CONTADOR QUE SE DESCONTABA POR PESTAÑA, Y EL AVISO QUE SE QUEMABA SOLO
+
+Primeros tres defectos del **barrido de las 40.810 líneas** que no dependen de una decisión
+del médico. Los tres reproducidos con el arnés antes de tocar nada.
+
+### 1. «Paciente no diabético, no fumador» se leía como una AFIRMACIÓN
+
+`mtrTextoOpinaSobre` reconocía la negación **con verbo** («no fuma», «no es diabético»,
+arreglo de v17.6.30) pero no la forma en que el médico escribe de verdad, que va **sin
+verbo**: «no diabético», «sin diabetes conocida», «nunca fumador», «sin tabaquismo». Todas
+caían en el `return true` del final.
+
+Medido con el arnés antes de arreglar: **6 de 12 frases clínicas normales mal clasificadas.**
+
+Y no era cosmético. `mtrDiscrepanciasDeFuentes` devolvía una discrepancia de severidad ALTA,
+`mtrDiscrepanciasQueFrenan` la dejaba **frenando**, y el Panel del paciente **no abría** hasta
+que el médico respondiera un cuadro «Las fuentes no coinciden» sobre un dato que él mismo
+acababa de negar por escrito. Si respondía «Sí», se archivaba una confirmación falsa.
+
+**El arreglo es por proximidad, no por catálogo.** Se mira si hay un negador
+(`no|sin|nunca|jamás`) justo antes de donde casó el término clínico, dentro de la misma
+cláusula. Así vale para cualquier `re` que se le pase, hoy y en el futuro, sin mantener una
+lista de enfermedades en paralelo.
+
+La frontera es **la coma**, y esa decisión la obligan dos casos reales que deben seguir siendo
+afirmaciones:
+
+| frase | debe salir | por qué |
+|---|---|---|
+| «Sin control, diabético descompensado» | **AFIRMA** | «sin control» niega el control, no la diabetes |
+| «Paciente no diabético, fumador activo» | **AFIRMA** (para tabaquismo) | el «no» es de la primera cláusula |
+| «No solo tiene hipertensión sino también diabetes» | **AFIRMA** | «sino» no es «no» (límite de palabra) |
+
+Después del arreglo: **19 de 19 correctas**, incluidas las tres trampas y el descarte de
+antecedentes de terceros, que sigue intacto.
+
+### 2. El contador de inasistencias se descontaba una vez POR PESTAÑA
+
+La rectificación retroactiva de v18.0.8 vivía **112 líneas antes** del
+`if (!state.leader) … return`, así que la ejecutaban **todas** las pestañas. Y desde la
+v18.0.4 `_fraudeCompartidoFusionar` copia `contadas` a las no líderes cada 10 s, con lo que
+todas llegaban con la marca puesta.
+
+Con tres pestañas abiertas, el contador del día bajaba **3 → 0** en vez de 3 → 2, y se
+escribían **tres filas** `RECTIFICACION_INASISTENCIA` por un único hecho. Una inasistencia
+falsa borraba dos verdaderas. Son los números con los que el médico reclama.
+
+La asimetría era evidente una vez vista: **contar** ya era exclusivo del líder y estaba
+deduplicado por `contadas` (`bumpStatCita`); **descontar** no tenía ni lo uno ni lo otro.
+
+**La guarda va sobre el bloque entero, no solo sobre el descuento**, y eso importa: si una
+pestaña no líder borrase su marca local y llamara a `_fraudeCompartidoGuardar()`, empujaría
+esa borradura al almacén compartido y el líder ya no vería la marca — **no rectificaría
+nunca**. El arreglo a medias habría sido peor que el defecto.
+
+### 3. El aviso de ceguera se quemaba solo, en el primer tick
+
+`avisoYaVisto` está fechado **por día** y vive en localStorage compartido entre pestañas: el
+aviso «Vigilante sin lectura de la agenda» sale **una vez al día y punto**.
+
+Y salía en el primer tick de cada arranque. `state.apiCitas` nace `null` y `tickApi()` solo se
+invoca **al final** del propio tick, así que `data === null` siempre la primera vez. Al
+recargar (F5) o abrir Everest dentro de una historia clínica —donde el médico pasa el 90 % de
+la jornada— la guarda se cumplía sin falta.
+
+Dos daños, y el segundo es el grave:
+
+1. se le afirmaba al médico que la conexión «aún no se aprendió esta sesión», **cosa falsa**
+   cuando `API.url` ya está aprendida y persistida y el sondeo funciona un segundo después;
+2. ese disparo espurio **consumía el único aviso del día**. Si a media mañana el Vigilante se
+   quedaba ciego de verdad, el aviso ya no salía. El arreglo de v18.0.8, que existe
+   precisamente para que la ceguera no pase en silencio, **quedaba anulado por el propio
+   arranque de la pestaña**.
+
+Condición que faltaba: que esta pestaña haya **intentado** leer el API al menos una vez. Sin
+URL aprendida el mensaje sí es cierto y sigue saliendo — la ceguera real no se silencia.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | se quita la negación por proximidad | *reconoce la negación por sustantivo o adjetivo, sin verbo* (`suite_01`) | Sí — 2.748 |
+| 7 | se quita la guarda de líder de la rectificación | *una pestaña NO líder no descuenta la inasistencia* (`suite_04`) | Sí — 2.748 |
+| 8 | se quita la exigencia de haber intentado leer el API | *el aviso de ceguera exige haber INTENTADO leer el API* (`suite_42`) | Sí — 2.748 |
+
+**Nota sobre la prueba del punto 3.** Es una regresión de **código fuente**, y se dice por
+qué: ejercitar el defecto de verdad exige el `tick()` completo con su DOM, su liderazgo y su
+reloj — una prueba así comprobaría media docena de cosas a la vez y se rompería por cualquiera
+de ellas. Lo que hay que fijar es un cable. Mismo criterio que la regresión de fuente de
+`suite_71` sobre el enganche de los widgets y la de `suite_57` sobre el nombre que viaja al
+saneador.
+
+Banco completo: **2.748 comprobaciones pasan, 0 fallan.**

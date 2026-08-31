@@ -591,5 +591,50 @@ module.exports = {
       t.cierto(r === null || r === undefined || typeof r === "object",
         "tiene que devolver algo manejable, no un valor suelto");
     });
+
+    // =====================================================================
+    // v18.0.17 — EL AVISO DE CEGUERA SE QUEMABA SOLO EN EL PRIMER TICK
+    //
+    // `avisoYaVisto` está fechado POR DÍA y vive en localStorage compartido entre pestañas:
+    // el aviso «Vigilante sin lectura de la agenda» sale UNA vez al día y punto. Y salía en
+    // el primer tick de cada arranque, porque `state.apiCitas` nace null y `tickApi()` solo
+    // se invoca AL FINAL del propio tick, así que `data === null` siempre la primera vez.
+    // Dos daños: se le afirmaba al médico que la conexión «aún no se aprendió esta sesión»
+    // cuando ya estaba aprendida y persistida; y, sobre todo, ese disparo espurio CONSUMÍA
+    // el único aviso del día — si a media mañana el Vigilante se quedaba ciego de verdad, el
+    // aviso ya no salía. El arreglo de v18.0.8, que existe precisamente para que la ceguera
+    // no pase en silencio, quedaba anulado por el arranque de la propia pestaña.
+    //
+    // ESTO ES UNA REGRESIÓN DE CÓDIGO FUENTE, y se dice por qué: ejercitar el defecto de
+    // verdad exige el `tick()` completo con su DOM, su liderazgo y su reloj, y una prueba
+    // así comprobaría media docena de cosas a la vez y se rompería por cualquiera de ellas.
+    // Lo que hay que fijar aquí es UN CABLE: que la condición del aviso exija haber
+    // intentado leer el API. Mismo criterio que la regresión de fuente de suite_71 sobre el
+    // enganche de los widgets y la de suite_57 sobre el nombre que viaja al saneador.
+    t.caso("v18.0.17: el aviso de ceguera exige haber INTENTADO leer el API (no se quema en el arranque)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const i = src.indexOf('"vgl-sin-datos-agenda"');
+      t.cierto(i > 0, "sigue existiendo el aviso de ceguera con su identificador de una-vez-al-día");
+
+      // La condición que lo dispara está justo encima de la llamada a osNotify.
+      const bloque = src.slice(Math.max(0, i - 1400), i);
+      const cond = bloque.slice(bloque.lastIndexOf("if (leader"));
+      t.cierto(/_enModuloHCHealth\(\)/.test(cond), "sigue restringido al módulo clínico");
+      t.cierto(/secc !== "agenda"/.test(cond),
+        "y sigue siendo «aquí no puedo leer la agenda del DOM», que es el arreglo de v18.0.8");
+      t.cierto(/_intentoLeerApi/.test(cond),
+        "pero además exige que esta pestaña haya intentado leer el API: sin eso, el primer tick lo quema");
+
+      // Y la definición del testigo tiene que ser la correcta en las dos direcciones.
+      const def = src.slice(src.indexOf("const _intentoLeerApi"), src.indexOf("const _intentoLeerApi") + 90);
+      t.cierto(/!API\.url/.test(def),
+        "sin URL aprendida el mensaje SÍ es cierto y debe seguir saliendo: no se puede silenciar la ceguera real");
+      t.cierto(/API\.ok\s*\+\s*API\.fallos/.test(def),
+        "y con URL aprendida hace falta al menos un intento —correcto o fallido— antes de declarar ceguera");
+    });
+
   },
 };

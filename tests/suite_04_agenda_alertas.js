@@ -1345,5 +1345,68 @@ module.exports = {
       t.cierto(filas.some((x) => x && x.ev === "INASISTENCIA"),
         "sin borrar la fila original: se añade el porqué, no se reescribe la historia");
     });
+
+    // v18.0.17 — SOLO EL LÍDER RECTIFICA. El bloque de rectificación de v18.0.8 vivía 112
+    // líneas ANTES del `if (!state.leader) … return`, así que lo corrían TODAS las pestañas.
+    // Y desde v18.0.4 `_fraudeCompartidoFusionar` copia `contadas` a las no líderes, con lo
+    // que todas llegaban con la marca puesta: con tres pestañas el contador bajaba 3→0 en
+    // vez de 3→2, y se escribían tres filas por un único hecho. Una inasistencia falsa
+    // borraba dos verdaderas — y son los números con los que el médico reclama.
+    t.caso("v18.0.17: una pestaña NO líder no descuenta la inasistencia (el contador es del líder)", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "08:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const cuenta = () => { const a = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}"); return (a[c.api.todayStamp()] || {}).inasistencia || 0; };
+
+      const r = c.api.colorAndAlert(cita("Sin presentarse"), new Date("2026-08-10T08:10:00").getTime());
+      c.api.__state.notified.set(r.key, "siembra");
+      c.api.maybeNotify(r);
+      t.igual(cuenta(), 1, "una inasistencia contada por el líder (control del caso)");
+
+      // Ahora esta pestaña PIERDE el liderazgo — es la situación real de la segunda ventana,
+      // que sigue raspando la agenda y sigue teniendo la marca por la fusión compartida.
+      c.api.__state.leader = false;
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:30:00").getTime());
+      t.igual(cuenta(), 1, "la pestaña no líder NO descuenta: quien no cuenta, tampoco descuenta");
+      t.cierto(c.api.__state.contadas.has("inasistencia@" + r.key),
+        "y sobre todo NO borra la marca: si la borrara y la compartiera, el líder ya no podría rectificar nunca");
+
+      // Y cuando vuelve a ser líder (relevo normal), la rectificación sí ocurre.
+      c.api.__state.leader = true;
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:31:00").getTime());
+      t.igual(cuenta(), 0, "recuperado el liderazgo, la rectificación se hace UNA vez");
+    });
+
+    t.caso("v18.0.17: con dos pestañas, el hecho se rectifica UNA sola vez, no una por pestaña", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "08:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const cuenta = () => { const a = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}"); return (a[c.api.todayStamp()] || {}).inasistencia || 0; };
+
+      // Tres inasistencias reales del día.
+      c.api.__state.leader = true;
+      for (const h of ["08:00 AM", "08:20 AM", "08:40 AM"]) {
+        const a = { hora_texto: h, estado: "Sin presentarse", nombre: "P", index: 1, doc_id: "5150076" };
+        const r = c.api.colorAndAlert(a, new Date("2026-08-10T09:00:00").getTime());
+        c.api.__state.notified.set(r.key, "siembra");
+        c.api.maybeNotify(r);
+      }
+      t.igual(cuenta(), 3, "tres inasistencias contadas (control del caso)");
+
+      // Una de ellas resulta falsa. La ve el líder... y también la ven las otras dos
+      // pestañas, que ejecutan colorAndAlert igual porque el raspado no depende del mando.
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:30:00").getTime());
+      c.api.__state.leader = false;
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:31:00").getTime());
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:32:00").getTime());
+      t.igual(cuenta(), 2, "3 → 2, no 3 → 0: un hecho, un descuento");
+
+      c.api.evFlush();
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
+      const rect = filas.filter((x) => x && x.ev === "RECTIFICACION_INASISTENCIA");
+      t.igual(rect.length, 1, "y una sola fila en la bitácora, no una por pestaña");
+    });
+
   }
 };

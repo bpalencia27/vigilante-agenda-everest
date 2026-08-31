@@ -256,6 +256,47 @@ module.exports = {
       t.igual(api.mtrTextoOpinaSobre("Refiere ser hipertenso de larga data.", RE_HTA), true);
     });
 
+    // v18.0.17 — NEGACIÓN SIN VERBO, que es como el médico escribe de verdad.
+    // La v17.6.30 cubrió «no + VERBO» («no fuma», «no es diabético»). No cubrió la forma
+    // habitual, que va sin verbo: «Paciente no diabético, no fumador», «sin diabetes
+    // conocida», «nunca fumador», «sin tabaquismo». Medido con el arnés antes de arreglar:
+    // 6 de 12 frases clínicas normales salían mal clasificadas, y no era cosmético — la
+    // discrepancia resultante es de severidad ALTA y FRENA la apertura del Panel del
+    // paciente hasta que el médico responda un cuadro sobre un dato que él mismo acaba de
+    // negar por escrito.
+    //
+    // El arreglo es por PROXIMIDAD (un negador dentro de la misma cláusula, antes del
+    // término), no con una lista de enfermedades: así vale para cualquier `re` futuro. Las
+    // dos trampas de abajo son las que obligan a que la frontera sea la COMA y no una
+    // distancia a secas — sin ella, dos afirmaciones reales se leerían como negaciones.
+    const RE_DM = /\bdiabet|\bdm2?\b/i;
+    t.caso("v18.0.17: mtrTextoOpinaSobre reconoce la negación por sustantivo o adjetivo, sin verbo", () => {
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, no fumador.", RE_DM), false,
+        "«no diabético» — la frase más habitual del examen físico — debe NEGAR");
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, no fumador.", RE_FUMA), false,
+        "y «no fumador» en la misma frase también");
+      t.igual(api.mtrTextoOpinaSobre("Paciente sin diabetes conocida.", RE_DM), false, "«sin + sustantivo»");
+      t.igual(api.mtrTextoOpinaSobre("Nunca fumador.", RE_FUMA), false, "«nunca + sustantivo»");
+      t.igual(api.mtrTextoOpinaSobre("Sin tabaquismo.", RE_FUMA), false, "«sin tabaquismo»");
+      t.igual(api.mtrTextoOpinaSobre("No hay evidencia de diabetes.", RE_DM), false,
+        "el negador puede estar a varias palabras, mientras siga en la misma cláusula");
+    });
+
+    t.caso("v18.0.17: la coma es la frontera — dos afirmaciones reales NO se leen como negación", () => {
+      t.igual(api.mtrTextoOpinaSobre("Sin control, diabético descompensado.", RE_DM), true,
+        "«sin control» niega el control, no la diabetes: la coma separa las dos cláusulas");
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, fumador activo.", RE_FUMA), true,
+        "el «no» es de la primera cláusula; el tabaquismo se AFIRMA en la segunda");
+      t.igual(api.mtrTextoOpinaSobre("No solo tiene hipertensión sino también diabetes.", RE_DM), true,
+        "«sino» no es «no» (límite de palabra) y el negador queda fuera de alcance");
+    });
+
+    t.caso("v18.0.17: no se sobre-corrigió — las afirmaciones limpias siguen afirmando", () => {
+      t.igual(api.mtrTextoOpinaSobre("Ex fumador, suspendió hace 5 años.", RE_FUMA), true, "«ex fumador» AFIRMA el antecedente");
+      t.igual(api.mtrTextoOpinaSobre("Paciente diabético en control.", RE_DM), true);
+      t.igual(api.mtrTextoOpinaSobre("Hipertenso de larga data.", RE_HTA), true);
+    });
+
     t.caso("mtrTextoOpinaSobre descarta antecedentes de terceros (no del propio paciente)", () => {
       t.igual(api.mtrTextoOpinaSobre("Padre hipertenso, madre diabética.", RE_HTA), null, "antecedente FAMILIAR, no del paciente: sin veredicto");
     });
