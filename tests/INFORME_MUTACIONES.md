@@ -6597,3 +6597,66 @@ defensa a medias que nadie declaró es exactamente cómo apareció este defecto.
 | 4 | se restaura `salida[nombre] = v.slice(0, 300)` (la fuga original) | *la cosecha EN VIVO desidentifica igual que la vía de red* y *lo cosechado llega ya desidentificado al texto de la hoja* (`suite_57`) | Sí — 2.741 |
 
 Banco completo: **2.741 comprobaciones pasan, 0 fallan.**
+
+## v18.0.16 — 31-ago-2026 · MI PROPIO BLINDAJE SE COMIÓ CUATRO AVISOS
+
+Regresión **mía**, de la v18.0.14, encontrada al comprobar si mi barrido de `!important`
+podía haber roto el rediseño visual que el médico echa en falta. Podía, y lo hizo.
+
+### Qué rompí
+
+`CLAUDE.md` daba por sentado — y era cierto hasta esa entrega — que *«el estilo inline SÍ es
+inmune a esto (gana a cualquier regla no-`!important`)»*. **Dejó de serlo el día que
+nuestras propias reglas ganaron `!important`**: un `!important` de hoja le gana a un estilo
+en línea que no lo lleva. Y el blindaje tipográfico alcanza a todo elemento **sin clase
+propia**, que es exactamente lo que eran los cuatro sitios afectados.
+
+Medido en Chromium, v18.0.13 contra v18.0.15:
+
+| sitio | antes | después de mi barrido |
+|---|---|---|
+| hora asignada del modal de agendamiento | `#4ff0b8` | **blanco** |
+| etiqueta de fecha («mañana», «hoy») | `#4ff0b8` | **blanco** |
+| caja «la IA escribió una cifra que no está en los hechos» | `#8b1a1a` | **negro** |
+| el número señalado dentro de esa caja | `#c00` | **negro** |
+
+Los dos últimos son **el aviso más grave del módulo de redacción**. Los dos primeros son
+cifras que el médico lee **antes de confirmar una cita**.
+
+Y un quinto, **anterior a mi barrido**: los dos «✓ Activa en este equipo» de Ajustes pintaban
+su verde en línea sobre un `.vgl-fld .vgl-hint` que ya declaraba `color:var(--fg2) !important`
+desde antes. Nunca se vieron verdes. Se arregla de paso.
+
+### Por qué la Regla B no lo cazó
+
+La Regla B de `suite_25` existe literalmente para esto — «`!important` nuestro contra `.style`
+de JS nuestro» — y mira `.style.color =`. Los cuatro pintaban por **`cssText`** o por
+**`style="…"` dentro del HTML**, dos vías que la regla no miraba. Yo mismo me apoyé en ella:
+antes de barrer comprobé `grep "style.color ="` → cero, y di el riesgo por descartado. La
+comprobación era correcta y el alcance era demasiado estrecho.
+
+### El arreglo
+
+El idioma que el proyecto ya tenía escrito: **quien lleva color propio lleva clase propia**, y
+entonces el `:not([class])` del blindaje no lo alcanza nunca. Los seis sitios pierden el color
+en línea y lo reciben desde la hoja, con `!important` porque cuelgan de `document.body`.
+
+Efecto lateral bueno: ahora esos cuatro avisos **también sobreviven al Everest hostil**, cosa
+que antes no hacían — el estilo en línea sin `!important` perdía contra cualquier regla de
+Everest que sí lo llevara.
+
+### Prueba nueva — Regla R (`suite_25`)
+
+Ningún color pintado en línea puede quedarse sin `!important`, contando **las tres vías**:
+`style="…"` en el HTML, `elemento.style.cssText`, y `elemento.style.color =`. El invariante:
+o lleva `!important` (y gana a todo, nuestro y de Everest), o no existe y el elemento lleva
+clase propia con su color en la hoja, donde la Regla P ya lo obliga a blindarse. Las dos
+salidas son seguras; lo inseguro es el término medio, que es lo que había.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 5 | se le devuelve el `color:#8b1a1a` en línea a la caja de cifras y se le quita la clase | *Regla R* (`suite_25`) | Sí — 2.742 |
+
+Banco completo: **2.742 comprobaciones pasan, 0 fallan.**

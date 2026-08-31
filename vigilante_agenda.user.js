@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.15
+// @version      18.0.16
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.15";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.16";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14920,7 +14920,35 @@ _vglOfrecerDeshacer(btn);
       #vgl-cw-farmaco.vgl-cw-abierto .vgl-cw-panel{display:block}
       #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
-      #vgl-cw-farmaco :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where() */
+      #vgl-cw-farmaco :where(:not([class])){color:inherit !important}
+
+      /* =====================================================================
+         v18.0.16 — REGRESIÓN DE MI PROPIO BLINDAJE (v18.0.14), medida en Chromium.
+         Al ponerle !important al blindaje tipográfico, éste pasó a ganarle también al
+         ESTILO EN LÍNEA de nuestros propios elementos — que hasta entonces era inmune
+         (CLAUDE.md lo daba por sentado: «el estilo inline SÍ es inmune a esto»). Dejó
+         de serlo el día que nuestras reglas ganaron !important, y se llevó por delante
+         cuatro sitios que pintaban color en línea SIN clase propia:
+             · la HORA ASIGNADA del modal de agendamiento   #4ff0b8 -> blanco
+             · la etiqueta de fecha («mañana», «hoy»)        #4ff0b8 -> blanco
+             · la caja «la IA escribió una cifra que no está en los hechos»  #8b1a1a -> negro
+             · el número señalado dentro de esa caja                        #c00    -> negro
+         Los dos últimos son el aviso más grave del módulo de redacción, y los dos
+         primeros son cifras que el médico lee ANTES de confirmar una cita.
+         El arreglo es el idioma que el propio proyecto ya tenía escrito: quien lleva
+         color propio lleva CLASE propia, y entonces el :not([class]) del blindaje no lo
+         alcanza nunca. El color se muda a la hoja, con !important porque estos modales
+         cuelgan de document.body (Regla E). La Regla R fija el invariante.
+         ===================================================================== */
+      .vgl-agm-hora-ok{color:var(--c-verde) !important;font-weight:900}
+      .vgl-agm-fecha-lbl{color:var(--c-verde) !important}
+      .vgl-ia-cifras{color:#8b1a1a !important}
+      .vgl-ia-cifra-n{color:#c00 !important}
+      /* v18.0.16 — los dos «✓ Activa/Activo en este equipo» de Ajustes pintaban su verde
+         en línea sobre un .vgl-hint que YA declaraba color con !important (línea ~15593):
+         perdían el verde desde antes de mi barrido. Misma cura: clase propia, y como
+         convive con .vgl-hint (misma especificidad, Regla A) va DESPUÉS en la hoja. */
+      .vgl-fld .vgl-hint.vgl-hint-ok{color:var(--c-verde) !important;font-weight:600}   /* v18.0.14 — id fuera del :where() */
       /* =====================================================================
          v16.1.0 — REGLA E APLICADA A LA FICHA Y AL MÓDULO DE RIESGO
          ---------------------------------------------------------------------
@@ -23187,7 +23215,7 @@ _vglOfrecerDeshacer(btn);
               <div><b>Servicio / Especialidad:</b> ${escapeHtml(selectedEspName)}</div>
               <div><b>Médico / Profesional:</b> ${escapeHtml(doctorName)}</div>
               <div><b>Fecha del Control:</b> ${escapeHtml(fechaFmt)} (${escapeHtml(fechaLbl)})</div>
-              <div><b>Horario Asignado:</b> <span style="color:var(--c-verde);font-weight:900">${escapeHtml(horaFmt)}</span></div>
+              <div><b>Horario Asignado:</b> <span class="vgl-agm-hora-ok">${escapeHtml(horaFmt)}</span></div>
               <div id="vgl-agm-sum-sms"></div>
             </div>
           `;
@@ -23396,7 +23424,7 @@ _vglOfrecerDeshacer(btn);
       confirmBtn.dataset.dupOk = "";
       confirmBtn.dataset.vencOk = "";
       if (step2Next) step2Next.disabled = true;
-      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span style="color:var(--c-verde)">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
+      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span class="vgl-agm-fecha-lbl">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
       // v17.6.53 (1.9) — mismo bug, segundo punto: esta etiqueta se pisaba con la fecha
@@ -27545,7 +27573,7 @@ _vglOfrecerDeshacer(btn);
         <!-- v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): la telemetría es el precio de usar el
              script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
              y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
-        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activa en este equipo</span></div>
+        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activa en este equipo</span></div>
       </div>
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
@@ -27600,7 +27628,7 @@ _vglOfrecerDeshacer(btn);
 <!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
              arriba, a la sección siempre visible: son operativos, no técnicos. -->
         <!-- v17.58.2 — mismo tratamiento que "Ayudar a mejorar": obligatoria, sin interruptor. -->
-        <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activo en este equipo</span></div>
+        <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activo en este equipo</span></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
       </div>
@@ -38852,7 +38880,8 @@ _vglOfrecerDeshacer(btn);
           if (!caja) {
             caja = document.createElement("div");
             caja.id = "vgl-ia-cifras";
-            caja.style.cssText = "margin:0 0 8px;scroll-margin-top:12px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
+            caja.className = "vgl-ia-cifras";   /* v18.0.16 — CLASE PROPIA, no color en línea: ver la nota de la hoja */
+            caja.style.cssText = "margin:0 0 8px;scroll-margin-top:12px;border:1px solid #d33;border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
             // v17.14.0 — enjambre UX #53: la caja iba DESPUÉS del área de texto
             // (salida.nextSibling). Una nota de Análisis y Plan ocupa varias pantallas, así
             // que el aviso de que la IA pudo INVENTAR una cifra quedaba por debajo del
@@ -38862,7 +38891,7 @@ _vglOfrecerDeshacer(btn);
             salida.parentNode.insertBefore(caja, salida);
           }
           caja.innerHTML = '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
-            + hallazgos.map((x) => '<div style="margin:4px 0"><b style="color:#c00">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");
+            + hallazgos.map((x) => '<div style="margin:4px 0"><b class="vgl-ia-cifra-n">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");
         } catch (e) {}
       };
 

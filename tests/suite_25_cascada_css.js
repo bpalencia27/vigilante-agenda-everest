@@ -568,7 +568,7 @@ module.exports = {
       // estilo en línea dentro del HTML.
       // =====================================================================
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 635, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 635 tras el blindaje completo de color de la v18.0.14, salió ${importantTotal})`);
+      t.cierto(importantTotal === 644, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 644 tras el blindaje completo de color de la v18.0.14, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -1081,6 +1081,68 @@ module.exports = {
       for (const prop of ["z-index:", "max-width:", "font-family:", "color:"]) {
         t.cierto(bloque.includes(prop), `la regla raíz de #vgl-cw-farmaco conserva ${prop}`);
       }
+    });
+
+
+    // =====================================================================
+    // v18.0.16 — REGLA R: EL ESTILO EN LÍNEA DEJÓ DE SER INMUNE EL DÍA QUE GANAMOS
+    //            !important, Y ME LLEVÓ POR DELANTE CUATRO AVISOS
+    //
+    // `CLAUDE.md` daba por sentado: «el estilo inline SÍ es inmune a esto (gana a
+    // cualquier regla no-!important)». Era cierto hasta la v18.0.14. Al blindar TODA la
+    // hoja, nuestras propias reglas pasaron a llevar !important — y un !important de hoja
+    // le gana a un estilo en línea SIN !important. El blindaje tipográfico, que alcanza a
+    // todo elemento sin clase propia, se comió el color en línea de cuatro sitios. Medido
+    // en Chromium, antes y después de mi propio cambio:
+    //     · hora asignada del modal de agendamiento   #4ff0b8 -> blanco
+    //     · etiqueta de fecha («mañana», «hoy»)       #4ff0b8 -> blanco
+    //     · caja «la IA escribió una cifra que no está en los hechos»  #8b1a1a -> negro
+    //     · el número señalado dentro de esa caja                      #c00    -> negro
+    // Los dos últimos son el aviso más grave del módulo de redacción; los dos primeros son
+    // cifras que el médico lee ANTES de confirmar una cita.
+    //
+    // La Regla B de esta misma suite existía para esto y NO lo cazó: mira `\.style\.color =`
+    // y estos cuatro pintaban por `cssText` o por `style="…"` dentro del HTML. Se cierra el
+    // hueco entero: TODA forma de pintar color en línea entra en la cuenta.
+    //
+    // El invariante que se fija: un color en línea o lleva `!important` (y entonces gana a
+    // cualquier regla, nuestra o de Everest), o no existe — el elemento lleva CLASE propia
+    // y su color vive en la hoja, donde la Regla P ya lo obliga a blindarse. Las dos
+    // salidas son seguras; lo inseguro es el término medio, que es justo lo que había.
+    // =====================================================================
+    t.caso("Regla R - ningún color pintado EN LÍNEA queda sin !important (la hoja se lo comería)", () => {
+      const sitios = [];
+
+      // (a) style="…color:…" escrito dentro del HTML que generamos
+      const reHtml = /style="([^"]*)"/g;
+      let m;
+      while ((m = reHtml.exec(code)) !== null) {
+        const decls = m[1];
+        if (!/(^|;)\s*color\s*:/.test(decls)) continue;
+        const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
+        if (decl.includes("!important")) continue;
+        sitios.push('style="…' + decl.slice(0, 60) + '…"  (línea ' + (code.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      // (b) elemento.style.cssText = "…color:…"  — la vía que la Regla B no miraba
+      const reCss = /\.style\.cssText\s*=\s*"([^"]*)"/g;
+      while ((m = reCss.exec(code)) !== null) {
+        const decls = m[1];
+        if (!/(^|;)\s*color\s*:/.test(decls)) continue;
+        const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
+        if (decl.includes("!important")) continue;
+        sitios.push('cssText "…' + decl.slice(0, 60) + '…"  (línea ' + (code.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      // (c) elemento.style.color = "…"  — lo que la Regla B ya cubría, aquí por completitud.
+      //     setProperty("color", v, "important") NO cuenta: lleva su prioridad aparte.
+      const reProp = /\.style\.color\s*=/g;
+      while ((m = reProp.exec(code)) !== null) {
+        sitios.push(".style.color = …  (línea " + (code.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      t.igual(sitios.length, 0,
+        `un color en línea sin !important lo pisa cualquier regla nuestra de la hoja (todas llevan !important desde la v18.0.14). O lleva !important, o el elemento lleva clase propia y su color vive en la hoja. Sitios: ${sitios.slice(0, 6).join(" | ")}`);
     });
 
   }
