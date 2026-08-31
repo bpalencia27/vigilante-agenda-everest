@@ -6154,3 +6154,26 @@ leer la agenda del DOM»: `secc !== "agenda"`. Con su prueba, y con la contraria
 día» NO se declara ciego, que sería un falso aviso).
 
 Banco completo: **2.725 comprobaciones pasan, 0 fallan.**
+
+### Anexo v18.0.8 — el piso por diabetes NO tapaba ningún MUY ALTO (medido, sin tocar código)
+
+Precisión del médico (31-ago): *«todo diabético entra en alto riesgo pero se sigue
+clasificando con el método de 4 pasos del consenso colombiano de dislipidemias, es decir que
+los diabéticos aún pueden subir a muy alto»*.
+
+Se midió sobre el corpus dorado ANTES de proponer nada, y **no hizo falta cambiar el código**:
+de los **125 vectores diabéticos, 102 salen MUY ALTO y 23 ALTO — ninguno por debajo**. La razón
+es estructural: «muy alto» lo produce ÚNICAMENTE el paso 1, que corre ANTES del piso; los
+pasos 3 y 4 solo pueden dar alto/moderado/bajo, así que el `return` del piso no puede tapar
+ninguno.
+
+Se añaden dos pruebas para que ese razonamiento no se pierda con el tiempo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | el piso por diabetes se adelanta ANTES del paso 1 | *en TODO el corpus dorado, ningún diabético queda por debajo de ALTO — y la mayoría sube a MUY ALTO* (`suite_45`), además de otras tres ya existentes | Sí — 63/63 |
+
+La segunda prueba nueva es de forma, no de conducta: recorre el clasificador y exige que
+**toda** línea que produzca `categoria: "muy alto"` lleve `paso: 1`. Si alguien añadiera una
+vía a «muy alto» en el paso 3 o el 4, el piso empezaría a tapar categorías en silencio y esta
+prueba lo obliga a decidirlo a conciencia.

@@ -1021,5 +1021,62 @@ module.exports = {
         "sin nada que pedir, cadena vacía: nunca una solicitud vacía que el modelo copie");
     });
 
+
+    // =====================================================================
+    //  v18.0.8 — «TODO DIABÉTICO ENTRA EN ALTO, PERO PUEDE SUBIR A MUY ALTO»
+    //
+    //  Precisión del médico (31-ago, textual): «todo diabético entra en alto riesgo pero se
+    //  sigue clasificando con el método de 4 pasos del consenso colombiano de dislipidemias,
+    //  es decir que los diabéticos aún pueden subir a muy alto».
+    //
+    //  Se comprobó sobre el corpus dorado ANTES de tocar nada, y NO hizo falta cambiar el
+    //  código: de los 125 vectores diabéticos, 102 salen MUY ALTO y 23 ALTO — ninguno por
+    //  debajo. La razón es estructural y conviene dejarla fijada: «muy alto» lo produce
+    //  ÚNICAMENTE el paso 1, que corre ANTES del piso por diabetes. Los pasos 3 y 4 solo
+    //  pueden dar alto/moderado/bajo, así que el `return` del piso no puede tapar ningún
+    //  MUY ALTO por mucho que corte la escalera.
+    //
+    //  Estas dos pruebas existen para que ese razonamiento no se pierda: si alguien mueve el
+    //  piso por diabetes ANTES del paso 1, o hace que el paso 3/4 pueda producir «muy alto»,
+    //  la propiedad clínica se rompe en silencio y aquí salta.
+    // =====================================================================
+    t.caso("v18.0.8: en TODO el corpus dorado, ningún diabético queda por debajo de ALTO — y la mayoría sube a MUY ALTO", () => {
+      const d = JSON.parse(fs.readFileSync(GOLD, "utf8"));
+      const vs = d.vectores || d;
+      let dm = 0, muyAlto = 0, alto = 0;
+      const flojos = [];
+      for (const v of vs) {
+        const e = v.entrada || v.input || v;
+        const x = {};
+        for (const k in MAPA_ENTRADA) if (e[k] !== undefined) x[MAPA_ENTRADA[k]] = e[k];
+        for (const k in e) if (!(k in MAPA_ENTRADA)) x[k] = e[k];
+        if (!x.diabetes) continue;
+        dm++;
+        const r = api.mtrClasificarRiesgoCv(x);
+        if (r.categoria === "muy alto") muyAlto++;
+        else if (r.categoria === "alto") alto++;
+        else flojos.push(r.categoria);
+      }
+      t.cierto(dm >= 100, "el corpus trae suficientes diabéticos para que esto pruebe algo (" + dm + ")");
+      t.igual(flojos.length, 0, "ni uno por debajo de ALTO · encontrados: " + flojos.join(", "));
+      t.cierto(muyAlto > 0, "y el paso 1 sigue subiendo diabéticos a MUY ALTO (" + muyAlto + " de " + dm + ")");
+      t.igual(muyAlto + alto, dm, "la suma cuadra: solo hay estas dos categorías entre los diabéticos");
+    });
+
+    t.caso("v18.0.8: «muy alto» solo puede salir del paso 1 — que es lo que hace inofensivo al piso por diabetes", () => {
+      // El piso corta la escalera con un `return` en el paso 2. Eso es seguro SOLO mientras
+      // ningún paso posterior pueda producir «muy alto». Si alguien lo añadiera al paso 3 o
+      // al 4, el piso empezaría a tapar categorías sin que nadie se enterase.
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function mtrClasificarRiesgoCv");
+      t.cierto(ini > 0, "se localiza el clasificador");
+      const cuerpo = src.slice(ini, ini + 12000);
+      const conMuyAlto = cuerpo.split("\n").filter((l) => /categoria\s*[:=]\s*"muy alto"/.test(l));
+      t.cierto(conMuyAlto.length > 0, "hay al menos una vía a «muy alto»");
+      conMuyAlto.forEach((l) => {
+        t.cierto(/paso:\s*1\b/.test(l),
+          "toda vía a «muy alto» sale del paso 1, que corre ANTES del piso por diabetes · " + l.trim().slice(0, 110));
+      });
+    });
   },
 };
