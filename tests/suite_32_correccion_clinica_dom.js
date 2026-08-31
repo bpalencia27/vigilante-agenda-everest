@@ -727,5 +727,95 @@ module.exports = {
       t.cierto(leido.factores.hta && leido.factores.hta.v === true, "y lo que ya venía sigue ahí");
     });
 
+    // =====================================================================
+    // v18.0.18 — LA GUARDA DE ESCRITURA CEGABA UN SELLO QUE SÍ ES CONTENIDO
+    //
+    // La guarda de v18.0.4 ("no escribir si nada cambió") comparaba firmas con un replacer
+    // que borraba TODA clave llamada `ts` a cualquier profundidad. Entre ellas,
+    // `confirmaciones[clave].ts` — que no es ruido de reloj: es lo único que decide si la
+    // respuesta del médico sigue viva (_vglConfirmacionVigente).
+    //
+    // Consecuencia, reproducida con el arnés antes de arreglar: el médico responde una
+    // confirmación que caduca —«¿está embarazada?», 30 días, severidad ALTA, FRENA el Panel
+    // del paciente—, pasan 31 días, se le vuelve a preguntar y contesta LO MISMO. La firma
+    // nueva salía idéntica a la vieja y no se escribía nada: el sello seguía siendo el de
+    // hace 31 días, la confirmación seguía caducada, y la misma pregunta bloqueante volvía
+    // cada vez que se abre el Panel, indefinidamente. Su respuesta se descartaba en
+    // silencio, sin toast y sin registro.
+    // =====================================================================
+    t.caso("v18.0.18: re-responder lo mismo tras la caducidad SÍ renueva la vigencia", () => {
+      const c = cargar();
+      const ID = "5150076", CLAVE = "embarazo";
+      const HOY = Date.now(), HACE31 = HOY - 31 * 86400000;
+
+      c.api._vglCosechaGuardar(ID, { confirmaciones: { [CLAVE]: { v: false, ts: HACE31 } } });
+      t.igual(c.api._vglConfirmacionVigente(ID, CLAVE, 30, HOY), null,
+        "a los 31 días con 30 de vigencia está caducada: se vuelve a preguntar (control del caso)");
+
+      // El médico contesta EXACTAMENTE lo mismo que la vez anterior.
+      c.api._vglConfirmacionGuardar(ID, CLAVE, false);
+
+      const reg = (c.api._vglConfirmacionesLeer(ID) || {})[CLAVE];
+      t.cierto(!!reg, "la confirmación sigue archivada");
+      t.cierto((HOY - Number(reg.ts)) / 86400000 < 1,
+        "y su sello se renovó: el valor no cambió, pero la RESPUESTA sí es nueva");
+      t.cierto(c.api._vglConfirmacionVigente(ID, CLAVE, 30, HOY) !== null,
+        "así que vuelve a estar vigente y la pregunta bloqueante deja de reaparecer");
+    });
+
+    // Y la otra dirección, que es lo que la guarda existe para conseguir: el ruido de reloj
+    // NO debe escribir. Si esta prueba se rompe, es que el arreglo de arriba se pasó de
+    // frenada y reabrió las escrituras síncronas que la v18.0.4 cerró.
+    //
+    // OJO AL MÉTODO, porque la primera versión de estas dos pruebas era HUECA y la mutación
+    // lo destapó: simulaban a mano la línea de producción (`if (!n["Antecedentes"]) …`) en
+    // vez de ejecutarla, así que comprobaban su propia lógica local. Al revertir el arreglo
+    // en el script, seguían verdes. Ahora se llama a `_vglCosecharDePantalla`, que es la
+    // función que contiene de verdad esas líneas, con la barra de pestañas de Everest
+    // simulada como ya hace suite_64.
+    const barraDeEverest = (c, idActivo, textoActivo) => {
+      const activa = { id: idActivo, textContent: textoActivo };
+      const qsOrig = c.ctx.document.querySelector.bind(c.ctx.document);
+      c.ctx.document.querySelector = (sel) => {
+        const s = String(sel);
+        if (s.indexOf("active") >= 0 || s.indexOf('aria-selected="true"') >= 0) return activa;
+        return qsOrig(sel);
+      };
+    };
+
+    t.caso("v18.0.18: quedarse parado en una pestaña ya anotada no reescribe el almacén", () => {
+      const c = cargar();
+      const ID = "5150076";
+      barraDeEverest(c, "antecedente", "Antecedentes");
+      t.cierto(c.api._vglEnPestana("antecedentes") === true, "control del caso: el arnés ve la pestaña abierta");
+
+      let escrituras = 0;
+      const orig = c.env.storage.setItem.bind(c.env.storage);
+      c.env.storage.setItem = (k, v) => { if (k === "vgl_cosecha") escrituras++; return orig(k, v); };
+
+      c.api._vglCosecharDePantalla(ID);        // primera vuelta: anota la pestaña, escribe
+      const trasPrimera = escrituras;
+      t.cierto(trasPrimera >= 1, "la primera vuelta sí escribe: hay algo nuevo que archivar");
+
+      for (let i = 0; i < 5; i++) c.api._vglCosecharDePantalla(ID);   // el médico no toca nada
+      t.igual(escrituras - trasPrimera, 0,
+        "cinco vueltas más del reloj sin un solo cambio real no pueden reescribir el almacén entero (~1 MB con 80 pacientes)");
+    });
+
+    t.caso("v18.0.18: el sello de la pestaña ya anotada no se renueva en cada vuelta", () => {
+      const c = cargar();
+      const ID = "5150076";
+      barraDeEverest(c, "antecedente", "Antecedentes");
+
+      c.api._vglCosecharDePantalla(ID);
+      const sello1 = ((c.api._vglCosechaLeer(ID) || {}).pestanasVistas || {})["Antecedentes"];
+      t.cierto(!!sello1, "la pestaña queda anotada — que es para lo que sirve la lista");
+
+      for (let i = 0; i < 5; i++) c.api._vglCosecharDePantalla(ID);
+      const sello2 = ((c.api._vglCosechaLeer(ID) || {}).pestanasVistas || {})["Antecedentes"];
+      t.igual(sello2, sello1,
+        "y su sello NO se renueva: viaja bajo la clave «Antecedentes», que la guarda de escritura no ignora, así que renovarlo reescribía el almacén cada 2–5 s");
+    });
+
   }
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.17
+// @version      18.0.18
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.17";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.18";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4795,7 +4795,46 @@
       // "Escribir SOLO si algo cambió" que ya usa mtrProdRegistrar (12 escrituras síncronas
       // por minuto → 2). _vglCosecharFactoresVisibles coopera conservando el sello del
       // valor cuando el médico no tocó nada, así el JSON no "cambia" solo por el reloj.
-      const _firma = (o) => JSON.stringify(o, (k, v) => (k === "ts" ? undefined : v));
+      // v18.0.18 — LA GUARDA CEGABA UN SELLO QUE SÍ ES CONTENIDO, y con eso descartaba
+      // respuestas del médico. El replacer anterior borraba TODA clave llamada `ts` a
+      // cualquier profundidad — incluido `confirmaciones[clave].ts`, que no es ruido de
+      // reloj: es lo que decide si la respuesta sigue viva (_vglConfirmacionVigente).
+      //
+      // Reproducido con el arnés: el médico responde «¿está embarazada?» (vigencia 30 días,
+      // severidad ALTA, FRENA el Panel del paciente); pasan 31 días, se le vuelve a
+      // preguntar y contesta LO MISMO. Se arma {v:false, ts:ahora}, pero como la firma
+      // ignoraba `ts` quedaba idéntica a {v:false} y no se escribía nada. El sello del
+      // almacén seguía siendo el de hace 31 días, la confirmación seguía caducada, y la
+      // MISMA pregunta bloqueante reaparecía cada vez que se abre el Panel, indefinidamente
+      // — con la respuesta del médico descartada en silencio, sin toast y sin registro.
+      // Con la escalera de adherencia (vigencia 1 día) el efecto es que a partir del
+      // segundo día nunca vuelve a callarse.
+      //
+      // Se ciegan SOLO los dos sellos que de verdad son ruido de reloj, y por su sitio, no
+      // por su nombre: el del registro del paciente y el de `hcEverest` (que se renueva en
+      // cada cosecha de pantalla aunque no cambie nada). `confirmaciones[*].ts` y
+      // `factores[*].ts` quedan dentro de la firma — el segundo ya no genera ruido porque
+      // la v18.0.4 conserva el sello anterior cuando el valor no cambia.
+      const _firma = (o) => {
+        const fuera = {};
+        for (const k of Object.keys(o || {})) {
+          const reg = o[k];
+          if (!reg || typeof reg !== "object") { fuera[k] = reg; continue; }
+          const copia = {};
+          for (const kk of Object.keys(reg)) {
+            if (kk === "ts") continue;                     // sello del registro: ruido
+            if (kk === "hcEverest" && reg[kk] && typeof reg[kk] === "object") {
+              const hc = {};
+              for (const hk of Object.keys(reg[kk])) if (hk !== "ts") hc[hk] = reg[kk][hk];
+              copia[kk] = hc;
+              continue;
+            }
+            copia[kk] = reg[kk];                           // confirmaciones y factores, íntegros
+          }
+          fuera[k] = copia;
+        }
+        return JSON.stringify(fuera);
+      };
       if (_firma(todo) === _firma(previoTodo)) return fusion;
       // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
       // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
@@ -4920,9 +4959,26 @@
         const vistasPrevias = (_vglCosechaLeer(id) || {}).pestanasVistas || {};
         const vistasNuevas = Object.assign({}, vistasPrevias);
         let hayVista = false;
-        if (_vglEnPestana("antecedentes") === true) { vistasNuevas["Antecedentes"] = Date.now(); hayVista = true; }
-        if (_vglEnPestana("habitos") === true) { vistasNuevas["Hábitos y Gestión de Riesgo"] = Date.now(); hayVista = true; }
-        if (_vglEnPestana("cronicos") === true) { vistasNuevas["Ruta Crónicos"] = Date.now(); hayVista = true; }
+        // v18.0.18 — EL SELLO SOLO SE PONE LA PRIMERA VEZ, y con eso revive la guarda de
+        // escritura de la v18.0.4. Antes se renovaba `Date.now()` en CADA vuelta del reloj:
+        // la guarda de la línea ~4798 compara firmas ignorando solo las claves llamadas
+        // `ts`, y aquí el sello viaja bajo «Antecedentes» / «Hábitos…» / «Ruta Crónicos»,
+        // así que la firma cambiaba SIEMPRE y se reescribía el almacén COMPLETO.
+        // Medido con el arnés: 10 escrituras de `vgl_cosecha` en 10 vueltas sin un solo
+        // cambio real. Con 80 pacientes archivados eso es ~1 MB de JSON.stringify más un
+        // setItem síncrono cada 2–5 s, en cada pestaña con una historia abierta — y reabría
+        // justo la carrera que el comentario de v18.0.4 dice haber cerrado: dos pestañas
+        // que leen-fusionan-reescriben el almacén entero en la misma vuelta pueden pisarse
+        // y perder la fusión de la otra, que es la memoria clínica del paciente.
+        //
+        // Conservar el sello viejo es seguro, y no de palabra: el VALOR no se lee en ningún
+        // sitio. El único consumidor (línea ~5692) hace
+        //     for (const p of Object.keys(anotadas)) vistas[p] = true;
+        // — le importa que la clave exista, no cuándo se puso. Es la misma cura que la
+        // v18.0.4 aplicó a `factores`, aquí a la lista de pestañas vistas.
+        if (_vglEnPestana("antecedentes") === true) { if (!vistasNuevas["Antecedentes"]) vistasNuevas["Antecedentes"] = Date.now(); hayVista = true; }
+        if (_vglEnPestana("habitos") === true) { if (!vistasNuevas["Hábitos y Gestión de Riesgo"]) vistasNuevas["Hábitos y Gestión de Riesgo"] = Date.now(); hayVista = true; }
+        if (_vglEnPestana("cronicos") === true) { if (!vistasNuevas["Ruta Crónicos"]) vistasNuevas["Ruta Crónicos"] = Date.now(); hayVista = true; }
         if (hayVista) guardado = _vglCosechaGuardar(id, { pestanasVistas: vistasNuevas });
       } catch (e) {}
       // 2) v16.2.9 — CONTEXTO DE TODA LA HISTORIA, no solo de la pestaña abierta.

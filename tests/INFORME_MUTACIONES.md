@@ -6754,3 +6754,66 @@ de ellas. Lo que hay que fijar es un cable. Mismo criterio que la regresión de 
 saneador.
 
 Banco completo: **2.748 comprobaciones pasan, 0 fallan.**
+
+## v18.0.18 — 31-ago-2026 · LA MEMORIA DEL PACIENTE: UNA RESPUESTA DESCARTADA Y UN ALMACÉN REESCRITO CADA 2 SEGUNDOS
+
+Dos defectos del barrido, los dos en `_vglCosechaGuardar` —la función que archiva lo que el
+script sabe de cada paciente— y los dos reproducidos con el arnés.
+
+### 1. Una respuesta del médico se descartaba en silencio, y la pregunta volvía para siempre
+
+La guarda de escritura de la v18.0.4 («no escribir si nada cambió») comparaba firmas con un
+replacer que borraba **toda** clave llamada `ts`, a cualquier profundidad. Entre ellas,
+`confirmaciones[clave].ts` — que **no es ruido de reloj**: es lo único que decide si la
+respuesta sigue viva (`_vglConfirmacionVigente`).
+
+Reproducido:
+
+```
+vigente a los 31 días (30 de vigencia):  NO -> se vuelve a preguntar (correcto)
+tras responder de nuevo, el sello guardado es de hace 31 días
+¿vale ahora la respuesta?                NO
+```
+
+El médico responde «¿está embarazada?» —30 días de vigencia, severidad ALTA, **frena** el
+Panel del paciente—, pasan 31 días, se le vuelve a preguntar y contesta lo mismo. La firma
+nueva salía idéntica a la vieja y **no se escribía nada**: el sello seguía siendo el de hace
+31 días y la misma pregunta bloqueante reaparecía cada vez que se abre el Panel,
+indefinidamente. Sin toast y sin registro. Con la escalera de adherencia (vigencia 1 día), a
+partir del segundo día no vuelve a callarse nunca.
+
+Se ciegan **solo los dos sellos que de verdad son ruido**, y por su sitio, no por su nombre:
+el del registro del paciente y el de `hcEverest` (que se renueva en cada cosecha de pantalla).
+`confirmaciones[*].ts` y `factores[*].ts` quedan dentro de la firma.
+
+### 2. El almacén entero se reescribía cada 2–5 segundos
+
+Las tres líneas que anotan la pestaña vista ponían `Date.now()` **en cada vuelta del reloj**.
+El sello viaja bajo la clave «Antecedentes» (no `ts`), así que la guarda no lo veía y la firma
+cambiaba siempre. Medido: **10 escrituras en 10 vueltas sin un solo cambio real**.
+
+Con 80 pacientes archivados eso es ~1 MB de `JSON.stringify` más un `setItem` síncrono cada
+2–5 s, en cada pestaña con una historia abierta — y reabría justo la carrera que el comentario
+de la v18.0.4 dice haber cerrado: dos pestañas que leen-fusionan-reescriben el almacén entero
+en la misma vuelta pueden pisarse y **perder la fusión de la otra**, que es la memoria clínica
+del paciente.
+
+Conservar el sello viejo es seguro, y no de palabra: **el valor no se lee en ningún sitio**. El
+único consumidor recorre `Object.keys(anotadas)`, no sus fechas.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 9 | vuelve la firma que ciega todo `ts` | *re-responder lo mismo tras la caducidad SÍ renueva la vigencia* (`suite_32`) | Sí — 2.751 |
+| 10 | vuelve el sello incondicional de las pestañas | *el sello de la pestaña ya anotada no se renueva en cada vuelta* (`suite_32`) | Sí — 2.751 |
+
+**Nota de proceso: la mutación 10 destapó que mis dos primeras pruebas eran HUECAS.**
+Simulaban a mano la línea de producción (`if (!n["Antecedentes"]) …`) en vez de ejecutarla, así
+que comprobaban su propia lógica local: al revertir el arreglo en el script **seguían verdes**.
+Se reescribieron llamando a `_vglCosecharDePantalla`, que es la función que contiene de verdad
+esas líneas, con la barra de pestañas de Everest simulada como ya hace `suite_64`. Es la
+segunda vez hoy que una mutación encuentra un fallo en una prueba mía — y las dos veces la
+prueba se habría entregado verde y vacía.
+
+Banco completo: **2.751 comprobaciones pasan, 0 fallan.**
