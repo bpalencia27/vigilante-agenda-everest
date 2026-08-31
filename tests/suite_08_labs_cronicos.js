@@ -2103,5 +2103,59 @@ module.exports = {
       t.falso(api._esUroComponenteAlterado({ nombre: "COLOR", resultado: "AMARILLO" }), "el color normal no alarma");
     });
 
+
+    // =====================================================================
+    // v18.0.20 — UN FALLO DE RED SE LE MOSTRABA AL MÉDICO COMO UN HECHO DEL PACIENTE
+    //
+    // Cuando Athenea contesta 5 de 8 solicitudes, el lector devuelve lo que sí llegó pero
+    // MARCADO: `__vglIncompleto = 3`, puesto con Object.defineProperty({enumerable:false})
+    // para que no ensucie las iteraciones sobre el array. Y JSON.stringify NO serializa
+    // propiedades no enumerables: al persistir la pre-consulta, la marca desaparecía.
+    //
+    // Aguas abajo: _preconHidratar mete ese array en _labsPrefetch, checkAvisoUniversal
+    // calcula labsListos = true, y _analitosRcvVencidos declara VENCIDOS los analitos que
+    // venían en las solicitudes ilegibles. El aviso de entrada los lista como «Laboratorios
+    // RCV sin resultado vigente» y avisoMarcarVisto lo silencia el resto de la jornada. Al
+    // médico se le afirma «a este paciente le faltan estos exámenes» cuando lo que hubo fue
+    // un fallo de red — justo lo que «casilla vacía antes que dato inventado» impide.
+    // =====================================================================
+    t.caso("v18.0.20: la marca de lectura incompleta de Athenea sobrevive a la persistencia", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];
+      Object.defineProperty(labs, "__vglIncompleto", { value: 3, enumerable: false, configurable: true });
+
+      t.cierto(c.api.atheneaLecturaIncompleta(labs), "control del caso: recién leída consta como incompleta");
+
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.cierto(!!e && Array.isArray(e.labs), "la pre-consulta se recupera");
+      t.cierto(c.api.atheneaLecturaIncompleta(e.labs),
+        "y sigue constando incompleta: si se pierde, 3 solicitudes ilegibles se convierten en «exámenes que le faltan al paciente»");
+      t.igual(e.labs.__vglIncompleto, 3, "con el número exacto de solicitudes que no se dejaron leer");
+    });
+
+    t.caso("v18.0.20: la marca repuesta NO se cuela como un resultado más del array", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];
+      Object.defineProperty(labs, "__vglIncompleto", { value: 2, enumerable: false, configurable: true });
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.igual(e.labs.length, 1, "el array sigue teniendo UN resultado");
+      t.igual(Object.keys(e.labs).length, 1,
+        "y la marca se repone como NO enumerable: ninguna iteración la verá como un laboratorio");
+    });
+
+    t.caso("v18.0.20: una lectura COMPLETA no se marca por error", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];   // sin marca: llegó entera
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.falso(c.api.atheneaLecturaIncompleta(e.labs),
+        "no se puede sobre-corregir: una lectura completa debe seguir contando como completa");
+    });
+
   }
 };

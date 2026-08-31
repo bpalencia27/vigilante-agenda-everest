@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.19
+// @version      18.0.20
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.19";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.20";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4465,7 +4465,22 @@
   function _preconGuardar(doc, labs) {
     try {
       const g = _preconLeerTodo();
-      g.porDoc[String(doc)] = { ts: Date.now(), labs: labs };
+      // v18.0.20 — LA MARCA DE LECTURA INCOMPLETA NO SOBREVIVÍA A JSON, y eso convertía un
+      // fallo de red en una afirmación clínica falsa. `__vglIncompleto` se marca con
+      // Object.defineProperty({enumerable:false}) —para que no ensucie las iteraciones— y
+      // JSON.stringify NO serializa propiedades no enumerables: al persistir la
+      // pre-consulta, la marca desaparecía. Al abrir la historia, _preconHidratar metía ese
+      // array en _labsPrefetch, checkAvisoUniversal calculaba labsListos = true, y
+      // _analitosRcvVencidos declaraba VENCIDOS los analitos que venían en las solicitudes
+      // que Athenea no dejó leer. El aviso de entrada los listaba como «Laboratorios RCV sin
+      // resultado vigente» y avisoMarcarVisto lo silenciaba el resto de la jornada: al
+      // médico se le mostraba «a este paciente le faltan estos exámenes» cuando lo que
+      // pasaba era que 3 de 8 solicitudes no se dejaron leer. Es exactamente lo que la regla
+      // «casilla vacía antes que dato inventado» existe para impedir.
+      // Se guarda como campo NORMAL (sí viaja en el JSON) y se recuelga al leer.
+      let _incompleto = 0;
+      try { _incompleto = (labs && labs.__vglIncompleto) || 0; } catch (e0) {}
+      g.porDoc[String(doc)] = { ts: Date.now(), labs: labs, incompleto: _incompleto };
       writeJSON(VGL_PRECON_KEY, g);
     } catch (e) {}
   }
@@ -4477,6 +4492,17 @@
       const e = _vglBuscarPorDoc(_preconLeerTodo().porDoc, doc);
       if (!e || !Array.isArray(e.labs)) return null;
       if (Date.now() - (e.ts || 0) > VGL_PRECON_TTL_MS) return null;
+      // v18.0.20 — se recuelga la marca que el JSON no puede llevar por sí solo. Sin esto,
+      // quien lea esta caché creería que la lectura de Athenea fue completa (ver la nota de
+      // _preconGuardar). Se repone como NO enumerable, igual que la original, para que
+      // ninguna iteración sobre el array la vea como un resultado más.
+      try {
+        if (e.incompleto > 0 && !e.labs.__vglIncompleto) {
+          Object.defineProperty(e.labs, "__vglIncompleto", {
+            value: e.incompleto, enumerable: false, configurable: true,
+          });
+        }
+      } catch (e2) {}
       return e;
     } catch (e) { return null; }
   }
@@ -11794,7 +11820,18 @@ _vglOfrecerDeshacer(btn);
     if (!m) return null;
     let h = parseInt(m[1], 10); const mi = parseInt(m[2], 10);
     if (!(h >= 0 && h <= 23) || !(mi >= 0 && mi <= 59)) return null;
-    const ap = /([AaPp])\.?\s*[Mm]/.exec(s.slice(m.index + m[0].length));
+    // v18.0.20 — LA MARCA DE MERIDIANO SE BUSCABA EN TODO EL RESTO DE LA CADENA, SIN
+    // ANCLAR, así que cualquier «a» o «p» seguida de una palabra que empiece por M la
+    // convertía en meridiano. Medido: parseHoraMin("13:00 Cita Medica") devolvía 60 —la
+    // 1:00 a. m.— en vez de 780, y "19:00 Consulta Medicina" devolvía 420 en vez de 1140.
+    // Doce horas de error. Si la hora llegara con cualquier sufijo así (el texto de
+    // .labelHora en otra vista, o porque apiCampos elige como columna de hora una que
+    // arrastre texto —esa función puntúa columnas llamando a parseHoraMin sobre valores
+    // arbitrarios), elapsedMin daría +12 h toda la tarde: la agenda entera en ÁMBAR pasada
+    // la gracia y marcas de fraude falsas.
+    // Anclado al principio del resto. Sigue aceptando «7:30 a. m.», «07:00 AM» y
+    // «12:00 p. m.», y deja de cazar la «a» de una palabra cualquiera.
+    const ap = /^\s*([AaPp])\.?\s*[Mm]/.exec(s.slice(m.index + m[0].length));
     if (ap) { h = h % 12; if (/[Pp]/.test(ap[1])) h += 12; }
     return h * 60 + mi;
   }

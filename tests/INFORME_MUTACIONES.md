@@ -6873,3 +6873,63 @@ archivo. El día que se cambie el canal, cambiarlo en un sitio y no en el otro p
 rojo — que es exactamente lo que no pasó la última vez.
 
 Banco completo: **2.752 comprobaciones pasan, 0 fallan.**
+
+## v18.0.20 — 31-ago-2026 · UN FALLO DE RED PRESENTADO COMO HECHO CLÍNICO, Y UN ERROR DE DOCE HORAS
+
+Dos defectos más del barrido, los dos reproducidos con el arnés.
+
+### 1. «A este paciente le faltan estos exámenes» cuando lo que hubo fue un fallo de red
+
+Cuando Athenea contesta **5 de 8** solicitudes, el lector devuelve lo que sí llegó pero
+**marcado**: `__vglIncompleto = 3`, puesto con `Object.defineProperty({enumerable:false})`
+para que no ensucie las iteraciones sobre el array.
+
+`JSON.stringify` **no serializa propiedades no enumerables**. Al persistir la pre-consulta, la
+marca desaparecía:
+
+```
+antes de guardar  · ¿marcado como incompleto? true  ( 3 solicitudes ilegibles )
+tras persistir    · ¿marcado como incompleto? false ( undefined )
+```
+
+Aguas abajo: `_preconHidratar` mete ese array en `_labsPrefetch`, `checkAvisoUniversal`
+calcula `labsListos = true`, y `_analitosRcvVencidos` declara **vencidos** los analitos que
+venían en las solicitudes ilegibles. El aviso de entrada los lista como «Laboratorios RCV sin
+resultado vigente» y `avisoMarcarVisto` lo silencia el resto de la jornada.
+
+Al médico se le afirma **«a este paciente le faltan estos exámenes»** cuando lo que pasó fue
+que tres solicitudes no se dejaron leer. Es exactamente lo que la regla **«casilla vacía antes
+que dato inventado»** existe para impedir, y el aviso además se auto-silencia, así que la
+afirmación falsa no vuelve a revisarse en todo el día.
+
+Se guarda como campo normal —que sí viaja en el JSON— y se **recuelga al leer**, otra vez como
+no enumerable, para que ninguna iteración la vea como un resultado más.
+
+### 2. Doce horas de error por una palabra suelta
+
+La marca de meridiano se buscaba **sin anclar**, sobre todo el resto de la cadena tras
+`HH:MM`. Cualquier «a» o «p» seguida de una palabra que empiece por M pasaba por meridiano:
+
+| entrada | daba | debía dar |
+|---|---|---|
+| `13:00 Cita Medica` | **60** (1:00 a. m.) | 780 |
+| `19:00 Consulta Medicina` | **420** (7:00 a. m.) | 1140 |
+
+Si la hora llegara con un sufijo así —el texto de `.labelHora` en otra vista, o porque
+`apiCampos` elige como columna de hora una que arrastre texto, ya que esa función puntúa
+columnas llamando a `parseHoraMin` sobre valores arbitrarios— `elapsedMin` daría **+12 h toda
+la tarde**: la agenda entera en ÁMBAR pasada la gracia, y marcas de fraude falsas sobre
+pacientes que llegaron a su hora.
+
+Anclado al principio del resto. Comprobadas las once formas: `7:30 a. m.`, `07:00 AM`,
+`7:30 A.M.`, `11:45 p.m.`, `12:00 p. m.`, `12:00 a. m.`, con texto detrás y sin meridiano.
+**11 de 11 correctas.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 12 | se desancla el meridiano | *el meridiano se lee solo si viene pegado a la hora* (`suite_02`) | Sí — 2.757 |
+| 13 | se deja de persistir la marca de lectura incompleta | *la marca de lectura incompleta sobrevive a la persistencia* (`suite_08`) | Sí — 2.757 |
+
+Banco completo: **2.757 comprobaciones pasan, 0 fallan.**

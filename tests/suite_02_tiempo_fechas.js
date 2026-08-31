@@ -329,5 +329,38 @@ module.exports = {
       });
     });
 
+
+    // v18.0.20 — LA MARCA DE MERIDIANO SE BUSCABA SIN ANCLAR, y una palabra suelta la
+    // convertía en un error de DOCE HORAS. La expresión miraba todo el resto de la cadena
+    // tras «HH:MM», así que cualquier «a» o «p» seguida de una palabra que empiece por M
+    // pasaba por meridiano. Medido antes de arreglar:
+    //     parseHoraMin("13:00 Cita Medica")       -> 60   (la 1:00 a. m.)  en vez de 780
+    //     parseHoraMin("19:00 Consulta Medicina") -> 420  (las 7:00 a. m.) en vez de 1140
+    // Si la hora llegara con un sufijo así —el texto de .labelHora en otra vista, o porque
+    // apiCampos elige como columna de hora una que arrastre texto, ya que esa función
+    // puntúa columnas llamando a parseHoraMin sobre valores arbitrarios— elapsedMin daría
+    // +12 h toda la tarde: la agenda entera en ÁMBAR pasada la gracia, y marcas de fraude
+    // falsas sobre pacientes que llegaron a su hora.
+    t.caso("v18.0.20: el meridiano se lee solo si viene pegado a la hora, no en cualquier palabra", () => {
+      t.igual(api.parseHoraMin("13:00 Cita Medica"), 780,
+        "«Cita Medica» no es «a. m.»: las 13:00 son las 13:00");
+      t.igual(api.parseHoraMin("19:00 Consulta Medicina"), 1140,
+        "«Consulta Medicina» tampoco");
+      t.igual(api.parseHoraMin("08:00 Anexo Modulo 3"), 480,
+        "ni «Anexo Modulo», que es el caso que más se parece a un meridiano de verdad");
+    });
+
+    t.caso("v18.0.20: y los meridianos REALES se siguen leyendo, en todas sus formas", () => {
+      t.igual(api.parseHoraMin("07:30 a. m."), 450, "la forma en que Everest los escribe");
+      t.igual(api.parseHoraMin("07:00 AM"), 420, "sin puntos y en mayúscula");
+      t.igual(api.parseHoraMin("7:30 A.M."), 450, "con puntos");
+      t.igual(api.parseHoraMin("11:45 p.m."), 1425, "por la tarde");
+      t.igual(api.parseHoraMin("12:00 p. m."), 720, "el mediodía");
+      t.igual(api.parseHoraMin("12:00 a. m."), 0, "y la medianoche");
+      t.igual(api.parseHoraMin("08:00 a. m. Control"), 480,
+        "un meridiano real seguido de más texto sigue valiendo");
+      t.igual(api.parseHoraMin("13:00"), 780, "y sin meridiano se lee en 24 h, como siempre");
+    });
+
   }
 };
