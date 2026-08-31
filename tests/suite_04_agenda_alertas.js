@@ -1408,5 +1408,74 @@ module.exports = {
       t.igual(rect.length, 1, "y una sola fila en la bitácora, no una por pestaña");
     });
 
+
+    // v18.0.20+ — «1h60» ES UNA HORA QUE NO EXISTE, y salía media hora de cada hora.
+    // `elapsed` viene redondeado a un decimal, así que 119,7 min pasados daban
+    // Math.floor(119,7/60)=1 y Math.round(119,7 % 60)=Math.round(59,7)=60: la tarjeta decía
+    // «hace 1h60» y el title «Lleva 1h60 pasado de la tolerancia», en vez de «hace 2h00».
+    // Pasaba siempre que los minutos caían en [59,5 ; 60), en cualquier tarjeta con la
+    // cuenta a la vista, y también del lado positivo («en 1h60»). Se redondea UNA vez, al
+    // total, y se reparte después: el acarreo a la hora siguiente ya no puede perderse.
+    t.caso("v18.0.20+: la cuenta regresiva nunca imprime «h60» — el acarreo sube a la hora", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (elapsed) => ({ estado: "Sin presentarse", hora_texto: "08:00 AM", elapsed });
+
+      t.igual(c.api.countdownParts(cita(125.7)).text, "hace 2h00",
+        "119,7 min pasados son dos horas, no «1h60»");
+      t.igual(c.api.countdownParts(cita(125.9)).text, "hace 2h00", "y 119,9 también");
+      t.igual(c.api.countdownParts(cita(125.7)).title, "Lleva 2h00 pasado de la tolerancia",
+        "el title se arma con la misma cadena: si uno estaba mal, los dos lo estaban");
+    });
+
+    t.caso("v18.0.20+: y el resto de la cuenta no cambió", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (elapsed) => ({ estado: "Sin presentarse", hora_texto: "08:00 AM", elapsed });
+      t.igual(c.api.countdownParts(cita(66)).text, "hace 1h00", "la hora en punto");
+      t.igual(c.api.countdownParts(cita(185.4)).text, "hace 2h59", "y los minutos sueltos");
+      t.igual(c.api.countdownParts(cita(65.5)).text, "hace 59:30",
+        "por debajo de la hora sigue el formato mm:ss, con sus segundos");
+      t.igual(c.api.countdownParts({ estado: "En Sala", hora_texto: "08:00 AM", elapsed: 90 }), null,
+        "y un paciente ya en sala sigue sin cuenta regresiva");
+    });
+
+    // v18.0.20+ — SOLO EL LÍDER CONSUME LA MARCA DE UN SOLO DISPARO DEL FRAUDE.
+    // `alertedFraud` gobierna `if (sound) { logEvent(FRAUDE_EXTEMPORANEO); reportarFraude() }`:
+    // se dispara UNA vez por cita. Pero colorAndAlert corre en TODA pestaña que lea la
+    // agenda, y desde la v18.0.4 las no líderes fusionan `fraudWatch` del almacén
+    // compartido — así que una pestaña no líder llegaba a marcar y COMPARTIR la marca. Su
+    // `sound` se descarta, pero la marca quedaba puesta para todos: cuando el líder
+    // evaluaba la misma cita la veía consumida, y no escribía la fila de auditoría ni
+    // reportaba el fraude. La evidencia de una reclamación desaparecía por tener una
+    // segunda ventana abierta. Misma familia que v18.0.13 y v18.0.17: quien no avisa, no
+    // consume.
+    t.caso("v18.0.20+: una pestaña NO líder no consume la marca de fraude del líder", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "10:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const t0 = new Date("2026-08-10T10:20:00").getTime();
+
+      // Se arma la vigilancia de fraude con el líder: «sin presentarse» pasada la tolerancia.
+      c.api.__state.leader = true;
+      c.api.colorAndAlert(cita("Sin presentarse"), t0);
+
+      // Ahora esta pestaña pierde el mando y ve «En Sala» dos veces (el antirrebote de
+      // v17.6.21 exige confirmarlo con una segunda lectura).
+      c.api.__state.leader = false;
+      c.api.colorAndAlert(cita("En Sala"), t0 + 60000);
+      const r = c.api.colorAndAlert(cita("En Sala"), t0 + 120000);
+      t.igual(r.color, "ROJO", "la no líder sí pinta el rojo: eso es lectura, no aviso");
+      t.falso(c.api.__state.alertedFraud.size > 0,
+        "pero NO consume la marca de un solo disparo — si la consume, el líder ya no escribe la fila de auditoría ni reporta el fraude");
+
+      // Y cuando el líder la ve, sí la consume y sí suena.
+      c.api.__state.leader = true;
+      const q = c.api.colorAndAlert(cita("En Sala"), t0 + 180000);
+      t.igual(q.color, "ROJO");
+      t.cierto(q.sound === true, "el líder sí dispara el aviso");
+      t.cierto(c.api.__state.alertedFraud.size > 0, "y ahora sí queda marcada, una sola vez");
+    });
+
   }
 };

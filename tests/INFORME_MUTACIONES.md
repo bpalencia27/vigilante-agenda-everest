@@ -6933,3 +6933,48 @@ Anclado al principio del resto. Comprobadas las once formas: `7:30 a. m.`, `07:0
 | 13 | se deja de persistir la marca de lectura incompleta | *la marca de lectura incompleta sobrevive a la persistencia* (`suite_08`) | Sí — 2.757 |
 
 Banco completo: **2.757 comprobaciones pasan, 0 fallan.**
+
+## v18.0.21 — 31-ago-2026 · LA EVIDENCIA DEL FRAUDE SE PERDÍA POR TENER DOS VENTANAS, Y UNA HORA QUE NO EXISTE
+
+### 1. Quien no avisa se comía la marca de un solo disparo
+
+`alertedFraud` es lo que gobierna `if (sound) { logEvent(FRAUDE_EXTEMPORANEO); reportarFraude(); }`:
+se dispara **una vez por cita**. Pero `colorAndAlert` corre en **toda** pestaña que lea la
+agenda —`render` la llama con `.map` sin mirar el liderazgo— y desde la v18.0.4 las no líderes
+fusionan `fraudWatch` del almacén compartido cada 10 s.
+
+Así que una pestaña no líder llegaba a la rama del fraude, **marcaba y compartía** la marca.
+Su propio `sound` se descarta (el `return` de no-líder lo pone en `false`), pero la marca ya
+estaba puesta para todos: cuando el líder evaluaba la misma cita, la veía consumida y **no
+escribía la fila de auditoría ni reportaba el fraude al tablero**.
+
+La evidencia de una reclamación desaparecía por tener una segunda ventana abierta.
+
+Es la **tercera vez hoy** que aparece la misma familia: v18.0.13 (la fila del fraude se
+escribía sin contarse), v18.0.17 (la rectificación descontaba una vez por pestaña) y esta. El
+patrón común: **un efecto de una sola vez, ejecutado en un camino que corre en todas las
+pestañas.** `sound` se sigue calculando igual, así que el camino del líder no cambia en nada.
+
+### 2. «1h60» es una hora que no existe, y salía media hora de cada hora
+
+`elapsed` viene redondeado a un decimal. Un paciente con **119,7 min** pasados daba
+`Math.floor(119,7/60) = 1` y `Math.round(119,7 % 60) = Math.round(59,7) = 60`: la tarjeta
+mostraba **«hace 1h60»** y el `title` **«Lleva 1h60 pasado de la tolerancia»**, en vez de
+«hace 2h00». Ocurría siempre que los minutos caían en `[59,5 ; 60)` —media hora de cada
+hora— y también del lado positivo («en 1h60»).
+
+Se redondea **una sola vez, al total**, y se reparte después: el acarreo a la hora siguiente
+ya no puede perderse.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 14 | vuelve el redondeo que produce «1h60» | *la cuenta regresiva nunca imprime «h60»* (`suite_04`) | Sí — 2.760 |
+| 15 | se quita la guarda de líder de `alertedFraud` | *una pestaña NO líder no consume la marca de fraude del líder* (`suite_04`) | Sí — 2.760 |
+
+`countdownParts` **no tenía ninguna prueba** en todo el banco antes de esta entrega — se
+comprobó con `grep` sobre `tests/`. Una función que pinta una cifra en cada tarjeta de la
+agenda, sin una sola prueba: por eso «1h60» pudo estar ahí sin que nada lo notara.
+
+Banco completo: **2.760 comprobaciones pasan, 0 fallan.**

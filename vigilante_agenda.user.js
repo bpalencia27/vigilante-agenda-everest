@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.20
+// @version      18.0.21
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.20";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.21";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12051,7 +12051,21 @@ _vglOfrecerDeshacer(btn);
       _fraudeCompartidoGuardar();
     }
     if (st.includes("en sala")) {
-      if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
+      // v18.0.20+ — SOLO EL LÍDER CONSUME LA MARCA DE UN SOLO DISPARO. `alertedFraud` es
+      // lo que gobierna `if (sound) { logEvent(FRAUDE_EXTEMPORANEO); reportarFraude(); }`:
+      // se dispara UNA vez por cita. Pero colorAndAlert corre en TODA pestaña que lea la
+      // agenda (render la llama con .map sin mirar el liderazgo), y desde la v18.0.4 las no
+      // líderes fusionan `fraudWatch` del almacén compartido cada 10 s — así que una pestaña
+      // no líder llegaba aquí, marcaba y COMPARTÍA la marca. Su propio `sound` se descarta
+      // (el return de no-líder lo pone en false), pero la marca ya estaba puesta para todos:
+      // cuando el líder evaluaba la misma cita, la veía consumida y no escribía la fila de
+      // auditoría ni reportaba el fraude al tablero. La evidencia para una reclamación
+      // desaparecía por tener una segunda ventana abierta.
+      //
+      // Misma familia que la rectificación de inasistencias (v18.0.17) y la fila del fraude
+      // (v18.0.13): quien no avisa, no consume. `sound` se sigue calculando igual para que
+      // el camino del líder no cambie en nada.
+      if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; if (state.leader) { _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
     }
     else if (st.includes("atendido")) {
@@ -28160,7 +28174,14 @@ _vglOfrecerDeshacer(btn);
     if (rest > 90 || rest < -180) return null;
     const abs = Math.abs(rest);
     let cuanto;
-    if (abs >= 60) cuanto = Math.floor(abs / 60) + "h" + String(Math.round(abs % 60)).padStart(2, "0");
+    // v18.0.20+ — «1h60» ES UNA HORA QUE NO EXISTE, y salía media hora de cada hora.
+    // `elapsed` viene redondeado a un decimal, así que un paciente con 119,7 min pasados
+    // daba abs = 119,7: Math.floor(119,7/60) = 1 y Math.round(119,7 % 60) = Math.round(59,7)
+    // = 60. La tarjeta mostraba «hace 1h60» y el title «Lleva 1h60 pasado de la tolerancia»
+    // en vez de «hace 2h00». Ocurría siempre que los minutos caían en [59,5 ; 60), y también
+    // del lado positivo («en 1h60»). Se redondea UNA sola vez, al total, y se reparte
+    // después: así el acarreo a la hora siguiente no puede perderse.
+    if (abs >= 60) { const tot = Math.round(abs); cuanto = Math.floor(tot / 60) + "h" + String(tot % 60).padStart(2, "0"); }
     else { const mm = Math.floor(abs), ss = Math.round((abs - mm) * 60); cuanto = mm + ":" + String(Math.min(59, ss)).padStart(2, "0"); }
     // v7.4: palabra corta en vez de signo matemático — bajo presión, un "−"/"+" de 10.5px
     // junto a una hora en el mismo formato numérico es fácil de pasar por alto o confundir.
