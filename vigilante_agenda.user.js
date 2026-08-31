@@ -23178,20 +23178,32 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  let _fuzzyQueryCache = null;
+  let _fuzzyQueryTokens = null;
+  let _fuzzyBufPrev = new Uint16Array(256);
+  let _fuzzyBufCurr = new Uint16Array(256);
+  let _fuzzyBufPrevPrev = new Uint16Array(256);
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    if (q !== _fuzzyQueryCache) {
+      _fuzzyQueryCache = q;
+      _fuzzyQueryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    }
+    const queryTokens = _fuzzyQueryTokens;
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = _fuzzyBufPrev;
+    let currRow = _fuzzyBufCurr;
+    let prevPrevRow = _fuzzyBufPrevPrev;
 
-    for (const qToken of queryTokens) {
+    for (let idx = 0; idx < queryTokens.length; idx++) {
+      const qToken = queryTokens[idx];
       let tokenMatched = false;
       const m = qToken.length;
       const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
 
-      for (const tToken of textTokens) {
+      for (let tIdx = 0; tIdx < textTokens.length; tIdx++) {
+        const tToken = textTokens[tIdx];
         if (tToken.includes(qToken)) {
           tokenMatched = true;
           break;
@@ -23199,6 +23211,7 @@ _vglOfrecerDeshacer(btn);
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+        if (n >= 256) continue; // safety: skip extremely long tokens to prevent buffer overflow
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -23218,11 +23231,11 @@ _vglOfrecerDeshacer(btn);
               currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          // Swap rows by reference to avoid inner-loop array allocations
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
@@ -23234,8 +23247,20 @@ _vglOfrecerDeshacer(btn);
           break;
         }
       }
-      if (!tokenMatched) return false;
+      if (!tokenMatched) {
+        // Restore buffers before returning
+        _fuzzyBufPrev = prevRow;
+        _fuzzyBufCurr = currRow;
+        _fuzzyBufPrevPrev = prevPrevRow;
+        return false;
+      }
     }
+
+    // Restore buffers for the next call
+    _fuzzyBufPrev = prevRow;
+    _fuzzyBufCurr = currRow;
+    _fuzzyBufPrevPrev = prevPrevRow;
+
     return true;
   }
 
