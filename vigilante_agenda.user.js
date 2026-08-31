@@ -14195,8 +14195,8 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Header — barra de mando ---- */
       #vgl-head{
-        height:48px;display:flex;align-items:center;gap:12px;
-        padding:0 16px;cursor:move;user-select:none;
+        height:44px;display:flex;align-items:center;gap:10px;
+        padding:0 13px;cursor:move;user-select:none;
         border-bottom:1px solid var(--line);
         background:linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,0));
         flex:0 0 auto;
@@ -14749,34 +14749,18 @@ _vglOfrecerDeshacer(btn);
         transform:translateY(-2px);
         box-shadow:var(--shadow-card-hover);
       }
-      .vgl-card.rojo{
-        background:linear-gradient(170deg,rgba(var(--rgb-rojo),.11),rgba(var(--rgb-rojo),.04));
-        border-color:rgba(var(--rgb-rojo),.34);
-        border-left-color:var(--c-rojo);
-        box-shadow:var(--shadow-card),0 0 18px rgba(var(--rgb-rojo),.06);
-      }
-      .vgl-card.rojo:hover{background:linear-gradient(170deg,rgba(var(--rgb-rojo),.15),rgba(var(--rgb-rojo),.06))}
-      .vgl-card.morado{
-        background:linear-gradient(170deg,rgba(var(--rgb-morado),.10),rgba(var(--rgb-morado),.04));
-        border-color:rgba(var(--rgb-morado),.30);
-        border-left-color:var(--c-morado);
-        box-shadow:var(--shadow-card),0 0 18px rgba(var(--rgb-morado),.05);
-      }
-      .vgl-card.morado:hover{background:linear-gradient(170deg,rgba(var(--rgb-morado),.14),rgba(var(--rgb-morado),.06))}
-      .vgl-card.ambar{
-        background:linear-gradient(170deg,rgba(var(--rgb-ambar),.10),rgba(var(--rgb-ambar),.04));
-        border-color:rgba(var(--rgb-ambar),.30);
-        border-left-color:var(--c-ambar);
-        box-shadow:var(--shadow-card),0 0 18px rgba(var(--rgb-ambar),.05);
-      }
-      .vgl-card.ambar:hover{background:linear-gradient(170deg,rgba(var(--rgb-ambar),.14),rgba(var(--rgb-ambar),.06))}
-      .vgl-card.pes{
-        background:linear-gradient(170deg,rgba(var(--rgb-pes),.10),rgba(var(--rgb-pes),.04));
-        border-color:rgba(var(--rgb-pes),.32);
-        border-left-color:var(--c-pes);
-        box-shadow:var(--shadow-card),0 0 18px rgba(var(--rgb-pes),.05);
-      }
-      .vgl-card.pes:hover{background:linear-gradient(170deg,rgba(var(--rgb-pes),.14),rgba(var(--rgb-pes),.06))}
+      /* v-S+ — Panel principal: se retira el degradado de fondo tintado por color de estado
+         (era "gradiente + glow" por cada variante). El estado clínico ya se comunica de forma
+         redundante e inequívoca por 3 vías que NO dependen de matices de fondo: el borde
+         izquierdo de 4px (var(--c-rojo)/--c-morado/--c-ambar/--c-pes), el punto .vgl-cdot con
+         su propio glow, y el texto del badge/flag correspondiente. Bajar el fondo a un tono
+         neutro (como el resto de tarjetas) reduce el "ruido" visual entre tarjetas de la lista
+         sin perder ninguna señal — de hecho mejora la lectura para daltonismo, que ya no debe
+         diferenciar tintes sutiles de fondo, solo el borde/badge/texto. */
+      .vgl-card.rojo{border-color:rgba(var(--rgb-rojo),.34);border-left-color:var(--c-rojo)}
+      .vgl-card.morado{border-color:rgba(var(--rgb-morado),.30);border-left-color:var(--c-morado)}
+      .vgl-card.ambar{border-color:rgba(var(--rgb-ambar),.30);border-left-color:var(--c-ambar)}
+      .vgl-card.pes{border-color:rgba(var(--rgb-pes),.32);border-left-color:var(--c-pes)}
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(var(--rgb-ambar),.60),var(--shadow-card)}
       /* v13.0.0 — Además de atenuar (opacidad+grises), el borde izquierdo pasa al tono
          EXCLUSIVO --c-atendido: así la tarjeta se distingue de "En sala" (mismo verde en
