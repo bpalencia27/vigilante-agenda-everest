@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.11
+// @version      18.0.12
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.11";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.12";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11843,6 +11843,9 @@ _vglOfrecerDeshacer(btn);
     // Ahora se dispara YA la búsqueda del PyM real de hoy (la líder; el resto espera).
     if (heartbeat() && typeof GM_xmlhttpRequest !== "undefined") loadPymDiario(true).catch(() => {});
   }
+  // v18.0.12 — la hora de reloj para la fila del hueco de lectura, que se escribe ANTES de
+  // que colorAndAlert calcule su `stamp` habitual. Misma forma, una sola fuente.
+  function stampSalto() { return new Date().toLocaleTimeString(); }
   function colorAndAlert(a, now) {
     const stCrudoRaw = a.estado || ""; const stCrudo = stCrudoRaw.toLowerCase();
     const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
@@ -11932,7 +11935,47 @@ _vglOfrecerDeshacer(btn);
       // v18.0.4 — ENJAMBRE (31-ago): además de `sound=false`, se marca `callar` para que
       // maybeNotify respete la decisión (antes volvía a sonar el ROJO por esa vía).
       if (_apptMarcada(state.alertedFraud, a, key)) color = "ROJO";
-      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; callar = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
+      // =================================================================
+      // v18.0.12 — ESTE SALTO NO EXISTE EN EVEREST: ES UN DEFECTO DEL SCRIPT.
+      //
+      // CORRECCIÓN DEL MÉDICO (31-ago), textual: «el rojo es cuando cambia de "sin
+      // presentarse" a "en sala" después del tiempo de confirmación. en ningún momento
+      // pasará de sin presentarse a atendido», y al preguntarle expresamente por este
+      // caso: «imposible que eso pase… primero debe pasar de sin presentarse a "en sala"
+      // y ahí yo lo llamo a consulta y cuando termina la consulta pasa a "atendido"».
+      //
+      // QUÉ IMPLICA. La v16.2.8 (20-ago) trató este salto como un hecho real y decidió
+      // "no notificar pero sí registrar en rojo". Su PREMISA era falsa: lo que el médico
+      // veía entonces no era Everest saltándose "En Sala", era EL SCRIPT perdiéndose esa
+      // lectura — el mismo hueco que hoy se ha arreglado por tres sitios (el líder ciego
+      // de v18.0.8, el antirrebote que resucitaba estados viejos de v18.0.8, y el descanso
+      // de 5 minutos del API de v18.0.9). Un dato que solo aparece cuando el script
+      // parpadea no es un hallazgo clínico: es la huella del parpadeo.
+      //
+      // QUÉ SE HACE. No se afirma nada que no se haya visto. Medido antes de cambiarlo:
+      // por esta rama el contador de fraude subía a 1 SIN escribir la fila
+      // FRAUDE_EXTEMPORANEO —solo un CAMBIO_ESTADO genérico—, así que el médico veía «1
+      // confirmación extemporánea» y no encontraba la línea con la que reclamar. Ahora la
+      // cita se trata como lo que es —un paciente atendido— y queda constancia del HUECO
+      // DE LECTURA, que es el hecho verdadero y además le sirve para saber cuándo el
+      // Centinela dejó de mirar.
+      //
+      // El color VERDE aquí no afirma «llegó a tiempo»: maybeNotify exige `arrival` (una
+      // llegada observada EN VIVO) para contar o avisar un verde, y aquí `arrival` es
+      // false porque nadie vio la llegada. Así que no cuenta, no suena y no miente.
+      // La primera rama de arriba NO se toca: si el fraude ya se avisó por «En Sala»
+      // (alertedFraud), el rojo se conserva — esa es la evidencia buena, observada entera.
+      // =================================================================
+      else if (_apptMarcada(state.fraudWatch, a, key)) {
+        color = "VERDE";
+        const marca = "saltosinsala@" + key;
+        if (!state.contadas.has(marca)) {
+          state.contadas.add(marca);
+          _fraudeCompartidoGuardar();       // una sola vez por cita y día, entre pestañas
+          logEvent({ t: stampSalto(), ev: "HUECO_DE_LECTURA", hora: a.hora_texto, doc: a.doc_id,
+            estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+        }
+      }
       else color = "VERDE";
     }
     else if (st.includes("sin presentarse")) {

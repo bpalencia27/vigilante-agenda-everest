@@ -54,25 +54,79 @@ module.exports = {
       t.falso(r2.sound, "no debe sonar por segunda vez");
     });
 
-    t.caso("colorAndAlert: el salto directo a Atendido SIGUE quedando registrado en rojo, pero YA NO suena (v16.2.8)", () => {
-      // Decisión del médico (20-ago, con pantallazo de una notificación recibida a las
-      // 12:09 por una cita de las 11:20): "solamente necesito el aviso cuando la leyenda
-      // pasa de 'sin presentarse' a 'en sala' fuera del tiempo de confirmación; pero para
-      // 'sin presentarse' a 'atendido' no es necesario generar ninguna notificación".
-      // Cuando la agenda ya dice "Atendido" el paciente lleva rato dentro: avisar entonces
-      // solo interrumpe. Lo que NO se pierde es la evidencia: el color rojo y el registro
-      // de auditoría son los que sustentan las reclamaciones.
+    // =====================================================================
+    //  v18.0.12 — ESTE CASO REEMPLAZA AL DE v16.2.8, PORQUE SU PREMISA ERA FALSA
+    //
+    //  La v16.2.8 (20-ago) trató el salto «sin presentarse → atendido» como un hecho real y
+    //  decidió «no notificar, pero registrar en rojo». El 31-ago el médico corrigió la
+    //  premisa, dos veces y sin margen:
+    //    «el rojo es cuando cambia de "sin presentarse" a "en sala" después del tiempo de
+    //     confirmación. en ningún momento pasará de sin presentarse a atendido»
+    //    «yo soy el que decido si se atiende o no al que llega tarde […] JAMÁS pasaría a la
+    //     leyenda "atendido" si yo no estoy de acuerdo en atenderlo»
+    //
+    //  O sea: en Everest la cita SIEMPRE pasa por «En Sala» (ahí él llama al paciente) antes
+    //  de «Atendido». Lo que veía en agosto no era Everest saltándose un estado: era EL
+    //  SCRIPT perdiéndose esa lectura — el mismo hueco que se arregló por tres sitios el
+    //  31-ago (líder ciego, antirrebote que resucitaba estados viejos, y el descanso de 5
+    //  minutos del API).
+    //
+    //  Y el coste medido de tratarlo como hecho clínico: por esa rama el contador de fraude
+    //  subía a 1 SIN escribir la fila FRAUDE_EXTEMPORANEO —solo un CAMBIO_ESTADO genérico—,
+    //  así que el médico veía «1 confirmación extemporánea» y no encontraba la línea con la
+    //  que reclamar. Un número sin evidencia detrás es justo lo que este proyecto prohíbe.
+    // =====================================================================
+    t.caso("v18.0.12: el salto imposible a Atendido NO es un fraude — es un hueco de lectura, y así se registra", () => {
       const c = cargar();
       const refDate = new Date("2026-08-10T08:20:00").getTime();
       const a = { hora_texto: "08:00 AM", estado: "Atendido", nombre: "JUAN", index: 1, doc_id: "123" };
       c.api.__state.leader = true;
       const k = c.api.apptKey(a);
-      c.api.__state.fraudWatch.add(k); // estaba en ambar
+      c.api.__state.fraudWatch.add(k); // estaba en ámbar
 
       const r = c.api.colorAndAlert(a, refDate);
-      t.igual(r.color, "ROJO", "se sigue pescando: el panel lo pinta y la auditoría lo guarda");
-      t.falso(r.sound, "pero no dispara tono, ni notificación de Windows, ni cartel");
-      t.cierto(c.api.__state.alertedFraud.has(k), "queda marcado para no reevaluarlo");
+      t.falso(r.color === "ROJO", "ya no se afirma una confirmación extemporánea que nadie vio");
+      t.falso(r.sound, "y sigue sin sonar, como el médico pidió en agosto");
+      t.falso(c.api.__state.alertedFraud.has(k), "no se marca como fraude avisado: no hubo fraude observado");
+
+      c.api.evFlush();
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
+      const hueco = filas.filter((x) => x && x.ev === "HUECO_DE_LECTURA");
+      t.igual(hueco.length, 1, "queda constancia del hecho VERDADERO: al script se le escapó una lectura");
+      t.igual(hueco[0].doc, "123", "con la cita afectada, para que se pueda investigar");
+      t.igual(filas.filter((x) => x && x.ev === "FRAUDE_EXTEMPORANEO").length, 0,
+        "y ninguna fila de fraude: no se firma una evidencia que no se observó");
+    });
+
+    t.caso("v18.0.12: y no se repite en cada vuelta — una cita, un hueco, una fila", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "Atendido", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__state.fraudWatch.add(c.api.apptKey(a));
+      c.api.colorAndAlert(a, refDate);
+      c.api.colorAndAlert(a, refDate + 5000);
+      c.api.colorAndAlert(a, refDate + 10000);
+      c.api.evFlush();
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
+      t.igual(filas.filter((x) => x && x.ev === "HUECO_DE_LECTURA").length, 1,
+        "el sondeo pasa cada pocos segundos: sin candado, la bitácora se llenaría de la misma línea");
+    });
+
+    t.caso("v18.0.12: el FRAUDE REAL (pasa por En Sala) no se toca — sigue sonando y sigue dejando su fila", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      const k = c.api.apptKey(a);
+      c.api.__state.fraudWatch.add(k);
+      const r = c.api.colorAndAlert(a, refDate);
+      t.igual(r.color, "ROJO", "esta es la transición que el médico SÍ quiere vigilada");
+      t.cierto(r.sound, "y esta sí suena");
+      c.api.evFlush();
+      const filas = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]");
+      t.igual(filas.filter((x) => x && x.ev === "FRAUDE_EXTEMPORANEO").length, 1,
+        "con su fila de evidencia, que es la que sustenta la reclamación");
     });
 
     t.caso("colorAndAlert: el paso a EN SALA fuera de gracia SÍ suena — es el aviso que el médico sí quiere", () => {

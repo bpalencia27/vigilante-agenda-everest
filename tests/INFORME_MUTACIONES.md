@@ -6311,3 +6311,53 @@ buena es una mentira sobre el estado actual**, y de las peores — le diría al 
 falla justo cuando ya funciona.
 
 Banco completo: **2.730 comprobaciones pasan, 0 fallan.**
+
+## v18.0.12 — 31-ago-2026 · LA PREMISA DE v16.2.8 ERA FALSA
+
+El médico corrigió una afirmación mía sobre el ROJO y, al tirar del hilo, resultó que
+corregía una decisión suya de agosto. Sus palabras, en dos mensajes:
+
+> «el rojo es cuando cambia de "sin presentarse" a "en sala" después del tiempo de
+> confirmación. **en ningún momento pasará de sin presentarse a atendido**»
+>
+> «yo soy el que decido si se atiende o no al que llega tarde […] **JAMÁS pasaría a la
+> leyenda "atendido" si yo no estoy de acuerdo en atenderlo**»
+
+En Everest la cita SIEMPRE pasa por «En Sala» —ahí él llama al paciente— antes de
+«Atendido». La v16.2.8 (20-ago) trató el salto directo como un hecho real y decidió «no
+notificar, pero registrar en rojo». Lo que veía entonces no era Everest saltándose un
+estado: era **el script perdiéndose esa lectura**, el mismo hueco arreglado hoy por tres
+sitios (líder ciego, antirrebote que resucitaba estados viejos, y el descanso de 5 min del
+API). Un dato que solo aparece cuando el script parpadea no es un hallazgo clínico: es la
+huella del parpadeo.
+
+### Lo que se midió antes de cambiarlo
+
+| | contador «fraude» | filas del CSV |
+|---|---|---|
+| Salto imposible (hueco de lectura) | **1** | INASISTENCIA · RECTIFICACIÓN · CAMBIO_ESTADO |
+| Fraude real (pasa por «En Sala») | 1 | INASISTENCIA · RECTIFICACIÓN · **FRAUDE_EXTEMPORANEO** · CAMBIO_ESTADO |
+
+Mismo número, **sin la fila que lo respalda**. El médico veía «1 confirmación extemporánea»
+y no encontraba la línea con la que reclamar. Después del cambio, la primera fila queda en
+`fraude = 0` y escribe `HUECO_DE_LECTURA`, que es el hecho verdadero; la segunda no cambia.
+
+El color pasa a VERDE, y eso **no** afirma «llegó a tiempo»: `maybeNotify` exige `arrival`
+—una llegada observada EN VIVO— para contar o avisar un verde, y aquí `arrival` es false
+porque nadie vio la llegada. Así que no cuenta, no suena y no miente.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | vuelve la conducta de v16.2.8 (ROJO + `alertedFraud`) | *el salto imposible a Atendido NO es un fraude — es un hueco de lectura* (`suite_04`) | Sí — 68/68 |
+| 2 | se quita el candado y la fila se repite en cada vuelta | *y no se repite en cada vuelta — una cita, un hueco, una fila* (`suite_04`) | Sí — 68/68 |
+| 3 | el fraude REAL deja de sonar | *el FRAUDE REAL (pasa por En Sala) no se toca* + **dos pruebas preexistentes** (`suite_04`) | Sí — 68/68 |
+
+La mutación 3 es la que de verdad importa: comprueba que al retirar el fraude falso **no se
+tocó el verdadero**, y lo confirman dos casos que ya existían desde antes de esta entrega.
+La 2 protege la bitácora: el sondeo pasa cada pocos segundos y sin candado se llenaría de la
+misma línea.
+
+`suite_32` (R2.5) afirmaba también la conducta vieja: se conserva el caso —la rama sigue
+siendo alcanzable y hay que fijar su conducta— reescrito a lo que ahora debe pasar.
+
+Banco completo: **2.732 comprobaciones pasan, 0 fallan.**

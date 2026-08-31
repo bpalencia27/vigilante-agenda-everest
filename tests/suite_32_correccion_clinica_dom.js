@@ -411,7 +411,13 @@ module.exports = {
       t.falso(res.sound, "AMBAR no emite sonido");
     });
 
-    t.caso("R2.5: Transición Sin presentarse -> Atendido (salto de sala) dispara ROJO sin sonido (v16.2.8)", () => {
+    // v18.0.12 — este caso afirmaba la conducta de v16.2.8, cuya PREMISA el médico corrigió
+    // el 31-ago: en Everest la cita siempre pasa por «En Sala» (ahí él llama al paciente)
+    // antes de «Atendido», y además es él quien decide si atiende a quien llega tarde. El
+    // salto directo no ocurre: cuando el script lo ve, es que se perdió una lectura. Ver el
+    // bloque largo en suite_04. Aquí se conserva el caso —la rama sigue siendo alcanzable y
+    // hay que fijar su conducta— con lo que ahora debe pasar.
+    t.caso("R2.5 (v18.0.12): el salto Sin presentarse -> Atendido NO se firma como fraude", () => {
       const c = cargar();
       c.api.__state.leader = true;
       const key = "1098765432@m420"; // apptKey v17.x: doc_id@m+minutos
@@ -420,18 +426,14 @@ module.exports = {
       const appt = { doc_id: "1098765432", hora_texto: "07:00 AM", estado: "Atendido", index: 0 };
       const now = Date.now();
 
-      // v16.2.8 — decisión del médico (20-ago, con pantallazo): «para sin presentarse a
-      // atendido no es necesario generar ninguna notificación». El ROJO se CONSERVA (el
-      // panel lo pinta y la auditoría lo registra: la evidencia para reclamaciones), pero
-      // sound se queda en false, que es lo único que dispara tono/notificación/cartel.
       const res1 = c.api.colorAndAlert(appt, now);
-      t.igual(res1.color, "ROJO");
-      t.falso(res1.sound, "v16.2.8: Atendido ya no notifica — el paciente lleva rato en el consultorio");
-      t.cierto(c.api.__state.alertedFraud.has(key), "debe quedar en alertedFraud");
+      t.falso(res1.color === "ROJO", "no se afirma una confirmación extemporánea que nadie observó");
+      t.falso(res1.sound, "y sigue sin notificar, como el médico pidió en agosto");
+      t.falso(c.api.__state.alertedFraud.has(key), "ni queda marcado como fraude avisado");
 
-      // Segundo tick: sigue ROJO (el color persiste para el panel y la auditoría).
+      // Segundo tick: estable, y sin repetir la fila del hueco.
       const res2 = c.api.colorAndAlert(appt, now);
-      t.igual(res2.color, "ROJO");
+      t.igual(res2.color, res1.color, "la conducta es estable entre vueltas");
       t.falso(res2.sound);
     });
 
