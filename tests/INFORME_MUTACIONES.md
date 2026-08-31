@@ -6978,3 +6978,59 @@ comprobó con `grep` sobre `tests/`. Una función que pinta una cifra en cada ta
 agenda, sin una sola prueba: por eso «1h60» pudo estar ahí sin que nada lo notara.
 
 Banco completo: **2.760 comprobaciones pasan, 0 fallan.**
+
+## v18.0.22 — 31-ago-2026 · LA REGLA DE LA FAMILIA, EN VEZ DE UN CUARTO PARCHE
+
+Cuatro veces en una sola jornada apareció **el mismo defecto**, con cuatro caras:
+
+| entrega | cara |
+|---|---|
+| v18.0.13 | la fila del fraude se escribía sin contarse |
+| v18.0.17 | la rectificación de inasistencias descontaba una vez **por pestaña** |
+| v18.0.21 | una pestaña no líder consumía la marca de un solo disparo del fraude |
+| **v18.0.22** | el registro del HUECO DE LECTURA — **escrito por mí ese mismo día** (v18.0.12), con exactamente el mismo agujero |
+
+El patrón, una vez visto, es siempre el mismo: `colorAndAlert` corre en **toda** pestaña que
+lea la agenda —`render` la llama con `.map`, sin mirar el liderazgo— y su
+`if (!state.leader) … return` está **al final**. Todo efecto de una sola vez escrito antes de
+esa línea lo ejecutan todas las ventanas: se duplican filas de auditoría, se descuentan
+contadores de más, y se consumen marcas que el líder ya no vuelve a ver.
+
+### El cuarto caso
+
+`state.contadas.add(marca)` + `_fraudeCompartidoGuardar()` + `logEvent(HUECO_DE_LECTURA)`
+corrían sin guarda. Una pestaña no líder empujaba `contadas` al almacén compartido —el mismo
+empujón indebido que la v18.0.17 tuvo que cerrar en la rectificación— y, como la marca es por
+pestaña hasta que la fusión de los 10 s la reparta, **dos ventanas que vean el hueco en la
+misma vuelta escriben dos filas por un solo hecho**.
+
+### Y la regla, que es lo que de verdad importa
+
+Arreglar el cuarto caso y seguir no sirve de nada: el quinto se escribiría igual. `suite_04`
+gana una **regresión estructural**: dentro de `colorAndAlert`, y antes de la guarda de líder,
+todo efecto secundario (`_apptMarcar`, `_fraudeCompartidoGuardar`, `logEvent`, `bumpStatCita`,
+`rectificarStat`, `_noShowRegistrar`, `reportarFraude`, `contadas.add/delete`) tiene que estar
+gobernado por `state.leader`. Censo actual: **10 efectos protegidos, 0 sin proteger.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 16 | se quita la guarda del `HUECO_DE_LECTURA` | *ningún efecto de una sola vez corre sin ser líder* (`suite_04`) | Sí — 2.761 |
+| 17 | se quita la guarda de la **rectificación** (otro miembro de la familia) | la misma regla | Sí — 2.761 |
+
+La mutación 17 se hizo a propósito sobre un miembro **distinto** del que se acababa de
+arreglar: una regla que solo cazara su propio caso no sería una regla, sería el parche otra
+vez.
+
+**Nota de proceso — la primera versión de esta regla era HUECA, y lo destapó su propia
+mutación.** El contexto que examinaba incluía los comentarios, y los comentarios que explican
+el arreglo contienen la cadena «state.leader»: la comprobación la encontraba siempre y pasaba
+aunque se quitara la guarda de verdad. **Es exactamente el defecto que la regla existe para
+cazar, cometido dentro de la regla misma.** Ahora el contexto se filtra a código.
+
+Van **tres pruebas huecas** encontradas hoy por la disciplina de mutación (Regla P, las dos de
+la memoria del paciente, y esta). Ninguna habría fallado nunca; las tres se habrían entregado
+en verde.
+
+Banco completo: **2.761 comprobaciones pasan, 0 fallan.**

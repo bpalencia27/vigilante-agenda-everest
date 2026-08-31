@@ -1477,5 +1477,73 @@ module.exports = {
       t.cierto(c.api.__state.alertedFraud.size > 0, "y ahora sí queda marcada, una sola vez");
     });
 
+
+    // =====================================================================
+    // v18.0.22 — LA REGLA DE LA FAMILIA, no otro parche suelto
+    //
+    // Cuatro veces en una sola jornada apareció el MISMO defecto, con cuatro caras:
+    //   · v18.0.13 — la fila del fraude se escribía sin contarse;
+    //   · v18.0.17 — la rectificación de inasistencias descontaba una vez POR PESTAÑA;
+    //   · v18.0.21 — una pestaña no líder consumía la marca de un solo disparo del fraude;
+    //   · v18.0.22 — el registro del HUECO DE LECTURA, escrito por mí ese mismo día, con
+    //     exactamente el mismo agujero.
+    //
+    // El patrón, una vez visto, es siempre el mismo: `colorAndAlert` corre en TODA pestaña
+    // que lea la agenda (render la llama con .map, sin mirar el liderazgo) y su
+    // `if (!state.leader) … return` está al FINAL. Todo efecto de UNA SOLA VEZ escrito
+    // antes de esa línea lo ejecutan todas las ventanas: se duplican filas de auditoría, se
+    // descuentan contadores de más, y se consumen marcas que el líder ya no vuelve a ver.
+    //
+    // Arreglar el cuarto caso y seguir no sirve de nada: el quinto se escribirá igual. Esta
+    // prueba fija la REGLA — dentro de colorAndAlert, y antes de la guarda de líder, todo
+    // efecto secundario tiene que estar gobernado por `state.leader`. Es una regresión de
+    // código fuente a propósito: lo que hay que vigilar es una propiedad estructural de la
+    // función, no una conducta concreta que ya tiene sus cuatro pruebas arriba.
+    // =====================================================================
+    t.caso("v18.0.22: en colorAndAlert, ningún efecto de una sola vez corre sin ser líder", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const lineas = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8").split("\n");
+
+      const ini = lineas.findIndex((l) => l.includes("function colorAndAlert"));
+      t.cierto(ini > 0, "se localiza colorAndAlert");
+      let fin = -1;
+      for (let i = ini + 1; i < lineas.length; i++) {
+        if (/^\s*if \(!state\.leader\)/.test(lineas[i])) { fin = i; break; }
+      }
+      t.cierto(fin > ini, "y su guarda de liderazgo, que es la frontera de esta regla");
+
+      // Lo que cuenta como "efecto de una sola vez": marcar, compartir entre pestañas,
+      // registrar en la bitácora, mover un contador del día o reportar al tablero.
+      const EFECTOS = /_apptMarcar\(|_fraudeCompartidoGuardar\(|logEvent\(|bumpStatCita\(|rectificarStat\(|_noShowRegistrar\(|reportarFraude\(|state\.contadas\.(?:add|delete)\(/;
+
+      const desprotegidos = [];
+      let protegidos = 0;
+      for (let i = ini; i < fin; i++) {
+        const l = lineas[i];
+        if (/^\s*\/\//.test(l) || !EFECTOS.test(l)) continue;
+        // ¿Hay un `state.leader` gobernando este efecto? Se mira el bloque inmediato hacia
+        // atrás; una guarda más lejana que 25 líneas ya no gobierna nada de forma legible.
+        //
+        // Y SE MIRA SOLO EL CÓDIGO, NO LOS COMENTARIOS. La primera versión de esta regla
+        // era HUECA y lo destapó su propia mutación: los comentarios que explican el
+        // arreglo contienen la cadena «state.leader», así que el contexto la encontraba
+        // siempre y la comprobación pasaba aunque se quitara la guarda de verdad. Es
+        // exactamente el defecto que esta regla existe para cazar, cometido dentro de la
+        // regla misma.
+        const ctx = lineas.slice(Math.max(ini, i - 25), i + 1)
+          .filter((x) => !/^\s*\/\//.test(x))
+          .map((x) => x.replace(/\/\/.*$/, ""))
+          .join("\n");
+        if (ctx.includes("state.leader")) protegidos++;
+        else desprotegidos.push(`L${i + 1}: ${l.trim().slice(0, 90)}`);
+      }
+
+      t.cierto(protegidos >= 8,
+        `la regla tiene que estar mirando algo real: se esperaban al menos 8 efectos gobernados por state.leader, se hallaron ${protegidos}`);
+      t.igual(desprotegidos.length, 0,
+        `todo efecto de una sola vez dentro de colorAndAlert, antes de la guarda de líder, debe estar bajo state.leader — si no, lo ejecuta cada ventana abierta y se duplican filas, contadores y marcas. Sin proteger: ${desprotegidos.join(" | ")}`);
+    });
+
   }
 };

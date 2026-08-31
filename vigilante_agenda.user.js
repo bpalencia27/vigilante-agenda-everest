@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.21
+// @version      18.0.22
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.21";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.22";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12114,8 +12114,18 @@ _vglOfrecerDeshacer(btn);
       // =================================================================
       else if (_apptMarcada(state.fraudWatch, a, key)) {
         color = "VERDE";
+        // v18.0.22 — MISMA FAMILIA QUE v18.0.13, v18.0.17 y v18.0.21, Y ESTA VEZ EN CÓDIGO
+        // QUE ESCRIBÍ YO ESTA MISMA JORNADA (v18.0.12). El bloque vive 50 líneas ANTES del
+        // `if (!state.leader) … return`, así que lo ejecutaba cualquier pestaña. Dos daños:
+        // una pestaña no líder empujaba `contadas` al almacén compartido con
+        // _fraudeCompartidoGuardar() —el mismo empujón indebido que la v18.0.17 tuvo que
+        // cerrar en la rectificación—, y como la marca es POR PESTAÑA hasta que la fusión
+        // de los 10 s la reparta, dos ventanas que vean el hueco en la misma vuelta
+        // escriben DOS filas HUECO_DE_LECTURA por un solo hecho.
+        // El color se decide igual en todas —eso es lectura, no aviso—; lo que se reserva
+        // al líder es marcar, compartir y registrar.
         const marca = "saltosinsala@" + key;
-        if (!state.contadas.has(marca)) {
+        if (state.leader && !state.contadas.has(marca)) {
           state.contadas.add(marca);
           _fraudeCompartidoGuardar();       // una sola vez por cita y día, entre pestañas
           logEvent({ t: stampSalto(), ev: "HUECO_DE_LECTURA", hora: a.hora_texto, doc: a.doc_id,
