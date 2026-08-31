@@ -14584,9 +14584,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-sidebar::-webkit-scrollbar{width:0}
 
       /* Buscador */
-      #vgl-find{margin-bottom:12px}
+      /* [S+] pasa a flex para alojar el ícono de lupa como hermano decorativo del
+         input, sin envolver el campo en un contenedor con position:relative — así
+         el ancho/comportamiento nativo del <input> no cambia, solo su padding. */
+      #vgl-find{margin-bottom:12px;display:flex;align-items:center;gap:8px}
+      #vgl-find .vgl-find-ico{flex:0 0 auto;color:var(--fg3)}
       #vgl-q{
-        width:100%;appearance:none;
+        flex:1;min-width:0;appearance:none;
         border:1px solid var(--edge);background:var(--bg2);
         color:var(--fg);border-radius:var(--r-field);padding:9px 14px;
         font-size:13px;font-family:inherit;outline:none;
@@ -14617,13 +14621,17 @@ _vglOfrecerDeshacer(btn);
         transition:background .16s var(--ease-out),color .16s var(--ease-out),transform .24s var(--spring);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
+        /* [S+] ícono Lucide como hijo, alineado con el texto */
+        display:flex;align-items:center;gap:8px;
       }
+      .vgl-fchip .vgl-ico{flex:0 0 auto;color:var(--fg3)}
       .vgl-fchip:hover{background:var(--bg3);color:var(--fg);transform:translateX(2px)}
       .vgl-fchip.sel{
         background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
         font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),var(--glow-edge);
       }
+      .vgl-fchip.sel .vgl-ico{color:var(--c-azul)}
       #vgl-root.light .vgl-fchip.sel{color:var(--c-azul)}
 
       /* Stats */
@@ -14664,6 +14672,7 @@ _vglOfrecerDeshacer(btn);
         line-height:1.4;
         box-shadow:var(--glow-edge);
       }
+      .vgl-sb-btn .vgl-ico{flex:0 0 auto}
       .vgl-sb-btn:hover{background:var(--bg3);transform:translateY(-1px)}
       .vgl-sb-btn:active{transform:scale(.97)}
       /* [S+] CTA sólido inspirado en el mock: de traslúcido a gradiente pleno con texto
@@ -16907,23 +16916,24 @@ _vglOfrecerDeshacer(btn);
       <div id="vgl-body">
         <div id="vgl-sidebar">
           <div id="vgl-find">
-            <input id="vgl-q" type="text" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
+            <svg class="vgl-find-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="vgl-q" type="text" spellcheck="false" placeholder="Buscar paciente por nombre o cédula…">
           </div>
           <div class="vgl-sb-lbl">Filtros</div>
           <nav id="vgl-filters">
-            <button class="vgl-fchip sel" data-f="todas">Todas las citas</button>
-            <button class="vgl-fchip" data-f="riesgo" title="Alertas de atención e inasistencias">⚠ Atención prioritaria</button>
-            <button class="vgl-fchip" data-f="sinpres">Sin presentarse</button>
-            <button class="vgl-fchip" data-f="ensala">En sala</button>
-            <button class="vgl-fchip" data-f="pym">Con PyM</button>
+            <button class="vgl-fchip sel" data-f="todas"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>Todas las citas</button>
+            <button class="vgl-fchip" data-f="riesgo" title="Alertas de atención e inasistencias"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Atención prioritaria</button>
+            <button class="vgl-fchip" data-f="sinpres"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.5 13.5-2 2"/><path d="m19.5 13.5 2 2"/></svg>Sin presentarse</button>
+            <button class="vgl-fchip" data-f="ensala"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>En sala</button>
+            <button class="vgl-fchip" data-f="pym"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Con PyM</button>
           </nav>
           <div id="vgl-stats"></div>
           <div id="vgl-actions">
-            <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)">📂 Cargar prevención</button>
+            <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Cargar prevención</button>
             <button class="vgl-sb-btn" id="vgl-bell" title="Activar notificaciones de Windows">🔔 Alertas</button>
             <button class="vgl-sb-btn" id="vgl-mute" title="Silenciar el sonido 15 minutos">🔉 Silenciar</button>
-            <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención">📊 Resumen</button>
-            <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes">⚙ Ajustes</button>
+            <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Resumen</button>
+            <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
           </div>
         </div>
         <div id="vgl-main">
