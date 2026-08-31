@@ -122,11 +122,43 @@ module.exports = {
       t.igual(api.parseSpDocId("%E0%A4%A"), "");
     });
 
-    t.caso("spFallbackUrls: normaliza el id (llaves fuera, minúsculas) y da las DOS rutas de descarga", () => {
+    // v18.0.6 — el cambio de v18.0.5 (incidente del 31-ago: las dos rutas por ID seguían
+    // fallando con el vínculo regenerado) añadió una TERCERA vía por el GUID del vínculo de
+    // compartir, y se entregó SIN prueba: esta suite seguía exigiendo exactamente dos rutas
+    // y se puso roja al fusionar. Se fija la conducta real, y las dos mitades del `if`:
+    // con shareId configurado hay tres rutas, sin él siguen siendo las dos de siempre.
+    t.caso("spFallbackUrls: normaliza el id (llaves fuera, minúsculas) y da las rutas de descarga por ID", () => {
       const urls = api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}");
-      t.igual(urls.length, 2);
       t.igual(urls[0], SP_BASE + "/_api/web/GetFileById('" + PILOTO_GUID + "')/$value");
       t.igual(urls[1], SP_BASE + "/_layouts/15/download.aspx?UniqueId=" + PILOTO_GUID);
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: con shareId configurado añade la TERCERA vía, y solo esa", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = {
+        id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx",
+        shareId: "{2BD8F42A-F8F5-46E0-B2E1-B1D2E5FA5D4F}",
+      };
+      const urls = c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}");
+      t.igual(urls.length, 3, "las dos por UniqueId + la del vínculo de compartir");
+      t.igual(urls[2], SP_BASE + "/_api/web/GetFileById('2bd8f42a-f8f5-46e0-b2e1-b1d2e5fa5d4f')/$value",
+        "el shareId también se normaliza: llaves fuera y minúsculas");
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: SIN shareId la lista queda igual que antes (dos rutas)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = { id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx" };
+      t.igual(c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}").length, 2);
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: un shareId IGUAL al id no se repite como tercera ruta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = {
+        id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx",
+        shareId: "809a098b-69d1-44fe-9e51-b01f07290807",
+      };
+      t.igual(c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}").length, 2,
+        "pedir dos veces el mismo archivo no es un respaldo, es un intento perdido");
     });
 
     t.caso("pilotoId: el id configurado de fábrica, ya normalizado", () => {
@@ -419,11 +451,16 @@ module.exports = {
       t.igual(w.acciones["pym.fallback.red"], 1);
     });
 
-    await t.casoAsync("loadPymBaseDescarga: si las DOS rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
+    await t.casoAsync("loadPymBaseDescarga: si TODAS las rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
       let intentos = 0;
       const c = cargar({ silencioso: true, gmxhr: (o) => { intentos++; o.onerror(); } });
       t.igual(await c.api.loadPymBaseDescarga(true, null), false);
-      t.igual(intentos, 2, "GetFileById y download.aspx, en ese orden, sin paralelismo");
+      // v18.0.6 — eran 2 hasta v18.0.4; v18.0.5 añadió la vía por shareId, que viene
+      // configurada de fábrica. Lo que esta prueba protege no es el número: es que se
+      // prueben EN ORDEN y de una en una (nunca en paralelo, que dispararía tres
+      // descargas de ~14 MB a la vez sobre la red de la IPS).
+      t.igual(intentos, c.api.spFallbackUrls(c.api.pilotoId()).length,
+        "una por cada ruta declarada, en orden y sin paralelismo");
       t.igual(c.api.__state.pymFile, "", "no debe quedar nada a medias");
     });
 
@@ -526,7 +563,7 @@ module.exports = {
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
       t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
-      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
+      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Centinela PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
       c.api.spToast("segundo aviso", 0);

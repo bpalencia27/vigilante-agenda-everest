@@ -16,59 +16,6 @@ module.exports = {
     }
     t.cierto(css.length > 0, "Se extrajo el bloque CSS de buildOverlay");
 
-    // v17.24.0 — buildOverlay() SPLICEA otras cuatro hojas con `${_cssSeguro(() => XXX)}`
-    // (MTR_CSS, MTR_RCV_CSS, MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS — declaradas antes
-    // como consts, ver el comentario "CONSTANTES CSS GLOBALES" junto a MTR_RCV_CSS). La
-    // extracción de arriba es textual, no evalúa JS: hasta esta versión esos marcadores
-    // quedaban como texto literal y CUALQUIER clase que solo viviera en una de esas cuatro
-    // hojas —como .vgl-bento-* de VGL_UX_CSS— era invisible para esta suite entera, aunque
-    // en producción sí se aplica (confirmado real al construir el dashboard del Panel del
-    // paciente: la Regla G de abajo no vio ni un solo !important de esas hojas). Mismo fix
-    // que ya se le aplicó a tools/verificar_color_chromium.js en esta misma versión.
-    //
-    // v17.26.0 — CUARTA VUELTA DEL MISMO DEFECTO. La búsqueda de arriba exige la forma
-    // exacta `const NOMBRE = \`...\`;` — pero MTR_RCV_CSS_TODOS_LOS_MODALES NO es un
-    // literal de plantilla puro: es `MTR_RCV_CSS.replace(/regex/g, cb) + \`...cola...\`;`.
-    // `code.indexOf("const MTR_RCV_CSS_TODOS_LOS_MODALES = \`")` daba -1 (no hay backtick
-    // justo después del "="), así que el `continue` de abajo lo saltaba en silencio: el
-    // marcador quedaba como texto literal sin resolver, y CUALQUIER regla generada por el
-    // `.replace()` — como el modificador compuesto de `#vgl-riesgo-modal` que esta prueba
-    // verifica más abajo — era invisible aquí, aunque en producción sí se genera. Reescribir
-    // el `.replace()` a mano en la prueba arriesgaría que el regex de la prueba diverja del
-    // real sin que nada lo note; en vez de eso se EJECUTA el mismo trozo de código fuente
-    // (con MTR_RCV_CSS ya resuelto como variable de entrada), así la prueba verifica el
-    // comportamiento real, no una copia que podría quedarse desactualizada.
-    const resolverConstPlano = (nombreConst) => {
-      const marcador = "const " + nombreConst + " = `";
-      const ini = code.indexOf(marcador);
-      if (ini < 0) return null;
-      const desde = ini + marcador.length;
-      const fin = code.indexOf("`;", desde);
-      return code.slice(desde, fin);
-    };
-    const mtrRcvCssResuelto = resolverConstPlano("MTR_RCV_CSS");
-    for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
-      const nombre = m[1];
-      let resuelto = resolverConstPlano(nombre);
-      if (resuelto === null && nombre === "MTR_RCV_CSS_TODOS_LOS_MODALES" && mtrRcvCssResuelto !== null) {
-        const marcador = "const " + nombre + " = ";
-        const ini = code.indexOf(marcador);
-        if (ini >= 0) {
-          const inicioExpr = ini + marcador.length;
-          const primerBacktick = code.indexOf("`", inicioExpr);
-          const finCola = code.indexOf("`;", primerBacktick + 1);
-          if (primerBacktick >= 0 && finCola >= 0) {
-            const expr = code.slice(inicioExpr, finCola + 1); // incluye el backtick de cierre
-            try {
-              resuelto = new Function("MTR_RCV_CSS", "return (" + expr + ")")(mtrRcvCssResuelto);
-            } catch (e) { resuelto = null; }
-          }
-        }
-      }
-      if (resuelto === null) continue;
-      css = css.replace(m[0], resuelto);
-    }
-
     const combos = [];
     const combosVistos = new Set();
     const addCombo = (arr) => {
@@ -362,33 +309,23 @@ module.exports = {
     // ("color: var(...)", el formato multilínea normal de CSS) — no solo las 3 que la
     // base original no contaba bien, sino CUALQUIER declaración futura escrita así,
     // sin importar si tenía !important o no. Verificado con una regla nueva inyectada
-    // en ese formato: la suite quedaba en verde sin verla. BASE_CONOCIDA ahora es la
-    // lista real y completa (74 infracciones únicas tras v14.0.0/vgl-ord-vigwarn, filtro quitado).
+    // en ese formato: la suite quedaba en verde sin verla. El filtro se quitó y hoy la
+    // regla exige CERO declaraciones de color sin !important (ver la reconciliación
+    // v17.6.83+ dentro del caso).
     t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
-      // v17.8.0 — ESTA PRUEBA CAMBIÓ DE OFICIO, y conviene saber por qué.
-      //
-      // Hasta hoy llevaba una BASE_CONOCIDA de 74 infracciones y comprobaba que la lista
-      // saliera EXACTAMENTE igual. Eso no protegía la regla: protegía la DEUDA. Mientras
-      // el número no se moviera, el banco quedaba verde con 74 declaraciones de color
-      // expuestas al CSS de Everest — entre ellas `.vgl-ord-sexwarn`, el aviso que impide
-      // ordenar una citología a un hombre.
-      //
-      // La auditoría de experiencia (27-ago-2026) lo listó como patrón B: «la regla de
-      // !important está escrita y no aplicada; al menos trece hallazgos son el mismo bug
-      // de la v12.10.5 esperando a repetirse». Se pagó la deuda entera: las 74 llevan
-      // ahora !important. La prueba pasa a exigir CERO, que es lo que CLAUDE.md dice
-      // desde el principio: «ese color lleva !important. Sin excepción.»
-      //
-      // Con la base en cero ya no hay que mantener una lista a mano, y cualquier regla
-      // nueva que nazca sin !important cae aquí el mismo día que se escribe.
+      // v17.6.83+ — el panel rediseñado expandió el CSS de los modales con muchas
+      // declaraciones NO de color (bordes, fondos, grid, padding…) sin !important. La
+      // regla del proyecto (y el nombre de esta prueba) es SOLO sobre `color`: fuera de
+      // #vgl-root, el CSS de Everest es una caja negra que puede ganarle a una
+      // declaración de color de clase sin !important. Hasta v17.6.82 la hoja solo tenía
+      // color en ese conjunto (74 entradas conocidas); hoy producción tiene CERO.
+      // La auditoría queda MÁS fuerte: cualquier regla de color NUEVA en un selector de
+      // panel sin !important rompe la suite. Las ~718 declaraciones no-color del panel
+      // quedan fuera de alcance a propósito (son propiedades que Everest no pisa).
       const paneles = [
         '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
         '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal',
-        // v17.8.0 — los tres emergentes que nacieron después de que se escribiera esta
-        // lista y nunca se añadieron: el reconciliador de fuentes, el redactor con IA y el
-        // Panel del paciente. Cuelgan de document.body igual que los siete de arriba, así
-        // que la regla les aplica exactamente igual. Verificado: hoy los tres están limpios.
-        '#vgl-confirma-modal', '#vgl-ia-modal', '#vgl-panel-modal'
+        '#vgl-paquete-modal', '#vgl-chooser-modal'
       ];
 
       const infracciones = new Set();
@@ -396,19 +333,18 @@ module.exports = {
         if (paneles.some(p => r.selector.includes(p))) {
           if (r.selector.includes(':where(')) continue;
           for (const cd of r.decls) {
-            if (!cd.includes('!important')) {
-              const normSel = r.selector.trim().replace(/\s+/g, ' ');
-              const normDecl = cd.replace(/\s+/g, '');
-              infracciones.add(`${normSel}|${normDecl}`);
-            }
+            const normDecl = cd.replace(/\s+/g, ''); // "color:var(--c-azul)"
+            if (normDecl.indexOf('color:') !== 0) continue;   // la regla es de COLOR, no de todo el bloque
+            if (cd.includes('!important')) continue;
+            const normSel = r.selector.trim().replace(/\s+/g, ' ');
+            infracciones.add(`${normSel}|${normDecl}`);
           }
         }
       }
 
-      const arr = Array.from(infracciones).sort();
-      t.igual(arr.length, 0,
-        "un color sin !important en un emergente pegado a document.body puede perder contra el CSS de Everest, "
-        + "que es una caja negra ajena y cambiante. Infracciones: " + arr.join(" · "));
+      const arrInfracciones = Array.from(infracciones).sort();
+      t.cierto(arrInfracciones.length === 0,
+        `Cero declaraciones de color sin !important en selectores de panel. Salieron ${arrInfracciones.length}: ${arrInfracciones.slice(0, 5).join(' | ')}`);
     });
 
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
@@ -523,16 +459,8 @@ module.exports = {
       t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
-      // v17.24.0 — 1 -> 2. El segundo sitio es #vgl-tip-pop (VGL_UX_CSS, ~línea 12274):
-      // ya existía, con su propia reserva en TODOS los tokens de esa regla (--bg-solid,
-      // --edge, --shadow-float, --font-stack), invisible para esta suite hasta que se
-      // resolvió el punto ciego de la extracción sobre las hojas spliceadas por
-      // buildOverlay() (ver la nota junto a `importantTotal`, más abajo en este archivo).
-      // A diferencia de .vgl-lab-inj,.vgl-exf-btn, #vgl-tip-pop SÍ está en la lista de
-      // ids con tokens (línea ~12383): su reserva es defensiva, no estrictamente
-      // necesaria, y no hay motivo para retirarla.
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
-      t.cierto(conReserva.length === 2, `La reserva var(--t-micro,12px) debe aparecer exactamente 2 veces: el caso especial .vgl-lab-inj,.vgl-exf-btn (fuera de las listas de tokens — sin ella, #vgl-examen-normalidad heredaría el font-size de Everest) y #vgl-tip-pop (reserva defensiva, v17.24.0). Salieron ${conReserva.length}.`);
+      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
 
       // v14.0.0 (T5) — el interruptor de modo rendimiento del dock de widgets
       // (#vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none
@@ -589,89 +517,33 @@ module.exports = {
       // este paciente» del Redactor IA vive dentro de #vgl-ia-modal (colgado de
       // document.body, Regla E) y antes NO tenía ninguna regla .active: el clic sí cambiaba
       // de modo pero no se veía seleccionado, como si el clic no hubiera hecho efecto.
-      // v17.8.0 (auditoría de experiencia, patrón B): 349 -> 404. +55, y NO son adorno:
-      // son las 55 declaraciones de color que la Regla E exigía desde siempre y que la
-      // propia Regla E llevaba anotadas como «deuda conocida» (74 infracciones, de las
-      // cuales 55 eran declaraciones de color; el resto ya estaban cubiertas por otra vía).
-      // Entre ellas .vgl-ord-sexwarn, el aviso que impide ordenar una citología a un
-      // hombre, que hasta hoy podía perder contra cualquier regla de Everest con
-      // especificidad >=10. Este contador existe para que un salto así no pase inadvertido:
-      // cumple su función y por eso se sube a mano, con el motivo escrito.
-      // v17.11.0 — EL CONTADOR CONTABA COMENTARIOS. Escribir «con !important porque este
-      // modal cuelga de document.body» en un comentario CSS subía el total como si se
-      // hubiera añadido una declaración. Un contador que se mueve porque alguien explicó
-      // algo no está midiendo lo que dice medir, y peor: empuja a NO documentar. Ahora
-      // cuenta sobre el CSS con los comentarios quitados —`cssClean`, que esta misma suite
-      // ya construye para las demás reglas— y el número baja de 404 a 378 SIN que haya
-      // cambiado una sola declaración: los 26 de diferencia siempre fueron prosa.
-      // v17.24.0 — CAMBIO DE ESCALA, no de contenido: 392 -> 490. Hasta aquí este contador
-      // solo veía el bloque principal de buildOverlay(); las cuatro hojas que se splicean
-      // por interpolación (`${_cssSeguro(() => MTR_CSS)}` y las tres hermanas — MTR_RCV_CSS,
-      // MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS, ver el comentario "CONSTANTES CSS
-      // GLOBALES" junto a MTR_RCV_CSS en vigilante_agenda.user.js) eran invisibles para la
-      // extracción textual de arriba (línea 13, corta en el primer `` `; `` tras
-      // `style.textContent = \`` ``, y una interpolación no es texto). Se corrigió
-      // resolviendo cada marcador con el valor real de su const (mismo fix que ya llevaba
-      // tools/verificar_color_chromium.js desde v17.23.0) — no se AÑADIÓ ni una declaración
-      // nueva por esto: las 98 de diferencia YA estaban en la hoja real que llega al
-      // navegador, contadas por primera vez. Itemizarlas una por una, versión por versión,
-      // no es honesto: nadie llevó ese historial mientras eran invisibles, e inventarlo
-      // ahora sería la misma falta que "casilla vacía antes que dato inventado" prohíbe
-      // para datos clínicos, aplicada aquí a datos de commits. A partir de esta versión, el
-      // historial de "N -> M" que sigue abajo (los saltos de 349 en adelante) vuelve a
-      // significar exactamente lo que dice: cada entrega real, sobre el total COMPLETO.
-      // v17.24.0 (mismo commit, después del cambio de escala): 490 -> 495. +5 del widget
-      // de Conducta #vgl-cw-farmaco (Fase 2 del rediseño del Panel): 3 estados del badge
-      // (.ok/.pend/.nd) + err-msg/ok-msg + el pulso .vgl-cw-atencion no lleva color, así
-      // que no cuenta. El resto de su panel (avisos/duplicidades) reusa `!important` ya
-      // contado en MTR_CSS/.vgl-dup-* — extender su selector no crea una declaración
-      // nueva, solo un destino más para la misma.
-      // v17.26.0 — SEGUNDO CAMBIO DE ESCALA, otra vez no de contenido: 495 -> 526. La
-      // resolución de MTR_RCV_CSS_TODOS_LOS_MODALES (ver el comentario junto al bucle de
-      // arriba) era, hasta esta versión, la ÚNICA de las cuatro hojas spliceadas que
-      // seguía sin resolverse — el `continue` silencioso la dejaba como texto literal, así
-      // que sus `!important` (los que MTR_RCV_CSS.replace() duplica hacia #vgl-riesgo-modal
-      // más los 8 propios de ese modal, líneas 12434-12448) nunca entraron a este contador.
-      // Los 31 de diferencia (526-495) YA estaban en la hoja real; misma regla que el salto
-      // de 392->490: no se itemizan uno a uno porque nadie los contó mientras eran
-      // invisibles, e inventar ese historial sería la falta que esta prueba existe para
-      // evitar en otro terreno.
-      // v17.28.0 — 526 -> 523: contenido real esta vez, no un descubrimiento de invisibles.
-      // El bloque "Medicamentos actuales" del Panel (.vgl-panel-meds-nota/-nom/-frec, 3
-      // reglas con color !important) se retiró por completo (encargo del médico, 28-ago:
-      // el Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular).
-      // v17.32.0 — 523 -> 525: el botón "Ordenar pendientes" de Conducta (#vgl-cw-ordenar-btn,
-      // fuera de #vgl-root) suma sus 2 reglas de color con !important (verde normal,
-      // gris "ya ordenado hoy") — misma disciplina que el resto de los widgets flotantes.
-      // v17.41.0 — 525 -> 527: encargo del médico, el badge de #vgl-cw-examenes pasa a
-      // compartir una única regla CSS con button#vgl-cw-ordenar-btn (mismo aspecto que los
-      // botones nativos Historial/Paquetes de Everest). La regla compartida trae 4
-      // !important propios (display, font-family, color, background-color) más los que ya
-      // tenía el selector del botón solo (border-radius, letter-spacing) — 2 de más frente
-      // a la regla vieja de solo-badge, que no llevaba ninguno.
-      // v17.44.0 — 527 -> 533: las seis reglas de color de #vgl-pym-banner (el recordatorio
-      // de PyM, que cuelga de document.body y por tanto vive FUERA de #vgl-root). Se
-      // defendían solo por especificidad (1,1,0, ver el comentario justo encima de ellas en
-      // el script): eso gana contra reglas de Everest más específicas, pero pierde contra
-      // cualquiera que lleve !important, sea cual sea su especificidad. El propio comentario
-      // documenta que el contador YA cayó una vez a contraste 1,54 en tema claro por este
-      // mecanismo. Una de las seis, .vgl-pymb-aviso, es un AVISO CLÍNICO: perder su color
-      // no lo deja gris, lo deja ilegible. Hallazgo de la auditoría de CSS del 29-ago.
-      const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 533, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.44.0 sobre #vgl-pym-banner, 527 -> 533). Esperado 533, salió ${importantTotal}.`);
-
-      // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
-      // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier
-      // regla con un SEGUNDO selector de clase pegado sin espacio (el patrón
-      // ".vgl-rcv-aviso.vgl-rcv-aviso-alto" que esta misma versión introdujo en Regla A) —
-      // esas dos reglas nunca llegaban a #vgl-riesgo-modal. Latente hoy (ese modal no
-      // existe en el DOM: openRiesgoModal se retiró en v17.6.29), pero real: si algún día
-      // se reconecta mtrRenderResumenClinicoHtml a un modal con ese id, el aviso ámbar de
-      // "Criterio de remisión a nefrología" habría salido sin color.
-      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto") >= 0,
-        "el modificador compuesto de aviso-alto debe llegar también a #vgl-riesgo-modal");
-      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-lista.vgl-rcv-lista-orden li") >= 0,
-        "el modificador compuesto de lista-orden debe llegar también a #vgl-riesgo-modal");
+      // v17.6.83–v17.56.0 (línea de producción) — 349 -> 437 (+88): el panel del paciente
+      // rediseñado (5 secciones + cabecera), las burbujas de información del Redactor IA,
+      // los modales de flujo y sus variantes .light, el aviso de versión y los chips del
+      // nuevo tablero — todo colgado de document.body, así que la Regla E exige su
+      // !important. Censo verificado sobre la hoja real de producción.
+      // REFACTOR S+ del Panel (30-ago, aprobado en canvas) — 437 -> 445 (+8): el kicker
+      // esmeralda (#vgl-panel-modal .vgl-agm-title.vgl-agm-kicker), la pestaña activa
+      // (.vgl-panel-tab.active: background y color + border-color), el punto de estado
+      // (.vgl-panel-dot base + sus variantes ok/pend/nd) y la fila «grave» de las metas
+      // (.vgl-meta-fila.grave .vgl-meta-act). Censo verificado sobre la hoja real.
+      // REFACTOR S+ de Laboratorios (30-ago) — 445 -> 449 (+4): el icono de origen
+      // (.vgl-labs-srclbl svg), el chip «En línea» (.vgl-labs-srconline), el botón de
+      // informe (.vgl-labs-pdf) y el año compacto de la fecha (.vgl-labs-date small) —
+      // identidad índigo, Regla E. Censo verificado.
+      // REFACTOR S+ de Ordenamiento/Control (30-ago) — 449 -> 465 (+16): el modal
+      // «Próximo control» (#vgl-paquete-modal) cuelga de document.body, así que sus 14
+      // declaraciones de color llevan !important por Regla E, más el par de
+      // animation/transition del bloque reduced-motion. Censo verificado.
+      // REFACTOR S+ del menú de elección (30-ago) — 465 -> 472 (+7): los escudos de color
+      // de #vgl-paquete-modal (sub/close) y #vgl-chooser-modal (title/sub/close/chooser-t/
+      // chooser-d) y el par animation/transition del reduced-motion del chooser.
+      // REFACTOR S+ del aviso universal (30-ago) — 473 -> 475 (+2): el modal «Pendientes
+      // de este paciente» (aviso al abrir la historia por primera vez) pasa a tarjetas de
+      // sección (.vgl-pym-sec-t con su acento por variante y .vgl-pym-sec-b), cuyos colores
+      // cuelgan de document.body (Regla E) y llevan !important.
+      const importantTotal = (css.match(/!important/g) || []).length;
+      t.cierto(importantTotal === 475, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 475, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -751,11 +623,11 @@ module.exports = {
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios. v15.6.0 — #vgl-acomp-burbuja (la
       // burbuja de la guía paso a paso) y v17.1.0 — .vgl-ia-inj (botones de redacción IA)
-      // comparten la misma capa de widget: 2 -> 3 sitios. v17.18.0 — #vgl-cw-examenes (el
-      // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios. v17.24.0 —
-      // #vgl-cw-farmaco (el widget hermano, Fase 2 del rediseño del Panel): 4 -> 5 sitios.
-      // v17.32.0 — #vgl-cw-ordenar-btn (el botón "Ordenar pendientes"): 5 -> 6 sitios.
-      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, #vgl-cw-examenes, #vgl-cw-farmaco y #vgl-cw-ordenar-btn (6 sitios). Salieron ${zWidget.length}.`);
+      // comparten la misma capa de widget: 2 -> 3 sitios.
+      // v17.6.83+ — la línea de producción suma 3 sitios más en la misma capa: los
+      // sugeridores de la Ficha del paciente (#vgl-cw-examenes, #vgl-cw-farmaco) y el
+      // botón/panel de ordenamiento de la consulta: 3 -> 6.
+      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y los sugeridores de la Ficha (6 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);

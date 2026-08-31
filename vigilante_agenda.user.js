@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.56.0
+// @version      18.0.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
-// @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
+// @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
@@ -653,8 +653,8 @@
      re-búsqueda PARA (debeBuscarPymDiario) — pedido explícito; «Abrir PyM» siempre manda.
   6. PUNTUALIDAD RESCATADA (semántica original v8.2.0, decisión A): siembra silenciosa +
      VERDE solo en llegada EN VIVO (a.arrival por fin se consume); textos precisos y
-     neutros — ROJO "Confirmación extemporánea", MORADO "última llamada ~1 min", ÁMBAR
-     "venció el tiempo de gracia".
+     neutros — ROJO "Llegada confirmada fuera del tiempo de confirmación", MORADO "última
+     llamada ~1 min", ÁMBAR "venció el tiempo de confirmación".
   7. HORA DE ATHENEA DE PUNTA A PUNTA: _parseFechaHoraLike conserva {fecha, hora} en ISO,
      /Date(ms)/ y dd/mm/aaaa (cuyo ancla $ hacía que "11/08/2026 07:35" cayera a "Sin
      fecha" — bug real corregido); el raspado de la tarjeta captura la hora del portal
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.56.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1702,11 +1702,25 @@
       const primeraMitad = insulinoRequirente || medsRcvN >= 5 || ercBaja || hayFalla || paDescontrolada || cronicosCount >= 3 || dmSinVerificar;
       const finalOk = !primeraMitad && medsRcvN < 5 && !catRcv.includes("muy alto") && !sinResumen;
       const franjaSugerida = primeraMitad ? "primera_mitad" : (finalOk ? "final_jornada" : "adicional_30");
+      // v18.0.6 — `motivoTexto` ES SOLO TEXTO: ni emoji, ni marcado, ni un solo carácter de
+      // adorno. Llevaba el punto de color pegado delante ("🔴 Paciente complejo…") y el único
+      // sitio que lo pinta (mtrPintarPildoraComplejidad, ~:23066) le anteponía OTRO punto,
+      // así que en pantalla salía "🔴 🔴 Paciente complejo…"; y en la franja amarilla salía
+      // peor todavía, "🟢 🟡 Control habitual…", porque quien pinta solo miraba `esComplejo`
+      // (dos estados) y aquí hay TRES. Nadie lo vio porque este texto no tenía ni una prueba.
+      //
+      // La raíz es de frontera: este valor es DATO (viaja en el objeto, lo puede leer quien
+      // sea) y el adorno es PRESENTACIÓN. Mezclarlos es justo lo que hace que un `<span>`
+      // metido aquí salga impreso como texto crudo — quien pinta usa escapeHtml(), que
+      // existe precisamente para que nada de aquí se interprete como HTML. Así que el
+      // adorno lo pone quien pinta, a partir de `franjaSugerida`, que es una de tres claves
+      // cerradas; y este texto no puede volver a ensuciar la pantalla aunque alguien le
+      // meta marcado, porque escapeHtml() lo neutraliza y ya no hay punto duplicado.
       const motivoTexto = primeraMitad
-          ? "🔴 Paciente complejo (" + (badges.join(" · ") || "múltiples factores clínicos") + ") ➔ Sugerido: Primera mitad de la jornada"
+          ? "Paciente complejo (" + (badges.join(" · ") || "múltiples factores clínicos") + ") ➔ Sugerido: Primera mitad de la jornada"
           : (finalOk
-              ? "🟢 Paciente estable, pocos medicamentos (" + (badges.join(" · ") || "sin factores críticos") + ") ➔ Sugerido: Final de la jornada (últimos cupos)"
-              : "🟡 Control habitual (" + (badges.join(" · ") || "sin factores críticos") + ") ➔ Sugerido: Segunda mitad o cupo adicional (:30)");
+              ? "Paciente estable, pocos medicamentos (" + (badges.join(" · ") || "sin factores críticos") + ") ➔ Sugerido: Final de la jornada (últimos cupos)"
+              : "Control habitual (" + (badges.join(" · ") || "sin factores críticos") + ") ➔ Sugerido: Segunda mitad o cupo adicional (:30)");
 
       return {
           esComplejo: primeraMitad,
@@ -2319,6 +2333,16 @@
   // se reintentará) de rechazo de CREDENCIALES (se marca y NO se reintenta solo).
   // v12.5.2 — ya NO exige un médico identificado en Everest primero: al ser una cuenta
   // compartida, no depende de saber quién está en turno.
+  // Silencia los avisos rutinarios de Athenea (auto-login/keep-alive/Auto-Labs):
+  // conserva la deduplicación diaria por uid, pero en vez de un toast molesto deja
+  // solo un console.warn. No toca el resto de notificaciones del sistema.
+  function atheneaAvisoSilencioso(uid, title, body) {
+    try {
+      if (avisoYaVisto(uid)) return;
+      avisoMarcarVisto(uid);
+    } catch (e) {}
+    try { console.warn("[Vigilante Athenea] " + String(title || "") + (body ? " — " + String(body) : "")); } catch (e2) {}
+  }
   async function atheneaAutoLogin() {
     if (!S.atheneaAutoLogin) return false;
     if (atheneaLoginBloqueado || atheneaLoginEnVuelo) return false;
@@ -2330,9 +2354,8 @@
     // dice claro, una vez al día, con la instrucción exacta de qué hacer.
     if (!cred) {
       console.warn("[Vigilante Athenea] auto-login: este equipo NO tiene guardada la cuenta compartida de Athenea — se guarda una sola vez en Ajustes → «Auto-inicio de sesión en Athenea». Sin eso, el login debe hacerse a mano.");
-      notify("AMBAR", "🔑 Athenea: falta configurar este computador",
-        "Este computador aún no tiene guardada la cuenta de Athenea de la sede (es un paso único que hace el administrador del asistente). Mientras tanto, inicie sesión a mano en medicosviva1a.atheneasoluciones.com y los laboratorios volverán a cargarse.",
-        false, "athenea_sin_creds|" + todayStamp());
+      atheneaAvisoSilencioso("athenea_sin_creds|" + todayStamp(), "🔑 Laboratorios: falta configurar este computador",
+        "Este computador aún no tiene guardada la cuenta del sistema de laboratorios de la sede (es un paso único que hace el administrador del asistente). Mientras tanto, inicie sesión a mano en medicosviva1a.atheneasoluciones.com y los laboratorios volverán a cargarse.");
       return false;
     }
     atheneaLoginEnVuelo = true;
@@ -2352,9 +2375,8 @@
       if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (cuenta compartida de la sede)."); return true; }
       // Rechazo de credenciales (o el portal cambió): se MARCA y NO se reintenta solo.
       atheneaLoginBloqueado = true;
-      notify("AMBAR", "🔑 Athenea: la cuenta guardada no funcionó",
-        "El inicio de sesión automático en Athenea falló (usuario o contraseña incorrectos, o el portal cambió). Inicie sesión a mano y avise al administrador del asistente para que actualice la cuenta guardada. No se reintenta solo, para no bloquear la cuenta de toda la sede.",
-        false, "athenea_autologin_fallo|" + todayStamp());
+      atheneaAvisoSilencioso("athenea_autologin_fallo|" + todayStamp(), "🔑 Laboratorios: la cuenta guardada no funcionó",
+        "El inicio de sesión automático en el sistema de laboratorios falló (usuario o contraseña incorrectos, o el portal cambió). Inicie sesión a mano y avise al administrador del asistente para que actualice la cuenta guardada. No se reintenta solo, para no bloquear la cuenta de toda la sede.");
       return false;
     } catch (e) {
       console.warn("[Vigilante Athenea] auto-login: error de red (reintenta en el próximo latido):", e && e.message);
@@ -2406,9 +2428,8 @@
       }
       atheneaSesionViva = viva;
       if (!viva) {
-        notify("AMBAR", "🔑 Athenea: inicie sesión una vez",
-          "Los laboratorios no se están cargando porque no hay sesión activa de Athenea en este navegador. Abra medicosviva1a.atheneasoluciones.com e inicie sesión — después el asistente la mantiene activa sola, sin que tenga que repetirlo.",
-          false, "athenea_sesion_caducada|" + todayStamp());
+        atheneaAvisoSilencioso("athenea_sesion_caducada|" + todayStamp(), "🔑 Laboratorios: inicie sesión una vez",
+          "Los laboratorios no se están cargando porque no hay sesión activa del sistema de laboratorios en este navegador. Abra medicosviva1a.atheneasoluciones.com e inicie sesión — después el asistente la mantiene activa sola, sin que tenga que repetirlo.");
       }
     } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
   }
@@ -2607,9 +2628,9 @@
     const ocultas = Number(d.viejasOcultas) || 0;
     const frases = [];
     if (noLeidas > 0) {
-      frases.push("Athenea no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
+      frases.push("El sistema de laboratorios no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
         + " de este paciente, así que esta lista puede estar incompleta: un examen que no aparezca aquí puede estar hecho igual.");
-      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el Portal Athenea.");
+      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el portal de laboratorios.");
     }
     if (ocultas > 0) {
       frases.push(ocultas === 1
@@ -3579,7 +3600,7 @@
           try {
               if (fechaInfo && fechaInfo.hora) {
                   const p = fechaInfo.iso.split("-");
-                  const titulo = `Athenea: ${p[2]}/${p[1]}/${p[0]} a las ${fechaInfo.hora}`;
+                  const titulo = `Laboratorio: ${p[2]}/${p[1]}/${p[0]} a las ${fechaInfo.hora}`;
                   if (dateInput && !dateInput.title) dateInput.title = titulo;
                   if (inputEl && !inputEl.title) inputEl.title = titulo;
               }
@@ -4602,8 +4623,8 @@
               if (!yaAvisado) {
                   _labsAvisoDoc = docId;
                   _labsAvisoTs = Date.now();
-                  notify("VERDE", "🧪 Paraclínicos de Athenea encontrados",
-                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧬 Auto-Labs (Athenea)» cuando quiera diligenciarlos.`,
+                  notify("VERDE", "🧪 Resultados de laboratorio encontrados",
+                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧪 Exámenes» cuando quiera diligenciarlos.`,
                     false, "athenea_listo|" + docId + "|" + todayStamp());
               }
           }
@@ -4739,9 +4760,17 @@
     try {
       const id = String(docId || "");
       if (!id || !datos) return null;
-      const todo = _vglCosechaTodo();
-      const previo = todo[id] || {};
+      // v18.0.4 — ENJAMBRE (31-ago): se guarda la foto ANTERIOR para comparar. Antes se
+      // releía tras fusionar, se reescribía TODO el almacén (hasta 80 pacientes) en cada
+      // vuelta del reloj (2-5 s) y en TODAS las pestañas con historia abierta: tirón de
+      // CPU en PCs modestos y una ventana de carrera abierta entre pestañas (dos lecturas
+      // seguidas podían pisarse y perder la fusión de la otra — memoria clínica). La
+      // guarda de escritura de abajo solo persiste cuando algo cambió de verdad (la
+      // comparación ignora los sellos de tiempo).
+      const previoTodo = _vglCosechaTodo();
+      const previo = previoTodo[id] || {};
       const fusion = Object.assign({}, previo, datos, { ts: Date.now() });
+      const todo = Object.assign({}, previoTodo);
       todo[id] = fusion;
       // Poda: por edad y por cantidad, sacrificando siempre lo más viejo.
       try {
@@ -4755,6 +4784,13 @@
           for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) delete todo[k];
         }
       } catch (e2) {}
+      // v18.0.4 — GUARDA DE ESCRITURA: si tras fusionar y podar el contenido es idéntico
+      // al almacenado (sin contar `ts`), no hay nada que persistir. Es la misma guarda
+      // "Escribir SOLO si algo cambió" que ya usa mtrProdRegistrar (12 escrituras síncronas
+      // por minuto → 2). _vglCosecharFactoresVisibles coopera conservando el sello del
+      // valor cuando el médico no tocó nada, así el JSON no "cambia" solo por el reloj.
+      const _firma = (o) => JSON.stringify(o, (k, v) => (k === "ts" ? undefined : v));
+      if (_firma(todo) === _firma(previoTodo)) return fusion;
       // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
       // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
       // null, así que un QuotaExceededError se tragaba ENTERO y en silencio. Con el
@@ -4928,7 +4964,14 @@
       for (const clave of Object.keys(C)) {
         let v = null;
         try { v = mtrLeerRadioSiNo(C[clave], doc); } catch (e) { v = null; }
-        if (v === true || v === false) { mapa[clave] = { v: v, ts: Date.now() }; n++; }
+        if (v === true || v === false) {
+          // v18.0.4 — ENJAMBRE (31-ago): si el valor no cambió se conserva el sello
+          // anterior. Antes se renovaba `ts` en cada lectura y el JSON cambiaba siempre,
+          // forzando la reescritura completa del almacén en cada vuelta del reloj.
+          const anterior = mapa[clave];
+          if (anterior && anterior.v === v) { mapa[clave] = anterior; } else { mapa[clave] = { v: v, ts: Date.now() }; }
+          n++;
+        }
       }
       return { mapa: mapa, n: n };
     } catch (e) { return null; }
@@ -5279,10 +5322,201 @@
     };
   }
 
+  // =====================================================================
+  //  v17.57.0 — PARTE A: LA ESCALERA DE ADHERENCIA (preguntar antes de repetir)
+  //  ------------------------------------------------------------------
+  //  DECISIÓN DEL MÉDICO (29-ago): cuando un eje está en falla terapéutica
+  //  —el examen se va a mandar a repetir—, el script pregunta, EN ESTE ORDEN:
+  //    1) ¿el paciente TIENE tratamiento para ese eje?
+  //    2) ¿el tratamiento es ADECUADO (tipo y dosis)?
+  //    3) ¿hay ADHERENCIA (lo está tomando)?
+  //  "No siempre el script debe preguntar si el paciente tiene tratamiento":
+  //  como toda confirmación del reconciliador, INDAGA primero en toda la
+  //  historia de Everest (medicamentos RCV, dosis, histórico HCM) y solo
+  //  pregunta lo que no puede deducir. Para el LDL la adecuación se deduce de
+  //  la dosis (mtrInerciaEstatina: atorva 40-80 / rosuva 20-40); para la
+  //  diabetes no hay regla escrita, así que se pregunta.
+  //  Severidad MEDIA (informa, nunca bloquea: el médico manda). La respuesta
+  //  viaja en las confirmaciones, que el JSON de la IA ya consume (la sección
+  //  de adherencia farmacológica de los prompts). La adherencia CADUCA a 1 día:
+  //  se conversa en cada consulta, no se da por eterna como el tratamiento.
+  // =====================================================================
+  const MTR_ADHERENCIA_VIGENCIA_DIAS = 1;   // la toma real se vuelve a preguntar cada consulta
+  const MTR_ADHERENCIA_EJES = {
+    ldl: {
+      familia: "colesterol",
+      claveTratamiento: "tratamiento_ldl",
+      claveAdecuado: "adecuado_ldl",
+      claveAdherencia: "adherencia_ldl",
+      etiquetaPatologia: "el colesterol alto",
+      preguntaTratamiento: "¿El paciente tiene tratamiento para el colesterol alto (estatina u otro hipolipemiante)?",
+      preguntaAdecuado: "¿El tratamiento para el colesterol es el adecuado (tipo y dosis)?",
+      preguntaAdherencia: "¿Está tomando su medicamento para el colesterol como se le indicó?",
+    },
+    hba1c: {
+      familia: "diabetes",
+      claveTratamiento: "tratamiento_hba1c",
+      claveAdecuado: "adecuado_hba1c",
+      claveAdherencia: "adherencia_hba1c",
+      etiquetaPatologia: "la diabetes",
+      preguntaTratamiento: "¿El paciente tiene tratamiento para la diabetes?",
+      preguntaAdecuado: "¿El tratamiento para la diabetes es el adecuado (tipo y dosis)?",
+      preguntaAdherencia: "¿Está tomando su medicamento para la diabetes como se le indicó?",
+    },
+  };
+
+  // De un resumen cacheado a los insumos que la escalera necesita. PURA: no toca
+  // DOM ni red. `medsRcv` es null cuando la lista no se pudo leer — la compuerta
+  // distingue "no se sabe" de "no tiene", que son conductas opuestas.
+  function mtrInsumosAdherencia(res) {
+    const r = res || {};
+    const frec = (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function")
+      ? r.medicamentosFrecuencia : null;
+    const listaCruda = r.medicamentos;
+    return {
+      medsRcv: Array.isArray(listaCruda) ? mtrMedicamentosRcv(listaCruda, frec) : null,
+      medsNoLeidos: !Array.isArray(listaCruda),
+      inerciaLdl: (r.fallas && r.fallas.inercia) || null,
+    };
+  }
+
+  // Los ejes en falla terapéutica HOY (los analitos de mtrPlanFallas). La glicemia
+  // comparte eje metabólico con la HbA1c: una sola escalera de diabetes.
+  function mtrEjesEnFallaAdherencia(res) {
+    const r = res || {};
+    const fallas = (r.fallas && Array.isArray(r.fallas.fallas)) ? r.fallas.fallas : [];
+    const ejes = new Set();
+    for (const f of fallas) {
+      const a = f && f.analito;
+      if (a === "LDL") ejes.add("ldl");
+      if (a === "HbA1c" || a === "Glicemia") ejes.add("hba1c");
+    }
+    return [...ejes];
+  }
+
+  // Estado de UN eje: qué se dedujo de la historia y qué confirmó el médico.
+  //   tieneTratamiento: true/false, o null si no se pudo leer la lista
+  //   adecuado:         true/false, o null si no es deducible (ni confirmado)
+  // Las confirmaciones del médico (sin vigencia para tratamiento/adecuación,
+  // con vigencia de 1 día para la adherencia) mandan sobre la deducción.
+  function mtrEstadoAdherenciaEje(eje, insumos, confirmadas) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    const i = insumos || {};
+    if (!cfg) return null;
+    const c = confirmadas || {};
+    const medsDelEje = Array.isArray(i.medsRcv)
+      ? i.medsRcv.filter((m) => m && m.para === cfg.familia) : [];
+    const regT = c[cfg.claveTratamiento];
+    const regA = c[cfg.claveAdecuado];
+    const deducidoT = i.medsNoLeidos ? null : (medsDelEje.length > 0);
+    const tieneTratamiento = regT ? (regT.v === true) : deducidoT;
+    let deducidoA = null;
+    if (eje === "ldl" && tieneTratamiento === true) {
+      const inercia = i.inerciaLdl;
+      if (inercia && typeof inercia.inercia === "boolean") deducidoA = !inercia.inercia;
+    }
+    const adecuado = regA ? (regA.v === true) : deducidoA;
+    return { eje: eje, cfg: cfg, medsDelEje: medsDelEje, tieneTratamiento: tieneTratamiento, adecuado: adecuado };
+  }
+
+  function mtrDebePreguntarTratamientoEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (confirmadas && confirmadas[est.cfg.claveTratamiento]) return false;   // ya respondido: se calla
+    if (est.tieneTratamiento === true) return false;   // indagó y SÍ tiene: no pregunta
+    return true;   // sin lista, o sin medicamento del eje -> pregunta
+  }
+
+  function mtrDebePreguntarAdecuacionEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (confirmadas && confirmadas[est.cfg.claveAdecuado]) return false;
+    if (est.tieneTratamiento !== true) return false;   // sin tratamiento no hay adecuación que juzgar
+    if (est.adecuado === true || est.adecuado === false) return false;   // dedujo: el aviso de inercia ya informa si es inadecuado
+    return true;   // no deducible -> pregunta
+  }
+
+  function mtrDebePreguntarAdherenciaEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (est.tieneTratamiento !== true) return false;
+    if (est.adecuado === false) return false;   // primero se ajusta el tratamiento; la toma se pregunta después
+    if (est.adecuado === null) return false;    // la adecuación se pregunta primero (misma pasada); la toma espera
+    // v17.58.0 — la adherencia CADUCA a 1 día: el llamador ya recorta la clave a su
+    // versión vigente (o la borra si venció) antes de pasar las compuertas, así que un
+    // registro presente aquí significa «respondida y todavía vigente»: se calla.
+    if (confirmadas && confirmadas[est.cfg.claveAdherencia]) return false;
+    return true;   // tratamiento adecuado -> la toma real no se puede leer, se pregunta
+  }
+
+  function mtrPreguntaTratamientoEje(eje, insumos) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, {});
+    const cfg = est.cfg;
+    return {
+      clave: cfg.claveTratamiento,
+      severidad: "media",
+      etiqueta: cfg.preguntaTratamiento,
+      porQue: "el " + (eje === "ldl" ? "LDL" : "control glucémico") + " está en falla terapéutica y el examen se va a repetir: "
+        + "sin tratamiento, repetir no cambia el resultado — hay que saber primero si hay tratamiento",
+      afirman: est.medsDelEje.length
+        ? [{ fuente: "Medicamentos (historial de Everest)", detalle: est.medsDelEje.map((m) => m.texto).join(" · ") }]
+        : [],
+      niegan: [{ fuente: "Medicamentos (historial de Everest)", detalle: "no se leyó ningún medicamento para " + cfg.etiquetaPatologia }],
+    };
+  }
+
+  function mtrPreguntaAdecuacionEje(eje, insumos) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    return {
+      clave: cfg.claveAdecuado,
+      severidad: "media",
+      etiqueta: cfg.preguntaAdecuado,
+      porQue: "el tratamiento existe, pero si la dosis se quedó corta o la intensidad es insuficiente, "
+        + "ajustarlo antes de repetir el examen evita un viaje que no cambia nada",
+      afirman: [],
+      niegan: [{ fuente: "Historia clínica", detalle: "la adecuación del tratamiento no se puede juzgar desde el script" }],
+    };
+  }
+
+  function mtrPreguntaAdherenciaEje(eje, insumos) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    return {
+      clave: cfg.claveAdherencia,
+      severidad: "media",
+      etiqueta: cfg.preguntaAdherencia,
+      porQue: "si el paciente no está tomando el medicamento, el examen repetido no va a mejorar: "
+        + "la causa no es el fármaco, es la toma",
+      afirman: [],
+      niegan: [{ fuente: "Historia clínica", detalle: "la toma real no se puede leer del historial; solo se sabe que fue prescrito" }],
+      vigenciaDias: MTR_ADHERENCIA_VIGENCIA_DIAS,
+    };
+  }
+
   // ¿Hay que detenerse y preguntar antes de seguir? Solo las de severidad alta frenan el
   // flujo; las medias se muestran pero no bloquean.
   function mtrDiscrepanciasQueFrenan(discrepancias) {
     return (Array.isArray(discrepancias) ? discrepancias : []).filter((d) => d && d.severidad === "alta");
+  }
+
+  // v17.58.0 — PARTE A: memoria de lo que el reconciliador YA preguntó (severidad MEDIA)
+  // en esta jornada y para este paciente. «Informa, nunca bloquea» también significa no
+  // interrogatorio: lo que el médico ya vio hoy no se le vuelve a poner delante en cada
+  // reapertura del Panel. Lo puebla el modal del reconciliador al RENDERIZAR la fila (no
+  // al deducirla, para que una pregunta que nunca llegó a ver se vuelva a ofrecer) y lo
+  // vacía `diaNuevo()`. Las ALTA no pasan por aquí: son compuerta y se reevalúan siempre.
+  const _mtrMediaPreguntadas = new Map();   // docId -> Set(clave)
+  function _mtrMediaFuePreguntada(docId, clave) {
+    try { const s = _mtrMediaPreguntadas.get(String(docId)); return !!(s && s.has(clave)); }
+    catch (e) { return false; }
+  }
+  function _mtrMediaMarcarPreguntada(docId, clave) {
+    try {
+      const id = String(docId || "");
+      if (!id || !clave) return;
+      let s = _mtrMediaPreguntadas.get(id);
+      if (!s) { s = new Set(); _mtrMediaPreguntadas.set(id, s); }
+      s.add(clave);
+    } catch (e) {}
   }
 
   // =====================================================================
@@ -5340,6 +5574,30 @@
         if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
           res, _vglConfirmacionVigente(docId, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
         ))) frenan.push(mtrPreguntaEmbarazo());
+      } catch (e) {}
+
+      // v17.57.0 — PARTE A: la escalera de adherencia, SOLO con ejes en falla. El examen
+      // se va a repetir porque el tratamiento falló: se pregunta (en orden) si hay
+      // tratamiento, si es adecuado y si hay adherencia — indagando antes en la historia
+      // (medicamentos RCV, dosis, histórico HCM) y preguntando solo lo que no se deduce.
+      // La adherencia se guarda con vigencia de 1 día: se conversa en cada consulta.
+      try {
+        const insumosAdh = mtrInsumosAdherencia(res);
+        const confirmadasAdh = _vglConfirmacionesLeer(docId);
+        for (const eje of mtrEjesEnFallaAdherencia(res)) {
+          const cfgEje = MTR_ADHERENCIA_EJES[eje];
+          if (!cfgEje) continue;
+          // v17.58.0 — la adherencia CADUCA a 1 día: una respuesta de hace una semana no
+          // debe callar la pregunta de la toma de hoy. Se recorta la clave de adherencia
+          // a su versión vigente (o se borra si venció) antes de pasar las compuertas.
+          const confEje = Object.assign({}, confirmadasAdh);
+          const regAdhVigente = _vglConfirmacionVigente(docId, cfgEje.claveAdherencia, MTR_ADHERENCIA_VIGENCIA_DIAS);
+          if (regAdhVigente) confEje[cfgEje.claveAdherencia] = regAdhVigente;
+          else delete confEje[cfgEje.claveAdherencia];
+          if (mtrDebePreguntarTratamientoEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaTratamientoEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdecuacionEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaAdecuacionEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdherenciaEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaAdherenciaEje(eje, insumosAdh));
+        }
       } catch (e) {}
 
       return { frenan: frenan, desfasadas: desfasadas, leidos: f._leidos };
@@ -6132,6 +6390,101 @@
   // _labsAvisoDoc/_labsAvisoTs, que la v17.0.3 puso en el robot de pre-carga por este
   // mismo síntoma y que aquí se quedó sin poner.
   let _autoLabsAvisoDoc = "", _autoLabsAvisoTs = 0;
+
+  // v17.x.x — REFACTOR S+ (30-ago): menú de elección compartido por «Exámenes»
+  // (Auto-Labs) y «Examen normal» (Normalidad). Al pulsar el botón se abre un selector
+  // pequeño con las opciones; elegir una ejecuta su acción y cierra. Se construye por
+  // elementos reales (createElement + addEventListener directo, como el dock) para que
+  // cada opción conserve su listener sin depender de querySelectorAll sobre innerHTML.
+  function _vglChooserModal(o) {
+    o = o || {};
+    try { const prev = document.getElementById("vgl-chooser-modal"); if (prev) prev.remove(); } catch (e) {}
+
+    const modal = document.createElement("div");
+    modal.id = "vgl-chooser-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    if (isLight()) modal.classList.add("light");
+
+    const card = document.createElement("div");
+    card.className = "vgl-agm-card";
+    card.style.maxWidth = "460px";
+
+    const head = document.createElement("div");
+    head.className = "vgl-agm-head";
+    const headTxt = document.createElement("div");
+    headTxt.style.minWidth = "0";
+    const titulo = document.createElement("div");
+    titulo.className = "vgl-chooser-titulo";
+    titulo.textContent = o.titulo || "";
+    headTxt.appendChild(titulo);
+    if (o.descripcion) {
+      const sub = document.createElement("div");
+      sub.className = "vgl-agm-sub";
+      sub.textContent = o.descripcion;
+      headTxt.appendChild(sub);
+    }
+    head.appendChild(headTxt);
+    const close = document.createElement("button");
+    close.className = "vgl-agm-close";
+    close.setAttribute("aria-label", "Cerrar");
+    close.textContent = "\u2715";
+    head.appendChild(close);
+    card.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "vgl-chooser-body";
+    const onPick = o.onPick || function () {};
+    const cerrar = () => { try { modal.remove(); } catch (e) {} };
+    close.addEventListener("click", cerrar);
+    modal.addEventListener("click", (e) => { if (e.target === modal) cerrar(); });
+
+    (o.opciones || []).forEach((op) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "vgl-chooser-opt";
+      b.setAttribute("data-chooser-id", op.id);
+      const ico = document.createElement("span");
+      ico.className = "vgl-chooser-ico";
+      ico.setAttribute("aria-hidden", "true");
+      ico.textContent = op.icono || "";
+      const txt = document.createElement("span");
+      txt.className = "vgl-chooser-txt";
+      const t = document.createElement("span");
+      t.className = "vgl-chooser-t";
+      t.textContent = op.rotulo;
+      txt.appendChild(t);
+      if (op.desc) {
+        const d = document.createElement("span");
+        d.className = "vgl-chooser-d";
+        d.textContent = op.desc;
+        txt.appendChild(d);
+      }
+      b.appendChild(ico); b.appendChild(txt);
+      b.addEventListener("click", () => { const id = op.id; cerrar(); try { onPick(id); } catch (e) {} });
+      body.appendChild(b);
+    });
+
+    card.appendChild(body);
+    modal.appendChild(card);
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  // v17.x.x — REFACTOR S+ (30-ago): opción 1 de «Exámenes» — solo la tanda más reciente.
+  // Dado el labsArray de Athenea, devuelve SOLO los resultados cuya fecha es la MÁXIMA
+  // (la toma más fresca), conservando el objeto intacto para que la escritura no cambie.
+  // Sin fechas resolubles, devuelve la lista tal cual (no se descarta nada a ciegas).
+  function _mtrLabsSoloUltimaToma(labs) {
+    if (!Array.isArray(labs) || !labs.length) return labs;
+    let maxIso = null;
+    for (const lab of labs) {
+      try { const f = _extractAtheneaFecha(lab); const iso = f && f.iso ? f.iso : null; if (iso && (!maxIso || iso > maxIso)) maxIso = iso; } catch (e) {}
+    }
+    if (!maxIso) return labs;
+    return labs.filter((lab) => { try { const f = _extractAtheneaFecha(lab); return f && f.iso === maxIso; } catch (e) { return true; } });
+  }
+
   function createLabInjectorUI() {
       autoFetchAtheneaLabsForActivePatient();
       // v15.5.0 — Solo VISIBLE donde aplica: el botón escribe en la Ruta Crónicos; si la
@@ -6153,16 +6506,31 @@
 
       const btn = document.createElement("button");
       btn.id = "vgl-lab-injector";
-      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+      // v17.x.x — REFACTOR S+ (30-ago): nombre sanitizado para el médico. «Auto-Labs
+      // (Athenea)» mezclaba el nombre del módulo con el del proveedor; el consumidor
+      // final ve «Llenar laboratorios», lenguaje de consultorio.
+      btn.innerHTML = "🧪 Exámenes";
       btn.className = "vgl-lab-inj";
 
-      btn.onclick = async () => {
+      btn.onclick = () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
           if (!docId) {
-              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧬 Auto-Labs (Athenea)");
+              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧪 Exámenes");
               return;
           }
-          btn.innerHTML = "⏳ Buscando en Athenea...";
+          _vglChooserModal({
+              titulo: "Exámenes",
+              descripcion: "¿Qué resultados traigo a la historia?",
+              opciones: [
+                  { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "Solo los resultados de la fecha de laboratorio más reciente." },
+                  { id: "historial", icono: "🗂", rotulo: "Historial por analito", desc: "El último resultado de cada analito, sin importar cuándo se hizo." },
+              ],
+              onPick: (modo) => { _ejecutarLlenadoExamenes(docId, btn, modo); },
+          });
+      };
+
+      async function _ejecutarLlenadoExamenes(docId, btn, modo) {
+          btn.innerHTML = "⏳ Buscando resultados de laboratorio...";
           uxTrack("labs.autollenado.click");
           try {
               // v12.3.35 — hallado en revisión adversarial: usar aquí la PRE-CARGA servía
@@ -6172,7 +6540,14 @@
               // pre-carga del robot queda solo para el aviso temprano y para no repetir
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
-              const labs = await getAtheneaLabsAuto(docId);
+              let labs = await getAtheneaLabsAuto(docId);
+              // v17.x.x — REFACTOR S+ (30-ago): opción «Última toma completa» — descarta
+              // los resultados de tomas anteriores y deja solo la fecha más reciente.
+              if (modo === "ultima" && labs && labs.length > 0) {
+                  const _antes = labs.length;
+                  labs = _mtrLabsSoloUltimaToma(labs);
+                  if (labs.length !== _antes) uxTrack("labs.autollenado.solo_ultima_toma", { antes: _antes, despues: labs.length });
+              }
               // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
               // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
               // el robot no repita esta misma consulta 30 s después.
@@ -6185,9 +6560,9 @@
                   // historia quedó diligenciada.
                   if (r.abortadoPorPaciente) {
                       uxTrack("labs.autollenado.abortado_cambio_paciente");
-                      showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras Athenea respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Auto-Labs de nuevo.", true);
-                      _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧬 Auto-Labs (Athenea)");
-                      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                      showToast("AMBAR", "Exámenes", "No se diligenció nada: la historia abierta cambió mientras el laboratorio respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Exámenes de nuevo.", true);
+                      _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧪 Exámenes");
+                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   // v17.1.0 (#136) — Un apagado del kill-switch o del interruptor remoto
@@ -6195,8 +6570,8 @@
                   // se pintaban idénticos: «✓ 0 casillas escritas», en verde, con el visto
                   // bueno. El médico se quedaba creyendo que Auto-Labs había corrido.
                   if (r.abortadoPorKillSwitch || r.desactivadoRemoto) {
-                      _vglFeedbackBoton(btn, "🛑 Auto-Labs está desactivado ahora mismo", "ambar", "🧬 Auto-Labs (Athenea)");
-                      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                      _vglFeedbackBoton(btn, "🛑 El llenado de exámenes está desactivado ahora mismo", "ambar", "🧪 Exámenes");
+                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   uxTrack("labs.autollenado.casillas", { n: r.count });
@@ -6223,8 +6598,8 @@
                           : (r.respetadas
                               ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
                               : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
-                      _huboEscritura ? "verde" : "ambar", "🧬 Auto-Labs (Athenea)");
-                  _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
+                      _huboEscritura ? "verde" : "ambar", "🧪 Exámenes");
+                  _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
 _vglOfrecerDeshacer(btn);
                   // v17.1.0 (#136) — y aunque SÍ haya escrito, el aviso no se repite para el
                   // mismo paciente dentro del mismo minuto: es el mismo remedio que la
@@ -6232,7 +6607,7 @@ _vglOfrecerDeshacer(btn);
                   // por este mismo síntoma, y que al clic manual se le quedó sin aplicar.
                   if (_huboEscritura && !(_autoLabsAvisoDoc === docId && (Date.now() - _autoLabsAvisoTs) < 60000)) {
                       _autoLabsAvisoDoc = docId; _autoLabsAvisoTs = Date.now();
-                      showToast("VERDE", "Auto-Labs", labs.length + " resultado(s) de Athenea: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
+                      showToast("VERDE", "Exámenes", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
                   }
                   // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
                   // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
@@ -6247,7 +6622,7 @@ _vglOfrecerDeshacer(btn);
                           const w = WHITELIST_13_LABS.find((x) => x.key === k);
                           return (w && w.names && w.names[0]) ? w.names[0] : String(k).replace(/_/g, " ");
                       });
-                      showToast("AMBAR", "Auto-Labs",
+                      showToast("AMBAR", "Exámenes",
                           "Llegaron resultados de " + _nombresSc.join(", ") + " pero esta pantalla no tiene la casilla donde escribirlos. "
                           + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false);
                       try { uxTrack("labs.autollenado.sincasilla", { n: r.sinCasilla.length }); } catch (e) {}
@@ -6259,7 +6634,7 @@ _vglOfrecerDeshacer(btn);
                       const _bloq = r.implausibles.slice(0, 4).map((o) => o.key + " = " + o.valor).join(", ");
                       const _resto = r.implausibles.length - 4;
                       const _prim = r.implausibles[0];
-                      showToast("AMBAR", "Auto-Labs",
+                      showToast("AMBAR", "Exámenes",
                           "NO se escribieron: " + _bloq + (_resto > 0 ? " y " + _resto + " más" : "")
                           + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false);
                       try { uxTrack("labs.autollenado.implausibles", { n: r.implausibles.length }); } catch (e) {}
@@ -6275,35 +6650,38 @@ _vglOfrecerDeshacer(btn);
                   // v12.3.16 — Si el médico configuró el auto-inicio, se intenta aquí mismo y
                   // se reintenta la búsqueda una vez, sin abrir otra pestaña ni pedir nada.
                   if (S.atheneaAutoLogin && atheneaCredsGet()) {
-                      btn.innerHTML = "🔑 Iniciando sesión en Athenea…";
+                      btn.innerHTML = "🔑 Iniciando sesión en el laboratorio…";
                       const okl = await atheneaAutoLogin();
                       if (okl) {
                           btn.innerHTML = "⏳ Reintentando…";
-                          const labs2 = await getAtheneaLabsAuto(docId);
+                          let labs2 = await getAtheneaLabsAuto(docId);
+                          if (modo === "ultima" && labs2 && labs2.length > 0) labs2 = _mtrLabsSoloUltimaToma(labs2);
                           if (labs2 && labs2.length > 0) {
                               const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
                               if (r2.abortadoPorPaciente) {
                                   uxTrack("labs.autollenado.abortado_cambio_paciente");
-                                  showToast("AMBAR", "Auto-Labs", "No se diligenció nada: la historia abierta cambió mientras se iniciaba sesión en Athenea."
-                                    + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Auto-Labs de nuevo.");
-                                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                                  showToast("AMBAR", "Exámenes", "No se diligenció nada: la historia abierta cambió mientras se iniciaba sesión en el laboratorio."
+                                    + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Exámenes de nuevo.");
+                                  btn.innerHTML = "🧪 Exámenes";
                                   return;
                               }
-                              _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧬 Auto-Labs (Athenea)");
-                              _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
+                              _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧪 Exámenes");
+                              _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
 _vglOfrecerDeshacer(btn);
-                              showToast("VERDE", "Auto-Labs", "Sesión de Athenea iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                              showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
                           } else {
-                              _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧬 Auto-Labs (Athenea)");
+                              _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
                           }
                       } else {
-                          showToast("ROJO", "Auto-Labs", "No se pudo iniciar sesión automáticamente en Athenea. Inicie sesión a mano; si sigue pasando, avise al administrador del asistente.", true);
+                          atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Exámenes",
+                            "No se pudo iniciar sesión automáticamente en el laboratorio. Inicie sesión a mano; si sigue pasando, avise al administrador del asistente.");
                       }
                   } else {
                       // v15.6.0 — sin confirm() del navegador: el botón mismo explica y actúa.
-                      _vglFeedbackBoton(btn, "Inicie sesión en Athenea y reintente", "ambar", "🧬 Auto-Labs (Athenea)");
-                      showToast("AMBAR", "Auto-Labs", "La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página de Athenea en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.", false);
+                      _vglFeedbackBoton(btn, "Inicie sesión en el laboratorio y reintente", "ambar", "🧪 Exámenes");
+                      atheneaAvisoSilencioso("athenea_sesion_labs_caducada|" + todayStamp(), "Exámenes",
+                        "La sesión del laboratorio no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página del laboratorio en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.");
                       try { window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank"); } catch (e) {}
                   }
               } else if (labs === null) {
@@ -6315,8 +6693,8 @@ _vglOfrecerDeshacer(btn);
                   // casos. Un fallo de lectura se presentaba como un hecho clínico
                   // verificado. Se distingue: null es "no pude leer, reintente", nunca
                   // "no tiene".
-                  _vglFeedbackBoton(btn, "❌ No se pudo leer Athenea", "ambar", "🧬 Auto-Labs (Athenea)");
-                  showToast("AMBAR", "Auto-Labs", "No se pudo leer el portal de Athenea para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
+                  _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
+                  showToast("AMBAR", "Exámenes", "No se pudo leer el portal de laboratorios para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
                   // historia clínica los resultados de CUALQUIER otro paciente, sin
@@ -6325,16 +6703,16 @@ _vglOfrecerDeshacer(btn);
                   // ambos casos no se diligenció nada y hay que revisar a mano.
                   // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
                   // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
-                  _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧬 Auto-Labs (Athenea)");
-                  showToast("AMBAR", "Auto-Labs", "Athenea no tiene laboratorios registrados para la cédula " + docId + " en el último año.", false);
+                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                  showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
               }
           } catch (e) {
-              _vglFeedbackBoton(btn, "❌ Athenea no respondió", "ambar", "🧬 Auto-Labs (Athenea)");
-              showToast("ROJO", "Auto-Labs", "No se pudo conectar con el Portal de Athenea. Verifique la red o intente desde el portal.", true);
+              _vglFeedbackBoton(btn, "❌ El laboratorio no respondió", "ambar", "🧪 Exámenes");
+              showToast("ROJO", "Exámenes", "No se pudo conectar con el portal de laboratorios. Verifique la red o intente desde el portal.", true);
           }
           // v15.5.0 — el rótulo ya no se restaura aquí a la brava: cada rama deja su
           // resultado contado en el botón y _vglFeedbackBoton lo devuelve solo a los 8 s.
-      };
+      }
 
       document.body.appendChild(btn);
   }
@@ -6478,6 +6856,12 @@ _vglOfrecerDeshacer(btn);
     // el mensaje es «aún cargando», no una pestaña concreta que podría estar equivocada.
     const _panelBloqueado = !_resumenListoParaGate || !_factoresParaGate || _pendientesPanel.length > 0;
 
+    // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico. `_autorizado` decide
+    // qué botones existen en el dock. Los no autorizados solo ven: agendamiento de
+    // laboratorios, Psicología/Odontología, laboratorios y PyM. Ocultos para ellos:
+    // agendamiento de citas médicas, Panel del paciente, Redactor IA y Control.
+    const _autorizado = mtrEsMedicoAutorizado();
+
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
     // provocando reflow + GC cada 5 s en la vista de historia. Ahora, si la firma de estado
@@ -6488,8 +6872,9 @@ _vglOfrecerDeshacer(btn);
       citaReal ? "R" : "n",
       // v17.5.0 — la compuerta del Panel del paciente: si el resumen termina de calcularse o
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
-      // para reflejarlo (habilitar el botón, quitar/actualizar el atajo «Ir a…»).
-      _panelBloqueado ? "PB" : "pb", _pendientesPanel.map((p) => p.pestania).join(",")].join("|");
+      // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
+      // así que la firma solo necesita saber si sigue bloqueado o no.
+      _panelBloqueado ? "PB" : "pb", _autorizado ? "AU" : "no"].join("|");
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -6524,6 +6909,10 @@ _vglOfrecerDeshacer(btn);
     // la tarjeta, no de existencia: isCitaAgendadaHoy/isLabAgendadaHoy siguen siendo las
     // mismas funciones, con las mismas pruebas).
     if (S.agendamientoRapido !== false) {
+      // v17.x.x — REFACTOR S+ (30-ago): los no autorizados solo agendan la TOMA DE
+      // MUESTRAS (openLabSoloModal); la cita de control general y su recordatorio
+      // quedan ocultos para ellos.
+      if (_autorizado || soloFaltaLab) {
       const bAg = document.createElement("button");
       bAg.className = "vgl-dock-btn" + (soloFaltaLab ? " vgl-dock-btn-ambar" : "");
       bAg.setAttribute("data-accion", "agendar");
@@ -6567,7 +6956,7 @@ _vglOfrecerDeshacer(btn);
       // labs» y «Recordatorio». Cada uno con una sola cosa que hacer, los dos a la vista.
       // Antes, con la cita hecha y el laboratorio pendiente, el recordatorio era
       // inalcanzable — que es exactamente lo que reportó el médico.
-      if (soloFaltaLab && citaDetalleHoy(docId)) {
+      if (_autorizado && soloFaltaLab && citaDetalleHoy(docId)) {
         const bRec = document.createElement("button");
         bRec.className = "vgl-dock-btn";
         bRec.setAttribute("data-accion", "recordatorio");
@@ -6576,6 +6965,7 @@ _vglOfrecerDeshacer(btn);
         _vglDockRotulo(bRec, "\uD83D\uDDA8", "Recordatorio");
         bRec.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.recordatorio.abrir"); abrirRecordatorioCita(apt); });
         btns.appendChild(bRec);
+      }
       }
 
       const bOrd = document.createElement("button");
@@ -6611,50 +7001,29 @@ _vglOfrecerDeshacer(btn);
     // juzgar a un paciente ya no hay que abrir dos ventanas y compararlas de memoria.
     // v17.5.0 — DESHABILITADO (orden explícita del médico, no solo con aviso) mientras
     // falte lo mínimo por documentar o el resumen automático todavía no termine de calcular.
+    // v17.x.x — REFACTOR S+ (30-ago): el Panel del paciente solo existe para los médicos
+    // autorizados, y ahora se OCULTA POR COMPLETO (no se muestra ni bloqueado) hasta que
+    // el paciente cumpla todos los requisitos. El resumen automático se sigue calculando
+    // en segundo plano (autoCalcularResumenSiNecesario), así que el botón aparece solo
+    // cuando de verdad se puede abrir. Sin atajos «Ir a…»: el médico entra a esas
+    // pestañas cuando corresponde, en su flujo natural.
+    if (_autorizado && !_panelBloqueado) {
     const bFicha = document.createElement("button");
     bFicha.className = "vgl-dock-btn";
     bFicha.setAttribute("data-accion", "ficha");
-    bFicha.disabled = _panelBloqueado;
-    if (bFicha.classList) bFicha.classList.toggle("vgl-dock-btn-disabled", _panelBloqueado);
-    if (!_panelBloqueado) {
-      bFicha.setAttribute("aria-label", "Abrir el panel del paciente: lo leído, riesgo, función renal, exámenes, tendencias y medicamentos");
-      bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
-      _vglDockRotulo(bFicha, "🧾", "Panel del paciente");
-    } else if (_pendientesPanel.length > 0) {
-      const _faltaTxt = _pendientesPanel.map((p) => p.etiqueta).join("; ");
-      bFicha.setAttribute("aria-label", "Panel del paciente bloqueado: falta documentar " + _faltaTxt);
-      bFicha.title = "🔒 Panel del paciente bloqueado — aún falta documentar: " + _faltaTxt + ". Se habilita solo apenas quede registrado en Everest (use los atajos de al lado).";
-      _vglDockRotulo(bFicha, "🔒", "Panel del paciente");
-    } else {
-      bFicha.setAttribute("aria-label", "Panel del paciente: recopilando datos automáticamente");
-      bFicha.title = "⏳ Panel del paciente — recopilando laboratorios y función renal automáticamente… se habilita solo en unos segundos.";
-      _vglDockRotulo(bFicha, "⏳", "Panel del paciente");
-    }
+    bFicha.setAttribute("aria-label", "Abrir el panel del paciente: lo leído, riesgo, función renal, exámenes, tendencias y medicamentos");
+    bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
+    _vglDockRotulo(bFicha, "🧾", "Panel del paciente");
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
-
-    // v17.5.0 — atajos «Ir a [pestaña]»: uno por cada pestaña con algo pendiente, solo
-    // mientras haya algo concreto que el médico pueda ir a hacer (no durante la sola espera
-    // del resumen automático, donde ningún clic suyo la acelera).
-    _pendientesPanel.forEach((pend) => {
-      const bIr = document.createElement("button");
-      bIr.className = "vgl-dock-btn vgl-dock-btn-ambar";
-      bIr.setAttribute("data-accion", "ir-pestana");
-      bIr.setAttribute("aria-label", "Ir a la pestaña " + pend.pestania + " para documentar " + pend.nombres.join(" y "));
-      bIr.title = "📍 Ir a « " + pend.pestania + " » para documentar: " + pend.nombres.join(", ") + ". El Panel del paciente se habilita apenas quede registrado.";
-      const _corto = pend.pestania === "Hábitos y Gestión de Riesgo" ? "Hábitos" : pend.pestania;
-      _vglDockRotulo(bIr, "📍", "Ir a " + _corto);
-      bIr.addEventListener("click", (e) => {
-        e.stopPropagation();
-        uxTrack("widget.panel.iraPestana");
-        mtrIrAPestanaPorNombre(pend.pestania, document);
-      });
-      btns.appendChild(bIr);
-    });
+    }
 
     // v15.6.0 — Redactor de texto libre con IA (Propuesta 3): módulo propio, separado
     // del Riesgo CV (que sigue en beta). Escribe borradores para las casillas de texto
     // libre de la historia; el médico revisa, edita e inserta — nunca se escribe solo.
+    // v17.x.x — REFACTOR S+ (30-ago): solo autorizado Y con la API (Gemini) configurada.
+    // Sin API configurada, el botón ni se muestra (pedido explícito del médico).
+    if (_autorizado && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini()) {
     const bRedactar = document.createElement("button");
     bRedactar.className = "vgl-dock-btn";
     bRedactar.setAttribute("data-accion", "redactar");
@@ -6667,6 +7036,21 @@ _vglOfrecerDeshacer(btn);
       abrirRedactorTextoLibre(apt);
     });
     btns.appendChild(bRedactar);
+    }
+
+    // v17.x.x — REFACTOR S+ (30-ago): Ordenamiento de exámenes · próximo control
+    // (simula el botón Paquetes de HTA/DM/ERC en revisión de solo-lectura). Solo
+    // médicos autorizados.
+    if (_autorizado) {
+    const bControl = document.createElement("button");
+    bControl.className = "vgl-dock-btn";
+    bControl.setAttribute("data-accion", "control");
+    bControl.setAttribute("aria-label", "Ordenamiento de exámenes del próximo control");
+    bControl.title = "📦 Revisar el paquete del programa del paciente y qué toca pedir en el próximo control.";
+    _vglDockRotulo(bControl, "📦", "Próximo control");
+    bControl.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.control.abrir"); openPaquetesModal(apt); });
+    btns.appendChild(bControl);
+    }
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
     // v16.8.0 — RETIRADO DEL DOCK. Su contenido (clasificación con su porqué, función
@@ -6860,9 +7244,9 @@ _vglOfrecerDeshacer(btn);
   // médico mostró alguna vez), esta función devuelve null y quien llama cae en el rehúso de
   // siempre. Nunca puede ser MENOS seguro que hoy: solo evita un rehúso innecesario cuando
   // la evidencia es clara, y jamás toca una casilla que no sea Mamas/Genito-Urinario.
-  function _excluirMamasGenitoPorTexto(candidatos) {
-      const esperado = EXAMEN_FISICO_NORMALIDAD_FIJA.length;
-      const sobran = candidatos.length - esperado;
+  function _excluirMamasGenitoPorTexto(candidatos, esperado) {
+      const objetivo = esperado != null ? esperado : EXAMEN_FISICO_NORMALIDAD_FIJA.length;
+      const sobran = candidatos.length - objetivo;
       if (sobran !== 1 && sobran !== 2) return null;
 
       const idxMama = [];
@@ -6885,7 +7269,7 @@ _vglOfrecerDeshacer(btn);
 
       const excluirSet = new Set(excluir);
       const filtrados = candidatos.filter((_, i) => !excluirSet.has(i));
-      return filtrados.length === esperado ? filtrados : null;
+      return filtrados.length === objetivo ? filtrados : null;
   }
 
   // =====================================================================
@@ -7043,6 +7427,19 @@ _vglOfrecerDeshacer(btn);
 
   function createIaInjectorUI() {
     try {
+      // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico. Igual que el botón
+      // «Redactar» del dock, estos inyectores forman parte del Redactor IA: solo se pintan
+      // para médico autorizado CON la redacción activada y su clave Gemini configurada.
+      // Si no toca, se esconde lo que ya estuviera pintado (el permiso puede cambiar entre
+      // ticks, p. ej. al cambiar de médico) y no se crea nada.
+      const permitido = mtrEsMedicoAutorizado() && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini();
+      if (!permitido) {
+        VGL_IA_INJECTORES.forEach((def) => {
+          const ya = document.getElementById(def.id);
+          if (ya) { try { ya.style.display = "none"; } catch (e) {} }
+        });
+        return;
+      }
       VGL_IA_INJECTORES.forEach((def) => {
         const ya = document.getElementById(def.id);
         // ¿Está la casilla de este botón en pantalla, y medible? Las dos cosas: la pestaña
@@ -7107,75 +7504,90 @@ _vglOfrecerDeshacer(btn);
 
       const btnNormalidad = document.createElement("button");
       btnNormalidad.id = "vgl-examen-normalidad";
-      btnNormalidad.innerHTML = "🩺 Normalidad";
-      btnNormalidad.title = "Escribe, casilla por casilla, las frases de normalidad del examen físico — solo en las casillas vacías. Nunca toca una que ya tenga texto suyo.";
+      btnNormalidad.innerHTML = "🩺 Examen normal";
+      btnNormalidad.title = "Llena las frases de normalidad en las casillas vacías. Elige si quieres solo Revisión por sistemas, solo Examen físico o ambos. Nunca toca una casilla que ya tenga texto suyo.";
       btnNormalidad.className = "vgl-exf-btn vgl-exf-btn-normalidad";
 
       btnNormalidad.onclick = () => {
+          _vglChooserModal({
+              titulo: "Examen normal",
+              descripcion: "¿Qué sección lleno?",
+              opciones: [
+                  { id: "revision", icono: "🧠", rotulo: "Revisión por sistemas", desc: "Solo las casillas subjetivas (síntomas referidos)." },
+                  { id: "fisico", icono: "🫀", rotulo: "Examen físico", desc: "Solo los hallazgos objetivos de la exploración." },
+                  { id: "ambos", icono: "🩺", rotulo: "Ambos", desc: "Revisión por sistemas y examen físico completos." },
+              ],
+              onPick: (modo) => { _aplicarNormalidad(btnNormalidad, modo); },
+          });
+      };
+
+      function _aplicarNormalidad(btnNormalidad, modo) {
           uxTrack("examenFisico.normalidadFija.click");
           const candidatos = _casillasExamenFisico();
           if (!candidatos.length) {
-              _vglFeedbackBoton(btnNormalidad, "Aquí no hay casillas de examen físico", "ambar", "🩺 Normalidad");
-              showToast("AMBAR", "Normalidad", "En esta pantalla no están las casillas de Revisión por sistema / Examen físico. Abra esa pestaña de la historia y vuelva a tocar el botón.", false);
+              _vglFeedbackBoton(btnNormalidad, "Aquí no hay casillas de examen físico", "ambar", "🩺 Examen normal");
+              showToast("AMBAR", "Examen normal", "En esta pantalla no están las casillas de Revisión por sistema / Examen físico. Abra esa pestaña de la historia y vuelva a tocar el botón.", false);
               return;
           }
-          // v14.2.0 — Sonda de anclaje (solo conteos, PHI-safe): en cada uso real registra si
-          // las casillas traen name/aria/placeholder/etiqueta propios. Es la evidencia que
-          // hoy falta para cerrar el VGL-003 con un mapeo por etiqueta en vez de por posición.
+          // v14.2.0 — Sonda de anclaje (solo conteos, PHI-safe).
           try { uxTrack("examenFisico.anclas", _examenFisicoAnclas(candidatos)); } catch (e) {}
 
-          // [v14.2.2 — corrección 2026-08-18, reportado en consultorio en vivo: "pega en las
-          // casillas que no corresponden y varias quedan vacías"] _casillasExamenFisico() junta
-          // TODAS las casillas visibles con id="alert_message" (id repetido — mismo patrón de
-          // colisión que resultadoHemoglobina/HbA1c, ver _findHbA1cFields) y las empareja con
-          // EXAMEN_FISICO_NORMALIDAD_FIJA[i] a ciegas, por POSICIÓN — el VGL-003 de la sonda de
-          // arriba sigue abierto, así que no hay ancla confiable todavía. La plantilla EXCLUYE a
-          // propósito Mamas y Genito/Urinario (17 en vez de 19 en la sección de examen físico, a
-          // pedido del médico), pero esas dos casillas SIGUEN en el DOM real y CUENTAN en
-          // candidatos — así que en cualquier pantalla que las traiga (la gran mayoría), TODO lo
-          // que sigue después se corre un puesto: exactamente "pega en la que no corresponde".
-          // Antes esto solo avisaba DESPUÉS de pegar igual. Sin poder identificar cuáles dos
-          // casillas sobran, no hay forma honesta de reordenar sola: se rehúsa entera en vez de
-          // arriesgar un hallazgo clínico mal puesto — "casilla vacía es mejor que una mal puesta".
-          let usar = candidatos;
+          // v17.x.x — REFACTOR S+ (30-ago): el botón deja elegir qué franja llenar. La
+          // plantilla fija está ordenada: [0..19) Revisión por sistemas (19) y [19..36)
+          // Examen físico (17, sin Mamas/Genito). El DOM de Everest trae las casillas en ese
+          // MISMO orden: primero las 19 subjetivas, luego las del examen físico.
+          const N_REVISION = 19;
+          let plantilla, casillasObjetivo;
+          if (modo === "revision") {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(0, N_REVISION);
+              casillasObjetivo = candidatos.slice(0, N_REVISION);
+          } else if (modo === "fisico") {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(N_REVISION);
+              casillasObjetivo = candidatos.slice(N_REVISION);
+          } else {
+              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA;
+              casillasObjetivo = candidatos;
+          }
+
+          // La sección de Examen físico trae 19 casillas en el DOM pero la plantilla solo 17
+          // (se omiten Mamas y Genito/Urinario a pedido del médico). Se excluyen por texto
+          // esas dos antes de emparejar, misma red de seguridad de siempre, acotada a la
+          // franja que se va a llenar. En "Revisión por sistemas" no hay nada que excluir:
+          // si la cuenta no cuadra, se rehúsa entero (nunca se pega a ciegas).
+          let usar = casillasObjetivo;
           let excluidas = 0;
-          if (candidatos.length !== EXAMEN_FISICO_NORMALIDAD_FIJA.length) {
-              // v14.2.4 — antes de rehusar, intenta excluir Mamas/Genito-Urinario por texto
-              // (ver comentario de _excluirMamasGenitoPorTexto). Riesgo asimétrico: si no
-              // resuelve de forma inequívoca, cae exactamente en el mismo rehúso de siempre.
-              const filtrados = _excluirMamasGenitoPorTexto(candidatos);
+          if (casillasObjetivo.length !== plantilla.length) {
+              const filtrados = (modo === "revision") ? null : _excluirMamasGenitoPorTexto(casillasObjetivo, plantilla.length);
               if (!filtrados) {
-                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: candidatos.length, plantilla: EXAMEN_FISICO_NORMALIDAD_FIJA.length });
-                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + candidatos.length + " casillas y la plantilla espera " + EXAMEN_FISICO_NORMALIDAD_FIJA.length, "ambar", "🩺 Normalidad fija");
-                  showToast("AMBAR", "Normalidad fija", "Por seguridad no se escribió nada: esta pantalla tiene " + candidatos.length + " casillas y la plantilla espera exactamente " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
+                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: casillasObjetivo.length, plantilla: plantilla.length, modo });
+                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + casillasObjetivo.length + " casillas y la plantilla espera " + plantilla.length, "ambar", "🩺 Examen normal");
+                  showToast("AMBAR", "Examen normal", "Por seguridad no se escribió nada: esta pantalla tiene " + casillasObjetivo.length + " casillas y la plantilla espera exactamente " + plantilla.length + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
                   return;
               }
               usar = filtrados;
-              excluidas = candidatos.length - filtrados.length;
-              uxTrack("examenFisico.normalidadFija.exclusionTexto", { candidatos: candidatos.length, excluidas });
+              excluidas = casillasObjetivo.length - filtrados.length;
+              uxTrack("examenFisico.normalidadFija.exclusionTexto", { candidatos: casillasObjetivo.length, excluidas, modo });
           }
 
           const porAplicar = [];
           for (let i = 0; i < usar.length; i++) {
               const actual = String(usar[i].value == null ? "" : usar[i].value).trim();
-              if (actual === "") porAplicar.push({ el: usar[i], texto: EXAMEN_FISICO_NORMALIDAD_FIJA[i] });
+              if (actual === "") porAplicar.push({ el: usar[i], texto: plantilla[i] });
           }
           if (!porAplicar.length) {
-              _vglFeedbackBoton(btnNormalidad, "✋ Todas ya tenían texto: no toqué nada", "ambar", "🩺 Normalidad fija");
+              _vglFeedbackBoton(btnNormalidad, "✋ Todas ya tenían texto: no toqué nada", "ambar", "🩺 Examen normal");
               return;
           }
-          // v15.5.0 — foto previa para «Deshacer» (se toma del valor real de cada casilla:
-          // si esta rama cambia algún día, el deshacer nunca miente).
           const fotoPrevia = porAplicar.map(({ el }) => ({ el, prev: String(el.value == null ? "" : el.value) }));
           porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
-          _vglGuardarDeshacer(extractPacienteAbierto(), fotoPrevia, "Normalidad fija");
-          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length });
+          _vglGuardarDeshacer(extractPacienteAbierto(), fotoPrevia, "Examen normal");
+          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, modo });
           const respetadasN = usar.length - porAplicar.length;
           _vglFeedbackBoton(btnNormalidad,
             "✓ " + porAplicar.length + " escritas" + (respetadasN ? " · " + respetadasN + " respetadas" : "") + (excluidas ? " · " + excluidas + " excluidas" : ""),
-            "verde", "🩺 Normalidad fija");
+            "verde", "🩺 Examen normal");
           _vglOfrecerDeshacer(btnNormalidad);
-      };
+      }
 
       document.body.appendChild(btnNormalidad);
   }
@@ -7343,7 +7755,11 @@ _vglOfrecerDeshacer(btn);
     recordatorio: "07:30",    // avisa si a esta hora aún no hay PyM cargado ("" = nunca)
     baseAuto: true,           // bajar la base PyM de la sede UNA vez al día (por identificador)
     respaldoId: "",           // opcional: otro archivo de base (enlace o identificador)
-    reporte: false,           // reporte MÍNIMO al tablero (Default-off R1.8)
+    reporte: true,            // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): telemetría SIEMPRE
+                              // encendida, es el precio de usar el script gratis. Se fuerza
+                              // además en S (ver más abajo): ni la config guardada con false
+                              // ni una edición manual de vgl_cfg la apagan. Anónima por
+                              // construcción (cero PHI: ver docs/TELEMETRIA.md).
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
@@ -7361,16 +7777,20 @@ _vglOfrecerDeshacer(btn);
                               // administrador (nunca se adivina). Comodines {citaId} {correo} {eps} {nombre} {usuarioId}.
     sedeLabNombre: "",        // v15.9.0 — nombre de la sede que se imprime en el recordatorio de la toma.
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
-    uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
+    uxTelemetria: true,       // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): métricas de uso
+                              // SIEMPRE encendidas (misma política que `reporte` arriba).
+                              // El RUM, los contadores de acciones y el Diario de Lentitud
+                              // se consideran parte del servicio, no una opción.
     // v17.43.0 — DIARIO DE LENTITUD, y NO es lo mismo que `uxTelemetria`.
     // El médico reportó lentitud real en consulta pero "no sé cuándo" se dispara. El
     // observador LoAF que ya existía (_iniciarRumObserver) sabe atribuir si una tarea
     // larga fue NUESTRA o de Everest, pero solo contaba baldes agregados: perdía el
     // contexto, así que jamás podía responder "¿cuándo?". Esto añade la otra mitad: una
     // línea en la bitácora local por cada tarea larga NUESTRA.
-    // Nace ENCENDIDO, y eso exige justificarse frente a la regla Default-off R1.8:
-    //   · `uxTelemetria` gobierna los CONTADORES que pueden SALIR del equipo (uxTrack →
-    //     vgl_ux → repPost). Sigue apagado de fábrica y NO se toca aquí.
+    // Nace ENCENDIDO. Antes se justificaba frente a la regla Default-off R1.8 porque
+    // `uxTelemetria` (los CONTADORES que salen del equipo) iba apagado de fábrica; desde
+    // v17.58.2 la política del dueño es que la telemetría completa (reporte + uso) está
+    // SIEMPRE encendida, así que el Diario de Lentitud local no contradice nada.
     //   · `perfLog` gobierna solo la bitácora LOCAL (vglLog → localStorage), que nunca
     //     se envía a ninguna parte y ya pasa por sanitizePII en cada campo.
     // Lo que se guarda es el nombre de una fase nuestra y unos milisegundos. Cero PHI:
@@ -7517,6 +7937,17 @@ _vglOfrecerDeshacer(btn);
   // CHANGELOG.
 
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
+  // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago-2026): la telemetría es el precio de usar el
+  // script gratis. Nace ENCENDIDA y NO se puede desactivar: este forzado corre en CADA
+  // arranque, así que ni una config guardada con `false`, ni una edición manual de
+  // vgl_cfg, ni la migración de estreno (que ya no la necesita) pueden dejarla apagada.
+  // Los interruptores correspondientes se retiraron de Ajustes (renderSettings) y los
+  // guards de runtime (`if (S.uxTelemetria === false) return;`) quedan solo como red de
+  // seguridad frente a un estado imposible. La telemetría sigue siendo anónima por
+  // construcción: conteos, nombres de acción de un catálogo fijo y errores saneados —
+  // cero PHI (ver docs/TELEMETRIA.md).
+  S.reporte = true;
+  S.uxTelemetria = true;
   // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): capturada AQUÍ, antes de que
   // corra cualquier migración. La migración "estreno" (más abajo) la usaba para
   // distinguir instalación nueva de actualización, pero la leía DESPUÉS de que las
@@ -7556,11 +7987,11 @@ _vglOfrecerDeshacer(btn);
     // claves que ya no existen como default.
     // Migración v14.2.0 ESTRENO (decisión del médico para el arranque con 3 consultorios).
     // Enciende, UNA sola vez, las funciones nuevas y la telemetría de mejora del servicio.
-    // Los valores de FÁBRICA siguen en false (arranque conservador para instalaciones
-    // limpias sin esta marca); esta migración es el "sí, enciéndelo para mi sede" explícito.
-    // Como es de una sola pasada, si un médico luego lo apaga desde Ajustes, se queda
-    // apagado (la marca ya está puesta y la migración no vuelve a correr). La telemetría es
-    // de conteos anónimos SIN dato de paciente (misma barrera de PHI de todo el reporte).
+    // v17.58.2 — desde esta versión la telemetría completa (reporte + uxTelemetria) nace
+    // encendida y se fuerza SIEMPRE en S (política del dueño), así que esta migración ya
+    // solo es necesaria para motorPortado e iaRedaccion (las dos funciones que siguen
+    // naciendo apagadas y que el médico enciende una a una). Se conserva el resto del
+    // comportamiento original.
     // v17.6.8 — AUDITORÍA 5 MÓDULOS: sin guarda de versión, esta migración corría también
     // en CUALQUIER instalación nueva (sin vgl_cfg previo), activando el envío a Gemini y el
     // reporte remoto sin que el médico los hubiera encendido. Ahora solo aplica a equipos
@@ -7858,16 +8289,33 @@ _vglOfrecerDeshacer(btn);
         "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM/CITAS DIA EBS",
         "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE BELLO"
       ],
+      // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
+      // sesión, es que hay que quitarle la protección antes de subirlo.
       respaldo: {
         id: "809a098b-69d1-44fe-9e51-b01f07290807",
         name: "BASE PILOTO DE CONSULTA  BELLO MAYO.xlsx",
+        // v18.0.5 — INCIDENTE 31-ago (parte 2): el respaldo tampoco cargaba, y con el
+        // vínculo de la carpeta regenerado tampoco servía la URL de descarga por ID si
+        // el archivo cambió de ubicación/permisos. El médico pasó el vínculo NUEVO del
+        // archivo de respaldo (backup de base piloto): se usa su GUID directo como
+        // tercera vía de descarga cuando las dos por ID fallen. El GUID salió del
+        // redirect del vínculo (doc2.aspx?sourcedoc=...). Si el archivo se reemplaza,
+        // pedir el vínculo actual y actualizar SOLO este id.
+        shareId: "2bd8f42a-f8f5-46e0-b2e1-b1d2e5fa5d4f",
       },
       // v7.8.3: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
       // → "Cualquier persona con el vínculo" / "Personas de la organización"). Visitarlo
       // le da a ESTE navegador una cookie de acceso anónimo válida para esa carpeta, sin
       // que el médico tenga que iniciar sesión en SharePoint con su usuario. Se "recarga"
       // cada cierto tiempo (primeShareAccess) antes de listar/descargar.
-      shareLink: "https://viva1aips-my.sharepoint.com/:f:/g/personal/director_bello_viva1a_com_co/IgCsGP_chaHvTKYH9v-QZ2Q1AQuJo3umR5gDLjKlkUqgPS4?e=jscdBl",
+      // v18.0.5 — INCIDENTE 31-ago: el PyM dejó de cargar en consultorio (ni el de hoy ni
+      // la base piloto) con todas las tarjetas en "sin registro en PyM". Causa raíz: el
+      // vínculo de la carpeta había sido REGENERADO en SharePoint (el token cambió de
+      // e=jscdBl a e=Xael2W) y el viejo dejó de conceder la cookie de acceso anónimo, así
+      // que primeShareAccess() no podía renovar la sesión y cada listado/descarga moría en
+      // silencio (403). El médico pasó el vínculo nuevo desde el consultorio. Si vuelve a
+      // fallar así, pedir el vínculo actual de la carpeta y actualizar SOLO este token.
+      shareLink: "https://viva1aips-my.sharepoint.com/:f:/g/personal/director_bello_viva1a_com_co/IgCsGP_chaHvTKYH9v-QZ2Q1AQuJo3umR5gDLjKlkUqgPS4?e=Xael2W",
     },
     SEL: {
       hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
@@ -7876,8 +8324,11 @@ _vglOfrecerDeshacer(btn);
     },
   };
   // [UI-CSS] Paleta clínica suavizada (WCAG compliant, tono no estresante)
-  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#2563EB", MORADO: "#9333EA" };
-  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(37,99,235,.16)", MORADO: "rgba(147,51,234,.16)" };
+  // v18.0.0 — rebrand "Centinela": el acento primario pasa de azul a VIOLETA (marca) y
+  // la pre-alerta pasa de morado a CIAN para no chocar con la marca. VERDE/ÁMBAR/ROJO
+  // conservan su semántica clínica intacta.
+  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#7C3AED", MORADO: "#0891B2" };
+  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(124,58,237,.16)", MORADO: "rgba(8,145,178,.16)" };
   // v7.8.1: etiquetas ACCIONABLES, confirmadas por el médico del programa (no adivinadas):
   //  - Tamización CMB = riesgo cardiometabólico según Resolución 3280/2018 (el nombre del
   //    archivo "Agenda_Dia_CMB" es la sede/contrato, NO la prueba — se aclaró a propósito).
@@ -8336,6 +8787,35 @@ _vglOfrecerDeshacer(btn);
   }
   function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
   function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  // =====================================================================
+  //  v17.x.x — REFACTOR S+ (30-ago): CONTROL DE ACCESO POR MÉDICO.
+  //  ------------------------------------------------------------------
+  //  Lista FIJA de los médicos con acceso completo. Se compara el NOMBRE COMPLETO
+  //  normalizado (sin tildes, sin mayúsculas, sin espacios dobles) contra
+  //  `state.activeDoctor.name`. Los demás médicos ven solo el panel del Centinela,
+  //  agendamiento de laboratorios, Psicología/Odontología, laboratorios y PyM.
+  //  Restringido para los demás: agendamiento de citas médicas, Panel del paciente,
+  //  Redactor IA y Ordenamiento de exámenes (Control).
+  // =====================================================================
+  const MTR_MEDICOS_AUTORIZADOS = [
+    "ELISETH MARGARITA ESTRADA MORENO",
+    "BRANDON JESUS PALENCIA MARTINEZ",
+    "MARIA EDINETH PINO",
+    "SINAI MIJARES",
+  ];
+  function mtrNormalizarNombre(n) {
+    return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
+  }
+  // Pura y cacheable: devuelve true si el médico activo está en la lista autorizada.
+  // Sin nombre detectado todavía -> false (máxima restricción: ante la duda, ocultar).
+  function mtrEsMedicoAutorizado() {
+    try {
+      const nombre = (state && state.activeDoctor && state.activeDoctor.name) || "";
+      const n = mtrNormalizarNombre(nombre);
+      if (!n) return false;
+      return MTR_MEDICOS_AUTORIZADOS.some((x) => mtrNormalizarNombre(x) === n);
+    } catch (e) { return false; }
+  }
   function isExcludedActivity(header, label) {
     const hay = stripAccents((header + " " + label).toLowerCase());
     if (hay.includes("vih")) return false; // VIH siempre se conserva
@@ -9190,7 +9670,7 @@ _vglOfrecerDeshacer(btn);
     const pasos = [];
     const paso = (nombre, ok, detalle) => pasos.push({ paso: nombre, ok: !!ok, detalle: detalle || "" });
     try {
-      paso("Interruptor del envío (Ajustes → Reporte)", !!S.reporte, S.reporte ? "encendido" : "APAGADO en este equipo: nada sale de aquí");
+      paso("Estado del envío (v17.58.2: la telemetría es obligatoria)", !!S.reporte, S.reporte ? "encendido" : "APAGADO (estado imposible por UI desde v17.58.2)");
       const u = repUrl();
       paso("Dirección del panel", !!u && /^https:\/\/script\.google\.com\//.test(u), u ? "" : "sin dirección");
       paso("Permiso de red del navegador", typeof GM_xmlhttpRequest !== "undefined", typeof GM_xmlhttpRequest !== "undefined" ? "" : "falta el permiso del gestor de scripts");
@@ -9219,7 +9699,16 @@ _vglOfrecerDeshacer(btn);
       const ayer = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
       const stAyer = (allStats() || {})[ayer];
       paso("Resumen diario", true, sum === ayer ? "el de ayer ya se intentó" : stAyer ? "el de ayer está pendiente de salir" : "ayer no hubo actividad vigilada en este equipo (no hay fila que enviar)");
-      paso("Nombre del consultorio (opcional)", true, (S.equipo || "").trim() ? S.equipo : "vacío — las filas llegan sin nombre de equipo");
+      // v18.0.1 — «Nombre del consultorio» deja de ser un aviso verde falso: sin nombre,
+      // las filas SÍ llegan identificadas (ID anónimo estable _equipoId()), pero el
+      // tablero no puede decir qué puesto las envió. La puerta se cierra en rojo con la
+      // instrucción exacta, y el campo de Ajustes ahora vive en la sección visible
+      // (Operación) para que el administrador lo configure sin modo programador.
+      const nombreEq = (S.equipo || "").trim();
+      paso("Nombre del consultorio (Ajustes → Operación)", !!nombreEq,
+        nombreEq ? nombreEq
+          : "vacío — las filas llegan con el identificador anónimo " + (_equipoId() || "?")
+            + "; escriba el nombre del puesto en Ajustes → Operación → «Nombre del consultorio», una vez por equipo, para que el tablero lo muestre legible");
     } catch (e) { paso("Diagnóstico", false, "no se pudo completar: " + (e && e.message)); }
     return pasos;
   }
@@ -9794,6 +10283,15 @@ _vglOfrecerDeshacer(btn);
               if (!cubeta) continue;
               const mio = _rumNodoEsNuestro(entries[i].target);
               uxTrack((mio ? "rum.self.inp." : "rum.page.inp.") + cubeta);
+              // v17.58.2 — INP CON ATRIBUCIÓN. El export real traía 2.740 `rum.self.inp.poor`
+              // y 2.497 `needs_imp` SIN decir qué interacción era: un contador dice cuántas
+              // veces pasó, nunca qué botón. Además de la cubeta agregada (que el tablero
+              // ya suma), se guarda la etiqueta del elemento tocado — catálogo fijo de
+              // _rageEtiqueta, jamás un id/URL ajeno — para que el próximo export pueda
+              // decir «el INP malo es el chip de día del modal», no solo que existe.
+              if (mio) {
+                try { uxTrack("rum.self.inp.detalle." + _rageEtiqueta(entries[i].target) + "." + cubeta); } catch (eInpD) {}
+              }
             }
           } catch (e) {}
         });
@@ -10006,7 +10504,12 @@ _vglOfrecerDeshacer(btn);
     if (!repOn()) return;
     const d = todayStamp(); if (repFrDia !== d) { repFrDia = d; repFrN = 0; }
     if (repFrN >= 20) return; repFrN++;
-    reportar("fraude", { hora: hora || "", min: Math.round((min || 0) * 10) / 10 });
+    // v18.0.4 — ENJAMBRE (31-ago): `hora` es el ÚNICO campo de telemetría derivado del DOM
+    // que no pasaba por la barrera de 6+ dígitos (uxClaveLimpia / _sanearMensajeError).
+    // Normalmente lleva "08:20 AM", pero si el parser de la agenda llegara a poner otra
+    // cosa (dato corrupto, cédula), no debe viajar: sin forma de hora, va vacío.
+    const hLimpia = (typeof hora === "string" && /^\s*\d{1,2}:\d{2}/.test(hora)) ? hora.trim().slice(0, 20) : "";
+    reportar("fraude", { hora: hLimpia, min: Math.round((min || 0) * 10) / 10 });
   }
 
   // =====================================================================
@@ -10330,10 +10833,19 @@ _vglOfrecerDeshacer(btn);
   // Dos formas de bajar un archivo por identificador (si una falla se prueba la otra).
   function spFallbackUrls(id) {
     const g = String(id || "").replace(/[{}]/g, "").toLowerCase();
-    return [
+    // v18.0.5 — INCIDENTE 31-ago: las dos rutas por ID (GetFileById + download.aspx)
+    // seguían fallando con el vínculo de la carpeta regenerado. Se añade una TERCERA
+    // vía por el GUID del vínculo de compartir del archivo (shareId), que es el
+    // identificador que SharePoint usa aunque el archivo se haya movido o recompuesto.
+    // Si shareId no está configurado, la lista queda igual que antes.
+    const r = [
       spBase() + "/_api/web/GetFileById('" + g + "')/$value",
       spBase() + "/_layouts/15/download.aspx?UniqueId=" + g,
     ];
+    const sid = CONFIG.SP.respaldo && CONFIG.SP.respaldo.shareId
+      ? String(CONFIG.SP.respaldo.shareId).replace(/[{}]/g, "").toLowerCase() : "";
+    if (sid && sid !== g) r.push(spBase() + "/_api/web/GetFileById('" + sid + "')/$value");
+    return r;
   }
   // v7.8: devuelve directamente el ÍNDICE ({map, todos}); nunca la tabla de filas.
   async function readPym(name, buffer) {
@@ -10459,7 +10971,7 @@ _vglOfrecerDeshacer(btn);
       const m = await pilotoMeta();
       if (!m || (m.mtime && m.mtime === state.pymMTime)) return;  // sin metadatos o sin cambios: sigue la copia
       const ok = await loadPymBaseDescarga(true, m);
-      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe bajó la versión nueva desde el servidor de datos.", false, "pilotoupd|" + franja); // [COPY-UX]
+      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe descargó la lista de prevención actualizada.", false, "pilotoupd|" + franja); // [COPY-UX]
     } catch (e) {} finally { pilotoChkEnCurso = false; }
   }
   async function loadPymBase(silent) {
@@ -10495,10 +11007,10 @@ _vglOfrecerDeshacer(btn);
       // (esos dominios ya están en @connect, pero sin sesión igual no hay archivo).
       // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
       // sesión, es que hay que quitarle la protección antes de subirlo.
-      const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo del servidor de datos tiene CONTRASEÑA — pide que lo guarden sin protección (Excel: Archivo → Información → Proteger libro → Quitar contraseña)" // [COPY-UX]
-        : errores.find((x) => /red|permiso/i.test(x)) ? "la conexión no salió (permiso de Tampermonkey, o sesión de sincronización remota vencida que redirige al login)" // [COPY-UX]
-        : errores.find((x) => /401|403/.test(x)) ? "el servidor de datos rechazó la sesión (401/403)" // [COPY-UX]
-        : errores.find((x) => /no es un Excel/i.test(x)) ? "el servidor de datos contestó su página de inicio de sesión en vez del archivo" // [COPY-UX]
+      const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo de la lista de prevención está protegido con contraseña — pida que lo guarden sin protección (en Excel: Archivo → Información → Proteger libro → Quitar contraseña)" // [COPY-UX]
+        : errores.find((x) => /red|permiso/i.test(x)) ? "no se pudo conectar con la carpeta compartida de la sede" // [COPY-UX]
+        : errores.find((x) => /401|403/.test(x)) ? "la carpeta compartida de la sede rechazó el acceso" // [COPY-UX]
+        : errores.find((x) => /no es un Excel/i.test(x)) ? "la carpeta compartida de la sede pidió iniciar sesión en vez de entregar el archivo" // [COPY-UX]
         : (errores[0] || "sin respuesta");
       if (!silent) setSummary("No se pudo descargar la lista de prevención — " + razon + ". Puede cargar el archivo del día con «Abrir PyM», o avisar al administrador del asistente.", "warn");
       console.warn("[Vigilante] base PyM:", errores.join(" · "));
@@ -10519,7 +11031,7 @@ _vglOfrecerDeshacer(btn);
     state.pymFallback = true;
     uxTrack("pym.fallback.red");
     applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (base piloto — aún no llega la de hoy)", (meta && meta.mtime) || "", fb.name);
-    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca el PyM real de hoy en el servidor de datos.", false); // [COPY-UX]
+    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca la lista real de hoy en la carpeta compartida de la sede.", false); // [COPY-UX]
     return true;
   }
   // v7.7: PyM DEL DÍA — primera opción. Busca en la carpeta de SharePoint (confirmada
@@ -10564,7 +11076,7 @@ _vglOfrecerDeshacer(btn);
   // para decidir si se fía de la lista que está viendo.
   function pymDiarioMensajeFallo(noSePudoListar, hayPymCargado) {
     if (noSePudoListar) {
-      return "No pude revisar la carpeta del PyM: la conexión con SharePoint falló. NO sé si la lista de hoy ya está subida. "
+      return "No pude revisar la carpeta de la lista de prevención: no se pudo conectar con la carpeta compartida de la sede. NO sé si la lista de hoy ya está subida. "
         + (hayPymCargado ? "Sigo con lo que hay cargado, que puede no ser lo último." : "Puede cargarla a mano con el botón 📂 «Abrir PyM».");
     }
     return "Aún no aparece la lista de prevención de hoy. "
@@ -10599,7 +11111,7 @@ _vglOfrecerDeshacer(btn);
           filas = [];
           noSePudoListar = true;
           if (diarioFallosSesion === 3 && state.leader) {
-            notify("AMBAR", "🔒 La lista de prevención no se está actualizando", "Llevo media hora sin poder revisar la carpeta del PyM — si el archivo de hoy ya está subido, no lo estoy viendo.\nPuede cargarlo con el botón 📂 «Abrir PyM» del panel mientras el administrador del asistente renueva la conexión.", false, "sesionvencida|" + todayStamp());
+            notify("AMBAR", "🔒 La lista de prevención no se está actualizando", "Llevo media hora sin poder revisar la carpeta de la lista de prevención — si el archivo de hoy ya está subido, no lo estoy viendo.\nPuede cargarlo con el botón 📂 «Abrir PyM» del panel mientras el administrador del asistente renueva el acceso.", false, "sesionvencida|" + todayStamp());
           }
         }
       }
@@ -10762,7 +11274,7 @@ _vglOfrecerDeshacer(btn);
         textNode.style.setProperty("font-weight", "600", "important");
         t.insertBefore(textNode, t.firstChild);
       }
-      textNode.textContent = "🛡️ Vigilante PyM · " + msg;
+      textNode.textContent = "🛡️ Centinela PyM · " + msg;
 
       t.classList.add("vgl-sp-visible");
 
@@ -11035,6 +11547,7 @@ _vglOfrecerDeshacer(btn);
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
     state.contadas.clear();   // v17.1.0 (#72/#146) — día nuevo, contadores nuevos
     try { state.checkCierreAvisados.clear(); } catch (e) {}   // v17.6.7 — avisos de cierre por cita, día nuevo
+    try { if (typeof _mtrMediaPreguntadas !== "undefined" && _mtrMediaPreguntadas && typeof _mtrMediaPreguntadas.clear === "function") _mtrMediaPreguntadas.clear(); } catch (e) {}   // v17.58.0 — PARTE A: la escalera de adherencia se ofrece de nuevo cada jornada
     // v16.7.0 — AUDITORÍA #9: al cruzar medianoche el Excel PyM cargado ayer seguía
     // usándose SIN NINGUNA MARCA, como si fuera el del día. No se borra (a las 00:01 de
     // un turno nocturno sigue siendo lo mejor que hay), pero desde ahora la barra lo
@@ -11082,7 +11595,7 @@ _vglOfrecerDeshacer(btn);
       if (state.estadoPendiente.get(key) === stCrudo) { state.estadoPendiente.delete(key); stRaw = stCrudoRaw; st = stCrudo; }
       else { state.estadoPendiente.set(key, stCrudo); stRaw = prevRaw; st = prev; }
     } else state.estadoPendiente.delete(key);
-    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false;
+    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false, callar = false;
     if (st.includes("en sala")) {
       if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
@@ -11097,8 +11610,10 @@ _vglOfrecerDeshacer(btn);
       // interrumpe. El color ROJO se CONSERVA (el panel lo sigue pintando y la auditoría lo
       // sigue registrando: es la evidencia para las reclamaciones), pero `sound` se queda
       // en false, que es lo único que dispara tono, notificación del sistema y cartel.
+      // v18.0.4 — ENJAMBRE (31-ago): además de `sound=false`, se marca `callar` para que
+      // maybeNotify respete la decisión (antes volvía a sonar el ROJO por esa vía).
       if (_apptMarcada(state.alertedFraud, a, key)) color = "ROJO";
-      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
+      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; callar = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
       else color = "VERDE";
     }
     else if (st.includes("sin presentarse")) {
@@ -11142,7 +11657,7 @@ _vglOfrecerDeshacer(btn);
     // forma de saber a qué hora se confirmó realmente. Pedido textual: "no me dice a qué
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
-    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, elapsed: Math.round(elapsed * 10) / 10, pym }; }
+    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
     if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
     else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
     state.historical.set(key, stRaw);
@@ -11152,14 +11667,18 @@ _vglOfrecerDeshacer(btn);
     // solo si el médico lo encendió. Sugiere verificar; nunca ordena ni acusa.
     if (S.checkCierre && st.includes("atendido") && prev !== "" && !prev.includes("atendido") && !state.checkCierreAvisados.has(key)) {
       state.checkCierreAvisados.add(key);
-      try {
-        let _rc = null;
-        try { _rc = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(a.doc_id) : null; } catch (e) { _rc = null; }
-        const _msg = _checklistCierreMsg(_rc && _rc.plan);
-        if (_msg) showToast("AZUL", "Cierre de consulta", (a.nombre || "El paciente") + ": " + _msg, false, key);
-      } catch (e) {}
+      // Comparte el candado "una leyenda por paciente por día": si ese paciente ya notificó
+      // hoy (VERDE/MORADO), el aviso de cierre no se suma encima de otra leyenda.
+      if (_legendMarcaUnaVez(a.doc_id)) {
+        try {
+          let _rc = null;
+          try { _rc = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(a.doc_id) : null; } catch (e) { _rc = null; }
+          const _msg = _checklistCierreMsg(_rc && _rc.plan);
+          if (_msg) showToast("AZUL", "Cierre de consulta", (a.nombre || "El paciente") + ": " + _msg, false, key);
+        } catch (e) {}
+      }
     }
-    return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
+    return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound, callar, elapsed: Math.round(elapsed * 10) / 10, pym };
   }
 
   let audioCtx = null;
@@ -11441,7 +11960,7 @@ _vglOfrecerDeshacer(btn);
       return juntos.length > 40 ? juntos.slice(0, 39) + "…" : juntos;
     }
     if (base) return base.length > 40 ? base.slice(0, 39) + "…" : base;
-    return "Módulo del Vigilante";
+    return "Módulo de Centinela";
   }
 
   function vglMinBarra() {
@@ -11630,7 +12149,7 @@ _vglOfrecerDeshacer(btn);
       ov.setAttribute("role", "alertdialog");
       ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250)">
           <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
           <button class="vgl-modal-ok">Entendido</button>
@@ -11693,6 +12212,11 @@ _vglOfrecerDeshacer(btn);
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
+      // v17.x.x — REFACTOR S+ (30-ago): para médicos NO autorizados, en vez de la lista
+      // cruda de analitos vencidos se muestra un mensaje de prioridad cardiovascular. Es
+      // la señal que a ese perfil le importa: "este paciente necesita atención de riesgo
+      // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
+      const prioridadRcv = !!datos.prioridadRcv;
       if (!abandono && !pym.length && !labs.length) return; // nada que mostrar
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
@@ -11701,10 +12225,13 @@ _vglOfrecerDeshacer(btn);
       ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
       if (abandono) { ov.classList.add("pes"); ov.style.setProperty("--rgb-recordatorio", "var(--rgb-pes)"); ov.style.setProperty("--c-recordatorio", "var(--c-pes)"); }
-      const ico = abandono ? "🫀" : (labs.length && !pym.length ? "🧪" : "🩺");
+      const ico = (abandono || prioridadRcv) ? "🫀" : (labs.length && !pym.length ? "🧪" : "🩺");
       const secciones = [];
       if (abandono) {
-        secciones.push('<div class="vgl-au-prio" style="background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.45);color:var(--fg);font-weight:800;font-size:var(--t-micro);padding:9px 12px;border-radius:11px;margin-bottom:12px;line-height:1.45;text-align:left">🫀 <b>Abandono Programa RCV.</b> Priorice el control de riesgo cardiovascular en esta consulta.</div>');
+        secciones.push('<div class="vgl-pym-sec-pes">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🫀</span><span class="vgl-pym-sec-t">Abandono Programa RCV</span></div>' +
+          '<div class="vgl-pym-sec-b">Priorice el control de riesgo cardiovascular en esta consulta.</div>' +
+        '</div>');
       }
       if (pym.length) {
         // v17.6.18 — REPORTE DE CAMPO (24-ago-2026): "los botones para ordenar
@@ -11713,19 +12240,34 @@ _vglOfrecerDeshacer(btn);
         // es un recordatorio al abrir la historia, no un atajo de flujo — el médico ya
         // tiene 🗓️/📋/🧪 en el dock de acciones para eso.
         const chipPym = (a) => '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>";
-        const chips = pym.map(chipPym).join("");
-        secciones.push('<div class="vgl-pym-lead">Actividades preventivas por solicitar:</div><div class="vgl-pym-list">' + chips + "</div>");
+        secciones.push('<div class="vgl-pym-sec">' +
+          '<div class="vgl-pym-lead">Actividades preventivas por solicitar</div>' +
+          '<div class="vgl-pym-list">' + pym.map(chipPym).join("") + "</div>" +
+        '</div>');
       }
-      if (labs.length) {
+      if (prioridadRcv) {
+        const n = labs.length;
+        const plural = n === 1 ? "" : "es";
+        secciones.push('<div class="vgl-pym-sec-pes">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🫀</span><span class="vgl-pym-sec-t">Priorice riesgo cardiovascular</span></div>' +
+          '<div class="vgl-pym-sec-b">Este paciente tiene ' + n + ' examen' + plural + ' de laboratorio vencido' + (n === 1 ? "" : "s") + ' más allá de su vigencia según el programa. Priorice la atención de riesgo cardiovascular en esta consulta.</div>' +
+        '</div>');
+      } else if (labs.length) {
         const chipLab = (f) => '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
-        const chips = labs.map(chipLab).join("");
-        secciones.push('<div style="font-size:var(--t-micro);color:var(--c-rojo);font-weight:600;margin-bottom:10px;text-align:center">Laboratorios RCV sin resultado vigente:</div><div class="vgl-pym-list">' + chips + "</div>");
+        secciones.push('<div class="vgl-pym-sec-rojo">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🧪</span><span class="vgl-pym-sec-t">Laboratorios RCV sin resultado vigente</span></div>' +
+          '<div class="vgl-pym-list">' + labs.map(chipLab).join("") + "</div>" +
+        '</div>');
       }
       ov.innerHTML = '<div class="vgl-pym-card">' +
-        '<div class="vgl-pym-ic">' + ico + "</div>" +
-        '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
-        '<div class="vgl-pym-n"></div>' +
-        secciones.join("") +
+        '<div class="vgl-pym-head">' +
+          '<div class="vgl-pym-ic">' + ico + '</div>' +
+          '<div class="vgl-pym-headtxt">' +
+            '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
+            '<div class="vgl-pym-n"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="vgl-pym-body">' + secciones.join("") + '</div>' +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
         '<button class="vgl-pym-ok">Entendido</button>' +
         "</div>";
@@ -11734,7 +12276,7 @@ _vglOfrecerDeshacer(btn);
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
-      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length });
+      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, pr: prioridadRcv ? 1 : 0 });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
       // v15.4.0 — Sin tono: el propio modal en pantalla ES el aviso (un canal por función).
@@ -11760,15 +12302,27 @@ _vglOfrecerDeshacer(btn);
       // hay resumen en caché (tabla por estadio + 50% por fuera de meta). Sin resumen,
       // cae al tamizaje plano de siempre — nunca inventa un estadio.
       const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
+      // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico en la sección de
+      // laboratorios RCV del aviso. Solo los AUTORIZADOS descuentan el 50 % por fuera de
+      // meta (aplicar50). Los no autorizados juzgan con la vigencia original (tabla por
+      // estadio/programa) SIN esa reducción, y además solo si el paciente está en un
+      // programa de Ruta Crónicos (programa rector presente); si no, la sección se
+      // silencia (máxima restricción: ante la duda, ocultar).
+      const _autorizado = mtrEsMedicoAutorizado();
       const _optsAviso = _resAviso ? {
         programa: _resAviso.programa || null,
         estadio: _resAviso.erc && _resAviso.erc.estadioAdministrativo || null,
         esDM2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
-        aplicar50: true,
+        aplicar50: _autorizado,
       } : undefined;
-      const faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
+      let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
+      if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
+      // v17.x.x — REFACTOR S+ (30-ago): para no autorizados, los labs vencidos (ya acotados
+      // a pacientes en Ruta Crónicos con vigencia original) se comunican como mensaje de
+      // prioridad cardiovascular, no como lista de analitos a pedir.
+      const prioridadRcv = !_autorizado && faltantes.length > 0;
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 
@@ -11778,7 +12332,7 @@ _vglOfrecerDeshacer(btn);
         if (labsListos && faltantes.length && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes });
+          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, prioridadRcv: prioridadRcv });
         }
         return;
       }
@@ -11807,7 +12361,7 @@ _vglOfrecerDeshacer(btn);
       // Labs resueltos: aviso completo si hay algo.
       if (!abandono && !pym.length && !faltantes.length) return;
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes });
+      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, prioridadRcv: prioridadRcv });
       avisoMarcarVisto(uid);
     } catch (e) {}
   }
@@ -11880,6 +12434,20 @@ _vglOfrecerDeshacer(btn);
   let toastQueue = [];
   let toastFlushTimer = null;
 
+  // v-S+ (refactor panel, mockup canvas 30-ago): el ícono de la caja del toast pasa del
+  // emoji al SVG Lucide del color (consistente con el resto del refactor S+), y el título
+  // del TOAST DE PÁGINA deja de duplicar el emoji que ya vive en esa caja. Las
+  // notificaciones de Windows y el parpadeo de pestaña conservan su emoji en `title`
+  // (ahí es la única señal visual), así que el strip solo ocurre aquí, al pintar.
+  const TOAST_ICONO_SVG = {
+    ROJO: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>',
+    MORADO: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>',
+    AMBAR: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+    VERDE: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+    AZUL: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  };
+  const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" };
+
   function _renderToast(color, title, body, persist, apptKey) {
     try {
       const wrap = document.getElementById("vgl-toasts"); if (!wrap) return;
@@ -11891,7 +12459,6 @@ _vglOfrecerDeshacer(btn);
         });
       }
       const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
-      const icon = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" }[color] || "🛡️";
       const t = document.createElement("div"); t.className = "vgl-toast";
       t.__vglApptKey = apptKey || "";
       // [v12.3.13] El CSS estático del toast vive al final de la hoja maestra de buildOverlay()
@@ -11899,9 +12466,12 @@ _vglOfrecerDeshacer(btn);
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
-      t.querySelector(".vgl-toast-ic").textContent = icon;
-      t.querySelector(".vgl-toast-title").textContent = title;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.querySelector(".vgl-toast-ic").innerHTML = TOAST_ICONO_SVG[color] || TOAST_ICONO_SVG.AZUL;
+      const emoji = TOAST_EMOJI[color] || "";
+      let titulo = String(title || "");
+      if (emoji && titulo.indexOf(emoji) === 0) titulo = titulo.slice(emoji.length).replace(/^\s+/, "");
+      t.querySelector(".vgl-toast-title").textContent = titulo;
       t.querySelector(".vgl-toast-b").textContent = body;
       const cerrar = () => { t.classList.add("out"); setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260); };
       t.addEventListener("click", cerrar);
@@ -12039,9 +12609,9 @@ _vglOfrecerDeshacer(btn);
   // _renderToast (el cartel dentro de la página) y osNotify (la notificación de Windows),
   // que ahora lo tratan con la misma prioridad que ROJO/MORADO.
   const NOTIFY = {
-    ROJO: { icon: "⛔", label: "Confirmación extemporánea: ingreso después del tiempo de gracia", sound: true, persist: true },
+    ROJO: { icon: "⛔", label: "Llegada confirmada fuera del tiempo de confirmación", sound: true, persist: true },
     MORADO: { icon: "⏳", label: "Última llamada: ~1 minuto para confirmar la llegada", persist: false },
-    AMBAR: { icon: "⚠", label: "Inasistencia: venció el tiempo de gracia sin confirmar", persist: true },
+    AMBAR: { icon: "⚠", label: "Venció el tiempo de confirmación", persist: true },
     VERDE: { icon: "✅", label: "Paciente confirmó a tiempo (En Sala)", persist: false },
   };
   // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
@@ -12093,9 +12663,14 @@ _vglOfrecerDeshacer(btn);
     cola.forEach((p) => {
       if (!p) return;
       if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
-      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
+      // v18.0.4 — ENJAMBRE (31-ago): el cartel respeta muted() (v17.19.0) pero el FLUSH
+      // no lo miraba: decidía "puedo pintar", llamaba _dispararAvisoCartel (que callaba
+      // por el silencio temporal) y daba por pintado el aviso — el cartel ROJO de fraude
+      // se consumía sin mostrarse nunca. Con `!muted()` aquí, un aviso que no se pudo
+      // pintar por silencio activo SE QUEDA en la cola y sale en el siguiente ciclo.
+      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted();
       if (puedePintar) { _dispararAvisoCartel(p); return; }
-      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta: esperará
+      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta o silencio activo: esperará
       // No-ROJO o cartel apagado: jamás se pintará como cartel — su canal ya sonó. Se suelta.
     });
     try { writeJSON(AVISOS_PENDIENTES_KEY, seQuedan); } catch (e) {}
@@ -12434,6 +13009,21 @@ _vglOfrecerDeshacer(btn);
     return !!hecho && hecho.dias <= pkg.vigenciaDias;
   }
 
+  // Candado maestro "una leyenda por paciente por día" (v-pedido deduplicación por
+  // paciente). Las leyendas RUTINARIAS (VERDE llegada, MORADO preaviso, y el cierre de
+  // consulta) se emiten UNA vez por paciente por jornada, aunque cambie el color/estado o
+  // se repinte. ROJO (fraude) y AMBAR (inasistencia) NO pasan por aquí: son hechos
+  // terminales con su propia guarda (bumpStatCita) y deben sonar siempre. Usa el mismo
+  // mecanismo una-vez-por-día que avisoYaVisto/avisoMarcarVisto (clave `legend|doc_id`),
+  // así sobrevive a recargas, cambios de versión y se reinicia solo al cambiar de día.
+  function _legendMarcaUnaVez(docId) {
+    if (!docId) return true;                      // sin identidad de paciente: no se puede deduplicar
+    const uid = "legend|" + String(docId);
+    try { if (avisoYaVisto(uid)) return false; } catch (e) {}
+    try { avisoMarcarVisto(uid); } catch (e) {}
+    return true;
+  }
+
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
     // La siembra compartida se mantiene al día con cada aviso: si se quedara en la foto
@@ -12471,6 +13061,16 @@ _vglOfrecerDeshacer(btn);
     // extemporánea son hechos TERMINALES de la jornada: si ya se contaron, ya se
     // avisaron — la re-transición actualiza el estado interno pero NO vuelve a sonar.
     if (!_conto && (a.color === "AMBAR" || a.color === "ROJO")) return;
+    // v18.0.4 — ENJAMBRE (31-ago): la decisión v16.2.8 ("sin presentarse → atendido" NO
+    // notifica) vivía solo en colorAndAlert (sound=false) y este flujo no la miraba: el
+    // ROJO de esa transición volvía a sonar con repique, notificación y cartel — justo la
+    // interrupción que el médico ordenó callar. `callar` lo dice en voz alta; el conteo y
+    // la auditoría de arriba ya corrieron, así que la evidencia para reclamaciones queda.
+    if (a.color === "ROJO" && a.callar) return;
+    // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
+    // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
+    // ya quedaron registrados; aquí solo se frena el cartel/sonido repetido.
+    if ((a.color === "VERDE" || a.color === "MORADO") && !_legendMarcaUnaVez(a.doc_id)) return;
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     // v16.2.7 — Tercera línea con la hora REAL del hecho. Se dice "Visto" y no
     // "Confirmado" a propósito: el Vigilante consulta la agenda cada pocos segundos, así
@@ -12516,14 +13116,25 @@ _vglOfrecerDeshacer(btn);
       return;
     }
     if (Notification.permission !== "granted") { setSummary("Pulse «Permitir» en el aviso del navegador…"); enableOsNotifications(); return; }
-    // UN SOLO CANAL A LA VEZ: la prueba usa la misma cascada que las alertas reales
-    // (Windows y, solo si Windows no la muestra, el aviso dentro del navegador).
-    // NO es persistente: se cierra sola a los 20 s y no deja fantasmas en Windows.
+    // UN SOLO CANAL A LA VEZ — y el canal se elige como en las alertas REALES (v15.4.0):
+    // con la pestaña VISIBLE el aviso sale DENTRO de la página (toast), nada va a
+    // Windows; con la pestaña OCULTA, el canal es la notificación del sistema (y el
+    // toast solo queda de respaldo si Windows no puede mostrarla). Antes esta prueba
+    // mandaba SIEMPRE a Windows aunque la pestaña estuviera a la vista: el médico
+    // pulsaba «Probar avisos», oía el tono y no veía NINGÚN toast en la página (el
+    // aviso quedaba en el Centro de actividades de Windows) — reportado en campo.
+    // NO es persistente: en Windows se cierra a los 20 s y no deja fantasmas.
     const t = new Date().toLocaleTimeString();
+    const titulo = "⛔ Prueba " + t + " · En Sala";
+    const cuerpo = "PACIENTE DE PRUEBA\nConfirmación extemporánea (NO CONFIRMADO)\n" + (_pestanaSinAtencion() ? "(Este aviso se cierra solo)" : "Cierre este aviso con un clic, igual que los avisos reales.");
     // v15.4.0 — La prueba ejercita EXACTAMENTE la política real: un solo canal + un tono.
-    osNotify("ROJO", "⛔ Prueba " + t + " · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (NO CONFIRMADO)\n(Este aviso se cierra solo)", false, "prueba|" + t);
+    if (_pestanaSinAtencion()) {
+      osNotify("ROJO", titulo, cuerpo, false, "prueba|" + t);
+    } else {
+      showToast("ROJO", titulo, cuerpo, false, "prueba|" + t);
+    }
     playTone("ROJO");
-    setSummary("Prueba enviada. Debe verse UNA notificación de Windows (+ sonido). Se cierra sola: no queda pegada en el Centro de actividades.");
+    setSummary("Prueba enviada: " + (_pestanaSinAtencion() ? "notificación de Windows" : "aviso dentro de la página") + " + sonido." + (_pestanaSinAtencion() ? " Se cierra sola: no queda pegada en el Centro de actividades." : " Cierre el aviso con un clic."));
   }
   function enableOsNotifications() {
     try {
@@ -12987,6 +13598,15 @@ _vglOfrecerDeshacer(btn);
     el.root.classList.toggle("min", s === "min");
     el.root.style.display = (s === "dock" || s === "hidden") ? "none" : "flex";
     if (el.dock) el.dock.style.display = (s === "dock") ? "flex" : "none";
+    // v18.0.4 — ENJAMBRE (31-ago): el canal de 1 s del reloj (v18.0.3) late con el panel
+    // invisible todo el día: "cerrar" solo aplica display:none y el nodo sigue en el DOM,
+    // así que su auto-stop nunca disparaba (~86.400 ticks inútiles/día). Al ocultar se
+    // detiene el canal y se libera el sello; al volver a una vista visible se remonta.
+    // El auto-stop original (el nodo de verdad desapareció) se conserva intacto.
+    try {
+      if (s === "dock" || s === "hidden") { _relojDetener("reloj"); _relojSegundosMontado = false; }
+      else _relojSegundosMontar();
+    } catch (e) {}
     if (!auto) { state.userWinState = s; savePos(); }
   }
 
@@ -13117,11 +13737,11 @@ _vglOfrecerDeshacer(btn);
            muestras") el azul oscuro de Everest se colaba en el texto. Causa: todo este
            bloque quedó fuera de la pasada de v16.1.0 que blindó Ficha/Riesgo con
            !important en cada color de texto — misma regla de la casa, aplicada aquí. */
-        .vgl-stepper-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;background:rgba(255,255,255,.03);padding:10px 14px;border-radius:var(--r-card);border:1px solid var(--line)}
+        .vgl-stepper-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;background:var(--bg2);padding:10px 14px;border-radius:var(--r-card);border:1px solid var(--line)}
         .vgl-stepper-step{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:700;color:var(--fg3) !important}
-        .vgl-stepper-step.active{color:var(--c-azul) !important;font-weight:900}
+        .vgl-stepper-step.active{color:var(--c-azul) !important;font-weight:800}
         .vgl-stepper-step.completed{color:var(--c-verde) !important}
-        .vgl-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:var(--r-pill);font-size:10.5px;font-weight:900;background:var(--bg3);color:var(--fg3) !important}
+        .vgl-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:var(--r-pill);font-size:10.5px;font-weight:800;background:var(--bg3);color:var(--fg3) !important}
         .vgl-stepper-step.active .vgl-step-num{background:var(--c-azul);color:#020617 !important}
         .vgl-stepper-step.completed .vgl-step-num{background:var(--c-verde);color:#020617 !important}
         .vgl-stepper-line{flex:1;height:2px;background:var(--line);border-radius:1px}
@@ -13168,7 +13788,7 @@ _vglOfrecerDeshacer(btn);
         .vgl-agm-undo-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(var(--rgb-ambar),.14);border:1px solid rgba(var(--rgb-ambar),.38);border-radius:var(--r-card);padding:10px 14px;margin-bottom:12px;font-size:var(--t-micro);color:var(--c-ambar) !important;font-weight:700}
         .vgl-btn-undo{background:rgba(var(--rgb-rojo),.18);color:var(--c-rojo) !important;border:1px solid rgba(var(--rgb-rojo),.45);border-radius:var(--r-pill);padding:5px 12px;font-size:11px;font-weight:800;cursor:pointer;transition:all .15s ease}
         .vgl-btn-undo:hover{background:var(--c-rojo);color:#fff !important}
-        .vgl-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:10px;background:rgba(255,255,255,.02);border-radius:var(--r-field);font-size:var(--t-micro);color:var(--fg2) !important}
+        .vgl-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:10px;background:var(--bg2);border-radius:var(--r-field);font-size:var(--t-micro);color:var(--fg2) !important}
         .vgl-summary-grid b{color:var(--fg) !important}
 
         /* ==== [v15.1.0] Bento Grid y Aislamiento CSS Total ==== */
@@ -13183,7 +13803,7 @@ _vglOfrecerDeshacer(btn);
         .vgl-bento-card:hover,.vgl-bento-card:focus-visible{transform:translateY(-2px);border-color:var(--edge)}
         .vgl-bento-card:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
         .vgl-bento-card.full{grid-column:1 / -1}
-        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#38bdf8) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
+        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#a78bfa) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
         .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--t-micro);color:var(--fg2,#94a3b8) !important;line-height:1.4}
         .vgl-bento-row b{color:var(--fg,#f8fafc) !important;font-weight:700}
         .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
@@ -13198,11 +13818,11 @@ _vglOfrecerDeshacer(btn);
 
         /* Aislamiento CSS estricto para Uroanálisis y Tablas de Laboratorios */
         #vgl-labs-modal .vgl-labs-uro-panel{background:var(--bg2,#121826) !important;border:1px solid var(--edge,rgba(255,255,255,.16)) !important;border-radius:var(--r-card,12px) !important;padding:12px 14px !important;color:var(--fg,#f8fafc) !important}
-        #vgl-labs-modal .vgl-labs-uro-i{color:var(--c-azul,#38bdf8) !important;font-weight:600 !important;font-size:11px !important}
+        #vgl-labs-modal .vgl-labs-uro-i{color:var(--c-azul,#a78bfa) !important;font-weight:600 !important;font-size:11px !important}
         #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg,#f8fafc) !important;font-weight:700 !important;font-size:11.5px !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert{color:var(--c-rojo,#f87171) !important;background:rgba(var(--rgb-rojo,248,113,113),.16) !important;border-radius:4px !important;padding:1px 6px !important;font-weight:800 !important}
         #vgl-labs-modal .vgl-labs-uro-i.alert b{color:var(--c-rojo,#f87171) !important;font-weight:800 !important}
-        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-azul,#38bdf8) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
+        #vgl-labs-modal .vgl-uro-subcol-t{color:var(--c-labs,#818cf8) !important;font-weight:800 !important;font-size:11px !important;border-bottom:1px solid var(--edge,rgba(255,255,255,.14)) !important}
   `;
 
   // v16.2.4 — CAÍDA REAL EN CONSULTORIO (20-ago, consola del médico):
@@ -13240,21 +13860,25 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal{
         /* Vidrio frost sobre negro OLED */
-        --bg:rgba(9,11,17,.84);
-        --bg-sidebar:rgba(5,7,12,.66);
-        --bg2:rgba(255,255,255,.055);
-        --bg3:rgba(255,255,255,.095);
-        --bg4:rgba(255,255,255,.17);
-        --bg-solid:#0b0e15;
-        /* Triaje neón-pastel — AAA (>=7:1) sobre fondo OLED */
+        /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
+        --bg:rgba(7,10,16,.88);
+        --bg-sidebar:rgba(4,6,10,.70);
+        --bg2:rgba(255,255,255,.045);
+        --bg3:rgba(255,255,255,.075);
+        --bg4:rgba(255,255,255,.13);
+        --bg-solid:#090c12;
+        /* Triaje neón-pastel — AAA (>=7:1) sobre fondo OLED. v18: azul→violeta (marca), morado→cian (pre-alerta). */
         --c-rojo:#ff8177;
-        --c-morado:#c9a2ff;
+        --c-morado:#22d3ee;
         --c-ambar:#ffc46b;
         --c-verde:#4ff0b8;
-        --c-azul:#7cb8ff;
+        --c-azul:#a78bfa;
         --c-recordatorio:#54e6d4;
+        --c-panel:#2dd4bf;
+        --c-labs:#818cf8;
+        --c-paquete:#38bdf8;
         --c-pes:#ff9ec4;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
            eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
@@ -13265,15 +13889,18 @@ _vglOfrecerDeshacer(btn);
         --c-atendido:#9aa7c7;
         /* Canales RGB para veladuras y glows: rgba(var(--rgb-x),alfa) */
         --rgb-rojo:255,129,119;
-        --rgb-morado:201,162,255;
+        --rgb-morado:34,211,238;
         --rgb-ambar:255,196,107;
         --rgb-verde:79,240,184;
-        --rgb-azul:124,184,255;
+        --rgb-azul:167,139,250;
         --rgb-recordatorio:84,230,212;
+        --rgb-panel:45,212,191;
+        --rgb-labs:129,140,248;
+        --rgb-paquete:56,189,248;
         --rgb-pes:255,158,196;
         --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
-        --r-chip:16px;--r-card:20px;--r-surface:24px;--r-field:16px;--r-pill:999px;
+        --r-chip:14px;--r-card:18px;--r-surface:22px;--r-field:14px;--r-pill:999px;
         /* Tinta */
         --fg:#f7fafc;--fg2:rgba(226,232,240,.90);--fg3:#9aa7ba;
         /* v14.0.0 (T3) — --t-body/--t-lead se quedan en 14/16px con sus consumidores ya
@@ -13294,50 +13921,55 @@ _vglOfrecerDeshacer(btn);
            también tienen consumidor real desde este mismo commit. */
         --z-toast:2147483647;--z-modal:2147483000;
         --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
-        --line:rgba(255,255,255,.08);--edge:rgba(255,255,255,.15);
-        --edge-side:rgba(255,255,255,.09);
+        --line:rgba(255,255,255,.07);--edge:rgba(255,255,255,.13);
+        --edge-side:rgba(255,255,255,.08);
         --toast:rgba(13,16,24,.94);
         /* Física spring + vidrio frost */
         --spring:cubic-bezier(0.34, 1.56, 0.64, 1);
         --ease-out:cubic-bezier(.2,.9,.3,1);
-        --glass:blur(24px) saturate(190%);
-        --glass-deep:blur(30px) saturate(210%);
+        --glass:blur(18px) saturate(155%);
+        --glass-deep:blur(22px) saturate(170%);
         /* Capas de sombra ambiental + inner-glow (delimitar sin líneas) */
         --glow-edge:inset 0 1px 0 rgba(255,255,255,.13),inset 0 0 0 1px rgba(255,255,255,.04);
         --shadow-panel:
-          0 0 0 1px rgba(255,255,255,.10),
-          0 2px 6px rgba(0,0,0,.35),
-          0 12px 32px rgba(0,0,0,.45),
-          0 42px 110px rgba(2,4,10,.78),
-          inset 0 1px 0 rgba(255,255,255,.13),
-          inset 0 0 36px rgba(124,184,255,.05);
+          0 0 0 1px rgba(255,255,255,.08),
+          0 2px 6px rgba(0,0,0,.28),
+          0 16px 38px rgba(0,0,0,.40),
+          0 40px 100px rgba(2,4,10,.70),
+          inset 0 1px 0 rgba(255,255,255,.10);
         --shadow-card:
-          0 1px 2px rgba(0,0,0,.28),
-          0 6px 18px rgba(0,0,0,.26),
-          inset 0 1px 0 rgba(255,255,255,.07);
+          0 1px 2px rgba(0,0,0,.22),
+          0 6px 16px rgba(0,0,0,.20),
+          inset 0 1px 0 rgba(255,255,255,.06);
         --shadow-card-hover:
-          0 4px 10px rgba(0,0,0,.32),
-          0 18px 44px rgba(0,0,0,.48),
-          inset 0 1px 0 rgba(255,255,255,.11);
+          0 4px 10px rgba(0,0,0,.26),
+          0 16px 38px rgba(0,0,0,.36),
+          inset 0 1px 0 rgba(255,255,255,.08);
         --shadow-float:
-          0 10px 28px rgba(0,0,0,.45),
-          0 34px 90px rgba(2,4,10,.70);
+          0 8px 22px rgba(0,0,0,.38),
+          0 28px 70px rgba(2,4,10,.58);
         --font-stack:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       }
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light{
-        --bg:rgba(250,250,253,.86);
-        --bg-sidebar:rgba(243,245,250,.80);
-        --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light{
+        --bg:rgba(249,250,252,.90);
+        --bg-sidebar:rgba(243,246,250,.84);
+        --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
         --bg-solid:#f6f7fb;
         /* Triaje profundo — AAA sobre cerámica clara */
-        --c-rojo:#991b1b;--c-morado:#5b21b6;--c-ambar:#92400e;
-        --c-verde:#065f46;--c-azul:#1e40af;--c-recordatorio:#115e59;
+        --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
+        --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
+        --c-panel:#0f766e;
+        --c-labs:#3730a3;
+        --c-paquete:#0369a1;
         --c-pes:#9d174d;--c-atendido:#475569;
-        --rgb-rojo:153,27,27;--rgb-morado:91,33,182;--rgb-ambar:146,64,14;
-        --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
+        --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
+        --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
+        --rgb-panel:15,118,110;
+        --rgb-labs:55,48,163;
+        --rgb-paquete:3,105,161;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
@@ -13355,7 +13987,7 @@ _vglOfrecerDeshacer(btn);
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
         --z-toast:2147483647;--z-modal:2147483000;
         --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
-        --line:rgba(15,23,42,.08);--edge:rgba(15,23,42,.13);--edge-side:rgba(15,23,42,.10);
+        --line:rgba(15,23,42,.07);--edge:rgba(15,23,42,.11);--edge-side:rgba(15,23,42,.08);
         --toast:rgba(255,255,255,.94);
         --glow-edge:inset 0 1px 0 rgba(255,255,255,.90),inset 0 0 0 1px rgba(255,255,255,.35);
         --shadow-panel:
@@ -13387,7 +14019,7 @@ _vglOfrecerDeshacer(btn);
         overflow:hidden;
         border-radius:var(--r-surface);
         background:
-          linear-gradient(165deg,rgba(124,184,255,.07),rgba(201,162,255,.035) 42%,rgba(0,0,0,0) 72%),
+          linear-gradient(165deg,rgba(124,184,255,.05),rgba(201,162,255,.025) 42%,rgba(0,0,0,0) 72%),
           var(--bg);
         -webkit-backdrop-filter:var(--glass-deep);
         backdrop-filter:var(--glass-deep);
@@ -13403,10 +14035,10 @@ _vglOfrecerDeshacer(btn);
       #vgl-root::before{
         content:"";position:absolute;inset:-30%;z-index:-1;pointer-events:none;
         background:
-          radial-gradient(42% 34% at 16% 6%,rgba(124,184,255,.11),transparent 62%),
-          radial-gradient(36% 30% at 90% 10%,rgba(201,162,255,.09),transparent 64%),
-          radial-gradient(46% 40% at 80% 98%,rgba(79,240,184,.06),transparent 66%);
-        filter:blur(28px);
+          radial-gradient(40% 30% at 16% 6%,rgba(124,184,255,.08),transparent 62%),
+          radial-gradient(34% 28% at 90% 10%,rgba(201,162,255,.06),transparent 64%),
+          radial-gradient(42% 36% at 80% 98%,rgba(79,240,184,.04),transparent 66%);
+        filter:blur(22px);
       }
       #vgl-root.light::before{opacity:.5}
       #vgl-root.min{
@@ -13497,7 +14129,7 @@ _vglOfrecerDeshacer(btn);
         font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
       }
-      .vgl-lab-inj{bottom:70px;background:var(--c-morado, #8b5cf6)}
+      .vgl-lab-inj{bottom:70px;background:var(--c-morado, #22d3ee)}
       .vgl-exf-btn{background:var(--c-verde, #16a34a)}
       .vgl-exf-btn-normalidad{bottom:116px}
       /* v17.1.0 (#73) — los dos botones de redacción, uno por casilla, cada uno en SU
@@ -13508,7 +14140,7 @@ _vglOfrecerDeshacer(btn);
          Azul de acento propio, distinto del morado de Auto-Labs y del verde de Normalidad,
          para distinguirlos de un vistazo. Los dos van a la misma altura porque NUNCA
          coinciden en pantalla: cada uno vive en su pestaña. */
-      .vgl-ia-inj{background:var(--c-azul, #2563eb)}
+      .vgl-ia-inj{background:var(--c-azul, #a78bfa)}
       .vgl-ia-inj:hover{opacity:.88}
       .vgl-ia-inj-ea,.vgl-ia-inj-an{bottom:162px}
 
@@ -13628,7 +14260,7 @@ _vglOfrecerDeshacer(btn);
          venga después en la hoja de estilos, es el mismo criterio que ya usa la Regla C. */
       .vgl-dock-btn.vgl-dock-btn-ambar{box-shadow:inset 0 0 0 1px var(--c-ambar);color:var(--c-ambar)}
       .vgl-dock-ico{font-size:var(--t-lead);line-height:1;flex:none;color:inherit !important}
-      .vgl-dock-lbl{font-size:var(--t-micro);font-weight:700;line-height:1;white-space:nowrap;color:inherit !important}
+      .vgl-dock-lbl{font-size:var(--t-micro);font-weight:750;line-height:1;white-space:nowrap;letter-spacing:.1px;color:inherit !important}
       #vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none !important;animation:none !important}
       /* v15.5.0 (auditoría de rendimiento): el "Modo rendimiento" ahora sí gobierna TODO —
          antes solo neutralizaba los dos docks y dejaba vivos 29 backdrop-filter y 37
@@ -13688,8 +14320,8 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Header — barra de mando ---- */
       #vgl-head{
-        height:48px;display:flex;align-items:center;gap:12px;
-        padding:0 16px;cursor:move;user-select:none;
+        height:44px;display:flex;align-items:center;gap:10px;
+        padding:0 13px;cursor:move;user-select:none;
         border-bottom:1px solid var(--line);
         background:linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,0));
         flex:0 0 auto;
@@ -13720,14 +14352,14 @@ _vglOfrecerDeshacer(btn);
       .vgl-tl.hc.vgl-hc-on{box-shadow:0 0 0 2px var(--bg-solid),0 0 12px rgba(var(--rgb-azul),.9) !important}
       /* [v17.6.5] Reloj del turno en la cabecera: hora + tiempo de jornada; ámbar = datos viejos */
       #vgl-clock{
-        flex:0 0 auto;font-size:var(--t-micro);font-weight:600;
-        letter-spacing:.3px;color:var(--fg2) !important;
+        flex:0 0 auto;font-size:var(--t-micro);font-weight:650;
+        letter-spacing:.2px;color:var(--fg2) !important;
         white-space:nowrap;font-variant-numeric:tabular-nums;
       }
       #vgl-clock.vgl-stale{color:var(--c-ambar) !important;font-weight:700}
       #vgl-title{
-        flex:1;text-align:center;font-weight:700;font-size:var(--t-lead); /* Título 16px */
-        letter-spacing:.3px;color:var(--fg);opacity:.96;
+        flex:1;text-align:center;font-weight:750;font-size:var(--t-lead); /* Título 16px */
+        letter-spacing:.2px;color:var(--fg);opacity:.96;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       }
       #vgl-title small{
@@ -13881,6 +14513,10 @@ _vglOfrecerDeshacer(btn);
       #vgl-ficha-modal,#vgl-tablero-modal,#vgl-panel-modal{color:var(--fg) !important}
       #vgl-ficha-modal .vgl-agm-card,#vgl-tablero-modal .vgl-agm-card,#vgl-panel-modal .vgl-agm-card{color:var(--fg) !important}
       #vgl-ia-modal .vgl-agm-kicker,#vgl-ficha-modal .vgl-agm-kicker,#vgl-tablero-modal .vgl-agm-kicker,#vgl-panel-modal .vgl-agm-kicker{color:var(--fg) !important}
+      /* v17.x.x — REFACTOR S+ (Panel): identidad esmeralda del kicker. El rótulo lleva las
+         DOS clases (.vgl-agm-title .vgl-agm-kicker), así que esta regla (0,3,0) gana sobre
+         la compartida de arriba (0,2,0) sin colisionar con la Regla A del banco. */
+      #vgl-panel-modal .vgl-agm-title.vgl-agm-kicker{color:var(--c-panel) !important}
       #vgl-ficha-modal .vgl-agm-patient,#vgl-tablero-modal .vgl-agm-patient,#vgl-panel-modal .vgl-agm-patient{color:var(--fg) !important}
       #vgl-ia-modal .vgl-agm-sub,#vgl-ficha-modal .vgl-agm-sub,#vgl-tablero-modal .vgl-agm-sub,#vgl-panel-modal .vgl-agm-sub{color:var(--fg2) !important}
       #vgl-ficha-modal .vgl-agm-close,#vgl-tablero-modal .vgl-agm-close,#vgl-panel-modal .vgl-agm-close{color:var(--fg2) !important}
@@ -13976,7 +14612,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-card,#vgl-ordenar-modal .vgl-agm-card,#vgl-labs-modal .vgl-agm-card{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-kicker{color:var(--c-azul) !important}
       #vgl-ordenar-modal .vgl-agm-kicker{color:var(--c-morado) !important}
-      #vgl-labs-modal .vgl-labs-kicker{color:var(--c-verde) !important}
+      #vgl-labs-modal .vgl-labs-kicker{color:var(--c-labs) !important}
       #vgl-agendar-modal .vgl-agm-patient,#vgl-ordenar-modal .vgl-agm-patient,#vgl-labs-modal .vgl-labs-patient{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-sub,#vgl-ordenar-modal .vgl-agm-sub,#vgl-labs-modal .vgl-agm-sub{color:var(--fg2) !important}
       #vgl-agendar-modal .vgl-agm-close,#vgl-ordenar-modal .vgl-agm-close,#vgl-labs-modal .vgl-agm-close{color:var(--fg) !important}
@@ -14061,7 +14697,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Sidebar izquierdo — costado frost ---- */
       #vgl-sidebar{
-        width:195px;flex-shrink:0;
+        width:208px;flex-shrink:0; /* [S+] 195->208: más aire lateral, sin invadir el área principal */
         display:flex;flex-direction:column;gap:0;
         border-right:1px solid var(--edge-side);
         background:linear-gradient(180deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 42%),var(--bg-sidebar);
@@ -14073,9 +14709,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-sidebar::-webkit-scrollbar{width:0}
 
       /* Buscador */
-      #vgl-find{margin-bottom:12px}
+      /* [S+] pasa a flex para alojar el ícono de lupa como hermano decorativo del
+         input, sin envolver el campo en un contenedor con position:relative — así
+         el ancho/comportamiento nativo del <input> no cambia, solo su padding. */
+      #vgl-find{margin-bottom:12px;display:flex;align-items:center;gap:8px}
+      #vgl-find .vgl-find-ico{flex:0 0 auto;color:var(--fg3)}
       #vgl-q{
-        width:100%;appearance:none;
+        flex:1;min-width:0;appearance:none;
         border:1px solid var(--edge);background:var(--bg2);
         color:var(--fg);border-radius:var(--r-field);padding:9px 14px;
         font-size:13px;font-family:inherit;outline:none;
@@ -14099,20 +14739,24 @@ _vglOfrecerDeshacer(btn);
       /* Filtros */
       #vgl-filters{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
       .vgl-fchip{
-        cursor:pointer;font-size:13px;font-weight:500;
-        padding:8px 12px;border-radius:var(--r-chip);
+        cursor:pointer;font-size:12.5px;font-weight:500; /* [S+] 13->12.5px, más denso */
+        padding:7px 10px;border-radius:var(--r-chip);
         background:transparent;color:var(--fg2);
         border:0;text-align:left;font-family:inherit;
         transition:background .16s var(--ease-out),color .16s var(--ease-out),transform .24s var(--spring);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
+        /* [S+] ícono Lucide como hijo, alineado con el texto */
+        display:flex;align-items:center;gap:8px;
       }
+      .vgl-fchip .vgl-ico{flex:0 0 auto;color:var(--fg3)}
       .vgl-fchip:hover{background:var(--bg3);color:var(--fg);transform:translateX(2px)}
       .vgl-fchip.sel{
         background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
         font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),var(--glow-edge);
       }
+      .vgl-fchip.sel .vgl-ico{color:var(--c-azul)}
       #vgl-root.light .vgl-fchip.sel{color:var(--c-azul)}
 
       /* Stats */
@@ -14126,7 +14770,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-stat{
         display:flex;align-items:center;gap:8px;
         font-size:var(--t-micro);font-weight:600;color:var(--fg2); /* Mínimo 12px */
-        padding:5px 6px;border-radius:var(--r-chip);
+        padding:4px 6px;border-radius:var(--r-chip); /* [S+] 5px->4px vertical, más compacto */
         line-height:1.4;
       }
       .vgl-stat b{font-weight:800;color:var(--fg);font-variant-numeric:tabular-nums;margin-left:auto}
@@ -14145,7 +14789,7 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-sb-btn{
         appearance:none;border:0;border-radius:var(--r-chip);
-        padding:9px 12px;font-size:13px;font-weight:500;
+        padding:8px 11px;font-size:12.5px;font-weight:500; /* [S+] más compacto, 13->12.5px */
         cursor:pointer;color:var(--fg);background:var(--bg2);
         transition:background .16s var(--ease-out),transform .24s var(--spring),box-shadow .24s var(--ease-out);
         font-family:inherit;text-align:left;
@@ -14153,14 +14797,18 @@ _vglOfrecerDeshacer(btn);
         line-height:1.4;
         box-shadow:var(--glow-edge);
       }
+      .vgl-sb-btn .vgl-ico{flex:0 0 auto}
       .vgl-sb-btn:hover{background:var(--bg3);transform:translateY(-1px)}
       .vgl-sb-btn:active{transform:scale(.97)}
+      /* [S+] CTA sólido inspirado en el mock: de traslúcido a gradiente pleno con texto
+         oscuro sobre el tono azul del panel, mismo hue, mucho más contraste como acción
+         primaria real (antes se confundía visualmente con un botón secundario resaltado). */
       .vgl-sb-btn.primary{
-        background:linear-gradient(150deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.14));
-        color:var(--c-azul) !important;font-weight:700;
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 4px 14px rgba(var(--rgb-azul),.18);
+        background:linear-gradient(165deg,var(--c-azul),rgba(var(--rgb-azul),.74));
+        color:var(--bg-solid) !important;font-weight:800;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 6px 16px rgba(var(--rgb-azul),.30);
       }
-      .vgl-sb-btn.primary:hover{background:linear-gradient(150deg,rgba(var(--rgb-azul),.40),rgba(var(--rgb-azul),.20))}
+      .vgl-sb-btn.primary:hover{background:linear-gradient(165deg,var(--c-azul),rgba(var(--rgb-azul),.86))}
       .vgl-sb-btn.on{
         background:rgba(var(--rgb-verde),.15);color:var(--c-verde);font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
@@ -14235,34 +14883,18 @@ _vglOfrecerDeshacer(btn);
         transform:translateY(-2px);
         box-shadow:var(--shadow-card-hover);
       }
-      .vgl-card.rojo{
-        background:linear-gradient(170deg,rgba(var(--rgb-rojo),.16),rgba(var(--rgb-rojo),.07));
-        border-color:rgba(var(--rgb-rojo),.38);
-        border-left-color:var(--c-rojo);
-        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-rojo),.10);
-      }
-      .vgl-card.rojo:hover{background:linear-gradient(170deg,rgba(var(--rgb-rojo),.22),rgba(var(--rgb-rojo),.10))}
-      .vgl-card.morado{
-        background:linear-gradient(170deg,rgba(var(--rgb-morado),.14),rgba(var(--rgb-morado),.06));
-        border-color:rgba(var(--rgb-morado),.34);
-        border-left-color:var(--c-morado);
-        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-morado),.08);
-      }
-      .vgl-card.morado:hover{background:linear-gradient(170deg,rgba(var(--rgb-morado),.20),rgba(var(--rgb-morado),.09))}
-      .vgl-card.ambar{
-        background:linear-gradient(170deg,rgba(var(--rgb-ambar),.14),rgba(var(--rgb-ambar),.06));
-        border-color:rgba(var(--rgb-ambar),.34);
-        border-left-color:var(--c-ambar);
-        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-ambar),.08);
-      }
-      .vgl-card.ambar:hover{background:linear-gradient(170deg,rgba(var(--rgb-ambar),.20),rgba(var(--rgb-ambar),.09))}
-      .vgl-card.pes{
-        background:linear-gradient(170deg,rgba(var(--rgb-pes),.14),rgba(var(--rgb-pes),.06));
-        border-color:rgba(var(--rgb-pes),.36);
-        border-left-color:var(--c-pes);
-        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-pes),.08);
-      }
-      .vgl-card.pes:hover{background:linear-gradient(170deg,rgba(var(--rgb-pes),.20),rgba(var(--rgb-pes),.09))}
+      /* v-S+ — Panel principal: se retira el degradado de fondo tintado por color de estado
+         (era "gradiente + glow" por cada variante). El estado clínico ya se comunica de forma
+         redundante e inequívoca por 3 vías que NO dependen de matices de fondo: el borde
+         izquierdo de 4px (var(--c-rojo)/--c-morado/--c-ambar/--c-pes), el punto .vgl-cdot con
+         su propio glow, y el texto del badge/flag correspondiente. Bajar el fondo a un tono
+         neutro (como el resto de tarjetas) reduce el "ruido" visual entre tarjetas de la lista
+         sin perder ninguna señal — de hecho mejora la lectura para daltonismo, que ya no debe
+         diferenciar tintes sutiles de fondo, solo el borde/badge/texto. */
+      .vgl-card.rojo{border-color:rgba(var(--rgb-rojo),.34);border-left-color:var(--c-rojo)}
+      .vgl-card.morado{border-color:rgba(var(--rgb-morado),.30);border-left-color:var(--c-morado)}
+      .vgl-card.ambar{border-color:rgba(var(--rgb-ambar),.30);border-left-color:var(--c-ambar)}
+      .vgl-card.pes{border-color:rgba(var(--rgb-pes),.32);border-left-color:var(--c-pes)}
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(var(--rgb-ambar),.60),var(--shadow-card)}
       /* v13.0.0 — Además de atenuar (opacidad+grises), el borde izquierdo pasa al tono
          EXCLUSIVO --c-atendido: así la tarjeta se distingue de "En sala" (mismo verde en
@@ -14297,8 +14929,11 @@ _vglOfrecerDeshacer(btn);
         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         display:inline-block;max-width:100%;vertical-align:bottom;
       }
+      /* v-S+ (refactor panel, mockup 30-ago): el resaltado de búsqueda pasa del ámbar al
+         cian — el ámbar queda reservado para alertas y el cian (--c-morado) es el acento
+         de resaltado del panel. color:inherit se mantiene para adaptarse al tema. */
       .vgl-name mark{
-        background:rgba(var(--rgb-ambar),.30);color:inherit;
+        background:rgba(var(--rgb-morado),.30);color:inherit;
         border-radius:6px;padding:0 3px
       }
       .vgl-doc{color:var(--fg3);font-size:var(--t-micro);font-weight:500;flex-shrink:0} /* Mínimo 12px */
@@ -14317,13 +14952,22 @@ _vglOfrecerDeshacer(btn);
         line-height:1.3;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
+      /* v-S+ (refactor panel, mockup canvas 30-ago): las banderas dejan el relleno SÓLIDO
+         (texto oscuro sobre bloque de color + glow) por el estilo "outline" del mockup:
+         texto del color de su semáforo sobre fondo tintado al 10% con borde interior al
+         32%. El estado se lee igual de inequívoco (texto + borde de color) y la fila de
+         banderas deja de competir con el dot/borde/badge de la tarjeta. Contraste AA en
+         ambos temas (p. ej. rojo #ff8177 sobre #0d1219 = 7,8:1; rojo claro #991b1b sobre
+         #f6f7fb = 7,7:1). Sin la palabra clave important: viven dentro de #vgl-root, no
+         aplica la Regla E. */
       .vgl-flag{
         font-size:var(--t-micro);font-weight:800;padding:3px 9px; /* Mínimo 12px */
-        border-radius:var(--r-pill);background:var(--c-rojo);
-        color:var(--bg-solid);white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
-        box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
+        border-radius:var(--r-pill);
+        background:rgba(var(--rgb-rojo),.10);color:var(--c-rojo);
+        white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.32);
       }
-      .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
+      .vgl-flag.pes{background:rgba(var(--rgb-pes),.10);color:var(--c-pes);box-shadow:inset 0 0 0 1px rgba(var(--rgb-pes),.32)}
       /* v17.8.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #1 (gravedad alta). Estas dos reglas
          NO EXISTÍAN. Sin ellas, la bandera «agpend» (🗓️ SIN TERMINAR) y la bandera «adic»
          («➕ CANDIDATO ADICIONAL») heredaban el fondo ROJO de la regla base — y ninguna de
@@ -14334,8 +14978,8 @@ _vglOfrecerDeshacer(btn);
          programa. Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa
          todos los demás. La suite_70 (REGLA A) impide que vuelva a pasar con cualquier
          bandera nueva. */
-      .vgl-flag.agpend{background:var(--c-ambar);box-shadow:0 0 12px rgba(var(--rgb-ambar),.30)}
-      .vgl-flag.adic{background:var(--c-azul);box-shadow:0 0 12px rgba(var(--rgb-azul),.28)}
+      .vgl-flag.agpend{background:rgba(var(--rgb-ambar),.10);color:var(--c-ambar);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.32)}
+      .vgl-flag.adic{background:rgba(var(--rgb-azul),.10);color:var(--c-azul);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.32)}
 
       .vgl-cd{
         font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
@@ -14387,8 +15031,8 @@ _vglOfrecerDeshacer(btn);
         box-shadow:var(--glow-edge);
       }
       .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover{
-        transform:scale(1.14);background:var(--bg4);
-        box-shadow:0 4px 12px rgba(0,0,0,.30),var(--glow-edge);
+        transform:scale(1.08);background:var(--bg4);
+        box-shadow:0 2px 8px rgba(0,0,0,.22),var(--glow-edge);
       }
       /* v12.10.0 — El ámbar del botón «🧪 falta la toma de muestras» DEBE ir aquí, después de la
          regla base y de :hover, y con selector COMPUESTO (.vgl-btn-action.vgl-btn-ambar). Antes de
@@ -14418,14 +15062,28 @@ _vglOfrecerDeshacer(btn);
         gap:5px;
         padding-bottom:2px;
       }
+      /* v-S+ (refactor panel, mockup canvas 30-ago): los chips PyM pasan de la pastilla
+         violeta rellena al chip NEUTRO del mockup (fondo blanco 5% + borde --line + texto
+         --fg2). El color deja de competir con dot/borde/badge de la tarjeta; el sobrante
+         "+N más" y la remisión AV/OD llevan el acento cian, igual que .pym.mas del mockup.
+         El refuerzo #vgl-root:not(.light) se conserva con el nuevo color (misma
+         especificidad que antes) para no perder contra el hostil en tema oscuro; las
+         variantes cian lo blindan con un selector compuesto de mayor peso. */
       .vgl-chip{
-        font-size:11.5px;font-weight:700;padding:3px 9px;
-        border-radius:var(--r-pill);
-        background:rgba(var(--rgb-azul),.14);color:var(--c-azul);
+        font-size:11.5px;font-weight:750;padding:4px 10px;
+        border-radius:var(--r-pill);letter-spacing:.1px;
+        background:rgba(255,255,255,.05);color:var(--fg2);
         white-space:normal;line-height:1.35;
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.25);
+        border:1px solid var(--line);
       }
-      #vgl-root:not(.light) .vgl-chip{color:var(--c-azul)}
+      #vgl-root:not(.light) .vgl-chip{color:var(--fg2)}
+      .vgl-chip.vgl-chip-mas,.vgl-chip.vgl-chip-ocultas{
+        color:var(--c-morado);
+        border-color:rgba(var(--rgb-morado),.35);
+        background:rgba(var(--rgb-morado),.08);
+      }
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado)}
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado)}
       .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2) !important;font-style:italic} /* Mínimo 12px */
       .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:700}
 
@@ -14571,7 +15229,7 @@ _vglOfrecerDeshacer(btn);
         color:var(--fg);font-family:var(--font-stack);font-size:var(--t-body);
       }
       .vgl-pymb-barra{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4)}
-      .vgl-pymb-titulo{font-weight:700;font-size:var(--t-strong)}
+      .vgl-pymb-titulo{font-weight:750;font-size:var(--t-strong);letter-spacing:.1px}
       /* v14.0.0 — INCIDENTE REAL EN CONSULTA: el banner se veía con el título y los nombres
          de actividad ilegibles, "mezclado con el CSS de Everest". Causa: al quitar el
          escudo simple "#vgl-pym-banner span{color:inherit}" para arreglar el contraste del
@@ -14727,7 +15385,7 @@ _vglOfrecerDeshacer(btn);
         border:1px solid rgba(var(--ac-rgb),.55);
         border-radius:var(--r-surface);padding:30px 34px;
         max-width:460px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 60px rgba(var(--ac-rgb),.14),inset 0 1px 0 rgba(255,255,255,.10);
+        box-shadow:var(--shadow-float),0 0 40px rgba(var(--ac-rgb),.10),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
@@ -14747,25 +15405,41 @@ _vglOfrecerDeshacer(btn);
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
       .vgl-pym-card{
-        background:linear-gradient(165deg,rgba(var(--rgb-recordatorio),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
-        border:1px solid rgba(var(--rgb-recordatorio),.50);
-        border-radius:var(--r-surface);padding:28px 32px;
-        max-width:420px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-recordatorio),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        background:linear-gradient(170deg,rgba(var(--rgb-recordatorio),.13),rgba(0,0,0,0) 46%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-recordatorio),.42);
+        border-radius:var(--r-surface);padding:0;overflow:hidden;
+        max-width:460px;width:min(92vw,460px);text-align:left;
+        box-shadow:var(--shadow-float),0 0 42px rgba(var(--rgb-recordatorio),.10),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
+      .vgl-pym-head{
+        display:flex;align-items:center;gap:14px;
+        padding:22px 24px 16px;
+        border-bottom:1px solid rgba(var(--rgb-recordatorio),.16)
+      }
       .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
-        width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
+        width:46px;height:46px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:var(--t-hero);
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
+      .vgl-pym-headtxt{min-width:0}
+      .vgl-pym-t{font-size:11.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:3px;letter-spacing:1.3px;text-transform:uppercase}
+      .vgl-pym-n{font-size:20px;font-weight:800;color:var(--fg) !important;line-height:1.18;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.28);overflow-wrap:anywhere}
+      .vgl-pym-body{padding:16px 24px 6px;display:flex;flex-direction:column;gap:12px}
+      .vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo{
+        border-radius:var(--r-card);padding:12px 14px
+      }
+      .vgl-pym-sec{border:1px solid var(--edge);background:var(--bg2);--sec-accent:var(--c-recordatorio)}
+      .vgl-pym-sec-pes{border:1px solid rgba(var(--rgb-pes),.42);background:rgba(var(--rgb-pes),.08);--sec-accent:var(--c-pes)}
+      .vgl-pym-sec-rojo{border:1px solid rgba(var(--rgb-rojo),.36);background:rgba(var(--rgb-rojo),.07);--sec-accent:var(--c-rojo)}
+      .vgl-pym-sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .vgl-pym-sec-ic{font-size:var(--t-strong);line-height:1}
+      .vgl-pym-sec-t{font-size:12.5px;font-weight:800;letter-spacing:.2px;color:var(--sec-accent) !important}
+      .vgl-pym-sec-b{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+      .vgl-pym-lead{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--fg2) !important;margin-bottom:9px}
       .vgl-pym-list{
-        display:flex;flex-wrap:wrap;gap:7px;
-        justify-content:center;margin-bottom:16px
+        display:flex;flex-wrap:wrap;gap:7px
       }
       .vgl-pym-chip{
         font-size:var(--t-micro);font-weight:700;padding:6px 13px;
@@ -14773,15 +15447,16 @@ _vglOfrecerDeshacer(btn);
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin:4px 24px 18px;text-align:center} /* [UI-CSS] */
       .vgl-pym-ok{
-        border:0;border-radius:var(--r-chip);padding:10px 26px;
+        display:block;width:calc(100% - 48px);margin:0 24px 22px;
+        border:0;border-radius:var(--r-chip);padding:11px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
         cursor:pointer;font-family:inherit;background:var(--c-recordatorio);
         box-shadow:0 6px 18px rgba(var(--rgb-recordatorio),.25);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
-      .vgl-pym-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
+      .vgl-pym-ok:hover{transform:scale(1.02);filter:brightness(1.06)}
       #vgl-pes-modal{
         position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
@@ -14792,7 +15467,7 @@ _vglOfrecerDeshacer(btn);
         border:1px solid rgba(var(--rgb-pes),.50);
         border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-pes),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        box-shadow:var(--shadow-float),0 0 36px rgba(var(--rgb-pes),.09),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
@@ -14829,7 +15504,7 @@ _vglOfrecerDeshacer(btn);
         border:1px solid rgba(var(--rgb-rojo),.50);
         border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        box-shadow:var(--shadow-float),0 0 36px rgba(var(--rgb-rojo),.09),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
@@ -14875,7 +15550,7 @@ _vglOfrecerDeshacer(btn);
          página — consistente con el «no hace nada» reportado en consultorio. Mismo
          esqueleto que los otros modales; la Ficha del paciente nueva entra a la lista.
          Sin blur nuevo: estos cuatro comparten el fondo oscurecido sin backdrop-filter. */
-      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal{
+      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal,#vgl-paquete-modal,#vgl-chooser-modal{
         position:fixed;top:0;left:0;width:100vw;height:100vh;
         background:rgba(2,4,9,.78);z-index:var(--z-modal);
         display:flex;align-items:center;justify-content:center;
@@ -14970,9 +15645,18 @@ _vglOfrecerDeshacer(btn);
       }
       #vgl-panel-modal .vgl-panel-tab:hover{background:var(--bg3);border-color:var(--bg4)}
       #vgl-panel-modal .vgl-panel-tab.active{
-        background:rgba(var(--rgb-azul),.22) !important;color:var(--c-azul) !important;
-        border-color:rgba(var(--rgb-azul),.55) !important;font-weight:800
+        background:rgba(var(--rgb-panel),.22) !important;color:var(--c-panel) !important;
+        border-color:rgba(var(--rgb-panel),.55) !important;font-weight:800
       }
+      /* v17.x.x — REFACTOR S+ (Panel): punto de estado por pestaña (al día / revisar /
+         sin dato). Regla E: cuelga de document.body, todo color con !important. */
+      #vgl-panel-modal .vgl-panel-dot{
+        display:inline-block;width:7px;height:7px;border-radius:50%;
+        margin-left:5px;vertical-align:1px;background:var(--fg3) !important
+      }
+      #vgl-panel-modal .vgl-panel-dot.ok{background:var(--c-verde) !important}
+      #vgl-panel-modal .vgl-panel-dot.pend{background:var(--c-ambar) !important}
+      #vgl-panel-modal .vgl-panel-dot.nd{background:var(--fg3) !important}
       #vgl-panel-modal .vgl-tend-fila{
         border:1px solid var(--edge);border-radius:var(--r-field);
         padding:10px 12px;margin-bottom:8px;background:var(--bg2)
@@ -15008,11 +15692,16 @@ _vglOfrecerDeshacer(btn);
       }
       #vgl-panel-modal .vgl-meta-fila.ok{border-color:rgba(var(--rgb-verde),.45);background:rgba(var(--rgb-verde),.07)}
       #vgl-panel-modal .vgl-meta-fila.falla{border-color:rgba(var(--rgb-ambar),.45);background:rgba(var(--rgb-ambar),.07)}
+      /* v17.x.x — REFACTOR S+ (Panel): SEMÁFORO COMPLETO en metas. El rojo es la «falla
+         grave» que ya calcula el motor (riesgo alto con eGFR < 45 en menor de 75, D10);
+         el ámbar queda para la «falla leve» (por encima de la meta). Regla E: !important. */
+      #vgl-panel-modal .vgl-meta-fila.grave{border-color:rgba(var(--rgb-rojo),.55);background:rgba(var(--rgb-rojo),.09)}
       #vgl-panel-modal .vgl-meta-rot{font-size:var(--t-body);font-weight:800;color:var(--fg) !important;min-width:64px}
       #vgl-panel-modal .vgl-meta-obj{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
       #vgl-panel-modal .vgl-meta-act{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-panel-modal .vgl-meta-fila.ok .vgl-meta-act{color:var(--c-verde) !important}
       #vgl-panel-modal .vgl-meta-fila.falla .vgl-meta-act{color:var(--c-ambar) !important}
+      #vgl-panel-modal .vgl-meta-fila.grave .vgl-meta-act{color:var(--c-rojo) !important}
       /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color.
          v17.24.0 — se suma #vgl-cw-farmaco (widget de Conducta, Fase 2): mismo contenido
          (mtrRenderDuplicidadesHtml), misma disciplina de !important por colgar de
@@ -15144,6 +15833,11 @@ _vglOfrecerDeshacer(btn);
          cambio de casilla a mitad de generación entregue el borrador en el chip equivocado)
          y contador de palabras del borrador (N palabras · N caracteres · modelo). */
       .vgl-ia-lock{opacity:.45;pointer-events:none}
+      /* v-S+ — ícono Lucide dentro del Redactor IA: se alinea a la línea de base del texto
+         sin tocar el layout compartido de .vgl-agm-btn (inline). Hereda currentColor del
+         botón/título, cuyo color ya está blindado por la Regla E (no requiere la palabra
+         clave important). */
+      .vgl-ia-ico{display:inline-block;vertical-align:-2px;margin-right:7px;flex:0 0 auto}
       #vgl-ia-modal .vgl-ia-meta{color:var(--fg2) !important}
       #vgl-ia-modal .vgl-ia-meta b{color:var(--c-verde) !important}
       /* v15.3 — GAP 1: aviso de la fecha de control sugerida por el motor. */
@@ -15566,39 +16260,49 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.12);
-        border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
-        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
+        color:var(--c-labs) !important;background:rgba(var(--rgb-labs),.12);
+        border:1px solid rgba(var(--rgb-labs),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-labs),.10)
       }
+      #vgl-labs-modal .vgl-labs-kicker svg{width:13px;height:13px}
       #vgl-labs-modal .vgl-labs-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
         color:var(--fg) !important;overflow-wrap:anywhere;
-        text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
+        text-shadow:0 0 30px rgba(var(--rgb-labs),.22)
       }
       #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
       #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
-      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde) !important}
-      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde) !important}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-labs) !important}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-labs) !important}
 
-      /* ---- Celda bento de fuente + botón portal ---- */
+      /* ---- Celda bento de fuente + chip «En línea» + portal al pie ---- */
       #vgl-labs-modal .vgl-labs-srcbar{
         display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;
-        background:linear-gradient(165deg,rgba(var(--rgb-azul),.10),rgba(var(--rgb-azul),.02) 70%),var(--bg2);
-        border:1px solid rgba(var(--rgb-azul),.28);border-radius:var(--r-card);
+        background:linear-gradient(165deg,rgba(var(--rgb-labs),.10),rgba(var(--rgb-labs),.02) 70%),var(--bg2);
+        border:1px solid rgba(var(--rgb-labs),.28);border-radius:var(--r-card);
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
-      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0}
+      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-labs),.06)}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0;display:inline-flex;align-items:center;gap:7px}
       #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg) !important;font-weight:800}
+      #vgl-labs-modal .vgl-labs-srclbl svg{flex:none;width:14px;height:14px;color:var(--c-labs) !important}
+      #vgl-labs-modal .vgl-labs-srconline{
+        flex:none;display:inline-flex;align-items:center;gap:6px;
+        font-size:var(--t-micro);font-weight:800;color:var(--c-verde) !important;
+        background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.30);
+        border-radius:var(--r-pill);padding:5px 12px
+      }
+      #vgl-labs-modal .vgl-labs-srconline svg{width:13px;height:13px}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
-        background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul) !important;font-size:var(--t-micro);font-weight:800;
+        background:linear-gradient(135deg,rgba(var(--rgb-labs),.30),rgba(var(--rgb-labs),.15));
+        color:var(--c-labs) !important;font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-labs),.40),0 6px 18px rgba(var(--rgb-labs),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
       #vgl-labs-modal .vgl-labs-portal:hover{transform:translateY(-1px);filter:brightness(1.08)}
+      #vgl-labs-modal .vgl-labs-portal svg{width:14px;height:14px}
 
       /* ---- Contenedor de resultados ---- */
       #vgl-labs-modal #vgl-labs-content{background:rgba(0,0,0,.22);border-color:var(--line);padding:0 10px 10px}
@@ -15646,6 +16350,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
       #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3) !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-date small{display:block;font-size:10px;color:var(--fg3) !important;opacity:.72;font-variant-numeric:tabular-nums}
       #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
         font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg) !important;
@@ -15748,14 +16453,18 @@ _vglOfrecerDeshacer(btn);
         background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
       }
-      /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
+      /* v12.5.4 — Botón "Ver informe" (PDF real del laboratorio) */
       #vgl-labs-modal .vgl-labs-pdfcol{text-align:center;width:1%}
       #vgl-labs-modal .vgl-labs-pdf{
-        all:unset;cursor:pointer;font-size:var(--t-lead);padding:4px 8px;border-radius:var(--r-chip);
+        all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+        color:var(--c-labs) !important;padding:6px 9px;border-radius:var(--r-chip);
         transition:transform .15s var(--ease-out),background .15s var(--ease-out)
       }
+      #vgl-labs-modal .vgl-labs-pdf svg{width:15px;height:15px}
       #vgl-labs-modal .vgl-labs-pdf:hover{background:var(--bg3);transform:scale(1.12)}
       #vgl-labs-modal .vgl-labs-pdf:disabled{opacity:.5;cursor:wait}
+      /* REFACTOR S+: iconografía SVG en el acordeón de uroanálisis y sus subcolumnas */
+      #vgl-labs-modal .vgl-uro-badge svg,#vgl-labs-modal .vgl-labs-uro-btn svg,#vgl-labs-modal .vgl-uro-subcol-t svg{width:13px;height:13px;vertical-align:-2px}
 
       /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
@@ -15767,6 +16476,60 @@ _vglOfrecerDeshacer(btn);
 
       @media (prefers-reduced-motion:reduce){
         #vgl-labs-modal,#vgl-labs-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ==== v17.x.x — REFACTOR S+: modal «Ordenamiento de exámenes · próximo control» ==== */
+      /* Solo-lectura: revisa el paquete del programa, jamás dispara el Paquetes nativo. */
+      #vgl-paquete-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:14px}
+      #vgl-paquete-modal .vgl-paquete-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-paquete) !important;background:rgba(var(--rgb-paquete),.12);
+        border:1px solid rgba(var(--rgb-paquete),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-paquete),.10)
+      }
+      #vgl-paquete-modal .vgl-paquete-kicker svg{width:13px;height:13px}
+      #vgl-paquete-modal .vgl-agm-patient{font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;color:var(--fg) !important;overflow-wrap:anywhere;text-shadow:0 0 30px rgba(var(--rgb-paquete),.20)}
+      #vgl-paquete-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-paquete-modal #vgl-paquete-body{background:rgba(0,0,0,.18);border-color:var(--line);padding:8px 10px;border-radius:var(--r-card)}
+      #vgl-paquete-modal.light #vgl-paquete-body{background:rgba(15,23,42,.03)}
+      #vgl-paquete-modal .vgl-paq-programa{margin-bottom:12px}
+      #vgl-paquete-modal .vgl-paq-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+      #vgl-paquete-modal .vgl-paq-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--fg2) !important;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r-pill);padding:5px 12px}
+      #vgl-paquete-modal .vgl-paq-chip.active{color:var(--c-paquete) !important;background:rgba(var(--rgb-paquete),.12);border-color:rgba(var(--rgb-paquete),.45)}
+      #vgl-paquete-modal .vgl-paq-porque{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.5}
+      #vgl-paquete-modal .vgl-paq-sec{margin-top:12px}
+      #vgl-paquete-modal .vgl-paq-t{font-size:var(--t-micro);font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--c-paquete) !important;margin-bottom:7px}
+      #vgl-paquete-modal .vgl-paq-lista{display:flex;flex-direction:column;gap:6px}
+      #vgl-paquete-modal .vgl-paq-fila{display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-chip);padding:8px 12px}
+      #vgl-paquete-modal .vgl-paq-nom{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;min-width:0;flex:1}
+      #vgl-paquete-modal .vgl-paq-que{font-size:var(--t-micro);color:var(--fg3) !important}
+      #vgl-paquete-modal .vgl-paq-badge{flex:none;font-size:10.5px;font-weight:800;border-radius:var(--r-pill);padding:3px 9px}
+      #vgl-paquete-modal .vgl-paq-aldia{color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.30)}
+      #vgl-paquete-modal .vgl-paq-vence{color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.10);border:1px solid rgba(var(--rgb-ambar),.30)}
+      #vgl-paquete-modal .vgl-paq-vencido{color:var(--c-rojo) !important;background:rgba(var(--rgb-rojo),.10);border:1px solid rgba(var(--rgb-rojo),.30)}
+      #vgl-paquete-modal .vgl-paq-sinhist,#vgl-paquete-modal .vgl-paq-sinfecha{color:var(--fg3) !important;background:var(--bg3);border:1px solid var(--edge)}
+      #vgl-paquete-modal .vgl-paq-okmsg{font-size:var(--t-body);color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.08);border:1px solid rgba(var(--rgb-verde),.25);border-radius:var(--r-chip);padding:10px 12px}
+      #vgl-paquete-modal .vgl-paq-err{font-size:var(--t-body);color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.08);border:1px solid rgba(var(--rgb-ambar),.28);border-radius:var(--r-chip);padding:10px 12px;line-height:1.5}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-paquete-modal,#vgl-paquete-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ==== v17.x.x — REFACTOR S+: menú de elección («Exámenes» / «Examen normal») ==== */
+      /* Escudos de color para los textos neutros de los modales nuevos: cuelgan de
+         document.body, así que la Regla E exige !important. */
+      #vgl-paquete-modal .vgl-agm-sub,#vgl-chooser-modal .vgl-agm-sub{color:var(--fg2) !important}
+      #vgl-paquete-modal .vgl-agm-close,#vgl-chooser-modal .vgl-agm-close{color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-titulo{font-size:var(--t-title);font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:8px;color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-body{display:flex;flex-direction:column;gap:8px}
+      #vgl-chooser-modal .vgl-chooser-opt{display:flex;align-items:center;gap:11px;text-align:left;width:100%;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r-chip);padding:12px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s,transform .1s}
+      #vgl-chooser-modal .vgl-chooser-opt:hover{background:var(--bg3);border-color:var(--fg3);transform:translateY(-1px)}
+      #vgl-chooser-modal .vgl-chooser-ico{flex:none;font-size:var(--t-title)}
+      #vgl-chooser-modal .vgl-chooser-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+      #vgl-chooser-modal .vgl-chooser-t{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-d{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-chooser-modal,#vgl-chooser-modal *{animation:none!important;transition:none!important}
       }
 
       /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
@@ -16302,30 +17065,31 @@ _vglOfrecerDeshacer(btn);
           <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo" aria-label="Restaurar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
           <button class="vgl-tl hc" id="vgl-tl-hc" title="Alto contraste: fondo sólido y letra más grande (1 clic)" aria-label="Alto contraste" aria-pressed="false"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="0.7" stroke-linecap="round"><circle cx="3" cy="3" r="1.6" fill="currentColor" stroke="none"/><path d="M3 0.6V1.3M3 4.7V5.4M0.6 3H1.3M4.7 3H5.4M1.3 1.3L1.8 1.8M4.2 4.2L4.7 4.7M4.7 1.3L4.2 1.8M1.8 4.2L1.3 4.7"/></svg></button>
         </div>
-        <div id="vgl-title">Asistente Clínico</div>
+        <div id="vgl-title">Centinela</div>
         <span id="vgl-clock" title="Hora actual y tiempo de turno"></span>
         <span id="vgl-dot" title="Estado del asistente — tóquelo para ver qué está leyendo" role="button" tabindex="0"></span>
       </div>
       <div id="vgl-body">
         <div id="vgl-sidebar">
           <div id="vgl-find">
-            <input id="vgl-q" type="text" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
+            <svg class="vgl-find-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="vgl-q" type="text" spellcheck="false" placeholder="Buscar paciente por nombre o cédula…">
           </div>
           <div class="vgl-sb-lbl">Filtros</div>
           <nav id="vgl-filters">
-            <button class="vgl-fchip sel" data-f="todas">Todas las citas</button>
-            <button class="vgl-fchip" data-f="riesgo" title="Alertas de atención e inasistencias">⚠ Atención prioritaria</button>
-            <button class="vgl-fchip" data-f="sinpres">Sin presentarse</button>
-            <button class="vgl-fchip" data-f="ensala">En sala</button>
-            <button class="vgl-fchip" data-f="pym">Con PyM</button>
+            <button class="vgl-fchip sel" data-f="todas"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>Todas las citas</button>
+            <button class="vgl-fchip" data-f="riesgo" title="Alertas de atención e inasistencias"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Atención prioritaria</button>
+            <button class="vgl-fchip" data-f="sinpres"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.5 13.5-2 2"/><path d="m19.5 13.5 2 2"/></svg>Sin presentarse</button>
+            <button class="vgl-fchip" data-f="ensala"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>En sala</button>
+            <button class="vgl-fchip" data-f="pym"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Con PyM</button>
           </nav>
           <div id="vgl-stats"></div>
           <div id="vgl-actions">
-            <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)">📂 Cargar prevención</button>
+            <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Cargar prevención</button>
             <button class="vgl-sb-btn" id="vgl-bell" title="Activar notificaciones de Windows">🔔 Alertas</button>
             <button class="vgl-sb-btn" id="vgl-mute" title="Silenciar el sonido 15 minutos">🔉 Silenciar</button>
-            <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención">📊 Resumen</button>
-            <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes">⚙ Ajustes</button>
+            <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Resumen</button>
+            <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
           </div>
         </div>
         <div id="vgl-main">
@@ -16379,11 +17143,11 @@ _vglOfrecerDeshacer(btn);
     root.querySelector("#vgl-tl-hc").onclick = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } _vglAlternarAltoContraste(); };
     root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     // [COPY-UX] Dock flotante del asistente clínico
-    const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Asistente Clínico (Alt+V)";
+    const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Centinela (Alt+V)";
     dock.setAttribute("role", "button");
     dock.setAttribute("tabindex", "0");
-    dock.setAttribute("aria-label", "Mostrar Asistente Clínico (Alt+V)");
-    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
+    dock.setAttribute("aria-label", "Mostrar Centinela (Alt+V)");
+    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Centinela</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
     dock.addEventListener("click", () => setWinState("full"));
     dock.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWinState("full"); } });
     // [v17.6.5] Doble clic en la pastilla: abre el panel directamente en el Resumen del turno.
@@ -16414,8 +17178,26 @@ _vglOfrecerDeshacer(btn);
       }
     });
     restorePos(); applyTheme(); paintMute(); updateBell();
-    // [v17.6.5] Reloj del turno: la jornada empieza cuando monta el panel.
-    state.turnoInicio = Date.now(); actualizarRelojCabecera();
+    // [v17.6.5] Reloj del turno: la jornada empieza UNA vez por día, no en cada montaje.
+    // Se persiste en localStorage por día, así F5, un cambio de versión o reabrir el
+    // panel no reinician el contador; solo se reinicia al cambiar el día.
+    try {
+      const _tDia = todayStamp();
+      let _tTs = 0;
+      try {
+        const _o = JSON.parse(localStorage.getItem("vgl_turno_inicio") || "null") || null;
+        if (_o && _o.dia === _tDia && typeof _o.ts === "number" && _o.ts > 0) _tTs = _o.ts;
+      } catch (e) {}
+      if (!_tTs) {
+        _tTs = Date.now();
+        try { localStorage.setItem("vgl_turno_inicio", JSON.stringify({ dia: _tDia, ts: _tTs })); } catch (e) {}
+      }
+      state.turnoInicio = _tTs;
+    } catch (e) { state.turnoInicio = Date.now(); }
+    actualizarRelojCabecera();
+    // v18.0.3 — se monta el canal "reloj" (1 s) al terminar de construir el overlay. El
+    // canal se detiene solo si el panel se cierra de verdad (removeOverlay), como el resto.
+    _relojSegundosMontar();
     // El tema "auto" sigue al modo claro/oscuro de Windows en vivo.
     try { if (PAGEWIN.matchMedia) PAGEWIN.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.tema === "auto") applyTheme(); }); } catch (e) {}
   }
@@ -18524,31 +19306,80 @@ _vglOfrecerDeshacer(btn);
   //  propio asistente acaba de confirmar. Decisión del médico: SOLO los
   //  datos de la cita —nada clínico sin confirmar—, y la preparación se
   //  consulta en el laboratorio.
+  //  v17.x.x — REFACTOR S+ (30-ago, aprobado en el canvas): tarjeta compacta
+  //  tipo recetario (A5 / media carta). Antes era una hoja genérica en Arial
+  //  con los datos en una tabla plana: la fecha y la hora —lo único que el
+  //  paciente necesita recordar— pesaban lo mismo que el radicado, no había
+  //  instrucciones de llegada y el pie usaba jerga interna. Ahora: franja de
+  //  identidad con la sede, fecha y hora como bloque central, recuadros de
+  //  Llegada y Preparación, y pie sanitizado. Una fila sin dato no se imprime
+  //  (la probó suite_62) y el nombre del paciente va escapado, igual que antes.
+  //  v18.0.5 — TAMAÑO CARTA (pedido del médico, 31-ago, con el recordatorio
+  //  oficial de la IPS como referencia: página 612x792 pt = Letter 8.5x11in).
+  //  El documento sale en Letter portrait como los formatos que ya imprime
+  //  Everest (ImprimirRecordatorioCita), no en A5. Se conserva todo el diseño
+  //  S+; solo cambian @page y las medidas de la tarjeta, que ahora llenan la
+  //  hoja con márgenes amplios y la tipografía de la fecha/hora crece para
+  //  que el recordatorio se lea igual de lejos que el oficial de la IPS.
   //  Función PURA: devuelve el documento; quien lo abre es imprimirRecordatorioLab.
   // =====================================================================
   function _recordatorioLabHtml(d) {
     const x = d || {};
-    const fila = (rot, val) => val ? `<tr><th>${escapeHtml(rot)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
+    const sede = String(x.sede || "").trim() || "Laboratorio de la IPS";
+    const fecha = x.fechaLegible || x.fechaIso || "";
+    const hora = String(x.hora || "").trim();
+    const esc = (v) => escapeHtml(v == null ? "" : String(v));
+    const fila = (rot, val) => val ? `<div class="rc-row"><span class="rc-k">${esc(rot)}</span><span class="rc-v">${esc(String(val))}</span></div>` : "";
     return `<!doctype html><html lang="es"><head><meta charset="utf-8">`
       + `<title>Recordatorio de toma de laboratorio</title><style>`
-      + `body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:14px}`
-      + `h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;font-weight:normal;color:#444;margin:0 0 18px}`
-      + `table{border-collapse:collapse;margin:12px 0 18px}th,td{text-align:left;padding:6px 14px 6px 0;vertical-align:top}`
-      + `th{color:#444;font-weight:600;white-space:nowrap}.nota{border-top:1px solid #bbb;padding-top:10px;color:#333}`
-      + `.pie{margin-top:22px;color:#666;font-size:11px}@media print{body{margin:12mm}}`
+      + `@page{size:Letter portrait;margin:12mm}`
+      + `*{box-sizing:border-box;margin:0;padding:0}`
+      + `body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:#eef1f4;color:#17212b;display:flex;justify-content:center;padding:20px}`
+      + `.rc-card{width:680px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 18px 50px -20px rgba(15,50,60,.45);display:flex;flex-direction:column;min-height:calc(100vh - 40px)}`
+      + `.rc-bar{background:#0d9488;color:#ffffff;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:10px}`
+      + `.rc-bar-l{font-size:12.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:8px}`
+      + `.rc-bar-r{font-size:12px;font-weight:700;opacity:.94;text-align:right;line-height:1.35}`
+      + `.rc-body{padding:26px 30px 30px;display:flex;flex-direction:column;flex:1}`
+      + `.rc-title{font-size:23px;font-weight:800;letter-spacing:-.01em;line-height:1.2}`
+      + `.rc-sub{font-size:13px;color:#5b6b7b;margin-top:4px}`
+      + `.rc-fh{display:grid;grid-template-columns:1.35fr 1fr;gap:12px;margin:18px 0 4px}`
+      + `.rc-fh-cell{border:1.5px solid #0d9488;background:#f0fdfa;border-radius:10px;padding:14px 16px}`
+      + `.rc-fh-lbl{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e}`
+      + `.rc-fh-val{font-size:21px;font-weight:800;color:#0f3d3a;margin-top:3px;line-height:1.25}`
+      + `.rc-fh-val small{font-size:12px;font-weight:700;color:#0f766e}`
+      + `.rc-sec{margin-top:16px}`
+      + `.rc-sec-t{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#8a99a8;border-bottom:1px solid #e3e9ef;padding-bottom:5px;margin-bottom:8px}`
+      + `.rc-row{display:flex;gap:8px;align-items:baseline;font-size:14px;padding:4px 0}`
+      + `.rc-k{min-width:130px;color:#5b6b7b;font-weight:600}`
+      + `.rc-v{font-weight:700;color:#17212b}`
+      + `.rc-call{display:flex;gap:10px;align-items:flex-start;margin-top:14px;border-radius:9px;padding:12px 14px;font-size:12.5px;line-height:1.55}`
+      + `.rc-call svg{width:16px;height:16px;flex:none;margin-top:1px}`
+      + `.rc-call.arrive{background:#f0fdfa;border:1px solid #99f6e4;color:#134e4a}`
+      + `.rc-call.arrive svg{color:#0d9488}`
+      + `.rc-call.prep{background:#fffbeb;border:1px solid #fde68a;color:#713f12}`
+      + `.rc-call.prep svg{color:#d97706}`
+      + `.rc-call b{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}`
+      + `.rc-pie{margin-top:auto;padding-top:14px;border-top:1px solid #e3e9ef;font-size:11px;color:#8a99a8;line-height:1.5}`
+      + `@media print{body{background:#ffffff;padding:0}.rc-card{width:100%;min-height:auto;box-shadow:none;border-radius:0}}`
       + `</style></head><body>`
-      + `<h1>Recordatorio de toma de laboratorio</h1>`
-      + `<h2>Presente este papel el día de su toma de muestras.</h2>`
-      + `<table>`
+      + `<div class="rc-card">`
+      + `<div class="rc-bar"><span class="rc-bar-l">VIVA 1A IPS</span><span class="rc-bar-r">${esc(sede)}</span></div>`
+      + `<div class="rc-body">`
+      + `<div class="rc-title">RECORDATORIO DE TOMA DE LABORATORIO</div>`
+      + `<div class="rc-sub">Presente este documento el día de la toma de muestras.</div>`
+      + (fecha || hora ? `<div class="rc-fh">`
+        + (fecha ? `<div class="rc-fh-cell"><div class="rc-fh-lbl">Fecha de la toma</div><div class="rc-fh-val">${esc(fecha)}</div></div>` : "")
+        + (hora ? `<div class="rc-fh-cell"><div class="rc-fh-lbl">Hora</div><div class="rc-fh-val">${esc(hora)}</div></div>` : "")
+        + `</div>` : "")
+      + `<div class="rc-sec"><div class="rc-sec-t">Datos de la cita</div>`
       + fila("Paciente", x.nombre)
       + fila("Documento", x.documento)
-      + fila("Fecha", x.fechaLegible || x.fechaIso)
-      + fila("Hora", x.hora)
-      + fila("Lugar", x.sede || "Laboratorio de la IPS")
       + fila("Número de la cita", x.radicado)
-      + `</table>`
-      + `<div class="nota">Consulte en el laboratorio la preparación que requiere su examen (por ejemplo, si necesita ayuno).</div>`
-      + `<div class="pie">Documento generado por el asistente de agenda para su comodidad. La cita quedó registrada en el sistema de laboratorio.</div>`
+      + `</div>`
+      + `<div class="rc-call arrive"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span><b>Recuerde llegar 15 minutos antes</b>RECUERDE LLEGAR 15 MINUTOS ANTES DE SU CITA PARA TRÁMITES ADMINISTRATIVOS. Presente su documento de identidad.</span></div>`
+      + `<div class="rc-call prep"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg><span><b>Preparación</b>Consulte en el laboratorio la preparación que requiere su examen (por ejemplo, si necesita ayuno).</span></div>`
+      + `<div class="rc-pie">Documento de recordatorio de su cita de laboratorio. Si no puede asistir, comuníquese con el laboratorio.</div>`
+      + `</div></div>`
       + `</body></html>`;
   }
 
@@ -18713,8 +19544,8 @@ _vglOfrecerDeshacer(btn);
         .filter(Boolean).join(" ");
       const bloqueLab = !lab ? "" : `
           ${ex.soloLab ? "" : `<div class="vgl-postcita-sep"></div>`}
-          <div class="vgl-postcita-lab">🧪 <b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
-          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">🖨️ Imprimir recordatorio de la toma</button>`;
+          <div class="vgl-postcita-lab"><b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
+          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">Imprimir recordatorio de la toma</button>`;
       panel.innerHTML = `
         <div class="vgl-postcita-card">
           <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
@@ -19086,6 +19917,228 @@ _vglOfrecerDeshacer(btn);
     return "";
   }
 
+  // =====================================================================
+  //  v17.x.x — REFACTOR S+ (30-ago): «Ordenamiento de exámenes · próximo control»
+  //  ------------------------------------------------------------------
+  //  Nuevo módulo, pedido por el médico: simular la EXPERIENCIA del botón «Paquetes»
+  //  nativo de HTA/DM/ERC (programa → paquete → qué vence → qué sigue vigente), pero
+  //  como una REVISIÓN DE SOLO-LECTURA. NO dispara el paquete nativo: ese gesto
+  //  arrastra SIEMPRE el hemograma (902210), un analito que el médico prohibió pedir
+  //  por arrastre (decisión v17.37.0 — «jamás ordenar lo que no se debe»). Aquí el
+  //  médico revisa qué toca pedir y lo ordena con su propio botón «Paquetes» o con
+  //  «Ordenar pendientes» (que solo agrega analitos permitidos). Cero clics simulados,
+  //  cero red nueva: se sirve del resumen ya en caché, igual que el Panel.
+  // =====================================================================
+
+  // Pura: del analito del tablero a su estado de vigencia para la tarjeta.
+  function mtrPaqueteEstadoDe(a) {
+    const x = a || {};
+    if (x.subestado === "vencido" || x.vencidoBase) return "vencido";
+    if (x.subestado === "sin_historial") return "sin_historial";
+    if (x.subestado === "sin_fecha") return "sin_fecha";
+    if (x.vence) return "vence";
+    return "al_dia";
+  }
+
+  // Pura: del tablero clínico (mtrTableroClinico) al HTML de la revisión del paquete.
+  // No lee red ni DOM; solo formatea lo que el motor ya calculó. Si no hay programa
+  // rector, se declara y NO se ofrece ningún paquete (regla D de la casa).
+  function mtrPaqueteProgramaHtml(d) {
+    if (!d) return '<div class="vgl-paq-err">No se pudo evaluar el programa del paciente todavía.</div>';
+    const prog = d.programa || {};
+    const ordenar = Array.isArray(d.ordenar) ? d.ordenar : [];
+    const vigentes = Array.isArray(d.vigentes) ? d.vigentes : [];
+
+    if (!prog.rector) {
+      return '<div class="vgl-paq-err">'
+        + escapeHtml(prog.porQue || "Sin programa de crónicos identificado: no se ofrece ningún paquete.")
+        + '</div>';
+    }
+
+    const badge = {
+      vencido: { rotulo: "Vencido", clase: "vgl-paq-vencido" },
+      vence: { rotulo: "Vence", clase: "vgl-paq-vence" },
+      sin_historial: { rotulo: "Sin tomas", clase: "vgl-paq-sinhist" },
+      sin_fecha: { rotulo: "Sin fecha", clase: "vgl-paq-sinfecha" },
+      al_dia: { rotulo: "Al día", clase: "vgl-paq-aldia" },
+    };
+
+    const filaOrden = ordenar.map((a) => {
+      const e = mtrPaqueteEstadoDe(a);
+      const b = badge[e] || badge.al_dia;
+      return '<div class="vgl-paq-fila">'
+        + '<span class="vgl-paq-nom">' + escapeHtml(a.nombre) + '</span>'
+        + '<span class="vgl-paq-que">' + escapeHtml(a.quePasa || "") + '</span>'
+        + '<span class="vgl-paq-badge ' + b.clase + '">' + escapeHtml(b.rotulo) + '</span>'
+        + '</div>';
+    }).join("");
+
+    const filaVigente = vigentes.map((a) => {
+      return '<div class="vgl-paq-fila vgl-paq-ok">'
+        + '<span class="vgl-paq-nom">' + escapeHtml(a.nombre) + '</span>'
+        + '<span class="vgl-paq-que">' + escapeHtml(a.quePasa || "") + '</span>'
+        + '<span class="vgl-paq-badge vgl-paq-aldia">Al día</span>'
+        + '</div>';
+    }).join("");
+
+    const chips = ["HTA", "DM2", "ERC"].map((p) => {
+      const activo = prog.rector === p;
+      const rotulo = MTR_PROGRAMA_ROTULO[p] || p;
+      return '<span class="vgl-paq-chip' + (activo ? " active" : "") + '">'
+        + (activo ? "● " : "") + escapeHtml(rotulo) + '</span>';
+    }).join("");
+
+    let html = '<div class="vgl-paq-programa">'
+      + '<div class="vgl-paq-chips">' + chips + '</div>'
+      + '<div class="vgl-paq-porque">' + escapeHtml(prog.porQue || "") + '</div>'
+      + '</div>';
+
+    if (ordenar.length) {
+      html += '<div class="vgl-paq-sec">'
+        + '<div class="vgl-paq-t">Para el próximo control</div>'
+        + '<div class="vgl-paq-lista">' + filaOrden + '</div>'
+        + '</div>';
+    } else {
+      html += '<div class="vgl-paq-sec"><div class="vgl-paq-okmsg">Al día con el programa de '
+        + escapeHtml(prog.rotulo || prog.rector) + ': nada vence para la próxima toma.</div></div>';
+    }
+
+    if (vigentes.length) {
+      html += '<div class="vgl-paq-sec">'
+        + '<div class="vgl-paq-t">Sigue vigente</div>'
+        + '<div class="vgl-paq-lista">' + filaVigente + '</div>'
+        + '</div>';
+    }
+
+    return html;
+  }
+
+  async function openPaquetesModal(apt) {
+    if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
+    let _fnCompletado = false;
+    try { uxTrack("fn.paquete.open"); } catch (e) {}
+
+    let existing = document.getElementById("vgl-paquete-modal");
+    if (existing) existing.remove();
+
+    const patientName = apt.nombre || apt.name || "Paciente Everest";
+    const modal = document.createElement("div");
+    modal.id = "vgl-paquete-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-paquete-title");
+    if (isLight()) modal.classList.add("light");
+
+    const ICO = {
+      pkg: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+      info: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    };
+
+    modal.innerHTML = `
+      <div class="vgl-agm-card" style="max-width:720px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-paquete-kicker" id="vgl-paquete-title">${ICO.pkg} Ordenamiento de exámenes · Próximo control</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b></div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-paquete-x" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="vgl-ux-caption">Revisión del paquete que le corresponde al paciente según su programa. Con «Ordenar pendientes» el asistente simula los botones de la historia y agrega SOLO los exámenes que tocan para la próxima visita (los que ya calculó este motor), nunca el paquete completo de Everest.</div>
+        <div id="vgl-paquete-body" class="vgl-agm-slots" aria-live="polite" style="max-height:440px;overflow-y:auto;display:block">
+          <div class="vgl-agm-loading">⏳ Revisando el programa y las vigencias del paciente...</div>
+        </div>
+        <div class="vgl-agm-foot">
+          <button class="vgl-agm-btn pri" id="vgl-paquete-ordenar">📋 Ordenar pendientes</button>
+          <button class="vgl-agm-btn sec" id="vgl-paquete-close">Cerrar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const xBtn = modal.querySelector("#vgl-paquete-x");
+    const closeBtn = modal.querySelector("#vgl-paquete-close");
+    let cerrado = false;
+    const closeMod = () => { cerrado = true; try { if (!_fnCompletado) uxTrack("fn.paquete.abandon"); } catch (e) {} try { if (xBtn) xBtn.removeEventListener("click", closeMod); if (closeBtn) closeBtn.removeEventListener("click", closeMod); } catch (e) {} modal.innerHTML = ""; modal.remove(); };
+    if (xBtn) xBtn.addEventListener("click", closeMod);
+    if (closeBtn) closeBtn.addEventListener("click", closeMod);
+    const bgClick = (e) => { if (e.target === modal) closeMod(); };
+    modal.addEventListener("click", bgClick);
+
+    const body = modal.querySelector("#vgl-paquete-body");
+    const ordenarBtn = modal.querySelector("#vgl-paquete-ordenar");
+    let d = null;       // tablero clínico, compartido con el botón «Ordenar pendientes»
+    let resumen = null;
+    const repintar = () => { if (body) body.innerHTML = mtrPaqueteProgramaHtml(d); };
+
+    // v17.x.x — REFACTOR S+ (30-ago): «Ordenar pendientes» DENTRO del propio modal. Simula
+    // los botones nativos de Everest pero agrega SOLO los analitos que el motor ya calculó
+    // para la próxima visita (mtrItemsOrdenarConducta sobre d.ordenar), nunca el paquete
+    // completo (que arrastra el hemograma prohibido 902210). Misma lógica que el botón
+    // «Ordenar pendientes» de Conducta (_cwoClic), con el mismo candado _cwoEnCurso.
+    if (ordenarBtn) ordenarBtn.addEventListener("click", async (e) => {
+      try { e.stopPropagation(); } catch (e2) {}
+      if (!apt || !apt.doc_id) return;
+      if (_cwoEnCurso) return;
+      const docId = apt.doc_id;
+      try {
+        const items = mtrItemsOrdenarConducta(d ? d.ordenar : []);
+        const total = items.paquete.length + items.individuales.length;
+        if (!total) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
+        _cwoEnCurso = true;
+        ordenarBtn.disabled = true;
+        const textoPrevio = ordenarBtn.textContent;
+        ordenarBtn.textContent = "⏳ Agregando...";
+        try {
+          uxTrack("widget.paquete.ordenar.clic");
+          const r = await mtrConductaAgregarPendientes(items, undefined, docId);
+          const todos = items.paquete.concat(items.individuales);
+          if (r.agregados.length) {
+            markOrdenLabsConductaHoy(docId, r.agregados);
+            const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+            if (r.fallidos.length) {
+              const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
+              showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
+            } else {
+              showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
+            }
+          } else if (!_pacienteSigueAbierto(docId)) {
+            showToast("AMBAR", "Se canceló para no equivocar la historia", "Se cambió de paciente mientras se agregaban los exámenes, así que se detuvo: nada se escribió en la historia de otra persona. Vuelva a abrir al paciente y púlselo de nuevo.", true);
+          } else {
+            showToast("ROJO", "No se pudo agregar", "No se encontraron los botones o la lista de exámenes en la pantalla. Inténtelo de nuevo, o agréguelo a mano.", true);
+          }
+          // Refresca la revisión: lo ya agregado deja de figurar como pendiente.
+          try { repintar(); } catch (e2) {}
+        } catch (e2) {
+          showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
+        } finally {
+          _cwoEnCurso = false;
+          ordenarBtn.disabled = false;
+          ordenarBtn.textContent = textoPrevio;
+          try { mtrWidgetOrdenarConductaTick(); } catch (e2) {}
+        }
+      } catch (e2) {
+        showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
+      }
+    });
+
+    try {
+      try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
+      if (!resumen) {
+        if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo leer el resumen del paciente. Abra la historia un momento (ahí se carga solo) y vuelva a abrir este módulo.</div>';
+        if (ordenarBtn) ordenarBtn.style.display = "none";
+        return;
+      }
+      try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
+      repintar();
+      _fnCompletado = true;
+      try { uxTrack("fn.paquete.complete"); } catch (e) {}
+    } catch (e) {
+      if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo revisar el paquete en este momento. Inténtelo de nuevo.</div>';
+      if (ordenarBtn) ordenarBtn.style.display = "none";
+    }
+  }
+
   async function openLaboratoriosModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal (mismo patron que el panel de IA): abrir -> resultado ->
@@ -19107,28 +20160,40 @@ _vglOfrecerDeshacer(btn);
     const docSeguro = encodeURIComponent(String(apt.doc_id || "").trim());
     const atheneaUrl = escapeHtml(`https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${docSeguro}`);
 
+    // v17.x.x — REFACTOR S+ (30-ago, aprobado en canvas): identidad índigo propia
+    // (--c-labs), kicker con iconografía SVG, y nombres sanitizados para el médico:
+    // se retira la jerga interna («Everest», «Athenea Soluciones API», «Portal Athenea
+    // (Auto-Login)», «Paraclínicos», «Agendamiento», «Ordenamiento») y el portal oficial
+    // se mueve al pie del modal.
+    const MTR_ICONO_FLASK = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>';
+    const MTR_ICONO_PORTAL = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+    const MTR_ICONO_CHECK = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const MTR_ICONO_PDF = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>';
+    const MTR_ICONO_ALERTA = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+    const MTR_ICONO_OK = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>';
+    const MTR_ICONO_LUPA = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+    const MTR_ICONO_BARRAS = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>';
+
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:880px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">🧪 Exámenes de Laboratorio (Últimos 365 días)</div>
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">${MTR_ICONO_FLASK} Laboratorios</div>
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
-            <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Últimos 365 días</div>
           </div>
           <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
         </div>
 
-        <div class="vgl-ux-caption">Los resultados de laboratorio del paciente en los últimos 365 días. Aquí solo se consultan — nada se modifica en Everest. Para agendar la toma de muestras use Agendamiento; para pedir un examen nuevo, Ordenamiento.</div>
+        <div class="vgl-ux-caption">Resultados del paciente en los últimos 365 días. Aquí solo se consultan: nada se modifica en la plataforma. Para programar la toma de muestras use Programación de cita; para pedir exámenes nuevos, Ordenar.</div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
-          <span class="vgl-labs-srclbl"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b>${vglTip("Estos resultados se traen solos del sistema del laboratorio (Athenea), sin que tenga que buscarlos. El botón de la derecha abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
-          <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
-            🌐 Abrir en Portal Athenea (Auto-Login)
-          </a>
+          <span class="vgl-labs-srclbl">${MTR_ICONO_FLASK} <b>Origen:</b> consulta automática al sistema del laboratorio, sin buscarlo a mano${vglTip("Estos resultados se traen solos del sistema del laboratorio, sin que tenga que buscarlos. El botón del pie abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
+          <span class="vgl-labs-srconline">${MTR_ICONO_CHECK} En línea</span>
         </div>
 
         <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">⚡ Historial de Paraclínicos (Últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en Everest, no es un error del Vigilante. La etiqueta junto a cada resultado dice si vino directo del laboratorio (Athenea) o quedó registrado a mano.")}</label>
+          <label class="vgl-agm-lbl">Historial de resultados (últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en la plataforma, no es un error del asistente. La etiqueta junto a cada resultado dice si vino directo del sistema del laboratorio o quedó registrado a mano.")}</label>
           <!-- v17.25.0 — AUDITORÍA DE LABORATORIOS: _renderEstadioRenalHtml (R1b, v14.1.1)
                calculaba el recuadro de función renal — TFG, estadio, discordancia entre
                fórmulas, paciente pediátrico, creatinina fuera de rango — con su propio CSS
@@ -19144,12 +20209,15 @@ _vglOfrecerDeshacer(btn);
                puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
           <div id="vgl-labs-renal" aria-live="polite"></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
-            <div class="vgl-agm-loading">⏳ Consultando automáticamente exámenes de laboratorio en Portal Athenea Soluciones...</div>
+            <div class="vgl-agm-loading">⏳ Consultando resultados de laboratorio...</div>
           </div>
         </div>
 
         <div class="vgl-agm-foot">
-          <button class="vgl-agm-btn sec" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
+          <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
+            ${MTR_ICONO_PORTAL} Abrir el portal oficial del laboratorio
+          </a>
+          <button class="vgl-agm-btn pri" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
         </div>
       </div>
     `;
@@ -19248,8 +20316,17 @@ _vglOfrecerDeshacer(btn);
         try {
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
           try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
-          try { mtrTelemetriaResumen(resumenClinico).forEach((ev) => uxTrack(ev.accion, ev.extra)); }
-          catch (eTel) {}
+          // Dedup del recuadro: "recuadro.*" se emite UNA vez por paciente por día.
+          // Recalcular el resumen (reabrir el modal, refresco interno, re-render) no
+          // debe volver a contar "recuadro.mostrado" ni inflar las métricas.
+          try {
+            const _recuadroDoc = String((apt && apt.doc_id) || "");
+            const _uidRecuadro = "recuadro_telemetria|" + _recuadroDoc;
+            if (!avisoYaVisto(_uidRecuadro)) {
+              avisoMarcarVisto(_uidRecuadro);
+              mtrTelemetriaResumen(resumenClinico).forEach((ev) => uxTrack(ev.accion, ev.extra));
+            }
+          } catch (eTel) {}
         } catch (e) { console.warn("[Vigilante] recuadro clínico no disponible:", e); }
       } catch (e) { console.warn("[Vigilante] recuadro renal no disponible:", e); }
     })();
@@ -19268,8 +20345,8 @@ _vglOfrecerDeshacer(btn);
       // portal» hace que se vuelva a intentar o se mire a mano.
       const _noSePudoLeer = (_labsAtheneaCrudos === null) || _labsSolicitudesNoLeidas > 0;
       if (contentEl) contentEl.innerHTML = _noSePudoLeer
-        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No pude leer el portal de Athenea</b>, así que no sé qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón azul de arriba.</div>`
-        : `<div class="vgl-agm-err vgl-labs-empty">ℹ Athenea respondió y <b>no tiene ningún paraclínico registrado</b> de los últimos 365 días para este paciente. Tampoco Annar ni Citi.<br><br>Verifique directamente en el portal con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No se pudo leer el portal de laboratorios</b>, así que no se sabe qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón del portal, al pie.</div>`
+        : `<div class="vgl-agm-err vgl-labs-empty">ℹ El sistema de laboratorios respondió y <b>no tiene ningún resultado</b> de los últimos 365 días para este paciente, ni en los otros orígenes consultados.<br><br>Verifique directamente en el portal con el botón del pie. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
       return;
     }
 
@@ -19306,12 +20383,20 @@ _vglOfrecerDeshacer(btn);
         _labViejasOcultas++; return false;
       } catch (e) { return true; }
     });
+    // v17.x.x — REFACTOR S+: el médico ve «Laboratorio» como origen, nunca el nombre
+    // interno del proveedor (Athenea/Annar/Citi son nombres de sistema).
+    const _origenVisible = (o) => (/athenea|annar|citi/i.test(String(o || ""))) ? "Laboratorio" : String(o || "");
     let rowsHtml = _agruparUroanalisisParaTabla(_labsVentana).map((lab, idx) => {
       const esGrupoUro = Array.isArray(lab.__vglGrupoUroComponentes);
       const fechaInfo = _extractAtheneaFecha(lab);
       const fecha = fechaInfo
-        ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}` + (fechaInfo.hora ? ` · ${fechaInfo.hora}` : ""); })()
+        ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}` + (fechaInfo.hora ? ` · ${fechaInfo.hora}` : ""); })()
         : "Sin fecha";
+      // v17.x.x — REFACTOR S+: el año y la hora de la toma viajan al tooltip de la celda
+      // (el mockup aprobado pide fecha compacta «12/08» + año en <small>).
+      const fechaTitle = fechaInfo
+        ? fechaInfo.iso.split("-").reverse().join("/") + (fechaInfo.hora ? ` a las ${fechaInfo.hora}` : "")
+        : "";
       if (fecha === "Sin fecha" && !diagFechaModalLogged && String(lab.origen || "").includes("Athenea")) {
         diagFechaModalLogged = true;
         console.warn("[Vigilante Labs] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en la tabla del modal. Claves disponibles:", Object.keys(lab));
@@ -19338,7 +20423,7 @@ _vglOfrecerDeshacer(btn);
         : (String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal"));
 
       const btnInforme = (lab.__vglHash && lab.__vglToken)
-        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real del laboratorio">${MTR_ICONO_PDF}</button>`
         : "";
 
       // v14.6.0 — Renderizado de Uroanálisis en 1 fila compacta con resumen clínico y acordeón
@@ -19351,7 +20436,7 @@ _vglOfrecerDeshacer(btn);
         const uRes = _resumenClinicoUro(comps);
         const targetId = `vgl-uro-acc-${idx}`;
         const badgeCls = uRes.esPatologico ? "warn" : "ok";
-        const badgeIcon = uRes.esPatologico ? "⚠️" : "🟢";
+        const badgeIcon = uRes.esPatologico ? MTR_ICONO_ALERTA : MTR_ICONO_OK;
         const badgeText = uRes.esPatologico ? "Alteraciones detectadas" : "Sin hallazgos patológicos (Normal)";
         const chipsText = uRes.chips.join(" · ");
 
@@ -19370,14 +20455,14 @@ _vglOfrecerDeshacer(btn);
               <span class="vgl-uro-badge ${badgeCls}">${badgeIcon} ${escapeHtml(badgeText)}</span>
               <span class="vgl-uro-chips">${escapeHtml(chipsText)}</span>
               <button type="button" class="vgl-labs-uro-btn" data-target="${targetId}">
-                🔍 Ver ${comps.length} analitos <span class="vgl-uro-arrow">▾</span>
+                ${MTR_ICONO_LUPA} Ver ${comps.length} analitos <span class="vgl-uro-arrow">▾</span>
               </button>
             </div>
             <div class="vgl-labs-uro-panel" id="${targetId}" style="display:none">
               <div class="vgl-labs-uro">
-                ${fqItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">🧪 Físico - Químico</div>${fqItems}</div>` : ""}
-                ${sedItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">🔬 Sedimento Microscópico</div>${sedItems}</div>` : ""}
-                ${otrosItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">📊 Otros Analitos</div>${otrosItems}</div>` : ""}
+                ${fqItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_FLASK} Físico - Químico</div>${fqItems}</div>` : ""}
+                ${sedItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_ACTIVITY} Sedimento Microscópico</div>${sedItems}</div>` : ""}
+                ${otrosItems ? `<div class="vgl-uro-subcol"><div class="vgl-uro-subcol-t">${MTR_ICONO_BARRAS} Otros Analitos</div>${otrosItems}</div>` : ""}
               </div>
             </div>
           </div>
@@ -19394,11 +20479,11 @@ _vglOfrecerDeshacer(btn);
 
       return `
         <tr class="vgl-labs-tr${esAlerta ? " vgl-labs-alert" : ""}">
-          <td class="vgl-labs-date">${escapeHtml(String(fecha))}</td>
+          <td class="vgl-labs-date" title="${escapeHtml(fechaTitle)}">${fechaInfo ? escapeHtml(fecha) + `<small>${escapeHtml(fechaInfo.iso.split("-")[0])}</small>` : escapeHtml(String(fecha))}</td>
           <td class="vgl-labs-exam">${escapeHtml(String(examen))}</td>
           <td class="vgl-labs-val">${resultadoHtml}</td>
           <td class="vgl-labs-ref">${referenciaHtml}</td>
-          <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(lab.origen)}</span></td>
+          <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(_origenVisible(lab.origen))}</span></td>
           <td class="vgl-labs-pdfcol">${btnInforme}</td>
         </tr>
       `;
@@ -19411,9 +20496,9 @@ _vglOfrecerDeshacer(btn);
           <thead>
             <tr>
               <th>Fecha</th>
-              <th>Examen / Paraclínico</th>
+              <th>Examen</th>
               <th>Resultado</th>
-              <th>Ref. / Rango</th>
+              <th>Rango</th>
               <th>Fuente</th>
               <th>Informe</th>
             </tr>
@@ -19551,10 +20636,10 @@ _vglOfrecerDeshacer(btn);
     const f = r.factores || {};
     const erc = r.erc || {};
     const ult = r.ultimos || r._ultimos || {};
-    const F_LAB = "Laboratorios (Athenea/Annar/Citi)";
-    const F_EVE = "Everest (datos del paciente)";
-    const F_DOM = "Historia de hoy (lo escrito en las pestañas)";
-    const F_ORD = "Órdenes de Everest (medicamentos)";
+    const F_LAB = "Laboratorios";
+    const F_EVE = "Datos del paciente";
+    const F_DOM = "Historia de hoy";
+    const F_ORD = "Órdenes de la plataforma";
     const F_CAL = "Calculado por el asistente";
     const fila = (etiqueta, valor, fuente, extra) => {
       const falta = valor === null || valor === undefined || valor === "" || valor === "--";
@@ -19730,11 +20815,29 @@ _vglOfrecerDeshacer(btn);
   // defecto de v17.1.0 con el conteo de medicamentos, ahora evitado por diseño).
   // mtrPanelSeccionValida sigue cayendo a "resumen" ante cualquier id desconocido, así
   // que un llamador viejo con seccion:"medicamentos" no se rompe.
+  // Iconos SVG del modal del Panel (mismos paths Lucide que el resto del refactor S+).
+  const MTR_ICONO_HOJA = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
+  const MTR_ICONO_REFRESH = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+  const MTR_ICONO_ACTIVITY = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>';
+
+  // v17.x.x — REFACTOR S+ (30-ago, aprobado en canvas): las cuatro secciones con
+  // iconos emoji pasan a iconografía SVG (Lucide) con identidad esmeralda, y se
+  // RESTAURA la quinta pestaña «Medicamentos» (mtrPanelMedicamentosHtml quedó
+  // huérfana desde v17.28.0: construida, probada y sin llamador). Los rótulos
+  // se acortan a lenguaje de consultorio.
+  const MTR_PANEL_ICONOS = {
+    resumen: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>',
+    renal: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>',
+    examenes: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></svg>',
+    tendencias: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></svg>',
+    medicamentos: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>',
+  };
   const MTR_PANEL_SECCIONES = [
-    { id: "resumen",      icono: "🧾", rotulo: "Resumen" },
-    { id: "renal",        icono: "❤️", rotulo: "Riesgo y función renal" },
-    { id: "examenes",     icono: "🧪", rotulo: "Exámenes y vigencias" },
-    { id: "tendencias",   icono: "📈", rotulo: "Tendencias" },
+    { id: "resumen",      icono: MTR_PANEL_ICONOS.resumen,      rotulo: "Resumen" },
+    { id: "renal",        icono: MTR_PANEL_ICONOS.renal,        rotulo: "Riesgo y renal" },
+    { id: "examenes",     icono: MTR_PANEL_ICONOS.examenes,     rotulo: "Exámenes" },
+    { id: "tendencias",   icono: MTR_PANEL_ICONOS.tendencias,   rotulo: "Tendencias" },
+    { id: "medicamentos", icono: MTR_PANEL_ICONOS.medicamentos, rotulo: "Medicamentos" },
   ];
   // Los puntos de entrada viejos siguen existiendo (el agendamiento abre el
   // tablero, el dock abría la ficha): cada uno aterriza en SU sección.
@@ -19745,13 +20848,20 @@ _vglOfrecerDeshacer(btn);
     return MTR_PANEL_SECCIONES.some((x) => x.id === s) ? s : "resumen";
   }
 
-  function mtrPanelNavHtml(activa) {
+  // v17.x.x — REFACTOR S+: las pestañas llevan un punto de estado (al día / revisar /
+  // sin dato) cuando el llamador pasa `estados` ({seccion: "ok"|"pend"|"nd"}). Sin
+  // estados, se pintan sin punto — los llamadores viejos (y sus pruebas) no cambian.
+  function mtrPanelNavHtml(activa, estados) {
     const act = mtrPanelSeccionValida(activa);
+    const est = (estados && typeof estados === "object") ? estados : null;
     return '<div class="vgl-panel-nav" role="tablist">'
-      + MTR_PANEL_SECCIONES.map((s) =>
-          '<button type="button" role="tab" class="vgl-panel-tab' + (s.id === act ? " active" : "") + '"'
-          + ' data-panel-sec="' + s.id + '" aria-selected="' + (s.id === act ? "true" : "false") + '">'
-          + s.icono + ' ' + escapeHtml(s.rotulo) + '</button>').join("")
+      + MTR_PANEL_SECCIONES.map((s) => {
+          const e = est && est[s.id];
+          const dot = e ? '<span class="vgl-panel-dot ' + escapeHtml(e) + '" aria-hidden="true"></span>' : "";
+          return '<button type="button" role="tab" class="vgl-panel-tab' + (s.id === act ? " active" : "") + '"'
+            + ' data-panel-sec="' + s.id + '" aria-selected="' + (s.id === act ? "true" : "false") + '">'
+            + s.icono + ' ' + escapeHtml(s.rotulo) + dot + '</button>';
+        }).join("")
       + '</div>';
   }
 
@@ -19860,7 +20970,7 @@ _vglOfrecerDeshacer(btn);
       ? '<div class="vgl-ord-vigwarn" style="margin:8px 0">Faltan ' + datos.faltantes + ' dato(s). El asistente NO los inventa: donde diga «sin dato», sus conclusiones van sin ese insumo.</div>'
       : "";
     return bento + aviso + filas
-      + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y órdenes de Everest, y lo escrito hoy en la historia.</div>';
+      + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y las órdenes de la plataforma, y lo escrito hoy en la historia.</div>';
   }
 
   // ---------- SECCIÓN 2: RIESGO Y FUNCIÓN RENAL ----------
@@ -19978,21 +21088,41 @@ _vglOfrecerDeshacer(btn);
   }
 
   // Las metas del paciente, con su valor actual al lado. Pura: recibe lo ya calculado.
+  // v17.x.x — REFACTOR S+ (decisión del médico, 30-ago): SEMÁFORO COMPLETO. El motor ya
+  // calculaba la gravedad de cada falla (mtrEvaluarFalla: «falla leve» vs «falla grave»
+  // por la regla renal de riesgo alto con eGFR < 45 en menor de 75) y el Panel la
+  // ignoraba: solo pintaba verde/ámbar/gris. Ahora la fila consume mtrEvaluarFalla y el
+  // rojo existe en Metas — sin umbrales nuevos, es la regla que el médico ya decidió.
   function mtrPanelMetasHtml(d) {
     const metas = [];
     const m = d && d.meta;
+    const _ctxFalla = {
+      categoriaRiesgo: (d && d.riesgo && d.riesgo.categoria) || null,
+      egfr: (d && d.renal && d.renal.ckd && d.renal.ckd.tfg != null) ? d.renal.ckd.tfg : null,
+      edad: (d && d.factores && d.factores.edad != null) ? d.factores.edad : null,
+    };
+    const _estadoMeta = (actual, metaN) => {
+      if (actual === null || actual === undefined) return { estado: "nd", motivo: "" };
+      try {
+        const f = mtrEvaluarFalla("", actual, metaN, _ctxFalla);
+        if (f && f.gravedad === "grave") return { estado: "grave", motivo: f.motivo || "" };
+        if (f && f.falla) return { estado: "falla", motivo: f.motivo || "" };
+      } catch (e) {}
+      return { estado: "ok", motivo: "" };
+    };
+    const _conMotivo = (base, motivo) => (base && motivo ? base + " · " + motivo : (base || motivo));
     if (m && m.metas) {
       const act = (m.ldlActual !== null && m.ldlActual !== undefined) ? m.ldlActual : null;
-      const enMeta = act !== null ? act < m.metas.ldl : null;
+      const est = _estadoMeta(act, m.metas.ldl);
       metas.push({
         rotulo: "LDL", meta: "< " + m.metas.ldl + " mg/dL",
         actual: act === null ? "sin dato" : act + " mg/dL",
-        estado: act === null ? "nd" : (enMeta ? "ok" : "falla"),
-        extra: (m.metas.reduccion !== null && m.metas.reduccion !== undefined)
+        estado: est.estado,
+        extra: _conMotivo((m.metas.reduccion !== null && m.metas.reduccion !== undefined)
           ? (m.reduccionPct !== null && m.reduccionPct !== undefined
               ? "reducción " + m.reduccionPct + " % desde " + m.ldlBasal + (m.reduccionPct >= m.metas.reduccion ? " ✓" : " (exige ≥" + m.metas.reduccion + " %)")
               : "reducción ≥" + m.metas.reduccion + " % no evaluable: sin LDL previo del último año")
-          : "",
+          : "", est.motivo),
       });
     }
     // v17.0.0 — HbA1c: solo se muestra cuando el paciente es diabético. Enseñarle una
@@ -20007,13 +21137,14 @@ _vglOfrecerDeshacer(btn);
     const h = d && d.esDm2 && d.hba1c;
     if (h && h.actual !== null && h.actual !== undefined) {
       const metaH = (h.meta !== null && h.meta !== undefined) ? h.meta : mtrMetaHba1cGeneral();
+      const estH = _estadoMeta(h.actual, metaH);
       metas.push({
         rotulo: "HbA1c", meta: "< " + metaH + " %",
         actual: h.actual + " %",
-        estado: h.actual < metaH ? "ok" : "falla",
-        extra: (h.meta !== null && h.meta !== undefined && h.meta !== mtrMetaHba1cGeneral())
+        estado: estH.estado,
+        extra: _conMotivo((h.meta !== null && h.meta !== undefined && h.meta !== mtrMetaHba1cGeneral())
           ? "meta individual de este paciente, no la general de " + mtrMetaHba1cGeneral() + " %"
-          : "",
+          : "", estH.motivo),
         // v17.6.0 — la tubería para una meta de HbA1c individual quedó lista desde
         // v16.4.0 ("meta individual de este paciente" ya sabía mostrarse), pero nunca
         // se construyó el campo para fijarla. `data-accion` lo recoge openPanelPacienteModal.
@@ -20021,13 +21152,14 @@ _vglOfrecerDeshacer(btn);
       });
     }
     if (!metas.length) return "";
-    // v17.6.1 — DEFENSA EN PROFUNDIDAD: `x.estado` es siempre uno de "nd"/"ok"/"falla",
-    // fijados dos funciones más arriba en este mismo archivo — nunca texto libre ni un
-    // valor que pueda llegar de fuera — así que hoy no hay forma real de colar HTML por
-    // aquí. Pero era el único campo de esta fila sin `escapeHtml`, mientras todos sus
-    // vecinos (rótulo, meta, actual, extra, editable) sí lo llevan: una auditoría de
-    // producción lo señaló por esa inconsistencia. Blindarlo cuesta nada y evita que un
-    // futuro estado nuevo, agregado sin pensar en esto, abra la puerta sin que nadie lo note.
+    // v17.6.1 — DEFENSA EN PROFUNDIDAD: `x.estado` es siempre uno de "nd"/"ok"/"falla"
+    // (y desde el refactor S+ también "grave"), fijados dos funciones más arriba en este
+    // mismo archivo — nunca texto libre ni un valor que pueda llegar de fuera — así que
+    // hoy no hay forma real de colar HTML por aquí. Pero era el único campo de esta fila
+    // sin `escapeHtml`, mientras todos sus vecinos (rótulo, meta, actual, extra, editable)
+    // sí lo llevan: una auditoría de producción lo señaló por esa inconsistencia.
+    // Blindarlo cuesta nada y evita que un futuro estado nuevo, agregado sin pensar en
+    // esto, abra la puerta sin que nadie lo note.
     return '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">Metas terapéuticas</span>'
       + metas.map((x) => '<div class="vgl-meta-fila ' + escapeHtml(x.estado) + '"' + (x.editable ? ' id="vgl-meta-fila-' + escapeHtml(x.editable) + '"' : '') + '>'
@@ -20109,7 +21241,7 @@ _vglOfrecerDeshacer(btn);
     const series = (resumen && resumen._series) || {};
     const claves = Object.keys(series).filter((k) => (series[k] || []).length >= 1);
     if (!claves.length) {
-      return '<div class="vgl-agm-sec"><div class="vgl-agm-dinfo">Todavía no hay serie de laboratorios para este paciente. Las tendencias aparecen solas cuando haya al menos dos controles con fecha en Athenea.</div></div>';
+      return '<div class="vgl-agm-sec"><div class="vgl-agm-dinfo">Todavía no hay serie de laboratorios para este paciente. Las tendencias aparecen solas cuando haya al menos dos controles con fecha en el laboratorio.</div></div>';
     }
     // v17.1.0 (#123) — El nombre bonito cuando existe. RCV_VIGENCIA_NOMBRES solo tiene 8
     // de las 12 claves, así que HbA1c, PTH, fósforo, albúmina y hemoglobina salían en
@@ -20575,18 +21707,27 @@ _vglOfrecerDeshacer(btn);
     // médico no lo ha confirmado nunca, el panel se detiene y pregunta UNA vez.
     // v17.7.0 — el armado vive ahora en mtrReconciliarAhora, para que el banco pueda
     // probarlo y para que la vigilancia de 20 s del propio cuadro pueda repetirlo.
-    try {
-      const _rec = mtrReconciliarAhora(apt.doc_id, document);
-      if (_rec.frenan.length) {
-        // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
-        // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
-        // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
-        // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
-        const mostrado = _vglModalConfirmarDatos(apt, _rec.frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
-        if (mostrado) return;
-        try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
-      }
-    } catch (e) {}
+    // v17.58.0 — PARTE A: al continuar tras el cuadro NO se vuelve a reconciliar en la
+    // misma apertura (saltarReconciliar): las preguntas MEDIA de la escalera ya se
+    // mostraron y no deben reaparecer ni atrapar al médico en un segundo cuadro.
+    if (!(opts && opts.saltarReconciliar)) {
+      try {
+        const _rec = mtrReconciliarAhora(apt.doc_id, document);
+        // Las MEDIA de la escalera se ofrecen UNA vez por jornada: las ya mostradas hoy
+        // para este paciente se filtran aquí (las ALTA siempre se reevalúan).
+        const aPreguntar = (Array.isArray(_rec.frenan) ? _rec.frenan : []).filter((d) =>
+          !(d && d.severidad !== "alta" && _mtrMediaFuePreguntada(apt.doc_id, d.clave)));
+        if (aPreguntar.length) {
+          // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
+          // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
+          // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
+          // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
+          const mostrado = _vglModalConfirmarDatos(apt, aPreguntar, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen, saltarReconciliar: true }));
+          if (mostrado) return;
+          try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
+        }
+      } catch (e) {}
+    }
 
     // v17.0.0 — FASE 2 DEL PATRÓN DEL MÉDICO. Va DESPUÉS del reconciliador a propósito:
     // una contradicción entre fuentes es más grave que un dato que falta, y preguntar por
@@ -20634,7 +21775,7 @@ _vglOfrecerDeshacer(btn);
     };
     modal.innerHTML = '<div class="vgl-agm-card" style="max-width:900px">'
       + '<div class="vgl-agm-head"><div style="min-width:0">'
-      + '<div class="vgl-agm-title vgl-agm-kicker">🧾 Panel del paciente</div>'
+      + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_ICONO_ACTIVITY + 'Panel del paciente</div>'
       + '<div class="vgl-agm-patient">' + escapeHtml(apt.nombre || apt.name || "Paciente") + '</div>'
       + '<div class="vgl-agm-sub">Todo lo del paciente en un solo sitio: lo que leí y de dónde, el riesgo y la función renal, qué ordenar, cómo viene evolucionando y sus medicamentos.</div>'
       + '</div><button class="vgl-agm-close" id="vgl-panel-x" aria-label="Cerrar">✕</button></div>'
@@ -20647,12 +21788,41 @@ _vglOfrecerDeshacer(btn);
 
     let _resumen = null;
     let _firma = _tableroFirmaDom(apt.doc_id);
+    // v17.x.x — REFACTOR S+ (sincronización, aprobado en canvas): la vigilancia de 20 s
+    // solo miraba la pantalla. Prescribir u ordenar desde Conducta con el Panel abierto
+    // no se reflejaba hasta reabrir. Esta firma del resumen CACHEADO detecta cuando OTRO
+    // módulo invalidó la caché y recalculó medicamentos/órdenes: el Panel se repinta solo.
+    let _firmaMeds = (() => {
+      try {
+        const r = mtrCacheResumenLeer(apt.doc_id);
+        return (r && Array.isArray(r.medicamentos))
+          ? r.medicamentos.length + "|" + (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function" ? r.medicamentosFrecuencia.size : 0)
+          : "";
+      } catch (e) { return ""; }
+    })();
 
     const pintar = (aviso) => {
       const cuerpo = modal.querySelector("#vgl-panel-cuerpo");
       const nav = modal.querySelector("#vgl-panel-nav-slot");
       if (!cuerpo || !vivo()) return;
-      if (nav) nav.innerHTML = mtrPanelNavHtml(seccion);
+      // v17.x.x — REFACTOR S+: punto de estado por pestaña (al día / revisar / sin dato),
+      // derivado de los MISMOS datos que el tablero de «Estado de un vistazo» del Resumen
+      // (mtrPanelResumenBentoDatos): misma regla de no-divergencia de v17.24.0.
+      let _estados = null;
+      if (_resumen) {
+        try {
+          const dE = mtrTableroClinico(_resumen);
+          const bento = mtrPanelResumenBentoDatos(_resumen, dE);
+          const estados = {};
+          (bento || []).forEach((c) => { estados[c.id] = c.estado; });
+          const vals = Object.keys(estados).map((k) => estados[k]);
+          estados.resumen = vals.indexOf("pend") >= 0 ? "pend" : (vals.indexOf("ok") >= 0 ? "ok" : "nd");
+          const meds = Array.isArray(_resumen.medicamentos) ? _resumen.medicamentos : null;
+          estados.medicamentos = (meds === null || !meds.length) ? "nd" : "ok";
+          _estados = estados;
+        } catch (e) { _estados = null; }
+      }
+      if (nav) nav.innerHTML = mtrPanelNavHtml(seccion, _estados);
 
       let dentro;
       if (!_resumen) {
@@ -20661,6 +21831,11 @@ _vglOfrecerDeshacer(btn);
         dentro = mtrPanelResumenHtml(_resumen);
       } else if (seccion === "tendencias") {
         dentro = mtrPanelTendenciasHtml(_resumen);
+      } else if (seccion === "medicamentos") {
+        // v17.x.x — REFACTOR S+: la sección restaurada. mtrPanelMedicamentosHtml ya
+        // estaba construida y probada (lista con frecuencia, avisos de dosis renal,
+        // duplicidades); solo le faltaba un llamador desde que v17.28.0 la retiró.
+        dentro = mtrPanelMedicamentosHtml(_resumen);
       } else {
         const d = mtrTableroClinico(_resumen);
         dentro = (seccion === "examenes")
@@ -20678,12 +21853,12 @@ _vglOfrecerDeshacer(btn);
       const frescura = (edadMin === null)
         ? "de esta consulta (no puedo precisar de hace cuánto)"
         : (edadMin < 1 ? "recién leídos" : "leídos hace " + edadMin + " min");
-      cuerpo.innerHTML = (aviso ? '<div class="vgl-tab-aviso">🔄 ' + escapeHtml(aviso) + '</div>' : "")
+      cuerpo.innerHTML = (aviso ? '<div class="vgl-tab-aviso">' + escapeHtml(aviso) + '</div>' : "")
         + dentro
         + '<div class="vgl-agm-foot" style="margin-top:14px">'
         + '<span class="vgl-agm-dinfo" style="margin:0">Datos ' + escapeHtml(frescura) + ' · se revisa solo mientras el panel esté abierto</span>'
-        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente">🖨 Hoja educativa</button>' : "")
-        + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">🔄 Buscar laboratorios nuevos</button>'
+        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente">' + MTR_ICONO_HOJA + 'Hoja educativa</button>' : "")
+        + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">' + MTR_ICONO_REFRESH + 'Buscar laboratorios nuevos</button>'
         + '<button type="button" class="vgl-agm-btn pri" id="vgl-panel-cerrar">Cerrar</button>'
         + '</div>';
 
@@ -20865,6 +22040,23 @@ _vglOfrecerDeshacer(btn);
       try {
         if (!vivo()) { clearInterval(_timer); return; }
         if (minimizado()) return;                 // v17.0.2 — dormido: no se recalcula nada
+        // v17.x.x — REFACTOR S+ (sincronización): primero se mira la firma del resumen
+        // cacheado. Si otro módulo (Conducta, Ordenar, Agendar) invalidó la caché y
+        // recalcularon medicamentos/órdenes, el Panel se repinta con lo nuevo — sin
+        // tocar la clasificación, que solo depende de la pantalla.
+        try {
+          const _resC = mtrCacheResumenLeer(apt.doc_id);
+          const _firmaMedsN = (_resC && Array.isArray(_resC.medicamentos))
+            ? _resC.medicamentos.length + "|" + (_resC.medicamentosFrecuencia && typeof _resC.medicamentosFrecuencia.get === "function" ? _resC.medicamentosFrecuencia.size : 0)
+            : "";
+          if (_firmaMeds !== "" && _firmaMedsN !== _firmaMeds && _resC) {
+            _firmaMeds = _firmaMedsN;
+            _resumen = _resC;
+            pintar("Se actualizó la lista de medicamentos (cambió en otro módulo): la pestaña Medicamentos quedó al día.");
+            return;
+          }
+          if (_firmaMeds === "") _firmaMeds = _firmaMedsN;
+        } catch (eM) {}
         const ahora = _tableroFirmaDom(apt.doc_id);
         if (!ahora || ahora === _firma) return;
         const cambios = _tableroQueCambio(_firma, ahora);
@@ -21051,15 +22243,32 @@ _vglOfrecerDeshacer(btn);
       document.body.appendChild(modal);
 
       const pendientes = new Set(discrepancias.map((d) => d.clave));
+      // v17.58.0 — PARTE A (escalera de adherencia): las preguntas de severidad MEDIA se
+      // muestran en el cuadro pero NO retienen el flujo ("el médico manda"). Si hay
+      // preguntas ALTA (compuertas de fuentes/embarazo), el cuadro continúa en cuanto
+      // todas las ALTA están respondidas, sin esperar a las MEDIA; si solo hay MEDIA, se
+      // espera a responderlas todas (o a «Decidir luego») para no dejar la escalera a
+      // medias.
+      const pendientesBloquean = new Set(
+        discrepancias.filter((d) => d.severidad === "alta").map((d) => d.clave)
+      );
+      const hayAlta = pendientesBloquean.size > 0;
+      // v17.58.0 — PARTE A: lo que se RENDERIZÓ cuenta como «ya preguntado» para la
+      // jornada. Las MEDIA se ofrecen una vez por paciente y por día, no en cada
+      // reapertura del Panel; se marca al pintar la fila (no al deducirla), para que una
+      // pregunta que el médico nunca llegó a ver se vuelva a ofrecer.
+      discrepancias.forEach((d) => { if (d.severidad !== "alta") _mtrMediaMarcarPreguntada(apt.doc_id, d.clave); });
       let cerrar = () => { try { modal.remove(); } catch (e) {} };
       const responder = (clave, valor) => {
         _vglConfirmacionGuardar(apt.doc_id, clave, valor);
         pendientes.delete(clave);
+        pendientesBloquean.delete(clave);
         try {
           const ok = modal.querySelector("#vgl-conf-ok-" + clave);
           if (ok) ok.textContent = valor ? "✓ Sí" : "✓ No";
         } catch (e) {}
-        if (!pendientes.size) {
+        const listo = hayAlta ? pendientesBloquean.size === 0 : pendientes.size === 0;
+        if (listo) {
           // El resumen en caché se calculó con las fuentes en disputa: se invalida para
           // que todo lo que dependa de él se rehaga con la respuesta del médico.
           try { mtrCacheResumenBorrar(); } catch (e) {}
@@ -21382,8 +22591,6 @@ _vglOfrecerDeshacer(btn);
                 <label for="vgl-agm-sms-tel">Celular:</label>
                 <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;flex:1;padding:7px 11px;font-size:13px" placeholder="cargando…">
                 <span id="vgl-agm-sms-nota"></span>
-                <button type="button" class="vgl-agm-lnk" id="vgl-agm-sms-ver">Ver el mensaje que le llegará al paciente</button>
-                <div id="vgl-agm-sms-prev" class="vgl-agm-dinfo vgl-d-none" style="margin-top:4px"></div>
               </div>
             </div>
 
@@ -21400,8 +22607,6 @@ _vglOfrecerDeshacer(btn);
                 </span>
               </label>
               <div id="vgl-agm-lab-sms-nota" class="vgl-agm-lab-sms-nota"></div>
-              <button type="button" class="vgl-agm-lnk" id="vgl-agm-lab-sms-ver">Ver el mensaje del laboratorio</button>
-              <div id="vgl-agm-lab-sms-prev" class="vgl-agm-dinfo vgl-d-none" style="margin-top:4px"></div>
               <button type="button" id="vgl-agm-plan-cambiar" class="vgl-agm-btn sec vgl-sm" style="align-self:flex-start;margin:2px 0 4px">✎ Cambiar fecha u hora</button>
               <div id="vgl-agm-plan-det" class="vgl-d-none">
                 <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="margin:2px 0 6px;gap:4px;flex-wrap:wrap"></div>
@@ -21726,7 +22931,11 @@ _vglOfrecerDeshacer(btn);
         let res;
         try { res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId); } catch (e) { continue; }
         const agendasDeEseDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === item.fmt);
-        if (_agendasPropias(agendasDeEseDia, doctorName).length) return item;
+        // v17.58.1 — telemetría (29-ago): devuelve también la respuesta cruda de
+        // BuscarCitasDisponibles. El llamador se la pasa a cargarHoras() para NO
+        // consultar dos veces el mismo (fecha, especialidad): este endpoint promedia
+        // ~4,7 s en la flota y la doble llamada duplicaba la espera en este flujo.
+        if (_agendasPropias(agendasDeEseDia, doctorName).length) return { item, res };
       }
       return null;
     }
@@ -21742,7 +22951,12 @@ _vglOfrecerDeshacer(btn);
     // sin la toma que el médico pidió. Se guarda el ÚLTIMO VALOR elegido a mano, no solo
     // que "ya lo tocó", para poder restaurarlo en cada recarga.
     let _labChkEditadoManual = false, _labChkValorManual = false;
-    async function cargarHoras() {
+    // v17.58.1 — primer parámetro OPIONAL: la respuesta cruda de BuscarCitasDisponibles
+    // que _buscarDiaConAgendaPropia() ya trajo para el día al que se salta. Los viejos
+    // llamadores (cargarHoras() a secas, o el heredado cargarHoras(m, d) del final del
+    // modal, cuyos argumentos siempre se ignoraron) siguen funcionando: cualquier valor
+    // que no sea un objeto con agendas cae a la consulta real de siempre.
+    async function cargarHoras(resAgendasCrudas) {
       if (!selectedDateInfo) return;
       const token = ++_cargarHorasToken;
       selectedTurnoObj = null;
@@ -21863,7 +23077,15 @@ _vglOfrecerDeshacer(btn);
           const compPill = modal.querySelector("#vgl-complexity-pill");
           if (compPill) {
             compPill.className = "vgl-complex-pill " + (compEval.esComplejo ? "warn" : "ok");
-            compPill.innerHTML = (compEval.esComplejo ? "🔴 " : "🟢 ") + `<b>${escapeHtml(compEval.motivoTexto)}</b>`;
+            // v18.0.6 — el punto de color lo pone AQUÍ quien pinta, y sale de `franjaSugerida`,
+            // que solo puede valer una de tres claves cerradas. Antes se elegía con
+            // `esComplejo` (dos estados) sobre un texto que YA traía su propio punto: salía
+            // duplicado, y en la franja amarilla además contradictorio ("🟢 🟡 Control
+            // habitual…"). El texto entra por escapeHtml() y nada de lo que traiga puede
+            // volver a interpretarse como HTML.
+            const PUNTO = { primera_mitad: "🔴", final_jornada: "🟢", adicional_30: "🟡" };
+            const punto = PUNTO[compEval.franjaSugerida] || (compEval.esComplejo ? "🔴" : "🟢");
+            compPill.innerHTML = punto + " " + `<b>${escapeHtml(compEval.motivoTexto)}</b>`;
           }
 
           try { state.perfilAdicionalCache.set(normalizeKey(apt.doc_id), { adicionales: perfilDelPaciente.adicionales, motivo: perfilDelPaciente.motivoNoSencillo || "" }); state.lastSignature = ""; } catch (eCacheAdic) {}
@@ -21913,7 +23135,14 @@ _vglOfrecerDeshacer(btn);
         }
       }
 
-      const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
+      // v17.58.1 — telemetría (29-ago): este endpoint promedia ~4,7 s en la flota. Cuando
+      // _buscarDiaConAgendaPropia() ya trajo la respuesta del día al que se salta (la rama
+      // "solo agenda ajena" de arriba), se reutiliza tal cual en vez de llamarlo dos veces
+      // seguidas. La guardia cae a la consulta real ante números (viejos llamadores),
+      // null, la marca de sin-respuesta o una respuesta sin agendas.
+      const resAgendas = (resAgendasCrudas && typeof resAgendasCrudas === "object" && !resAgendasCrudas.__sinRespuesta && extractAgendasList(resAgendasCrudas).length > 0)
+        ? resAgendasCrudas
+        : await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
       if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
@@ -21948,10 +23177,15 @@ _vglOfrecerDeshacer(btn);
           if (!vivo() || token !== _cargarHorasToken) return;
           if (otroDia) {
             diaBotonesPorIso.forEach((b) => b.classList.remove("active"));
-            const btnNuevo = diaBotonesPorIso.get(otroDia.iso);
+            const btnNuevo = diaBotonesPorIso.get(otroDia.item.iso);
             if (btnNuevo) btnNuevo.classList.add("active");
-            selectedDateInfo = otroDia;
-            cargarHoras();
+            selectedDateInfo = otroDia.item;
+            // v17.58.1 — telemetría (29-ago): _buscarDiaConAgendaPropia() YA trajo la
+            // respuesta de BuscarCitasDisponibles de este día (promedio 4,7 s medido en la
+            // flota). Se la pasamos a cargarHoras() para no consultar el MISMO
+            // (fecha, especialidad) dos veces seguidas: antes, el salto al día con agenda
+            // propia pagaba la latencia dos veces (~9 s) antes de pintar los turnos.
+            cargarHoras(otroDia.res);
             return;
           }
           slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ Ningún día del rango tiene su agenda propia identificada — solo se encontraron agendas de otros profesionales. Verifique su nombre en Ajustes, o elija la fecha desde la agenda oficial de Everest.</div>`;
@@ -22019,6 +23253,7 @@ _vglOfrecerDeshacer(btn);
       }
 
       slotsEl.innerHTML = "";
+      const _turnosNodos = [];   // v17.58.2 — los turnos se montan en lote (append(...) al final)
       const turnosLibres = turnosAcumulados.filter((x) => {
         const e = String((x.turno && x.turno.estado) || "ACT").toUpperCase().trim();
         return e === "" || e === "ACT";
@@ -22162,8 +23397,12 @@ _vglOfrecerDeshacer(btn);
           if (step2Next) step2Next.disabled = false;
           markAgendamientoPendiente(apt.doc_id);
         });
-        slotsEl.appendChild(btn);
+        _turnosNodos.push(btn);
       });
+      // v17.58.2 — una sola actualización de árbol en vez de un appendChild por turno: el
+      // render de la agenda es el mayor bloque síncrono del modal y cada append invalidaba
+      // el layout por separado (INP de 2.740 interacciones >500 ms en la flota real).
+      slotsEl.append(..._turnosNodos);
       if (_preseleccion) {
         _preseleccion.btn.classList.add("active");
         selectedTurnoObj = _preseleccion.t;
@@ -22251,6 +23490,7 @@ _vglOfrecerDeshacer(btn);
       const centro = (_labFechaTomaElegidaManual && selectedLabDateInfo) ? selectedLabDateInfo.iso : centerIso;
       const range = calcDateRangeAroundIso(centro, 3);
       labChipsEl.innerHTML = "";
+      const _labChipsNodos = [];   // v17.58.2 — montar en lote (append(...) al final)
       const labLblEl = modal.querySelector("#vgl-lab-date-lbl");
 
       range.forEach((item) => {
@@ -22292,9 +23532,11 @@ _vglOfrecerDeshacer(btn);
             }
           } catch (e) {}
         });
-        labChipsEl.appendChild(btn);
+        _labChipsNodos.push(btn);
         if (item.isCenter) selectedLabDateInfo = item;
       });
+      // v17.58.2 — una sola actualización de árbol (rendimiento INP del clic en un chip).
+      labChipsEl.append(..._labChipsNodos);
       cargarHorasLab();
     }
 
@@ -22325,6 +23567,7 @@ _vglOfrecerDeshacer(btn);
       const range = calcRangoSondeoIso(isoBase);
       diaRangeActual = range;
       dayChipsEl.innerHTML = "";
+      const _chipsNodos = [];   // v17.58.2 — montar en lote (append(...) al final)
       const miToken = ++_sweepAgendaToken;
       const botonesPorIso = new Map();
       diaBotonesPorIso = botonesPorIso;
@@ -22363,12 +23606,16 @@ _vglOfrecerDeshacer(btn);
           selectedDateInfo = item;
           _controlElegidoManual = true;   // v15.4.0 — la regla labs-primero ya no lo mueve sola
           _labsAfinarToken++;   // v17.0.3 — el médico ya eligió día de control: no se le pisa después
-          cargarHoras();
+          // v17.58.2 — la fase de este clic se anota en el Diario de Lentitud (mide el
+          // trabajo SÍNCRONO del handler hasta el primer await: justo lo que paga el INP).
+          _rumTramo("agm.clickDia", () => cargarHoras());
         });
-        dayChipsEl.appendChild(btn);
+        _chipsNodos.push(btn);
         botonesPorIso.set(item.iso, btn);
         if (item.isCenter) selectedDateInfo = item;
       });
+      // v17.58.2 — una sola actualización de árbol: los chips del día se montan en lote.
+      dayChipsEl.append(..._chipsNodos);
       cargarHoras();
       _sondearAgendaDeCadaDia(range, botonesPorIso, miToken);
     }
@@ -22403,7 +23650,8 @@ _vglOfrecerDeshacer(btn);
         eb.classList.add("active");
         selectedEspId = parseInt(eb.getAttribute("data-esp") || "12", 10);
         selectedEspName = eb.getAttribute("data-name") || "Especialidad";
-        cargarHoras();
+        // v17.58.2 — fase del clic de especialidad en el Diario de Lentitud (INP).
+        _rumTramo("agm.clickEsp", () => cargarHoras());
       });
     });
 
@@ -22551,49 +23799,14 @@ _vglOfrecerDeshacer(btn);
       });
     }
 
-    // =====================================================================
-    // v15.8.0 (N4) — VISTA PREVIA DEL SMS: el paciente pregunta «¿y qué me va
-    // a llegar?» y el médico puede responder mirándolo. Si el administrador ya
-    // capturó el texto real (Ajustes → modo programador), se muestra tal cual;
-    // si no, se dice honestamente QUÉ contiene y quién lo redacta.
-    // =====================================================================
-    {
-      const _wirePrev = (verSel, prevSel, plantillaDe, datosDe) => {
-        const verBtn = modal.querySelector(verSel);
-        const prev = modal.querySelector(prevSel);
-        if (!verBtn || !prev) return;
-        verBtn.addEventListener("click", () => {
-          if (prev.classList && !prev.classList.contains("vgl-d-none")) { prev.classList.add("vgl-d-none"); return; }
-          const v = _smsVistaPrevia(plantillaDe(), datosDe());
-          prev.innerHTML = `<b>${v.esReal ? "Mensaje que le llegará" : "Qué contiene el mensaje"}:</b> ${escapeHtml(v.texto)}`
-            + `<br><span style="opacity:.8">${v.esReal
-              ? "Texto real del mensaje, capturado por el administrador."
-              : "La redacción exacta la pone Everest; cuando el administrador capture un mensaje real, aquí se verá tal cual."}</span>`;
-          if (prev.classList) prev.classList.remove("vgl-d-none");
-          try { uxTrack("fn.agendar.sms_prev"); } catch (e) {}
-        });
-      };
-      _wirePrev("#vgl-agm-sms-ver", "#vgl-agm-sms-prev",
-        () => S.smsPlantillaCita,
-        () => ({
-          fecha: (selectedDateInfo && selectedDateInfo.lbl) || "",
-          hora: (selectedTurnoCtx && selectedTurnoCtx.horaTxt) || "",
-          sede: "",
-          profesional: (selectedEspId === 12 ? doctorName : selectedEspName) || "",
-        }));
-      { const vt = modal.querySelector("#vgl-agm-vertablero");
-        if (vt) vt.addEventListener("click", () => {
-          try { uxTrack("fn.agendar.ver_tablero"); } catch (e) {}
-          try { openTableroModal(apt); } catch (e) {}
-        }); }
-      _wirePrev("#vgl-agm-lab-sms-ver", "#vgl-agm-lab-sms-prev",
-        () => S.smsPlantillaLab,
-        () => ({
-          fecha: (selectedLabDateInfo && (selectedLabDateInfo.lbl || selectedLabDateInfo.fmt)) || "",
-          hora: (() => { try { const s = modal.querySelector("#vgl-agm-lab-time-sel"); return (s && s.value) ? format12hTime(s.value) : ""; } catch (e) { return ""; } })(),
-          sede: "", profesional: "",
-        }));
-    }
+    // v17.26.0 — REFACTOR APROBADO: se retiran del modal los enlaces «Ver el mensaje…»
+    // (vista previa SMS de la cita y de la toma de muestras). Se conserva el enlace al
+    // tablero de riesgo cardiovascular.
+    { const vt = modal.querySelector("#vgl-agm-vertablero");
+      if (vt) vt.addEventListener("click", () => {
+        try { uxTrack("fn.agendar.ver_tablero"); } catch (e) {}
+        try { openTableroModal(apt); } catch (e) {}
+      }); }
     modal.querySelectorAll("#vgl-time-presets .vgl-agm-pbtn").forEach((pb) => {
       pb.addEventListener("click", () => {
         // v15.7.0 — tocar un plazo de sugerencias también SALE del modo manual.
@@ -23215,7 +24428,10 @@ _vglOfrecerDeshacer(btn);
       }
     });
 
-    cargarHoras((selectedTimeframe || PLAZO_POR_DEFECTO).m, (selectedTimeframe || PLAZO_POR_DEFECTO).d);
+    // v17.58.2 — fase de apertura del modal en el Diario de Lentitud: el montaje síncrono
+    // (HTML + queries + listeners + primer render de chips) es lo que paga el INP del clic
+    // que abre el modal; _rumTramo mide esa parte y la anota si pasa de 50 ms.
+    _rumTramo("agm.abrir", () => cargarHoras((selectedTimeframe || PLAZO_POR_DEFECTO).m, (selectedTimeframe || PLAZO_POR_DEFECTO).d));
   }
 
   // v12.3.28 — Modal ligero para cuando la cita de CONTROL ya se agendó hoy pero la
@@ -23405,6 +24621,7 @@ _vglOfrecerDeshacer(btn);
     function renderLabDayChipsSolo(centerIsoManual) {
       const range = calcDateRangeAroundIso(centerIsoManual || suggestedLab.iso, 3);
       labChipsEl.innerHTML = "";
+      const _labChipsNodosSolo = [];   // v17.58.2 — montar en lote (append(...) al final)
       range.forEach((item) => {
         const btn = document.createElement("button");
         btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
@@ -23416,9 +24633,10 @@ _vglOfrecerDeshacer(btn);
           selectedLabDateInfo = item;
           cargarHorasLabSolo();
         });
-        labChipsEl.appendChild(btn);
+        _labChipsNodosSolo.push(btn);
         if (item.isCenter) selectedLabDateInfo = item;
       });
+      labChipsEl.append(..._labChipsNodosSolo);   // v17.58.2 — una sola actualización de árbol
       cargarHorasLabSolo();
     }
     renderLabDayChipsSolo();
@@ -23642,6 +24860,32 @@ _vglOfrecerDeshacer(btn);
     }
   ];
 
+  // v17.26.0 — REFACTOR APROBADO por el médico (módulo Ordenar PyM): nombres clínicos
+  // naturales para el usuario final, paquete RCV exprés retirado del módulo y títulos
+  // cortos para progreso/impresión. Solo afecta la capa de presentación del modal; el
+  // catálogo (PYM_CATALOG) no se toca porque lo siguen usando el banner y el motor RCV.
+  const PYM_EXCLUIDOS_MODAL = ["I10X"]; // RCV exprés: se retira del módulo de Ordenar.
+  const PYM_TITULO_CLINICO = {
+    "Z124": "Prevención de cáncer de cuello uterino (citología y prueba de VPH)",
+    "Z113": "VIH (prueba de anticuerpos VIH 1 y 2)",
+    "Z108": "Tamización cardiometabólica (lípidos, glicemia, creatinina y parcial de orina)",
+    "Z123": "Mamografía (detección de cáncer de mama)",
+    "Z125": "PSA (antígeno de próstata)",
+    "Z121": "Sangre oculta en materia fecal (detección de cáncer de colon)",
+    "Z103": "Hemoglobina y hematocrito"
+  };
+  const PYM_TITULO_CORTO = {
+    "Z124": "citología",
+    "Z113": "VIH",
+    "Z108": "tamización cardiometabólica",
+    "Z123": "mamografía",
+    "Z125": "PSA",
+    "Z121": "sangre oculta",
+    "Z103": "hemoglobina"
+  };
+  function pymTituloClinico(pkg) { return (pkg && PYM_TITULO_CLINICO[pkg.cie10]) || (pkg && pkg.titulo) || ""; }
+  function pymTituloCorto(pkg) { return (pkg && PYM_TITULO_CORTO[pkg.cie10]) || (pkg && pkg.cie10) || ""; }
+
   // v14.0.0 (T7) — Extraído de dentro de openOrdenamientoModal (donde vivía desde v12.3.x,
   // inline): la MISMA lógica de emparejamiento por palabra clave que decide qué paquetes de
   // PYM_CATALOG le corresponden a las etiquetas del Excel de PyM de un paciente. Ahora la
@@ -23741,13 +24985,13 @@ _vglOfrecerDeshacer(btn);
   // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
     if (state.killed) {
-      showToast("ROJO", "Pausa de seguridad", "El asistente está en pausa de seguridad para proteger la historia clínica. No se realizó ningún cambio.", true);
+      showToast("ROJO", "Asistente en pausa por seguridad", "El asistente está en pausa de seguridad para proteger la historia clínica. No se realizó ningún cambio.", true);
       return null;
     }
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
     // órdenes clínicas a nombre de otro profesional.
-    if (!uId) { showToast("ROJO", "Órdenes NO generadas", "No se pudo identificar al médico en sesión. Abra la agenda del día un momento (ahí el asistente lo reconoce solo) y vuelva a intentar.", true); return null; }
+    if (!uId) { showToast("ROJO", "Órdenes no generadas", "No se pudo identificar al médico en la sesión. Abra la agenda del día por un momento para que el asistente lo reconozca y vuelva a intentar.", true); return null; }
     const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento`;
     const payload = {
       DiagnosticoId: dxId,
@@ -23966,7 +25210,7 @@ _vglOfrecerDeshacer(btn);
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -24039,25 +25283,42 @@ _vglOfrecerDeshacer(btn);
     // entero para marcar a mano es justo el riesgo de sobre-ordenar que se quería evitar.
     // Sin coincidencia, no se ofrece nada; el aviso honesto explica por qué y remite al
     // catálogo institucional real (Ordenamientos de Everest) si de verdad corresponde algo.
-    const hayCoincidencia = matchedPackages && matchedPackages.length > 0;
-    const pkgsToRender = hayCoincidencia ? matchedPackages : [];
+    let hayCoincidencia = matchedPackages && matchedPackages.length > 0;
+    let pkgsToRender = hayCoincidencia ? matchedPackages : [];
     // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. Los tres motivos ya se podían
     // distinguir con lo que el estado guarda; hasta hoy los tres salían con la misma frase,
     // que además afirmaba algo sobre el paciente en los dos casos en que no se sabe nada
     // de él. `pymTodos` es null mientras no se haya indexado ninguna base: entonces no se
     // puede afirmar que el paciente no esté en la lista, y el primer motivo ya manda.
-    const _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades({
+    const _pymSinActOpts = {
       listaCargada: !!state.pymFile,
       esBasePiloto: state.pymFallback === true,
       diaDistinto: !!state.pymFile && state.pymDia !== todayStamp(),
       pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
         ? state.pymTodos.has(normalizeKey(apt.doc_id))
         : null,
-    });
+    };
+    let _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades(_pymSinActOpts);
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
     const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
+
+    // v17.26.0 — REFACTOR APROBADO por el médico: el paquete RCV exprés (I10X) se retira
+    // del módulo de Ordenar y las actividades de otro sexo ya no se muestran (antes solo
+    // se avisaban en rojo). Si tras el filtro no queda ninguna actividad, el modal cae al
+    // mismo estado honesto de "sin actividades para este paciente".
+    pkgsToRender = pkgsToRender.filter((p) => {
+      if (!p) return false;
+      if (PYM_EXCLUIDOS_MODAL.indexOf(p.cie10) >= 0) return false;
+      const sexoReq = SEXO_PKG[p.cie10] || "";
+      if (sexoReq && sexoPaciente && sexoReq !== sexoPaciente) return false;
+      return true;
+    });
+    if (!pkgsToRender.length) {
+      hayCoincidencia = false;
+      _pymSinAct = pymMotivoSinActividades(_pymSinActOpts);
+    }
 
     // v16.2.5 — CRUCE ANTIDUPLICADO CONTRA ATHENEA (pedido explícito del médico): "CON LA
     // MISMA LÓGICA QUE SE REVISAN LOS EXÁMENES DE RIESGO CARDIOVASCULAR Y SUS VENCIMIENTOS...
@@ -24149,7 +25410,7 @@ _vglOfrecerDeshacer(btn);
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -24162,11 +25423,11 @@ _vglOfrecerDeshacer(btn);
              suite_25 sobre VGL_UX_CSS (Regla B lo señaló). Se retira lo muerto; el
              margin-bottom SÍ tenía efecto (la clase no lo lleva con !important) y se
              conserva para no mover ni un píxel lo que sí se veía. -->
-        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
+        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, las órdenes quedan registradas en el sistema de órdenes médicas de Everest y se abre la orden lista para imprimir.</div>
 
         <div class="vgl-agm-sec">
-          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
-          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">⚠ No pude consultar Athenea para este paciente, así que <b>no comprobé si alguno de estos exámenes ya se lo hicieron</b>. La lista sale completa a propósito (ante la duda se ofrece, nunca se esconde): revísela antes de ordenar.</div>` : ""}
+          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico (CIE-10) y los códigos de procedimiento (CUPS). Al ordenar, quedan registrados automáticamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
+          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">No fue posible consultar el sistema de laboratorio para este paciente, por lo que <b>no pudimos verificar si alguno de estos exámenes ya se realizó</b>. Mostramos la lista completa a propósito: revísela antes de generar las órdenes.</div>` : ""}
           <div id="vgl-ord-list">
             ${pkgsToRender.map((pkg, idx) => {
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
@@ -24184,21 +25445,25 @@ _vglOfrecerDeshacer(btn);
               // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
               const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
               const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
-              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
+              // v17.26.0 — REFACTOR APROBADO: cuando ya hay una orden vigente, un resultado
+              // vigente en el laboratorio o un resultado reciente, la actividad queda
+              // BLOQUEADA (checkbox deshabilitado) con su aviso visible. La lista de la
+              // sede (mandaPym) sigue mandando: no se bloquea.
+              const bloqueada = !mandaPym && (yaVigente || yaHechoAthenea || hechoYReciente);
+              const marcar = hayCoincidencia && !chocaSexo && !bloqueada && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
               <div class="vgl-ord-item${prio.nivel === "alta" ? " vgl-ord-item-prio" : ""}">
                 ${prio.nivel === "alta" ? `<div class="vgl-ord-prio">⚑ Prioritario — ${escapeHtml(prio.motivo)}</div>` : ""}
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
+                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}${bloqueada ? " disabled" : ""}>
                   <div class="vgl-ord-content">
-                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
-                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
-                    ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
-                    ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
-                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). ${mandaPym ? "Aquí manda la lista de PyM de la sede, no este resultado: si ahí figura pendiente, se premarca. Descárquelo usted si no corresponde." : "No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto" + (hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde.")}</div>` : ""}
-                    ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
+                    <div class="vgl-ord-title">${escapeHtml(pymTituloClinico(pkg))} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
+                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">Según la lista de prevención de la sede: <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Ya existe una orden vigente en Everest para esta actividad. Si considera que debe repetirse, comuníquese con el servicio de órdenes.</div>` : ""}
+                    ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">Este examen ya se realizó y el resultado está vigente en el sistema de laboratorio. No es necesario repetirlo.</div>` : ""}
+                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">${mandaPym ? "Se realizó hace poco, pero la lista de prevención de la sede la tiene pendiente; por eso la dejamos marcada." : (hechoYReciente ? `Se realizó hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}; por ser tan reciente no la marcamos. Si considera que debe repetirse, selecciónela manualmente.` : "El último resultado es de hace más de 2 años; la dejamos marcada para que pueda solicitarla de nuevo.")}</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}${idx === 0 ? vglTip("Códigos oficiales de procedimiento asignados automáticamente.") : ""}
                     </div>
@@ -24211,7 +25476,7 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista que consultar")}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
         </div>
       </div>
     `;
@@ -24233,8 +25498,8 @@ _vglOfrecerDeshacer(btn);
       // "hay opciones pero ninguna marcada todavía": el primero ya no debe invitar a
       // seleccionar algo que no existe.
       confirmBtn.textContent = count > 0
-        ? `✓ Generar la(s) Orden(es) (${count})`
-        : (chks.length === 0 ? "Sin actividades para ordenar" : "Seleccione al menos una orden");
+        ? `Generar ${count} ${count === 1 ? "orden" : "órdenes"}`
+        : (chks.length === 0 ? "Sin actividades para ordenar" : "Seleccione al menos una actividad");
     };
 
     // El primer cambio de seleccion es el escalon intermedio del embudo: dice cuantos
@@ -24260,15 +25525,15 @@ _vglOfrecerDeshacer(btn);
       const _cerrarPestanaImpresion = () => { try { if (pestanaImpresion && !pestanaImpresion.closed) pestanaImpresion.close(); } catch (e) {} pestanaImpresion = null; };
 
       confirmBtn.disabled = true;
-      confirmBtn.textContent = "⏳ Obteniendo datos del paciente en el sistema de órdenes...";
+      confirmBtn.textContent = "Consultando la información del paciente...";
 
       const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
       if (!pacienteIdOrd) {
         _cerrarPestanaImpresion();
-        showToast("AMBAR", "Órdenes", "No se encontró al paciente en el sistema de órdenes con la cédula " + apt.doc_id + ". Verifique la cédula en Everest e inténtelo de nuevo.", false);
+        showToast("AMBAR", "Paciente no encontrado", "No se encontró al paciente en el sistema de órdenes con el documento " + apt.doc_id + ". Verifique el documento en Everest e inténtelo de nuevo.", false);
         if (!vivo()) return;
         confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        confirmBtn.textContent = "Reintentar";
         return;
       }
 
@@ -24287,7 +25552,7 @@ _vglOfrecerDeshacer(btn);
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
         if (!pkg) continue;
-        if (vivo()) confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
+        if (vivo()) confirmBtn.textContent = `Generando ${pymTituloCorto(pkg)}... (${creadasCount + fallidasCount + 1} de ${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
@@ -24309,7 +25574,7 @@ _vglOfrecerDeshacer(btn);
         if (resOrd && !resOrd.error && agpReal) {
           creadasCount++;
           agrupadores.push(agpReal);
-          if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pkg.titulo || pkg.cie10 || String(agpReal));
+          if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pymTituloCorto(pkg) || String(agpReal));
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false;
@@ -24356,8 +25621,8 @@ _vglOfrecerDeshacer(btn);
         if (vivo()) {
           if (!parcial) confirmBtn.classList.add("vgl-bg-success");
           confirmBtn.textContent = parcial
-            ? `↻ Reintentar las ${fallidasCount} que faltaron`
-            : `✅ ¡${creadasCount} Orden(es) Generada(s)!`;
+            ? `Reintentar las ${fallidasCount} que faltaron`
+            : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
@@ -24367,12 +25632,12 @@ _vglOfrecerDeshacer(btn);
           successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
           successMsg.innerHTML = parcial
             ? `
-            <div style="font-size:14px;font-weight:600;margin-bottom:4px">⚠️ Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
-            <div style="font-size:12px;opacity:0.9">Las ${creadasCount} que sí quedaron están abajo para imprimir (agrupador <b>${escapeHtml(agrupadores.join(", "))}</b>) y ya cuentan como ordenadas: <b>no las vuelva a generar</b>. Las ${fallidasCount} marcadas en rojo son las que faltan — el botón de arriba reintenta solo esas.</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
+            <div style="font-size:12px;opacity:0.9">Las ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} creadas quedaron listas para imprimir y quedan registradas como generadas: <b>no las vuelva a generar</b>. ${fallidasCount === 1 ? "La que falta está marcada en rojo; el botón de arriba reintenta solo esa." : `Las ${fallidasCount} que faltan están marcadas en rojo; el botón de arriba reintenta solo esas.`}</div>
           `
             : `
-            <div style="font-size:14px;font-weight:600;margin-bottom:4px">✅ ${creadasCount} Orden(es) PyM Generada(s) con Éxito</div>
-            <div style="font-size:12px;opacity:0.9">Agrupador oficial: <b>${escapeHtml(agrupadores.join(", "))}</b>${pestanaImpresion ? " · La orden se abrió en otra pestaña, lista para imprimir (Ctrl+P)." : ""}</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"} correctamente</div>
+            <div style="font-size:12px;opacity:0.9">Número de la orden: <b>${escapeHtml(agrupadores.join(", "))}</b>${pestanaImpresion ? " · Se abrió la orden en otra pestaña, lista para imprimir." : ""}</div>
           `;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
@@ -24396,7 +25661,7 @@ _vglOfrecerDeshacer(btn);
           // orden vieja de otra sesión ni de otro paciente.
           const printBox = document.createElement("div");
           printBox.className = "vgl-ord-printbox";
-          printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">🖨️ Imprimir la(s) orden(es)</label>`;
+          printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">Imprimir las órdenes generadas</label>`;
           const printRow = document.createElement("div");
           printRow.className = "vgl-agm-fieldrow";
           agrupadoresUnicos.forEach((agp) => {
@@ -24404,7 +25669,7 @@ _vglOfrecerDeshacer(btn);
             printBtn.className = "vgl-agm-btn sec";
             // v17.6.76 — rotulado con la actividad real (VIH, PSA…), no con el id crudo
             // del agrupador: con eso el médico no podía distinguir un botón de otro.
-            printBtn.textContent = "🖨️ " + (_tituloPorAgrupador.get(agp) || ("Orden " + agp));
+            printBtn.textContent = "Imprimir orden de " + (_tituloPorAgrupador.get(agp) || ("Orden " + agp));
             printBtn.addEventListener("click", async () => {
               uxTrack("ordenes.imprimir");
               // v12.6.2 — pestaña en blanco SÍNCRONA en el clic real (evita el bloqueador de
@@ -24435,7 +25700,7 @@ _vglOfrecerDeshacer(btn);
           const mailBox = document.createElement("div");
           mailBox.className = "vgl-ord-mailbox";
           mailBox.innerHTML = `
-            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <label class="vgl-agm-lbl" style="margin-top:14px">Enviar las órdenes al correo del paciente (opcional)</label>
             <div class="vgl-agm-fieldrow">
               <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
               <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
@@ -24448,8 +25713,8 @@ _vglOfrecerDeshacer(btn);
           const mailStatus = mailBox.querySelector("#vgl-ord-mail-status");
           mailBtn.addEventListener("click", async () => {
             const correo = (mailInput.value || "").trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "⚠ Escriba un correo válido."; return; }
-            mailBtn.disabled = true; mailBtn.textContent = "⏳ Enviando...";
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "Escriba un correo válido."; return; }
+            mailBtn.disabled = true; mailBtn.textContent = "Enviando...";
             // v12.6.6 — CORREGIDO: `UsuarioId` aquí es el id del PACIENTE, no el del médico.
             // Confirmado en la grabación real del consultorio (12-08-2026): en la MISMA
             // corrida, GenerarLinksImpresionOrdenamientos va con PacienteId=801848 y acto
@@ -24470,8 +25735,8 @@ _vglOfrecerDeshacer(btn);
             if (!vivo()) return;
             mailBtn.disabled = false; mailBtn.textContent = "Enviar";
             mailStatus.textContent = okCount === agrupadoresUnicos.length
-              ? `✅ Orden(es) enviada(s) a ${correo}.`
-              : (okCount > 0 ? `⚠ Se enviaron ${okCount} de ${agrupadoresUnicos.length} orden(es). Verifique en el portal de Everest.` : "❌ No se pudo enviar la orden por correo. Verifique el correo o inténtelo desde el portal.");
+              ? `Órdenes enviadas al correo del paciente.`
+              : (okCount > 0 ? `Se enviaron ${okCount} de ${agrupadoresUnicos.length} órdenes. Verifique en la plataforma de Everest.` : "No fue posible enviar las órdenes por correo. Verifique el correo o inténtelo desde la plataforma de Everest.");
           });
         }
 
@@ -24486,9 +25751,9 @@ _vglOfrecerDeshacer(btn);
         // corridas parciales. El color y el texto ahora dicen la verdad, que es lo
         // único que el médico puede usar para decidir si le falta algo por ordenar.
         if (parcial) {
-          notify("AMBAR", "⚠️ Órdenes PyM incompletas", `Paciente: ${patientName}\n${creadasCount} de ${creadasCount + fallidasCount} orden(es) quedaron creadas. Faltan ${fallidasCount}: reintente SOLO esas en el módulo, ya abierto.`, true); // [COPY-UX]
+          notify("AMBAR", "Órdenes incompletas", `${patientName} · ${creadasCount} de ${creadasCount + fallidasCount} órdenes quedaron creadas. ${fallidasCount === 1 ? "Falta 1: reintente solo esa" : `Faltan ${fallidasCount}: reintente solo esas`} en el módulo.`, true); // [COPY-UX]
         } else {
-          notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
+          notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]
         }
         // v17.1.0 (#146) — RETIRADO `bumpStat("atiempo")`, misma razón que en el
         // agendamiento: generar órdenes de PyM no es una llegada puntual, y estaba
@@ -25660,6 +26925,19 @@ _vglOfrecerDeshacer(btn);
     }).join("");
     // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
     // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
+    //
+    // v18.0.5 — el botón de diagnóstico (#vgl-diag, más abajo) vuelve a estar SIEMPRE visible.
+    // v17.6.10 lo escondió detrás del modo programador (Ctrl+Shift+D) y en consulta real el
+    // médico no lo encontraba ("no tengo botón de diagnóstico en la interfaz"). Es un botón
+    // sanitizado (sin datos de pacientes) y es la única vía rápida para reportar un fallo sin
+    // pegar capturas: la disciplina del proyecto es diagnosticar antes de arreglar, y un
+    // diagnóstico que no se puede pedir muere en silencio.
+    //
+    // v18.0.6 — ESTE COMENTARIO VIVÍA DENTRO DE LA PLANTILLA. Las seis líneas `//` estaban
+    // entre el `\`` de apertura y el `<div>` del botón, o sea DENTRO de una plantilla de
+    // texto: `//` no comenta nada ahí, es texto normal. El médico las veía impresas en
+    // pantalla, encima del botón Diag, en «Resumen del turno». Un comentario solo comenta
+    // fuera de la plantilla; aquí arriba sí lo hace.
     el.sheet.innerHTML = sheetHeader("Resumen del turno") + `
       <div class="vgl-kpis">
         <div class="vgl-kpi vgl-kpi-rojo"><div class="vgl-n">${hoy.fraude || 0}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
@@ -25671,7 +26949,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-bars">${bars}</div>
       </div>
       ${(function () { try { return mtrProductividadHtml(mtrProductividadVistas(mtrProdLeer(), todayStamp())); } catch (e) { return ""; } })()}
-      ${(function () { try { return mtrTableroTelemetriaHtml(mtrTableroTelemetria(readJSON(UX_KEY, null))); } catch (e) { return ""; } })()}
+      ${(typeof _vglProgOn !== "undefined" && _vglProgOn) ? (function () { try { return mtrTableroTelemetriaHtml(mtrTableroTelemetria(readJSON(UX_KEY, null))); } catch (e) { return ""; } })() : ""}
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Eventos registrados hoy<span class="vgl-hint">Cambios de estado y alertas, con hora exacta.</span></label><b class="vgl-count">${evs.length}</b></div>
         <div class="vgl-fld"><label>Reporte de auditoría<span class="vgl-hint">Archivo .csv que se abre en Excel. No sale del computador.</span></label><button class="vgl-btn primary" id="vgl-exp">Descargar</button></div>
@@ -25679,7 +26957,7 @@ _vglOfrecerDeshacer(btn);
       </div>
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Archivo PyM en uso<span class="vgl-hint">${escapeHtml(state.pymFile || "ninguno")}</span></label><b class="vgl-count">${state.pym.size}</b></div>
-        ${(typeof _vglProgOn !== "undefined" && _vglProgOn) ? `<div class="vgl-fld"><label>Diagnóstico técnico<span class="vgl-hint">Sin datos de pacientes. Para el administrador, si algo deja de funcionar.</span></label><button class="vgl-btn" id="vgl-diag">Descargar</button></div>` : ""}
+        <div class="vgl-fld"><label>Diagnóstico técnico<span class="vgl-hint">Sin datos de pacientes. Úsalo si algo deja de funcionar.</span></label><button class="vgl-btn" id="vgl-diag">Diag</button></div>
       </div>`;
     wireClose();
     el.sheet.querySelector("#vgl-exp").addEventListener("click", () => exportAudit());
@@ -25691,7 +26969,7 @@ _vglOfrecerDeshacer(btn);
     const h = statsToday(), lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
     const cnt = (f) => lst.filter((a) => f((a.estado || "").toLowerCase())).length;
     // [COPY-UX] Resumen clínico de la jornada
-    const txt = ["Asistente Clínico de Agenda — " + todayStamp(),
+    const txt = ["Centinela — " + todayStamp(),
       "Citas en agenda: " + lst.length,
       "En sala ahora: " + cnt((s) => s.includes("en sala")) + " · Atendidas: " + cnt((s) => s.includes("atendido")) + " · Sin presentarse: " + cnt((s) => s.includes("sin presentarse")),
       "Confirmaciones extemporáneas: " + (h.fraude || 0),
@@ -25799,7 +27077,7 @@ _vglOfrecerDeshacer(btn);
     // v15.6.1 — El grupo de Athenea es configuración DE INSTALACIÓN (una vez por equipo,
     // la hace el programador): solo se pinta en modo programador. Reporte del 20-08.
     const grpAthenea = !isDevMode ? "" : `      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Athenea</div>
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Laboratorios</div>
         <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">Guarde aquí, una sola vez por computador, el usuario y la contraseña de la cuenta compartida de Athenea de la sede: cuando la sesión se caiga, el asistente vuelve a entrar solo, para cualquier médico que use este equipo. Úselo únicamente en computadores de la IPS. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin !== false)}</div>
         <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">La cuenta compartida de la sede — queda guardada solo en este computador.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
         <div class="vgl-fld"><label>Contraseña de Athenea<span class="vgl-hint">No se muestra ni se guarda en ningún registro. Déjela vacía si solo quiere cambiar el usuario.</span></label><input type="password" id="c-athpass" autocomplete="new-password" placeholder="••••••••" value=""></div>
@@ -25816,12 +27094,6 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Tamaño de letra<span class="vgl-hint">Agranda todo el asistente: panel, botones y ventanas. Útil en monitores pequeños, con poca luz o si la letra se le hace chica.</span></label>
           <select id="c-fz"><option value="normal">Normal</option><option value="grande">Grande</option><option value="muygrande">Muy grande</option></select></div>
         <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Si este computador se siente lento, enciéndalo: la pantalla se ve más sencilla y todo responde más rápido.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
-      </div>
-      <!-- [v17.6.7] Cierre de turno: todo APAGADO por defecto; el médico elige. Avisos suaves, nunca críticos. -->
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-morado"><i></i>Turno (avanzado)</div>
-        <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
-        <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
@@ -25844,7 +27116,10 @@ _vglOfrecerDeshacer(btn);
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Privacidad y mejora del servicio</div>
-        <div class="vgl-fld"><label>Ayudar a mejorar el Vigilante<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores, rendimiento, y aciertos/tiempos de la IA. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción. Puede apagarlo cuando quiera.</span></label>${sw("c-uxtel", S.uxTelemetria)}</div>
+        <!-- v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): la telemetría es el precio de usar el
+             script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
+             y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
+        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activa en este equipo</span></div>
       </div>
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
@@ -25852,17 +27127,24 @@ _vglOfrecerDeshacer(btn);
       <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
+        <!-- v18.0.1 — «Nombre del consultorio / puesto» sale de la sección técnica (solo
+             modo programador) a la parte SIEMPRE visible: sin él, el tablero de telemetría
+             mostraba filas anónimas porque nadie lo configuraba. El administrador lo fija
+             una vez por equipo y cada fila viaja con ese nombre. -->
+        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3"). Viaja con cada envío al panel de seguimiento para saber qué puesto lo reportó. Sin nombre, las filas llegan con un identificador anónimo (no personal).</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
-        <!-- v15.5.0 — Barrido de Ajustes (decidido en entrevista): controles técnicos y de identidad manual retirados; los valores quedan en fábrica y la identidad se detecta sola. -->
-        <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
-        <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
-        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
-        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
-        <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
       <div class="vgl-grp vgl-grp-tec ${isDevMode ? '' : 'vgl-d-none'}">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Modo programador (Ctrl+Shift+D)</div>
+        <!-- v18.0.0 — poda a "mínimo clínico": los controles avanzados (clínicos o de
+             instalación) salen del menú visible y viven aquí, tras el modo programador. -->
+        <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
+        <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
+        <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
+        <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
+        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.6.1 — Esta fila era PURAMENTE informativa (sin interruptor) y vivía en la
              sección visible: el médico no tiene nada que decidir ahí (reporte del 20-08,
              pantallazo). Se conserva aquí como referencia de comportamiento. -->
@@ -25891,8 +27173,8 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
 <!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
              arriba, a la sección siempre visible: son operativos, no técnicos. -->
-        <div class="vgl-fld"><label>Reporte de atención consolidado<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento.</span></label>${sw("c-rep", S.reporte)}</div>
-        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
+        <!-- v17.58.2 — mismo tratamiento que "Ayudar a mejorar": obligatoria, sin interruptor. -->
+        <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activo en este equipo</span></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
       </div>
@@ -25967,7 +27249,9 @@ _vglOfrecerDeshacer(btn);
     // comportamiento; la credencial compartida se guarda aparte y nunca se registra en
     // consola ni en telemetría.
     bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
-    bind("#c-uxtel", "uxTelemetria", (n) => n.checked);
+    // v17.58.2 — se retiró el interruptor de métricas de uso (política del dueño: la
+    // telemetría es obligatoria y no se apaga); su bind ya no existe. El estado de envío
+    // se muestra fijo en el panel de Ajustes.
     // v15.6.0 — cero ventanas del navegador: el resultado se dice con los avisos propios,
     // y el borrado usa DOBLE TOQUE en el mismo botón (armar → confirmar), sin confirm().
     const athSave = q("#c-athsave");
@@ -26031,7 +27315,8 @@ _vglOfrecerDeshacer(btn);
     bind("#c-base", "baseAuto", (n) => n.checked);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
     const spBtn = q("#c-spabrir"); if (spBtn) spBtn.addEventListener("click", () => { primeShareAccess(true); });
-    bind("#c-rep", "reporte", (n) => n.checked);
+    // v17.58.2 — se retiró el interruptor del reporte (obligatorio, política del dueño);
+    // el botón «Probar y diagnosticar» y el estado de envío siguen disponibles abajo.
     bind("#c-eq", "equipo", (n) => n.value);
     const repBtn = q("#c-repgo"); if (repBtn) repBtn.addEventListener("click", async () => {
       q("#c-repn").textContent = "Probando...";
@@ -26334,7 +27619,7 @@ _vglOfrecerDeshacer(btn);
     everest: "Servicios de Everest (buscar paciente, agendar)",
     agenda: "Agenda del día",
     historia: "Historia clínica",
-    labs: "Laboratorios (Athenea)",
+    labs: "Laboratorios",
     pym: "Lista de prevención (PyM)",
   };
 
@@ -26396,6 +27681,21 @@ _vglOfrecerDeshacer(btn);
   // [v17.6.5] Reloj del turno en la cabecera: hora actual + tiempo de jornada. Si la última
   // lectura real de la agenda pasa de 30 s, el reloj se pone ámbar (datos viejos) y el tooltip
   // dice a qué hora fue. Sin ultimaLectura (arranque) no alarma: todavía no hay nada que medir.
+  // v18.0.3 — el reloj ya no depende de que el panel repinte (render() solo corre en Citas del
+  // día / historia): ahora tiene SU PROPIO temporizador de 1 s (canal "reloj" del mismo motor
+  // _relojCada, Web Worker con degradación a setInterval), así que la hora avanza en CUALQUIER
+  // pantalla de Everest. El aviso de datos viejos (ámbar vgl-stale) se conserva intacto.
+  let _relojSegundosMontado = false;   // sello de "intenté montar el canal" (no afecta a la lógica)
+  function _relojSegundosMontar() {
+    if (_relojSegundosMontado || !el || !el.root) return;
+    _relojSegundosMontado = true;
+    _relojCada("reloj", 1000, () => {
+      try {
+        if (!document.getElementById("vgl-clock")) { _relojDetener("reloj"); return; }   // el panel ya no existe: no tiene sentido seguir latiendo
+        actualizarRelojCabecera();
+      } catch (e) {}
+    });
+  }
   function actualizarRelojCabecera() {
     try {
       const c = document.getElementById("vgl-clock");
@@ -26703,6 +28003,97 @@ _vglOfrecerDeshacer(btn);
       (vencidas ? ` (${vencidas} con tiempo de tolerancia transcurrido)` : "") +
       `.\nMonitoreo activo para eventos en tiempo real.`, false);
   }
+  // v18.0.0 — ONBOARDING de primera vez: la leyenda de colores, una sola vez por navegador.
+  // Los compañeros no técnicos necesitan saber qué significa cada color AHORA que la
+  // pre-alerta pasó de morado a CIAN y el estado normal es VIOLETA (rebrand "Centinela").
+  // Se muestra solo la primera vez y queda guardado para no molestar de nuevo.
+  function _onboardingColores() {
+    try {
+      if (localStorage.getItem("vgl_onb_colores") === "1") return;
+      localStorage.setItem("vgl_onb_colores", "1");
+    } catch (e) {}
+    try {
+      notify("AZUL", "🛡️ Centinela activo",
+        "Colores de cada cita:\n" +
+        "· Verde — llegó a tiempo.\n" +
+        "· Cian — última llamada (queda ~1 minuto de gracia).\n" +
+        "· Ámbar — no se presentó (venció el tiempo de confirmación).\n" +
+        "· Rojo — llegada confirmada fuera del tiempo de confirmación.\n" +
+        "· Violeta — normal, sin novedad.\n\n" +
+        "· Alt+V — muestra u oculta el asistente.\n\n" +
+        "Centinela avisa y sugiere; usted decide.", true);
+    } catch (e) {}
+  }
+  // v18.0.0 — FASE 3 (notificaciones en tiempo real). Las transiciones POR TIEMPO de la
+  // leyenda ("última llamada" MORADO en prealert y "inasistencia" ÁMBAR en grace) son
+  // deterministas: ocurren en hora_cita + prealert y hora_cita + grace. En vez de esperar
+  // al siguiente sondeo (CONFIG.POLL_MS), se agenda UN setTimeout al instante exacto del
+  // próximo cruce. El timer solo adelanta un tick() — reutiliza colorAndAlert/maybeNotify
+  // y toda la guardia de fraude intacta. No sustituye el sondeo (que sigue siendo la única
+  // fuente para las LLEGADAS, impredecibles y sin canal push): lo complementa para que el
+  // dato de gracia llegue al segundo, no "en algún momento de los últimos 5 s".
+  let _deadlineTimer = null;
+  function _proximoDeadlineTiempo(processed, now) {
+    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0);
+    let best = null;
+    for (const p of processed) {
+      if (!p || !p.hora_texto) continue;
+      const min = parseHoraMin(p.hora_texto);
+      if (min == null) continue;
+      const est = (p.estado || "").toLowerCase();
+      if (est.includes("en sala") || est.includes("atendido")) continue;   // ya llegó/atendido: no hay vencimiento por tiempo
+      const apt = new Date(now); apt.setHours(0, min, 0, 0);
+      const preMs = apt.getTime() + prealert * 60000;
+      const graMs = apt.getTime() + grace * 60000;
+      const ahora = now.getTime();
+      if (ahora < preMs) { if (best == null || preMs < best) best = preMs; }
+      else if (ahora < graMs) { if (best == null || graMs < best) best = graMs; }
+    }
+    return best;
+  }
+  function _reprogramarDeadline(processed) {
+    try {
+      if (_deadlineTimer) { clearTimeout(_deadlineTimer); _deadlineTimer = null; }
+      const now = new Date();
+      const t = _proximoDeadlineTiempo(processed, now);
+      if (t == null) return;
+      let ms = t - now.getTime() + 60;   // +60 ms para cruzar el umbral de gracia
+      if (ms < 0) ms = 0;
+      if (ms > 86400000) return;         // tope defensivo: nada a más de un día
+      _deadlineTimer = setTimeout(() => { _deadlineTimer = null; try { tick(); } catch (e) {} }, ms);
+    } catch (e) {}
+  }
+  // v18.0.0 — FASE 3 (polling adaptativo para LLEGADAS). Las llegadas son impredecibles y
+  // Everest no tiene canal push: solo se ven leyendo la agenda. Para no pagar un sondeo
+  // veloz TODO el tiempo, se acelera a 2 s SOLO cuando hay una cita "Sin presentarse" a
+  // menos de 90 s de vencer la gracia — la ventana donde una llegada decide si es "a
+  // tiempo" o "extemporánea". Fuera de esa ventana vuelve a la cadencia base (CONFIG.POLL_MS).
+  let _tickMsActual = 0;
+  function _hayCitaCritica(processed, now) {
+    try {
+      const grace = CONFIG.TOLERANCIA_MIN || 6.0;
+      const VENTANA_CRITICA_MS = 90000;   // 90 s antes de vencer la gracia
+      for (const p of processed) {
+        if (!p || !p.hora_texto) continue;
+        const min = parseHoraMin(p.hora_texto);
+        if (min == null) continue;
+        const est = (p.estado || "").toLowerCase();
+        if (est.includes("en sala") || est.includes("atendido")) continue;
+        const apt = new Date(now); apt.setHours(0, min, 0, 0);
+        const hastaGra = apt.getTime() + grace * 60000 - now.getTime();
+        if (hastaGra > 0 && hastaGra <= VENTANA_CRITICA_MS) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+  function _ajustarSondeo(processed) {
+    try {
+      const deseado = _hayCitaCritica(processed, new Date()) ? 2000 : CONFIG.POLL_MS;
+      if (deseado === _tickMsActual) return;
+      _tickMsActual = deseado;
+      _relojCada("tick", deseado, tick);
+    } catch (e) {}
+  }
   function tick() {
     try {
       if (state.killed) return;
@@ -26737,6 +28128,15 @@ _vglOfrecerDeshacer(btn);
           const _comp = _siembraCompartidaLeer();
           if (_comp) for (const [k, v] of _comp) state.notified.set(k, v);
           _fraudeCompartidoFusionar();
+        } catch (e) {}
+      } else if (!state.leader) {
+        // v18.0.4 — ENJAMBRE (31-ago): la fusión solo corría al tomar el mando, así que
+        // una pestaña NO líder abierta durante la jornada pintaba VERDE "llegó a tiempo"
+        // una cita que la líder ya marcó ROJA (fraude compartido en localStorage). Con
+        // este throttle (10 s) todas las pestañas mantienen la misma realidad visual; el
+        // relevo sigue fusionando en el acto (rama de arriba), como siempre.
+        try {
+          if (Date.now() - (state._noLiderFraudeTs || 0) > 10000) { state._noLiderFraudeTs = Date.now(); _fraudeCompartidoFusionar(); }
         } catch (e) {}
       }
       // v7.8.1: fuera de agenda del día / historia clínica, el panel no se repinta —
@@ -26961,7 +28361,7 @@ _vglOfrecerDeshacer(btn);
           // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña
           // esté en HCHealth, aunque la pestaña líder (la que sondea el API) esté en otro
           // módulo de Everest en ese momento.
-          if (_enModuloHCHealth()) helloOncePerDay(processed);
+          if (_enModuloHCHealth()) { helloOncePerDay(processed); _onboardingColores(); }
         } else if (leader) {
           // v17.1.0 (#126) — la sincronización del relevo se mudó ARRIBA, junto a
           // heartbeat(): aquí solo se ejecutaba cuando el tick traía agenda, y en una
@@ -26969,7 +28369,7 @@ _vglOfrecerDeshacer(btn);
           processed.forEach(maybeNotify);
         }
         state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) share(processed);
+        if (leader) { share(processed); _reprogramarDeadline(processed); _ajustarSondeo(processed); }
         if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
         // v17.0.0 — PRODUCTIVIDAD: se registran las atendidas de la agenda propia. Solo
         // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del
@@ -26989,6 +28389,8 @@ _vglOfrecerDeshacer(btn);
       if (leader) {
         if (!API.url) apiSniffPerf(window);
         tickApi();
+        // v18.0.0 — Fase 3: si este tick no trajo agenda, se devuelve el sondeo a la cadencia base.
+        if (!data || !data.citas.length) _ajustarSondeo([]);
         // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
         // reportado en consultorio, deja margen para que la expiración deslizante nunca
         // llegue a cumplirse mientras el navegador siga abierto.
@@ -27174,7 +28576,7 @@ _vglOfrecerDeshacer(btn);
       const anterior = GM_getValue("vgl_last_ver", "");
       const cambio = anterior !== VERSION;
       if (anterior && cambio) {
-        notify("AZUL", "✅ Vigilante actualizado", `Ya tiene la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
+        notify("AZUL", "✅ Centinela actualizado", `Ya tiene la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
       }
       if (cambio) {
         GM_setValue("vgl_last_ver", VERSION);
@@ -27223,7 +28625,7 @@ _vglOfrecerDeshacer(btn);
   // este (acaba de salir). Coste de red: UN GET pequeño al día, y solo lee los primeros
   // bytes del encabezado para el @version — dentro del presupuesto (PRESUPUESTO_RED.md).
   // Requiere el @connect gist.githubusercontent.com añadido en esta misma versión.
-  const VGL_UPDATE_GIST_URL = "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt"; // = @updateURL del encabezado
+  const VGL_UPDATE_GIST_URL = "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt"; // = @updateURL del encabezado
   function mtrCheckActualizacionGist() {
     try {
       if (state.killed) return;
@@ -27388,7 +28790,7 @@ _vglOfrecerDeshacer(btn);
 
       const span = document.createElement("span");
       span.style.cssText = "color:var(--c-ambar,#fef3c7) !important;";
-      span.textContent = "⚠️ Atención: Se detectaron dos copias de Vigilante de Agenda activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
+      span.textContent = "⚠️ Atención: Se detectaron dos copias de Centinela activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
       aviso.appendChild(span);
 
       const btn = document.createElement("button");
@@ -27814,7 +29216,7 @@ _vglOfrecerDeshacer(btn);
     try { if (typeof GM_setValue !== "undefined") GM_setValue(OCULTO_KEY, nuevo ? "1" : ""); else localStorage.setItem(OCULTO_KEY, nuevo ? "1" : ""); } catch (e) {}
     _vglModoOcultoAplicar(nuevo);
     try { uxTrack(nuevo ? "vigilante.ocultar" : "vigilante.mostrar"); } catch (e) {}
-    if (!nuevo) { try { showToast("AZUL", "Vigilante visible", "Todo el asistente volvió a la pantalla. Ctrl+Shift+V (o el puntico «V») lo esconde de nuevo.", false); } catch (e) {} }
+    if (!nuevo) { try { showToast("AZUL", "Centinela visible", "Todo el asistente volvió a la pantalla. Ctrl+Shift+V (o el puntico «V») lo esconde de nuevo.", false); } catch (e) {} }
     return nuevo;
   }
   function _vglInstalarModoOculto() {
@@ -32244,16 +33646,24 @@ _vglOfrecerDeshacer(btn);
     // ALIMENTABA NADIE. El piso no corregía una regla del consenso: tapaba una ceguera de
     // datos. Con el dato ya no hay nada que tapar y el consenso clasifica de verdad.
     //
-    // Sin el dato el piso sigue entero — y ESO ES LO QUE LO HACE SEGURO. Medido con el
-    // harness antes de tocar nada, quitándolo a secas: un hombre de 60 años con DM2 + HTA
-    // pasa de ALTO (<70) a MODERADO (<100), y uno de 52 con DM2 sola pasa de ALTO a
-    // **BAJO** (<116). Eso no es fidelidad al consenso, es perder al paciente por un campo
-    // vacío. Así que el piso se aplica solo cuando NO SE SABE, se marca como lo que es
-    // —provisional— y PIDE el dato en vez de callarse (ver `mtrSolicitudV68`).
-    if (x.diabetes && !mtrDmEvolucionConocida(x)) {
+    // v18.0.5 — REVERSIÓN PARCIAL, REPORTE EN CONSULTA (31-ago). El condicional quedó
+    // con un hueco que el propio comentario de arriba predijo: el diabético CON evolución
+    // registrada corta (p. ej. 3 años) y sin otros FR mayores no lo recoge el paso 1 (ni
+    // daño de órgano ni FR>=3 ni 20+ años), no lo recoge el paso 2 (exige >10 años) y el
+    // potenciador solo existe para `conteoFr === 0` — así que con un solo FR cae directo
+    // al paso 4 y la escala ASCVD puede devolver BAJO. Reportado en consulta real:
+    // "aparecía ALTO y apenas le puse que son 3 años cambió a RCV BAJO". Eso contradice
+    // la decisión del 20-ago ("todo diabético debe entrar como riesgo ALTO"), que era un
+    // PISO, no un valor fijo: la casilla de años conserva todo su valor escalando hacia
+    // arriba (paso 1: 20+ años = MUY ALTO; paso 2: >10 años + FR), y el piso vuelve a
+    // cubrir el suelo para CUALQUIER diabético. Si falta el dato, se sigue pidiendo.
+    if (x.diabetes) {
+      const conocida = mtrDmEvolucionConocida(x);
       return Object.assign({}, base, {
-        categoria: "alto", paso: 2, pisoPorDiabetes: true, dmAniosRequerido: true,
-        criterios: c2.concat(["Diabetes mellitus sin tiempo de evolución registrado (piso provisional: riesgo ALTO como mínimo mientras falte ese dato)"]),
+        categoria: "alto", paso: 2, pisoPorDiabetes: true, dmAniosRequerido: !conocida,
+        criterios: c2.concat([conocida
+          ? "Diabetes mellitus (piso: todo diabético entra como riesgo ALTO como mínimo)"
+          : "Diabetes mellitus sin tiempo de evolución registrado (piso provisional: riesgo ALTO como mínimo mientras falte ese dato)"]),
       });
     }
 
@@ -36234,7 +37644,7 @@ _vglOfrecerDeshacer(btn);
     if (meta) {
       meta.ldlBasal = (_ldlBasal === undefined ? null : _ldlBasal);
       meta.ldlBasalFecha = _ldlBasalInfo ? _ldlBasalInfo.fecha : null;
-      meta.ldlBasalOrigen = _ldlBasalInfo ? "el más alto del último año en Athenea" : (mtrEsFalsy(c.ldlBasal) ? null : "entregado por el llamador");
+      meta.ldlBasalOrigen = _ldlBasalInfo ? "el más alto del último año en el laboratorio" : (mtrEsFalsy(c.ldlBasal) ? null : "entregado por el llamador");
     }
 
     // El programa rector lo decide la norma: ERC > DM2 > HTA.
@@ -36561,7 +37971,7 @@ _vglOfrecerDeshacer(btn);
     const fallaHtml = mtrRenderFallaHtml(r);
 
     const iaBtn = (!ocultarCabeceraRiesgoEIA && typeof S !== "undefined" && S.iaRedaccion === true && r && r._docId)
-      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">✍ Redactar con IA (enfermedad actual y análisis)</button>`
+      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">${MTR_IA_ICONOS.pluma}Redactar con IA (enfermedad actual y análisis)</button>`
       : "";
 
     return `<div class="vgl-rcv-bloque" role="region" aria-label="Resumen clínico del paciente">
@@ -36647,6 +38057,17 @@ _vglOfrecerDeshacer(btn);
   // llamadores vivos pasan modos de MTR_IA_MODOS; un modo desconocido cae en
   // "enfermedad_actual" (modoInicial), nunca revienta.
   const MTR_IA_MODOS = ["enfermedad_actual", "analisis_plan", "recomendaciones", "consulta"];
+  // v-S+ (refactor panel, mockup canvas 30-ago): iconografía Lucide del Redactor IA,
+  // consistente con el resto del refactor S+. Los botones cuyo rótulo se REESCRIBE por
+  // textContent (chips de casilla con «✓ insertado» y el estado del modal) conservan su
+  // emoji funcional; estos íconos viven en títulos y botones de rótulo estable.
+  const MTR_IA_ICONOS = {
+    pluma: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>',
+    chispa: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
+    tablero: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
+    descargar: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>',
+    ayuda: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+  };
   function mtrAbrirPanelRedaccion(resumen, opts) {
     try {
       if (!resumen) { setSummary("No hay resumen clínico para redactar.", "warn"); return; }
@@ -36696,7 +38117,7 @@ _vglOfrecerDeshacer(btn);
       modal.innerHTML =
         '<div class="vgl-agm-card" style="max-width:760px">'
         + '<div class="vgl-agm-head"><div style="min-width:0">'
-        + '<div class="vgl-agm-title vgl-agm-kicker">✍ Redacción asistida (IA)</div>'
+        + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_IA_ICONOS.pluma + 'Redacción asistida (IA)</div>'
         + '<div class="vgl-agm-sub">Borrador desde los datos de la historia. Usted lo revisa, edita y firma.</div>'
         + '</div><button class="vgl-agm-close" id="vgl-ia-x" aria-label="Cerrar">✕</button></div>'
         + (hayClave ? '' : '<div class="vgl-ord-vigwarn" style="margin:8px 0">Falta la clave de Gemini. Configúrela en Ajustes → Redacción IA para generar. Mientras tanto se muestran los hechos para copiar a mano.</div>')
@@ -36711,15 +38132,15 @@ _vglOfrecerDeshacer(btn);
         /* v16.5.0 — decisión del médico: Motivo, Nota clínica y Resumen previo se
            eliminan (Análisis y plan ES la nota); Preguntar queda como opción claramente
            visible y rotulada opcional, no escondida entre chips. */
-        + '<button class="vgl-agm-btn sec" id="vgl-ia-btn-preguntar" data-modo="consulta" style="font-weight:700">❓ Preguntar sobre este paciente <span style="font-weight:400;opacity:.75">(opcional)</span></button>'
+        + '<button class="vgl-agm-btn sec" id="vgl-ia-btn-preguntar" data-modo="consulta" style="font-weight:700">' + MTR_IA_ICONOS.ayuda + 'Preguntar sobre este paciente <span style="font-weight:400;opacity:.75">(opcional)</span></button>'
         + vglTip("Responde una duda puntual sobre este paciente usando SOLO sus datos — no escribe en la historia. Es opcional: las tres casillas de arriba son el trabajo principal.")
         + '</div>'
         + '<input type="text" id="vgl-ia-pregunta" class="vgl-agm-input' + (modoInicial === "consulta" ? '' : ' vgl-d-none') + '" placeholder="Escriba su pregunta sobre este paciente…" style="width:100%;margin-bottom:8px">'
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
-        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
-        + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
-        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button></div>'
+        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">' + MTR_IA_ICONOS.chispa + 'Generar</button>'
+        + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.tablero + 'Copiar</button>'
+        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.descargar + '<span id="vgl-ia-ins-lbl">Insertar en la historia</span></button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
         + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
@@ -36805,8 +38226,10 @@ _vglOfrecerDeshacer(btn);
       // v15.6.0 — TODAS las casillas del registro se pueden insertar; nota/briefing/consulta
       // se copian (no tienen casilla propia).
       const puedeInsertar = () => !!MTR_CASILLAS_REDACTOR[modo];
-      const rotuloInsertar = () => "⬇ Insertar en " + ((MTR_CASILLAS_REDACTOR[modo] || {}).etiqueta || "la casilla");
-      const pintarRotuloInsertar = () => { try { btnIns.textContent = puedeInsertar() ? rotuloInsertar() : "⬇ Insertar"; } catch (e) {} };
+      // v-S+ — el rótulo se escribe sobre el <span id="vgl-ia-ins-lbl"> interno para no
+      // borrar el SVG de descarga que ahora abre el botón (antes, textContent completo).
+      const rotuloInsertar = () => "Insertar en " + ((MTR_CASILLAS_REDACTOR[modo] || {}).etiqueta || "la casilla");
+      const pintarRotuloInsertar = () => { try { const lbl = btnIns.querySelector("#vgl-ia-ins-lbl"); if (lbl) lbl.textContent = puedeInsertar() ? rotuloInsertar() : "Insertar"; } catch (e) {} };
       const habilitarPost = (texto) => {
         const hay = !!String(texto || "").trim();
         btnCop.disabled = !hay;

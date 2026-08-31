@@ -208,20 +208,43 @@ module.exports = {
       t.falso(api.mtrDmLargaDuracion({ diabetes: false, dmAnios: 40 }), "sin diabetes, no hay diabetes de larga evolución");
     });
 
-    t.caso("v17.6.94: CON el dato manda el consenso, y el piso se aparta", () => {
+    // ============================================================================
+    // v18.0.6 — AVISO: v18.0.5 REVIRTIÓ v17.6.94, Y ESTA SUITE LO DEJA POR ESCRITO.
+    //
+    // v17.6.94 había refinado el piso por diabetes: el piso solo intervenía cuando NO se
+    // sabía el tiempo de evolución; sabiéndolo, mandaba el consenso y un diabético de 5 o
+    // 12 años sin otros factores podía quedar MODERADO. La build 18.0.5 (31-ago, editada
+    // fuera de este banco) volvió al piso plano de v16.2.9: TODO diabético entra en ALTO,
+    // se sepa o no el tiempo de evolución (vigilante_agenda.user.js:33660).
+    //
+    // NO SE REVIERTE AQUÍ: es la conducta que el médico tiene instalada y corriendo en
+    // consulta, y una regla clínica no se cambia desde el banco de pruebas. Lo que sí se
+    // hace es no dejarla sin prueba, y decir su CONSECUENCIA, que no es pequeña: al pasar
+    // de MODERADO a ALTO, la meta de LDL baja de 100 a 70 (MTR_METAS_LIPIDICAS). Con
+    // MTR_FALLA_UMBRAL = 0 (estricto, decisión D9 del 29-ago), un LDL de 110 que antes
+    // estaba EN meta pasa a estar FUERA, su vigencia se parte a la mitad (regla del 50 %),
+    // y el arrastre del grupo lipídico (mtrPlanParaclinicos, regla 1.15) se lleva colesterol
+    // total, HDL y triglicéridos al mismo viaje. Es decir: este cambio, solo, multiplica las
+    // repeticiones de perfil lipídico. Pendiente de que el médico confirme o revierta.
+    // ============================================================================
+    t.caso("v18.0.5 (revierte v17.6.94): el piso por diabetes vuelve a ser plano — con dato o sin él", () => {
       const base = { edad: 60, sexo: "M", egfrCkdepi: 75, hta: true, enAntihipertensivos: true,
         ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85, diabetes: true };
       const sinDato = api.mtrClasificarRiesgoCv(Object.assign({}, base));
-      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso provisional");
+      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso");
+      t.cierto(sinDato.dmAniosRequerido === true, "y se sigue pidiendo el dato que falta");
+      t.cierto(sinDato.criterios.some((c) => /sin tiempo de evolución/i.test(c)),
+        "y la pantalla dice que el piso es provisional por ese dato que falta");
 
       const cinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 5 }));
-      t.cierto(!cinco.pisoPorDiabetes, "con 5 años el piso ya no interviene");
-      t.cierto(cinco.dmAniosRequerido !== true, "ni queda pidiendo el dato que ya tiene");
+      t.igual(cinco.categoria, "alto", "v18.0.5: con 5 años TAMBIÉN entra por el piso");
+      t.cierto(cinco.pisoPorDiabetes === true, "el piso ya no se aparta al conocer el dato");
+      t.cierto(cinco.dmAniosRequerido !== true, "pero ya no pide un dato que sí tiene");
+      t.cierto(cinco.criterios.some((c) => /todo diabético/i.test(c)),
+        "y el porqué se dice en pantalla, sin fingir que lo decidió el consenso");
 
       const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
-      t.igual(doce.categoria, "alto", "12 años + al menos un factor: ALTO por el paso 2");
-      t.igual(doce.paso, 2, "y por el paso 2, no por un piso");
-      t.cierto(doce.criterios.some((c) => /10 años/.test(c)), "citando la regla del consenso");
+      t.igual(doce.categoria, "alto", "12 años: ALTO");
 
       const veinticinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 25 }));
       t.igual(veinticinco.categoria, "muy alto", "25 años es larga evolución: MUY ALTO por el paso 1");
@@ -246,11 +269,18 @@ module.exports = {
         t.cierto(n >= previo, "a los " + a + " años bajó de categoría respecto al tramo anterior · " + detalle.join(" "));
         previo = n;
       }
-      // Y en concreto: el caso que estaba roto.
+      // Y en concreto: el caso que estaba roto en v68 (salía BAJO). Sigue sin caer a BAJO;
+      // desde v18.0.5 sale ALTO en vez de MODERADO, por el piso plano por diabetes — ver el
+      // aviso largo unas líneas más arriba, y su coste en repeticiones de perfil lipídico.
       const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
-      t.igual(doce.categoria, "moderado", "el diabético de 12 años sin otros factores ya no cae a BAJO");
-      t.cierto(doce.criterios.some((c) => /sin otros factores de riesgo mayores/.test(c)),
-        "y el porqué se dice sin el techo de años");
+      t.igual(doce.categoria, "alto", "el diabético de 12 años sin otros factores no cae a BAJO");
+      t.cierto(doce.pisoPorDiabetes === true, "y consta que fue el piso quien lo puso ahí");
+      // v18.0.6 — antes salía por el paso 3 y el criterio citaba «sin otros factores de
+      // riesgo mayores». Ahora sale por el piso plano por diabetes, así que el criterio que
+      // ve el médico es el del piso. Lo que la prueba protege sigue siendo lo mismo: que la
+      // pantalla diga POR QUÉ quedó en esa categoría, nunca una categoría a secas.
+      t.cierto(doce.criterios.some((c) => /todo diabético entra como riesgo ALTO/i.test(c)),
+        "y el porqué se dice: fue el piso por diabetes, no una escala");
     });
 
     // =====================================================================

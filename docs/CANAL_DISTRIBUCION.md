@@ -38,6 +38,7 @@ El userscript opera actualmente bajo un esquema híbrido de actualización:
    - `@updateURL`: `https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt`
    - `@downloadURL`: `https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt`
    - Tampermonkey consulta la cabecera en segundo plano. Si el valor de `@version` en el Gist es superior al instalado localmente, descarga el script completo y lo reemplaza.
+   - **Segundo archivo del mismo Gist (v18.0.4):** `VGL_UPDATE_GIST_URL` apunta a `.../raw/gistfile2.txt` — es el canal del aviso proactivo "⬆ Actualización vN disponible" (estilo Windows Update) que el propio script consulta 1 vez al día (`mtrCheckActualizacionGist`). **Ambos archivos deben actualizarse SIEMPRE con el mismo contenido** en cada publicación.
 2. **Canal Dinámico (Google Apps Script):**
    - `versionCheckUrl`: `https://script.google.com/macros/s/AKfycbwXwwQdSGGMyt4X6Wf5YbJVRZjB_z_cYEVVpRoebO_VrobIhtHKD3nAJs689kq3R7tC/exec`
    - Se ejecuta cada 5 minutos (`checkVersionMinimum`). Si la versión instalada es inferior a `minVersion` y no hay una consulta médica activa (`seccionActiva() !== "historia"`), fuerza una recarga controlada del navegador.

@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita", "_proximoDeadlineTiempo", "_hayCitaCritica", "_ajustarSondeo"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -33,82 +33,6 @@ module.exports = {
       const r = c.api.colorAndAlert(a, refDate);
       t.igual(r.color, "AMBAR", "esta pestaña SÍ pinta AMBAR (es un cálculo instantáneo, sin memoria)");
       t.falso(c.api.__state.fraudWatch.has(r.key), "pero NO origina la marca compartida — eso solo lo hace la líder");
-    });
-
-    // v17.17.0 — REPORTE EN VIVO (27-ago): "avisa erróneamente que activaron un paciente
-    // tarde y no fue así" — un FALSO POSITIVO de contenido, no una demora ni un duplicado.
-    // v17.6.74 ya cerró "cualquier pestaña origina", pero dejó abierto que la pestaña
-    // LÍDER misma origine con su PRIMER vistazo justo tras tomar el mando por relevo de
-    // visibilidad — vistazo que puede venir de una copia estancada (propia o de
-    // state.apiCitas) de una pestaña que estuvo oculta y estrangulada.
-    t.caso("v17.17.0: la pestaña líder NO origina fraudWatch en la ventana de gracia tras un relevo por visibilidad, pero deja constancia", () => {
-      const c = cargar();
-      const refDate = new Date("2026-08-10T08:10:00").getTime();
-      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
-      c.api.__state.leader = true;
-      c.api.__CONFIG.TOLERANCIA_MIN = 6;
-      c.api._setUltimoRelevoParaTest(Date.now());   // "acabo de tomar el mando por relevo"
-
-      const r = c.api.colorAndAlert(a, refDate);
-      t.igual(r.color, "AMBAR", "el color se sigue calculando igual — es la ORIGINACIÓN de la marca lo que se difiere");
-      t.falso(c.api.__state.fraudWatch.has(r.key), "no se origina fraude con el primer vistazo tras el relevo");
-      const evs = c.api.eventsOf(c.api.todayStamp());
-      t.cierto(evs.some((e) => e.ev === "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR" && e.doc === "123"), "la lectura sospechosa queda igual en la bitácora — la evidencia no se pierde, solo se pospone");
-    });
-
-    t.caso("v17.17.0: pasada la ventana de gracia, la misma pestaña líder SÍ origina fraudWatch con normalidad", () => {
-      const c = cargar();
-      const refDate = new Date("2026-08-10T08:10:00").getTime();
-      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
-      c.api.__state.leader = true;
-      c.api.__CONFIG.TOLERANCIA_MIN = 6;
-      c.api._setUltimoRelevoParaTest(Date.now() - 9000);   // relevo hace 9s, ya pasó la gracia de 8s
-
-      const r = c.api.colorAndAlert(a, refDate);
-      t.igual(r.color, "AMBAR");
-      t.cierto(c.api.__state.fraudWatch.has(r.key), "pasada la gracia, origina igual que siempre — el arreglo no debilita la detección real");
-    });
-
-    t.caso("v17.17.0: sin relevo de por medio (sesión normal, una sola pestaña) la gracia nunca aplica", () => {
-      const c = cargar();
-      t.igual(c.api._getUltimoRelevoParaTest(), 0, "una sesión que nunca vio un latido ajeno nunca tocó este reloj");
-      const refDate = new Date("2026-08-10T08:10:00").getTime();
-      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
-      c.api.__state.leader = true;
-      c.api.__CONFIG.TOLERANCIA_MIN = 6;
-
-      const r = c.api.colorAndAlert(a, refDate);
-      t.cierto(c.api.__state.fraudWatch.has(r.key), "el arranque normal de una sola pestaña (v17.6.74/suite_32) sigue originando de inmediato");
-    });
-
-    await t.casoAsync("v17.17.0: reproducción de dos pestañas — la líder ascendida por relevo no acusa de fraude a quien otra pestaña ya confirmó a tiempo", async () => {
-      // Reproduce el reporte real: A (visible) confirma "En Sala" a tiempo; B, en
-      // segundo plano, toma el mando por relevo de visibilidad con una copia estancada
-      // ("Sin presentarse") y, SIN el arreglo, la marcaría como fraude.
-      const A = cargar({ silencioso: true });
-      const cita = { hora_texto: "08:00 AM", doc_id: "999", nombre: "PACIENTE", index: 0 };
-      const t1 = new Date("2026-08-10T08:03:00").getTime();
-      A.api.__state.leader = true;
-      A.api.colorAndAlert({ ...cita, estado: "Sin presentarse" }, t1);   // esNueva, candidato
-      const t2 = new Date("2026-08-10T08:03:10").getTime();
-      A.api.colorAndAlert({ ...cita, estado: "En sala" }, t2);            // primera vez "En sala": debounce, aún AZUL
-      const t2b = new Date("2026-08-10T08:03:20").getTime();
-      const rA = A.api.colorAndAlert({ ...cita, estado: "En sala" }, t2b); // segunda vez seguida: se confirma
-      t.igual(rA.color, "VERDE", "A confirma la llegada a tiempo");
-
-      const B = cargar({ almacen: A.env.almacen, storage: A.env.storage, silencioso: true });
-      B.api.__state.leader = true;
-      B.api._setUltimoRelevoParaTest(Date.now());   // B acaba de tomar el mando por relevo
-      const t3 = new Date("2026-08-10T08:10:00").getTime();   // 10 min reales desde la cita
-      const rB = B.api.colorAndAlert({ ...cita, estado: "Sin presentarse" }, t3);   // copia estancada de B
-      t.falso(B.api.__state.fraudWatch.has(rB.key), "B no origina fraude con su primer vistazo tras el relevo");
-
-      const t4 = new Date("2026-08-10T08:10:05").getTime();
-      B.api.colorAndAlert({ ...cita, estado: "En sala" }, t4);            // primera vez "En sala" para B: debounce
-      const t4b = new Date("2026-08-10T08:10:15").getTime();
-      const rB2 = B.api.colorAndAlert({ ...cita, estado: "En sala" }, t4b); // segunda vez seguida: se confirma
-      t.igual(rB2.color, "VERDE", "y cuando B por fin ve 'En Sala', pinta VERDE — nunca ROJO para quien ya llegó a tiempo");
-      t.falso(rB2.sound, "sin FRAUDE_EXTEMPORANEO para una llegada que ya se había confirmado puntual");
     });
 
     t.caso("colorAndAlert: un paciente en fraude que pasa a En Sala dispara ROJO y sonido (una vez)", () => {
@@ -235,6 +159,73 @@ module.exports = {
       t.igual(r3.color, "VERDE", "segunda lectura seguida del mismo valor: el cambio real SÍ se acepta");
       t.igual(r3.estado, "En Sala");
       t.cierto(r3.arrival, "y cuenta como llegada, porque el estado confirmado anterior no era 'en sala'");
+    });
+
+    // ---------- _proximoDeadlineTiempo (Fase 3: notificación en tiempo real) ----------
+    t.caso("_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta -> devuelve el instante de la prealerta", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 3, 0);
+      const processed = [{ hora_texto: "08:00 AM", estado: "Sin presentarse" }];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 5, 0).getTime(), "siguiente cruce = 5 min (prealerta)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: pasada la prealerta -> devuelve el instante de la gracia (AMBAR)", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 5, 30);
+      const processed = [{ hora_texto: "08:00 AM", estado: "Sin presentarse" }];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 6, 0).getTime(), "siguiente cruce = 6 min (gracia)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: ignora llegadas/atendidos y devuelve el cruce más próximo entre varias citas", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 2, 0);
+      const processed = [
+        { hora_texto: "07:00 AM", estado: "En sala" },
+        { hora_texto: "08:00 AM", estado: "Sin presentarse" },
+        { hora_texto: "08:10 AM", estado: "Sin presentarse" },
+      ];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 5, 0).getTime(), "el más próximo es 08:05 (la llegada no cuenta)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: sin citas pendientes o sin hora legible devuelve null", () => {
+      const c = cargar();
+      const now = new Date(2026, 7, 10, 8, 3, 0);
+      t.igual(c.api._proximoDeadlineTiempo([], now), null, "lista vacía -> null");
+      t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "sin-hora", estado: "Sin presentarse" }], now), null, "hora ilegible -> null");
+      t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "08:00 AM", estado: "En sala" }], now), null, "todas llegaron -> null");
+    });
+
+    // ---------- _hayCitaCritica / _ajustarSondeo (Fase 3: polling adaptativo) ----------
+    t.caso("_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia es crítica; fuera de la ventana o llegada no", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      t.cierto(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }], new Date(2026, 7, 10, 8, 5, 30)), "30 s antes de la gracia -> crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }], new Date(2026, 7, 10, 8, 4, 0)), "2 min antes de la gracia -> no crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "En sala" }], new Date(2026, 7, 10, 8, 5, 30)), "ya llegó -> no crítica");
+      t.falso(c.api._hayCitaCritica([{ hora_texto: "08:00 AM", estado: "Atendido" }], new Date(2026, 7, 10, 8, 5, 30)), "atendido -> no crítica");
+    });
+
+    t.caso("_ajustarSondeo: acelera a 2 s con cita crítica y vuelve a la cadencia base sin ella", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api.__CONFIG.POLL_MS = 5000;
+      const fixed = new Date(2026, 7, 10, 8, 5, 30);
+      const FechaFija = class extends Date {
+        constructor(...a) { if (a.length === 0) { super(); this.setTime(fixed.getTime()); } else { super(...a); } }
+        static now() { return fixed.getTime(); }
+      };
+      c.env.win.Date = FechaFija; c.ctx.Date = FechaFija;
+
+      c.api._ajustarSondeo([{ hora_texto: "08:00 AM", estado: "Sin presentarse" }]);
+      const rapido = (c.api._relojEstadoParaTest().locales || []).find((x) => x.id === "tick");
+      t.cierto(rapido && rapido.ms === 2000, "con cita crítica el sondeo del tick baja a 2 s (obtuvo " + (rapido && rapido.ms) + ")");
+
+      c.api._ajustarSondeo([{ hora_texto: "08:00 AM", estado: "En sala" }]);
+      const base = (c.api._relojEstadoParaTest().locales || []).find((x) => x.id === "tick");
+      t.cierto(base && base.ms === 5000, "sin cita crítica vuelve a la cadencia base (obtuvo " + (base && base.ms) + ")");
     });
 
     t.caso("muted / muteFor / unmute controlan el estado de silencio temporal", () => {
@@ -617,40 +608,12 @@ module.exports = {
       c.env.doc.querySelector = () => null;
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
     }
-    // v17.48.0 (D2) — Mismo motivo, en el camino de respaldo por DOM (el que se usa cuando
-    // el API de Everest falla): la cédula debe salir igual de canónica que por el API, o
-    // el paciente quedaría con una clave según por dónde llegara ese día.
-    t.caso("v17.48.0 — el respaldo por DOM entrega la misma cédula canónica que el API", () => {
-      const c = cargar({ silencioso: true });
-      const el = (txt, extra) => Object.assign({ textContent: txt, closest: () => null, querySelector: () => null }, extra || {});
-      const tarjeta = {
-        querySelector: (sel) => (sel === ".status-label" ? el("PENDIENTE") : (sel === ".fw-bold.mb-0" ? el("Presencial") : null)),
-      };
-      tarjeta.querySelector = ((orig) => (sel) => {
-        if (sel === ".status-label") return el("PENDIENTE");
-        if (sel === ".text-muted") return el("C.C. 0005150076");
-        if (sel === ".text-uppercase.fw-bold") return el("PACIENTE DE PRUEBA");
-        if (sel === ".fw-bold.mb-0") return el("Presencial");
-        return null;
-      })();
-      const hora = el("7:00 a. m.", { closest: (sel) => (sel === ".card-body" ? tarjeta : null) });
-      const docFalso = { querySelectorAll: (sel) => (sel === ".labelHora" ? [hora] : []) };
-      const r = c.api.extractAgenda(docFalso);
-      t.cierto(r.visible, "la agenda debe verse");
-      t.igual(r.citas[0].doc_id, "5150076", "una sola clave por paciente, también por el camino lento");
-    });
-
-    // v17.48.0 (D2) — La cédula que se raspa de la historia abierta indexa la memoria del
-    // paciente (vgl_cosecha) y el estado del día. Si Everest la pinta rellenada de ceros,
-    // el mismo paciente quedaría archivado bajo dos claves distintas.
-    t.caso("v17.48.0 — la cédula de la historia abierta sale canónica, sin ceros de relleno", () => {
-      const c = cargar({ silencioso: true });
-      mockPacienteAbierto(c, "0005150076");
-      t.igual(c.api.extractPacienteAbierto(), "5150076", "una sola clave por paciente");
-      mockPacienteAbierto(c, "8396613");
-      t.igual(c.api.extractPacienteAbierto(), "8396613", "la que ya venía limpia no cambia");
-    });
-
+    // v17.x.x — control de acceso por médico en la sección de labs del aviso universal.
+    // Los casos que ejercitan el comportamiento de "labs" (vencidos/al día/parcial) fijan
+    // un médico AUTORIZADO, que es la ruta "normal" que sigue vigente. El gating para no
+    // autorizados se prueba aparte.
+    const AUTHORIZED = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+    function autorizar(c) { c.api.__state.activeDoctor = AUTHORIZED; }
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).
@@ -852,6 +815,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: si el aviso salió SIN labs y luego llegan labs con vencidos, sale UN único aviso de labs (no se pierde en silencio)", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       const OriginalDate = c.ctx.Date || Date;
       let mockIso = "2026-08-11T12:00:00.000";
@@ -882,6 +846,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: paciente al día (sin PyM, sin abandono, labs vigentes) -> ningún aviso, jamás", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsAlDia("2026-08-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
@@ -892,6 +857,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: si ya hay un aviso en pantalla, se pospone y sale al siguiente tick", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
@@ -967,6 +933,7 @@ module.exports = {
 
     await t.casoAsync("checkAvisoUniversal: con labs RCV vencidos (Athenea resuelto) dispara UN aviso y lo marca; no repite", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      autorizar(c);
       mockPacienteAbierto(c, DOC_LABSV);
       await c.api.autoFetchAtheneaLabsForActivePatient();   // _labsPrefetch resuelto (7 faltantes)
       const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
@@ -974,6 +941,40 @@ module.exports = {
       c.api.checkAvisoUniversal();
       t.cierto(c.api.avisoYaVisto(uid), "labs vencidos -> aviso único, marcado una vez por paciente");
       t.noLanza(() => c.api.checkAvisoUniversal(), "un segundo tick no repite ni revienta");
+    });
+
+    // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico en la sección de labs
+    // RCV del aviso universal. Solo los autorizados la ven "normal" (con 50 % por fuera de
+    // meta); los no autorizados la ven SOLO si el paciente está en un programa de Ruta
+    // Crónicos, juzgando vencidos con la vigencia original (tabla por estadio, sin 50 %).
+    await t.casoAsync("checkAvisoUniversal: médico NO autorizado sin programa de Ruta Crónicos no ve la sección de labs RCV", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      // Sin autorizar(): el médico activo es no autorizado (o aún no detectado).
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto(uid),
+        "sin programa de crónicos detectado, la sección de labs se silencia para el no autorizado (no hay aviso de labs)");
+    });
+
+    await t.casoAsync("checkAvisoUniversal: médico NO autorizado SÍ ve labs RCV vencidos si el paciente está en Ruta Crónicos", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
+      // Siembra un resumen con programa rector: el paciente está en Ruta Crónicos (HTA).
+      c.api.mtrCacheResumenGuardar(DOC_LABSV, { programa: "HTA", erc: {}, factores: {}, riesgo: {} });
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid),
+        "en Ruta Crónicos con labs vencidos (vigencia original, sin 50 %), la sección aparece y el aviso dispara");
+      // mockPacienteAbierto deja getElementById devolviendo null para todo salvo
+      // #anamesis, así que se busca el modal entre los hijos del body.
+      const m = c.env.doc.body.children.find((n) => n.id === "vgl-pym-modal");
+      t.cierto(!!m && /Priorice riesgo cardiovascular/.test(m.innerHTML || ""),
+        "el no autorizado ve el mensaje de prioridad cardiovascular, no la lista cruda");
+      t.falso(!!m && /Laboratorios RCV sin resultado vigente/.test(m.innerHTML || ""),
+        "y NO ve el encabezado de la lista de analitos (eso es solo del autorizado)");
     });
 
     // Variante de planLabsVencidos que ECHA DE VUELTA la cédula que de verdad se buscó (en
@@ -1021,7 +1022,7 @@ module.exports = {
       mockPacienteAbierto(c, docActual);
       await c.api.autoFetchAtheneaLabsForActivePatient();
       t.igual(avisos.length, 1, "primera lectura: un aviso de paraclínicos encontrados");
-      t.cierto(/Paraclínicos de Athenea/.test(avisos[0].title), "es el aviso correcto");
+      t.cierto(/Resultados de laboratorio encontrados/.test(avisos[0].title), "es el aviso correcto");
 
       mockIso = "2026-08-21T12:00:02.000";             // +2 s: el médico sigue con el MISMO paciente
       docActual = "999888777";                          // pero el DOM se leyó con OTRA cédula esta vez
@@ -1094,5 +1095,105 @@ module.exports = {
       t.noLanza(() => c.api._avisoUnivReset());
     });
 
+
+    // ===== INJERTADO EN LA FUSIÓN main<-rama (v18.0.6): casos que solo
+    // existían en la rama de trabajo y que main había perdido. =====
+    t.caso("v17.17.0: la pestaña líder NO origina fraudWatch en la ventana de gracia tras un relevo por visibilidad, pero deja constancia", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api._setUltimoRelevoParaTest(Date.now());   // "acabo de tomar el mando por relevo"
+
+      const r = c.api.colorAndAlert(a, refDate);
+      t.igual(r.color, "AMBAR", "el color se sigue calculando igual — es la ORIGINACIÓN de la marca lo que se difiere");
+      t.falso(c.api.__state.fraudWatch.has(r.key), "no se origina fraude con el primer vistazo tras el relevo");
+      const evs = c.api.eventsOf(c.api.todayStamp());
+      t.cierto(evs.some((e) => e.ev === "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR" && e.doc === "123"), "la lectura sospechosa queda igual en la bitácora — la evidencia no se pierde, solo se pospone");
+    });
+
+    t.caso("v17.17.0: pasada la ventana de gracia, la misma pestaña líder SÍ origina fraudWatch con normalidad", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api._setUltimoRelevoParaTest(Date.now() - 9000);   // relevo hace 9s, ya pasó la gracia de 8s
+
+      const r = c.api.colorAndAlert(a, refDate);
+      t.igual(r.color, "AMBAR");
+      t.cierto(c.api.__state.fraudWatch.has(r.key), "pasada la gracia, origina igual que siempre — el arreglo no debilita la detección real");
+    });
+
+    t.caso("v17.17.0: sin relevo de por medio (sesión normal, una sola pestaña) la gracia nunca aplica", () => {
+      const c = cargar();
+      t.igual(c.api._getUltimoRelevoParaTest(), 0, "una sesión que nunca vio un latido ajeno nunca tocó este reloj");
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+
+      const r = c.api.colorAndAlert(a, refDate);
+      t.cierto(c.api.__state.fraudWatch.has(r.key), "el arranque normal de una sola pestaña (v17.6.74/suite_32) sigue originando de inmediato");
+    });
+
+    await t.casoAsync("v17.17.0: reproducción de dos pestañas — la líder ascendida por relevo no acusa de fraude a quien otra pestaña ya confirmó a tiempo", async () => {
+      // Reproduce el reporte real: A (visible) confirma "En Sala" a tiempo; B, en
+      // segundo plano, toma el mando por relevo de visibilidad con una copia estancada
+      // ("Sin presentarse") y, SIN el arreglo, la marcaría como fraude.
+      const A = cargar({ silencioso: true });
+      const cita = { hora_texto: "08:00 AM", doc_id: "999", nombre: "PACIENTE", index: 0 };
+      const t1 = new Date("2026-08-10T08:03:00").getTime();
+      A.api.__state.leader = true;
+      A.api.colorAndAlert({ ...cita, estado: "Sin presentarse" }, t1);   // esNueva, candidato
+      const t2 = new Date("2026-08-10T08:03:10").getTime();
+      A.api.colorAndAlert({ ...cita, estado: "En sala" }, t2);            // primera vez "En sala": debounce, aún AZUL
+      const t2b = new Date("2026-08-10T08:03:20").getTime();
+      const rA = A.api.colorAndAlert({ ...cita, estado: "En sala" }, t2b); // segunda vez seguida: se confirma
+      t.igual(rA.color, "VERDE", "A confirma la llegada a tiempo");
+
+      const B = cargar({ almacen: A.env.almacen, storage: A.env.storage, silencioso: true });
+      B.api.__state.leader = true;
+      B.api._setUltimoRelevoParaTest(Date.now());   // B acaba de tomar el mando por relevo
+      const t3 = new Date("2026-08-10T08:10:00").getTime();   // 10 min reales desde la cita
+      const rB = B.api.colorAndAlert({ ...cita, estado: "Sin presentarse" }, t3);   // copia estancada de B
+      t.falso(B.api.__state.fraudWatch.has(rB.key), "B no origina fraude con su primer vistazo tras el relevo");
+
+      const t4 = new Date("2026-08-10T08:10:05").getTime();
+      B.api.colorAndAlert({ ...cita, estado: "En sala" }, t4);            // primera vez "En sala" para B: debounce
+      const t4b = new Date("2026-08-10T08:10:15").getTime();
+      const rB2 = B.api.colorAndAlert({ ...cita, estado: "En sala" }, t4b); // segunda vez seguida: se confirma
+      t.igual(rB2.color, "VERDE", "y cuando B por fin ve 'En Sala', pinta VERDE — nunca ROJO para quien ya llegó a tiempo");
+      t.falso(rB2.sound, "sin FRAUDE_EXTEMPORANEO para una llegada que ya se había confirmado puntual");
+    });
+
+    t.caso("v17.48.0 — el respaldo por DOM entrega la misma cédula canónica que el API", () => {
+      const c = cargar({ silencioso: true });
+      const el = (txt, extra) => Object.assign({ textContent: txt, closest: () => null, querySelector: () => null }, extra || {});
+      const tarjeta = {
+        querySelector: (sel) => (sel === ".status-label" ? el("PENDIENTE") : (sel === ".fw-bold.mb-0" ? el("Presencial") : null)),
+      };
+      tarjeta.querySelector = ((orig) => (sel) => {
+        if (sel === ".status-label") return el("PENDIENTE");
+        if (sel === ".text-muted") return el("C.C. 0005150076");
+        if (sel === ".text-uppercase.fw-bold") return el("PACIENTE DE PRUEBA");
+        if (sel === ".fw-bold.mb-0") return el("Presencial");
+        return null;
+      })();
+      const hora = el("7:00 a. m.", { closest: (sel) => (sel === ".card-body" ? tarjeta : null) });
+      const docFalso = { querySelectorAll: (sel) => (sel === ".labelHora" ? [hora] : []) };
+      const r = c.api.extractAgenda(docFalso);
+      t.cierto(r.visible, "la agenda debe verse");
+      t.igual(r.citas[0].doc_id, "5150076", "una sola clave por paciente, también por el camino lento");
+    });
+
+    t.caso("v17.48.0 — la cédula de la historia abierta sale canónica, sin ceros de relleno", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, "0005150076");
+      t.igual(c.api.extractPacienteAbierto(), "5150076", "una sola clave por paciente");
+      mockPacienteAbierto(c, "8396613");
+      t.igual(c.api.extractPacienteAbierto(), "8396613", "la que ya venía limpia no cambia");
+    });
   }
 };

@@ -472,6 +472,60 @@ module.exports = {
         "corre en cada vuelta del reloj: una excepción aquí mataría el resto del tick");
     });
 
+    // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico. Los inyectores de
+    // redacción («Enfermedad actual» y «Análisis y plan») son parte del Redactor IA: solo
+    // se pintan para médico autorizado CON la redacción activada y su clave Gemini. Igual
+    // que el botón «Redactar» del dock.
+    function mockCasillasInyectores(c) {
+      const ea = c.env.doc.createElement("textarea");
+      ea.setAttribute("name", "UltimaEnfermedad");
+      const an = c.env.doc.createElement("textarea");
+      an.setAttribute("placeholder", "Ingrese la descripcion del analisis del paciente");
+      c.env.doc.querySelector = (sel) => {
+        const s = String(sel || "");
+        if (s.indexOf('textarea[name="UltimaEnfermedad"]') >= 0) return ea;
+        return null;
+      };
+      c.env.doc.querySelectorAll = (sel) => (String(sel) === "textarea" ? [an] : []);
+      const creados = [];
+      c.env.doc.body.appendChild = (n) => { n._parent = c.env.doc.body; c.env.doc.body.children.push(n); creados.push(n); };
+      return creados;
+    }
+
+    t.caso("createIaInjectorUI: médico autorizado con redacción activada pinta los dos inyectores cuando las casillas están en pantalla", () => {
+      const c = cargar({ silencioso: true });
+      const a = c.api;
+      a.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      a.__S.iaRedaccion = true;
+      a.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const creados = mockCasillasInyectores(c);
+      a.createIaInjectorUI();
+      t.igual(creados.map((n) => n.id).sort(), ["vgl-ia-inj-an", "vgl-ia-inj-ea"],
+        "con permiso completo se pintan los dos botones por casilla");
+    });
+
+    t.caso("createIaInjectorUI: médico NO autorizado no pinta los inyectores aunque las casillas estén en pantalla", () => {
+      const c = cargar({ silencioso: true });
+      const a = c.api;
+      a.__state.activeDoctor = { id: 909, name: "ANA MARIA PEREZ" }; // no está en la lista autorizada
+      a.__S.iaRedaccion = true;
+      a.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const creados = mockCasillasInyectores(c);
+      a.createIaInjectorUI();
+      t.igual(creados.length, 0, "sin autorización no se pinta nada, con casilla presente o sin ella");
+    });
+
+    t.caso("createIaInjectorUI: médico autorizado sin clave Gemini no pinta los inyectores", () => {
+      const c = cargar({ silencioso: true });
+      const a = c.api;
+      a.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      a.__S.iaRedaccion = true;
+      // sin mtrGuardarClaveGemini → mtrLeerClaveGemini() devuelve "" → no se pinta nada
+      const creados = mockCasillasInyectores(c);
+      a.createIaInjectorUI();
+      t.igual(creados.length, 0, "el Redactor IA no se muestra sin la clave configurada");
+    });
+
     // =====================================================================
     // v17.6.2 — DESENGANCHE DEL AGENDAMIENTO (reporte del 22-ago con pantallazo):
     // el aviso decía «falta documentar Hipertensión y Diabetes; Tabaquismo» cuando el

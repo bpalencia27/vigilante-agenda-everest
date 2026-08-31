@@ -5918,3 +5918,86 @@ también el otro mecanismo.
 **Lo que NO se perdía:** la línea `FRAUDE_EXTEMPORANEO` de la auditoría se escribe cuando suena
 el aviso y no depende de la clave. La evidencia para reclamaciones de los casos ya afectados
 sigue en el CSV; lo que se perdía era el color de la tarjeta.
+
+
+## v18.0.6 — 31-ago-2026 · FUSIÓN DE LAS DOS LÍNEAS DE TRABAJO (rama ↔ main)
+
+Las dos ramas se habían separado en `87849d3` (v17.6.82) y siguieron por caminos distintos:
+la rama llegó a v17.56.0 (51 commits) y `main` a v18.0.4 (136 commits). **Ninguna de las dos
+era superset de la otra, y en direcciones opuestas:**
+
+| | rama | main | se toma de |
+|---|---|---|---|
+| `vigilante_agenda.user.js` | v17.56.0 | **v18.0.4** (0 marcadores exclusivos de la rama) | **main**, y encima la build v18.0.5 instalada |
+| banco de pruebas | **2.213 casos** | 1.926 casos | **la rama** (main había perdido 349 casos) |
+| `INFORME_MUTACIONES.md` | **872 filas** | 319 filas | **la rama**, injertando las 23 de main |
+
+Se comprobó midiendo, no opinando: cero marcadores `v1x.y.z` exclusivos de la rama en el
+userscript (main los tiene todos, más v17.57.0→v18.0.4), y 349 títulos `t.caso` presentes solo
+en la rama. Donde la versión de main de una suite pasaba y la de la rama no, se tomó la de main
+**injertándole** los casos que solo existían en la rama, en vez de reemplazar y perderlos.
+
+Renombrada `suite_70_lint_pantalla.js` → `suite_72_lint_pantalla.js`: main traía su propia
+`suite_70_enjambre_pre_despliegue.js` y dos suites no pueden llevar el mismo número.
+
+### Mutaciones verificadas de esta entrega
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | **comentario `//` dentro de la plantilla** — se devuelve una línea `// …` entre el `` ` `` de apertura de `el.sheet.innerHTML` y el `<div>` del botón Diag (el defecto original de la v18.0.5, visto en pantalla por el médico) | "REGLA H — ninguna línea `//` vive DENTRO de una plantilla de texto" (`suite_72`) | Sí — 17/17 |
+| 2 | **adorno dentro del dato** — se devuelve el `"🔴 "` al principio de `motivoTexto` | "REGLA I — motivoTexto es TEXTO: sin emoji, sin marcado, sin adorno" (`suite_72`) | Sí — 17/17 |
+
+**Regla H no es una prueba de conducta, es un analizador del código fuente**, y por eso caza
+esta familia entera: recorre el archivo distinguiendo comillas, comentarios y plantillas (con
+su anidamiento `${…}`), y marca cualquier línea que empiece por `//` dentro del texto de una
+plantilla. Una expresión regular no puede hacerlo: no sabe si un `//` está dentro de una
+plantilla o dentro de una URL. El bug original no daba error en consola, no rompía ninguna
+prueba de comportamiento y el archivo seguía siendo JavaScript válido — se veía solo en la
+pantalla del médico, en consulta.
+
+### Conducta de la v18.0.5 que se entregó sin prueba, y que ahora la tiene
+
+- **Tercera ruta de descarga por `shareId`** (`spFallbackUrls`): `suite_12` exigía exactamente
+  dos rutas y se puso roja al fusionar. Ahora se fijan las dos mitades del `if` (con `shareId`
+  → tres rutas; sin él → dos) y que un `shareId` igual al `id` no se repite. Y la prueba de
+  `loadPymBaseDescarga` deja de contar «2» a mano: cuenta contra `spFallbackUrls().length`, para
+  que lo que protege sea lo que importa —una ruta cada vez, en orden, nunca en paralelo— y no
+  un número que caduca.
+
+### Cambio CLÍNICO de la v18.0.5 que se conserva pero queda señalado
+
+- **Piso por diabetes plano** (`vigilante_agenda.user.js:33660`): la v18.0.5 revirtió el
+  refinamiento de la v17.6.94. Antes, sabiendo el tiempo de evolución mandaba el consenso y un
+  diabético de 5–12 años sin otros factores podía quedar MODERADO; ahora **todo** diabético
+  entra en ALTO. **No se revierte desde el banco de pruebas** —es la conducta que el médico
+  tiene instalada y corriendo—, pero se deja escrito su coste, que no es pequeño: ALTO baja la
+  meta de LDL de 100 a 70; con `MTR_FALLA_UMBRAL = 0` (estricto, D9) un LDL de 110 pasa de estar
+  en meta a estar fuera; su vigencia se parte a la mitad (regla del 50 %); y el arrastre del
+  grupo lipídico (`mtrPlanParaclinicos`, regla 1.15) se lleva colesterol total, HDL y
+  triglicéridos al mismo viaje. Pendiente de que el médico confirme o revierta.
+
+### Filas de mutación que solo existían en `main` y se recuperan aquí
+
+| **rojo de tendencias (v17.55.0)** | `_mtrTendUmbralGrave` vuelto a `const factor = 1.3` (revive el +30 %) | `suite_67` | *#123 rojo por VALOR* → *131 con meta 116 ya está sobre la meta: rojo en riesgo bajo también* (esperaba "grave", obtuvo null) y *#123: HbA1c usa la meta del paciente...* → *9,2 con meta individual de 8,0 está sobre ella* (esperaba "grave", obtuvo null) |
+| **chips PyM en la tarjeta (v17.22.0)** | `pymsVisibles = pymsPanel.slice(0, 0)` (amputa los chips otra vez) | `suite_15` | *render: ... los chips PyM volvieron en v17.22.0* → *el chip de PyM pendiente vuelve a la tarjeta*; *T4/v14.0.2 + v17.22.0...* → *la fila de chips PyM volvió*; *v14.0.2 + v17.22.0...* → *y muestra el chip PyM del paciente* (las tres obtuvieron false) |
+| **mensaje de labs sin lectura (v17.8.1)** | la rama `_noSePudoLeer` vuelta al texto viejo «No se encontraron paraclínicos recientes» | `suite_15` | *openLaboratoriosModal (v17.8.1): sin poder leer el portal...* → *el fallo fue del sistema: se dice como tal (obtuvo false)* |
+| **botón del modal de órdenes sin lista (v17.16.0)** | el confirm vuelto a «Sin actividades para ordenar» siempre (sin distinguir «No hay lista que consultar») | `suite_15` | *openOrdenamientoModal: sin coincidencia PyM...* → *y el botón no invita a ordenar nada (antes decía 'Sin actividades'...) (obtuvo false)* |
+| **claves muertas del banner (v17.19.0)** | `bannerPym: false` revivido en DEFAULTS | `suite_15` | *v15 (v17.19.0): el bloque T7 se retiró entero...* → *la clave del banner ya no existe en los ajustes (esperaba undefined y obtuvo false)* |
+| **escalón 1 (tratamiento)** | en `mtrDebePreguntarTratamientoEje` se retira el «indagó y SÍ tiene: no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *con estatina en la historia ya no se pregunta (obtuvo true)* |
+| **escalón 2 (adecuación)** | en `mtrDebePreguntarAdecuacionEje` se retira el «si la dedujo, no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *LDL: la inercia ya la deduce (inadecuado) (obtuvo true)* |
+| **escalón 3 (adherencia)** | en `mtrDebePreguntarAdherenciaEje` se retira el «respondida y vigente -> se calla» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *respondida y vigente -> se calla (obtuvo true)* |
+| **caducidad de la adherencia** | en `mtrReconciliarAhora` se deja la clave de adherencia vencida en `confEje` (no se borra) | `suite_63` | *la adherencia caduca* → *pero la adherencia de hace 3 días CADUCÓ: se vuelve a preguntar (obtuvo false)* |
+| **eje de la glicemia** | en `mtrEjesEnFallaAdherencia` se retira `a === "Glicemia"` (la glicemia ya no comparte la escalera de diabetes) | `suite_63` | *mtrEjesEnFallaAdherencia* → *glicemia sola también es eje de diabetes: esperaba "hba1c" y obtuvo ""* |
+| **vigencia declarada** | en `mtrPreguntaAdherenciaEje` se retira `vigenciaDias: MTR_ADHERENCIA_VIGENCIA_DIAS` | `suite_63` | *las preguntas de la escalera* → *y la adherencia declara su vigencia de 1 día (esperaba 1 y obtuvo undefined)* |
+| **memoria de lo ya preguntado** | en `_mtrMediaMarcarPreguntada` se retira `s.add(clave)` (la marca no se guarda) | `suite_63` | *memoria de lo ya preguntado* → *marcado -> ya fue preguntada (obtuvo false)* y *las MEDIA ya mostradas NO reaparecen* → *2ª apertura ... NO reaparecen (obtuvo true)* |
+| **media que vuelven a bloquear** | en `_vglModalConfirmarDatos` el `listo` vuelve a `!pendientes.size` (las MEDIA retienen el flujo) | `suite_63` | *RECONCILIADOR de punta a punta* (regresión existente) → *y el módulo se abrió solo, sin volver a preguntar (obtuvo false)* |
+| **marcar lo renderizado** | en `_vglModalConfirmarDatos` se retira el `_mtrMediaMarcarPreguntada` al pintar las filas | `suite_63` | *las MEDIA ya mostradas NO reaparecen* → *2ª apertura: las MEDIA ya mostradas NO reaparecen (obtuvo true)* |
+| **reinicio diario** | en `diaNuevo()` se retira el `_mtrMediaPreguntadas.clear()` | `suite_63` | *diaNuevo reinicia la memoria* → *al día siguiente se vuelve a ofrecer (obtuvo true)* |
+| **reaprovechamiento del salto** | en el llamador se vuelve a `cargarHoras()` sin pasarle `otroDia.res` (re-consulta el día encontrado) | `suite_15` | *openAgendamientoModal v17.58.1: el salto al día con agenda propia NO re-consulta BuscarCitasDisponibles — el día elegido se trae 2 veces (búsqueda + sondeo), nunca 3* → máximo por día 3 y el sábado elegido con 3 (esperaba 2) |
+| **forzado de la política** | se retiran `S.reporte = true; S.uxTelemetria = true;` (una config guardada con `false` vuelve a ganar) | `suite_31` | *Telemetría: nace ENCENDIDA por política del dueño (v17.58.2); el forzado gana a una config guardada con false* → `el forzado gana a una config guardada con reporte=false (obtuvo false)` |
+| **atribución del INP** | se retira el `uxTrack("rum.self.inp.detalle…")` dentro del observer de eventos | `suite_23` | *_iniciarRumObserver: la interacción lenta se atribuye por el ELEMENTO que el médico tocó* → `el INP malo nuestro dice qué botón: agm-btn: esperaba 1 y obtuvo undefined` |
+| **render en lote** | en el render de turnos se vuelve a `slotsEl.appendChild(btn)` por turno (además del lote) | `suite_23` | *v17.58.2: los handlers … se montan en lote (INP)* → `y no queda un appendChild por turno (obtuvo true)` |
+| **fase del Diario de Lentitud** | en el handler del chip de día se vuelve a `cargarHoras()` a secas (sin `_rumTramo`) | `suite_23` | *v17.58.2: los handlers … anotan su fase con _rumTramo (INP)* → `el clic en un chip de día anota su fase (agm.clickDia) (obtuvo false)` |
+| **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
+| **ventana crítica del sondeo** | en `_hayCitaCritica` (línea 27068), `VENTANA_CRITICA_MS` pasa de `90000` a `90000000` (toda cita "Sin presentarse" se vuelve crítica) | `suite_04` | *_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia…* → `2 min antes de la gracia -> no crítica (obtuvo true)` |
+| **marca de onboarding** | en `_onboardingColores` (línea 27027), `setItem("vgl_onb_colores", "1")` pasa a `"2"` (la marca nunca queda válida) | `suite_17` | *_onboardingColores: la leyenda de colores se muestra UNA sola vez…* → `la marca queda guardada en localStorage: esperaba "1" y obtuvo "2"` |

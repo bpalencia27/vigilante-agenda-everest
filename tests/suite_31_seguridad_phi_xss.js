@@ -240,20 +240,28 @@ module.exports = {
     });
 
     // ===================================================================
-    //  3. GOBERNANZA DE TELEMETRÍA: DEFAULT-OFF (R1.8)
+    //  3. GOBERNANZA DE TELEMETRÍA (v17.58.2 — política del dueño)
     // ===================================================================
 
-    t.caso("Telemetría: invariante Default-Off garantizado sin configuración previa", () => {
+    t.caso("Telemetría: nace ENCENDIDA por política del dueño (v17.58.2); el forzado gana a una config guardada con false", () => {
+      // v17.58.2 — decisión del dueño (29-ago): la telemetría es el precio de usar el
+      // script gratis. Nace encendida y NO se puede desactivar: aunque un equipo tenga
+      // vgl_cfg con `false` guardado, S la fuerza a true en cada arranque.
       const c = cargar({ silencioso: true, defaultOff: true });
+      t.cierto(c.api.__S.reporte, "DEFAULTS.reporte = true (v17.58.2: telemetría obligatoria)");
+      t.cierto(c.api.__S.uxTelemetria, "DEFAULTS.uxTelemetria = true (idem)");
+      t.cierto(c.api.repOn(), "repOn() resuelve true por defecto");
 
-      t.falso(c.api.__S.reporte, "DEFAULTS.reporte debe ser false de fábrica");
-      t.falso(c.api.__S.uxTelemetria, "DEFAULTS.uxTelemetria debe ser false de fábrica");
-      t.falso(c.api.repOn(), "repOn() debe resolver false por defecto");
+      const conFalse = cargar({ silencioso: true, defaultOff: true, almacen: { vgl_cfg: JSON.stringify({ reporte: false, uxTelemetria: false }) } });
+      t.cierto(conFalse.api.__S.reporte, "el forzado gana a una config guardada con reporte=false");
+      t.cierto(conFalse.api.__S.uxTelemetria, "el forzado gana a una config guardada con uxTelemetria=false");
 
-      // uxTrack con Default-Off no debe escribir en localStorage
+      // La telemetría registra (obligatoria), pero lo que registra sigue siendo el conteo
+      // anónimo de una acción de nuestro catálogo — el saneo PHI no depende del interruptor.
       c.api.uxTrack("accion.prueba");
       c.api._uxVolcarBuffer();
-      t.igual(c.env.storage.getItem("vgl_ux"), null, "No debe registrar métricas con telemetría apagada");
+      const ux = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(!!ux && !!ux.acciones && !!ux.acciones["accion.prueba"], "la métrica anónima se registra (telemetría obligatoria)");
     });
 
     // ===================================================================

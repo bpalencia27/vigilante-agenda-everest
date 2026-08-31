@@ -108,7 +108,10 @@ module.exports = {
 
     t.caso("REGRESIÓN — «Decidir luego» y Escape en el reconciliador no dejan sin Panel", () => {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 6000);
+      // v17.58.0 — la ventana creció de 6000 a 8000: `_vglModalConfirmarDatos` ganó el
+      // bloque de las preguntas MEDIA de la escalera de adherencia (que se muestran pero
+      // no retienen el flujo) justo antes de `_luego`, y la aserción dejó de alcanzarlo.
+      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 8000);
       t.cierto(/const _luego = \(\) =>/.test(zona), "hay una salida común para la ✕ y Escape");
       t.cierto(/alContinuar\(\)/.test(zona), "y esa salida continúa el flujo: antes el médico se quedaba sin módulo");
     });

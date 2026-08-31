@@ -359,18 +359,21 @@ module.exports = {
     // migración sin querer — aquí se anula ese preseteo a propósito con
     // `almacen: { vgl_v1420_estreno: null }` para poder observar la migración real.
     // ===================================================================
-    t.caso("v17.6.27: instalación LIMPIA (sin vgl_cfg previo) NO enciende las 4 banderas de estreno", () => {
+    t.caso("v17.6.27/v17.58.2: instalación LIMPIA (sin vgl_cfg previo): la migración de estreno NO enciende motorPortado/iaRedaccion; reporte/uso nacen encendidos por política", () => {
       // almacen sin vgl_cfg (instalación limpia) y con vgl_v1420_estreno=null para
       // anular el preseteo por defecto del harness y dejar correr la migración real.
       const fresco = cargar({ silencioso: true, defaultOff: true, almacen: { vgl_v1420_estreno: null } });
       t.igual(fresco.api.__S.motorPortado, false, "de fábrica, no por una migración que no debía correr");
       t.igual(fresco.api.__S.iaRedaccion, false);
-      t.igual(fresco.api.__S.uxTelemetria, false);
-      t.igual(fresco.api.__S.reporte, false);
+      // v17.58.2 — política del dueño: la telemetría nace ENCENDIDA (DEFAULTS + forzado en S),
+      // no por la migración de estreno. Las dos banderas que esta prueba vigila (motor/ia)
+      // siguen apagadas, que es lo que la v17.6.27 corregía.
+      t.igual(fresco.api.__S.uxTelemetria, true, "v17.58.2 — la telemetría nace encendida por política, no por la migración");
+      t.igual(fresco.api.__S.reporte, true, "idem");
       t.igual(fresco.env.almacen["vgl_v1420_estreno"], "1", "la migración SÍ se marca como corrida (no vuelve a intentarlo), pero no tocó las banderas");
     });
 
-    t.caso("v17.6.27: equipo con vgl_cfg PREVIO (la ruta de actualización real) SÍ enciende las 4 banderas", () => {
+    t.caso("v17.6.27/v17.58.2: equipo con vgl_cfg PREVIO (la ruta de actualización real) enciende motorPortado/iaRedaccion; la telemetría ya viene encendida", () => {
       const previo = JSON.stringify({ reporte: false, uxTelemetria: false });
       const actualizado = cargar({ silencioso: true, almacen: { vgl_cfg: previo, vgl_v1420_estreno: null } });
       t.igual(actualizado.api.__S.motorPortado, true, "equipo que YA tenía configuración: la migración de estreno SÍ aplica");

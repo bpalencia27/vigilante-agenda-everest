@@ -1,5 +1,5 @@
 // =====================================================================
-//  SUITE 70 — TANDA 0 DE LA AUDITORÍA DE EXPERIENCIA (27-ago-2026)
+//  SUITE 72 — TANDA 0 DE LA AUDITORÍA DE EXPERIENCIA (27-ago-2026)
 //
 //  Tres reglas que el proyecto YA tiene escritas —dos en CLAUDE.md, una en un
 //  comentario del propio código— y que hasta hoy dependían de que alguien se
@@ -396,5 +396,122 @@ module.exports = {
         "y el arranque sigue sin pintarse en alarma: no se cambia una mentira por un susto");
     });
 
+
+    // =================================================================
+    //  REGLA H — NINGÚN COMENTARIO `//` DENTRO DE UNA PLANTILLA DE TEXTO
+    //
+    //  BUG REAL, reportado por el médico el 31-ago sobre la build 18.0.5 que tenía
+    //  instalada: en «Resumen del turno», encima del botón Diag, aparecían impresas seis
+    //  líneas que empezaban por `//`. No era un fallo de CSS ni de datos: alguien escribió
+    //  un comentario de JavaScript ENTRE el ` de apertura de una plantilla y el HTML que
+    //  la plantilla construye. Ahí `//` no comenta nada — es texto, y el navegador lo pinta.
+    //
+    //  Es una frontera que se cruza en silencio: el archivo sigue siendo JavaScript válido,
+    //  no hay error en consola, ninguna prueba de conducta se entera, y el médico se lo
+    //  encuentra en pantalla en consulta. Por eso la guarda es un lint del código fuente y
+    //  no una prueba de comportamiento: hay que cazarlo ANTES de que se pinte.
+    //
+    //  El recorrido de abajo es un analizador de verdad (comillas, comentarios, plantillas y
+    //  su anidamiento con ${...}), no una expresión regular: una regex no puede saber si un
+    //  `//` está dentro de una plantilla o dentro de una URL.
+    // =================================================================
+    t.caso("REGLA H — ninguna línea `//` vive DENTRO de una plantilla de texto (bug del botón Diag, 31-ago)", () => {
+      const sospechosas = [];
+      let i = 0, linea = 1;
+      const pilaPlantilla = [];          // profundidad de ${} por plantilla abierta
+      let enLinea = false, enBloque = false, enCad = null;
+      let inicioDeLinea = true;
+      while (i < src.length) {
+        const ch = src[i], sig = src[i + 1];
+        if (ch === "\n") { linea++; enLinea = false; inicioDeLinea = true; i++; continue; }
+        const enTextoDePlantilla = pilaPlantilla.length > 0 && pilaPlantilla[pilaPlantilla.length - 1] === 0;
+
+        if (enLinea || enBloque) {
+          if (enBloque && ch === "*" && sig === "/") { enBloque = false; i += 2; continue; }
+          i++; continue;
+        }
+        if (enCad) {
+          if (ch === "\\") { i += 2; continue; }
+          if (ch === enCad) enCad = null;
+          i++; continue;
+        }
+        if (enTextoDePlantilla) {
+          if (ch === "\\") { i += 2; continue; }
+          if (ch === "`") { pilaPlantilla.pop(); i++; continue; }
+          if (ch === "$" && sig === "{") { pilaPlantilla[pilaPlantilla.length - 1] = 1; i += 2; continue; }
+          // AQUÍ está la caza: principio de línea (solo espacios delante) y luego `//`
+          if (inicioDeLinea && ch === "/" && sig === "/") {
+            sospechosas.push(linea + ": " + src.slice(i, src.indexOf("\n", i) < 0 ? undefined : src.indexOf("\n", i)).trim().slice(0, 90));
+          }
+          if (!/\s/.test(ch)) inicioDeLinea = false;
+          i++; continue;
+        }
+        // ---- código normal (incluye el interior de un ${...}) ----
+        if (ch === "/" && sig === "/") { enLinea = true; i += 2; continue; }
+        if (ch === "/" && sig === "*") { enBloque = true; i += 2; continue; }
+        if (ch === '"' || ch === "'") { enCad = ch; i++; continue; }
+        if (ch === "`") { pilaPlantilla.push(0); i++; continue; }
+        if (pilaPlantilla.length) {
+          if (ch === "{") pilaPlantilla[pilaPlantilla.length - 1]++;
+          else if (ch === "}") {
+            pilaPlantilla[pilaPlantilla.length - 1]--;
+            if (pilaPlantilla[pilaPlantilla.length - 1] <= 0) pilaPlantilla[pilaPlantilla.length - 1] = 0;
+          }
+        }
+        if (!/\s/.test(ch)) inicioDeLinea = false;
+        i++;
+      }
+      t.igual(sospechosas.length, 0,
+        "un `//` dentro de una plantilla NO comenta: se imprime en pantalla. Líneas: " + sospechosas.slice(0, 8).join("  ·  "));
+    });
+
+    // =================================================================
+    //  REGLA I — EL TEXTO QUE VA A escapeHtml() NO LLEVA ADORNO NI MARCADO
+    //
+    //  Mismo incidente del 31-ago, la otra mitad. `motivoTexto` (la píldora de complejidad
+    //  del modal de Agendamiento) mezclaba DATO y PRESENTACIÓN: traía el punto de color
+    //  pegado delante. Consecuencias reales, las dos vistas en pantalla:
+    //    · quien lo pinta le anteponía OTRO punto -> "🔴 🔴 Paciente complejo…", y en la
+    //      franja amarilla además contradictorio, "🟢 🟡 Control habitual…", porque quien
+    //      pintaba solo miraba `esComplejo` (dos estados) y aquí hay TRES;
+    //    · al sustituir el emoji por un <span> con el punto, escapeHtml() —que existe para
+    //      que nada de aquí se interprete como HTML— lo imprimió crudo en la pantalla.
+    //
+    //  La regla: este texto es dato. El adorno lo pone quien pinta.
+    // =================================================================
+    t.caso("REGLA I — motivoTexto es TEXTO: sin emoji, sin marcado, sin adorno (bug de la píldora, 31-ago)", () => {
+      // Los tres estados reales del triaje v2, con entradas que de verdad los alcanzan
+      // (mismos vectores que suite_24): sin cubrir las tres, esta regla no probaría nada.
+      const casos = [
+        { factores: {}, fallas: { hayGrave: true }, medicamentos: [] },                              // 🔴 primera_mitad
+        { factores: { diabetes: true }, riesgo: { categoria: "moderado" },
+          medicamentos: ["Metformina 850mg", "Losartán 50mg"] },                                     // 🟢 final_jornada
+        { factores: {}, riesgo: { categoria: "muy alto" }, medicamentos: ["Losartán 50mg"] },        // 🟡 adicional_30
+      ];
+      const vistos = new Set();
+      casos.forEach((c) => {
+        const r = api._evaluarComplejidadPaciente({}, c, []);
+        vistos.add(r.franjaSugerida);
+        t.falso(/[<>&]/.test(r.motivoTexto), "sin marcado: " + r.motivoTexto.slice(0, 70));
+        t.falso(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(r.motivoTexto.replace(/➔/g, "")),
+          "sin emoji pegado al dato: " + r.motivoTexto.slice(0, 70));
+        t.cierto(/^[A-ZÁÉÍÓÚÑ]/.test(r.motivoTexto), "empieza por la frase, no por un adorno: " + r.motivoTexto.slice(0, 40));
+        t.cierto(["primera_mitad", "final_jornada", "adicional_30"].indexOf(r.franjaSugerida) >= 0,
+          "la franja es una de tres claves cerradas, que es de donde sale el punto");
+      });
+      t.igual(vistos.size, 3, "los casos tocan las TRES franjas: " + [...vistos].join(", "));
+    });
+
+    t.caso("REGLA I — quien pinta la píldora elige el punto por la FRANJA (tres estados), no por esComplejo (dos)", () => {
+      const idx = src.indexOf('querySelector("#vgl-complexity-pill")');
+      t.cierto(idx > 0, "sigue existiendo la píldora de complejidad");
+      const bloque = src.slice(idx, idx + 1400);
+      t.cierto(/PUNTO\s*=\s*\{\s*primera_mitad:/.test(bloque),
+        "el punto sale de un mapa cerrado por franja: las tres, no dos");
+      t.cierto(/escapeHtml\(\s*compEval\.motivoTexto\s*\)/.test(bloque),
+        "y el texto sigue entrando por escapeHtml: nada que venga del dato puede volverse HTML");
+      t.falso(/\(compEval\.esComplejo \? "🔴 " : "🟢 "\)\s*\+/.test(bloque),
+        "ya no se antepone un punto por esComplejo sobre un texto que traía el suyo");
+    });
   },
 };

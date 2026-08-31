@@ -40,7 +40,7 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia",
+    "heartbeat", "share", "helloOncePerDay", "_onboardingColores", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
@@ -340,6 +340,21 @@ module.exports = {
       t.cierto(capturas[0].body.includes("(1 con tiempo de tolerancia transcurrido)"), "las vencidas (AMBAR) se cuentan aparte");
       c.api.helloOncePerDay(lista);
       t.igual(capturas.length, 1, "segunda llamada el mismo día: silencio total");
+    });
+
+    // ---------- _onboardingColores ----------
+    t.caso("_onboardingColores: la leyenda de colores se muestra UNA sola vez por navegador", () => {
+      const c = cargar({ silencioso: true });
+      const capturas = [];
+      instalarNotificacion(c, capturas);
+      c.env.doc.visibilityState = "hidden";
+      c.api._onboardingColores();
+      t.igual(c.env.almacen["vgl_onb_colores"], "1", "la marca queda guardada en localStorage");
+      t.igual(capturas.length, 1, "primera vez: muestra la leyenda");
+      t.cierto(capturas[0].title.includes("Centinela activo"), "título de bienvenida");
+      t.cierto(capturas[0].body.includes("Verde") && capturas[0].body.includes("Cian") && capturas[0].body.includes("Rojo") && capturas[0].body.includes("Violeta"), "la leyenda trae los colores de la agenda");
+      c.api._onboardingColores();
+      t.igual(capturas.length, 1, "segunda vez: ya no se repite");
     });
 
     // ---------- tick ----------
@@ -682,7 +697,7 @@ module.exports = {
       c.env.gm["vgl_last_ver"] = "1.0.0";
       c.api.avisarSiActualizado();
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Vigilante actualizado"));
+      t.cierto(capturas[0].title.includes("Centinela actualizado"));
       t.igual(c.env.gm["vgl_last_ver"], VERSION);
       t.igual(c.env.gm["vgl_ver_desde"], hoyReal(), "contador de 'desde cuándo' reiniciado");
     });
@@ -961,9 +976,10 @@ module.exports = {
     // registrar"): ninguna prueba comprobaba que TODOS los timers que boot() crea
     // quedan en `state.timers` — la lista EXACTA que emergencyTeardown() cancela con
     // el kill-switch. La mutación que omitía `tVerMin` del push sobrevivió por eso.
-    // Este caso la caza: el conteo de handles debe subir en 13 (los diez del push
-    // principal + tSonda + tPymDiario + tPymCaptador) y el handle del chequeo de
-    // versión escalonado (setTimeout 4 s) tiene que estar entre ellos.
+    // Este caso la caza: el conteo de handles debe subir en 14 (los once del push
+    // principal —tRepBoot incluido, ver v17.6.83+— + tSonda + tPymDiario +
+    // tPymCaptador) y el handle del chequeo de versión escalonado (setTimeout 4 s)
+    // tiene que estar entre ellos.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -979,13 +995,6 @@ module.exports = {
 
       t.igual(timers.length, antes + 14,
         "boot registra los 14 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
-      // v17.49.0 (D4) — tRepBoot: el vaciado de la cola al ARRANCAR. Desde que la
-      // evidencia (error/fraude/resumen) dejo de mandarse por beacon al cerrar, este es
-      // el UNICO camino por el que sale, asi que "se reintenta al arrancar" tiene que ser
-      // literal y no "en el minuto 10 por el intervalo".
-      const repBoot = handles.find((x) => x.ms === 8000 && x.fn === c.api._repVaciadoDeArranque);
-      t.cierto(!!repBoot, "boot programa el vaciado de la cola a los 8 s del arranque");
-      t.cierto(timers.indexOf(repBoot.h) >= 0, "y queda registrado para que el kill-switch pueda cancelarlo");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");

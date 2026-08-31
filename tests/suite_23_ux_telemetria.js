@@ -94,7 +94,12 @@ module.exports = {
       c.api.__S.reporte = false;
       const d = c.api.repDiagnostico();
       const p1 = d[0];
-      t.cierto(p1.paso.includes("Interruptor"), "la primera puerta es el interruptor");
+      // v18.0.6 — v17.58.2 renombró esta puerta ("Interruptor de envío" -> "Estado del
+      // envío"), porque desde esa versión la telemetría es obligatoria y el apagado ya no
+      // es un interruptor que el médico pueda tocar, sino un estado imposible por interfaz.
+      // Lo que la prueba protege no es el rótulo: es que la PRIMERA puerta del embudo sea
+      // el estado del envío, y que diga sin rodeos que está apagado.
+      t.cierto(/env[ií]o|interruptor/i.test(p1.paso), "la primera puerta es el estado del envío: " + p1.paso);
       t.falso(p1.ok, "y está cerrada");
       t.cierto(/APAGADO/.test(p1.detalle), "con la causa en claro");
       t.cierto(d.length >= 6, "el embudo completo se revisa igual (" + d.length + " puertas)");
