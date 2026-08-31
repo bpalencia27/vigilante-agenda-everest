@@ -683,6 +683,7 @@ function _sinDigitosLargos(v) {
   return String(v == null ? "" : v)
     .replace(/https?:\/\/[^\s)]+/g, "<url>")
     .replace(/\d{6,}/g, "")
+    .replace(/\d{1,3}(?:[.\s-]\d{3}){1,3}/g, "")   // v18.0.4 — cédulas formateadas "1.111.111.111" (el cliente ya las borra; el servidor no confía en el emisor)
     .replace(/["'`]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

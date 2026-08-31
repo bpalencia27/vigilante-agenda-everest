@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     18.0.3
+// @version     18.0.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4746,9 +4746,17 @@
     try {
       const id = String(docId || "");
       if (!id || !datos) return null;
-      const todo = _vglCosechaTodo();
-      const previo = todo[id] || {};
+      // v18.0.4 — ENJAMBRE (31-ago): se guarda la foto ANTERIOR para comparar. Antes se
+      // releía tras fusionar, se reescribía TODO el almacén (hasta 80 pacientes) en cada
+      // vuelta del reloj (2-5 s) y en TODAS las pestañas con historia abierta: tirón de
+      // CPU en PCs modestos y una ventana de carrera abierta entre pestañas (dos lecturas
+      // seguidas podían pisarse y perder la fusión de la otra — memoria clínica). La
+      // guarda de escritura de abajo solo persiste cuando algo cambió de verdad (la
+      // comparación ignora los sellos de tiempo).
+      const previoTodo = _vglCosechaTodo();
+      const previo = previoTodo[id] || {};
       const fusion = Object.assign({}, previo, datos, { ts: Date.now() });
+      const todo = Object.assign({}, previoTodo);
       todo[id] = fusion;
       // Poda: por edad y por cantidad, sacrificando siempre lo más viejo.
       try {
@@ -4762,6 +4770,13 @@
           for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) delete todo[k];
         }
       } catch (e2) {}
+      // v18.0.4 — GUARDA DE ESCRITURA: si tras fusionar y podar el contenido es idéntico
+      // al almacenado (sin contar `ts`), no hay nada que persistir. Es la misma guarda
+      // "Escribir SOLO si algo cambió" que ya usa mtrProdRegistrar (12 escrituras síncronas
+      // por minuto → 2). _vglCosecharFactoresVisibles coopera conservando el sello del
+      // valor cuando el médico no tocó nada, así el JSON no "cambia" solo por el reloj.
+      const _firma = (o) => JSON.stringify(o, (k, v) => (k === "ts" ? undefined : v));
+      if (_firma(todo) === _firma(previoTodo)) return fusion;
       // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
       // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
       // null, así que un QuotaExceededError se tragaba ENTERO y en silencio. Con el
@@ -4935,7 +4950,14 @@
       for (const clave of Object.keys(C)) {
         let v = null;
         try { v = mtrLeerRadioSiNo(C[clave], doc); } catch (e) { v = null; }
-        if (v === true || v === false) { mapa[clave] = { v: v, ts: Date.now() }; n++; }
+        if (v === true || v === false) {
+          // v18.0.4 — ENJAMBRE (31-ago): si el valor no cambió se conserva el sello
+          // anterior. Antes se renovaba `ts` en cada lectura y el JSON cambiaba siempre,
+          // forzando la reescritura completa del almacén en cada vuelta del reloj.
+          const anterior = mapa[clave];
+          if (anterior && anterior.v === v) { mapa[clave] = anterior; } else { mapa[clave] = { v: v, ts: Date.now() }; }
+          n++;
+        }
       }
       return { mapa: mapa, n: n };
     } catch (e) { return null; }
@@ -10451,7 +10473,12 @@ _vglOfrecerDeshacer(btn);
     if (!repOn()) return;
     const d = todayStamp(); if (repFrDia !== d) { repFrDia = d; repFrN = 0; }
     if (repFrN >= 20) return; repFrN++;
-    reportar("fraude", { hora: hora || "", min: Math.round((min || 0) * 10) / 10 });
+    // v18.0.4 — ENJAMBRE (31-ago): `hora` es el ÚNICO campo de telemetría derivado del DOM
+    // que no pasaba por la barrera de 6+ dígitos (uxClaveLimpia / _sanearMensajeError).
+    // Normalmente lleva "08:20 AM", pero si el parser de la agenda llegara a poner otra
+    // cosa (dato corrupto, cédula), no debe viajar: sin forma de hora, va vacío.
+    const hLimpia = (typeof hora === "string" && /^\s*\d{1,2}:\d{2}/.test(hora)) ? hora.trim().slice(0, 20) : "";
+    reportar("fraude", { hora: hLimpia, min: Math.round((min || 0) * 10) / 10 });
   }
 
   // =====================================================================
@@ -11528,7 +11555,7 @@ _vglOfrecerDeshacer(btn);
       if (state.estadoPendiente.get(key) === stCrudo) { state.estadoPendiente.delete(key); stRaw = stCrudoRaw; st = stCrudo; }
       else { state.estadoPendiente.set(key, stCrudo); stRaw = prevRaw; st = prev; }
     } else state.estadoPendiente.delete(key);
-    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false;
+    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false, callar = false;
     if (st.includes("en sala")) {
       if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
@@ -11543,8 +11570,10 @@ _vglOfrecerDeshacer(btn);
       // interrumpe. El color ROJO se CONSERVA (el panel lo sigue pintando y la auditoría lo
       // sigue registrando: es la evidencia para las reclamaciones), pero `sound` se queda
       // en false, que es lo único que dispara tono, notificación del sistema y cartel.
+      // v18.0.4 — ENJAMBRE (31-ago): además de `sound=false`, se marca `callar` para que
+      // maybeNotify respete la decisión (antes volvía a sonar el ROJO por esa vía).
       if (_apptMarcada(state.alertedFraud, a, key)) color = "ROJO";
-      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
+      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; callar = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
       else color = "VERDE";
     }
     else if (st.includes("sin presentarse")) {
@@ -11588,7 +11617,7 @@ _vglOfrecerDeshacer(btn);
     // forma de saber a qué hora se confirmó realmente. Pedido textual: "no me dice a qué
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
-    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, elapsed: Math.round(elapsed * 10) / 10, pym }; }
+    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
     if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
     else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
     state.historical.set(key, stRaw);
@@ -11609,7 +11638,7 @@ _vglOfrecerDeshacer(btn);
         } catch (e) {}
       }
     }
-    return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
+    return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound, callar, elapsed: Math.round(elapsed * 10) / 10, pym };
   }
 
   let audioCtx = null;
@@ -12594,9 +12623,14 @@ _vglOfrecerDeshacer(btn);
     cola.forEach((p) => {
       if (!p) return;
       if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
-      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
+      // v18.0.4 — ENJAMBRE (31-ago): el cartel respeta muted() (v17.19.0) pero el FLUSH
+      // no lo miraba: decidía "puedo pintar", llamaba _dispararAvisoCartel (que callaba
+      // por el silencio temporal) y daba por pintado el aviso — el cartel ROJO de fraude
+      // se consumía sin mostrarse nunca. Con `!muted()` aquí, un aviso que no se pudo
+      // pintar por silencio activo SE QUEDA en la cola y sale en el siguiente ciclo.
+      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted();
       if (puedePintar) { _dispararAvisoCartel(p); return; }
-      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta: esperará
+      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta o silencio activo: esperará
       // No-ROJO o cartel apagado: jamás se pintará como cartel — su canal ya sonó. Se suelta.
     });
     try { writeJSON(AVISOS_PENDIENTES_KEY, seQuedan); } catch (e) {}
@@ -12987,6 +13021,12 @@ _vglOfrecerDeshacer(btn);
     // extemporánea son hechos TERMINALES de la jornada: si ya se contaron, ya se
     // avisaron — la re-transición actualiza el estado interno pero NO vuelve a sonar.
     if (!_conto && (a.color === "AMBAR" || a.color === "ROJO")) return;
+    // v18.0.4 — ENJAMBRE (31-ago): la decisión v16.2.8 ("sin presentarse → atendido" NO
+    // notifica) vivía solo en colorAndAlert (sound=false) y este flujo no la miraba: el
+    // ROJO de esa transición volvía a sonar con repique, notificación y cartel — justo la
+    // interrupción que el médico ordenó callar. `callar` lo dice en voz alta; el conteo y
+    // la auditoría de arriba ya corrieron, así que la evidencia para reclamaciones queda.
+    if (a.color === "ROJO" && a.callar) return;
     // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
     // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
     // ya quedaron registrados; aquí solo se frena el cartel/sonido repetido.
@@ -13518,6 +13558,15 @@ _vglOfrecerDeshacer(btn);
     el.root.classList.toggle("min", s === "min");
     el.root.style.display = (s === "dock" || s === "hidden") ? "none" : "flex";
     if (el.dock) el.dock.style.display = (s === "dock") ? "flex" : "none";
+    // v18.0.4 — ENJAMBRE (31-ago): el canal de 1 s del reloj (v18.0.3) late con el panel
+    // invisible todo el día: "cerrar" solo aplica display:none y el nodo sigue en el DOM,
+    // así que su auto-stop nunca disparaba (~86.400 ticks inútiles/día). Al ocultar se
+    // detiene el canal y se libera el sello; al volver a una vista visible se remonta.
+    // El auto-stop original (el nodo de verdad desapareció) se conserva intacto.
+    try {
+      if (s === "dock" || s === "hidden") { _relojDetener("reloj"); _relojSegundosMontado = false; }
+      else _relojSegundosMontar();
+    } catch (e) {}
     if (!auto) { state.userWinState = s; savePos(); }
   }
 
@@ -28011,6 +28060,15 @@ _vglOfrecerDeshacer(btn);
           const _comp = _siembraCompartidaLeer();
           if (_comp) for (const [k, v] of _comp) state.notified.set(k, v);
           _fraudeCompartidoFusionar();
+        } catch (e) {}
+      } else if (!state.leader) {
+        // v18.0.4 — ENJAMBRE (31-ago): la fusión solo corría al tomar el mando, así que
+        // una pestaña NO líder abierta durante la jornada pintaba VERDE "llegó a tiempo"
+        // una cita que la líder ya marcó ROJA (fraude compartido en localStorage). Con
+        // este throttle (10 s) todas las pestañas mantienen la misma realidad visual; el
+        // relevo sigue fusionando en el acto (rama de arriba), como siempre.
+        try {
+          if (Date.now() - (state._noLiderFraudeTs || 0) > 10000) { state._noLiderFraudeTs = Date.now(); _fraudeCompartidoFusionar(); }
         } catch (e) {}
       }
       // v7.8.1: fuera de agenda del día / historia clínica, el panel no se repinta —
