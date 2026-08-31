@@ -1095,5 +1095,49 @@ module.exports = {
       t.igual(B.api.heartbeat(), true, "la pestaña que SÍ evalúa toma el mando");
       t.falso(A.api.__state.leader, "y la ciega no lo tiene");
     });
+
+    // =====================================================================
+    //  v18.0.9 — RELEVO POR CEGUERA: UN LÍDER QUE NO VE NO SE QUEDA CON EL MANDO
+    //
+    //  Hasta aquí el mando solo cambiaba por VISIBILIDAD (v14.1.5): un líder OCULTO, al que
+    //  el navegador estrangula el temporizador, se lo cede a uno a la vista. Pero un líder
+    //  A LA VISTA y sin ninguna fuente —API caído y fuera de «Citas del día», que es el caso
+    //  del médico trabajando dentro de una historia clínica— lo retenía indefinidamente
+    //  mientras otra pestaña, capaz de leer, se quedaba callada.
+    //
+    //  Encargo del médico (31-ago): «siempre debe estar analizando citas del día con esa
+    //  pestaña líder». Ahora el latido lleva `ve`, y quien ve puede relevar a quien no ve.
+    // =====================================================================
+    t.caso("v18.0.9: el latido publica si esta pestaña PUEDE leer la agenda", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      c.api.heartbeat();
+      const beat = JSON.parse(c.env.storage.getItem("vgl_leader_beat") || "null");
+      t.cierto(!!beat, "hay latido");
+      t.cierto(typeof beat.ve === "boolean", "y declara si ve la agenda o no · ve=" + beat.ve);
+    });
+
+    t.caso("v18.0.9: una pestaña que SÍ ve releva a un líder ciego, aunque el líder esté a la vista", () => {
+      const c = cargar({ silencioso: true });
+      // Líder ajeno, fresco, A LA VISTA (no relevable por visibilidad) y CIEGO.
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: false }));
+      // Esta pestaña sí ve: se simula estando en «Citas del día» (hora + estado en el DOM).
+      c.env.doc.querySelector = () => ({ textContent: "07:30 a. m." });
+      t.igual(c.api.heartbeat(), true, "se lleva el mando: el otro no estaba vigilando nada");
+    });
+
+    t.caso("v18.0.9: si el líder ciego y yo estamos los dos ciegos, NO hay relevo — no arreglaría nada", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: false }));
+      c.env.doc.querySelector = () => null;          // ni agenda en el DOM ni API sano
+      t.igual(c.api.heartbeat(), false, "sin poder leer, quitarle el mando solo movería la ceguera de sitio");
+    });
+
+    t.caso("v18.0.9: a un líder que SÍ ve no se le quita el mando por esta vía", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: true }));
+      c.env.doc.querySelector = () => ({ textContent: "07:30 a. m." });
+      t.igual(c.api.heartbeat(), false, "el líder está vigilando: no hay motivo para relevarlo");
+    });
   },
 };

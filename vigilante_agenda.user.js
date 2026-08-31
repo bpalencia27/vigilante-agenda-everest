@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.8
+// @version      18.0.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8718,6 +8718,7 @@ _vglOfrecerDeshacer(btn);
   // LEADER_KEY. Ver heartbeat() para el porqué del umbral de 10 s.
   const BEAT_WRITE_MIN_MS = 10000;
   let _ultimoBeatWrite = 0;
+  let _ultimoBeatVe = null;   // v18.0.9 — última `ve` publicada en el latido
   let _ultimoBeatOculta = null;
   function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
   function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
@@ -8760,6 +8761,20 @@ _vglOfrecerDeshacer(btn);
   function _puedoEvaluarLaAgenda() {
     try { return !!(_reloj && _reloj.canales && _reloj.canales.has("tick")); } catch (e) { return false; }
   }
+  // v18.0.9 — ¿ESTA pestaña puede LEER la agenda ahora mismo? Es la MISMA condición que
+  // exige tick() para tener datos: o el API está sano y fresco, o estamos en «Citas del
+  // día» y se puede raspar el DOM. Se publica en el latido para que una pestaña que sí ve
+  // pueda relevar a un líder ciego — hasta ahora el mando solo cambiaba por VISIBILIDAD, así
+  // que un líder a la vista pero sin ninguna fuente lo retenía indefinidamente mientras
+  // otra pestaña, capaz de leer, se quedaba callada. Es la otra mitad del encargo del
+  // médico: «siempre debe estar analizando citas del día con esa pestaña líder».
+  function _puedoLeerLaAgenda() {
+    try {
+      if (typeof apiSano === "function" && apiSano() && state.apiCitas
+          && Date.now() - (state.apiEn || 0) < 180000) return true;
+      return seccionActiva() === "agenda";
+    } catch (e) { return false; }
+  }
   function heartbeat() {
     try {
       if (!_puedoEvaluarLaAgenda()) { state.leader = false; return false; }
@@ -8767,6 +8782,7 @@ _vglOfrecerDeshacer(btn);
       let beat = null;
       try { beat = JSON.parse(localStorage.getItem(LEADER_KEY) || "null"); } catch (e) {}
       const yoOculta = _pestanaOculta();
+      const yoVeo = _puedoLeerLaAgenda();   // v18.0.9 — viaja en el latido (ver más abajo)
       if (beat && beat.id && beat.id !== TABID && (ahora - beat.t) < LEADER_TTL_MS) {
         // Latido ajeno y fresco. Solo se le desafía si él está oculto —y por tanto
         // estrangulado por el navegador— y yo estoy a la vista.
@@ -8778,8 +8794,16 @@ _vglOfrecerDeshacer(btn);
         // verdad se quedó mirando la pestaña se lleva el mando igual, solo que sin ráfaga.
         const relevoPorVisibilidad = beat.oculta === true && !yoOculta &&
           (ahora - _ultimoRelevoVisibilidad) > RELEVO_VISIBILIDAD_MIN_MS;
-        if (!relevoPorVisibilidad) {
-          state.leader = false;             // hay un líder ajeno y su latido está fresco
+        // v18.0.9 — SEGUNDO MOTIVO DE RELEVO: LA CEGUERA. Un líder que NO puede leer la
+        // agenda (ni API sano y fresco, ni «Citas del día» para raspar) no está vigilando
+        // nada, esté a la vista o no. Si esta pestaña SÍ puede leer, se lo lleva. Mismo
+        // enfriamiento que el relevo por visibilidad, para que dos pestañas no se pasen el
+        // mando en ráfaga. Si las dos están ciegas no hay relevo: no arregla nada y solo
+        // añadiría ruido.
+        const relevoPorCeguera = beat.ve === false && yoVeo &&
+          (ahora - _ultimoRelevoVisibilidad) > RELEVO_VISIBILIDAD_MIN_MS;
+        if (!relevoPorVisibilidad && !relevoPorCeguera) {
+          state.leader = false;             // hay un líder ajeno, fresco, y que sí ve
           return false;
         }
         _ultimoRelevoVisibilidad = ahora;
@@ -8792,10 +8816,14 @@ _vglOfrecerDeshacer(btn);
       // (20 s) y `oculta` vigente, así que basta escribir si cambió la visibilidad o si
       // pasaron >= 10 s desde el último write. La LECTURA del latido ajeno sigue en cada
       // tick: es la que detecta al líder rival.
-      if (yoOculta !== _ultimoBeatOculta || (ahora - _ultimoBeatWrite) >= BEAT_WRITE_MIN_MS) {
-        try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: ahora, oculta: yoOculta })); } catch (e) {}
+      // v18.0.9 — el latido lleva también `ve`: si esta pestaña puede leer la agenda. Un
+      // cambio de `ve` se publica EN EL ACTO (igual que un cambio de visibilidad), porque es
+      // justo la transición que otra pestaña necesita ver para relevar a un líder ciego.
+      if (yoOculta !== _ultimoBeatOculta || yoVeo !== _ultimoBeatVe || (ahora - _ultimoBeatWrite) >= BEAT_WRITE_MIN_MS) {
+        try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: ahora, oculta: yoOculta, ve: yoVeo })); } catch (e) {}
         _ultimoBeatWrite = ahora;
         _ultimoBeatOculta = yoOculta;
+        _ultimoBeatVe = yoVeo;
       }
       if (!state.leader) API.ultimo = 0;    // al tomar el relevo: agenda fresca YA, sin esperar cadencia
       state.leader = true;
@@ -13776,14 +13804,23 @@ _vglOfrecerDeshacer(btn);
   // ¿Se puede intentar el API? Tras 5 fallos seguidos se deja descansar, pero se
   // reintenta cada 5 min: una caída pasajera (reinicio del servidor, corte de la VPN)
   // no debe dejar el camino directo muerto hasta que alguien recargue la página.
-  const apiUtil = () => !!API.url && (API.fallos < 5 || Date.now() - (API.ultimo || 0) > 300000);
+  // v18.0.9 — EL DESCANSO BAJA DE 5 MINUTOS A 1. Encargo del médico (31-ago): «hay que
+  // blindar que el Centinela siempre tenga acceso a la API de citas del día». Medido sobre
+  // el código anterior: tras 5 fallos seguidos (unos 370 s) el API se retiraba y solo se
+  // reintentaba CADA 5 MINUTOS. En una consulta en vivo eso son hasta 5 minutos ciego por
+  // cada reintento, y dentro de una historia clínica no hay respaldo que valga (el raspado
+  // del DOM solo funciona en «Citas del día»). Un minuto sigue siendo un ritmo contenido
+  // —una petición por minuto contra un servidor caído no es martilleo— y devuelve el
+  // camino directo en cuanto la red vuelve.
+  const API_DESCANSO_MS = 60000;
+  const apiUtil = () => !!API.url && (API.fallos < 5 || Date.now() - (API.ultimo || 0) > API_DESCANSO_MS);
   // ¿Se puede CONFIAR en él para pintar la agenda? Basta con que empiece a fallar para
   // que deje de ser la fuente: más vale volver al clon que enseñar estados de hace rato.
   const apiSano = () => API.ok > 0 && API.fallos < 2;
   // Espera entre consultas. Si el API está fallando NO se va más lento: se va a un
   // ritmo fijo y contenido (10–30 s) para agotar los 5 intentos en un par de minutos.
   // Con un frenado creciente clásico, rendirse costaba un cuarto de hora.
-  const apiEspera = (base) => (API.fallos >= 5 ? 300000 : API.fallos ? Math.min(30000, 5000 * (1 + API.fallos)) : Math.max(4000, base));
+  const apiEspera = (base) => (API.fallos >= 5 ? API_DESCANSO_MS : API.fallos ? Math.min(30000, 5000 * (1 + API.fallos)) : Math.max(4000, base));
 
   // v12.5.14 — DIAGNÓSTICO EN VIVO, pedido para investigar el aviso "Última lectura...
   // vuelve a Citas del día" pegado durante minutos fuera de esa vista (reportado en

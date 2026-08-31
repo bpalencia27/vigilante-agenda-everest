@@ -364,7 +364,13 @@ module.exports = {
       // Fallos 4 y 5: entra al enfriamiento largo de apiUtil(), pero la URL sigue viva
       await e.c.api.apiLeerAgenda();
       await e.c.api.apiLeerAgenda();
-      t.igual(e.c.api.apiEspera(0), 300000, "5 fallos: enfriamiento de 5 min, contra la MISMA url");
+      // v18.0.9 — el descanso baja de 5 min a 1. Encargo del médico (31-ago): «hay que
+      // blindar que el Centinela siempre tenga acceso a la API de citas del día». Con 5 min,
+      // y sin respaldo posible dentro de una historia clínica (el raspado del DOM solo vive
+      // en «Citas del día»), cada reintento costaba hasta cinco minutos de ceguera. Lo que
+      // esta prueba protege NO es el número: es que la URL sobreviva a la racha y se siga
+      // reintentando contra la MISMA url, que es lo que evitó v17.6.16.
+      t.igual(e.c.api.apiEspera(0), 60000, "5 fallos: descanso de 1 min, contra la MISMA url");
       t.cierto(e.c.api.apiUtil(), "aún con 5 fallos, apiUtil() deja reintentar tras el enfriamiento (no purgó)");
       // Y si el servidor responde bien esta vez (p. ej. la sesión de Athenea se restauró
       // sola), vuelve la confianza SIN que nadie haya vuelto a Citas del día

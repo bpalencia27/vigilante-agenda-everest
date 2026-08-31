@@ -6177,3 +6177,53 @@ La segunda prueba nueva es de forma, no de conducta: recorre el clasificador y e
 **toda** línea que produzca `categoria: "muy alto"` lleve `paso: 1`. Si alguien añadiera una
 vía a «muy alto» en el paso 3 o el 4, el piso empezaría a tapar categorías en silencio y esta
 prueba lo obliga a decidirlo a conciencia.
+
+## v18.0.9 — 31-ago-2026 · BLINDAR EL ACCESO A LA AGENDA
+
+Encargo del médico, textual: *«lo que hay que blindar es que el Centinela siempre tenga
+acceso a la API de citas del día o algún otro método que sea infalible para este tipo de
+cosas que me están poniendo muchos problemas últimamente»*.
+
+### Lo que se midió antes de tocar
+
+```
+fallos seguidos -> espera hasta el siguiente intento
+  1 -> 10 s   2 -> 15 s   3 -> 20 s   4 -> 25 s
+  5 -> 300 s  6 -> 300 s  7 -> 300 s …
+tiempo hasta agotar los 5 intentos: 370 s
+y a partir de ahí, un intento cada 5 minutos
+```
+
+Cinco minutos de descanso entre intentos. Y dentro de una historia clínica **no hay respaldo
+posible**: el raspado del DOM solo funciona en «Citas del día». Así que cada reintento costaba
+hasta cinco minutos de ceguera total, sin ninguna señal. Baja a **1 minuto** (`API_DESCANSO_MS`):
+una petición por minuto contra un servidor caído no es martilleo, y devuelve el camino directo
+en cuanto la red vuelve.
+
+**Corrección a una propuesta mía anterior, dicha porque estaba equivocada:** llegué a
+proponerle al médico «compartir la URL aprendida entre pestañas» como si no se hiciera. **Sí se
+hace** desde v17.6.14: se persiste ofuscada en `localStorage` (`vgl_api_url`) y se lee al
+cargar. Ese hueco no existía.
+
+### Relevo por ceguera
+
+Hasta aquí el mando solo cambiaba por VISIBILIDAD (v14.1.5): un líder OCULTO, estrangulado por
+el navegador, se lo cede a uno a la vista. Pero un líder **a la vista y sin ninguna fuente**
+—API caído y fuera de «Citas del día», que es exactamente el médico trabajando dentro de una
+historia— lo retenía indefinidamente mientras otra pestaña capaz de leer se quedaba callada.
+
+Ahora el latido lleva `ve` (¿puedo leer la agenda?), y quien ve puede relevar a quien no ve.
+Con el mismo enfriamiento que el relevo por visibilidad, y con dos guardas: si las dos
+pestañas están ciegas NO hay relevo (movería la ceguera de sitio), y a un líder que sí ve no
+se le quita el mando por esta vía.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se quita el relevo por ceguera de la condición | *una pestaña que SÍ ve releva a un líder ciego, aunque el líder esté a la vista* (`suite_17`) | Sí — 52/52 |
+| 2 | el relevo se dispara aunque yo tampoco vea (se quita `&& yoVeo`) | *si el líder ciego y yo estamos los dos ciegos, NO hay relevo* (`suite_17`) | Sí — 52/52 |
+| 3 | el latido deja de publicar `ve` | *el latido publica si esta pestaña PUEDE leer la agenda* (`suite_17`) | Sí — 52/52 |
+
+La mutación 2 es la que importa de verdad: sin ella el relevo degeneraría en dos pestañas
+ciegas pasándose el mando en ráfaga, que es peor que el defecto original.
+
+Banco completo: **2.731 comprobaciones pasan, 0 fallan.**
