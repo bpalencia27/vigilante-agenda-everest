@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.13
+// @version      18.0.14
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.13";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.14";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14501,12 +14501,12 @@ _vglOfrecerDeshacer(btn);
       .vgl-op-half{opacity:0.5}
       .vgl-line-through{text-decoration:line-through}
       .vgl-border-err{border:1px solid var(--c-rojo, #e54d42)}
-      .vgl-bg-success{background:var(--c-verde, #10b981) !important;color:var(--bg-solid, #0b0e15)}
+      .vgl-bg-success{background:var(--c-verde, #10b981) !important;color:var(--bg-solid, #0b0e15) !important}
       .vgl-btn-wait{opacity:0.5;cursor:wait}
 
-      .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
+      .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc !important;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
       .vgl-sp-toast.vgl-sp-visible{opacity:1;transform:translateY(0)}
-      .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:var(--t-strong);font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
+      .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:var(--t-strong);font-weight:700;color:#9aa7ba !important;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
 
       /* Botones inyectados globales */
       /* v14.0.0 — INCIDENTE REAL EN CONSULTA: el botón "Normalidad fija" desapareció.
@@ -14527,7 +14527,7 @@ _vglOfrecerDeshacer(btn);
            Diabetes» en el pantallazo). Etiqueta corta + tope de ancho: viven completos
            en la columna izquierda libre. */
         position:fixed;left:8px;max-width:132px;z-index:var(--z-widget,2147480000);
-        color:var(--bg-solid, #fff);border:none;padding:9px 10px;border-radius:6px;
+        color:var(--bg-solid, #fff) !important;border:none;padding:9px 10px;border-radius:6px;
         font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
       }
@@ -14617,16 +14617,16 @@ _vglOfrecerDeshacer(btn);
         background:linear-gradient(0deg,var(--surface-2),var(--surface-2)),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-card);
-        color:var(--fg);font-family:var(--font-stack);
+        color:var(--fg) !important;font-family:var(--font-stack);
       }
       #vgl-acciones-dock.colapsado .vgl-dock-btns{display:none}
       .vgl-dock-toggle{
         width:26px;height:22px;border:none;border-radius:var(--r-chip);
-        background:transparent;color:var(--fg3);cursor:pointer;padding:0;
+        background:transparent;color:var(--fg3) !important;cursor:pointer;padding:0;
         display:flex;align-items:center;justify-content:center;font-size:var(--t-micro);
         transition:background .15s var(--ease-out),color .15s var(--ease-out);
       }
-      .vgl-dock-toggle:hover{color:var(--fg);background:var(--surface-1)}
+      .vgl-dock-toggle:hover{color:var(--fg) !important;background:var(--surface-1)}
       .vgl-dock-btns{display:flex;flex-direction:column;gap:6px;align-self:stretch}
       /* El ▶ de plegar no debe estirarse a lo ancho del dock: se queda de su tamaño. */
       .vgl-dock-toggle{align-self:flex-start}
@@ -14660,7 +14660,7 @@ _vglOfrecerDeshacer(btn);
          la Regla A de cascada). Iguales de especificidad + orden de declaración es
          justamente lo que esa regla existe para atrapar; ganar SIEMPRE, sin depender de qué
          venga después en la hoja de estilos, es el mismo criterio que ya usa la Regla C. */
-      .vgl-dock-btn.vgl-dock-btn-ambar{box-shadow:inset 0 0 0 1px var(--c-ambar);color:var(--c-ambar)}
+      .vgl-dock-btn.vgl-dock-btn-ambar{box-shadow:inset 0 0 0 1px var(--c-ambar);color:var(--c-ambar) !important}
       .vgl-dock-ico{font-size:var(--t-lead);line-height:1;flex:none;color:inherit !important}
       .vgl-dock-lbl{font-size:var(--t-micro);font-weight:750;line-height:1;white-space:nowrap;letter-spacing:.1px;color:inherit !important}
       #vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none !important;animation:none !important}
@@ -14692,10 +14692,17 @@ _vglOfrecerDeshacer(btn);
          está diseñada, y el contador ".vgl-cd" a 1,05:1 — ilegible. Se pasa al blindaje
          tipográfico ya establecido: :where(...) tiene especificidad CERO y :not([class])
          hace que solo alcance a texto suelto sin clase propia, nunca a nuestras clases. */
-      :where(#vgl-root :not([class])),
-      :where(#vgl-toasts :not([class])),
-      :where(#vgl-dock :not([class])),
-      :where(#vgl-acciones-dock :not([class])){color:inherit}
+      /* v18.0.14 — el ID sale del :where() y la declaración gana !important. Escrito con el
+         id DENTRO, la regla tenía especificidad CERO: perdía contra cualquier regla
+         div{color:X !important} de Everest, que es una SPA ajena cuyo CSS puede cambiar sin avisar —
+         justo la fuga que el médico reportó el 31-ago. Con el id fuera queda (1,0,0), gana
+         a las reglas de tipo de Everest, y el :not([class]) de dentro la mantiene DISJUNTA
+         de toda clase de acento nuestra: nunca compiten, así que el bug #1 (nuestra regla
+         vieja gana a nuestra clase nueva) sigue cerrado. */
+      #vgl-root :where(:not([class])),
+      #vgl-toasts :where(:not([class])),
+      #vgl-dock :where(:not([class])),
+      #vgl-acciones-dock :where(:not([class])){color:inherit !important}
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
          especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
@@ -14761,7 +14768,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-clock.vgl-stale{color:var(--c-ambar) !important;font-weight:700}
       #vgl-title{
         flex:1;text-align:center;font-weight:750;font-size:var(--t-lead); /* Título 16px */
-        letter-spacing:.2px;color:var(--fg);opacity:.96;
+        letter-spacing:.2px;color:var(--fg) !important;opacity:.96;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       }
       #vgl-title small{
@@ -14803,12 +14810,12 @@ _vglOfrecerDeshacer(btn);
         position:absolute;top:38px;left:10px;right:10px;z-index:8;
         background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(0,0,0,0) 60%),var(--bg-solid);
         border:1px solid var(--edge);border-radius:var(--r-card);padding:10px 12px;
-        box-shadow:0 12px 30px rgba(0,0,0,.45);font-size:var(--t-micro);color:var(--fg2);cursor:pointer
+        box-shadow:0 12px 30px rgba(0,0,0,.45);font-size:var(--t-micro);color:var(--fg2) !important;cursor:pointer
       }
-      .vgl-salud-tit{font-weight:800;color:var(--fg);margin-bottom:6px}
+      .vgl-salud-tit{font-weight:800;color:var(--fg) !important;margin-bottom:6px}
       .vgl-salud-fila{margin:3px 0;line-height:1.45}
       .vgl-salud-fila b{display:inline-block;width:14px}
-      .vgl-salud-alerta{color:var(--c-ambar)}
+      .vgl-salud-alerta{color:var(--c-ambar) !important}
       .vgl-salud-nd{opacity:.75}
       /* =====================================================================
          v17.18.0 — WIDGETS DE CONDUCTA. Cuelgan de document.body, junto a un botón real
@@ -14818,22 +14825,30 @@ _vglOfrecerDeshacer(btn);
          patrón :where(...:not([class])), nunca "selector b,span,div" a pelo (bug #1 del
          proyecto: una regla de tipo le gana en especificidad a una clase de acento).
          ===================================================================== */
-      #vgl-cw-examenes{position:absolute;z-index:var(--z-widget,2147480000);font-family:"adineue PRO",var(--font-stack, sans-serif);max-width:280px;transform:translateX(-50%)}
+      /* v18.0.14 — MEDIDO EN CHROMIUM: el blindaje tipográfico NO bastaba aquí. Forzaba
+         color:inherit en el texto suelto, sí, pero HEREDABA UN ANCESTRO YA SECUESTRADO:
+         estas raíces y sus contenedores (.vgl-cw-panel, .vgl-cw-fila) son <div> CON clase
+         y SIN color propio, así que la regla div{color:X !important} de Everest los pintaba
+         a ellos y el <b>/<small> de dentro heredaba obedientemente el azul de Everest.
+         Un blindaje que hereda de un padre secuestrado no blinda nada. La cadena entera
+         necesita color propio con !important, desde la raíz. */
+      #vgl-cw-examenes{position:absolute;z-index:var(--z-widget,2147480000);font-family:"adineue PRO",var(--font-stack, sans-serif);max-width:280px;transform:translateX(-50%);color:var(--fg) !important}
       #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       #vgl-cw-examenes .vgl-cw-panel{
         display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
         border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
         max-height:260px;overflow-y:auto;
+      color:inherit !important;   /* v18.0.14 — eslabón de la cadena */
       }
       #vgl-cw-examenes.vgl-cw-abierto .vgl-cw-panel{display:block}
-      #vgl-cw-examenes .vgl-cw-fila{margin:5px 0;line-height:1.4}
+      #vgl-cw-examenes .vgl-cw-fila{margin:5px 0;line-height:1.4;color:inherit !important}   /* v18.0.14 — eslabón de la cadena: ver la nota de la raíz */
       #vgl-cw-examenes .vgl-cw-fila:not(:last-child){border-bottom:1px solid var(--line);padding-bottom:5px}
       #vgl-cw-examenes .vgl-cw-nom{display:block;font-size:var(--t-micro);font-weight:700;color:var(--fg) !important}
       #vgl-cw-examenes .vgl-cw-que{display:block;font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-examenes .vgl-cw-venc .vgl-cw-nom{color:var(--c-rojo) !important}
       #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
-      :where(#vgl-cw-examenes :not([class])){color:inherit}
+      #vgl-cw-examenes :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where(): ver la nota del blindaje general */
       /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
          ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
          Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
@@ -14872,13 +14887,21 @@ _vglOfrecerDeshacer(btn);
       }
       button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.6}
       button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:rgba(0,0,0,.5) !important}
-      :where(#vgl-cw-ordenar-btn :not([class])){color:inherit}
+      #vgl-cw-ordenar-btn :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where() */
       /* v17.24.0 — widget de Conducta: análisis farmacológico (Fase 2). Mismo idioma que
          #vgl-cw-examenes (badge/panel/estados/pulso); el contenido del panel lo pintan
-         mtrRenderAvisosHtml/mtrRenderDuplicidadesHtml (.vgl-mtr-*/.vgl-dup-*), cuyo CSS se
+         mtrRenderAvisosHtml/mtrRenderDuplicidadesHtml (clases .vgl-mtr- y .vgl-dup-), cuyo CSS se
+         v18.0.14 — ESTA LÍNEA ESTABA ROTA DESDE v17.24.0: decía «.vgl-mtr-·/.vgl-dup-·» con
+         asteriscos de comodín, y ese «·/» CERRABA EL COMENTARIO ahí mismo. El resto de la
+         frase pasaba a leerse como CSS, y el analizador se comía la regla que venía justo
+         detrás: #vgl-cw-farmaco{position:fixed;z-index;font-family;max-width:320px}. Medido
+         en Chromium contra la hoja real: position salía "static" y max-width "none". La
+         posición se salvaba de milagro porque JS la pone en línea (v17.38.0), pero el
+         z-index y el tope de 320 px llevaban meses muertos: el widget de Fármacos podía
+         quedar por debajo de elementos de Everest y estirarse sin freno.
          extiende más abajo para cubrir también este widget — Regla E, cuelga de
          document.body. */
-      #vgl-cw-farmaco{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:320px}
+      #vgl-cw-farmaco{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:320px;color:var(--fg) !important}   /* v18.0.14 — raíz con color propio: ver la nota de #vgl-cw-examenes */
       #vgl-cw-farmaco .vgl-cw-badge{
         display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
         background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
@@ -14892,11 +14915,12 @@ _vglOfrecerDeshacer(btn);
         display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
         border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
         max-height:320px;overflow-y:auto;
+      color:inherit !important;   /* v18.0.14 — eslabón de la cadena */
       }
       #vgl-cw-farmaco.vgl-cw-abierto .vgl-cw-panel{display:block}
       #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
-      :where(#vgl-cw-farmaco :not([class])){color:inherit}
+      #vgl-cw-farmaco :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where() */
       /* =====================================================================
          v16.1.0 — REGLA E APLICADA A LA FICHA Y AL MÓDULO DE RIESGO
          ---------------------------------------------------------------------
@@ -15049,47 +15073,47 @@ _vglOfrecerDeshacer(btn);
       .vgl-tab-riesgo.vgl-rcv-alto{border-color:rgba(var(--rgb-ambar),.55);background:rgba(var(--rgb-ambar),.10)}
       .vgl-tab-riesgo.vgl-rcv-mod{border-color:rgba(var(--rgb-recordatorio),.45);background:rgba(var(--rgb-recordatorio),.08)}
       .vgl-tab-riesgo.vgl-rcv-bajo{border-color:rgba(var(--rgb-verde),.45);background:rgba(var(--rgb-verde),.08)}
-      .vgl-tab-riesgo-cat{font-size:var(--t-lead);font-weight:800;color:var(--fg);margin-bottom:6px}
-      .vgl-tab-riesgo-por{font-size:var(--t-micro);color:var(--fg2);line-height:1.55}
+      .vgl-tab-riesgo-cat{font-size:var(--t-lead);font-weight:800;color:var(--fg) !important;margin-bottom:6px}
+      .vgl-tab-riesgo-por{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.55}
       .vgl-tab-crit{display:block;margin:2px 0}
-      .vgl-tab-mini{font-size:var(--t-micro);color:var(--fg3);margin-top:6px;line-height:1.45}
+      .vgl-tab-mini{font-size:var(--t-micro);color:var(--fg3) !important;margin-top:6px;line-height:1.45}
       .vgl-tab-tfgs{display:flex;gap:10px;flex-wrap:wrap}
       .vgl-tab-tfg{flex:1 1 190px;min-width:170px;border:1px solid var(--edge);border-radius:var(--r-card);padding:10px 12px;background:var(--bg2)}
-      .vgl-tab-tfg-rot{font-size:var(--t-micro);color:var(--fg3);font-weight:700;letter-spacing:.2px}
-      .vgl-tab-tfg-val{font-size:var(--t-hero);font-weight:800;color:var(--fg);line-height:1.15}
-      .vgl-tab-tfg-val span{font-size:var(--t-micro);font-weight:600;color:var(--fg3)}
-      .vgl-tab-tfg-est{font-size:var(--t-body);font-weight:700;color:var(--c-azul)}
-      .vgl-tab-tfg-nd .vgl-tab-tfg-val{color:var(--fg3);font-size:var(--t-lead)}
-      .vgl-tab-nota{font-size:var(--t-micro);color:var(--fg2);margin-top:8px;line-height:1.5}
-      .vgl-tab-nota.vgl-tab-falta{color:var(--c-ambar)}
-      .vgl-tab-prog{font-size:var(--t-body);color:var(--fg)}
+      .vgl-tab-tfg-rot{font-size:var(--t-micro);color:var(--fg3) !important;font-weight:700;letter-spacing:.2px}
+      .vgl-tab-tfg-val{font-size:var(--t-hero);font-weight:800;color:var(--fg) !important;line-height:1.15}
+      .vgl-tab-tfg-val span{font-size:var(--t-micro);font-weight:600;color:var(--fg3) !important}
+      .vgl-tab-tfg-est{font-size:var(--t-body);font-weight:700;color:var(--c-azul) !important}
+      .vgl-tab-tfg-nd .vgl-tab-tfg-val{color:var(--fg3) !important;font-size:var(--t-lead)}
+      .vgl-tab-nota{font-size:var(--t-micro);color:var(--fg2) !important;margin-top:8px;line-height:1.5}
+      .vgl-tab-nota.vgl-tab-falta{color:var(--c-ambar) !important}
+      .vgl-tab-prog{font-size:var(--t-body);color:var(--fg) !important}
       .vgl-tab-lista{display:flex;flex-direction:column;gap:4px;margin-top:4px}
       .vgl-tab-fila{display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:var(--r-chip);background:var(--bg2);border-left:3px solid var(--edge)}
       .vgl-tab-fila.vgl-tab-venc{border-left-color:var(--c-rojo)}
       .vgl-tab-fila.vgl-tab-pedir{border-left-color:var(--c-ambar)}
       .vgl-tab-fila.vgl-tab-ok{border-left-color:var(--c-verde)}
-      .vgl-tab-ex{flex:0 0 210px;font-size:var(--t-micro);font-weight:700;color:var(--fg)}
+      .vgl-tab-ex{flex:0 0 210px;font-size:var(--t-micro);font-weight:700;color:var(--fg) !important}
       /* v17.2.0 (#114) — la frecuencia va DENTRO de .vgl-tab-ex (es un <span> anidado), así
          que sin esto heredaría el mismo negrilla+color fuerte del nombre del medicamento y
          la línea perdería la jerarquía «qué tomo / cómo lo tomo» que el resto del panel ya
          usa (.vgl-tab-mini, dos reglas más arriba, es la misma idea: dato secundario en
          --fg3, sin negrilla). */
-      .vgl-tab-frec{font-weight:400;color:var(--fg3)}
-      .vgl-tab-que{flex:1 1 auto;font-size:var(--t-micro);color:var(--fg2)}
-      .vgl-tab-fecha{flex:0 0 120px;text-align:right;font-size:var(--t-micro);font-weight:700;color:var(--fg)}
-      .vgl-tab-fecha i{font-weight:600;color:var(--fg3);font-style:normal}
-      .vgl-tab-fechas{font-size:var(--t-micro);color:var(--fg2);margin-top:8px}
-      .vgl-tab-aviso{font-size:var(--t-micro);color:var(--c-verde);background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-chip);padding:8px 10px;margin-bottom:10px}
+      .vgl-tab-frec{font-weight:400;color:var(--fg3) !important}
+      .vgl-tab-que{flex:1 1 auto;font-size:var(--t-micro);color:var(--fg2) !important}
+      .vgl-tab-fecha{flex:0 0 120px;text-align:right;font-size:var(--t-micro);font-weight:700;color:var(--fg) !important}
+      .vgl-tab-fecha i{font-weight:600;color:var(--fg3) !important;font-style:normal}
+      .vgl-tab-fechas{font-size:var(--t-micro);color:var(--fg2) !important;margin-top:8px}
+      .vgl-tab-aviso{font-size:var(--t-micro);color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-chip);padding:8px 10px;margin-bottom:10px}
       /* v15.9.0 — aviso de fecha que deja vencer un examen (informa, no bloquea) */
       #vgl-agm-vencaviso{
         margin-top:8px;padding:10px 12px;border-radius:var(--r-card);
         background:rgba(var(--rgb-ambar),.10);border:1px solid rgba(var(--rgb-ambar),.45);
-        font-size:var(--t-micro);color:var(--fg2);line-height:1.5
+        font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5
       }
-      #vgl-agm-vencaviso b{color:var(--c-ambar)}
+      #vgl-agm-vencaviso b{color:var(--c-ambar) !important}
       #vgl-agm-vencaviso .vgl-agm-pbtn{margin:8px 6px 0 0}
       /* v15.8.0 (N4) — enlace discreto para ver el mensaje del paciente */
-      .vgl-agm-lnk{background:none;border:none;padding:0;margin:2px 0 0;color:var(--c-azul);font-size:var(--t-micro);cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
+      .vgl-agm-lnk{background:none;border:none;padding:0;margin:2px 0 0;color:var(--c-azul) !important;font-size:var(--t-micro);cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
       .vgl-agm-lnk:hover{opacity:.85}
 
       /* ---- Cuerpo 2 columnas ---- */
@@ -15115,11 +15139,11 @@ _vglOfrecerDeshacer(btn);
          input, sin envolver el campo en un contenedor con position:relative — así
          el ancho/comportamiento nativo del <input> no cambia, solo su padding. */
       #vgl-find{margin-bottom:12px;display:flex;align-items:center;gap:8px}
-      #vgl-find .vgl-find-ico{flex:0 0 auto;color:var(--fg3)}
+      #vgl-find .vgl-find-ico{flex:0 0 auto;color:var(--fg3) !important}
       #vgl-q{
         flex:1;min-width:0;appearance:none;
         border:1px solid var(--edge);background:var(--bg2);
-        color:var(--fg);border-radius:var(--r-field);padding:9px 14px;
+        color:var(--fg) !important;border-radius:var(--r-field);padding:9px 14px;
         font-size:13px;font-family:inherit;outline:none;
         line-height:1.4;
         box-shadow:var(--glow-edge);
@@ -15129,12 +15153,12 @@ _vglOfrecerDeshacer(btn);
         border-color:rgba(var(--rgb-azul),.65);
         box-shadow:0 0 0 3px rgba(var(--rgb-azul),.22),var(--glow-edge);
       }
-      #vgl-q::placeholder{color:var(--fg3)}
+      #vgl-q::placeholder{color:var(--fg3) !important}
 
       /* Etiqueta de sección */
       .vgl-sb-lbl{
         font-size:var(--t-micro);font-weight:700;letter-spacing:.9px; /* Mínimo 12px */
-        color:var(--fg3);text-transform:uppercase;
+        color:var(--fg3) !important;text-transform:uppercase;
         padding:0 4px;margin-bottom:6px;margin-top:8px;
       }
 
@@ -15143,7 +15167,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-fchip{
         cursor:pointer;font-size:12.5px;font-weight:500; /* [S+] 13->12.5px, más denso */
         padding:7px 10px;border-radius:var(--r-chip);
-        background:transparent;color:var(--fg2);
+        background:transparent;color:var(--fg2) !important;
         border:0;text-align:left;font-family:inherit;
         transition:background .16s var(--ease-out),color .16s var(--ease-out),transform .24s var(--spring);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -15151,15 +15175,15 @@ _vglOfrecerDeshacer(btn);
         /* [S+] ícono Lucide como hijo, alineado con el texto */
         display:flex;align-items:center;gap:8px;
       }
-      .vgl-fchip .vgl-ico{flex:0 0 auto;color:var(--fg3)}
-      .vgl-fchip:hover{background:var(--bg3);color:var(--fg);transform:translateX(2px)}
+      .vgl-fchip .vgl-ico{flex:0 0 auto;color:var(--fg3) !important}
+      .vgl-fchip:hover{background:var(--bg3);color:var(--fg) !important;transform:translateX(2px)}
       .vgl-fchip.sel{
-        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
         font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),var(--glow-edge);
       }
-      .vgl-fchip.sel .vgl-ico{color:var(--c-azul)}
-      #vgl-root.light .vgl-fchip.sel{color:var(--c-azul)}
+      .vgl-fchip.sel .vgl-ico{color:var(--c-azul) !important}
+      #vgl-root.light .vgl-fchip.sel{color:var(--c-azul) !important}
 
       /* Stats */
       #vgl-stats{
@@ -15171,18 +15195,18 @@ _vglOfrecerDeshacer(btn);
       #vgl-stats:empty{display:none;border-top:none;padding-top:0}
       .vgl-stat{
         display:flex;align-items:center;gap:8px;
-        font-size:var(--t-micro);font-weight:600;color:var(--fg2); /* Mínimo 12px */
+        font-size:var(--t-micro);font-weight:600;color:var(--fg2) !important; /* Mínimo 12px */
         padding:4px 6px;border-radius:var(--r-chip); /* [S+] 5px->4px vertical, más compacto */
         line-height:1.4;
       }
-      .vgl-stat b{font-weight:800;color:var(--fg);font-variant-numeric:tabular-nums;margin-left:auto}
+      .vgl-stat b{font-weight:800;color:var(--fg) !important;font-variant-numeric:tabular-nums;margin-left:auto}
       .vgl-stat .vgl-d{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
       .vgl-stat.hot{
-        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo);
+        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo) !important;
         font-weight:800;padding:6px 8px;border-radius:var(--r-chip);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.30);
       }
-      .vgl-stat.hot b{color:var(--c-rojo)}
+      .vgl-stat.hot b{color:var(--c-rojo) !important}
 
       /* Botones Sidebar */
       #vgl-actions{
@@ -15192,7 +15216,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-sb-btn{
         appearance:none;border:0;border-radius:var(--r-chip);
         padding:8px 11px;font-size:12.5px;font-weight:500; /* [S+] más compacto, 13->12.5px */
-        cursor:pointer;color:var(--fg);background:var(--bg2);
+        cursor:pointer;color:var(--fg) !important;background:var(--bg2);
         transition:background .16s var(--ease-out),transform .24s var(--spring),box-shadow .24s var(--ease-out);
         font-family:inherit;text-align:left;
         display:flex;align-items:center;gap:8px;
@@ -15212,11 +15236,11 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-sb-btn.primary:hover{background:linear-gradient(165deg,var(--c-azul),rgba(var(--rgb-azul),.86))}
       .vgl-sb-btn.on{
-        background:rgba(var(--rgb-verde),.15);color:var(--c-verde);font-weight:700;
+        background:rgba(var(--rgb-verde),.15);color:var(--c-verde) !important;font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
       }
       .vgl-sb-btn.off{
-        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo);font-weight:700;
+        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo) !important;font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.35);
       }
 
@@ -15225,7 +15249,7 @@ _vglOfrecerDeshacer(btn);
         flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;
       }
       #vgl-sum{
-        font-size:12.5px;color:var(--fg3);padding:9px 16px; /* Aumentado a 12.5px */
+        font-size:12.5px;color:var(--fg3) !important;padding:9px 16px; /* Aumentado a 12.5px */
         border-bottom:1px solid var(--line);
         font-weight:600;letter-spacing:.1px;flex:0 0 auto;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -15241,10 +15265,10 @@ _vglOfrecerDeshacer(btn);
         white-space:normal;overflow:hidden;text-overflow:clip;
         display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
       }
-      #vgl-sum.warn{color:var(--c-ambar)}
-      #vgl-sum.error{color:var(--c-rojo)}
-      #vgl-root:not(.light) #vgl-sum.warn{color:var(--c-ambar)}
-      #vgl-root:not(.light) #vgl-sum.error{color:var(--c-rojo)}
+      #vgl-sum.warn{color:var(--c-ambar) !important}
+      #vgl-sum.error{color:var(--c-rojo) !important}
+      #vgl-root:not(.light) #vgl-sum.warn{color:var(--c-ambar) !important}
+      #vgl-root:not(.light) #vgl-sum.error{color:var(--c-rojo) !important}
 
       /* Lista de Tarjetas — bandeja bento */
       #vgl-list{
@@ -15257,7 +15281,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-root.stale #vgl-list{opacity:.75}
 
       #vgl-empty{
-        color:var(--fg3);text-align:center;
+        color:var(--fg3) !important;text-align:center;
         padding:36px 16px;font-size:13px;line-height:1.55;
       }
 
@@ -15319,15 +15343,15 @@ _vglOfrecerDeshacer(btn);
         box-shadow:0 0 8px currentColor;
       }
       .vgl-time{
-        font-weight:800;font-size:var(--t-lead);color:var(--fg); /* Hora protagonista */
+        font-weight:800;font-size:var(--t-lead);color:var(--fg) !important; /* Hora protagonista */
         white-space:nowrap;font-variant-numeric:tabular-nums;
         letter-spacing:.2px;
       }
       .vgl-name{
-        font-size:15.5px;color:var(--fg);flex:1;min-width:0;font-weight:600; /* Nombre protagonista */
+        font-size:15.5px;color:var(--fg) !important;flex:1;min-width:0;font-weight:600; /* Nombre protagonista */
       }
       .vgl-name b{
-        font-weight:800;color:var(--fg);
+        font-weight:800;color:var(--fg) !important;
         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         display:inline-block;max-width:100%;vertical-align:bottom;
       }
@@ -15335,10 +15359,10 @@ _vglOfrecerDeshacer(btn);
          cian — el ámbar queda reservado para alertas y el cian (--c-morado) es el acento
          de resaltado del panel. color:inherit se mantiene para adaptarse al tema. */
       .vgl-name mark{
-        background:rgba(var(--rgb-morado),.30);color:inherit;
+        background:rgba(var(--rgb-morado),.30);color:inherit !important;
         border-radius:6px;padding:0 3px
       }
-      .vgl-doc{color:var(--fg3);font-size:var(--t-micro);font-weight:500;flex-shrink:0} /* Mínimo 12px */
+      .vgl-doc{color:var(--fg3) !important;font-size:var(--t-micro);font-weight:500;flex-shrink:0} /* Mínimo 12px */
 
       /* Badge & Flags */
       /* v16.6.1 — semáforo de pre-consulta en cada tarjeta (verde=listo, ámbar=en cola).
@@ -15350,7 +15374,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-badge{
         font-size:var(--t-micro);font-weight:800;padding:4px 11px; /* Mínimo 12px + padding */
         border-radius:var(--r-pill);white-space:nowrap;
-        letter-spacing:.2px;color:var(--fg);flex-shrink:0;
+        letter-spacing:.2px;color:var(--fg) !important;flex-shrink:0;
         line-height:1.3;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
@@ -15365,11 +15389,11 @@ _vglOfrecerDeshacer(btn);
       .vgl-flag{
         font-size:var(--t-micro);font-weight:800;padding:3px 9px; /* Mínimo 12px */
         border-radius:var(--r-pill);
-        background:rgba(var(--rgb-rojo),.10);color:var(--c-rojo);
+        background:rgba(var(--rgb-rojo),.10);color:var(--c-rojo) !important;
         white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.32);
       }
-      .vgl-flag.pes{background:rgba(var(--rgb-pes),.10);color:var(--c-pes);box-shadow:inset 0 0 0 1px rgba(var(--rgb-pes),.32)}
+      .vgl-flag.pes{background:rgba(var(--rgb-pes),.10);color:var(--c-pes) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-pes),.32)}
       /* v17.8.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #1 (gravedad alta). Estas dos reglas
          NO EXISTÍAN. Sin ellas, la bandera «agpend» (🗓️ SIN TERMINAR) y la bandera «adic»
          («➕ CANDIDATO ADICIONAL») heredaban el fondo ROJO de la regla base — y ninguna de
@@ -15380,19 +15404,19 @@ _vglOfrecerDeshacer(btn);
          programa. Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa
          todos los demás. La suite_70 (REGLA A) impide que vuelva a pasar con cualquier
          bandera nueva. */
-      .vgl-flag.agpend{background:rgba(var(--rgb-ambar),.10);color:var(--c-ambar);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.32)}
-      .vgl-flag.adic{background:rgba(var(--rgb-azul),.10);color:var(--c-azul);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.32)}
+      .vgl-flag.agpend{background:rgba(var(--rgb-ambar),.10);color:var(--c-ambar) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.32)}
+      .vgl-flag.adic{background:rgba(var(--rgb-azul),.10);color:var(--c-azul) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.32)}
 
       .vgl-cd{
         font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
         padding:3px 9px;border-radius:var(--r-pill);
-        white-space:nowrap;background:var(--bg3);color:var(--fg2);
+        white-space:nowrap;background:var(--bg3);color:var(--fg2) !important;
         flex-shrink:0;box-shadow:var(--glow-edge);
       }
-      .vgl-cd.warn{background:rgba(var(--rgb-morado),.18);color:var(--c-morado)}
-      #vgl-root.light .vgl-cd.warn{color:var(--c-morado)}
-      .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar)}
-      #vgl-root.light .vgl-cd.late{color:var(--c-ambar)}
+      .vgl-cd.warn{background:rgba(var(--rgb-morado),.18);color:var(--c-morado) !important}
+      #vgl-root.light .vgl-cd.warn{color:var(--c-morado) !important}
+      .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar) !important}
+      #vgl-root.light .vgl-cd.late{color:var(--c-ambar) !important}
       /* [v17.6.7] Inasistencias previas en la tarjeta: ámbar sutil, blindado contra el hostil */
       .vgl-cd.vgl-adh{background:rgba(var(--rgb-ambar),.18) !important;color:var(--c-ambar) !important}
       #vgl-root.light .vgl-cd.vgl-adh{color:var(--c-ambar) !important}
@@ -15474,20 +15498,20 @@ _vglOfrecerDeshacer(btn);
       .vgl-chip{
         font-size:11.5px;font-weight:750;padding:4px 10px;
         border-radius:var(--r-pill);letter-spacing:.1px;
-        background:rgba(255,255,255,.05);color:var(--fg2);
+        background:rgba(255,255,255,.05);color:var(--fg2) !important;
         white-space:normal;line-height:1.35;
         border:1px solid var(--line);
       }
-      #vgl-root:not(.light) .vgl-chip{color:var(--fg2)}
+      #vgl-root:not(.light) .vgl-chip{color:var(--fg2) !important}
       .vgl-chip.vgl-chip-mas,.vgl-chip.vgl-chip-ocultas{
-        color:var(--c-morado);
+        color:var(--c-morado) !important;
         border-color:rgba(var(--rgb-morado),.35);
         background:rgba(var(--rgb-morado),.08);
       }
-      #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado)}
-      #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado)}
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado) !important}
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado) !important}
       .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2) !important;font-style:italic} /* Mínimo 12px */
-      .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:700}
+      .vgl-none.falta{color:var(--fg3) !important;font-style:normal;font-weight:700}
 
       /* ---- Hoja Deslizante (Resumen / Ajustes) — bandeja bento ---- */
       #vgl-sheet{
@@ -15526,21 +15550,21 @@ _vglOfrecerDeshacer(btn);
       #vgl-set-bar .vgl-set-bar-t{margin-right:auto;font-size:var(--t-body);font-weight:600;color:var(--fg) !important}
       .vgl-ficha-fila{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px dashed var(--line)}
       .vgl-ficha-fila:last-child{border-bottom:0}
-      .vgl-ficha-k{min-width:150px;color:var(--fg2);font-size:var(--t-micro)}
+      .vgl-ficha-k{min-width:150px;color:var(--fg2) !important;font-size:var(--t-micro)}
       .vgl-ficha-v{flex:1;font-weight:600;font-size:var(--t-body)}
-      .vgl-ficha-fila.falta .vgl-ficha-v{color:var(--c-ambar);font-weight:500}
-      .vgl-ficha-f{font-size:var(--t-micro);color:var(--fg3);text-align:right;max-width:220px}
+      .vgl-ficha-fila.falta .vgl-ficha-v{color:var(--c-ambar) !important;font-weight:500}
+      .vgl-ficha-f{font-size:var(--t-micro);color:var(--fg3) !important;text-align:right;max-width:220px}
       #vgl-acomp-burbuja{
         position:fixed;z-index:var(--z-widget);max-width:280px;
         background:linear-gradient(165deg,rgba(var(--rgb-ambar),.14),rgba(0,0,0,0) 60%),var(--bg-solid);
         border:1px solid rgba(var(--rgb-ambar),.55);border-left:4px solid var(--c-ambar);
-        border-radius:var(--r-card);padding:10px 12px;color:var(--fg);
+        border-radius:var(--r-card);padding:10px 12px;color:var(--fg) !important;
         box-shadow:var(--shadow-card);font-family:var(--font-stack)
       }
       #vgl-acomp-burbuja .vgl-acomp-txt{font-size:var(--t-body);line-height:1.45;margin-bottom:8px}
       #vgl-acomp-burbuja .vgl-acomp-botones{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
       #vgl-acomp-burbuja .vgl-acomp-nomas{
-        all:unset;cursor:pointer;font-size:var(--t-micro);color:var(--fg3);text-decoration:underline
+        all:unset;cursor:pointer;font-size:var(--t-micro);color:var(--fg3) !important;text-decoration:underline
       }
       .vgl-fld label{font-size:var(--t-body);color:var(--fg) !important;font-weight:500;line-height:1.4} /* Base 14px */
       .vgl-fld .vgl-hint{
@@ -15628,17 +15652,17 @@ _vglOfrecerDeshacer(btn);
         background:linear-gradient(0deg,var(--surface-2),var(--surface-2)),var(--bg-solid);
         border-bottom:1px solid var(--edge);
         box-shadow:var(--shadow-card);
-        color:var(--fg);font-family:var(--font-stack);font-size:var(--t-body);
+        color:var(--fg) !important;font-family:var(--font-stack);font-size:var(--t-body);
       }
       .vgl-pymb-barra{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4)}
       .vgl-pymb-titulo{font-weight:750;font-size:var(--t-strong);letter-spacing:.1px}
       /* v14.0.0 — INCIDENTE REAL EN CONSULTA: el banner se veía con el título y los nombres
          de actividad ilegibles, "mezclado con el CSS de Everest". Causa: al quitar el
-         escudo simple "#vgl-pym-banner span{color:inherit}" para arreglar el contraste del
+         escudo simple "#vgl-pym-banner span{color:inherit !important}" para arreglar el contraste del
          contador (T8), quedaron sin protección los elementos que NO declaran color propio y
          solo lo HEREDABAN del contenedor. Y un valor heredado pierde contra CUALQUIER regla
          que apunte al elemento directamente, por poca especificidad que tenga: el
-         "span{color:...}" global de Everest les pega directo y la herencia ni compite.
+         "span{color:... !important}" global de Everest les pega directo y la herencia ni compite.
          Prueba viva de la mecánica: el contador y el botón Ordenar SÍ se veían, porque son
          los únicos que traen color propio.
          El arreglo NO es devolver el escudo simple —eso reventaba el contador otra vez, es
@@ -15651,7 +15675,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-pym-banner .vgl-pymb-titulo,
       #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg) !important}
       /* Los dos que SÍ traían color propio también suben a 1,1,0: con una clase pelada
-         (0,1,0) perdían contra un ".contenedor span{color:...}" de Everest (0,1,1) —
+         (0,1,0) perdían contra un ".contenedor span{color:... !important}" de Everest (0,1,1) —
          verificado, el contador caía a contraste 1.54 en tema claro. Su color va sobre
          fondo de acento, así que perderlo no los deja grises: los deja ilegibles.
          v17.44.0 — LA DEFENSA POR ESPECIFICIDAD ESTABA A MEDIAS, y una auditoría de CSS
@@ -15670,16 +15694,16 @@ _vglOfrecerDeshacer(btn);
       #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3) !important}
       #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg) !important}
       .vgl-pymb-contador{
-        background:var(--c-ambar);color:var(--bg-solid);font-weight:800;
+        background:var(--c-ambar);color:var(--bg-solid) !important;font-weight:800;
         border-radius:var(--r-pill);padding:1px 8px;font-size:var(--t-micro);
       }
       .vgl-pymb-toggle{
-        margin-left:auto;background:transparent;border:none;color:var(--fg3);cursor:pointer;
+        margin-left:auto;background:transparent;border:none;color:var(--fg3) !important;cursor:pointer;
         font-size:var(--t-body);padding:var(--s1) var(--s2);border-radius:var(--r-chip);
       }
-      .vgl-pymb-toggle:hover{color:var(--fg);background:var(--surface-1)}
+      .vgl-pymb-toggle:hover{color:var(--fg) !important;background:var(--surface-1)}
       .vgl-pymb-aviso{
-        padding:0 var(--s4) var(--s2);color:var(--c-ambar);font-size:var(--t-micro);font-weight:600;
+        padding:0 var(--s4) var(--s2);color:var(--c-ambar) !important;font-size:var(--t-micro);font-weight:600;
       }
       .vgl-pymb-lista{display:flex;flex-wrap:wrap;gap:var(--s2);padding:0 var(--s4) var(--s3)}
       .vgl-pymb-item{
@@ -15691,7 +15715,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-pymb-item.vgl-pymb-item-libre{box-shadow:inset 0 0 0 1px var(--c-ambar)}
       .vgl-pymb-item-nombre{font-size:var(--t-micro)}
       .vgl-pymb-item-btn{
-        background:var(--c-azul);color:var(--bg-solid);border:none;font-weight:700;
+        background:var(--c-azul);color:var(--bg-solid) !important;border:none;font-weight:700;
         border-radius:var(--r-chip);padding:2px 10px;font-size:var(--t-micro);cursor:pointer;
       }
       #vgl-pym-banner.minimizado .vgl-pymb-aviso,
@@ -15709,7 +15733,7 @@ _vglOfrecerDeshacer(btn);
         backdrop-filter:var(--glass);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.12);
-        color:var(--fg);
+        color:var(--fg) !important;
         font-family:var(--font-stack);
         font-size:12.5px;font-weight:700;
         transition:transform .22s var(--spring),box-shadow .22s var(--ease-out)
@@ -15721,7 +15745,7 @@ _vglOfrecerDeshacer(btn);
         box-shadow:0 0 10px rgba(var(--rgb-verde),.9) /* [UI-CSS] */
       }
       #vgl-dock b{
-        background:var(--c-rojo);color:var(--bg-solid);
+        background:var(--c-rojo);color:var(--bg-solid) !important;
         border-radius:var(--r-pill);padding:1px 7px;font-size:var(--t-micro);font-weight:800;
         box-shadow:0 0 10px rgba(var(--rgb-rojo),.40) /* [UI-CSS] */
       }
@@ -15737,7 +15761,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-toast{
         display:flex;gap:12px;align-items:flex-start;
         padding:14px 15px;border-radius:var(--r-card);
-        pointer-events:auto;color:var(--fg);
+        pointer-events:auto;color:var(--fg) !important;
         background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
@@ -15760,15 +15784,15 @@ _vglOfrecerDeshacer(btn);
       .vgl-toast-main{flex:1;min-width:0}
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
-        margin-top:3px;font-size:var(--t-micro);color:var(--fg2);
+        margin-top:3px;font-size:var(--t-micro);color:var(--fg2) !important;
         white-space:pre-line;line-height:1.45
       }
       .vgl-toast-x{
-        cursor:pointer;color:var(--fg3);font-size:var(--t-lead);
+        cursor:pointer;color:var(--fg3) !important;font-size:var(--t-lead);
         line-height:1;padding:2px 6px;border-radius:var(--r-chip);
         transition:background .14s var(--ease-out),color .14s var(--ease-out)
       }
-      .vgl-toast-x:hover{background:var(--bg4);color:var(--fg)}
+      .vgl-toast-x:hover{background:var(--bg4);color:var(--fg) !important}
       .vgl-toast.out{
         opacity:0;transform:translateX(26px) scale(.97);
         transition:opacity .25s,transform .25s
@@ -15788,7 +15812,7 @@ _vglOfrecerDeshacer(btn);
         border-radius:var(--r-surface);padding:30px 34px;
         max-width:460px;text-align:center;
         box-shadow:var(--shadow-float),0 0 40px rgba(var(--ac-rgb),.10),inset 0 1px 0 rgba(255,255,255,.10);
-        font-family:var(--font-stack);color:var(--fg)
+        font-family:var(--font-stack);color:var(--fg) !important
       }
       .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
       .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg) !important;margin-bottom:8px;letter-spacing:.2px}
@@ -15812,7 +15836,7 @@ _vglOfrecerDeshacer(btn);
         border-radius:var(--r-surface);padding:0;overflow:hidden;
         max-width:460px;width:min(92vw,460px);text-align:left;
         box-shadow:var(--shadow-float),0 0 42px rgba(var(--rgb-recordatorio),.10),inset 0 1px 0 rgba(255,255,255,.10);
-        font-family:var(--font-stack);color:var(--fg)
+        font-family:var(--font-stack);color:var(--fg) !important
       }
       .vgl-pym-head{
         display:flex;align-items:center;gap:14px;
@@ -15846,14 +15870,14 @@ _vglOfrecerDeshacer(btn);
       .vgl-pym-chip{
         font-size:var(--t-micro);font-weight:700;padding:6px 13px;
         border-radius:var(--r-pill);
-        background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
+        background:rgba(var(--rgb-recordatorio),.13);color:var(--fg) !important;
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
       .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin:4px 24px 18px;text-align:center} /* [UI-CSS] */
       .vgl-pym-ok{
         display:block;width:calc(100% - 48px);margin:0 24px 22px;
         border:0;border-radius:var(--r-chip);padding:11px 26px;
-        font-size:13px;font-weight:800;color:var(--bg-solid);
+        font-size:13px;font-weight:800;color:var(--bg-solid) !important;
         cursor:pointer;font-family:inherit;background:var(--c-recordatorio);
         box-shadow:0 6px 18px rgba(var(--rgb-recordatorio),.25);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -15870,7 +15894,7 @@ _vglOfrecerDeshacer(btn);
         border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
         box-shadow:var(--shadow-float),0 0 36px rgba(var(--rgb-pes),.09),inset 0 1px 0 rgba(255,255,255,.10);
-        font-family:var(--font-stack);color:var(--fg)
+        font-family:var(--font-stack);color:var(--fg) !important
       }
       .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
@@ -15886,7 +15910,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-pes-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
-        font-size:13px;font-weight:800;color:var(--bg-solid);
+        font-size:13px;font-weight:800;color:var(--bg-solid) !important;
         cursor:pointer;font-family:inherit;background:var(--c-pes);
         box-shadow:0 6px 18px rgba(var(--rgb-pes),.25);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -15907,7 +15931,7 @@ _vglOfrecerDeshacer(btn);
         border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
         box-shadow:var(--shadow-float),0 0 36px rgba(var(--rgb-rojo),.09),inset 0 1px 0 rgba(255,255,255,.10);
-        font-family:var(--font-stack);color:var(--fg)
+        font-family:var(--font-stack);color:var(--fg) !important
       }
       .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
@@ -15925,13 +15949,13 @@ _vglOfrecerDeshacer(btn);
       .vgl-labsv-chip{
         font-size:var(--t-micro);font-weight:700;padding:6px 13px;
         border-radius:var(--r-pill);
-        background:rgba(var(--rgb-rojo),.13);color:var(--fg);
+        background:rgba(var(--rgb-rojo),.13);color:var(--fg) !important;
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
       .vgl-labsv-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
-        font-size:13px;font-weight:800;color:var(--bg-solid);
+        font-size:13px;font-weight:800;color:var(--bg-solid) !important;
         cursor:pointer;font-family:inherit;background:var(--c-rojo);
         box-shadow:0 6px 18px rgba(var(--rgb-rojo),.25);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -16028,7 +16052,7 @@ _vglOfrecerDeshacer(btn);
          archivo es justo lo que la Regla A del banco prohíbe. El guion es más bajo que
          la ✕ y su hover es azul, no rojo: cerrar destruye, minimizar no. */
       .vgl-agm-close.vgl-agm-min{font-size:19px;line-height:1;margin-right:2px}
-      .vgl-agm-close.vgl-agm-min:hover{color:var(--c-azul);transform:scale(1.1)}
+      .vgl-agm-close.vgl-agm-min:hover{color:var(--c-azul) !important;transform:scale(1.1)}
       /* v16.8.0 — PANEL DEL PACIENTE: navegación de secciones y tendencias.
          El módulo cuelga de document.body como todos los demás, así que la Regla E
          (suite_25) exige !important en toda declaración de color: la hoja de Everest
@@ -16152,7 +16176,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-deshacer-llenado:hover{color:var(--c-ambar) !important}
       .vgl-agm-card{
         background:linear-gradient(160deg,rgba(var(--rgb-azul),.08),rgba(var(--rgb-morado),.04) 45%,rgba(0,0,0,0) 75%),var(--bg-solid);
-        color:var(--fg);
+        color:var(--fg) !important;
         border:1px solid var(--edge);
         border-radius:var(--r-surface);width:92%;max-width:580px;
         max-height:86vh;overflow-y:auto;margin:auto;
@@ -16176,33 +16200,33 @@ _vglOfrecerDeshacer(btn);
       }
       #vgl-agendar-modal.light .vgl-agm-head,#vgl-ordenar-modal.light .vgl-agm-head,#vgl-labs-modal.light .vgl-agm-head{border-bottom-color:var(--line)}
       .vgl-agm-title{
-        font-size:var(--t-title);font-weight:800;color:var(--fg);
+        font-size:var(--t-title);font-weight:800;color:var(--fg) !important;
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
       #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg) !important}
-      .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2)}
+      .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2) !important}
       #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2) !important}
-      .vgl-agm-sub b{color:var(--fg);font-weight:800}
+      .vgl-agm-sub b{color:var(--fg) !important;font-weight:800}
       #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg) !important}
-      .vgl-agm-sub.med b{color:var(--c-azul)}
+      .vgl-agm-sub.med b{color:var(--c-azul) !important}
       #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul) !important}
       .vgl-agm-close{
-        background:transparent;border:0;color:var(--fg);
+        background:transparent;border:0;color:var(--fg) !important;
         font-size:var(--t-hero);font-weight:700;cursor:pointer;
         opacity:.7;padding:0 6px;border-radius:var(--r-chip);
         transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
       #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg) !important}
-      .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
+      .vgl-agm-close:hover{opacity:1;color:var(--c-rojo) !important;transform:scale(1.1)}
       .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
         font-size:var(--t-micro);font-weight:800;letter-spacing:.7px;text-transform:uppercase;
-        display:block;margin-bottom:9px;color:var(--c-azul)
+        display:block;margin-bottom:9px;color:var(--c-azul) !important
       }
       #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul) !important}
       .vgl-agm-presets{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
       .vgl-agm-pbtn{
-        background:var(--bg2);color:var(--fg);
+        background:var(--bg2);color:var(--fg) !important;
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 15px;
         font-size:var(--t-micro);font-weight:600;cursor:pointer;
@@ -16212,14 +16236,14 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal.light .vgl-agm-pbtn,#vgl-ordenar-modal.light .vgl-agm-pbtn,#vgl-labs-modal.light .vgl-agm-pbtn{
         background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
-      .vgl-agm-pbtn:hover{background:var(--bg3);color:var(--fg);border-color:var(--bg4);transform:translateY(-1px)}
+      .vgl-agm-pbtn:hover{background:var(--bg3);color:var(--fg) !important;border-color:var(--bg4);transform:translateY(-1px)}
       #vgl-agendar-modal.light .vgl-agm-pbtn:hover,#vgl-ordenar-modal.light .vgl-agm-pbtn:hover{background:var(--bg3);border-color:var(--bg4)}
       .vgl-agm-pbtn.active{
         background:rgba(var(--rgb-azul),.22)!important;color:var(--c-azul)!important;border-color:rgba(var(--rgb-azul),.55)!important;
         font-weight:800;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),0 4px 14px rgba(var(--rgb-azul),.18)
       }
       .vgl-agm-dinfo{
-        font-size:var(--t-micro);color:var(--fg);
+        font-size:var(--t-micro);color:var(--fg) !important;
         background:rgba(var(--rgb-verde),.13);border:1px solid rgba(var(--rgb-verde),.45);
         border-radius:var(--r-field);padding:9px 13px;margin-top:7px;font-weight:600
       }
@@ -16229,7 +16253,7 @@ _vglOfrecerDeshacer(btn);
          texto ni propósito aparente. Mismo patrón que .vgl-agm-sugerida:empty ya usa un
          poco más abajo: si no hay texto, no hay caja. */
       .vgl-agm-dinfo:empty{display:none}
-      .vgl-agm-dinfo b{color:var(--c-verde)}
+      .vgl-agm-dinfo b{color:var(--c-verde) !important}
       .vgl-agm-dinfo span{color:var(--c-verde)!important}
       /* v17.6.11 — Redacción IA S+: chips congelados mientras se genera (evita que un
          cambio de casilla a mitad de generación entregue el borrador en el chip equivocado)
@@ -16245,7 +16269,7 @@ _vglOfrecerDeshacer(btn);
       /* v15.3 — GAP 1: aviso de la fecha de control sugerida por el motor. */
       .vgl-agm-sugerida:empty{display:none}
       .vgl-agm-sugerida-on{
-        font-size:var(--t-micro);color:var(--fg);
+        font-size:var(--t-micro);color:var(--fg) !important;
         background:rgba(var(--rgb-azul),.12);border:1px solid rgba(var(--rgb-azul),.42);
         border-radius:var(--r-field);padding:8px 12px;margin-top:6px;line-height:1.5
       }
@@ -16282,7 +16306,7 @@ _vglOfrecerDeshacer(btn);
         background:rgba(var(--rgb-ambar),.13)
       }
       .vgl-lp-chip.vgl-lp-mas{font-weight:600;opacity:.85}
-      .vgl-agm-sug-hint{font-size:var(--t-micro);color:var(--fg2);display:block;margin-top:6px;line-height:1.5}
+      .vgl-agm-sug-hint{font-size:var(--t-micro);color:var(--fg2) !important;display:block;margin-top:6px;line-height:1.5}
       .vgl-agm-pbtn-sugerida{border-color:rgba(var(--rgb-azul),.65);box-shadow:0 0 0 1px rgba(var(--rgb-azul),.35)}
       /* v15.3 — GAP 2: paquete PyM marcado prioritario por la clasificación. */
       #vgl-ordenar-modal .vgl-ord-item-prio{box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.45)}
@@ -16303,14 +16327,14 @@ _vglOfrecerDeshacer(btn);
          el cartel verde de "Cita asignada exitosamente" salía sin ningún estilo y los
          botones de turno y de plazo perdían el ajuste de línea que tenían en línea. */
       .vgl-msg-success{
-        background:rgba(var(--rgb-verde),.16);color:var(--c-verde);font-size:var(--t-body);font-weight:700;padding:13px;
+        background:rgba(var(--rgb-verde),.16);color:var(--c-verde) !important;font-size:var(--t-body);font-weight:700;padding:13px;
         text-align:center;margin-top:14px;border:1px solid rgba(var(--rgb-verde),.50);border-radius:var(--r-field);
         box-shadow:0 0 22px rgba(var(--rgb-verde),.12);
       }
       .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
       .vgl-agm-pbtn.vgl-sm{font-size:var(--t-micro);padding:3px 9px}
       .vgl-agm-sbtn{
-        background:var(--bg2);color:var(--fg);
+        background:var(--bg2);color:var(--fg) !important;
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 14px;
         font-size:var(--t-micro);font-weight:700;
@@ -16321,7 +16345,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal.light .vgl-agm-sbtn,#vgl-ordenar-modal.light .vgl-agm-sbtn,#vgl-labs-modal.light .vgl-agm-sbtn{
         background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
-      .vgl-agm-sbtn:hover{background:var(--bg3);border-color:var(--bg4);color:var(--fg)}
+      .vgl-agm-sbtn:hover{background:var(--bg3);border-color:var(--bg4);color:var(--fg) !important}
       .vgl-agm-sbtn.active{
         background:rgba(var(--rgb-verde),.20)!important;color:var(--c-verde)!important;border-color:rgba(var(--rgb-verde),.60)!important;
         transform:scale(1.05);box-shadow:0 0 14px rgba(var(--rgb-verde),.25)
@@ -16337,7 +16361,7 @@ _vglOfrecerDeshacer(btn);
          (el mismo recurso que ya usan las tarjetas del panel para el color de puntualidad),
          fondo más presente y contorno completo. Sigue sin preseleccionar nada. */
       .vgl-agm-sbtn-sugerido{
-        background:rgba(var(--rgb-ambar),.22);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.85);
+        background:rgba(var(--rgb-ambar),.22);color:var(--c-ambar) !important;border-color:rgba(var(--rgb-ambar),.85);
         border-left:5px solid var(--c-ambar);font-weight:800;
         transform:scale(1.04);box-shadow:0 0 0 1px rgba(var(--rgb-ambar),.45),0 0 18px rgba(var(--rgb-ambar),.28)
       }
@@ -16383,7 +16407,7 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-agm-cupo-adic{
         display:inline-block;font-size:10px;font-weight:800;letter-spacing:.6px;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.16);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.16);
         border:1px solid rgba(var(--rgb-morado),.40);border-radius:var(--r-pill);
         padding:1px 7px;margin-right:6px;vertical-align:1px
       }
@@ -16395,14 +16419,14 @@ _vglOfrecerDeshacer(btn);
          visible en la loseta, no solo en el tooltip. */
       .vgl-agm-sbtn-adic-no{opacity:.85}
       .vgl-agm-sbtn-adic-no .vgl-agm-cupo-adic{
-        color:var(--fg3);background:rgba(var(--rgb-atendido),.16);border-color:rgba(var(--rgb-atendido),.40)
+        color:var(--fg3) !important;background:rgba(var(--rgb-atendido),.16);border-color:rgba(var(--rgb-atendido),.40)
       }
       /* v17.6.13 — variante «solo si no hay otra cita»: especificidad MAYOR (3 clases) para
          que suite_25 no la considere colisión con la base: la loseta lleva AMBAS clases
          (vgl-agm-cupo-adic + vgl-agm-cupo-adic-no) y el ámbar debe ganar siempre, sin
          depender del orden de la hoja. */
       .vgl-agm-sbtn-adic-no .vgl-agm-cupo-adic.vgl-agm-cupo-adic-no{
-        color:var(--c-ambar);background:rgba(var(--rgb-ambar),.14);border-color:rgba(var(--rgb-ambar),.45)
+        color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.14);border-color:rgba(var(--rgb-ambar),.45)
       }
       #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
@@ -16422,17 +16446,17 @@ _vglOfrecerDeshacer(btn);
          El punteado significa "por confirmar"; si le toca, ya no está por confirmar. */
       .vgl-agm-pbtn-sabado-suyo{border-style:solid !important;border-color:rgba(var(--rgb-verde),.65) !important}
       .vgl-agm-loading{
-        font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
+        font-size:var(--t-micro);color:var(--fg2) !important;padding:6px;font-style:italic
       }
       .vgl-agm-err{
-        font-size:var(--t-micro);color:var(--c-rojo); /* [UI-CSS] */
+        font-size:var(--t-micro);color:var(--c-rojo) !important; /* [UI-CSS] */
         background:rgba(var(--rgb-rojo),.13);border:1px solid rgba(var(--rgb-rojo),.35); /* [UI-CSS] */
         padding:9px 11px;border-radius:var(--r-field);font-weight:700
       }
       .vgl-agm-check-lbl{
         display:flex;align-items:center;gap:10px;
         font-size:var(--t-body);font-weight:700;margin-bottom:8px;
-        cursor:pointer;color:var(--fg)
+        cursor:pointer;color:var(--fg) !important
       }
       /* v12.3.20 — Sin min-width:0 el span no podía encogerse por debajo de su ancho
          intrínseco (comportamiento por defecto de los hijos flex) y el texto largo del
@@ -16440,7 +16464,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-agm-check-lbl span{min-width:0;word-break:break-word}
       .vgl-agm-input{
         width:100%;box-sizing:border-box;
-        background:var(--bg2);color:var(--fg);
+        background:var(--bg2);color:var(--fg) !important;
         border:1px solid var(--edge);
         border-radius:var(--r-field);padding:11px 13px;
         font-size:var(--t-micro);font-family:inherit;resize:none;
@@ -16491,7 +16515,7 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-agm-btn.pri:hover{transform:translateY(-1px)}
       .vgl-agm-btn.pri:disabled{
-        background:var(--bg2);color:var(--fg3);
+        background:var(--bg2);color:var(--fg3) !important;
         box-shadow:none;cursor:not-allowed;transform:none
       }
 
@@ -16519,14 +16543,14 @@ _vglOfrecerDeshacer(btn);
         background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
-        color:var(--fg)
+        color:var(--fg) !important
       }
       .vgl-postcita-x{
         position:absolute;top:8px;right:10px;
-        background:transparent;border:0;color:var(--fg3);
+        background:transparent;border:0;color:var(--fg3) !important;
         font-size:var(--t-lead);cursor:pointer;line-height:1;padding:2px
       }
-      .vgl-postcita-x:hover{color:var(--fg)}
+      .vgl-postcita-x:hover{color:var(--fg) !important}
       .vgl-postcita-title{font-size:var(--t-body);font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
       .vgl-postcita-sub{font-size:var(--t-micro);color:var(--fg2) !important;margin-bottom:12px}
       /* v15.9.0 — módulo de cierre: correo del paciente y recordatorio de la toma */
@@ -16627,7 +16651,7 @@ _vglOfrecerDeshacer(btn);
         min-width: 0;
       }
       .vgl-ord-title {
-        color: var(--fg);
+        color: var(--fg) !important;
         font-size:var(--t-body);
         font-weight: 700;
         line-height: 1.45;
@@ -16637,7 +16661,7 @@ _vglOfrecerDeshacer(btn);
         color: var(--fg) !important;
       }
       .vgl-ord-cie {
-        color: var(--c-azul); /* [UI-CSS] */
+        color: var(--c-azul) !important; /* [UI-CSS] */
         font-weight: 800;
         white-space: nowrap;
       }
@@ -16646,7 +16670,7 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-ord-cups {
         font-size: var(--t-micro); /* [UI-CSS] */
-        color: var(--fg2);
+        color: var(--fg2) !important;
         font-weight: 400;
         margin-top: 4px;
         line-height: 1.45;
@@ -16778,14 +16802,14 @@ _vglOfrecerDeshacer(btn);
         padding:3px 9px;border-radius:var(--r-chip);line-height:1.2;
       }
       .vgl-uro-badge.ok{
-        background:rgba(var(--rgb-verde),.15);color:var(--c-verde);box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
+        background:rgba(var(--rgb-verde),.15);color:var(--c-verde) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
       }
       .vgl-uro-badge.warn{
-        background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.45);
+        background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.45);
       }
-      .vgl-uro-chips{font-size:11px;color:var(--fg2);font-weight:600}
+      .vgl-uro-chips{font-size:11px;color:var(--fg2) !important;font-weight:600}
       .vgl-labs-uro-btn{
-        background:var(--bg3);color:var(--fg);border:1px solid var(--edge);border-radius:var(--r-pill);
+        background:var(--bg3);color:var(--fg) !important;border:1px solid var(--edge);border-radius:var(--r-pill);
         padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;
         transition:all .15s ease;
       }
@@ -16802,7 +16826,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-uro-subcol{display:flex;flex-direction:column;gap:4px}
       .vgl-uro-subcol-t{
         font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
-        color:var(--c-azul);margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--edge);
+        color:var(--c-azul) !important;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--edge);
       }
       #vgl-labs-modal .vgl-labs-uro-i{
         min-width:0;overflow-wrap:break-word;line-height:1.4;
@@ -17399,7 +17423,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-root #vgl-sheet .vgl-fld input[type=range]{accent-color:var(--c-azul);width:180px;max-width:180px;height:28px;cursor:pointer;background:transparent;border:0;box-shadow:none;padding:0}
       #vgl-root #vgl-sheet .vgl-fld input:disabled{opacity:.55;cursor:not-allowed}
       #vgl-root #vgl-sheet .vgl-grp-tec{background:linear-gradient(170deg,rgba(var(--rgb-morado),.07),rgba(var(--rgb-morado),0) 55%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--rgb-morado),.16),var(--shadow-card)}
-      #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
+      #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde) !important;font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
       #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
       @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
 
@@ -17443,7 +17467,7 @@ _vglOfrecerDeshacer(btn);
       /* v17.6.60 — auditoría 25-ago (1.22): _pintarCriticos (la caja roja de "faltan datos
          que invalidarían la nota", dentro de #vgl-ia-modal) pinta con <div style="..."> sin
          clase propia — el blindaje de arriba solo cubría span/b/small/label/p, no div, así
-         que una regla de Everest de mayor peso para div{color:X} podía ganar por herencia
+         que una regla de Everest de mayor peso para div{color:X !important} podía ganar por herencia
          y dejar ilegible la caja que bloquea generar la nota sin categoría de riesgo.
          Mismo patrón que el CLAUDE.md ya documenta (bug #2), en un elemento que el censo
          previo no cubrió — se añade div:not([class]) SOLO a este modal, donde se confirmó
@@ -17454,7 +17478,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-confirma-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-panel-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-llenar-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]))
-      {color:inherit}
+      {color:inherit !important}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";

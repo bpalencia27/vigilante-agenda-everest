@@ -542,8 +542,33 @@ module.exports = {
       // de este paciente» (aviso al abrir la historia por primera vez) pasa a tarjetas de
       // sección (.vgl-pym-sec-t con su acento por variante y .vgl-pym-sec-b), cuyos colores
       // cuelgan de document.body (Regla E) y llevan !important.
+      // =====================================================================
+      // v18.0.14 — BLINDAJE COMPLETO DE color: 475 -> 635 (+160 en la hoja que mide
+      // esta suite; 248 contando también las hojas interpoladas que ella no resuelve).
+      //
+      // El médico reportó (31-ago) que «el CSS de Everest se mezcla». Yo lo descarté con
+      // una medición MAL HECHA: mi analizador solo contaba reglas cuyo selector llevara un
+      // id de módulo (#vgl-…), y así se me escaparon las reglas de SOLO CLASE (.vgl-agm-sub
+      // b, .vgl-uro-badge, .vgl-chip…), que son las más numerosas y viven dentro de todos
+      // los módulos a la vez. Una medición en Chromium con el Everest hostil que prescribe
+      // CLAUDE.md lo dejó sin discusión:
+      //     · en el panel: 46 de 58 nodos de texto perdían su color (mediana 1,62:1);
+      //     · en Laboratorios: el DOCUMENTO DEL PACIENTE y el rótulo «Función renal:»
+      //       quedaban literalmente invisibles en tema oscuro (1,03:1 y 1,04:1).
+      // Tenía razón él, y el censo real era de 125 declaraciones secuestrables, no una.
+      //
+      // Se blindan TODAS las declaraciones de `color` de la hoja. Censo posterior: 501
+      // declaraciones de color, 0 expuestas — las únicas sin !important son el blindaje
+      // tipográfico `:where(… :not([class])){color:inherit}`, que debe seguir SIN él
+      // (especificidad cero a propósito: ver CLAUDE.md, bug #1 del botón ámbar T1).
+      //
+      // Comprobado antes de barrer, porque era el riesgo real: `grep "style.color ="`
+      // devuelve CERO en todo el archivo, así que ningún !important nuestro puede pisar un
+      // color que el script pinte a mano. Regla B de esta misma suite cubre el caso del
+      // estilo en línea dentro del HTML.
+      // =====================================================================
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 475, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 475, salió ${importantTotal})`);
+      t.cierto(importantTotal === 635, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 635 tras el blindaje completo de color de la v18.0.14, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -849,6 +874,213 @@ module.exports = {
       const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
       const ocurrencias = (bloque.match(/font-size:/g) || []).length;
       t.igual(ocurrencias, 1, "una sola declaración de font-size en .vgl-toast-b");
+    });
+
+
+    // =====================================================================
+    // v18.0.14 — REGLA P: EL BLINDAJE COMPLETO, MEDIDO COMO REGLA Y NO COMO NÚMERO
+    //
+    // La Regla E solo mira selectores que NOMBRAN un id de panel (#vgl-pym-modal…). Ese
+    // punto ciego está declarado arriba desde v12.10.12 — y es exactamente por donde se
+    // coló el problema que el médico reportó el 31-ago: las reglas de SOLO CLASE
+    // (.vgl-agm-sub b, .vgl-uro-badge, .vgl-chip-mas…) viven dentro de todos los módulos
+    // a la vez y ninguna prueba las miraba. Yo las descarté con una medición mal hecha
+    // (mi analizador exigía el id en el selector, así que contaba 1 infracción donde
+    // había 125). Chromium con el Everest hostil de CLAUDE.md lo zanjó: 46 de 58 nodos
+    // de texto del panel perdían su color, y en Laboratorios el documento del paciente y
+    // el rótulo «Función renal:» quedaban invisibles (1,03:1 y 1,04:1).
+    //
+    // Esta regla no admite punto ciego: recorre TODA la hoja, sin filtrar por selector.
+    // CERO declaraciones de color sin !important, sin excepción — ni siquiera el blindaje
+    // tipográfico. Eso corrige lo que yo mismo tenía mal: creía que el blindaje debía
+    // quedarse sin !important «por tener especificidad cero», y esa lectura confundía DOS
+    // defensas distintas. La que importa contra el bug #1 (nuestra regla vieja gana a
+    // nuestra clase nueva, botón ámbar T1 / v12.10.2) es el `:not([class])`, no la falta
+    // de !important: con él, el blindaje y cualquier clase de acento nuestra son DISJUNTOS
+    // por construcción — jamás alcanzan al mismo elemento, así que no pueden competir.
+    // Sin !important, en cambio, el blindaje sí perdía contra Everest, que es el adversario
+    // real: escrito `:where(#vgl-cw-examenes :not([class])){color:inherit}` el id queda
+    // DENTRO del :where() y la regla vale (0,0,0) — la gana cualquier `span{color:X}` de
+    // Everest. Por eso en v18.0.14 los cuatro blindajes que estaban en esa forma pasan a la
+    // forma fuerte (id FUERA del :where(), como el blindaje general de v12.3.15 ya hacía)
+    // y ganan !important.
+    //
+    // Lo que esta prueba vigila en la otra dirección es esa condición de disyunción: un
+    // blindaje con !important SOLO es seguro mientras cada rama de su :where() lleve
+    // :not([class]). Si alguien la quitara, la regla pasaría a alcanzar elementos CON clase
+    // y, con (1,0,x) + !important, aplastaría todos nuestros acentos — el bug #1 otra vez,
+    // ahora blindado. Se comprueba explícitamente.
+    //
+    // Regla E se queda: es más barata de leer y da un mensaje de error más concreto
+    // cuando lo que se rompe es un panel. Esta es la red de abajo.
+    // =====================================================================
+    t.caso("Regla P - TODA declaración de color de la hoja lleva !important, blindaje incluido", () => {
+      const expuestas = [];
+      for (const r of reglasCss) {
+        for (const cd of r.decls) {
+          const norm = cd.replace(/\s+/g, '');
+          if (norm.indexOf('color:') !== 0) continue;   // solo `color`, no background-color ni border-color
+          if (cd.includes('!important')) continue;
+          expuestas.push(`${r.selector.trim().replace(/\s+/g, ' ')} {${norm}}`);
+        }
+      }
+
+      t.igual(expuestas.length, 0,
+        `Cero declaraciones de color sin !important en TODA la hoja (Everest es una caja negra: una clase sin !important pierde contra cualquier regla suya de especificidad >= 10, y contra cualquiera con !important sea cual sea su especificidad). Expuestas: ${expuestas.length}${expuestas.length ? " — " + expuestas.slice(0, 6).join(' | ') : ""}`);
+
+      // La otra dirección: la condición que hace SEGURO ese !important en el blindaje es
+      // que siga siendo disjunto de nuestras clases. Cada rama del :where() debe llevar
+      // :not([class]); si una la pierde, la regla alcanza elementos CON clase y, con
+      // (1,0,x)+!important, aplasta todos los acentos propios (bug #1, ahora blindado).
+      //
+      // Se recorre el CSS CRUDO, no `reglasCss`: el extractor de esta suite parte los
+      // selectores por comas — incluidas las comas de DENTRO de un :where() — así que sus
+      // entradas traen fragmentos con paréntesis sin cerrar (#vgl-root :where(span:not([class]))
+      // y una comprobación hecha sobre ellos se cuela sin ver nada. Verificado con una
+      // mutación: escrita así, quitarle el :not([class]) a una rama NO ponía la prueba en
+      // rojo. Por eso esta mitad no usa reglasCss.
+      const cuerposWhere = (texto) => {
+        const fuera = [];
+        for (let i = texto.indexOf(':where('); i >= 0; i = texto.indexOf(':where(', i + 1)) {
+          let prof = 1, j = i + ':where('.length;
+          for (; j < texto.length && prof > 0; j++) {
+            if (texto[j] === '(') prof++;
+            else if (texto[j] === ')') prof--;
+          }
+          if (prof === 0) fuera.push(texto.slice(i + ':where('.length, j - 1));
+        }
+        return fuera;
+      };
+      const ramasNivel0 = (cuerpo) => {
+        const partes = []; let prof = 0, act = '';
+        for (const ch of cuerpo) {
+          if (ch === '(') prof++;
+          else if (ch === ')') prof--;
+          if (ch === ',' && prof === 0) { partes.push(act); act = ''; continue; }
+          act += ch;
+        }
+        partes.push(act);
+        return partes.map(x => x.trim()).filter(Boolean);
+      };
+
+      const cuerpos = cuerposWhere(cssClean);
+      t.cierto(cuerpos.length >= 27, `el blindaje tipográfico sigue en la hoja (se esperaban >= 27 usos de :where(), se hallaron ${cuerpos.length})`);
+
+      const ramasSinGuarda = [];
+      for (const cuerpo of cuerpos) {
+        for (const rama of ramasNivel0(cuerpo)) {
+          if (!rama.includes(':not([class])')) ramasSinGuarda.push(rama);
+        }
+      }
+      t.igual(ramasSinGuarda.length, 0,
+        `toda rama de un :where() del blindaje debe llevar :not([class]) (es lo que lo mantiene disjunto de nuestras clases de acento). Sin guarda: ${ramasSinGuarda.slice(0, 5).join(' | ')}`);
+    });
+
+    // v18.0.14 — la contraprueba de que no barrí de más: si el script pintara colores a
+    // mano desde JS (el.style.color = …), un !important nuestro en la hoja ganaría a ese
+    // estilo en línea y le apagaría el color dinámico. Comprobado antes de barrer y
+    // cableado aquí para que siga siendo cierto: CERO asignaciones a .style.color.
+    t.caso("v18.0.14: ningún color se pinta desde JS con .style.color (o el !important lo apagaría)", () => {
+      const asignaciones = (code.match(/\.style\.color\s*=/g) || []).length;
+      t.igual(asignaciones, 0,
+        "el !important de la Regla P gana al estilo en línea; si alguien empieza a pintar color desde JS, hay que blindar ese caso a mano (Regla B cubre el estilo en línea escrito dentro del HTML)");
+    });
+
+
+    // =====================================================================
+    // v18.0.14 — REGLA Q: UN COMENTARIO QUE SE CIERRA ANTES DE TIEMPO SE COME LA REGLA
+    //            QUE VIENE DETRÁS
+    //
+    // Encontrado midiendo en Chromium, no leyendo: la regla raíz del widget de Fármacos
+    // (#vgl-cw-farmaco{position;z-index;font-family;max-width:320px}) NO se aplicaba. La
+    // causa estaba cinco líneas más arriba, en un comentario que documentaba las clases
+    // del panel escribiéndolas con comodín: «(.vgl-mtr-*/.vgl-dup-*)». Ese «*/» del medio
+    // CIERRA el comentario ahí mismo — el analizador de CSS se queda con el PRIMER «*/»,
+    // no con el que el autor tenía en la cabeza. Lo que seguía («cuyo CSS se extiende más
+    // abajo…») pasaba a leerse como selector, y el analizador seguía tragando hasta poder
+    // recuperarse: la regla siguiente entera se perdía. Vivo desde la v17.24.0.
+    //
+    // Es la misma familia que la Regla N (un backtick suelto cierra el template literal y
+    // tumba el archivo entero), pero MÁS silenciosa: aquí no hay error de sintaxis, ni en
+    // JS ni en CSS. El archivo carga, el banco pasa, y una regla simplemente no existe.
+    // Por eso hacen falta las dos comprobaciones:
+    //   1) sintáctica — ningún cierre de comentario seguido de texto en la misma línea;
+    //   2) semántica  — tras despiezar los comentarios COMO LO HACE EL ANALIZADOR (primer
+    //      «*/» gana), ningún selector puede traer caracteres no ASCII. Todos nuestros
+    //      selectores son ASCII puro; la prosa del proyecto es española y lleva tildes,
+    //      «—» o ««»». Si aparece un selector con acentos, es prosa que se escapó de un
+    //      comentario, y detrás de ella hay una regla perdida.
+    // =====================================================================
+    t.caso("Regla Q - ningún comentario del CSS se cierra antes de tiempo (se comería la regla siguiente)", () => {
+      // (1) sintáctica: dónde CREE el analizador que termina cada comentario.
+      const fugas = [];
+      let i = 0;
+      for (;;) {
+        const a = css.indexOf("/*", i);
+        if (a < 0) break;
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        const cierre = b + 2;
+        const finLinea = css.indexOf("\n", cierre);
+        const resto = css.slice(cierre, finLinea < 0 ? css.length : finLinea).trim();
+        if (resto && !resto.startsWith("/*")) fugas.push(`…${css.slice(Math.max(0, cierre - 45), cierre)}  ->  ${resto.slice(0, 60)}`);
+        i = cierre;
+      }
+      t.igual(fugas.length, 0,
+        `un "*/" seguido de más texto en la misma línea casi siempre significa que el comentario se cerró donde el autor no quería (p. ej. un comodín ".vgl-algo-*/" dentro del comentario). Fugas: ${fugas.slice(0, 3).join(' || ')}`);
+
+      // (2) semántica: despiece como el analizador (primer "*/" gana) y revisión de selectores.
+      const trozos = []; let j = 0;
+      for (;;) {
+        const a = css.indexOf("/*", j);
+        if (a < 0) { trozos.push(css.slice(j)); break; }
+        trozos.push(css.slice(j, a));
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        j = b + 2;
+      }
+      const limpio = trozos.join("");
+      const selConProsa = [];
+      const re = /(^|\})([^{}]*)\{/g;
+      let m;
+      while ((m = re.exec(limpio)) !== null) {
+        const sel = m[2].trim();
+        if (!sel) continue;
+        // eslint-disable-next-line no-control-regex
+        if (/[^\x00-\x7F]/.test(sel)) selConProsa.push(sel.slice(0, 110));
+      }
+      t.igual(selConProsa.length, 0,
+        `todos nuestros selectores son ASCII: uno con tildes o guiones largos es prosa que se escapó de un comentario, y detrás de ella hay una regla que el navegador nunca ve. Selectores con prosa: ${selConProsa.slice(0, 3).map(x => JSON.stringify(x)).join(' || ')}`);
+    });
+
+    // v18.0.14 — la consecuencia concreta de la fuga de arriba, cableada como prueba: la
+    // regla raíz del widget de Fármacos tiene que existir Y traer sus cuatro propiedades.
+    // Sin ella el widget se queda sin z-index (puede pintarse por debajo de Everest) y sin
+    // el tope de 320 px (se estira sin freno). La posición se salva porque JS la pone en
+    // línea desde la v17.38.0, que es justo por qué el fallo pudo pasar meses sin verse.
+    t.caso("v18.0.14: la regla raíz de #vgl-cw-farmaco sobrevive al despiece de comentarios", () => {
+      const trozos = []; let j = 0;
+      for (;;) {
+        const a = css.indexOf("/*", j);
+        if (a < 0) { trozos.push(css.slice(j)); break; }
+        trozos.push(css.slice(j, a));
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        j = b + 2;
+      }
+      const limpio = trozos.join("");
+      const idx = limpio.indexOf("#vgl-cw-farmaco{");
+      t.cierto(idx > 0, "la regla raíz #vgl-cw-farmaco{…} sigue en la hoja tras despiezar comentarios");
+      // y el selector que la precede debe ser sano: si el analizador venía arrastrando
+      // basura, "#vgl-cw-farmaco{" quedaría pegado a un selector inválido.
+      const antes = limpio.slice(Math.max(0, idx - 400), idx);
+      const ultimoCierre = Math.max(antes.lastIndexOf("}"), antes.lastIndexOf("{"));
+      const entre = antes.slice(ultimoCierre + 1).trim();
+      t.igual(entre, "", `entre la regla anterior y #vgl-cw-farmaco{ no puede quedar texto suelto (sería prosa de un comentario roto). Quedó: ${JSON.stringify(entre.slice(0, 90))}`);
+      const bloque = limpio.slice(idx, limpio.indexOf("}", idx));
+      for (const prop of ["z-index:", "max-width:", "font-family:", "color:"]) {
+        t.cierto(bloque.includes(prop), `la regla raíz de #vgl-cw-farmaco conserva ${prop}`);
+      }
     });
 
   }

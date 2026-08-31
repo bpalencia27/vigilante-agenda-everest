@@ -6417,3 +6417,112 @@ recorrer el camino entero —que es el real— y se le añadió la comprobación
 prueba que solo mira media tubería es justo cómo se coló el defecto.
 
 Banco completo: **2.734 comprobaciones pasan, 0 fallan.**
+
+## v18.0.14 — 31-ago-2026 · EL CSS DE EVEREST SÍ SE ESTABA COLANDO (yo medí mal)
+
+Origen: el médico reportó el 31-ago que *«la mayoría de los módulos quedaron con problemas
+con el rework visual»*, y marcó los cuatro síntomas —colores que parecen Everest, texto
+ilegible, cosas fuera de sitio o cortadas, y se ve apretado— en los cuatro módulos
+(Agendamiento, Panel del paciente, Laboratorios, panel del Centinela).
+
+**Yo lo descarté con una medición mal hecha.** Mi analizador solo contaba reglas cuyo
+selector llevara un id de módulo (`#vgl-…`), así que se me escaparon las reglas de SOLO
+CLASE —`.vgl-agm-sub b`, `.vgl-uro-badge`, `.vgl-chip-mas`…—, que son las más numerosas y
+viven dentro de todos los módulos a la vez. Le dije que la cascada no se estaba colando. El
+censo real era de **125 declaraciones secuestrables**, no una. Tenía razón él.
+
+### 1. El blindaje completo de `color`
+
+Medido en Chromium con el Everest hostil que prescribe `CLAUDE.md`
+(`div,span,p,b,small,label{color:#111827 !important}`):
+
+| | antes | después |
+|---|---|---|
+| nodos de texto del panel que perdían su color | **46 de 58** (mediana 1,62:1) | 0 |
+| documento del paciente (Laboratorios, tema oscuro) | 1,03:1 — **invisible** | legible |
+| rótulo «Función renal:» (Laboratorios, tema oscuro) | 1,04:1 — **invisible** | legible |
+
+Se blindan **todas** las declaraciones de `color` de la hoja: 423 declaraciones, **0
+expuestas**. El total de `!important` pasa de 475 a 635.
+
+Comprobado ANTES de barrer, porque era el riesgo real de barrer de más: `grep "style.color
+="` devuelve **cero** en todo el archivo, así que ningún `!important` nuestro puede apagar un
+color que el script pinte a mano desde JS.
+
+### 2. El blindaje tipográfico estaba escrito de dos formas, y una no servía
+
+Cuatro reglas lo escribían con el id DENTRO del `:where()`
+—`:where(#vgl-cw-examenes :not([class])){color:inherit}`—, lo que deja la regla en
+especificidad **(0,0,0)**: la gana cualquier `span{color:X}` de Everest. Pasan a la forma
+fuerte que ya usaba el blindaje general de v12.3.15 (id FUERA, `!important`):
+`#vgl-cw-examenes :where(:not([class])){color:inherit !important}` = (1,0,0).
+
+**Corrección a mi propio criterio, que tenía mal.** Yo creía que el blindaje debía quedarse
+sin `!important` «por tener especificidad cero». Eso confundía dos defensas distintas: la que
+cierra el bug #1 del proyecto (nuestra regla vieja gana a nuestra clase nueva) es el
+`:not([class])`, que hace al blindaje y a nuestras clases de acento **disjuntos por
+construcción** — nunca alcanzan al mismo elemento, así que no pueden competir. La falta de
+`!important` no defendía de nada; solo lo hacía perder contra Everest.
+
+### 3. Un blindaje que hereda de un padre secuestrado no blinda nada
+
+Aun con lo anterior, Chromium seguía marcando en rojo el `<b>vencido</b>` del widget de
+Exámenes. El blindaje SÍ forzaba `color:inherit`… y heredaba de `.vgl-cw-panel` /
+`.vgl-cw-fila`, que son `<div>` **con clase y sin color propio**: la regla
+`div{color:X !important}` de Everest los pintaba a ellos. La cadena entera necesita color
+propio desde la raíz. Se blindan las dos raíces (`#vgl-cw-examenes`, `#vgl-cw-farmaco`) y sus
+contenedores estructurales.
+
+### 4. Y debajo había un defecto vivo desde la v17.24.0
+
+Midiendo el punto 3 apareció que la **regla raíz del widget de Fármacos no se aplicaba en
+absoluto**: `position` salía `static` y `max-width` salía `none`. La causa estaba cinco
+líneas más arriba, en un comentario que documentaba las clases del panel con comodines:
+
+```
+(.vgl-mtr-*/.vgl-dup-*)
+        ↑ este "*/" CIERRA el comentario aquí
+```
+
+El analizador de CSS se queda con el **primer** `*/`, no con el que el autor tenía en la
+cabeza. El resto de la frase pasaba a leerse como selector y el analizador seguía tragando
+hasta poder recuperarse: **se comía la regla siguiente entera**.
+
+Lo que llevaba meses muerto: `z-index:var(--z-widget)` (el widget podía pintarse por debajo
+de elementos de Everest), `max-width:320px` (se estiraba sin freno) y `font-family`. La
+posición se salvaba de milagro porque JS la pone en línea desde la v17.38.0 — que es
+exactamente por qué el fallo pudo pasar meses sin verse.
+
+Es la misma familia que la Regla N (un backtick suelto tumba el archivo entero), pero **mucho
+más silenciosa**: no hay error de sintaxis ni en JS ni en CSS. El archivo carga, el banco
+pasa, y una regla simplemente no existe.
+
+### Pruebas nuevas
+
+- **Regla P** (`suite_25`) — TODA declaración de `color` de la hoja lleva `!important`, sin
+  excepción, recorriendo el CSS entero sin filtrar por selector (que es donde estaba mi punto
+  ciego). Y en la otra dirección: cada rama de cada `:where()` debe conservar `:not([class])`,
+  que es la condición que hace seguro ese `!important`.
+- **Regla Q** (`suite_25`) — ningún comentario se cierra antes de tiempo. Dos comprobaciones:
+  sintáctica (ningún `*/` seguido de texto en la misma línea) y semántica (tras despiezar los
+  comentarios *como lo hace el analizador*, ningún selector con caracteres no ASCII — todos
+  los nuestros son ASCII, la prosa del proyecto lleva tildes).
+- **La regla raíz de `#vgl-cw-farmaco`** sobrevive al despiece y conserva sus cuatro
+  propiedades.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se le quita `!important` a `.vgl-labsv-lead` (clase suelta, fuera de `#vgl-root`) | *Regla P* (`suite_25`) | Sí — 2.738 |
+| 2 | se le quita `:not([class])` a una rama del blindaje de `#vgl-labsv-modal` | *Regla P*, segunda mitad (`suite_25`) | Sí — 2.738 |
+| 3 | se reintroduce el `*/` prematuro del comentario de v17.24.0 | *Regla Q* (`suite_25`) | Sí — 2.738 |
+
+**Nota de proceso — la mutación 2 encontró un fallo en mi propia prueba.** Escrita al
+principio sobre `reglasCss`, NO se puso roja: el extractor de `suite_25` parte los selectores
+por comas, **incluidas las comas de dentro de un `:where()`**, así que sus entradas traen
+fragmentos con paréntesis sin cerrar y la comprobación no veía nada. Se reescribió esa mitad
+sobre el CSS crudo, con recorrido de paréntesis balanceados. Sin la mutación, la prueba se
+habría entregado verde y hueca.
+
+Banco completo: **2.738 comprobaciones pasan, 0 fallan.**
