@@ -14572,7 +14572,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Sidebar izquierdo — costado frost ---- */
       #vgl-sidebar{
-        width:195px;flex-shrink:0;
+        width:208px;flex-shrink:0; /* [S+] 195->208: más aire lateral, sin invadir el área principal */
         display:flex;flex-direction:column;gap:0;
         border-right:1px solid var(--edge-side);
         background:linear-gradient(180deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 42%),var(--bg-sidebar);
@@ -14610,8 +14610,8 @@ _vglOfrecerDeshacer(btn);
       /* Filtros */
       #vgl-filters{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
       .vgl-fchip{
-        cursor:pointer;font-size:13px;font-weight:500;
-        padding:8px 12px;border-radius:var(--r-chip);
+        cursor:pointer;font-size:12.5px;font-weight:500; /* [S+] 13->12.5px, más denso */
+        padding:7px 10px;border-radius:var(--r-chip);
         background:transparent;color:var(--fg2);
         border:0;text-align:left;font-family:inherit;
         transition:background .16s var(--ease-out),color .16s var(--ease-out),transform .24s var(--spring);
@@ -14637,7 +14637,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-stat{
         display:flex;align-items:center;gap:8px;
         font-size:var(--t-micro);font-weight:600;color:var(--fg2); /* Mínimo 12px */
-        padding:5px 6px;border-radius:var(--r-chip);
+        padding:4px 6px;border-radius:var(--r-chip); /* [S+] 5px->4px vertical, más compacto */
         line-height:1.4;
       }
       .vgl-stat b{font-weight:800;color:var(--fg);font-variant-numeric:tabular-nums;margin-left:auto}
@@ -14656,7 +14656,7 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-sb-btn{
         appearance:none;border:0;border-radius:var(--r-chip);
-        padding:9px 12px;font-size:13px;font-weight:500;
+        padding:8px 11px;font-size:12.5px;font-weight:500; /* [S+] más compacto, 13->12.5px */
         cursor:pointer;color:var(--fg);background:var(--bg2);
         transition:background .16s var(--ease-out),transform .24s var(--spring),box-shadow .24s var(--ease-out);
         font-family:inherit;text-align:left;
@@ -14666,12 +14666,15 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-sb-btn:hover{background:var(--bg3);transform:translateY(-1px)}
       .vgl-sb-btn:active{transform:scale(.97)}
+      /* [S+] CTA sólido inspirado en el mock: de traslúcido a gradiente pleno con texto
+         oscuro sobre el tono azul del panel, mismo hue, mucho más contraste como acción
+         primaria real (antes se confundía visualmente con un botón secundario resaltado). */
       .vgl-sb-btn.primary{
-        background:linear-gradient(150deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.14));
-        color:var(--c-azul) !important;font-weight:700;
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 4px 14px rgba(var(--rgb-azul),.18);
+        background:linear-gradient(165deg,var(--c-azul),rgba(var(--rgb-azul),.74));
+        color:var(--bg-solid) !important;font-weight:800;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 6px 16px rgba(var(--rgb-azul),.30);
       }
-      .vgl-sb-btn.primary:hover{background:linear-gradient(150deg,rgba(var(--rgb-azul),.40),rgba(var(--rgb-azul),.20))}
+      .vgl-sb-btn.primary:hover{background:linear-gradient(165deg,var(--c-azul),rgba(var(--rgb-azul),.86))}
       .vgl-sb-btn.on{
         background:rgba(var(--rgb-verde),.15);color:var(--c-verde);font-weight:700;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
