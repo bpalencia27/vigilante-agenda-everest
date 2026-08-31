@@ -6227,3 +6227,48 @@ La mutación 2 es la que importa de verdad: sin ella el relevo degeneraría en d
 ciegas pasándose el mando en ráfaga, que es peor que el defecto original.
 
 Banco completo: **2.731 comprobaciones pasan, 0 fallan.**
+
+## v18.0.10 — 31-ago-2026 · SE RETIRA LA HEURÍSTICA DEL CONSULTORIO
+
+Decisión del médico (31-ago), a propuesta mía: **«quítala entonces»**.
+
+### Qué era, y por qué se va
+
+La v18.0.7 añadió una heurística: *«si el médico abrió hoy la historia de ese paciente, calla
+el aviso ÁMBAR de Sin presentarse»*. Nació de un reporte real —dos avisos de pacientes ya
+atendidos— pero **atacaba el síntoma**. La v18.0.8 encontró la causa de verdad (el antirrebote
+resucitaba un estado de 45 minutos antes) y la arregló, con lo que esta heurística se quedó
+sin trabajo.
+
+Y tenía un filo que el propio médico señaló al dar el criterio bueno —*«o vino o no vino»*—:
+**abrir una historia no prueba que el paciente viniera.** Si la abre para revisar un dato de
+alguien que al final no se presentó, esa inasistencia REAL quedaba silenciada y sin contar.
+Cambiar un falso positivo por un falso negativo, justo en el CSV con el que reclama, es peor
+negocio que el problema original.
+
+### Qué se retiró, entero
+
+`_consultorioLeer` / `_consultorioMarcar` / `_consultorioTiene`, la clave de almacenamiento
+`vgl_consultorio_dia`, el campo `state.enConsultorio`, la marca `callar` que ponía en el
+ÁMBAR, la salida temprana de `maybeNotify` para ese caso, y sus cinco pruebas.
+`extractPacienteAbierto()` vuelve a ser un **extractor puro**: se le había añadido un efecto
+secundario (anotar al paciente) para no olvidarse de ninguno de sus 27 llamadores, y ese
+efecto ya no tiene razón de ser. `callar` vuelve a ponerlo **solo** el ROJO de «sin
+presentarse → atendido» (v16.2.8 / v18.0.4), que es evidencia que el médico sí quiere.
+
+### Verificación de que no se abre un agujero al quitarla
+
+Reproducido con el arnés, ya sin la heurística:
+
+```
+CASO DEL 31-AGO   -> estado "Atendido"  color VERDE  elapsed 20,7   (el aviso falso NO sale)
+INASISTENCIA REAL -> color AMBAR  callar=false                      (sigue avisando y contando)
+```
+
+La protección viene del antirrebote con ventana (v18.0.8), no de la heurística. No hace falta
+mutación nueva: las mutaciones 1 y 2 de la v18.0.8 ya fijan esa protección, y siguen en verde.
+Lo que sí queda comprobado aquí es la otra mitad —que una inasistencia REAL vuelve a avisar y
+a contarse sin nadie que la calle—, que era justo el riesgo de la heurística retirada.
+
+Banco completo: **2.726 comprobaciones pasan, 0 fallan** (cinco menos que la v18.0.9: las de
+la heurística, que se van con ella).

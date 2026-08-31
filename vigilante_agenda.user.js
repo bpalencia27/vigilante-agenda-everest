@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.9
+// @version      18.0.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8426,9 +8426,6 @@ _vglOfrecerDeshacer(btn);
     // del backlog). Solo en memoria (como state.pym/pymAbandono): se limpia en diaNuevo().
     perfilAdicionalCache: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
-    // v18.0.7 — cédulas cuya historia clínica abrió el médico HOY (ver _consultorioMarcar).
-    // Se hidrata perezosamente desde el almacén del día la primera vez que se consulta.
-    enConsultorio: null,
     // v18.0.8 — CUÁNDO se confirmó cada estado de `historical`. El antirrebote de v17.6.21
     // necesita saber si la lectura anterior es de HACE UN INSTANTE (dos ticks seguidos, que
     // es el parpadeo que existe para absorber) o de hace media hora (una memoria vieja, que
@@ -11660,11 +11657,7 @@ _vglOfrecerDeshacer(btn);
       for (const el of contenedor.querySelectorAll(".text-muted")) {
         if (el.closest("#vgl-root")) continue;                 // nunca leer el propio panel
         const doc = _vglDocCanon(limpio(el.textContent));
-        // v18.0.7 — se anota aquí, en el único punto por el que pasa "qué historia tiene
-        // abierta el médico", porque hay 27 llamadores y marcarlo en cada uno garantizaría
-        // olvidarse de alguno. La anotación es barata: solo escribe la primera vez que ve a
-        // cada paciente en la jornada (_consultorioMarcar sale antes si ya estaba).
-        if (doc) { _consultorioMarcar(doc); return doc; }
+        if (doc) return doc;
       }
       return "";
     } catch (e) { return ""; }
@@ -11942,15 +11935,6 @@ _vglOfrecerDeshacer(btn);
             _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
           }
         }
-        // v18.0.7 — REPORTE EN VIVO (31-ago): dos avisos ÁMBAR de pacientes que el médico
-        // YA HABÍA ATENDIDO. La agenda seguía diciendo "Sin presentarse" (el estado
-        // administrativo va por detrás de la consulta real), así que la decisión de v16.2.8
-        // —que solo mira si Everest dice "atendido"— no llegaba a cubrirlo. Si el médico
-        // abrió HOY la historia de ese paciente, el paciente estuvo delante de él.
-        // `callar` apaga la interrupción y NADA MÁS: el ÁMBAR se conserva, se sigue
-        // contando y la fila INASISTENCIA se sigue escribiendo en la auditoría — que es la
-        // evidencia de las reclamaciones. Misma contención que v16.2.8.
-        if (_consultorioTiene(a.doc_id)) callar = true;
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
     }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
@@ -13092,60 +13076,6 @@ _vglOfrecerDeshacer(btn);
   // anterior) llegaba a sala y esta pestaña lo pintaba VERDE "llegó a tiempo" — y el
   // FRAUDE_EXTEMPORANEO no se escribía nunca: la evidencia para reclamaciones se perdía.
   // Mismo remedio que la siembra de avisos (v14.1.5): un almacén compartido del día.
-  // =====================================================================
-  //  v18.0.7 — EL PACIENTE QUE YA PASÓ POR EL CONSULTORIO NO SE DENUNCIA
-  // =====================================================================
-  // REPORTE EN VIVO (31-ago, dos capturas): al médico le llegaron avisos ÁMBAR
-  // ("Venció el tiempo de confirmación · Sin presentarse") de dos pacientes que YA HABÍA
-  // ATENDIDO. El script no se equivocaba al LEER: la agenda de Everest seguía diciendo
-  // "Sin presentarse" porque el estado administrativo de la cita va por detrás de la
-  // consulta real — el médico atiende y la agenda se actualiza (o no) más tarde.
-  //
-  // El motor ya tenía media respuesta: v16.2.8 decidió que "sin presentarse -> atendido" no
-  // notifica ("cuando la agenda ya dice Atendido, el paciente lleva rato dentro del
-  // consultorio y avisar entonces no cambia nada, solo interrumpe"). Pero esa decisión
-  // depende de que EVEREST diga "atendido", que es justo lo que aquí no pasa.
-  //
-  // El script tiene otra fuente, y es más fiable que la agenda para esto: sabe qué HISTORIA
-  // CLÍNICA tiene abierta el médico (extractPacienteAbierto). Si abrió la historia de ese
-  // paciente hoy, el paciente estuvo delante de él: denunciarle una inasistencia es ruido.
-  //
-  // MISMA CONTENCIÓN QUE v16.2.8, Y ES LA PARTE IMPORTANTE: esto NO borra evidencia. El
-  // color ÁMBAR se conserva, bumpStatCita sigue contando y logEvent sigue escribiendo la
-  // fila INASISTENCIA en la auditoría — que es lo que sostiene las reclamaciones
-  // administrativas. Lo único que se apaga es la INTERRUPCIÓN (tono, notificación de
-  // Windows y cartel) mientras el médico está en consulta.
-  //
-  // Se guarda por día y compartido entre pestañas, igual que la siembra y el fraude: si
-  // viviera en la memoria de una pestaña, un relevo de liderazgo lo perdería y el aviso
-  // falso volvería. Se rehace solo cada día, por fecha.
-  const CONSULTORIO_KEY = "vgl_consultorio_dia";
-  function _consultorioLeer() {
-    try {
-      const g = readJSON(CONSULTORIO_KEY, null);
-      if (!g || g.dia !== todayStamp() || !Array.isArray(g.docs)) return new Set();
-      return new Set(g.docs);
-    } catch (e) { return new Set(); }
-  }
-  function _consultorioMarcar(doc) {
-    try {
-      const d = _vglDocCanon(String(doc == null ? "" : doc));
-      if (!d) return;
-      if (!state.enConsultorio) state.enConsultorio = _consultorioLeer();
-      if (state.enConsultorio.has(d)) return;      // ya estaba: ni una escritura más
-      state.enConsultorio.add(d);
-      writeJSON(CONSULTORIO_KEY, { dia: todayStamp(), docs: Array.from(state.enConsultorio) });
-    } catch (e) {}
-  }
-  function _consultorioTiene(doc) {
-    try {
-      const d = _vglDocCanon(String(doc == null ? "" : doc));
-      if (!d) return false;
-      if (!state.enConsultorio) state.enConsultorio = _consultorioLeer();
-      return state.enConsultorio.has(d);
-    } catch (e) { return false; }
-  }
-
   const FRAUDE_COMPARTIDO_KEY = "vgl_fraude_dia2";   // v17.1.0 — ver nota de SIEMBRA_KEY
   function _fraudeCompartidoGuardar() {
     try {
@@ -13412,14 +13342,6 @@ _vglOfrecerDeshacer(btn);
     // re-armaba. La fila de auditoría se escribe SOLO si de verdad se contó, para que
     // el número de la cabecera del CSV y el número de filas del cuerpo cuadren siempre
     // (hay una prueba de conciliación en suite_10 que lo exige).
-    // v18.0.8 — CORRECCIÓN DEL MÉDICO (31-ago): «no puede ser inasistencia porque el
-    // paciente sí llegó a tiempo y se atendió normalmente». La v18.0.7 callaba la
-    // interrupción pero SEGUÍA contando y escribiendo la fila INASISTENCIA — ensuciando
-    // justo la evidencia que sostiene las reclamaciones. Si sabemos que el paciente estuvo
-    // en consulta, no hay inasistencia que contar: se sale antes de contar y de registrar.
-    // (El ROJO con `callar` es otra cosa y NO entra aquí: ahí sí hubo confirmación
-    // extemporánea y su conteo es la evidencia que el médico quiere conservar — v16.2.8.)
-    if (a.color === "AMBAR" && a.callar) return;
     const _conto = bumpStatCita(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima", a.key);
     if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00
@@ -13435,10 +13357,6 @@ _vglOfrecerDeshacer(btn);
     // ROJO de esa transición volvía a sonar con repique, notificación y cartel — justo la
     // interrupción que el médico ordenó callar. `callar` lo dice en voz alta; el conteo y
     // la auditoría de arriba ya corrieron, así que la evidencia para reclamaciones queda.
-    // v18.0.7 — la guarda cubre también el ÁMBAR: es el color del aviso que le llegó al
-    // médico sobre dos pacientes que ya había atendido (ver _consultorioTiene en
-    // colorAndAlert). Sigue siendo SOLO la interrupción: el conteo y la fila de auditoría
-    // de arriba ya corrieron, y la evidencia para reclamaciones queda intacta.
     if (a.color === "ROJO" && a.callar) return;
     // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
     // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
