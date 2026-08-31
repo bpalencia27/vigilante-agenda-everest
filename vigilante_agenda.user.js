@@ -29,8 +29,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_notification
-// @updateURL    https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt
-// @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt
+// @updateURL    https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
+// @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
 // ==/UserScript==
 
 /* ═══════════════════════════════════════════════════════════════════════════════
