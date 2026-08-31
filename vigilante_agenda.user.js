@@ -12356,6 +12356,20 @@ _vglOfrecerDeshacer(btn);
   let toastQueue = [];
   let toastFlushTimer = null;
 
+  // v-S+ (refactor panel, mockup canvas 30-ago): el ícono de la caja del toast pasa del
+  // emoji al SVG Lucide del color (consistente con el resto del refactor S+), y el título
+  // del TOAST DE PÁGINA deja de duplicar el emoji que ya vive en esa caja. Las
+  // notificaciones de Windows y el parpadeo de pestaña conservan su emoji en `title`
+  // (ahí es la única señal visual), así que el strip solo ocurre aquí, al pintar.
+  const TOAST_ICONO_SVG = {
+    ROJO: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>',
+    MORADO: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>',
+    AMBAR: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+    VERDE: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+    AZUL: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  };
+  const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" };
+
   function _renderToast(color, title, body, persist, apptKey) {
     try {
       const wrap = document.getElementById("vgl-toasts"); if (!wrap) return;
@@ -12367,7 +12381,6 @@ _vglOfrecerDeshacer(btn);
         });
       }
       const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
-      const icon = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" }[color] || "🛡️";
       const t = document.createElement("div"); t.className = "vgl-toast";
       t.__vglApptKey = apptKey || "";
       // [v12.3.13] El CSS estático del toast vive al final de la hoja maestra de buildOverlay()
@@ -12376,8 +12389,11 @@ _vglOfrecerDeshacer(btn);
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
       t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
-      t.querySelector(".vgl-toast-ic").textContent = icon;
-      t.querySelector(".vgl-toast-title").textContent = title;
+      t.querySelector(".vgl-toast-ic").innerHTML = TOAST_ICONO_SVG[color] || TOAST_ICONO_SVG.AZUL;
+      const emoji = TOAST_EMOJI[color] || "";
+      let titulo = String(title || "");
+      if (emoji && titulo.indexOf(emoji) === 0) titulo = titulo.slice(emoji.length).replace(/^\s+/, "");
+      t.querySelector(".vgl-toast-title").textContent = titulo;
       t.querySelector(".vgl-toast-b").textContent = body;
       const cerrar = () => { t.classList.add("out"); setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260); };
       t.addEventListener("click", cerrar);
