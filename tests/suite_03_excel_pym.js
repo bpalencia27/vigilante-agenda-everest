@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Excel, caché y SharePoint",
-  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
+  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy", "mtrLibroNoParecePym"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
@@ -53,12 +53,87 @@ module.exports = {
       const c = cargar();
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
+      // v18.0.7 — ahora la 2ª regla exige que el archivo esté SUELTO EN LA CARPETA
+      // PRINCIPAL (ver el blindaje en pickTodaysFile), así que la ruta forma parte del caso.
+      const RAIZ = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
       const files = [
-        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z" }
+        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z", ServerRelativeUrl: RAIZ + "/ArchivoRandom.xlsx" }
       ];
       const selected = c.api.pickTodaysFile(files);
       t.cierto(selected !== null);
       t.igual(selected.Name, "ArchivoRandom.xlsx");
+    });
+
+    // =====================================================================
+    //  v18.0.7 — EL LIBRO EQUIVOCADO NO PUEDE VOLVER A PRESENTARSE COMO EL PyM DEL DÍA
+    //
+    //  REPORTE EN VIVO (31-ago): a varios médicos dejó de salirles el aviso de PyM y de
+    //  abandono de RCV al abrir la historia. El diagnóstico del equipo del médico:
+    //      Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
+    //      Pacientes con pendientes: 0 · Documentos totales en la hoja: 1396
+    //  El listado no es de UNA carpeta: fetchSpFilesMultiFolder junta las tres de
+    //  CONFIG.SP.folders, y una es «…/ESTRATEGIAS POR SEDE 2026/SEDE BELLO». Ese libro de
+    //  productividad no lleva fecha en el nombre y alguien lo edita a diario, así que la 2ª
+    //  regla lo tomaba por «el PyM de hoy».
+    //
+    //  Y el daño era doble: además de dejar el índice vacío (y con él, mudos los dos
+    //  avisos), al dar por encontrado el de hoy NUNCA se caía al respaldo de la base
+    //  piloto ni se seguía buscando el CMB real — desactivando la regla que el médico dejó
+    //  escrita: «mientras no esté subido el CMB del día se usa la base piloto, y cada X
+    //  minutos se rectifica si ya subieron el oficial».
+    // =====================================================================
+    const RAIZ_PYM = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
+
+    t.caso("v18.0.7: un libro de una SUBCARPETA no puede pasar por «el PyM de hoy»", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
+      ];
+      t.igual(c.api.pickTodaysFile(files), null,
+        "sin candidato válido se devuelve null, que es lo que hace caer al respaldo de la base piloto y seguir buscando el CMB");
+    });
+
+    t.caso("v18.0.7: entre el libro de la subcarpeta y el suelto en la raíz, gana el de la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
+        { Name: "Agenda del dia.xlsx", TimeLastModified: "2026-08-10T09:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/Agenda del dia.xlsx" },
+      ];
+      const sel = c.api.pickTodaysFile(files);
+      t.cierto(!!sel && sel.Name === "Agenda del dia.xlsx", "se elige el suelto en la raíz");
+    });
+
+    t.caso("v18.0.7: el nombre CON la fecha de hoy sigue mandando sobre todo lo demás", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "OtroCualquiera.xlsx", TimeLastModified: "2026-08-10T11:00:00Z", ServerRelativeUrl: RAIZ_PYM + "/OtroCualquiera.xlsx" },
+        { Name: "Agenda_Dia_CMB_20260810.xlsx", TimeLastModified: "2026-08-09T06:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/CITAS DIA EBS/Agenda_Dia_CMB_20260810.xlsx" },
+      ];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel.Name, "Agenda_Dia_CMB_20260810.xlsx",
+        "la 1ª regla (fecha en el nombre) no se toca: vale aunque esté en una subcarpeta");
+    });
+
+    t.caso("v18.0.7: mtrLibroNoParecePym — muchos documentos y CERO pendientes es OTRO libro", () => {
+      const mapa = (n) => { const m = new Map(); for (let i = 0; i < n; i++) m.set("d" + i, ["x"]); return m; };
+      const docs = (n) => { const s2 = new Set(); for (let i = 0; i < n; i++) s2.add("d" + i); return s2; };
+      t.cierto(api.mtrLibroNoParecePym({ todos: docs(1396), map: new Map() }),
+        "el caso real del 31-ago: 1.396 documentos, 0 pacientes con pendientes");
+      t.falso(api.mtrLibroNoParecePym({ todos: docs(1396), map: mapa(1) }),
+        "con UN solo paciente pendiente ya es un PyM plausible: no se rechaza");
+      t.falso(api.mtrLibroNoParecePym({ todos: docs(10), map: new Map() }),
+        "una hoja pequeña y de verdad al día NO se rechaza — el corte es alto a propósito");
+      t.falso(api.mtrLibroNoParecePym(null), "sin índice no se afirma nada");
     });
 
     t.caso("pickTodaysFile descarta archivos temporales", () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.6
+// @version      18.0.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4096,6 +4096,12 @@
       // entrada y del antiduplicado de Ordenar. Sin contexto, todo sigue igual que antes.
       if (opts && opts.aplicar50 && typeof mtrFueraDeMeta === "function" && MTR_CLAVES_CON_META.indexOf(key) >= 0) {
           const baseParaRegla = (base != null) ? base : RCV_VIGENCIA_DIAS;
+          // v18.0.7 — D11 (KDIGO) TAMBIÉN aquí. Esta es la vara del aviso de entrada y del
+          // antiduplicado de PyM; si la guarda viviera solo en el motor del panel, el panel
+          // diría "vence en 180" y el aviso de entrada seguiría reclamándolo a los 90 sobre
+          // el MISMO paciente. Dos varas distintas para la misma regla es peor que una vara
+          // equivocada: el médico no sabría a cuál creerle.
+          if (typeof mtrKdigoNoRepiteLipidos === "function" && mtrKdigoNoRepiteLipidos(key, opts)) return baseParaRegla;
           const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
           return fuera === true ? Math.max(1, Math.floor(baseParaRegla / 2)) : baseParaRegla;
       }
@@ -5874,6 +5880,16 @@
   // renglón que "Paquetes" (mismo `top`, con 12px de tolerancia por redondeo de layout), en
   // vez de tomar el primero que aparezca en el DOM. Si no se encuentran los dos, el botón se
   // oculta — mismo principio que mtrBotonOrdenarConducta: nunca se adivina un ancla.
+  // v18.0.7 — el escondite que se puede llamar desde CUALQUIER pantalla, sin depender de
+  // que corra el tick del widget (que solo vive en la pestaña Conducta). Es la mitad que
+  // faltaba: el botón se pintaba en document.body y nadie lo retiraba al navegar.
+  function mtrOcultarBotonOrdenarPendientes() {
+    try {
+      const el = document.getElementById("vgl-cw-ordenar-btn");
+      if (el) el.style.display = "none";
+    } catch (e) {}
+  }
+
   function mtrAnclaOrdenarPendientes(doc) {
     try {
       const d = doc || document;
@@ -6107,10 +6123,34 @@
     }
   }
 
+  // v18.0.7 — DOS COSAS, LAS DOS POR REPORTE EN VIVO DEL 31-AGO (captura):
+  //
+  // (1) EL BOTÓN SE COLABA EN «CITAS DEL DÍA». Causa: se pinta en `document.body` con
+  //     `position:absolute` y coordenadas de PÁGINA, y el ÚNICO que lo esconde es este
+  //     mismo tick — que solo se llama desde el observador de la pestaña Conducta y desde
+  //     el final de un clic. Al navegar la SPA a Citas del día este tick ya no corre, así
+  //     que el botón se quedaba huérfano flotando sobre la lista de citas, con las
+  //     coordenadas de la pantalla anterior. Ahora hay `mtrOcultarBotonOrdenarPendientes()`
+  //     (abajo), que el tick general llama en CADA vuelta esté donde esté el médico.
+  //
+  // (2) EL MÉDICO PIDIÓ OCULTARLO AL USUARIO FINAL mientras se termina de hacer funcionar
+  //     ("oculta ese botón para el usuario final mientras logramos hacerlo funcionar").
+  //     No se borra el código: queda tras el MODO PROGRAMADOR (Ctrl+Shift+D), que es el
+  //     mecanismo que este proyecto ya usa para lo que no debe verse en consulta pero sí
+  //     tiene que poder probarse. Con el modo apagado —o sea, para todos los médicos en
+  //     consulta— no se pinta nunca.
+  //
+  // Y el candado de ruta que el médico dejó por escrito: «el Centinela solo vive en
+  // HCHealth y en las historias abiertas de los pacientes, nada más». Aunque el modo
+  // programador esté encendido, fuera de una historia abierta este botón no existe.
   function mtrWidgetOrdenarConductaTick(doc) {
     try {
       const d = doc || document;
       const el = document.getElementById("vgl-cw-ordenar-btn");
+      // (2) oculto para el usuario final hasta nueva orden del médico.
+      if (typeof _vglProgOn === "undefined" || !_vglProgOn) { if (el) el.style.display = "none"; return; }
+      // Candado de ruta: solo dentro del módulo clínico Y con una historia abierta.
+      if (!_enModuloHCHealth() || seccionActiva() !== "historia") { if (el) el.style.display = "none"; return; }
       if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
       const docId = extractPacienteAbierto();
       if (!docId) { if (el) el.style.display = "none"; _cwoDocPrevio = null; return; }
@@ -8386,6 +8426,9 @@ _vglOfrecerDeshacer(btn);
     // del backlog). Solo en memoria (como state.pym/pymAbandono): se limpia en diaNuevo().
     perfilAdicionalCache: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
+    // v18.0.7 — cédulas cuya historia clínica abrió el médico HOY (ver _consultorioMarcar).
+    // Se hidrata perezosamente desde el almacén del día la primera vez que se consulta.
+    enConsultorio: null,
     // v17.1.0 (#72/#146) — «ya conté esta cita en este color». Los cuatro indicadores del
     // Resumen del turno (extemporáneas, inasistencias, a tiempo, última llamada) contaban
     // TRANSICIONES, no citas: la clave era `state.notified`, un mapa de «último color
@@ -10770,6 +10813,50 @@ _vglOfrecerDeshacer(btn);
     const n = normName(name);
     return toks.some((t) => (/[a-z]/.test(t) ? nameHasToken(n, t) : n.includes(t)));
   }
+  // =====================================================================
+  //  v18.0.7 — GUARDA DEL LIBRO EQUIVOCADO
+  // =====================================================================
+  // REPORTE EN VIVO (31-ago): a varios médicos dejó de salirles el aviso de PyM y de
+  // abandono de RCV al abrir la historia clínica. El diagnóstico del equipo del médico lo
+  // dijo sin ambigüedad:
+  //     Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
+  //     Pacientes con pendientes: 0
+  //     Documentos totales en la hoja: 1396
+  //     COINCIDEN: 0/20
+  // O sea: el libro se descargó y se leyó bien (1.396 documentos, la columna del documento
+  // SÍ se encontró), pero NINGUNA fila tenía una actividad pendiente. No es un fallo de
+  // red ni de sesión: es OTRO LIBRO.
+  //
+  // CÓMO SE COLÓ. `pickTodaysFile` tiene dos reglas. La 1ª busca la fecha de hoy en el
+  // nombre (Agenda_Dia_CMB_20260831.xlsx). Si no la encuentra, la 2ª acepta CUALQUIER
+  // .xlsx de la carpeta modificado hoy cuyo nombre no lleve una fecha. "ESTRATEGIA DE
+  // PRODUCTIVIDAD SEDE BELLO.xlsx" cumple las dos condiciones —no lleva fecha y alguien lo
+  // edita a diario—, así que se eligió como "el PyM de hoy" y hasta se etiquetó así.
+  // Tiene columna de documento (de ahí los 1.396) pero no tiene columnas de actividades
+  // con "Susceptible"/"Pendiente", así que el índice sale vacío y el aviso, que solo habla
+  // cuando tiene algo que decir, se calla. Para el médico eso es indistinguible de "este
+  // paciente no tiene nada pendiente" — que es justo la mentira que este proyecto prohíbe.
+  //
+  // El propio indexador ya había previsto el síntoma ("si por error se leyera la hoja
+  // equivocada el contador se va a cero y salta a la vista en lugar de engañar"), pero
+  // nadie miraba ese contador: saltaba a la vista solo si alguien abría el diagnóstico.
+  //
+  // LA GUARDA: un libro con MUCHOS documentos y CERO actividades pendientes no es la lista
+  // de prevención. Se rechaza, no se guarda en caché, y SE DICE. El corte es deliberadamente
+  // alto: una jornada real en la que de verdad no quede una sola actividad pendiente entre
+  // cientos de pacientes no existe, y por debajo del corte no se rechaza nada (una hoja
+  // pequeña y al día se acepta tal cual).
+  const MTR_PYM_DOCS_SOSPECHA = 50;
+  function mtrLibroNoParecePym(idx) {
+    if (!idx) return false;
+    const docs = (idx.todos && typeof idx.todos.size === "number") ? idx.todos.size : 0;
+    const conPendientes = (idx.map && typeof idx.map.size === "number") ? idx.map.size : 0;
+    return docs >= MTR_PYM_DOCS_SOSPECHA && conPendientes === 0;
+  }
+  // Huellas de libros ya rechazados HOY: sin esto, el chequeo cada 10 minutos volvería a
+  // descargar y a rechazar el mismo archivo toda la jornada, y a repetir el aviso.
+  const _pymRechazados = new Set();
+
   function pickTodaysFile(files) {
     const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
     if (!xls.length) return null;
@@ -10785,9 +10872,47 @@ _vglOfrecerDeshacer(btn);
     // pasaba el startsWith y se tomaba como "el de hoy" — apagando la re-búsqueda del
     // archivo real durante toda la jornada. Ahora ambos lados se reducen a fecha LOCAL.
     const todayStr = todayStamp();
+    // =====================================================================
+    // v18.0.7 — LA SEGUNDA REGLA, BLINDADA. Era el agujero por el que se coló el libro
+    // equivocado (reporte en vivo del 31-ago, con diagnóstico del equipo del médico).
+    //
+    // QUÉ PASÓ. Esta regla acepta un .xlsx modificado hoy cuyo nombre no lleve fecha. El
+    // listado NO es de una carpeta: `fetchSpFilesMultiFolder` junta las TRES de CONFIG.SP
+    // .folders, y una de ellas es «ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE
+    // BELLO», donde vive «ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx» — un libro de
+    // productividad que alguien edita a diario. Sin fecha en el nombre y modificado hoy:
+    // cumplía las dos condiciones, se eligió como «el PyM de hoy» y hasta se etiquetó así.
+    //
+    // EL DAÑO ERA DOBLE, y por eso el médico se quedó sin aviso toda la jornada:
+    //   1. El índice salía vacío (ese libro no tiene columnas de actividades), así que el
+    //      aviso de PyM y el de abandono de RCV no tenían nada que decir y se callaban;
+    //   2. al haber «encontrado el de hoy», `state.pymFP` quedaba puesto, la comparación de
+    //      huella cortaba por lo sano en el siguiente chequeo, y NUNCA se caía al respaldo
+    //      de la base piloto ni se seguía buscando el CMB real. La regla que el médico dejó
+    //      escrita —«mientras no esté subido el CMB del día se usa la base piloto, y cada X
+    //      minutos se rectifica si ya subieron el oficial»— quedaba desactivada.
+    //
+    // EL BLINDAJE: esta regla solo mira archivos SUELTOS EN LA CARPETA PRINCIPAL, que es
+    // donde el propio CONFIG dice que aparece el PyM del día («archivo suelto en la raíz»,
+    // v7.7). Nada de las subcarpetas de estrategias o de citas por sede puede volver a
+    // presentarse como la lista de prevención del día. Y si un libro ya se rechazó hoy por
+    // no traer ni una actividad (mtrLibroNoParecePym), se SALTA y se prueba el siguiente,
+    // en vez de reintentar el mismo cada diez minutos.
+    // =====================================================================
+    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
+    const sueltoEnLaRaiz = (f) => {
+      const ruta = String(f.ServerRelativeUrl || "");
+      if (!raiz || !ruta) return false;
+      if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
+      return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
+    };
     const matchMod = xls.find((f) => {
       if (!f.TimeLastModified || /20\d{6}/.test(f.Name)) return false;
-      try { return todayStamp(new Date(f.TimeLastModified)) === todayStr; } catch (e) { return false; }
+      if (!sueltoEnLaRaiz(f)) return false;
+      try {
+        if (todayStamp(new Date(f.TimeLastModified)) !== todayStr) return false;
+        return !_pymRechazados.has(pymFP(f.Name, f.TimeLastModified));
+      } catch (e) { return false; }
     });
     if (matchMod) return matchMod;
 
@@ -10894,6 +11019,12 @@ _vglOfrecerDeshacer(btn);
       const u = await unpackPym(raw, makeYielder(15));
       if (!u) { purgar(); return false; }               // formato v2 u otro: se re-indexa
       if (u.meta.date !== todayStamp()) { purgar(); return false; }
+      // v18.0.7 — la caché de HOY puede traer ya indexado el libro equivocado (es lo que le
+      // pasó al médico el 31-ago: el índice cacheado tenía 1.396 documentos y CERO
+      // pacientes con pendientes). Sin esto, la guarda de la descarga no serviría de nada:
+      // toda pestaña que arrancara volvería a cargar el índice malo desde la caché y el
+      // aviso seguiría mudo el día entero. Se purga y se vuelve a buscar el archivo bueno.
+      if (mtrLibroNoParecePym(u)) { purgar(); return false; }
       if (state.pymFile) return true;                    // algo se cargó mientras se desempaquetaba
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)", !u.meta.fb); return true;
     } catch (e) { return false; } finally { cacheCargando = false; } }
@@ -11139,6 +11270,20 @@ _vglOfrecerDeshacer(btn);
       const dl = await gmGet(spDownloadUrl(sel.ServerRelativeUrl), "arraybuffer", "", T_DESCARGA);
       if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
       const idx = await readPym(sel.Name, dl.response);
+      // v18.0.7 — ver mtrLibroNoParecePym: no se acepta como lista de prevención un libro
+      // con cientos de documentos y CERO actividades pendientes. Se dice y se sigue con lo
+      // que hubiera antes, en vez de dejar al médico creyendo que nadie tiene nada.
+      if (mtrLibroNoParecePym(idx)) {
+        const huella = pymFP(sel.Name, sel.TimeLastModified);
+        if (!_pymRechazados.has(huella)) {
+          _pymRechazados.add(huella);
+          if (state.leader) notify("AMBAR", "📋 Ese archivo no parece la lista de prevención",
+            sel.Name + "\nSe leyó completo (" + idx.todos.size + " documentos) pero NO trae ni una actividad pendiente, así que no es el PyM del día y no se cargó.\nSuba el archivo de prevención de hoy a la carpeta, o cárguelo a mano con 📂 «Abrir PyM».",
+            true, "pymraro|" + todayStamp() + "|" + huella);
+        }
+        if (!silent) setSummary("«" + sel.Name + "» no trae actividades de PyM: no se cargó como lista del día.", "warn");
+        return false;
+      }
       const eraRespaldo = state.pymFallback;
       // v12.0.0 (del otro linaje) — El aviso de Windows solo sale cuando APORTA algo: la
       // primera carga del día, la llegada del PyM real tras la base piloto, o una búsqueda
@@ -11203,6 +11348,14 @@ _vglOfrecerDeshacer(btn);
         if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábralo una vez con su usuario y recargue esta página."); return; }
       }
       const idx = await readPym(nombre, buf);
+      // v18.0.7 — misma guarda que en el camino automático: un libro con cientos de
+      // documentos y cero actividades no es el PyM. Aquí importa AÚN MÁS no guardarlo,
+      // porque esta rama escribe la caché (`vgl_pym`) que leen TODAS las pestañas y que
+      // sobrevive a las recargas: un libro equivocado cacheado apaga el aviso el día entero.
+      if (mtrLibroNoParecePym(idx)) {
+        spToast("⚠ «" + nombre + "» se leyó completo (" + idx.todos.size + " documentos) pero no trae ni una actividad pendiente: no es la lista de prevención y NO se guardó.");
+        return;
+      }
       const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (base piloto — aún no llega la de hoy)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", esFallback ? "1" : ""); }
       spToast((esFallback ? "⚠ Sin PyM de hoy — se usará la base piloto (referencia): " : "✓ PyM de hoy capturado: ") + nombre + " — " + idx.map.size + " paciente(s). Ya está disponible en Everest.");
@@ -11414,7 +11567,11 @@ _vglOfrecerDeshacer(btn);
       for (const el of contenedor.querySelectorAll(".text-muted")) {
         if (el.closest("#vgl-root")) continue;                 // nunca leer el propio panel
         const doc = _vglDocCanon(limpio(el.textContent));
-        if (doc) return doc;
+        // v18.0.7 — se anota aquí, en el único punto por el que pasa "qué historia tiene
+        // abierta el médico", porque hay 27 llamadores y marcarlo en cada uno garantizaría
+        // olvidarse de alguno. La anotación es barata: solo escribe la primera vez que ve a
+        // cada paciente en la jornada (_consultorioMarcar sale antes si ya estaba).
+        if (doc) { _consultorioMarcar(doc); return doc; }
       }
       return "";
     } catch (e) { return ""; }
@@ -11647,6 +11804,15 @@ _vglOfrecerDeshacer(btn);
             _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
           }
         }
+        // v18.0.7 — REPORTE EN VIVO (31-ago): dos avisos ÁMBAR de pacientes que el médico
+        // YA HABÍA ATENDIDO. La agenda seguía diciendo "Sin presentarse" (el estado
+        // administrativo va por detrás de la consulta real), así que la decisión de v16.2.8
+        // —que solo mira si Everest dice "atendido"— no llegaba a cubrirlo. Si el médico
+        // abrió HOY la historia de ese paciente, el paciente estuvo delante de él.
+        // `callar` apaga la interrupción y NADA MÁS: el ÁMBAR se conserva, se sigue
+        // contando y la fila INASISTENCIA se sigue escribiendo en la auditoría — que es la
+        // evidencia de las reclamaciones. Misma contención que v16.2.8.
+        if (_consultorioTiene(a.doc_id)) callar = true;
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
     }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
@@ -12315,6 +12481,7 @@ _vglOfrecerDeshacer(btn);
         esDM2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
+        egfrCkdEpi: (_resAviso.erc && _resAviso.erc.egfr !== undefined) ? _resAviso.erc.egfr : null,   // v18.0.7 — D11 (KDIGO)
         aplicar50: _autorizado,
       } : undefined;
       let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
@@ -12786,6 +12953,60 @@ _vglOfrecerDeshacer(btn);
   // anterior) llegaba a sala y esta pestaña lo pintaba VERDE "llegó a tiempo" — y el
   // FRAUDE_EXTEMPORANEO no se escribía nunca: la evidencia para reclamaciones se perdía.
   // Mismo remedio que la siembra de avisos (v14.1.5): un almacén compartido del día.
+  // =====================================================================
+  //  v18.0.7 — EL PACIENTE QUE YA PASÓ POR EL CONSULTORIO NO SE DENUNCIA
+  // =====================================================================
+  // REPORTE EN VIVO (31-ago, dos capturas): al médico le llegaron avisos ÁMBAR
+  // ("Venció el tiempo de confirmación · Sin presentarse") de dos pacientes que YA HABÍA
+  // ATENDIDO. El script no se equivocaba al LEER: la agenda de Everest seguía diciendo
+  // "Sin presentarse" porque el estado administrativo de la cita va por detrás de la
+  // consulta real — el médico atiende y la agenda se actualiza (o no) más tarde.
+  //
+  // El motor ya tenía media respuesta: v16.2.8 decidió que "sin presentarse -> atendido" no
+  // notifica ("cuando la agenda ya dice Atendido, el paciente lleva rato dentro del
+  // consultorio y avisar entonces no cambia nada, solo interrumpe"). Pero esa decisión
+  // depende de que EVEREST diga "atendido", que es justo lo que aquí no pasa.
+  //
+  // El script tiene otra fuente, y es más fiable que la agenda para esto: sabe qué HISTORIA
+  // CLÍNICA tiene abierta el médico (extractPacienteAbierto). Si abrió la historia de ese
+  // paciente hoy, el paciente estuvo delante de él: denunciarle una inasistencia es ruido.
+  //
+  // MISMA CONTENCIÓN QUE v16.2.8, Y ES LA PARTE IMPORTANTE: esto NO borra evidencia. El
+  // color ÁMBAR se conserva, bumpStatCita sigue contando y logEvent sigue escribiendo la
+  // fila INASISTENCIA en la auditoría — que es lo que sostiene las reclamaciones
+  // administrativas. Lo único que se apaga es la INTERRUPCIÓN (tono, notificación de
+  // Windows y cartel) mientras el médico está en consulta.
+  //
+  // Se guarda por día y compartido entre pestañas, igual que la siembra y el fraude: si
+  // viviera en la memoria de una pestaña, un relevo de liderazgo lo perdería y el aviso
+  // falso volvería. Se rehace solo cada día, por fecha.
+  const CONSULTORIO_KEY = "vgl_consultorio_dia";
+  function _consultorioLeer() {
+    try {
+      const g = readJSON(CONSULTORIO_KEY, null);
+      if (!g || g.dia !== todayStamp() || !Array.isArray(g.docs)) return new Set();
+      return new Set(g.docs);
+    } catch (e) { return new Set(); }
+  }
+  function _consultorioMarcar(doc) {
+    try {
+      const d = _vglDocCanon(String(doc == null ? "" : doc));
+      if (!d) return;
+      if (!state.enConsultorio) state.enConsultorio = _consultorioLeer();
+      if (state.enConsultorio.has(d)) return;      // ya estaba: ni una escritura más
+      state.enConsultorio.add(d);
+      writeJSON(CONSULTORIO_KEY, { dia: todayStamp(), docs: Array.from(state.enConsultorio) });
+    } catch (e) {}
+  }
+  function _consultorioTiene(doc) {
+    try {
+      const d = _vglDocCanon(String(doc == null ? "" : doc));
+      if (!d) return false;
+      if (!state.enConsultorio) state.enConsultorio = _consultorioLeer();
+      return state.enConsultorio.has(d);
+    } catch (e) { return false; }
+  }
+
   const FRAUDE_COMPARTIDO_KEY = "vgl_fraude_dia2";   // v17.1.0 — ver nota de SIEMBRA_KEY
   function _fraudeCompartidoGuardar() {
     try {
@@ -12904,6 +13125,7 @@ _vglOfrecerDeshacer(btn);
         esDM2: _esDm2Pym,
         esDm2: _esDm2Pym,
         categoriaRiesgo: _resPym.riesgo && _resPym.riesgo.categoria || null,
+        egfrCkdEpi: (_resPym.erc && _resPym.erc.egfr !== undefined) ? _resPym.erc.egfr : null,   // v18.0.7 — D11 (KDIGO)
         aplicar50: true,
         clavesExtra: _esDm2Pym ? ["HBA1C"] : [],
       } : undefined;
@@ -13066,7 +13288,11 @@ _vglOfrecerDeshacer(btn);
     // ROJO de esa transición volvía a sonar con repique, notificación y cartel — justo la
     // interrupción que el médico ordenó callar. `callar` lo dice en voz alta; el conteo y
     // la auditoría de arriba ya corrieron, así que la evidencia para reclamaciones queda.
-    if (a.color === "ROJO" && a.callar) return;
+    // v18.0.7 — la guarda cubre también el ÁMBAR: es el color del aviso que le llegó al
+    // médico sobre dos pacientes que ya había atendido (ver _consultorioTiene en
+    // colorAndAlert). Sigue siendo SOLO la interrupción: el conteo y la fila de auditoría
+    // de arriba ya corrieron, y la evidencia para reclamaciones queda intacta.
+    if (a.callar && (a.color === "ROJO" || a.color === "AMBAR")) return;
     // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
     // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
     // ya quedaron registrados; aquí solo se frena el cartel/sonido repetido.
@@ -19376,7 +19602,7 @@ _vglOfrecerDeshacer(btn);
       + fila("Documento", x.documento)
       + fila("Número de la cita", x.radicado)
       + `</div>`
-      + `<div class="rc-call arrive"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span><b>Recuerde llegar 15 minutos antes</b>RECUERDE LLEGAR 15 MINUTOS ANTES DE SU CITA PARA TRÁMITES ADMINISTRATIVOS. Presente su documento de identidad.</span></div>`
+      + `<div class="rc-call arrive"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span><b>Recuerde llegar 15 minutos antes</b>Ese tiempo es para los trámites administrativos. Presente su documento de identidad.</span></div>`
       + `<div class="rc-call prep"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg><span><b>Preparación</b>Consulte en el laboratorio la preparación que requiere su examen (por ejemplo, si necesita ayuno).</span></div>`
       + `<div class="rc-pie">Documento de recordatorio de su cita de laboratorio. Si no puede asistir, comuníquese con el laboratorio.</div>`
       + `</div></div>`
@@ -28154,6 +28380,12 @@ _vglOfrecerDeshacer(btn);
       // depende del DOM de cada vista) se queda condicionado a estar en agenda/historia.
       const secc = seccionActiva();
       const enVistaVigilada = secc !== "otra";
+      // v18.0.7 — el botón "Ordenar pendientes" se pinta en document.body con coordenadas de
+      // PÁGINA y su propio tick solo corre en la pestaña Conducta: al navegar la SPA a Citas
+      // del día nadie lo retiraba y se quedaba flotando sobre la lista de citas (reporte en
+      // vivo, 31-ago, con captura). Se retira aquí, en el tick general, siempre que no
+      // estemos dentro de una historia abierta — que es donde el médico dijo que vive.
+      if (secc !== "historia") { try { mtrOcultarBotonOrdenarPendientes(); } catch (e) {} }
       // v16.2.2 — pedido explícito del médico: el Vigilante NO debe APARECER fuera de
       // HCHealth (ni en Acceso ni en Ordenamiento - Everest, aunque el médico tenga
       // varias pestañas de Everest abiertas a la vez) — ni el panel completo ni la
@@ -34867,6 +35099,49 @@ _vglOfrecerDeshacer(btn);
     return null;
   }
 
+  // =====================================================================
+  //  D11 — REGLA KDIGO: CON TFG < 60 NO SE REPITE EL PERFIL LIPÍDICO AL 50 %
+  // =====================================================================
+  // Decisión del médico, verbatim (entrevista del 29-ago, docs/ENTREVISTA_20260829.md):
+  // «en pacientes con ckd epi 2021 menor a 60 tfg no repitamos perfil lipídico al 50% por
+  // falla terapéutica como lo dicen las guías kdigo», y «cockcroft gault solo aplica a nivel
+  // administrativo por lo que todo el script se debe alinear a estas reglas».
+  //
+  // Fundamento: KDIGO recomienda explícitamente no usar el LDL como objetivo ni repetir el
+  // perfil de rutina en ERC ("fire and forget"). El resto de lo lipídico sigue rigiéndose por
+  // el Consenso Colombiano de Dislipidemias 2024, de donde salen las metas 55/70/100/116.
+  //
+  // QUÉ FRENA Y QUÉ NO. Frena SOLO el acortamiento al 50 % de los lípidos. NO toca:
+  //   · la declaración de falla terapéutica (mtrFueraDeMeta sigue diciendo la verdad: el LDL
+  //     sigue estando fuera de meta, y el eje lipídico sigue encendiéndose en el panel). Lo
+  //     que cambia es que ese hecho ya no adelanta la toma;
+  //   · la vigencia normativa, que se respeta entera;
+  //   · la HbA1c ni la glicemia, que no son lípidos y no las cubre esta regla.
+  //
+  // POR QUÉ NO CHOCA CON «CERO VENCIDOS», que es la regla rectora del proyecto y manda sobre
+  // la logística: esta guarda solo puede ALARGAR una vigencia (de 90 a 180), nunca acortarla.
+  // La fecha de toma es el vencimiento MÁS PRÓXIMO entre los conductores, así que retirar un
+  // vencimiento temprano solo puede empujar la fecha al siguiente más próximo — que sigue
+  // siendo un vencimiento real. Por construcción, nada puede vencer antes de la toma.
+  //
+  // LA TFG ES LA DE CKD-EPI 2021, NUNCA LA DE COCKCROFT-GAULT (que en este proyecto es solo
+  // administrativa y para dosificar). `erc.egfr` ya es CKD-EPI 2021; `erc.crcl` es C-G y aquí
+  // no se mira. Si no hay TFG, la guarda NO se aplica: sin el dato no se supone nada y manda
+  // la regla del 50 %, que es la conducta conservadora (repetir antes, no después).
+  function mtrKdigoNoRepiteLipidos(clave, ctx) {
+    const LIPIDOS = ["COLESTEROL_LDL", "COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"];
+    if (LIPIDOS.indexOf(String(clave == null ? "" : clave).trim().toUpperCase()) < 0) return false;
+    const c = ctx || {};
+    let crudo = null;
+    if (c.egfrCkdEpi !== undefined && c.egfrCkdEpi !== null) crudo = c.egfrCkdEpi;
+    else if (c.erc && c.erc.egfr !== undefined && c.erc.egfr !== null) crudo = c.erc.egfr;
+    const tfg = (typeof mtrFloat === "function") ? mtrFloat(crudo) : null;
+    if (tfg === null) return false;                      // sin dato no se supone nada
+    return tfg < MTR_KDIGO_TFG_LIPIDOS;
+  }
+  // El corte de la guía: TFG < 60 (G3a en adelante).
+  var MTR_KDIGO_TFG_LIPIDOS = 60;
+
   // La mitad, nunca menos de 1 día. Se aplica DESPUÉS de colapsar el rango y
   // DESPUÉS del ajuste renal, sobre el número que de verdad se iba a usar.
   //
@@ -35016,7 +35291,12 @@ _vglOfrecerDeshacer(btn);
     // el siguiente control no puede esperar la vigencia completa, que está pensada para
     // un paciente controlado.
     const fueraMeta = mtrFueraDeMeta(clave, valor, c);
-    const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
+    // v18.0.7 — D11 (KDIGO): con TFG por CKD-EPI 2021 < 60 el perfil lipídico NO se repite al
+    // 50 % por falla terapéutica. Se marca aparte de `fueraMeta` a propósito: el examen SIGUE
+    // estando fuera de meta (el panel y el eje lipídico lo dicen igual), lo único que no pasa
+    // es que ese hecho adelante la toma. Ocultar la falla sería otra cosa, y no es lo pedido.
+    const kdigoFrena = mtrKdigoNoRepiteLipidos(clave, c) && fueraMeta === true;
+    const vigencia = kdigoFrena ? vigenciaNorma : mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
     if (!fecha) {
       // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
       // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
@@ -35076,6 +35356,11 @@ _vglOfrecerDeshacer(btn);
       // v16.2.7 — Cuando la vigencia se partió por estar fuera de meta, el motivo lo DICE:
       // si no, el médico ve una fecha más corta sin saber de dónde salió.
       fueraDeMeta: fueraMeta === true,
+      // v18.0.7 — D11 (KDIGO): true cuando el examen SÍ está fuera de meta pero la guarda
+      // renal impidió acortarle la vigencia. Viaja aparte de `fueraDeMeta` porque son dos
+      // hechos distintos y el médico necesita los dos: está fuera de meta (hay que tratar) y
+      // aun así no se repite antes (no hay que volver a pincharlo).
+      kdigoSinAcortar: kdigoFrena === true,
       vigenciaNormaDias: vigenciaNorma,
       motivo: (vencidoBase
         // v17.6.75 — un RAC≥30 vencido, ahora promovido a R, sigue diciendo que está
@@ -35083,7 +35368,13 @@ _vglOfrecerDeshacer(btn);
         // prioridad de ATENCIÓN (vigilancia estrecha), no una negación de que venció.
         ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha + " · albuminuria: vigilancia estrecha")
         : ("vigente hasta el " + vence))
-        + (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : ""),
+        + (kdigoFrena === true
+            // v18.0.7 — se DICE por qué no se adelanta. La entrevista lo dejó por escrito:
+            // "un examen que no se pide sin explicación es indistinguible de un olvido del
+            // script". Aquí el examen está fuera de meta y aun así no se repite antes, que es
+            // exactamente el caso en que callarse parecería un fallo.
+            ? " · fuera de meta, pero KDIGO: con TFG < 60 por CKD-EPI 2021 el perfil lipídico no se repite antes (se respetan los " + vigenciaNorma + " d)"
+            : (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : "")),
     };
   }
 
@@ -37659,6 +37950,9 @@ _vglOfrecerDeshacer(btn);
       estadioAdministrativo: erc.estadioAdministrativo,
       esDm2: !!factores.diabetes, edad: c.edad, rac: c.rac,
       categoriaRiesgo: riesgo.categoria,
+      // v18.0.7 — D11 (KDIGO). CKD-EPI 2021, nunca Cockcroft-Gault (que en este proyecto es
+      // solo administrativa y para dosificar): `erc.egfr` es CKD-EPI 2021, `erc.crcl` es C-G.
+      egfrCkdEpi: (erc && erc.egfr !== undefined) ? erc.egfr : null,
       funcionRenalInestable: erc.sospechaIra,
       ultimos: c.ultimos || {},
       grupoSabado: c.grupoSabado || null,

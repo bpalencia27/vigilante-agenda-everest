@@ -456,5 +456,118 @@ module.exports = {
       t.cierto(/Falla terap.utica/.test(html), "sale el bloque de falla");
       t.cierto(/intensidad y adherencia/i.test(html), "y el aviso de inercia de la estatina");
     });
+
+    // =====================================================================
+    //  D11 (KDIGO) — CON TFG < 60 EL PERFIL LIPÍDICO NO SE REPITE AL 50 %
+    //
+    //  Decisión del médico, verbatim (entrevista del 29-ago): «en pacientes con ckd epi
+    //  2021 menor a 60 tfg no repitamos perfil lipídico al 50% por falla terapéutica como
+    //  lo dicen las guías kdigo». Punto 9 de su orden de ejecución.
+    //
+    //  Lo que estas pruebas fijan, y por qué cada una:
+    //   · La guarda frena SOLO el adelanto. NO apaga la falla terapéutica: el LDL sigue
+    //     estando fuera de meta y el panel lo sigue diciendo. Confundir las dos cosas
+    //     dejaría a un paciente sin tratar creyendo que está bien.
+    //   · La TFG es la de CKD-EPI 2021, NUNCA Cockcroft-Gault (aquí solo administrativa).
+    //   · SIN TFG no se supone nada: manda la regla del 50 %, que es lo conservador
+    //     (repetir antes, no después).
+    //   · La guarda vive en los DOS caminos que parten la vigencia (el motor del panel y
+    //     la vara del aviso de entrada / antiduplicado de PyM). Con una sola, el panel
+    //     diría 180 y el aviso seguiría reclamándolo a los 90 sobre el mismo paciente.
+    //   · Y no rompe CERO VENCIDOS: solo puede ALARGAR, así que la fecha de toma no se
+    //     adelanta ni deja vencer nada. Se comprueba de punta a punta.
+    // =====================================================================
+    const _ctxKdigo = (tfg) => ({
+      hoyIso: "2026-08-31", programa: "DM2", esDm2: true, categoriaRiesgo: "alto", edad: 62,
+      estadioAdministrativo: null, rac: 12, egfrCkdEpi: tfg,
+      ultimos: {
+        COLESTEROL_LDL: { fecha: "2026-07-10", valor: 110 },
+        GLUCOSA: { fecha: "2026-07-10", valor: 165 },
+        HBA1C: { fecha: "2026-07-10", valor: 8.2 },
+        COLESTEROL_TOTAL: { fecha: "2026-07-10", valor: 190 },
+        COLESTEROL_HDL: { fecha: "2026-07-10", valor: 42 },
+        TRIGLICERIDOS: { fecha: "2026-07-10", valor: 180 },
+        CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+        RAC: { fecha: "2026-08-01", valor: 12 },
+        UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+      },
+    });
+    const _claves = (lista) => (lista || []).map((a) => a.clave);
+
+    t.caso("D11: la guarda solo mira los cuatro lípidos, y solo por debajo de 60", () => {
+      for (const k of ["COLESTEROL_LDL", "COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.cierto(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 59.9 }), k + " con TFG 59,9 sí la frena");
+        t.falso(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 60 }), k + " con TFG 60 exactos NO: la guía dice MENOR de 60");
+      }
+      for (const k of ["HBA1C", "GLUCOSA", "CREATININA", "RAC"]) {
+        t.falso(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 30 }), k + " no es un lípido: KDIGO no lo cubre");
+      }
+    });
+
+    t.caso("D11: sin TFG no se supone nada — manda la regla del 50 %", () => {
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", {}), "sin dato");
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { egfrCkdEpi: null }), "TFG nula");
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { egfrCkdEpi: "" }), "TFG vacía");
+      t.cierto(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { egfr: 45 } }), "y la lee del resumen si viene ahí");
+    });
+
+    t.caso("D11: la TFG es la de CKD-EPI 2021, nunca la de Cockcroft-Gault", () => {
+      // erc.crcl es Cockcroft-Gault y en este proyecto es solo administrativa/dosificación.
+      // Un crcl bajo NO puede activar la guarda por su cuenta.
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { crcl: 30, egfr: 90 } }),
+        "con CKD-EPI 90 no se frena, aunque Cockcroft-Gault diga 30");
+      t.cierto(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { crcl: 90, egfr: 45 } }),
+        "y con CKD-EPI 45 sí se frena, aunque Cockcroft-Gault diga 90");
+    });
+
+    t.caso("D11: la falla terapéutica NO se apaga — el LDL sigue estando fuera de meta", () => {
+      const ctx = _ctxKdigo(52);
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 110, ctx), true,
+        "110 sigue por encima de la meta de 70 del riesgo alto: eso no lo toca KDIGO");
+      const a = api.mtrEstadoAnalito("COLESTEROL_LDL", ctx.ultimos.COLESTEROL_LDL, ctx);
+      t.cierto(a.fueraDeMeta === true, "y el analito lo sigue publicando");
+      t.cierto(a.kdigoSinAcortar === true, "marcando aparte que la guarda renal frenó el adelanto");
+      t.igual(a.vigenciaDias, 180, "la vigencia se respeta entera");
+      t.cierto(/KDIGO/.test(a.motivo) && /no se repite antes/.test(a.motivo),
+        "y el porqué se dice: un examen que no se pide sin explicación parece un olvido · " + a.motivo);
+    });
+
+    t.caso("D11 PUNTA A PUNTA: con TFG < 60 el perfil lipídico entero sale de la toma", () => {
+      const sano = api.mtrPlanParaclinicos(_ctxKdigo(88));
+      const renal = api.mtrPlanParaclinicos(_ctxKdigo(52));
+
+      t.cierto(_claves(sano.ordenar).indexOf("COLESTEROL_LDL") >= 0, "con TFG 88 el LDL se ordena (regla del 50 %)");
+      for (const k of ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.cierto(_claves(sano.ordenar).indexOf(k) >= 0, k + " lo arrastra el grupo lipídico");
+      }
+      for (const k of ["COLESTEROL_LDL", "COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.falso(_claves(renal.ordenar).indexOf(k) >= 0, k + " NO se ordena con TFG 52");
+        t.cierto(_claves(renal.diferidos).indexOf(k) >= 0, k + " queda diferido a su vencimiento natural");
+      }
+      // Y lo que sí debe seguir pidiéndose se sigue pidiendo: KDIGO es sobre lípidos.
+      t.cierto(_claves(renal.ordenar).indexOf("GLUCOSA") >= 0, "la glicemia fuera de meta sigue entrando");
+      t.cierto(_claves(renal.ordenar).indexOf("HBA1C") >= 0, "y la HbA1c también");
+    });
+
+    t.caso("D11 y CERO VENCIDOS: la guarda solo ALARGA — la fecha de toma no se adelanta ni deja vencer nada", () => {
+      const sano = api.mtrPlanParaclinicos(_ctxKdigo(88));
+      const renal = api.mtrPlanParaclinicos(_ctxKdigo(52));
+      t.cierto(renal.ftl >= sano.ftl, "la toma nunca se adelanta por esta guarda");
+      // CERO VENCIDOS: ningún examen ordenado o diferido puede vencer ANTES de la toma.
+      for (const a of (renal.ordenar || []).concat(renal.diferidos || [])) {
+        if (!a.vence) continue;
+        t.cierto(a.vence >= renal.ftl, a.nombre + " no vence antes de la toma (" + a.vence + " vs " + renal.ftl + ")");
+      }
+    });
+
+    t.caso("D11: la guarda vive TAMBIÉN en la vara del aviso de entrada y del antiduplicado de PyM", () => {
+      // Si viviera solo en el motor del panel, el panel diría 180 y el aviso de entrada
+      // seguiría reclamando el LDL a los 90 sobre el MISMO paciente: dos varas para una regla.
+      const base = { programa: "DM2", esDm2: true, esDM2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true };
+      const sinRenal = api._vigenciaDiasParaAnalito("COLESTEROL_LDL", 110, Object.assign({}, base, { egfrCkdEpi: 88 }));
+      const conRenal = api._vigenciaDiasParaAnalito("COLESTEROL_LDL", 110, Object.assign({}, base, { egfrCkdEpi: 52 }));
+      t.cierto(conRenal > sinRenal, "con TFG < 60 la vigencia de este camino tampoco se parte (" + sinRenal + " -> " + conRenal + ")");
+      t.igual(conRenal * 1, sinRenal * 2, "y es exactamente el doble: es la mitad que ya no se aplica");
+    });
   },
 };

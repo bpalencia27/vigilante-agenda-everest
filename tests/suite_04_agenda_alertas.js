@@ -1195,5 +1195,94 @@ module.exports = {
       mockPacienteAbierto(c, "8396613");
       t.igual(c.api.extractPacienteAbierto(), "8396613", "la que ya venía limpia no cambia");
     });
+
+    // =====================================================================
+    //  v18.0.7 — EL PACIENTE QUE YA PASÓ POR EL CONSULTORIO NO SE DENUNCIA
+    //
+    //  REPORTE EN VIVO (31-ago, dos capturas de notificaciones de Windows): avisos ÁMBAR
+    //  ("Venció el tiempo de confirmación · Sin presentarse") de dos pacientes que el
+    //  médico YA HABÍA ATENDIDO. El script leía bien: la agenda de Everest seguía diciendo
+    //  "Sin presentarse" porque el estado administrativo va por detrás de la consulta real.
+    //  La decisión de v16.2.8 (no notificar "sin presentarse -> atendido") no lo cubría,
+    //  porque depende de que EVEREST diga "atendido".
+    //
+    //  LO QUE ESTAS PRUEBAS PROTEGEN, y lo segundo importa más que lo primero:
+    //   1. Que la interrupción se calle cuando el médico abrió hoy esa historia clínica.
+    //   2. Que NO se pierda un gramo de evidencia: el ÁMBAR se conserva, se sigue contando
+    //      y la fila INASISTENCIA se sigue escribiendo. Esa auditoría es lo que sostiene las
+    //      reclamaciones administrativas de la IPS; callarla para quitar un ruido sería
+    //      cambiar una molestia por un daño.
+    // =====================================================================
+    t.caso("v18.0.7: sin haber abierto su historia, el ÁMBAR de «Sin presentarse» NO se calla", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const r = c.api.colorAndAlert({ hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "P", index: 1, doc_id: "5150076" }, refDate);
+      t.igual(r.color, "AMBAR");
+      t.falso(r.callar === true, "nada que callar: este paciente no ha pasado por el consultorio");
+    });
+
+    t.caso("v18.0.7: si el médico abrió HOY su historia, el mismo ÁMBAR se marca para callar", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api._consultorioMarcar("5150076");
+      const r = c.api.colorAndAlert({ hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "P", index: 1, doc_id: "5150076" }, refDate);
+      t.igual(r.color, "AMBAR", "el color NO cambia: la inasistencia sigue existiendo y el panel la sigue pintando");
+      t.cierto(r.callar === true, "lo que se apaga es la interrupción");
+    });
+
+    t.caso("v18.0.7: LA EVIDENCIA NO SE PIERDE — se sigue contando y se sigue escribiendo la fila de auditoría", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api._consultorioMarcar("5150076");
+      const cita = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "P", index: 1, doc_id: "5150076" };
+      const r = c.api.colorAndAlert(cita, refDate);
+      // Se siembra el estado previo: maybeNotify ignora la primera pasada a propósito
+      // (siembra silenciosa, v12.4.0), así que sin esto no se ejercitaría nada.
+      c.api.__state.notified.set(r.key, "siembra");
+      const cuenta = () => { const a = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}"); const d = c.api.todayStamp(); return (a[d] && a[d].inasistencia) || 0; };
+      const filasAud = () => { const e = JSON.parse(c.env.storage.getItem(c.api.evKey(c.api.todayStamp())) || "[]"); return (Array.isArray(e) ? e : []).filter((x) => x && x.ev === "INASISTENCIA"); };
+      const antes = cuenta();
+      c.api.maybeNotify(r);
+      t.cierto(cuenta() > antes, "la inasistencia SE CUENTA igual (" + antes + " -> " + cuenta() + ")");
+      c.api.evFlush();   // la auditoría se escribe por tandas; se fuerza el volcado
+      const filas = filasAud();
+      t.igual(filas.length, 1, "y la fila INASISTENCIA queda escrita en la auditoría");
+      t.igual(filas[0].doc, "5150076", "con su documento, que es lo que sostiene la reclamación");
+    });
+
+    t.caso("v18.0.7: la memoria del consultorio es DEL DÍA y se comparte entre pestañas", () => {
+      const c = cargar();
+      c.api._consultorioMarcar("5150076");
+      t.cierto(c.api._consultorioTiene("5150076"), "esta pestaña lo sabe");
+      // Queda ESCRITO en el almacén, no solo en la memoria de esta pestaña: si viviera solo
+      // en memoria, un relevo de liderazgo devolvería el aviso falso. Se lee el almacén y se
+      // vacía la memoria para forzar la relectura, que es lo que hace una pestaña nueva.
+      const guardado = JSON.parse(c.env.storage.getItem("vgl_consultorio_dia") || "null");
+      t.cierto(!!guardado && guardado.dia === c.api.todayStamp(), "se guarda sellado con el día de hoy");
+      t.cierto((guardado.docs || []).indexOf("5150076") >= 0, "y con la cédula dentro");
+      c.api.__state.enConsultorio = null;                       // como una pestaña recién abierta
+      t.cierto(c.api._consultorioTiene("5150076"), "una pestaña que arranca de cero lo hereda del almacén");
+      // Y el de ayer no cuenta: el almacén se rehace solo por fecha.
+      c.env.storage.setItem("vgl_consultorio_dia", JSON.stringify({ dia: "2000-01-01", docs: ["5150076"] }));
+      c.api.__state.enConsultorio = null;
+      t.falso(c.api._consultorioTiene("5150076"), "un registro de otro día no calla nada hoy");
+    });
+
+    t.caso("v18.0.7: la cédula se compara canonizada — los ceros de relleno no abren un boquete", () => {
+      const c = cargar();
+      // Las DOS direcciones: Everest escribe la misma cédula con y sin ceros de relleno según
+      // la pantalla, así que la canonización tiene que estar en el que MARCA y en el que
+      // PREGUNTA. Con una sola de las dos, el aviso falso vuelve por el otro lado.
+      c.api._consultorioMarcar("0005150076");
+      t.cierto(c.api._consultorioTiene("5150076"), "marcada con ceros, se reconoce sin ellos");
+      c.api._consultorioMarcar("7654321");
+      t.cierto(c.api._consultorioTiene("0007654321"), "marcada sin ceros, se reconoce con ellos");
+    });
   }
 };

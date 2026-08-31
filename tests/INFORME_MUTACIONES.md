@@ -6001,3 +6001,82 @@ pantalla del médico, en consulta.
 | **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
 | **ventana crítica del sondeo** | en `_hayCitaCritica` (línea 27068), `VENTANA_CRITICA_MS` pasa de `90000` a `90000000` (toda cita "Sin presentarse" se vuelve crítica) | `suite_04` | *_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia…* → `2 min antes de la gracia -> no crítica (obtuvo true)` |
 | **marca de onboarding** | en `_onboardingColores` (línea 27027), `setItem("vgl_onb_colores", "1")` pasa a `"2"` (la marca nunca queda válida) | `suite_17` | *_onboardingColores: la leyenda de colores se muestra UNA sola vez…* → `la marca queda guardada en localStorage: esperaba "1" y obtuvo "2"` |
+
+## v18.0.7 — 31-ago-2026 · CUATRO REPORTES EN VIVO DE CONSULTORIO
+
+Todo lo de esta entrega sale de reportes del médico con el script corriendo en consulta, y
+del diagnóstico sanitizado de su propio equipo. Ninguna es una mejora especulativa.
+
+### 1. El aviso de PyM y el de abandono de RCV dejaron de salir (a él y a sus compañeros)
+
+El diagnóstico de su equipo lo dijo sin ambigüedad:
+
+```
+Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
+Pacientes con pendientes: 0
+Documentos totales en la hoja: 1396
+COINCIDEN: 0/20
+```
+
+El libro se descargó y se leyó bien —1.396 documentos, la columna del documento SÍ se
+encontró— pero ninguna fila traía actividad pendiente. **Era otro libro.** El listado no es
+de una carpeta: `fetchSpFilesMultiFolder` junta las TRES de `CONFIG.SP.folders`, y una es
+`…/ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE BELLO`, donde vive ese archivo de
+productividad. La 2ª regla de `pickTodaysFile` acepta cualquier `.xlsx` sin fecha en el
+nombre modificado hoy: lo cumplía, y se eligió como «el PyM de hoy».
+
+**El daño era doble**, y esa segunda mitad es la que dejó al médico sin aviso toda la
+jornada: al dar por encontrado el de hoy, `state.pymFP` quedaba puesto, el siguiente chequeo
+cortaba por huella, y **nunca se caía al respaldo de la base piloto ni se seguía buscando el
+CMB real** — desactivando la regla que el médico tenía escrita: *«mientras no esté subido el
+CMB del día se usa la base piloto, y cada X minutos se rectifica si ya subieron el oficial»*.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | la 2ª regla vuelve a aceptar archivos de subcarpetas (se quita `sueltoEnLaRaiz`) | *un libro de una SUBCARPETA no puede pasar por «el PyM de hoy»* y *entre el libro de la subcarpeta y el suelto en la raíz, gana el de la raíz* (`suite_03`) | Sí — 23/23 |
+| 2 | `MTR_PYM_DOCS_SOSPECHA` a 999999 (la guarda de contenido nunca dispara) | *mtrLibroNoParecePym — muchos documentos y CERO pendientes es OTRO libro* (`suite_03`) | Sí — 23/23 |
+
+Tres capas, no una: (a) la 2ª regla solo mira archivos **sueltos en la carpeta principal**,
+que es donde el propio `CONFIG` dice que aparece el PyM del día; (b) `mtrLibroNoParecePym`
+rechaza cualquier libro con ≥50 documentos y CERO pendientes, **lo dice** y recuerda la
+huella para no reintentarlo cada diez minutos; (c) la caché del día (`vgl_pym`) se purga
+sola si trae un índice con esa firma — sin esto, toda pestaña que arrancara volvería a
+cargar el índice malo y el aviso seguiría mudo aunque la descarga ya estuviera arreglada.
+
+### 2. Avisos ÁMBAR de pacientes YA ATENDIDOS
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 3 | se quita `if (_consultorioTiene(a.doc_id)) callar = true` | *si el médico abrió HOY su historia, el mismo ÁMBAR se marca para callar* (`suite_04`) | Sí — 68/68 |
+| 4 | se calla PERDIENDO la evidencia (`if (a.callar) return` antes de contar) | *LA EVIDENCIA NO SE PIERDE — se sigue contando y se sigue escribiendo la fila de auditoría* (`suite_04`) | Sí — 68/68 |
+| 5 | `_consultorioTiene` deja de canonizar la cédula | *la cédula se compara canonizada — los ceros de relleno no abren un boquete* (`suite_04`) | Sí — 68/68 |
+
+La mutación 4 es la importante: prueba que la supresión apaga **solo la interrupción**. El
+ÁMBAR se conserva, `bumpStatCita` cuenta y la fila `INASISTENCIA` se escribe — la evidencia
+de las reclamaciones queda intacta. Misma contención que la decisión v16.2.8 del médico.
+
+### 3. El botón «Ordenar pendientes» flotando sobre «Citas del día»
+
+Se pinta en `document.body` con `position:absolute` y coordenadas de PÁGINA, y el único que
+lo escondía era su propio tick, que solo corre en la pestaña Conducta. Al navegar la SPA
+fuera de la historia nadie lo retiraba. Ahora: oculto al usuario final (encargo del médico,
+queda tras el modo programador), candado de ruta, y `mtrOcultarBotonOrdenarPendientes()` que
+el tick general llama en cada vuelta esté donde esté el médico.
+
+### 4. D11 (KDIGO) — punto 9 de la orden de ejecución del 29-ago
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | `kdigoFrena = false` (la guarda del motor del panel) | *la falla terapéutica NO se apaga…* y *D11 PUNTA A PUNTA…* (`suite_49`) | Sí — 39/39 |
+| 7 | se quita la guarda del camino del aviso de entrada | *la guarda vive TAMBIÉN en la vara del aviso de entrada y del antiduplicado de PyM* (`suite_49`) | Sí — 39/39 |
+| 8 | el corte pasa de `< 60` a `<= 60` | *la guarda solo mira los cuatro lípidos, y solo por debajo de 60* (`suite_49`) | Sí — 39/39 |
+
+Vive en los DOS caminos que parten la vigencia a propósito: con la guarda en uno solo, el
+panel diría «vence en 180» y el aviso de entrada seguiría reclamando el mismo LDL a los 90
+sobre el MISMO paciente. Dos varas para una regla es peor que una vara equivocada.
+
+Y no choca con CERO VENCIDOS: la guarda solo puede ALARGAR una vigencia, así que la fecha de
+toma no se adelanta y, por construcción, nada puede vencer antes de ella. Hay una prueba que
+lo comprueba recorriendo todo el plan.
+
+Banco completo al cerrar: **2.716 comprobaciones pasan, 0 fallan.**
