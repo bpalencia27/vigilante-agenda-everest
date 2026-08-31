@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Excel, caché y SharePoint",
-  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy", "mtrLibroNoParecePym"],
+  cubre: ["applyPymIdx", "packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy", "mtrLibroNoParecePym"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
@@ -362,5 +362,63 @@ module.exports = {
       t.igual(fetchCalls.length, 1, "Debería parar en la primera carpeta porque halló el archivo de hoy");
     });
 
+
+    // =====================================================================
+    //  v18.0.11 — LA GUARDA EN applyPymIdx, Y EL «NO SÉ POR QUÉ» DEL MÉDICO
+    //
+    //  (1) La v18.0.7 puso la guarda del libro equivocado en la descarga automática y en el
+    //      captador de SharePoint. Pero a `applyPymIdx` se llega TAMBIÉN desde la base
+    //      piloto y desde el selector manual de archivo — y es ahí donde se hace el daño de
+    //      verdad: `afterPymLoaded` sella el día, con lo que `debeBuscarPymDiario()` pasa a
+    //      decir «ya está» y el reloj de 10 minutos DEJA DE BUSCAR la lista real hasta
+    //      medianoche; y `savePymCache` persiste el índice malo, que se readmite en cada
+    //      recarga. Un libro equivocado por cualquiera de esas dos puertas apagaba el aviso
+    //      la jornada entera.
+    //
+    //  (2) Los tres mensajes que explicaban el fallo vivían dentro de `if (!silent)` y las
+    //      TRES llamadas de producción pasan `silent = true`: el diagnóstico se calculaba y
+    //      se tiraba en cada vuelta, y al médico le quedaba un «PyM sin cargar» mudo. Sus
+    //      palabras: «no sé por qué». Ahora la razón se guarda y se enseña donde él ya mira.
+    // =====================================================================
+    t.caso("v18.0.11: applyPymIdx RECHAZA un libro que no parece PyM — venga por donde venga", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
+      const antesFile = c.api.__state.pymFile;
+      const ok = c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() },
+        "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", "", "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", true);
+      t.igual(ok, false, "no se instala");
+      t.igual(c.api.__state.pymFile, antesFile, "y NO sella el día: el reloj de 10 min sigue buscando la lista real");
+      t.cierto(!c.env.storage.getItem("vgl_pym_dia"), "ni deja la marca de «ya tengo la de hoy»");
+    });
+
+    t.caso("v18.0.11: un libro que SÍ es PyM se instala igual que siempre", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
+      const map = new Map([["5150076", ["Citología"]]]);
+      t.igual(c.api.applyPymIdx({ map, todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true), true,
+        "con actividades pendientes se instala");
+      t.igual(c.api.__state.pym.size, 1, "y la lista queda cargada");
+      t.igual(c.env.storage.getItem("vgl_pym_dia"), c.api.todayStamp(), "sellando el día, como siempre");
+    });
+
+    t.caso("v18.0.11: el motivo del fallo queda GUARDADO y deja de perderse en cada vuelta", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
+      t.igual(c.api.__state.pymUltimoFallo, "", "al arrancar no hay motivo que contar");
+      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
+      const motivo = c.api.__state.pymUltimoFallo;
+      t.cierto(/OTRO\.xlsx/.test(motivo), "el motivo nombra el archivo · " + motivo);
+      t.cierto(/200 documentos/.test(motivo), "y da la cifra que lo delata");
+      t.cierto(/ninguna actividad/.test(motivo), "dicho en lo que significa, no en jerga");
+    });
+
+    t.caso("v18.0.11: al cargar bien, el motivo anterior se OLVIDA — no se queda colgado del día", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
+      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
+      t.cierto(!!c.api.__state.pymUltimoFallo, "hay motivo (control del caso)");
+      c.api.applyPymIdx({ map: new Map([["5150076", ["Citología"]]]), todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true);
+      t.igual(c.api.__state.pymUltimoFallo, "", "cargó bien: enseñar un motivo viejo sería mentir sobre el estado actual");
+    });
   }
 };

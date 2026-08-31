@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.10
+// @version      18.0.11
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.11";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8415,7 +8415,14 @@ _vglOfrecerDeshacer(btn);
   };
 
   const rawState = {
-    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "", historical: new Map(),
+    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "",
+    // v18.0.11 — POR QUÉ no hay lista de prevención. Los tres mensajes que lo explicaban
+    // vivían dentro de `if (!silent)` y las TRES llamadas de producción pasan silent=true
+    // (ver loadPymDiario): el diagnóstico se calculaba y se tiraba en cada vuelta, y el
+    // médico se quedaba con un «PyM sin cargar» mudo. Reporte suyo, textual: «no sé por
+    // qué». Ahora la razón se guarda aquí y se enseña donde él ya mira —la línea de estado
+    // del panel y el informe de Diag—, sin interrumpir nada.
+    pymUltimoFallo: "", historical: new Map(),
     // v17.6.21 — candidato de estado sin confirmar (ver colorAndAlert): una lectura que
     // difiere del último estado CONFIRMADO se guarda aquí, no se acepta todavía.
     estadoPendiente: new Map(),
@@ -9603,6 +9610,21 @@ _vglOfrecerDeshacer(btn);
   // v7.8: se aplica un ÍNDICE ya construido ({map, todos, abandono}) — el lector en
   // streaming lo entrega directo, sin pasar por una tabla intermedia de filas.
   function applyPymIdx(idx, fileName, mtime, nombreReal, esDiarioRealDeHoy) {
+    // v18.0.11 — LA GUARDA, AQUÍ, PARA QUE VALGA EN TODOS LOS CAMINOS. La v18.0.7 la puso
+    // en la descarga automática y en el captador de SharePoint, pero a `applyPymIdx` se
+    // llega además desde la base piloto y desde el selector manual de archivo — y aquí es
+    // donde se hace el daño de verdad: `afterPymLoaded` sella el día, con lo que
+    // `debeBuscarPymDiario()` pasa a decir «ya está» y el reloj de 10 minutos DEJA de
+    // buscar la lista real hasta medianoche; y `savePymCache` persiste el índice malo, que
+    // se readmite en cada recarga. Un libro con cientos de documentos y CERO actividades no
+    // se instala, no sella el día y no se cachea — y se dice por qué.
+    if (typeof mtrLibroNoParecePym === "function" && mtrLibroNoParecePym(idx)) {
+      const cuantos = (idx && idx.todos && idx.todos.size) || 0;
+      _pymAnotarFallo("«" + (nombreReal || fileName || "el archivo") + "» tiene " + cuantos + " documentos y ninguna actividad pendiente: no es la lista de prevención");
+      try { setSummary("«" + (nombreReal || fileName) + "» se leyó completo (" + cuantos + " documentos) pero no trae ni una actividad de PyM: no se cargó.", "warn"); } catch (e) {}
+      return false;
+    }
+    _pymAnotarFallo("");                              // cargó bien: se olvida el motivo anterior
     try { _saludMarca("pym", true); } catch (e) {}   // v15.8.0 (N2) — la lista de prevención cargó bien
     state.pym = idx.map; state.pymTodos = idx.todos;
     state.pymAbandono = idx.abandono || new Set();
@@ -9618,6 +9640,7 @@ _vglOfrecerDeshacer(btn);
       // no obliga a interpretar varios MB de JSON cada ronda.
       localStorage.setItem("vgl_pym_dia", todayStamp());
     } catch (e) {}
+    return true;
   }
   async function savePymCache(fileName) {
     try {
@@ -11295,6 +11318,10 @@ _vglOfrecerDeshacer(btn);
   // fijar en el banco de pruebas. Solo el segundo caso es un HECHO sobre el PyM; el
   // primero es no saber, y con la piloto cargada el médico necesita esa diferencia
   // para decidir si se fía de la lista que está viendo.
+  // v18.0.11 — anota (y enseña) por qué no hay lista de prevención. Ver state.pymUltimoFallo.
+  function _pymAnotarFallo(motivo) {
+    try { state.pymUltimoFallo = motivo ? (motivo + " · " + new Date().toLocaleTimeString()) : ""; } catch (e) {}
+  }
   function pymDiarioMensajeFallo(noSePudoListar, hayPymCargado) {
     if (noSePudoListar) {
       return "No pude revisar la carpeta de la lista de prevención: no se pudo conectar con la carpeta compartida de la sede. NO sé si la lista de hoy ya está subida. "
@@ -11342,6 +11369,7 @@ _vglOfrecerDeshacer(btn);
       // comprobó: puede llevar horas subida. No poder mirar y haber mirado son cosas
       // distintas, y solo una de las dos justifica seguir con la base piloto tranquilo.
       if (noSePudoListar) {
+        _pymAnotarFallo("no se pudo conectar con la carpeta compartida de la sede");
         if (!silent) setSummary(pymDiarioMensajeFallo(true, !!state.pymFile), "warn"); // [COPY-UX]
         return false;
       }
@@ -11350,6 +11378,7 @@ _vglOfrecerDeshacer(btn);
         // ¿Subieron el de hoy pero en .xls antiguo? Avisar claro en vez de quedarse mudo.
         const viejo = xlsViejoDeHoy(filas);
         if (viejo && state.leader) notify("AMBAR", "📋 El PyM de hoy está en formato .xls antiguo", viejo.Name + "\nEse formato no se puede leer desde el navegador. Pide que lo guarden como .xlsx (Excel: Guardar como → Libro de Excel) y se cargará solo en el siguiente chequeo.", false, "xlsviejo|" + todayStamp());
+        _pymAnotarFallo("aún no aparece la lista de hoy en la carpeta");
         if (!silent) setSummary(pymDiarioMensajeFallo(false, !!state.pymFile), "warn"); // [COPY-UX]
         return false;
       }
@@ -11371,6 +11400,7 @@ _vglOfrecerDeshacer(btn);
             sel.Name + "\nSe leyó completo (" + idx.todos.size + " documentos) pero NO trae ni una actividad pendiente, así que no es el PyM del día y no se cargó.\nSuba el archivo de prevención de hoy a la carpeta, o cárguelo a mano con 📂 «Abrir PyM».",
             true, "pymraro|" + todayStamp() + "|" + huella);
         }
+        _pymAnotarFallo("«" + sel.Name + "» no trae actividades de PyM");
         if (!silent) setSummary("«" + sel.Name + "» no trae actividades de PyM: no se cargó como lista del día.", "warn");
         return false;
       }
@@ -11389,6 +11419,7 @@ _vglOfrecerDeshacer(btn);
       }
       return true;
     } catch (e) {
+      _pymAnotarFallo("no se pudo leer el archivo (" + ((e && e.message) || e) + ")");
       if (!silent) setSummary("No pude leer el PyM del día (" + ((e && e.message) || e) + "). " + (state.pymFile ? "Sigo con lo que hay cargado." : "Probando la base piloto."), "warn");
       return false;
     } finally { diarioEnCurso = false; }
@@ -28078,7 +28109,10 @@ _vglOfrecerDeshacer(btn);
     // decía solo "⚠ RESPALDO", una palabra que no explica QUÉ significa ni QUÉ hacer.
     const pymTxt = state.pymFile
       ? (`PyM: ${state.pym.size}` + (state.pymDeAyer ? " · ⚠ base de AYER (cargue el Excel de hoy)" : "") + (state.pymFallback ? " · ⚠ base piloto (aún no llega la de hoy)" : "") + (sinCruce ? " ⚠ SIN CRUCE (Ajustes→Diag)" : ""))
-      : "PyM sin cargar";
+      // v18.0.11 — sin lista, se dice POR QUÉ. Antes ponía «PyM sin cargar» a secas y el
+      // médico no tenía forma de saber si era la sesión de SharePoint, un archivo que aún
+      // no han subido, o un libro equivocado. Reporte suyo: «no sé por qué».
+      : ("PyM sin cargar" + (state.pymUltimoFallo ? " · " + state.pymUltimoFallo : ""));
     const hora = at ? at.toLocaleTimeString() : "—";
     const mute = muted() ? " · 🔕" : "";
     if (source) { try { _saludMarca("agenda", true); } catch (e) {} }   // v15.8.0 (N2) — lectura buena de la agenda
@@ -28800,6 +28834,7 @@ _vglOfrecerDeshacer(btn);
       "\n--- CONTADORES (últimos 7 días) ---", JSON.stringify(lastDays(7), null, 2),
       "\n--- PyM ---", "Archivo: " + (state.pymFile || "sin cargar"), "Pacientes con pendientes: " + state.pym.size,
       "Documentos totales en la hoja: " + (state.pymTodos ? state.pymTodos.size : "n/a"),
+      "Último fallo al buscar la lista: " + (state.pymUltimoFallo || "(ninguno)"),
       "Base automática activa: " + (S.baseAuto ? "sí" : "no") + " · id: " + ((CONFIG.SP.respaldo && CONFIG.SP.respaldo.id) || "n/a"),
       "\n--- CRUCE PyM ↔ AGENDA (v7.3.3) ---", (function () {
         try {

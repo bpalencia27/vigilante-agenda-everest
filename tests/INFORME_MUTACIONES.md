@@ -6272,3 +6272,42 @@ a contarse sin nadie que la calle—, que era justo el riesgo de la heurística 
 
 Banco completo: **2.726 comprobaciones pasan, 0 fallan** (cinco menos que la v18.0.9: las de
 la heurística, que se van con ella).
+
+## v18.0.11 — 31-ago-2026 · LA GUARDA EN TODOS LOS CAMINOS, Y EL «NO SÉ POR QUÉ»
+
+Dos huecos que quedaban abiertos tras la v18.0.7, verificados contra el código actual.
+
+### 1. `applyPymIdx` instalaba un libro equivocado por las otras dos puertas
+
+La v18.0.7 puso la guarda del libro equivocado en la descarga automática y en el captador de
+la pestaña de SharePoint. Pero a `applyPymIdx` se llega **además** desde la base piloto
+(`loadPymBaseDescarga`) y desde el **selector manual de archivo**. Y es ahí donde está el daño
+de verdad, porque `applyPymIdx` hace tres cosas seguidas:
+
+1. `afterPymLoaded(...)` **sella el día** → `debeBuscarPymDiario()` pasa a decir «ya está» y
+   el reloj de 10 minutos **deja de buscar la lista real hasta medianoche**;
+2. `savePymCache(...)` **persiste el índice malo**, que se readmite en cada recarga;
+3. `localStorage.setItem("vgl_pym_dia", …)` deja la marca de «ya tengo la de hoy».
+
+Un libro equivocado por cualquiera de esas puertas apagaba el aviso la jornada entera. La
+guarda pasa a vivir **en `applyPymIdx`**, que es el cuello por el que pasan todos.
+
+### 2. Los tres mensajes que explicaban el fallo eran inalcanzables
+
+`loadPymDiario` tiene tres ramas de fallo bien redactadas, todas dentro de `if (!silent)`. Las
+**tres** llamadas de producción pasan `silent = true`. El diagnóstico se calculaba y se tiraba
+en cada vuelta, y al médico le quedaba un «PyM sin cargar» mudo. Sus palabras: *«no sé por
+qué»*. Ahora la razón se guarda en `state.pymUltimoFallo` y se enseña **donde él ya mira**: la
+línea de estado del panel y el bloque `--- PyM ---` del Diag. Sin interrumpir nada — no es un
+aviso nuevo, es la respuesta esperando en el sitio donde surge la pregunta.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se quita la guarda de `applyPymIdx` | *applyPymIdx RECHAZA un libro que no parece PyM — venga por donde venga*, + las dos del motivo (`suite_03`) | Sí — 27/27 |
+| 2 | el motivo se anota pero no se limpia al cargar bien | *al cargar bien, el motivo anterior se OLVIDA — no se queda colgado del día* (`suite_03`) | Sí — 27/27 |
+
+La mutación 2 protege algo que se olvida fácil: **un motivo viejo que sobrevive a una carga
+buena es una mentira sobre el estado actual**, y de las peores — le diría al médico que algo
+falla justo cuando ya funciona.
+
+Banco completo: **2.730 comprobaciones pasan, 0 fallan.**
