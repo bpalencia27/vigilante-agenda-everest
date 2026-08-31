@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     18.0.0
+// @version     18.0.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9646,7 +9646,16 @@ _vglOfrecerDeshacer(btn);
       const ayer = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
       const stAyer = (allStats() || {})[ayer];
       paso("Resumen diario", true, sum === ayer ? "el de ayer ya se intentó" : stAyer ? "el de ayer está pendiente de salir" : "ayer no hubo actividad vigilada en este equipo (no hay fila que enviar)");
-      paso("Nombre del consultorio (opcional)", true, (S.equipo || "").trim() ? S.equipo : "vacío — las filas llegan sin nombre de equipo");
+      // v18.0.1 — «Nombre del consultorio» deja de ser un aviso verde falso: sin nombre,
+      // las filas SÍ llegan identificadas (ID anónimo estable _equipoId()), pero el
+      // tablero no puede decir qué puesto las envió. La puerta se cierra en rojo con la
+      // instrucción exacta, y el campo de Ajustes ahora vive en la sección visible
+      // (Operación) para que el administrador lo configure sin modo programador.
+      const nombreEq = (S.equipo || "").trim();
+      paso("Nombre del consultorio (Ajustes → Operación)", !!nombreEq,
+        nombreEq ? nombreEq
+          : "vacío — las filas llegan con el identificador anónimo " + (_equipoId() || "?")
+            + "; escriba el nombre del puesto en Ajustes → Operación → «Nombre del consultorio», una vez por equipo, para que el tablero lo muestre legible");
     } catch (e) { paso("Diagnóstico", false, "no se pudo completar: " + (e && e.message)); }
     return pasos;
   }
@@ -26987,6 +26996,11 @@ _vglOfrecerDeshacer(btn);
       <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
+        <!-- v18.0.1 — «Nombre del consultorio / puesto» sale de la sección técnica (solo
+             modo programador) a la parte SIEMPRE visible: sin él, el tablero de telemetría
+             mostraba filas anónimas porque nadie lo configuraba. El administrador lo fija
+             una vez por equipo y cada fila viaja con ese nombre. -->
+        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3"). Viaja con cada envío al panel de seguimiento para saber qué puesto lo reportó. Sin nombre, las filas llegan con un identificador anónimo (no personal).</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
@@ -27030,7 +27044,6 @@ _vglOfrecerDeshacer(btn);
              arriba, a la sección siempre visible: son operativos, no técnicos. -->
         <!-- v17.58.2 — mismo tratamiento que "Ayudar a mejorar": obligatoria, sin interruptor. -->
         <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint" style="color:var(--c-verde,#2e7d32);font-weight:600">✓ Activo en este equipo</span></div>
-        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
       </div>
