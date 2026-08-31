@@ -2107,5 +2107,64 @@ module.exports = {
         "si ningún vencimiento fijó la fecha, se calla en vez de señalar a uno");
     });
 
+    // =====================================================================
+    // v18.0.15 — FUGA DE PHI, hallazgo del barrido exhaustivo del 31-ago (40.810 líneas,
+    // verificado adversarialmente y REPRODUCIDO con el arnés antes de tocar nada).
+    //
+    // El módulo tiene DOS caminos que llevan la historia de Everest al prompt de Gemini:
+    //   · la vía de RED (mtrHechosDesdeHcEverest) — pasa por mtrHcTachar + mtrHcValorLimpio;
+    //   · la cosecha EN VIVO de la pantalla (mtrCosecharHcDelDom, v17.10.0) — NO pasaba por
+    //     nada. Guardaba `v.slice(0,300)`: el texto crudo que el médico acababa de teclear.
+    //
+    // Y de ahí no se quedaba quieto: mtrHcAcumularDelDom lo persiste en `hcEverest.dom`,
+    // mtrHcTextoParaHoja lo vuelca tal cual bajo «escrito en la historia de HOY», y
+    // mtrRedaccionPrompt lo mete en los HECHOS DEL PACIENTE que salen del equipo. Una
+    // cédula, un celular o un correo escritos a mano en una observación viajaban enteros.
+    //
+    // La cabecera del módulo (v17.9.0) ya prometía lo contrario: «defensa en profundidad:
+    // todo lo que sea texto pasa igual por scrubPII». Esta ruta era la excepción, y no
+    // estaba declarada en ningún comentario — que es justo lo que la hacía invisible.
+    // =====================================================================
+    t.caso("v18.0.15 — la cosecha EN VIVO de la pantalla desidentifica igual que la vía de red", () => {
+      const TEXTO = "Paciente APELLIDO NOMBRE CC 80123456 cel 3001234567 correo x@correo.com";
+      const doc = { querySelectorAll: () => [
+        { name: "revisionSistema.observaciones", type: "text", value: TEXTO },
+      ]};
+      const c = api.mtrCosecharHcDelDom(doc);
+      const v = c["revisionSistema.observaciones"];
+      t.cierto(typeof v === "string" && v.length > 0, "la casilla clínica sigue cosechándose (no se censura de más)");
+      t.cierto(v.indexOf("80123456") < 0, "la cédula tecleada a mano no puede salir del equipo");
+      t.cierto(v.indexOf("3001234567") < 0, "ni el celular");
+      t.cierto(v.indexOf("x@correo.com") < 0, "ni el correo");
+      // Y la comprobación que de verdad fija la regla: las DOS vías al mismo prompt tienen
+      // que dar lo mismo. Mientras eso se cumpla, no puede volver a haber una saneada y
+      // otra no — que es exactamente la forma que tuvo este defecto.
+      t.igual(v, api.mtrHcValorLimpio(TEXTO), "las dos vías al mismo prompt desidentifican igual");
+    });
+
+    t.caso("v18.0.15 — el saneo no rompe los números: peso, talla y tensión siguen siendo números", () => {
+      const doc = { querySelectorAll: () => [
+        { name: "signosVitales.peso", type: "text", value: "72,5" },
+        { name: "signosVitales.talla", type: "text", value: "168" },
+      ]};
+      const c = api.mtrCosecharHcDelDom(doc);
+      t.igual(c["signosVitales.peso"], 72.5, "el peso sigue llegando como número, no como texto censurado");
+      t.igual(c["signosVitales.talla"], 168, "y la talla también");
+    });
+
+    // Y lo que el texto de la hoja acaba diciendo: la comprobación de arriba mira la
+    // cosecha; esta mira el ESLABÓN SIGUIENTE, que es el que llega al modelo.
+    t.caso("v18.0.15 — lo cosechado llega ya desidentificado al texto de la hoja de hechos", () => {
+      const hechos = { dom: { "revisionSistema.observaciones": api.mtrCosecharHcDelDom({
+        querySelectorAll: () => [{ name: "revisionSistema.observaciones", type: "text",
+          value: "control, CC 80123456, cel 3001234567" }],
+      })["revisionSistema.observaciones"] } };
+      const texto = api.mtrHcTextoParaHoja(hechos);
+      t.cierto(texto.indexOf("80123456") < 0, "la cédula no aparece en el texto que se le entrega al modelo");
+      t.cierto(texto.indexOf("3001234567") < 0, "ni el celular");
+      t.cierto(/control/i.test(texto), "pero el contenido clínico sí sobrevive");
+    });
+
+
   },
 };

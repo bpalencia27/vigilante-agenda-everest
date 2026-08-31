@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.14
+// @version      18.0.15
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.14";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.15";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -40548,7 +40548,22 @@ _vglOfrecerDeshacer(btn);
       const v = String(el.value == null ? "" : el.value).trim();
       if (!v) continue;
       const num = Number(v.replace(",", "."));
-      salida[nombre] = (v !== "" && Number.isFinite(num) && /^-?[\d.,]+$/.test(v)) ? num : v.slice(0, 300);
+      if (v !== "" && Number.isFinite(num) && /^-?[\d.,]+$/.test(v)) { salida[nombre] = num; continue; }
+      // v18.0.15 — FUGA DE PHI REAL, encontrada por el barrido del 31-ago y REPRODUCIDA con
+      // el arnés. Esta línea guardaba `v.slice(0,300)`: el texto CRUDO de la pantalla. Y de
+      // aquí no se queda quieto — mtrHcAcumularDelDom lo persiste en `hcEverest.dom`,
+      // mtrHcTextoParaHoja lo vuelca tal cual bajo «escrito en la historia de HOY» y
+      // mtrRedaccionPrompt lo mete en los HECHOS DEL PACIENTE que viajan a Gemini. Una
+      // cédula, un celular o un correo escritos a mano en una observación salían del equipo
+      // sin tocar. La MISMA casilla, cuando llega por la vía de red, sí pasa por
+      // mtrHcValorLimpio: eran dos caminos al mismo prompt, uno saneado y otro no.
+      // La cabecera del módulo (v17.9.0) ya prometía «defensa en profundidad: todo lo que
+      // sea texto pasa igual por scrubPII» — esta ruta era la excepción no declarada.
+      // Medido antes y después: "…CC 80123456 cel 3001234567 correo x@correo.com" salía
+      // entero; ahora sale "…CC [CENSURADO] cel [TEL_CENSURADO] correo [CORREO_CENSURADO]".
+      const limpio = mtrHcValorLimpio(v);
+      if (limpio === null || limpio === "") continue;   // si el saneo lo deja vacío, no viaja
+      salida[nombre] = limpio;
     }
     for (const nombre of Object.keys(radios)) {
       let v = null;

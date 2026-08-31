@@ -6526,3 +6526,74 @@ sobre el CSS crudo, con recorrido de paréntesis balanceados. Sin la mutación, 
 habría entregado verde y hueca.
 
 Banco completo: **2.738 comprobaciones pasan, 0 fallan.**
+
+## v18.0.15 — 31-ago-2026 · LA COSECHA EN VIVO MANDABA PHI A GEMINI SIN SANEAR
+
+Hallazgo del **barrido exhaustivo de las 40.810 líneas** (97 agentes, cada hallazgo
+verificado adversarialmente; 72 confirmados). Este es el primero que se arregla porque no es
+una decisión de diseño: es una violación directa de la regla **Cero PHI** del proyecto, con
+el dato saliendo del equipo.
+
+### El defecto
+
+El módulo tiene **dos caminos** que llevan la historia de Everest al prompt de Gemini:
+
+| camino | desidentifica |
+|---|---|
+| vía de RED — `mtrHechosDesdeHcEverest` | sí: `mtrHcTachar` + `mtrHcValorLimpio` (→ `scrubPII`) |
+| cosecha EN VIVO de la pantalla — `mtrCosecharHcDelDom` (v17.10.0) | **no: `v.slice(0,300)` crudo** |
+
+Y de ahí no se quedaba quieto: `mtrHcAcumularDelDom` lo persiste en `hcEverest.dom`,
+`mtrHcTextoParaHoja` lo vuelca tal cual bajo «escrito en la historia de HOY», y
+`mtrRedaccionPrompt` lo mete en el bloque HECHOS DEL PACIENTE que viaja a
+`generativelanguage.googleapis.com`.
+
+Reproducido con el arnés, salida literal antes del arreglo:
+
+```
+COSECHADO DEL DOM  : "…CC 80123456 cel 3001234567 correo x@correo.com"
+VÍA DE RED (limpio): "…CC [CENSURADO] cel [TEL_CENSURADO] correo [CORREO_CENSURADO]"
+```
+
+La cabecera del módulo (v17.9.0) **prometía lo contrario**: *«Defensa en profundidad: todo lo
+que sea texto pasa igual por scrubPII»* y *«nunca se vuelca el DOM»*. Ningún comentario del
+archivo declaraba esta ruta como excepción — que es justo lo que la hacía invisible. Es la
+misma forma que el defecto de v17.45.0 (`mtrDatosExtraTexto` sin el nombre del paciente):
+**cinco canales llegan al mismo prompt y basta con que uno se salte la defensa.**
+
+### El arreglo
+
+`mtrCosecharHcDelDom` pasa el texto por `mtrHcValorLimpio`, el mismo saneador de la vía de
+red. Los valores numéricos siguen siendo números (peso, talla, tensión no se tocan), y si el
+saneo deja la casilla vacía no viaja — la regla de la casa.
+
+### Lo que este arreglo NO cierra, y hay que decirlo
+
+`scrubPII` reconoce cédula, teléfono, correo y fechas **porque tienen forma**. Un **nombre
+propio escrito a mano sigue pasando** por esta vía. La vía de red lo tacha con
+`mtrHcTachar(crudo, mtrHcTachaduras(payload))`, usando la identidad que trae el propio
+paquete — identidad que, **por diseño, no se guarda en ningún sitio** (`mtrHcTachaduras` la
+usa y la tira). La cosecha del DOM no tiene esa fuente.
+
+Cerrarlo exige decidir de dónde sale el nombre del paciente abierto, y además **depende de
+otro defecto abierto del mismo barrido** (`mtrHcTachar` tacha por subcadena sin límite de
+palabra: un nombre de 3-4 letras destroza el grounding clínico). Se declara aquí en vez de
+improvisarlo: un examen que no se pide sin explicación es indistinguible de un olvido, y una
+defensa a medias que nadie declaró es exactamente cómo apareció este defecto.
+
+### Pruebas nuevas (`suite_57`)
+
+- La cosecha en vivo desidentifica **igual** que la vía de red — comparación directa
+  `mtrCosecharHcDelDom(...) === mtrHcValorLimpio(...)`. Mientras eso se cumpla no puede
+  volver a haber un camino saneado y otro no, que es la forma que tuvo el defecto.
+- El saneo **no rompe los números**: peso 72,5 y talla 168 siguen llegando como números.
+- El eslabón siguiente: lo cosechado llega ya desidentificado a `mtrHcTextoParaHoja`, que es
+  el texto que de verdad ve el modelo.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 4 | se restaura `salida[nombre] = v.slice(0, 300)` (la fuga original) | *la cosecha EN VIVO desidentifica igual que la vía de red* y *lo cosechado llega ya desidentificado al texto de la hoja* (`suite_57`) | Sí — 2.741 |
+
+Banco completo: **2.741 comprobaciones pasan, 0 fallan.**
