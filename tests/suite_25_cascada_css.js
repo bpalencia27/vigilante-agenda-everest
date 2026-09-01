@@ -659,6 +659,12 @@ module.exports = {
       // es por lo que el total de los dos censos crece 3 y no 2: el CSS resuelto duplica
       // MTR_RCV_CSS en MTR_RCV_CSS_TODOS_LOS_MODALES. Los números están medidos, no
       // deducidos; si vuelven a moverse, medirlos otra vez antes de tocarlos.
+      // v18.0.69 — 651 -> 652: UNA regla nueva, .vgl-agm-sug-nota.vgl-agm-sug-aviso (el
+      // aviso de "sin cupo confirmado / no se pudo verificar" del buscador de laboratorio).
+      // Selector combinado a propósito — ver el comentario junto a la regla en el CSS: dos
+      // clases nuestras conviven en el mismo elemento con la misma especificidad, y la
+      // Regla A de aquí abajo cazó el primer intento (una clase suelta) como dependiente
+      // del orden de la hoja.
       // v18.0.43 — 645 -> 649: CUATRO reglas nuevas para el chip y la línea del respaldo
       // (`.vgl-chip-resp`, `.vgl-none.resp`, cada una con su gemela de tema oscuro), que
       // pintan en ámbar lo que viene de la base piloto y no de la lista oficial de hoy.
@@ -667,7 +673,7 @@ module.exports = {
       // De paso, el primer intento sumaba CINCO: el quinto era la palabra escrita dentro de
       // un comentario del propio CSS. Este censo cuenta texto crudo, así que una mención en
       // prosa le inventa una regla — anotado en el comentario de esa hoja para no repetirlo.
-      t.cierto(importantTotal === 651, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 651: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64; salió ${importantTotal})`);
+      t.cierto(importantTotal === 652, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 651: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba

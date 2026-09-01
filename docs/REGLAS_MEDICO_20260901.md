@@ -56,6 +56,18 @@ tiempo que lleva vencido.
 
 Razón de «solo la toma»: el control ya quedó hablado con el paciente.
 
+**Implementado en v18.0.69**, en el sitio exacto de su reporte (la toma forzada por un examen
+vencido, `_afinarLabsPrimeroConCupos`): `mtrBuscarCupoLaboratorio` + `mtrVerificarCupoLab`
+(motor puro, probado) + `mtrNotaDisponibilidadLab` (el aviso de una línea). Cerró de paso un
+defecto real en la sonda que ya existía: comprometía un día como bueno sin haberlo consultado
+nunca (el bucle viejo se rendía a los 8 intentos y tomaba el noveno sin verificar), y su
+extracción de la respuesta de AppCita solo reconocía dos de las seis formas reales en que esa
+API envuelve la lista de turnos.
+
+**Pendiente**: los otros dos sitios que sugieren una toma sin verificar cupo
+(`cargarHoras`/control-primero, y el modal de «toma sola») — mismo motor, ya construido y
+probado, falta solo conectarlo.
+
 ---
 
 ## 3. Jornada del médico

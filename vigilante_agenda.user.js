@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.68
+// @version      18.0.69
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.68";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.69";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -17493,6 +17493,14 @@
       }
       .vgl-agm-sug-motivo{color:var(--fg2) !important}
       .vgl-agm-sug-nota{font-size:var(--t-micro);color:var(--fg3) !important;margin-top:3px}
+      /* v18.0.69 — la nota de "sin cupo confirmado / no se pudo verificar" (regla 2 y 4 del
+         médico). Mismo tamaño que las demás notas del recuadro; ámbar para distinguirla de
+         la explicación rutinaria, sin gritar (nunca bloquea, solo avisa).
+         Regla A de suite_25: ".vgl-agm-sug-nota" y ".vgl-agm-sug-aviso" conviven en el MISMO
+         elemento y las dos declaran "color" — con la misma especificidad (0,1,0) cada una,
+         cuál gana dependería del orden en que quedaran escritas en la hoja, no de la
+         intención. Selector combinado (0,2,0): gana siempre, sin importar el orden. */
+      .vgl-agm-sug-nota.vgl-agm-sug-aviso{color:var(--c-ambar) !important}
       /* v17.5.0 — mismo aviso de completitud que ya bloquea el Panel del paciente
          (mtrFactoresPendientesNavegables), aquí en modo NO bloqueante: el borde de la
          sugerencia pasa a ámbar y la nota se destaca en el mismo tono, sin dejar de
@@ -25826,7 +25834,11 @@
           + ` → control médico <b>${escapeHtml(_sugeridaControl.iso)}</b>`
           + (venc.length ? `<div class="vgl-lp-fila"><span class="vgl-lp-rot">Ya vencidos:</span>${fichas(venc, "vgl-lp-chip venc")}</div>` : "")
           + (porVTxt.length ? `<div class="vgl-lp-fila"><span class="vgl-lp-rot">Vencen pronto:</span>${fichas(porVTxt, "vgl-lp-chip porvencer")}</div>` : "")
-          + `<div class="vgl-agm-sug-nota">${notaLP}</div>`;
+          + `<div class="vgl-agm-sug-nota">${notaLP}</div>`
+          // v18.0.69 — regla 2 y 4 del médico: si no se confirmó cupo real (o AppCita no
+          // respondió), se dice — no se calla ni se inventa disponibilidad.
+          + (_labsPrimero && _labsPrimero.avisoDisponibilidad
+              ? `<div class="vgl-agm-sug-nota vgl-agm-sug-aviso">${mtrNotaDisponibilidadLab(_labsPrimero.avisoDisponibilidad)}</div>` : "");
         _bannerSug.classList.add("vgl-agm-sugerida-on");
         _agmAvisarSiFaltaDocumentar();
         return;
@@ -26009,46 +26021,54 @@
     // Si el médico no ha tocado los chips, la fecha de control se recentra sola.
     //
     // v17.0.3 — REPORTE DE CAMPO: "se me seleccionaron 2 fechas a la vez" (2 capturas) +
-    // "se me congeló el PC". Esta función es la ÚNICA de todo este módulo (a diferencia de
-    // cargarHoras/_cargarHorasToken, _sondearAgendaDeCadaDia/_sweepAgendaToken,
-    // _buscarDiaConAgendaPropia/su propio token) que corre en segundo plano — hasta 8
-    // sondeos de red, uno por uno — SIN ninguna guardia de vigencia: `vivo()` solo pregunta
-    // si el modal sigue abierto, no si el médico ya eligió algo distinto mientras tanto.
-    // Si el médico toca un plazo, un chip de día/toma, o entra al calendario manual ANTES
-    // de que esta ronda de 8 sondeos termine, la ronda vieja igual aplicaba su resultado al
-    // volver: repintaba control Y toma (renderDayChips + renderLabDayChips), cada uno con
-    // su propio barrido de red (_sondearAgendaDeCadaDia, hasta 3 días a la vez) ENCIMA de lo
-    // que el médico ya estaba mirando — de ahí el chip viejo (el que esta ronda vieja
-    // vuelve a marcar) y el nuevo (el que el médico de verdad clicó) activos los dos a la
-    // vez, y una acumulación de sondeos de red superpuestos que, con varios clics seguidos,
-    // explica el "muy lento" y el congelamiento. Mismo remedio que sus hermanas: un token.
+    // "se me congeló el PC". Esta función corre en segundo plano —varios sondeos de red,
+    // uno por uno— y, sin guardia, `vivo()` solo pregunta si el modal sigue abierto, no si
+    // el médico ya eligió algo distinto mientras tanto. Si tocaba un plazo, un chip de
+    // día/toma, o el calendario manual ANTES de que la ronda vieja terminara, esa ronda
+    // igual aplicaba su resultado al volver: repintaba control Y toma ENCIMA de lo que el
+    // médico ya estaba mirando — de ahí el chip viejo (el que la ronda vieja vuelve a
+    // marcar) y el nuevo (el que el médico de verdad clicó) activos los dos a la vez.
+    // Mismo remedio que sus hermanas (cargarHoras/_cargarHorasToken,
+    // _sondearAgendaDeCadaDia/_sweepAgendaToken…): un token.
+    // v18.0.69 — REEMPLAZADO POR COMPLETO (ver docs/REGLAS_MEDICO_20260901.md). El bucle
+    // viejo probaba HASTA 8 días hacia ADELANTE y, si se acababan los 8 intentos sin
+    // romper el bucle, tomaba el noveno día como bueno SIN haberlo consultado — el techo
+    // (labMaxIso) suele quedar bastante más lejos que 8 días desde el piso cuando hay un
+    // examen vencido (piso = mañana, techo = hoy+21), así que ese noveno día casi nunca
+    // estaba verificado. Además su extracción de la respuesta (`r.turnos || r.data || r`)
+    // no reconocía las formas reales en que AppCita envuelve la lista (`Table`, `agendas`,
+    // `dtCitasDisponibles`…) — las que sí reconoce `extractAgendasList`, la misma que usa
+    // el camino que de verdad reserva el turno. Con esa ceguera, un día CON cupo real
+    // podía leerse como «sin turnos» y saltarse igual.
+    //
+    // Ahora usa mtrBuscarCupoLaboratorio con las 4 reglas del médico: hacia ATRÁS primero,
+    // nunca después; 5 días hábiles de margen; y si no hay cupo dentro de ese margen —o
+    // AppCita no responde— NO se inventa una fecha: se avisa en el banner (regla 2 y 4) y
+    // la sugerencia se queda en la fecha clínica, sin moverse sin verificar.
     async function _afinarLabsPrimeroConCupos() {
       if (!_labsPrimero) return;
       const miTok = ++_labsAfinarToken;
+      const sigueVivo = () => vivo() && miTok === _labsAfinarToken;
       try {
-        let iso = _labsPrimero.labMinIso;
-        for (let paso = 0; paso < 8 && iso <= _labsPrimero.labMaxIso; paso++) {
-          if (!vivo() || miTok !== _labsAfinarToken) return;
-          if (!mtrEsDiaNoHabil(iso)) {
-            let turnos = null;
-            try {
-              const r = await gmPostJson(`https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${iso}`, {});
-              turnos = (r && (r.turnos || r.data || r)) || null;
-            } catch (e) { turnos = null; }
-            if (Array.isArray(turnos) && turnos.length) break;   // primer día con cupo
-          }
-          iso = mtrSumarDias(iso, 1);
+        const r = await mtrBuscarCupoLaboratorio(
+          _labsPrimero.labMinIso, _labsPrimero.labMinIso, _labsPrimero.labMaxIso, 5,
+          // Mismo remedio que el bucle viejo: si el médico ya tocó algo mientras esta
+          // ronda estaba en vuelo, se dejan de gastar consultas de red — cada día restante
+          // «no se pudo verificar» hasta que el bucle termine solo, y el resultado se
+          // descarta abajo sin pintar nada encima de lo que el médico ya eligió.
+          async (iso) => (sigueVivo() ? mtrVerificarCupoLab(iso) : null)
+        );
+        if (!sigueVivo()) return;   // el médico ya eligió algo distinto: no se le pisa
+        _labsPrimero.avisoDisponibilidad = r.encontrada ? null : { motivo: r.motivo };
+        if (r.encontrada && r.iso !== _labsPrimero.labIso) {
+          _labsPrimero.labIso = r.iso;
+          _labsPrimero.controlIso = mtrControlDesdeLabs(r.iso);
+          _sugeridaControl.ftl = r.iso;
+          _sugeridaControl.iso = _labsPrimero.controlIso;
+          if (!_controlElegidoManual) renderDayChips(0, 0, _sugeridaControl.iso);
+          try { renderLabDayChips(r.iso); } catch (e) {}
         }
-        if (!vivo() || miTok !== _labsAfinarToken) return;   // el médico ya eligió algo distinto: no se le pisa
-        if (iso > _labsPrimero.labMaxIso) return;   // sin cupos en la ventana: queda la mínima
-        if (iso === _labsPrimero.labIso) return;
-        _labsPrimero.labIso = iso;
-        _labsPrimero.controlIso = mtrControlDesdeLabs(iso);
-        _sugeridaControl.ftl = iso;
-        _sugeridaControl.iso = _labsPrimero.controlIso;
         _pintarBannerSugerida();
-        if (!_controlElegidoManual) renderDayChips(0, 0, _sugeridaControl.iso);
-        try { renderLabDayChips(iso); } catch (e) {}
       } catch (e) {}
     }
 
@@ -32569,6 +32589,118 @@
       };
     } catch (e) { return null; }
   }
+  // =====================================================================
+  //  v18.0.69 — BÚSQUEDA DE CUPO DE LABORATORIO, SEGÚN LAS 4 REGLAS DEL MÉDICO (01-sep)
+  //  ------------------------------------------------------------------
+  //  REPORTE EN VIVO: «el módulo debe consultar la disponibilidad de agendas de
+  //  laboratorios antes de sugerir una fecha, porque hoy 01/09 me está sugiriendo un
+  //  examen para mañana 02/09 porque X examen ya está vencido, pero para mañana ya no hay
+  //  citas de laboratorio».
+  //
+  //  Reglas fijadas por él en la entrevista (ver docs/REGLAS_MEDICO_20260901.md):
+  //   1. Si la fecha ideal no tiene cupo, buscar el primer día CON cupo hacia ATRÁS,
+  //      nunca después (tomar antes no quita validez; tomar después alarga el
+  //      vencimiento).
+  //   2. Hasta 5 días hábiles de margen para decidir solo; más allá, se detiene y
+  //      muestra los días que sí verificó, para que el médico elija.
+  //   3. (aplica al llamador, no a esta función): solo se mueve la toma, nunca el
+  //      control.
+  //   4. Si AppCita no responde, no se inventa disponibilidad: se avisa que no se pudo
+  //      verificar.
+  //
+  //  EL CASO SIN "ANTES": cuando la fecha ideal YA es el piso absoluto (el examen está
+  //  vencido y `idealIso === pisoIso`, como en el reporte), no hay ningún día anterior
+  //  válido que probar — la regla 1 no tiene dónde aplicarse. No se inventa un permiso
+  //  para buscar "después" que él no dio: se trata igual que "se agotó el margen hacia
+  //  atrás sin cupo", y el módulo se detiene y pregunta (regla 2), en vez de decidir por
+  //  su cuenta cuánto más tarde puede llegar un examen que ya venció. Es la decisión
+  //  clínica del médico, no del script.
+  //
+  //  `verificarCupo(iso)` es async y devuelve:
+  //    true   -> ese día SÍ tiene cupo real en AppCita
+  //    false  -> AppCita respondió y ese día NO tiene cupo
+  //    null   -> no se pudo verificar (sin red, tiempo agotado, respuesta ilegible)
+  //  Nunca se asume disponibilidad sin una respuesta real: un `null` no cuenta ni a
+  //  favor ni en contra, y si TODOS los días consultados devuelven `null` el resultado
+  //  final lo dice explícitamente (regla 4), en vez de fabricar un "sin cupo".
+  //
+  //  Pura en su forma de decidir (la lista de días a probar es determinista y ordenada
+  //  ANTES de llamar a `verificarCupo`); el único efecto de red vive en el callback, que
+  //  el banco de pruebas puede sustituir por uno falso.
+  // =====================================================================
+  function mtrDiasParaSondearCupo(idealIso, pisoIso, techoIso, margenHabiles) {
+    const dias = [];
+    const visto = new Set();
+    const agregar = (iso) => { if (iso && iso >= pisoIso && iso <= techoIso && !visto.has(iso)) { visto.add(iso); dias.push(iso); } };
+    agregar(idealIso);
+    // Hacia ATRÁS primero, día hábil por día hábil, sin pasar del piso.
+    let atras = idealIso;
+    for (let i = 0; i < margenHabiles; i++) {
+      let cand = mtrSumarDias(atras, -1);
+      while (cand && cand >= pisoIso && mtrEsDiaNoHabil(cand)) cand = mtrSumarDias(cand, -1);
+      if (!cand || cand < pisoIso) break;
+      agregar(cand);
+      atras = cand;
+    }
+    return dias;
+  }
+  async function mtrBuscarCupoLaboratorio(idealIso, pisoIso, techoIso, margenHabiles, verificarCupo) {
+    const margen = (typeof margenHabiles === "number" && margenHabiles > 0) ? margenHabiles : 5;
+    const candidatos = mtrDiasParaSondearCupo(idealIso, pisoIso, techoIso, margen);
+    const probados = [];
+    let huboRespuestaReal = false;
+    for (const iso of candidatos) {
+      let r;
+      try { r = await verificarCupo(iso); } catch (e) { r = null; }
+      probados.push({ iso: iso, cupo: r });
+      if (r === true || r === false) huboRespuestaReal = true;
+      if (r === true) {
+        return {
+          iso: iso, encontrada: true, esIdeal: iso === idealIso,
+          desplazadaDias: Math.round((mtrFechaDesdeIso(iso).getTime() - mtrFechaDesdeIso(idealIso).getTime()) / 86400000),
+          probados: probados,
+        };
+      }
+    }
+    // Ninguna respondió con un SÍ. Dos motivos posibles, y el médico pidió que no se
+    // confundan: «no hay cupo» (AppCita respondió, y respondió que no) es un hecho
+    // distinto de «no se pudo saber» (AppCita no contestó nunca).
+    return {
+      iso: null, encontrada: false,
+      motivo: huboRespuestaReal ? "sin_cupo_en_margen" : "sin_verificar",
+      probados: probados,
+    };
+  }
+  // v18.0.69 — el mensaje corto para cuando mtrBuscarCupoLaboratorio NO encontró cupo.
+  // Una sola línea (regla del médico, 01-sep, sobre no abarrotar el módulo de texto): dice
+  // el hecho y qué hacer con él, sin repetir la fecha que el recuadro de encima ya muestra.
+  function mtrNotaDisponibilidadLab(aviso) {
+    if (!aviso) return "";
+    if (aviso.motivo === "sin_verificar") {
+      return "⚠ No se pudo consultar la disponibilidad en AppCita: esta fecha es la que corresponde por criterio clínico, sin verificar cupos.";
+    }
+    return "⚠ Sin cupo confirmado en AppCita para los días cercanos a esta fecha: verifique disponibilidad antes de confirmar, o elija otro día con los chips.";
+  }
+  // v18.0.69 — el verificador REAL contra AppCita, para los tres sitios del módulo que
+  // sugieren una fecha de toma (labs-primero, control-primero y «toma sola»). Antes cada
+  // uno tenía su propia extracción de la respuesta; una de ellas (`_afinarLabsPrimeroConCupos`,
+  // ahora retirada) solo miraba `r.turnos`/`r.data` como array — si AppCita envuelve la
+  // lista bajo cualquier otra forma (`dtCitasDisponibles`, `agendas`, `Table`…, las que ya
+  // reconoce `extractAgendasList` porque se observaron en otros endpoints reales de esta
+  // misma API), ese sitio veía SIEMPRE «sin cupo», día tras día, sin que fuera cierto.
+  // Aquí se usa `extractAgendasList`, la MISMA que ya usa el camino de verdad
+  // (`apiLaboratorioAgendarAuto`, el que de verdad reserva el turno) — una sola forma de
+  // leer esta respuesta en todo el script.
+  // `gmPostJsonEx` (no `gmPostJson`) porque hace falta saber si la petición fue exitosa: sin
+  // eso, un 500 del servidor y «cero turnos reales» se ven exactamente igual.
+  async function mtrVerificarCupoLab(iso) {
+    try {
+      const r = await gmPostJsonEx(`https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${iso}`, {});
+      if (!r || !r.ok) return null;              // no se pudo verificar — regla 4
+      return extractAgendasList(r.data).length > 0;
+    } catch (e) { return null; }
+  }
+
   // Control ~7 días calendario tras la toma, al hábil SIGUIENTE si el día 7 no es hábil.
   // v16.9.0 — Este era el OTRO camino para la fecha de control (el aviso «labs primero»
   // del agendamiento) y tenía su propia aritmética: +7 y al siguiente día hábil. Con eso

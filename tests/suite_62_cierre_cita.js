@@ -600,5 +600,134 @@ module.exports = {
       t.igual(typeof a.mtrSedeIdLab(), "number", "y es un número usable en las URLs de AppCita");
     });
 
+    // =====================================================================
+    // v18.0.69 — BÚSQUEDA DE CUPO DE LABORATORIO, LAS 4 REGLAS DEL MÉDICO (01-sep)
+    // Reporte con fecha real: «hoy 01/09 me está sugiriendo un examen para mañana 02/09
+    // porque X examen ya está vencido, pero para mañana ya no hay citas de laboratorio».
+    // Ver docs/REGLAS_MEDICO_20260901.md.
+    // =====================================================================
+    const _disp = (mapa) => async (iso) => (Object.prototype.hasOwnProperty.call(mapa, iso) ? mapa[iso] : null);
+
+    await t.casoAsync("v18.0.69: la fecha ideal SÍ tiene cupo — ni se mueve ni se pregunta nada más", async () => {
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": true }));
+      t.cierto(r.encontrada, "se encuentra");
+      t.igual(r.iso, "2026-09-10");
+      t.cierto(r.esIdeal, "es la propia fecha ideal — no se movió nada");
+      t.igual(r.desplazadaDias, 0);
+    });
+
+    await t.casoAsync("v18.0.69: sin cupo en la ideal, se busca hacia ATRÁS — nunca después (regla 1)", async () => {
+      // 2026-09-10 es jueves. Sin cupo; miércoles 9 sí tiene.
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": false, "2026-09-09": true, "2026-09-11": true }));
+      t.igual(r.iso, "2026-09-09", "se prefiere el día ANTERIOR con cupo");
+      t.igual(r.desplazadaDias, -1, "desplazada hacia atrás, no hacia adelante");
+      t.falso(r.esIdeal);
+    });
+
+    await t.casoAsync("v18.0.69 — EL REPORTE EXACTO DEL MÉDICO: mañana es el piso (examen vencido) y no tiene cupo", async () => {
+      // Hoy 01-sep, examen vencido -> ideal = piso = mañana 02-sep (martes). Sin cupo.
+      // No hay ningún día ANTES de mañana que probar (es el piso absoluto: no se agenda
+      // en el pasado ni el mismo día). La regla 1 no tiene dónde aplicarse.
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return iso === "2026-09-02" ? false : null; };
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-02", "2026-09-02", "2026-09-21", 5, disp);
+      t.igual(consultados.join(","), "2026-09-02",
+        "SOLO se consulta el piso: no hay ningún día anterior que probar, y NO se inventa un permiso para buscar después");
+      t.falso(r.encontrada, "no se decide solo");
+      t.igual(r.motivo, "sin_cupo_en_margen", "AppCita respondió que no — es un hecho, no una duda");
+    });
+
+    await t.casoAsync("v18.0.69: agotado el margen de 5 días hábiles hacia atrás, se detiene y pregunta (regla 2)", async () => {
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return false; };
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-08-01", "2026-09-21", 5, disp);
+      t.falso(r.encontrada, "sin cupo en los 5 días hábiles: el módulo no sigue decidiendo solo");
+      t.igual(r.motivo, "sin_cupo_en_margen");
+      // Ideal + 5 hacia atrás = 6 días consultados (jueves 10, y los 5 hábiles anteriores;
+      // sept 7 es lunes, sept 6/5 fin de semana no cuentan como hábiles).
+      t.igual(consultados.length, 6, "ideal + 5 días hábiles hacia atrás, ni uno más: " + consultados.join(","));
+      t.falso(consultados.some((d) => d > "2026-09-10"), "ninguna consulta cruza al lado de 'después'");
+      t.cierto(r.probados.length === 6, "y el detalle de lo consultado queda para mostrárselo al médico");
+    });
+
+    await t.casoAsync("v18.0.69: nunca cruza el piso ni el techo, aunque el margen alcanzaría para hacerlo", async () => {
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return false; };
+      // Piso a solo 2 días hábiles antes de la ideal: el margen de 5 se corta ahí.
+      await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-08", "2026-09-21", 5, disp);
+      t.falso(consultados.some((d) => d < "2026-09-08"), "nunca antes del piso: " + consultados.join(","));
+    });
+
+    await t.casoAsync("v18.0.69: AppCita no responde — se avisa que no se pudo verificar, nunca se inventa disponibilidad (regla 4)", async () => {
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5, async () => null);
+      t.falso(r.encontrada);
+      t.igual(r.motivo, "sin_verificar", "distinto de 'sin_cupo_en_margen': aquí no se sabe, no se afirma que no haya");
+    });
+
+    await t.casoAsync("v18.0.69: una mezcla de 'no' reales y 'no se pudo verificar' se cuenta como SÍ hubo respuesta real", async () => {
+      // Si AppCita respondió aunque sea una vez con un NO real, el motivo es el hecho
+      // (sin cupo), no la falta de verificación — no se puede decir "no se sabe" cuando
+      // sí se sabe de al menos un día.
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": false, "2026-09-09": null, "2026-09-08": false }));
+      t.igual(r.motivo, "sin_cupo_en_margen");
+    });
+
+    // =====================================================================
+    // v18.0.69 — mtrVerificarCupoLab: el verificador REAL, y por qué reemplaza a la
+    // extracción vieja de `_afinarLabsPrimeroConCupos` (`r.turnos || r.data || r`, luego
+    // `Array.isArray(...)`). Esa extracción solo reconocía la lista si vivía en
+    // `r.turnos` o `r.data` como ARRAY — cualquier otra forma real de envolverla (las que
+    // `extractAgendasList` sí reconoce, porque se observaron en otros endpoints de esta
+    // misma API: `dtCitasDisponibles`, `agendas`, `citas`, `Table`, `Table1`) hacía que
+    // `turnos = r` (el objeto entero, no un array), `Array.isArray(turnos)` saliera
+    // `false`, y ese día se leyera SIEMPRE como «sin cupo» aunque sí lo tuviera. Con
+    // `mtrSedeIdLab()` real (378) y `gmxhr` mockeado, se reproduce con el arnés.
+    // =====================================================================
+    const _gmxhrLab = (mapaPorFecha) => (o) => {
+      const m = /fechaBuscar=([\d-]+)/.exec(String(o.url) || "");
+      const iso = m ? m[1] : null;
+      const cuerpo = (iso && Object.prototype.hasOwnProperty.call(mapaPorFecha, iso)) ? mapaPorFecha[iso] : { turnos: [] };
+      if (o.onload) o.onload({ status: 200, responseText: JSON.stringify(cuerpo) });
+    };
+
+    await t.casoAsync("v18.0.69: mtrVerificarCupoLab reconoce las formas reales de AppCita (dtCitasDisponibles, agendas, Table…)", async () => {
+      const formas = {
+        "directo (array)": [{ hora: "08:00" }],
+        "envuelto en turnos": { turnos: [{ hora: "08:00" }] },
+        "envuelto en data": { data: [{ hora: "08:00" }] },
+        "dtCitasDisponibles (forma real de otro endpoint de esta API)": { dtCitasDisponibles: [{ hora: "08:00" }] },
+        "agendas": { agendas: [{ hora: "08:00" }] },
+        "Table (SQL crudo)": { Table: [{ hora: "08:00" }] },
+      };
+      for (const [nombre, cuerpo] of Object.entries(formas)) {
+        const c = cargar({ silencioso: true, gmxhr: (o) => { if (o.onload) o.onload({ status: 200, responseText: JSON.stringify(cuerpo) }); } });
+        const r = await c.api.mtrVerificarCupoLab("2026-09-10");
+        t.cierto(r === true, "forma «" + nombre + "»: debe verse como CON cupo, salió " + JSON.stringify(r));
+      }
+    });
+
+    await t.casoAsync("v18.0.69: día sin turnos reales — false, no null", async () => {
+      const c = cargar({ silencioso: true, gmxhr: _gmxhrLab({ "2026-09-10": { turnos: [] } }) });
+      t.igual(await c.api.mtrVerificarCupoLab("2026-09-10"), false, "AppCita respondió y la lista viene vacía: SÍ se sabe, es un NO");
+    });
+
+    await t.casoAsync("v18.0.69: sin red o con error del servidor — null, nunca se afirma disponibilidad ni su ausencia", async () => {
+      const cSinRed = cargar({ silencioso: true, gmxhr: (o) => { if (o.onerror) o.onerror("sin red simulada"); } });
+      t.igual(await cSinRed.api.mtrVerificarCupoLab("2026-09-10"), null, "sin red: no se sabe");
+      const c500 = cargar({ silencioso: true, gmxhr: (o) => { if (o.onload) o.onload({ status: 500, responseText: "error interno" }); } });
+      t.igual(await c500.api.mtrVerificarCupoLab("2026-09-10"), null, "un 500 del servidor no es lo mismo que 'cero turnos reales'");
+    });
+
+    t.caso("v18.0.69: mtrDiasParaSondearCupo ordena ideal primero y luego alterna hacia atrás — nunca repite un día", () => {
+      const dias = a.mtrDiasParaSondearCupo("2026-09-10", "2026-09-01", "2026-09-21", 3);
+      t.igual(dias[0], "2026-09-10", "la ideal siempre va primero");
+      t.igual(new Set(dias).size, dias.length, "sin días repetidos");
+      t.cierto(dias.every((d) => d >= "2026-09-01" && d <= "2026-09-21"), "todos dentro de [piso, techo]");
+      t.cierto(dias.slice(1).every((d) => d < "2026-09-10"), "todo lo que sigue a la ideal es ANTERIOR a ella");
+    });
+
   },
 };

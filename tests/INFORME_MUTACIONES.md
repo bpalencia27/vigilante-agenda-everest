@@ -9772,3 +9772,71 @@ resultado ya esté garantizado aguas abajo. Se deja tal cual: quitarla no cambia
 comportamiento actual, pero borraría la explicación.
 
 Banco completo: **2.902 comprobaciones pasan, 0 fallan.**
+
+## v18.0.69 — el módulo consulta cupo de laboratorio antes de sugerir la toma
+
+Encargo del médico (01-sep), con caso real: *«el módulo debe consultar la disponibilidad de
+agendas de laboratorios antes de sugerir una fecha, porque hoy 01/09 me está sugiriendo un
+examen para mañana 02/09 porque X examen ya está vencido, pero para mañana ya no hay citas de
+laboratorio».* Cuatro reglas fijadas por él en la entrevista, escritas en
+`docs/REGLAS_MEDICO_20260901.md`: buscar hacia **atrás**, nunca después; margen de **5 días
+hábiles** antes de detenerse a preguntar; mover **solo la toma**, nunca el control; y si AppCita
+no responde, **decirlo**, nunca inventar disponibilidad.
+
+### Lo que ya existía, y por qué no bastaba
+
+Sí había una sonda de cupos (`_afinarLabsPrimeroConCupos`, v15.4.0), pero con dos defectos
+reales, verificados los dos con el arnés:
+
+1. **Compromiso sin verificar.** El bucle probaba hasta 8 días hacia adelante desde el piso; si
+   se acababan los 8 intentos sin encontrar cupo, tomaba el **noveno día como bueno sin haberlo
+   consultado nunca**. Con un examen vencido el piso queda en «mañana» pero el techo sigue a
+   ~21 días — una ventana de hasta 20 días que 8 pasos no alcanzan a cubrir, así que el defecto
+   se activaba justo en el escenario que él reportó.
+2. **Extracción ciega de la respuesta.** Leía `r.turnos || r.data || r` y comprobaba
+   `Array.isArray(...)`. El camino que SÍ reserva el turno de verdad
+   (`apiLaboratorioAgendarAuto`) usa `extractAgendasList`, que reconoce seis formas distintas en
+   que AppCita envuelve la lista (`dtCitasDisponibles`, `agendas`, `citas`, `Table`, `Table1`,
+   además de `turnos`/`data`) — formas observadas en otros endpoints reales de esta misma API.
+   La sonda vieja solo reconocía dos de las seis: cualquier día cuya respuesta viniera envuelta
+   en otra forma se leía **siempre** como «sin cupo», tuviera turnos reales o no.
+
+### Lo nuevo
+
+- `mtrDiasParaSondearCupo` / `mtrBuscarCupoLaboratorio`: función pura que ordena los días a
+  consultar (ideal primero, luego hacia atrás día hábil por día hábil, nunca cruza el piso ni
+  el techo, nunca repite un día) y decide entre tres resultados — `encontrada`,
+  `sin_cupo_en_margen` (AppCita respondió que no) y `sin_verificar` (AppCita no respondió) — sin
+  confundir nunca los dos últimos.
+- `mtrVerificarCupoLab`: el verificador real, usando `extractAgendasList` (la misma del camino
+  de reserva) y `gmPostJsonEx` (para distinguir un 500 real de «cero turnos»).
+- `mtrNotaDisponibilidadLab`: el aviso de una sola línea cuando no se pudo decidir solo — nunca
+  dos textos que se contradigan, siguiendo la regla del médico de esa misma tarde sobre no
+  abarrotar el módulo.
+- `_afinarLabsPrimeroConCupos` reescrita sobre lo anterior: si no encuentra cupo dentro del
+  margen, **no mueve nada** y lo dice en el banner, en vez de comprometerse con un día sin
+  verificar.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 188 | la búsqueda deja de preferir «antes» (regla 1) | *sin cupo en la ideal, se busca hacia atrás* (2 fallan) | Sí |
+| 189 | el margen de 5 días hábiles deja de respetarse (regla 2) | *agotado el margen, se detiene y pregunta* | Sí |
+| 190 | un NO real se confunde con «no se pudo verificar» (regla 4) | *una mezcla de NO y sin verificar cuenta como respuesta real* (3 fallan) | Sí |
+| 191 | `mtrVerificarCupoLab` deja de distinguir un 500 de «sin turnos» | *un 500 no es lo mismo que cero turnos reales* | Sí |
+| 192 | `mtrVerificarCupoLab` vuelve a la extracción ciega original | *reconoce las formas reales de AppCita* | Sí |
+
+La 192 es la reproducción directa del defecto histórico: revertir a `r.turnos || r.data || r` +
+`Array.isArray` hace caer exactamente las pruebas que fijan las seis formas de
+`extractAgendasList`.
+
+**Alcance de esta entrega.** El motor (las funciones puras) y el sitio del reporte literal del
+médico —la toma forzada por un examen vencido— quedan completos. Hay otros dos sitios del
+módulo con la misma forma de sugerencia sin verificar (`cargarHoras` cuando el control ya está
+elegido, y el modal de «toma sola»); comparten la misma causa de fondo pero el médico no los
+reportó como confusos y ya tienen un mecanismo de recuperación en el momento de confirmar (el
+propio AppCita lista los horarios libres si el elegido ya no lo está). Quedan como siguiente
+paso, con el motor ya construido y probado.
+
+Banco completo: **2.913 comprobaciones pasan, 0 fallan.**
