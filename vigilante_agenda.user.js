@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.57
+// @version      18.0.58
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.57";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.58";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11823,6 +11823,24 @@
     // La copia persistente se guarda ANTES de aplicar (orden determinista) y con los
     // metadatos reales del archivo, para que la próxima revisión de frescura compare bien.
     await pilotoGuardar(idx, { name: (meta && meta.name) || fb.name, mtime: (meta && meta.mtime) || "", fp: pymFP(fb.name, (meta && meta.mtime) || "") });
+    // v18.0.58 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
+    // el arnés: LA TERCERA GUARDA, QUE FALTABA. Esta misma comprobación está DOS veces más
+    // arriba —antes y justo después de `readPym`— precisamente para no pisar un PyM real que
+    // haya llegado mientras tanto. Pero `pilotoGuardar` empaqueta el índice con `packPym`,
+    // que cede el hilo varias veces, y después de ESE await ya no se volvía a mirar.
+    //
+    // Si en esa ventana `loadPymDiario` (que corre cada 10 min en la misma pestaña) termina
+    // de cargar el archivo real de hoy, las líneas de abajo lo reemplazan por la base piloto
+    // vieja. Y el daño no acaba ahí: `applyPymIdx` se llama SIN el 5.º parámetro, así que
+    // `state.pymDia` se vacía y `debeBuscarPymDiario()` vuelve a creer que la lista de hoy no
+    // se ha cargado. Encima el médico ve el cartel ámbar «Usando la base piloto (mientras
+    // llega la de hoy)» — una afirmación FALSA, porque la de hoy ya había llegado — y puede
+    // consultar actividades de referencia desactualizadas sobre pacientes reales.
+    //
+    // Reproducido: `state.pym.size` pasaba de 1 (el paciente real) a 0 (la piloto vacía).
+    // La copia en disco YA se guardó arriba, y eso está bien: sirve para mañana. Lo que no
+    // puede pasar es APLICARLA encima de la lista buena.
+    if (state.pymFile && !state.pymFallback) return true;
     // v7.7: esta es la base PILOTO (respaldo) — antes esta línea decía "false" por error
     // y el panel nunca alcanzaba a avisar "⚠ RESPALDO". Ahora sí marca correctamente que
     // NO es el PyM real del día, para que loadPymDiario() sepa que puede reemplazarla.

@@ -9140,3 +9140,44 @@ real, la 145 tumbó 3 comprobaciones. La 146 (reordenar la alternancia) sigue si
 verdad: se anota como hueco conocido en vez de inventarle una prueba a medida.
 
 Banco completo: **2.870 comprobaciones pasan, 0 fallan.** Van **15 de los 47** del enjambre.
+
+---
+
+## v18.0.58 — la base piloto vieja podía pisar el PyM real de hoy, y decirlo al revés
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+`loadPymBaseDescarga` comprueba `state.pymFile && !state.pymFallback` **dos veces** —antes y
+justo después de `readPym`— precisamente para no pisar un PyM real que haya llegado mientras
+tanto. Pero `pilotoGuardar` empaqueta el índice con `packPym`, **que cede el hilo varias
+veces**, y después de ESE `await` ya no se volvía a mirar.
+
+Si en esa ventana `loadPymDiario` —que corre cada 10 minutos en la misma pestaña— termina de
+cargar el archivo real de hoy, las líneas de abajo lo reemplazan por la base piloto. Reproducido:
+`state.pym.size` pasaba de **1 (el paciente real) a 0 (la piloto)**.
+
+Y el daño no acaba en el reemplazo:
+
+- `applyPymIdx` se llama **sin el 5.º parámetro**, así que `state.pymDia` se vacía y
+  `debeBuscarPymDiario()` vuelve a creer que la lista de hoy no se ha cargado.
+- El médico ve el cartel ámbar **«Usando la base piloto (mientras llega la de hoy)»** — una
+  afirmación **falsa**, porque la de hoy ya había llegado.
+- Y consulta actividades de referencia desactualizadas sobre pacientes reales hasta el
+  siguiente ciclo.
+
+El arreglo es **la misma guarda, una tercera vez**, justo antes de aplicar. La copia en disco
+se sigue guardando —eso está bien, sirve para mañana—; lo que no puede pasar es **aplicarla**
+encima de la lista buena.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 147 | se quita la tercera guarda (**el defecto**) | *si el PyM real de hoy llega mientras se guarda la piloto, la piloto NO lo pisa* | Sí — 46 ok |
+
+La prueba abre la ventana de la carrera de verdad: envuelve `GM_setValue` y, en el instante en
+que `pilotoGuardar` escribe la copia, simula que la otra corrutina acaba de aplicar el PyM real.
+No es una simulación teórica — es lo que pasa en consultorio cuando el archivo de la sede
+aparece a media mañana.
+
+Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **16 de los 47** del enjambre.

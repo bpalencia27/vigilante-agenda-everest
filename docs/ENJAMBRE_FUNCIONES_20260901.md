@@ -41,8 +41,13 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | los widgets 🧪 y 💊 quedaban flotando sobre «Citas del día» con el juicio del paciente anterior — **el otro reporte en vivo** | `mtrWidgetConductaTick` / tick general | **v18.0.51** | 127, 128 |
 | el apellido real podía llegar intacto a Gemini (dos letras, o tilde desajustada) | `mtrSanearTextoLibreAI` | **v18.0.52** | 129, 130, 131 |
 | el kill-switch remoto se activaba en silencio total con «modo oculto» encendido | `_mostrarAvisoPausaClinica` / CSS | **v18.0.53** | 132, 133, 134 |
+| la tensión se mezclaba mitad de hoy y mitad de otra medición — **reporte en vivo** | `mtrLeerTensionDelDom` / merge | **v18.0.54** | 135, 136, 137 |
+| claves de programador en la nota, y una fecha que el modelo calculó — **reporte en vivo** | prompt IA / `mtrJsonV68DesdeResumen` | **v18.0.55** | 138, 139, 140 |
+| el uroanálisis anormal no aparecía en la nota — **reporte en vivo** | prompt IA / `mtrEvaluarUroanalisis` | **v18.0.56** | 141, 142, 143 |
+| una negación negaba todo lo de su misma frase | `mtrTextoOpinaSobre` | **v18.0.57** | 144, 145 |
+| la base piloto vieja podía pisar el PyM real de hoy | `loadPymBaseDescarga` | **v18.0.58** | 147 |
 
-Quedan **33 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **31 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

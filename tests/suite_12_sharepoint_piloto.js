@@ -451,6 +451,62 @@ module.exports = {
       t.igual(w.acciones["pym.fallback.red"], 1);
     });
 
+    // =================================================================
+    //  v18.0.58 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido
+    //  con el arnés: LA TERCERA GUARDA, QUE FALTABA.
+    //
+    //  `loadPymBaseDescarga` comprueba `state.pymFile && !state.pymFallback` DOS veces
+    //  —antes y justo después de `readPym`— precisamente para no pisar un PyM real que
+    //  haya llegado mientras tanto. Pero `pilotoGuardar` empaqueta el índice con
+    //  `packPym`, que cede el hilo varias veces, y después de ESE await ya no se miraba.
+    //
+    //  Si en esa ventana `loadPymDiario` (cada 10 min, misma pestaña) termina de cargar el
+    //  archivo real de hoy, la base piloto vieja lo reemplaza — y encima `state.pymDia` se
+    //  vacía, así que el script vuelve a creer que la lista de hoy no ha llegado, y el
+    //  médico ve «Usando la base piloto (mientras llega la de hoy)»: falso, ya había
+    //  llegado. Puede consultar actividades desactualizadas sobre pacientes reales.
+    // =================================================================
+    await t.casoAsync("v18.0.58: si el PyM REAL de hoy llega mientras se guarda la piloto, la piloto NO lo pisa", async () => {
+      const cont = contadorNuevo("base_piloto.csv", "T-DESC");
+      const c = cargar({ silencioso: true, gmxhr: gmxhrPiloto(cont) });
+      c.ctx.TextDecoder = TextDecoder;
+      c.api.__CONFIG.SP.respaldo = { id: PILOTO_GUID, name: "base_piloto.csv" };
+
+      // La ventana de la carrera: `pilotoGuardar` escribe la copia con GM_setValue. Justo
+      // en ese instante se simula que la OTRA corrutina (loadPymDiario) terminó de aplicar
+      // el PyM real de hoy — que es exactamente lo que pasa en consultorio cuando el
+      // archivo de la sede aparece a media mañana.
+      const setOriginal = c.env.win.GM_setValue;
+      let yaSimulado = false;
+      c.env.win.GM_setValue = function (k, v) {
+        const r = setOriginal.apply(this, arguments);
+        if (k === "vgl_piloto" && !yaSimulado) {
+          yaSimulado = true;
+          const st = c.api.__state;
+          st.pym = new Map([["9999999", ["Tamización cardiometabólica"]]]);
+          st.pymTodos = new Set(["9999999"]);
+          st.pymFile = "Agenda_Dia_CMB_HOY.xlsx (PyM de hoy)";
+          st.pymFallback = false;
+          st.pymDia = c.api.todayStamp();
+        }
+        return r;
+      };
+
+      await c.api.loadPymBaseDescarga(true, null);
+
+      const st = c.api.__state;
+      t.cierto(yaSimulado, "la carrera se llegó a simular (control del escenario)");
+      t.falso(st.pymFallback, "la lista activa sigue siendo el PyM REAL de hoy, no la piloto");
+      t.igual(st.pymFile, "Agenda_Dia_CMB_HOY.xlsx (PyM de hoy)", "y con su nombre, no el de la piloto");
+      t.igual(st.pym.size, 1, "el paciente real no se perdió");
+      t.cierto(st.pym.has("9999999"), "es el del archivo de hoy");
+      t.igual(st.pymDia, c.api.todayStamp(),
+        "y el día NO se borra: si se borrara, el script volvería a creer que la lista de hoy no ha llegado");
+      // La copia en disco sí se guarda, y está bien: sirve para mañana. Lo que no puede
+      // pasar es aplicarla encima de la lista buena.
+      t.cierto(!!c.env.gm["vgl_piloto"], "la copia persistente de la piloto sí queda guardada");
+    });
+
     await t.casoAsync("loadPymBaseDescarga: si TODAS las rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
       let intentos = 0;
       const c = cargar({ silencioso: true, gmxhr: (o) => { intentos++; o.onerror(); } });
