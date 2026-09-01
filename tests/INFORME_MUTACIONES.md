@@ -9181,3 +9181,49 @@ No es una simulación teórica — es lo que pasa en consultorio cuando el archi
 aparece a media mañana.
 
 Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **16 de los 47** del enjambre.
+
+---
+
+## v18.0.59 — «Deshacer» revertía una casilla distinta de la que el médico creía
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés. Rompe una de las
+reglas no negociables del proyecto —«la casilla del médico es sagrada»— **desde el propio botón
+que existe para rescatarla**.
+
+La ranura de deshacer es única, y desde v17.0.1 se avisa antes de destruir un lote vivo… pero
+ese aviso solo se daba `if (anterior !== etiqueta)`. Con el **mismo botón pulsado dos veces**
+—Athenea respondió distinto la segunda vez, o simplemente se reintentó— la etiqueta es
+idéntica: **no había aviso y el primer lote se perdía igual**.
+
+    clic 1  ->  escribe la casilla A
+    clic 2  ->  escribe la casilla B      (el lote de A se pierde, en silencio)
+    ↩ Deshacer  ->  revierte solo B, y canta «volvió exactamente a como estaba»
+
+El médico cree que corrigió el dato malo del primer clic. Ese dato sigue escrito en la historia
+**sin ninguna forma de deshacerlo**.
+
+### El arreglo, y el detalle que lo hace correcto
+
+Se toma la mejor de las dos salidas posibles: con el **mismo paciente y el mismo botón**, y el
+lote vivo, los pares nuevos se **acumulan** en vez de reemplazar — así «Deshacer» revierte todo
+lo que ese botón escribió en la tanda de clics, que es lo que el médico espera. Y cuando de
+verdad se sustituye un lote (otro botón, otro paciente) **se avisa siempre**, ya sin la
+condición de la etiqueta.
+
+**El detalle que decide la corrección:** al acumular, si una casilla ya estaba en el lote se
+conserva su valor previo **más viejo** y se descarta el nuevo. Deshacer tiene que devolver la
+casilla a como estaba **antes de la primera escritura automática**, no a como la dejó el clic
+anterior — que también era nuestro. Sin eso, «deshacer» dejaría dentro un valor que el médico
+nunca escribió.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 148 | vuelve el reemplazo en vez de acumular (**el defecto**) | *el mismo botón dos veces revierte LAS DOS casillas* | Sí — 45 ok |
+| 149 | al acumular se pisa el valor previo viejo con el nuevo | *vuelve al valor anterior a TODO lo automático* | Sí — 45 ok |
+
+La 149 es la que protege el arreglo de sí mismo: acumular mal deja la casilla con un valor que
+también escribimos nosotros, y el toast seguiría diciendo «volvió exactamente a como estaba».
+
+Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **17 de los 47** del enjambre.

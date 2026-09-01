@@ -46,8 +46,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | el uroanálisis anormal no aparecía en la nota — **reporte en vivo** | prompt IA / `mtrEvaluarUroanalisis` | **v18.0.56** | 141, 142, 143 |
 | una negación negaba todo lo de su misma frase | `mtrTextoOpinaSobre` | **v18.0.57** | 144, 145 |
 | la base piloto vieja podía pisar el PyM real de hoy | `loadPymBaseDescarga` | **v18.0.58** | 147 |
+| «Deshacer» revertía una casilla distinta de la que el médico creía | `_vglGuardarDeshacer` | **v18.0.59** | 148, 149 |
 
-Quedan **31 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **30 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

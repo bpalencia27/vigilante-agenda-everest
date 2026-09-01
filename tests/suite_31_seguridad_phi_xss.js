@@ -989,6 +989,47 @@ module.exports = {
       t.igual(cajaOtro.value, "TEXTO NUEVO",
         "y la casilla queda intacta: nunca se le escribe a un paciente el texto de otro");
 
+      // =================================================================
+      //  v18.0.59 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+      //  «DESHACER» REVERTÍA UNA CASILLA DISTINTA DE LA QUE EL MÉDICO CREÍA.
+      //
+      //  El aviso de arriba («ya no se puede deshacer X») solo se daba cuando la etiqueta
+      //  CAMBIABA. Pulsando el MISMO botón dos veces —Athenea respondió distinto, o solo
+      //  se reintentó— la etiqueta es idéntica: no había aviso y el primer lote se perdía
+      //  igual. El médico pulsa «↩ Deshacer» creyendo que revierte la casilla mala del
+      //  primer clic, ve el toast verde «volvió exactamente a como estaba», y ese dato
+      //  sigue escrito en la historia sin forma de deshacerlo.
+      // =================================================================
+      const cDos = cargar({ silencioso: true });
+      const nodoDoc = { textContent: "C.C. 111111", closest: () => null };
+      cDos.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      cDos.env.doc.querySelector = () => null;
+      cDos.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [nodoDoc] : []);
+      const cas = (v) => ({ value: v, type: "text", isConnected: true, dispatchEvent: () => true, setAttribute: () => {}, getAttribute: () => null });
+
+      const cA = cas(""), cB = cas("");
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cA, prev: "" }], "Exámenes");
+      cA.value = "120";                                   // lo que escribió el clic 1
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cB, prev: "" }], "Exámenes");
+      cB.value = "80";                                    // lo que escribió el clic 2
+      t.igual(cDos.api._vglEjecutarDeshacer(), 2,
+        "el MISMO botón dos veces acumula: deshacer revierte LAS DOS casillas, no solo la última");
+      t.igual(cA.value, "", "la del primer clic vuelve — antes se quedaba escrita sin remedio");
+      t.igual(cB.value, "", "y la del segundo también");
+
+      // El detalle que decide la corrección: si la MISMA casilla se escribe dos veces, se
+      // conserva el valor MÁS VIEJO. Deshacer devuelve la casilla a como estaba antes de la
+      // PRIMERA escritura automática, no a como la dejó el clic anterior (que también era
+      // nuestro).
+      const cC = cas("lo que el médico tenía");
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cC, prev: "lo que el médico tenía" }], "Otro botón");
+      cC.value = "primera escritura";
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cC, prev: "primera escritura" }], "Otro botón");
+      cC.value = "segunda escritura";
+      cDos.api._vglEjecutarDeshacer();
+      t.igual(cC.value, "lo que el médico tenía",
+        "vuelve al valor ANTERIOR A TODO lo automático, no a un valor que también escribimos nosotros");
+
       // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
       const c2 = cargar({ silencioso: true });
       c2.api._vglGuardarDeshacer("222", [], "vacío");

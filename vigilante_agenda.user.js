@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.58
+// @version      18.0.59
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.58";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.59";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7648,15 +7648,47 @@
     // de Auto-Labs, por ejemplo, con 12 resultados escritos hace diez segundos), guardar
     // el nuevo lo DESTRUÍA sin decir nada: el médico perdía la posibilidad de deshacer lo
     // anterior sin enterarse. Ahora se le avisa antes de sustituirlo.
+    // v18.0.59 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
+    // el arnés: «DESHACER» REVERTÍA UNA CASILLA DISTINTA DE LA QUE EL MÉDICO CREÍA.
+    //
+    // El aviso de arriba existe desde v17.0.1 para no destruir en silencio un lote vivo…
+    // pero solo se daba `if (anterior !== etiqueta)`. Con el MISMO botón pulsado dos veces
+    // —Athenea respondió distinto, o simplemente se reintentó— la etiqueta es idéntica, así
+    // que no había aviso Y el primer lote se perdía igual. Reproducido: el clic 1 escribe la
+    // casilla A, el clic 2 escribe la B, y «↩ Deshacer» revierte solo la B mientras canta
+    // «Deshecho: 1 casilla volvió exactamente a como estaba». El médico cree que corrigió el
+    // dato malo del primer clic y ese dato sigue escrito en la historia, sin forma de
+    // deshacerlo. Es «la casilla del médico es sagrada» rota por el propio botón de rescate.
+    //
+    // Se hace lo mejor de las dos salidas posibles: cuando es el MISMO paciente y el MISMO
+    // botón y el lote sigue vivo, los pares nuevos se ACUMULAN en vez de reemplazar — así
+    // «Deshacer» revierte todo lo que ese botón escribió en esta tanda de clics, que es lo
+    // que el médico espera. Y cuando de verdad se sustituye un lote (otro botón u otro
+    // paciente) se avisa SIEMPRE, ya sin la condición de la etiqueta.
+    //
+    // DETALLE QUE DECIDE LA CORRECCIÓN: al acumular, si una casilla ya estaba en el lote se
+    // CONSERVA su `prev` más viejo y se descarta el nuevo. Deshacer tiene que devolver la
+    // casilla a como estaba ANTES de la primera escritura automática, no a como la dejó el
+    // clic anterior — que también era nuestro.
+    const _docDes = String(docId || "");
+    const _etDes = etiqueta || "el último llenado";
     try {
       if (_vglDeshacerDisponible() && _vglLoteDeshacer && _vglLoteDeshacer.pares && _vglLoteDeshacer.pares.length) {
         const anterior = _vglLoteDeshacer.etiqueta || "el llenado anterior";
-        if (anterior !== (etiqueta || "")) {
-          showToast("AZUL", "Deshacer", "Ya no se puede deshacer «" + anterior + "»: el botón pasa a lo que se acaba de escribir.", false);
+        if (String(_vglLoteDeshacer.docId || "") === _docDes && anterior === _etDes) {
+          const yaEsta = new Set(_vglLoteDeshacer.pares.map((p) => p && p.el).filter(Boolean));
+          for (const par of pares) {
+            if (!par || !par.el || yaEsta.has(par.el)) continue;
+            _vglLoteDeshacer.pares.push(par);
+            yaEsta.add(par.el);
+          }
+          _vglLoteDeshacer.ts = Date.now();
+          return;
         }
+        showToast("AZUL", "Deshacer", "Ya no se puede deshacer «" + anterior + "»: el botón pasa a lo que se acaba de escribir.", false);
       }
     } catch (e) {}
-    _vglLoteDeshacer = { docId: String(docId || ""), pares, ts: Date.now(), etiqueta: etiqueta || "el último llenado" };
+    _vglLoteDeshacer = { docId: _docDes, pares, ts: Date.now(), etiqueta: _etDes };
   }
   function _vglDeshacerDisponible() {
     return !!(_vglLoteDeshacer && (Date.now() - _vglLoteDeshacer.ts) < 5 * 60 * 1000);
