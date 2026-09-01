@@ -9031,3 +9031,58 @@ La 139 es la que importa del par: sin ella, añadir el campo y llenarlo con las 
 habría pasado la prueba del prompt y dejado el defecto intacto.
 
 Banco completo: **2.866 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.56 — el uroanálisis anormal que la nota no mencionaba
+
+Cuarto y último defecto del reporte del 1-sep. La pantalla del médico mostraba el uroanálisis
+como **ANORMAL**, con **esterasa leucocitaria 3+** y hematíes 3,20; la sección de REVISIÓN
+PARACLÍNICA de la nota **no lo mencionaba en absoluto**, y el plan volvía a pedir uroanálisis
+sin decir nada del que ya estaba alterado.
+
+### Dos causas encadenadas
+
+**(1) La sección del prompt no tenía sitio para él.** Sus ítems eran cuatro —función renal,
+perfil lipídico, metabolismo glucídico y análisis de metas— y ninguno era el uroanálisis. El
+modelo escribía exactamente lo que se le pedía.
+
+**(2) Y aunque lo hubiera tenido, no había qué escribir.** Los valores leídos entraban a
+`mtrEvaluarUroanalisis`, se usaban para decidir… **y no salían**. El objeto devuelto llevaba la
+conclusión (`estado`, `criterios`, `conducta`) pero nunca los valores, así que ningún
+consumidor —ni el Panel, ni la nota, ni la IA— podía **nombrar** lo que el parcial mostró.
+
+    uro_valores (antes)   : []
+    uro_valores (después) : ["esterasa: 3+", "nitritos: NEGATIVO"]
+
+### La contradicción que había que evitar al arreglarlo
+
+Con esterasa 3+ el motor devuelve `itu_estado: "SIN HALLAZGOS"` — y **es correcto como
+decisión**: la esterasa sola, sin recuento de piuria, no es criterio de ITU, y no tratar una
+bacteriuria asintomática es una regla clínica ya acordada. Pero escrito en la nota junto a
+«esterasa 3+» se leería como una contradicción.
+
+**No se toca la etiqueta**: «SIN HALLAZGOS» es un rótulo clínico del médico y lo esperan varias
+pruebas. Lo que se hace es decirle al modelo qué significa: *«se refiere ÚNICAMENTE a criterios
+de infección urinaria; si hay valores alterados y dice SIN HALLAZGOS, escribe que NO HAY
+CRITERIOS DE INFECCIÓN URINARIA — nunca que el uroanálisis fue normal, porque no lo fue»*.
+
+Y sin uroanálisis evaluado, el ítem **se omite entero**: no se afirma que fue normal ni que no
+se hizo. Casilla vacía antes que dato inventado.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 141 | los valores vuelven a no salir del motor | *los valores del uroanálisis salen del motor* | Sí — 157 ok |
+| 142 | la sección del prompt vuelve a no tener uroanálisis | *la revisión paraclínica tiene un ítem de uroanálisis* | Sí — 157 ok |
+| 143 | se quita la regla de no llamarlo normal | *no puede llamarlo normal* | Sí — 157 ok |
+
+### Queda anotado, y es decisión del médico
+
+`mtrHallazgosUroDesdeLabs` capturó `esterasa` y `nitritos` pero **no los hematíes** (3,20 en su
+pantalla). La hematuria no llega al motor. No se toca aquí porque cambiar qué componentes del
+parcial se vigilan es una decisión clínica, no técnica.
+
+Banco completo: **2.868 comprobaciones pasan, 0 fallan.** Los **cuatro** defectos del reporte
+del 1-sep quedan cerrados.

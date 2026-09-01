@@ -2470,5 +2470,58 @@ module.exports = {
         "la plantilla ya no lleva el «EL» que invitaba a poner una fecha");
     });
 
+    // =================================================================
+    //  v18.0.56 — REPORTE EN VIVO DEL MÉDICO (1-sep): su pantalla mostraba el uroanálisis
+    //  como ANORMAL, con esterasa leucocitaria 3+, y la sección de REVISIÓN PARACLÍNICA
+    //  de la nota **no lo mencionaba en absoluto**.
+    //
+    //  Dos causas encadenadas, las dos comprobadas con el arnés:
+    //   (1) Esa sección del prompt tenía CUATRO ítems —función renal, perfil lipídico,
+    //       metabolismo glucídico y análisis de metas— y ninguno era el uroanálisis: el
+    //       modelo escribía una revisión de paraclínicos donde el parcial de orina no
+    //       tenía sitio.
+    //   (2) Y aunque lo hubiera tenido, no había QUÉ escribir: los valores leídos entraban
+    //       a mtrEvaluarUroanalisis, se usaban para decidir… y no salían. Solo salía la
+    //       conclusión, así que ningún consumidor podía NOMBRAR lo que se vio.
+    // =================================================================
+    t.caso("v18.0.56: los valores del uroanálisis salen del motor, no solo la conclusión", () => {
+      const uro = api.mtrHallazgosUroDesdeLabs([
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "3+" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+      ]);
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true }, uroHallazgos: uro,
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      t.cierto(j.uro_valores.length > 0, "los valores llegan al JSON de la nota");
+      t.cierto(j.uro_valores.join(" ").indexOf("3+") >= 0,
+        "y con la cifra que el médico tiene en pantalla: " + JSON.stringify(j.uro_valores));
+
+      // La contención: sin uroanálisis evaluado NO se inventa nada, y entonces el prompt
+      // manda omitir el ítem entero — nunca decir que fue normal.
+      const sinUro = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true }, ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      t.igual(api.mtrJsonV68DesdeResumen(sinUro, {}).uro_valores, [],
+        "sin uroanálisis, lista vacía: no se fabrica un parcial de orina");
+    });
+
+    t.caso("v18.0.56: la revisión paraclínica tiene un ítem de uroanálisis, y no puede llamarlo normal", () => {
+      const fs4 = require("fs"), path4 = require("path");
+      const src4 = fs4.readFileSync(path4.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src4.indexOf("===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL");
+      t.cierto(ini > 0, "se encontró la sección de revisión paraclínica del prompt");
+      const seccion = src4.slice(ini, src4.indexOf('",', ini));
+      t.cierto(/:: UROANÁLISIS/.test(seccion), "la sección incluye el uroanálisis");
+      t.cierto(/uro_valores/.test(seccion), "y le dice de qué campo sacar los valores");
+      t.cierto(/OMITE el ítem entero/.test(seccion),
+        "sin uroanálisis se omite el ítem: no se afirma que fue normal ni que no se hizo");
+      t.cierto(/NO HAY CRITERIOS DE INFECCIÓN URINARIA/.test(seccion),
+        "y con valores alterados pero sin criterios de ITU, se dice eso — nunca «normal», porque no lo fue");
+    });
+
   },
 };

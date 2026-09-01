@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.55
+// @version      18.0.56
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.55";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.56";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -38092,7 +38092,7 @@
     // modelo redactaría igual, como si el paciente estuviera estratificado. Es el mismo
     // patrón de "la función existe, nadie la cablea" que ya dejó inertes a otros campos.
     "- Si `status` es 'PENDIENTE', la estratificación de riesgo NO SE PUDO HACER: NO escribas ninguna categoría de riesgo ni meta de LDL (irán en null), di en una frase que la clasificación queda pendiente, y copia LITERALMENTE el texto del campo `solicitud` como última línea de esta sección. Si `status` trae otro valor, no menciones `solicitud` ni escribas nada sobre estratificación pendiente.",
-    "===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL (eGFR CKD-EPI y estadio clínico; CrCl como referencia; evolución; RAC como daño de órgano blanco; injuria/progresión como prioritario; remisión si aplica); :: PERFIL LIPÍDICO (CT, HDL, LDL, TG y cNoHDL, en meta o falla, con tendencia; TG≥500 riesgo de pancreatitis); :: METABOLISMO GLUCÍDICO (glicemia y HbA1c si diabetes; si no: 'HEMOGLOBINA GLICOSILADA NO SOLICITADA POR AUSENCIA DE DIAGNÓSTICO DE DIABETES MELLITUS'); :: ANÁLISIS DE METAS.",
+    "===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL (eGFR CKD-EPI y estadio clínico; CrCl como referencia; evolución; RAC como daño de órgano blanco; injuria/progresión como prioritario; remisión si aplica); :: PERFIL LIPÍDICO (CT, HDL, LDL, TG y cNoHDL, en meta o falla, con tendencia; TG≥500 riesgo de pancreatitis); :: METABOLISMO GLUCÍDICO (glicemia y HbA1c si diabetes; si no: 'HEMOGLOBINA GLICOSILADA NO SOLICITADA POR AUSENCIA DE DIAGNÓSTICO DE DIABETES MELLITUS'); :: UROANÁLISIS, si y solo si el JSON trae algo en uro_valores, uro_hallazgos o uro_leves: nombra los valores TAL CUAL vienen (esterasa, nitritos, hematíes…) y cierra con la conclusión de itu_estado, que se refiere ÚNICAMENTE a criterios de infección urinaria. Si hay valores alterados y itu_estado dice 'SIN HALLAZGOS', escribe que NO HAY CRITERIOS DE INFECCIÓN URINARIA — nunca que el uroanálisis fue normal, porque no lo fue. Si esos tres campos vienen vacíos, OMITE el ítem entero: no escribas que el uroanálisis es normal ni que no se hizo; :: ANÁLISIS DE METAS.",
     "===== SECCIÓN: PLAN FARMACOLÓGICO Y JUSTIFICACIÓN ===== Si alertas_dosis NO está vacío, ÁBRELA con 'AJUSTE DE DOSIS POR FUNCIÓN RENAL:' y un renglón propio por cada ajuste (medicamento, dosis actual, dosis sugerida, motivo, TFG usada) antes de cualquier otro contenido de la sección — es intencional que tenga sus propios saltos de línea, para que un ajuste de seguridad no se diluya en la prosa. Luego :: ESQUEMA FARMACOLÓGICO (medicamentos con dosis y frecuencia; si un registro es incompleto, anotar que se completará en próximo control); :: JUSTIFICACIÓN DE AJUSTES (el motivo y la TFG de cada ajuste ya listado arriba, sin repetir las cifras; suspensión de metformina por TFG<30; intensidad de estatina si falla; antihipertensivos para metas y protección renal).",
     "===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA (adaptada a las patologías); :: ACTIVIDAD FÍSICA (150 a 300 minutos semanales de intensidad moderada, adaptada); :: EDUCACIÓN (si education_flags true, reflejar que se explicó adherencia, control, riesgo, signos de alarma y autocuidado).",
     // v17.6.84 — auditoría v68 (S3 "LLEGA TARDE SIN LABS"), decisión del médico 26-ago:
@@ -39478,6 +39478,22 @@
       // para que el campo diga la verdad.
       datos_completos: (erc.datosCompletos !== false) && (riesgo.datosCompletos !== false),
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
+      // v18.0.56 — REPORTE EN VIVO DEL MÉDICO (1-sep): su pantalla mostraba el uroanálisis
+      // como ANORMAL, con esterasa leucocitaria 3+ y hematíes 3,20 — y la sección de
+      // REVISIÓN PARACLÍNICA de la nota **no lo mencionaba en absoluto**. Causa: esa sección
+      // del prompt tiene cuatro ítems (función renal, perfil lipídico, metabolismo glucídico
+      // y análisis de metas) y NINGUNO es el uroanálisis, así que el modelo escribía una
+      // revisión de paraclínicos donde el parcial de orina no tenía sitio. Al JSON solo
+      // llegaba `itu_estado` —una conclusión— y ningún hallazgo que nombrar.
+      //
+      // Ahora viajan los hallazgos tal como los leyó el motor, y los «leves» (trazas,
+      // escasas) que el propio motor separa justamente porque «no deciden nada, pero el
+      // médico tiene que verlos». Se mandan CRUDOS, sin interpretar: la conclusión ya viaja
+      // en `itu_estado` y la conducta en `orden_uroanalisis`.
+      uro_hallazgos: (r.uroanalisis && r.uroanalisis.criterios && r.uroanalisis.criterios.length)
+        ? r.uroanalisis.criterios.slice() : [],
+      uro_leves: (r.uroanalisis && Array.isArray(r.uroanalisis.leves)) ? r.uroanalisis.leves.slice() : [],
+      uro_valores: (r.uroanalisis && Array.isArray(r.uroanalisis.valores)) ? r.uroanalisis.valores.slice() : [],
       // v17.6.88 — auditoría v68 (S4 UROANÁLISIS: "pedir UROCULTIVO+antibiograma", "sin
       // antibiótico a ciegas", "la orden nunca queda vacía"). `mtrEvaluarUroanalisis` calcula
       // la orden concreta que corresponde a cada estado —["Urocultivo","Antibiograma"] en
@@ -41607,6 +41623,15 @@
       // pregunta pueda dispararse con la MISMA condición que usa esa rama.
       bacteriuria: !!bacteriuria,
       embarazo: !!embarazo,
+      // v18.0.56 — REPORTE EN VIVO DEL MÉDICO (1-sep): su pantalla mostraba el uroanálisis
+      // ANORMAL con esterasa leucocitaria 3+, y la nota no lo mencionaba. Una de las dos
+      // causas estaba AQUÍ: los valores leídos entraban a esta función, se usaban para
+      // decidir… y no salían. Solo salía la conclusión (`estado`, `criterios`, `conducta`),
+      // así que ningún consumidor —ni el Panel, ni la nota, ni la IA— podía NOMBRAR lo que
+      // el parcial de orina mostró. Se exponen crudos, sin interpretar: quien decida ya
+      // tiene `criterios` y `estado`; esto es para poder decir QUÉ se vio.
+      valores: Object.keys(h).filter((k) => h[k] != null && String(h[k]).trim() !== "")
+        .map((k) => k + ": " + h[k]),
     };
 
     // Embarazo: se tamiza y se trata SIEMPRE que haya bacteriuria, con o sin
