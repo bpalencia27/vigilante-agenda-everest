@@ -928,6 +928,23 @@ module.exports = {
       t.igual(r.estadioParaDosis, r.estadioClinico, "las dosis siguen al peor de los dos");
     });
 
+    // v18.0.82 — HALLAZGO DE ENJAMBRE #34. El `||` de repliegue anterior solo cubría el caso
+    // de arriba (clínico peor): `(posClinico > posAdmin && posClinico >= 0) ? estadioClinico
+    // : (estadioClinico || estadioAdmin)` — en CUALQUIER otro caso, incluido el
+    // administrativo peor, devolvía estadioClinico (el MEJOR) porque es el primer operando
+    // truthy del `||`. Es justo el caso real que el propio mensaje de discordancia cita como
+    // ejemplo ("Suele pasar con peso muy alto o muy bajo"): con peso muy BAJO (sarcopenia),
+    // Cockcroft-Gault (administrativo) sale más grave que CKD-EPI (clínico).
+    t.caso("REGRESIÓN — cuando el estadio ADMINISTRATIVO es PEOR que el clínico, las dosis también lo siguen a él (hallazgo #34)", () => {
+      // Peso muy bajo (sarcopenia) infla el estadio de Cockcroft-Gault: administrativo peor.
+      const r = api.mtrEvaluarErc({ edad: 60, sexo: "F", pesoKg: 30, creatinina: 1.2 });
+      const pAdmin = api.mtrPosEstadio(r.estadioAdministrativo);
+      const pClin = api.mtrPosEstadio(r.estadioClinico);
+      t.cierto(pAdmin > pClin, "con peso 30 el administrativo debía ser peor que el clínico — si no, la prueba no está probando este caso");
+      t.igual(r.estadioParaDosis, r.estadioAdministrativo,
+        "las dosis siguen al peor de los dos, sea cual sea — antes devolvía el MEJOR (el clínico) en este caso exacto");
+    });
+
     t.caso("remisión a nefrología por los tres criterios de la norma", () => {
       t.cierto(api.mtrRemisionNefrologia(28, null, null).remitir, "eGFR<30");
       t.cierto(api.mtrRemisionNefrologia(50, 350, null).remitir, "RAC>=300");

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.81
+// @version      18.0.82
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.81";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.82";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -37037,8 +37037,17 @@
 
     const posAdmin = mtrPosEstadio(estadioAdmin);
     const posClinico = mtrPosEstadio(estadioClinico);
-    // Cuando el clínico es PEOR, las dosis y la remisión lo siguen a él.
-    const estadioParaDosis = (posClinico > posAdmin && posClinico >= 0) ? estadioClinico : (estadioClinico || estadioAdmin);
+    // v18.0.82 — AUDITORÍA (hallazgo de enjambre #34): el comentario de arriba dice «las
+    // dosis siguen al peor», pero el `||` de repliegue solo cubría el caso en que el
+    // CLÍNICO es peor — cuando el ADMINISTRATIVO (Cockcroft-Gault) era el más grave (el
+    // caso real de peso muy bajo/sarcopenia que el propio aviso de discordancia cita como
+    // ejemplo), devolvía el estadio MENOS grave. Sin conexión hoy (nadie lee este campo
+    // todavía), pero es un contrato con nombre («el estadio para decidir la dosis») que ya
+    // mentía sobre lo que calculaba. Ahora se compara la posición de los dos y gana la
+    // MAYOR (peor) de las que sí sean válidas (pos >= 0); si una no es válida, gana la otra.
+    const estadioParaDosis = (posAdmin > posClinico && posAdmin >= 0) ? estadioAdmin
+      : (posClinico >= 0) ? estadioClinico
+      : (estadioAdmin || estadioClinico);
 
     return {
       crcl: crcl === null ? null : mtrRound(crcl, 1),

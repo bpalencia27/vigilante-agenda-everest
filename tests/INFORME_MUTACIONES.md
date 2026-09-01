@@ -10278,3 +10278,34 @@ para su propio POST de solo lectura — el mismo remedio que el hallazgo señal�
 | 215 | se quita `__idempotent: true` (**el defecto original**) | *REGRESIÓN — un blip transitorio de fetch se recupera por GM_xmlhttpRequest, igual que su hermano GET* | Sí |
 
 Banco completo: **2.938 comprobaciones pasan, 0 fallan.**
+
+## v18.0.82 — estadioParaDosis ya sigue de verdad al PEOR de los dos estadios
+
+Hallazgo #34 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente tenía
+razón en que hoy nadie lee `estadioParaDosis` (grep completo del archivo: solo aparece en su
+propio cálculo y en el objeto de retorno) — no hay camino de clic-a-daño hoy. Pero es un campo
+con nombre y contrato («el estadio para decidir la dosis») que ya miente sobre lo que calcula,
+listo para que una función futura lo conecte confiando en su nombre y herede la inversión
+exactamente en la población que el propio código identifica como la de mayor riesgo de
+discrepancia (peso muy alto o muy bajo). El comentario de cabecera del bloque dice textualmente
+«las dosis siguen al peor», y el código no lo cumplía.
+
+El `||` de repliegue (`(posClinico > posAdmin && posClinico >= 0) ? estadioClinico :
+(estadioClinico || estadioAdmin)`) solo cubría explícitamente el caso en que el CLÍNICO
+(CKD-EPI) es peor. En cualquier otro caso —incluido cuando el ADMINISTRATIVO (Cockcroft-Gault)
+es el peor, el caso real de peso muy bajo/sarcopenia que el propio aviso de discordancia cita
+como ejemplo— el `||` devolvía `estadioClinico` (el MEJOR) por ser el primer operando truthy.
+
+### La reparación
+
+Se compara la posición de los dos estadios y gana la MAYOR (peor) de las que sean válidas
+(`pos >= 0`); si una de las dos no es válida, gana la otra — exactamente el arreglo propuesto
+por el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 216 | vuelve el `\|\|` de repliegue original (**el defecto original**) | *REGRESIÓN — cuando el estadio ADMINISTRATIVO es PEOR que el clínico, las dosis también lo siguen a él* | Sí |
+
+Banco completo: **2.939 comprobaciones pasan, 0 fallan.**
