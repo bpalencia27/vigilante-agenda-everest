@@ -324,5 +324,63 @@ module.exports = {
       const r = cVacio.api.injectLabsIntoCronicos([], "");
       t.igual(r.count, 0, "No debe diligenciar ninguna casilla si no hay paciente");
     });
+
+    // =====================================================================
+    // v18.0.27 — EL ABORTO QUE EL COMENTARIO DE v11.0.1 AFIRMA QUE EXISTE, ESCRITO DE VERDAD
+    //
+    // Ese comentario dice, textualmente: «Sin valores fabricados: el "07:00:00" y sobre todo
+    // el agendaId "282531" estaban cableados, de modo que un turno sin datos habría citado al
+    // paciente en una agenda arbitraria. Ahora, si falta cualquiera de los dos, SE ABORTA.»
+    // No había ningún aborto.
+    //
+    // Si el turno de ObtenerTurnosPorFecha no trae AgendaId / agendaId / id —el escenario que
+    // el comentario dice cubrir, y que ya ocurrió una vez con hora/Hora en la v12.3.31 cuando
+    // AppCita renombró un campo— `agendaId` quedaba `undefined` y se interpolaba TAL CUAL en
+    // la URL: se hacía la escritura REAL contra AppCita con «AgendaId=undefined». Si AppCita
+    // respondía 200 con error:false, el script daba la cita por creada, devolvía {ok:true} y
+    // ADEMÁS le mandaba al paciente un SMS citándolo a una toma cuya agenda no existe. El
+    // paciente se presenta al laboratorio y no hay cita.
+    //
+    // Cuarto comentario de esta jornada que promete una red que no está (v18.0.13 ×2,
+    // v18.0.19, v18.0.26).
+    // =====================================================================
+    await t.casoAsync("v18.0.27: un turno sin AgendaId aborta — no se escribe en AppCita ni se cita al paciente", async () => {
+      const llamadas = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        const u = String(o.url);
+        llamadas.push(u);
+        if (u.includes("ObtenerTurnosPorFecha")) {
+          // El turno llega SIN identificador de agenda: ni AgendaId, ni agendaId, ni id.
+          return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ data: [{ hora: "07:00:00" }] }) });
+        }
+        return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ error: false }) });
+      }});
+
+      const r = await c.api.apiLaboratorioAgendarAuto("5150076", "2026-09-10", "07:00:00", "3001234567");
+      t.falso(r && r.ok, "no se puede dar por creada una cita cuya agenda no se sabe cuál es");
+      t.falso(llamadas.some((u) => u.includes("AgendarCita")),
+        "y sobre todo: NO se llega a la escritura real contra AppCita con AgendaId=undefined");
+      t.falso(llamadas.some((u) => /AgendaId=undefined/.test(u)),
+        "en ninguna URL puede viajar un identificador de agenda inventado");
+    });
+
+    await t.casoAsync("v18.0.27: y el camino normal sigue agendando cuando el turno SÍ trae su agenda", async () => {
+      const llamadas = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        const u = String(o.url);
+        llamadas.push(u);
+        if (u.includes("ObtenerTurnosPorFecha")) {
+          return o.onload && o.onload({ status: 200,
+            responseText: JSON.stringify({ data: [{ hora: "07:00:00", AgendaId: 282531 }] }) });
+        }
+        return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ error: false }) });
+      }});
+
+      await c.api.apiLaboratorioAgendarAuto("5150076", "2026-09-10", "07:00:00", "3001234567");
+      const book = llamadas.find((u) => u.includes("AgendarCita"));
+      t.cierto(!!book, "con AgendaId real sí se llega a agendar: no se sobre-corrigió");
+      t.cierto(/AgendaId=282531/.test(String(book)), "y viaja el identificador que trajo el turno, no uno inventado");
+    });
+
   }
 };

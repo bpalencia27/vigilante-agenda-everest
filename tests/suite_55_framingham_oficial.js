@@ -175,5 +175,71 @@ module.exports = {
       t.noLanza(() => api.mtrSondaPestanias(), "best-effort siempre");
       t.falso(!!env.almacen["vgl_sonda_pest_dia"], "sin API.url no gasta el intento del día (reintentará)");
     });
+
+    // =====================================================================
+    // v18.0.27 — EL SEXO LLEGABA SIN NORMALIZAR Y EL FRAMINGHAM SE DECLARABA INCOMPLETO
+    //
+    // `mtrFraminghamEverest` exige exactamente "M" o "F". Cuando la demografía de la API no
+    // trae un sexo reconocible, `mtrResumenDesdeModalLabs` cae al respaldo de la cabecera
+    // (v17.6.85), que devuelve la PALABRA COMPLETA: «Sexo: MASCULINO». Ese valor crudo
+    // llegaba al motor y respondía `puntos: null` con `faltantes: ["sexo"]`, de modo que la
+    // cabecera de riesgo pintaba «Framingham oficial: faltan sexo» EN EL MISMO RECUADRO donde
+    // la TFG ya se había calculado CON ese mismo sexo.
+    //
+    // Un fallo del sistema presentado al médico como un hueco del paciente — y el puntaje
+    // predicho del formulario oficial no se calculaba nunca para ese paciente. Los
+    // normalizadores ya existían y son los que usa el resto del motor; aquí no se llamaban.
+    // =====================================================================
+    t.caso("v18.0.27: «MASCULINO»/«FEMENINO» se normalizan y el Framingham deja de decir que falta el sexo", () => {
+      const norm = (s) => (api.mtrEsSexoFemenino(s) ? "F" : (api.mtrEsSexoMasculino(s) ? "M" : null));
+      for (const crudo of ["MASCULINO", "Masculino", "masculino"]) {
+        t.igual(norm(crudo), "M", `«${crudo}» es masculino`);
+      }
+      for (const crudo of ["FEMENINO", "Femenino", "femenino"]) {
+        t.igual(norm(crudo), "F", `«${crudo}» es femenino`);
+      }
+      const r = api.mtrFraminghamEverest({
+        sexo: norm("MASCULINO"), edad: 60, colTotal: 200, hdl: 45,
+        pas: 140, fumador: false, enTratamientoHta: false,
+      });
+      t.falso((r.faltantes || []).indexOf("sexo") >= 0,
+        "con el sexo normalizado, el motor ya no puede declararlo faltante");
+    });
+
+    t.caso("v18.0.27: y cuando el sexo de verdad no se sabe, se sigue declarando faltante", () => {
+      const norm = (s) => (api.mtrEsSexoFemenino(s) ? "F" : (api.mtrEsSexoMasculino(s) ? "M" : null));
+      for (const crudo of ["", null, undefined, "X", "NO REGISTRA"]) {
+        t.igual(norm(crudo), null, `«${JSON.stringify(crudo)}» no se puede interpretar, y no se adivina`);
+      }
+      const r = api.mtrFraminghamEverest({
+        sexo: norm(""), edad: 60, colTotal: 200, hdl: 45,
+        pas: 140, fumador: false, enTratamientoHta: false,
+      });
+      t.cierto((r.faltantes || []).indexOf("sexo") >= 0,
+        "sin sexo interpretable SÍ falta el sexo: no se sobre-corrigió hasta inventarlo");
+    });
+
+    // El cable: que el llamador de verdad normalice. Sin esto, las dos pruebas de arriba
+    // comprobarían los normalizadores —que ya funcionaban— y no el defecto, que era que
+    // NADIE los llamaba en ese punto. Es la lección de las cuatro pruebas huecas del 31-ago.
+    t.caso("v18.0.27: el llamador del Framingham normaliza el sexo antes de pasarlo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const soloCodigo = (txt) => txt.split("\n")
+        .filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+      const i = src.indexOf("resumen.framingham = mtrFraminghamEverest({");
+      t.cierto(i > 0, "se localiza el llamador");
+      // La ventana se toma sobre el CÓDIGO ya despojado de comentarios, no sobre los
+      // caracteres crudos: la nota que explica el arreglo ocupa más de mil caracteres, así
+      // que un recorte fijo sobre el texto original se quedaba entero dentro del comentario
+      // y no veía ni una línea de código. Otra cara de la misma lección del 31-ago.
+      const bloque = soloCodigo(src.slice(i, i + 4000)).slice(0, 700);
+      t.cierto(/mtrEsSexoFemenino/.test(bloque) && /mtrEsSexoMasculino/.test(bloque),
+        "el sexo se normaliza en el llamador con los mismos ayudantes que usa el resto del motor");
+      t.falso(/sexo:\s*c\.sexo\b/.test(bloque),
+        "y ya no puede pasarse el valor crudo de la cabecera, que es una palabra completa");
+    });
+
   },
 };

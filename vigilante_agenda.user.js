@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.26
+// @version      18.0.27
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.26";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.27";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18875,6 +18875,29 @@ _vglOfrecerDeshacer(btn);
       // contra una respuesta real; quedan de respaldo por si AppCita cambia el casing,
       // pero el nombre real confirmado va primero.
       const agendaId = turnoElegido.AgendaId || turnoElegido.agendaId || turnoElegido.id;
+      // v18.0.27 — EL ABORTO QUE EL COMENTARIO DE v11.0.1 AFIRMA QUE EXISTE, ESCRITO DE
+      // VERDAD. Ese comentario dice, unas líneas más arriba: «Sin valores fabricados: el
+      // "07:00:00" y sobre todo el agendaId "282531" estaban cableados, de modo que un turno
+      // sin datos habría citado al paciente en una agenda arbitraria. Ahora, si falta
+      // cualquiera de los dos, SE ABORTA.» No había ningún aborto.
+      //
+      // Si el turno de ObtenerTurnosPorFecha no trae AgendaId / agendaId / id —justo el
+      // escenario que el comentario dice cubrir, y que ya pasó una vez con hora/Hora en la
+      // v12.3.31 cuando AppCita renombró un campo— `agendaId` quedaba `undefined` y se
+      // interpolaba TAL CUAL en la URL: se hacía la escritura real contra AppCita con
+      // «AgendaId=undefined». Si AppCita respondía 200 con error:false, el script daba la
+      // cita por creada, devolvía {ok:true} y ADEMÁS le mandaba al paciente un SMS citándolo
+      // a una toma cuya agenda no existe. El paciente se presenta y no hay cita.
+      //
+      // Cuarto comentario de esta jornada que promete una red que no está (v18.0.13 ×2,
+      // v18.0.19, v18.0.26). Aquí la red se escribe.
+      if (!agendaId || !horaFinal) {
+        try {
+          spToast("⚠ El turno de laboratorio llegó sin identificador de agenda: NO se agendó la toma. "
+            + "Agéndela directamente en AppCita.", 12000);
+        } catch (e) {}
+        return false;
+      }
       // v12.3.31 — Mismo dígitos-solamente que ya usa apiAccesoAsignarTurno (línea
       // ~6141): sin esto un celular con espacios/guiones llegaba tal cual al parámetro.
       // v11.0.1 — Un número fijo estaba CABLEADO: se enviaba como teléfono de
@@ -38668,7 +38691,19 @@ _vglOfrecerDeshacer(btn);
     // formulario oficial calculará con sus propios insumos. El "tratamiento" es el flag de
     // HTA leído del DOM; si alguno falta, el puntaje es null y se listan los faltantes.
     resumen.framingham = mtrFraminghamEverest({
-      sexo: c.sexo, edad: c.edad, colTotal: factores.ct, hdl: factores.hdl,
+      // v18.0.27 — EL SEXO LLEGABA SIN NORMALIZAR Y EL FRAMINGHAM SE DECLARABA INCOMPLETO.
+      // mtrFraminghamEverest exige exactamente "M" o "F". Cuando la demografía de la API no
+      // trae un sexo reconocible, mtrResumenDesdeModalLabs cae al respaldo de la cabecera
+      // (v17.6.85), que devuelve la PALABRA COMPLETA: «Sexo: MASCULINO». Ese valor crudo
+      // llegaba aquí y el motor respondía puntos=null con faltantes ["sexo"], de modo que la
+      // cabecera de riesgo pintaba «Framingham oficial: faltan sexo» EN EL MISMO RECUADRO
+      // donde la TFG ya se había calculado CON ese mismo sexo. Un fallo del sistema
+      // presentado al médico como un hueco del paciente — y el puntaje predicho del
+      // formulario oficial no se calculaba nunca para ese paciente.
+      // Los normalizadores ya existían (mtrEsSexoFemenino / mtrEsSexoMasculino) y son los
+      // mismos que usa el resto del motor: aquí simplemente no se llamaban.
+      sexo: (mtrEsSexoFemenino(c.sexo) ? "F" : (mtrEsSexoMasculino(c.sexo) ? "M" : null)),
+      edad: c.edad, colTotal: factores.ct, hdl: factores.hdl,
       pas: factores.paSistolica,
       fumador: (typeof factores.tabaquismo === "boolean") ? factores.tabaquismo : null,
       // v16.7.0 — AUDITORÍA #14: la tabla de Framingham pide "EN TRATAMIENTO

@@ -7277,3 +7277,70 @@ principio: lo que está deshabilitado no se toca.
 | 26 | «no evaluable» vuelve a colapsar en falla | *sin LDL previo, un paciente bajo meta NO se declara en falla* (`suite_45`) | Sí — 2.783 |
 
 Banco completo: **2.783 comprobaciones pasan, 0 fallan.**
+
+## v18.0.27 — 1-sep-2026 · UN SMS CITANDO A UNA AGENDA QUE NO EXISTE, Y UN FALLO DEL SISTEMA PRESENTADO COMO HUECO DEL PACIENTE
+
+### 1. El aborto que el comentario de v11.0.1 afirma que existe, escrito de verdad
+
+Ese comentario dice, textualmente:
+
+> *«Sin valores fabricados: el "07:00:00" y sobre todo el agendaId "282531" estaban cableados,
+> de modo que un turno sin datos habría citado al paciente en una agenda arbitraria. Ahora, si
+> falta cualquiera de los dos, **se aborta**.»*
+
+**No había ningún aborto.** Si el turno de `ObtenerTurnosPorFecha` no trae `AgendaId` /
+`agendaId` / `id` —el escenario que el propio comentario dice cubrir, y que **ya ocurrió una
+vez** con `hora`/`Hora` en la v12.3.31, cuando AppCita renombró un campo— `agendaId` quedaba
+`undefined` y se interpolaba tal cual en la URL:
+
+```
+…/AgendarCita?…&AgendaId=undefined&…
+```
+
+Se hacía **la escritura real** contra AppCita. Si AppCita respondía 200 con `error:false`, el
+script daba la cita por creada, devolvía `{ok:true}` y **además le mandaba al paciente un SMS
+citándolo** a una toma cuya agenda no existe. El paciente se presenta al laboratorio y no hay
+cita.
+
+**Cuarto comentario de esta jornada que promete una red que no está** (v18.0.13 ×2, v18.0.19,
+v18.0.26). Aquí la red se escribe, y con la prueba que la ejercita de verdad: la red simulada
+confirma que **no se llega a `AgendarCita`** y que ninguna URL lleva `AgendaId=undefined`.
+
+### 2. «Framingham oficial: faltan sexo», con el sexo delante
+
+`mtrFraminghamEverest` exige exactamente `"M"` o `"F"`. Cuando la demografía de la API no trae
+un sexo reconocible, `mtrResumenDesdeModalLabs` cae al respaldo de la cabecera (v17.6.85), que
+devuelve la **palabra completa**: «Sexo: MASCULINO». Ese valor crudo llegaba al motor:
+
+```
+sexo="MASCULINO"  ->  puntos=null  faltantes=["sexo", …]
+sexo="M"          ->  puntos=…     (funciona)
+```
+
+Y la cabecera de riesgo pintaba «Framingham oficial: **faltan sexo**» **en el mismo recuadro**
+donde la TFG ya se había calculado **con ese mismo sexo**. Un fallo del sistema presentado al
+médico como un hueco del paciente — y el puntaje predicho del formulario oficial no se
+calculaba nunca para ese paciente.
+
+Los normalizadores ya existían (`mtrEsSexoFemenino` / `mtrEsSexoMasculino`) y son los que usa
+el resto del motor: aquí simplemente **no se llamaban**. Cuando el sexo de verdad no se sabe
+(`""`, `null`, `"X"`), se sigue declarando faltante: no se sobre-corrigió hasta inventarlo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 27 | se quita el aborto por `AgendaId` ausente | *un turno sin AgendaId aborta — no se escribe en AppCita ni se cita al paciente* (`suite_33`) | Sí — 2.788 |
+| 28 | el sexo vuelve a pasarse crudo | *el llamador del Framingham normaliza el sexo antes de pasarlo* (`suite_55`) | Sí — 2.788 |
+
+**Nota de método.** La prueba del Framingham incluye a propósito una comprobación del **cable**
+—que el llamador normalice— además de las de conducta. Sin ella, las otras dos comprobarían los
+normalizadores, *que ya funcionaban*, y no el defecto, que era que **nadie los llamaba en ese
+punto**. Es la lección de las cuatro pruebas huecas del 31-ago, aplicada por adelantado.
+
+Y una cara nueva de esa misma lección: la primera versión de esa comprobación recortaba 900
+caracteres del archivo desde el llamador, y la nota que explica el arreglo ocupa más de mil —
+el recorte se quedaba **entero dentro del comentario** y no veía una sola línea de código. La
+ventana se toma ahora sobre el código ya despojado de comentarios.
+
+Banco completo: **2.788 comprobaciones pasan, 0 fallan.**
