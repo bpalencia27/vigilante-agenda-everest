@@ -9896,7 +9896,7 @@ _vglOfrecerDeshacer(btn);
       ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
           <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
-          <button class="vgl-modal-ok">Entendido</button>
+          <button class="vgl-modal-ok" aria-label="Entendido, cerrar advertencia">Entendido</button>
         </div>`;
       const tEl = ov.querySelector ? ov.querySelector(".vgl-modal-t") : null;
       if (tEl) tEl.textContent = title;
@@ -10021,7 +10021,7 @@ _vglOfrecerDeshacer(btn);
         secciones.join("") +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
         acciones +
-        '<button class="vgl-pym-ok">Entendido</button>' +
+        '<button class="vgl-pym-ok" aria-label="Entendido, cerrar advertencia">Entendido</button>' +
         "</div>";
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
       if (nEl) nEl.textContent = nombre || "Paciente";
@@ -17078,7 +17078,7 @@ _vglOfrecerDeshacer(btn);
         : (String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal"));
 
       const btnInforme = (lab.__vglHash && lab.__vglToken)
-        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" aria-label="Abrir el informe PDF real de Athenea" title="Abrir el informe (PDF) real de Athenea">📄</button>`
         : "";
 
       // v14.6.0 — Renderizado de Uroanálisis en 1 fila compacta con resumen clínico y acordeón
@@ -24763,8 +24763,8 @@ _vglOfrecerDeshacer(btn);
       b.dataset.vglDoc = (apt && apt.doc_id) || "";
       b.innerHTML = '<div class="vgl-acomp-txt">' + escapeHtml(hint.texto) + '</div>'
         + '<div class="vgl-acomp-botones">'
-        + '<button class="vgl-agm-btn pri" data-acomp="ok">Entendido</button>'
-        + '<button class="vgl-acomp-nomas" data-acomp="nomas">No volver a mostrar esta ayuda</button>'
+        + '<button class="vgl-agm-btn pri" data-acomp="ok" aria-label="Entendido, cerrar advertencia">Entendido</button>'
+        + '<button class="vgl-acomp-nomas" data-acomp="nomas" aria-label="No volver a mostrar esta ayuda, cerrar advertencia">No volver a mostrar esta ayuda</button>'
         + '</div>';
       // Pegada al botón que toca usar (a su derecha) — ya se confirmó arriba que es
       // real y medible, así que siempre hay una posición de verdad, nunca la esquina fija.
