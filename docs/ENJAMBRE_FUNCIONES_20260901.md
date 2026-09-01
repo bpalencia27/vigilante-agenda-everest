@@ -22,6 +22,20 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 > del fixture congelado del propio repositorio (`tests/fixtures/dom_everest_agenda.html`).
 > Ningún dato de paciente real entró en este documento.
 
+
+## Ya aplicados (no volver a parchearlos)
+
+| hallazgo | función | versión | mutaciones |
+|---|---|---|---|
+| `eGFR = null` evaluado como `eGFR = 0` → dos avisos farmacológicos falsos | `mtrEvaluarInteracciones` | **v18.0.45** | 107, 108 |
+| la cédula viajaba cruda en el diagnóstico «SANITIZADO» | `downloadDiagnostic` / `san()` | **v18.0.45** | 109, 110 |
+| una tilde en «CÉDULA» apagaba el módulo de PyM el día entero | `findDocIdx` | **v18.0.46** | 111 |
+| un RAC de 0 de hoy perdía contra un RAC de 45 de enero | `_nuevoReemplazaCandidato` | **v18.0.46** | 112, 113 |
+| una coma entrecomillada borraba a un paciente del índice | `parseCSV` | **v18.0.46** | 114 |
+
+Quedan **42 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+propuesto, sigue abajo.
+
 ## Índice por gravedad
 
 - **alta**: 25
