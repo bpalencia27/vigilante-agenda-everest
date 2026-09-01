@@ -8252,3 +8252,90 @@ detallada de excepciones, así que se queda ahí. Las hojas spliceadas reciben *
 | 95 | se deja un splice sin resolver | *no queda ningún splice sin resolver* | Sí — 2.825 |
 
 Banco completo: **2.825 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.43 — la agrupación de exámenes: 59 días de vigencia quemados en un viaje que todavía no existe
+
+**Reporte en vivo del médico (1-sep), con captura de pantalla:** *"ESTO TAMPOCO TIENE SENTIDO
+LA FORMA EN LA QUE SE AGRUPAN TODOS LOS EXÁMENES QUE INCLUSO ESTAN A MUCHO TIEMPO SE SUGIERE LA
+REALIZACION EN DICIEMBRE Y NO ES ASÍ".* El plan ponía la toma el **23 de diciembre** —a 113
+días, porque ese día vencía la creatinina— y arrastraba **siete exámenes que vencían el 20 de
+febrero** (a 172 días), cada uno rotulado *"se aprovecha el mismo viaje"*.
+
+### La asimetría, medida antes de tocar nada
+
+`tools/medir_arrastre_lejano.js` (nuevo, mismo método que `medir_cercania.js`: Monte Carlo
+determinista, 10.000 pacientes sintéticos por población, cero datos reales). Lo primero que
+salió fue que la población de `medir_cercania.js` **no contiene el caso del médico**: con el
+último resultado de cada driver repartido entre 0 y 250 días, casi siempre hay algo vencido, y
+entonces la toma cae a 14-21 días (84,3 % de los planes). El paciente de la captura acaba de
+hacerse el panel completo — nada vencido — y ahí la toma se va a meses vista. Con esa población
+añadida (0-30 días), **31,7 % de los planes ponen la toma a más de 30 días**.
+
+La cosecha medía el margen **solo contra el 33 % de la vigencia del propio examen**, nunca
+contra la distancia a la que está la toma. Con algo por pedir esa distancia es como mucho
+`MTR_TECHO_ESTADO_A`, así que el canje "vigencia por viaje" que el médico aprobó en v17.6.0 se
+cobraba sobre un viaje inminente. Sin nada por pedir, la misma regla seguía corriendo contra un
+viaje que todavía no existe: entre hoy y diciembre el plan se recalcula en cada consulta.
+
+Qué regla cosecha qué, en la población del caso reportado:
+
+| regla | % de lo cosechado | adelanto medio | máximo |
+|---|---|---|---|
+| grupo de lípidos (sin tope) | 52,1 % | 122,0 d | 168 d |
+| cosecha del 33 % | 32,1 % | 15,3 d | 59 d |
+| vence con la toma | 8,5 % | 0 d | 0 d |
+| gracia de 14 d | 5,6 % | 59,9 d | 73 d |
+| ANR (creatinina / RAC) | 1,7 % | 53-73 d | 108 d |
+
+### El arreglo
+
+La **cosecha genérica** (el 33 % y la gracia de 14 días) solo corre si la toma cae dentro de
+`MTR_TECHO_ESTADO_A` (21 d) — la ventana que este proyecto ya llamaba *"el mismo viaje"*. Misma
+forma que el guardarraíl que el médico pidió en v17.30.0 para el ANR: cuando la fecha la
+gobierna otra cosa, la cosecha genérica no se suma encima. Y hace verdadera la frase de
+pantalla.
+
+**Lo que NO se toca, a propósito:** el ANR (lo ordenó el médico explícitamente) y el grupo de
+lípidos — que es el que más adelanta de todos y aun así se deja sin tope, porque **los cuatro
+lípidos no se pueden pedir sueltos en Everest** (`CONDUCTA_LI_TEXTO_POR_ANALITO` no tiene texto
+de `<li>` para ninguno: solo existen dentro del paquete). Excluirlos no evitaría que el
+laboratorio los procese; solo enseñaría una lista que no coincide con lo que el paquete agrega.
+Y no hace falta acotarlo por otro lado: esa regla solo dispara si YA va un lípido en la visita,
+así que se apaga sola cuando se apaga la cosecha que la alimentaba.
+
+Coste medido con umbral 21 d:
+
+| población | planes que cambian | viajes extra | vigencia devuelta |
+|---|---|---|---|
+| todos los días (0-250 d) | 39 de 10.000 | **1 paciente de 10.000** | 5.373 d |
+| panel recién hecho (0-30 d) | 2.770 de 10.000 | 1.158 (11,58 %) | 265.951 d (21,8 d/examen) |
+
+Con umbral 14 el coste en la población de todos los días se multiplica por 29 (1.131 planes);
+con 30 y con 45 no se gana nada más. **21 es el codo de la curva** y además es el número que el
+proyecto ya usa para decir "el mismo viaje".
+
+### Y se dice por qué, y cuánto cuesta
+
+Cada cosechado viaja ahora con `motivoCosecha` y `adelantoDias`, y la pastilla "qué ordenar"
+los usa. El texto único de antes (*"se aprovecha el mismo viaje"*) era verdad para un examen
+que vence en una semana y mentira para uno que vence en febrero, y los dos salían idénticos:
+
+- lípidos → *"viene en el mismo perfil lipídico, no se pide suelto"*
+- ANR → *"la ventana renal lo trae a esta toma"*
+- 33 % / gracia → *"se adelanta N d para salir en la misma toma"* — con el número delante
+- el que fija la fecha → *"justo el día de la toma"*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 96 | `tomaEsElMismoViaje` forzado a `true` (la conducta vieja) | los 7 de febrero vuelven a arrastrarse a diciembre — 3 fallan | Sí — 86 ok |
+| 97 | `tomaEsElMismoViaje` forzado a `false` (se apaga también donde sí sirve) | el borde de 21 días y la gracia — 7 fallan | Sí — 86 ok |
+| 98 | se quita el guardarraíl **solo** de la gracia | la gracia arrastra con la toma lejos — 3 fallan | Sí — 86 ok |
+| 99 | `cosechar` empuja el objeto original en vez de una copia | *el driver original no queda marcado* — 1 falla | Sí — 86 ok |
+
+La mutación 97 es la que importa en la dirección contraria: prueba que el guardarraíl **no**
+apaga la cosecha donde el médico la aprobó — con el viaje a la vuelta de la esquina sigue
+adelantando sus 59 días.

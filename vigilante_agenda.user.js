@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.42
+// @version      18.0.43
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.42";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.43";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31064,6 +31064,12 @@
       // agrega para que cualquier pantalla que pinte "vencido = rojo" pueda hacerlo
       // también para la RAC relabeleada, sin inventar un color nuevo para ella.
       vencidoBase: !!a.vencidoBase,
+      // v18.0.43 — por QUÉ está este examen en la lista, y cuánta vigencia cuesta traerlo.
+      // Hasta aquí todo cosechado salía con el mismo rótulo ("se aprovecha el mismo viaje")
+      // aunque se estuviera adelantando cinco meses, así que el médico no tenía forma de ver
+      // el costo de la agrupación — que es exactamente lo que reportó el 1-sep.
+      motivoCosecha: a.motivoCosecha || "",
+      adelantoDias: (typeof a.adelantoDias === "number") ? a.adelantoDias : null,
     });
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
@@ -31082,7 +31088,23 @@
       // que miente sobre algo que ya pasó. `vencidoBase` es la verdad de terreno.
       if (a.estado === "R" && a.vencidoBase) return fila(a, "Albuminuria: venció el " + mtrFechaLegible(a.vence) + " — vigilancia estrecha");
       if (a.estado === "R") return fila(a, "Albuminuria: vigilancia estrecha, vence el " + mtrFechaLegible(a.vence));
-      return fila(a, a.vence ? "Vence el " + mtrFechaLegible(a.vence) + ": se aprovecha el mismo viaje" : "Se ordena en esta toma");
+      // v18.0.43 — SE DICE POR QUÉ, Y CUÁNTO CUESTA. El texto único de antes ("se aprovecha
+      // el mismo viaje") era verdad para un examen que vence dentro de una semana y mentira
+      // para uno que vence en febrero, y los dos salían idénticos en pantalla. Ahora cada
+      // motivo dice el suyo y, cuando se adelanta de verdad, dice los días.
+      if (!a.vence) return fila(a, "Se ordena en esta toma");
+      const cuando = "Vence el " + mtrFechaLegible(a.vence);
+      const adelanto = (typeof a.adelantoDias === "number" && a.adelantoDias > 0) ? a.adelantoDias : 0;
+      if (a.motivoCosecha === "paquete_lipidos") {
+        return fila(a, cuando + (adelanto ? " (" + adelanto + " d antes)" : "")
+          + ": viene en el mismo perfil lipídico, no se pide suelto");
+      }
+      if (a.motivoCosecha === "anr_creatinina" || a.motivoCosecha === "anr_rac") {
+        return fila(a, cuando + (adelanto ? " (" + adelanto + " d antes)" : "")
+          + ": la ventana renal lo trae a esta toma");
+      }
+      if (adelanto > 0) return fila(a, cuando + ": se adelanta " + adelanto + " d para salir en la misma toma");
+      return fila(a, cuando + ": justo el día de la toma");
     });
 
     // ---- Lo que sigue vigente (el resto del programa), del que vence primero al último ----
@@ -36209,6 +36231,15 @@
   // El techo aquí era 22 y en mtrPlanLabsPrimero 21: un día de diferencia, invisible en el
   // código y visible en la consulta — el mismo paciente salía con dos fechas de toma según
   // por qué camino se hubiera llegado. Se iguala a 21.
+  //
+  // v18.0.43 — ESTE NÚMERO ES *LA* VENTANA DEL MISMO VIAJE, y desde esta versión gobierna
+  // DOS decisiones a propósito, con UNA sola constante: (1) hasta dónde puede estirarse la
+  // fecha de toma cuando ya hay algo por pedir, y (2) hasta dónde la toma sigue siendo un
+  // viaje que vale la pena compartir, es decir si la cosecha genérica corre o no (ver
+  // mtrPlanParaclinicos). Se deja UNA constante y no dos porque son la misma pregunta
+  // —"¿esta toma es el mismo viaje?"— y dos números que deben coincidir se separan solos
+  // con el tiempo. Si algún día el médico quiere ventanas distintas, se parten aquí, juntas,
+  // con el motivo escrito al lado.
   const MTR_TECHO_ESTADO_A = 21;
 
   // Estado de UN analito.
@@ -36491,7 +36522,59 @@
     // recomendación sin responder ("en su población el viaje pesa más que la
     // vigencia"); el médico la aprobó junto con el resto de la lista del 22-ago.
     const MTR_COSECHA_MARGEN_PROP = 0.33;
+    // v18.0.43 — REPORTE EN VIVO DEL MÉDICO (1-sep), con captura: un plan con la toma
+    // sugerida el 23 de diciembre (a 113 días, porque ese día vence la creatinina) arrastraba
+    // SIETE exámenes que vencen el 20 de febrero (a 172 días), cada uno rotulado "se
+    // aprovecha el mismo viaje". Son 59 días de vigencia quemados por examen, y el médico:
+    // "ESTO TAMPOCO TIENE SENTIDO LA FORMA EN LA QUE SE AGRUPAN TODOS LOS EXÁMENES QUE
+    // INCLUSO ESTAN A MUCHO TIEMPO SE SUGIERE LA REALIZACION EN DICIEMBRE Y NO ES ASÍ".
+    //
+    // LA ASIMETRÍA QUE LO CAUSABA. La cosecha mide el margen SOLO contra el 33 % de la
+    // vigencia del propio examen, y nunca contra la distancia a la que está la toma. Con algo
+    // por pedir (`hayEstadoA`) esa distancia es como mucho MTR_TECHO_ESTADO_A, así que el
+    // canje "vigencia por viaje" que el médico aprobó en v17.6.0 se cobra sobre un viaje que
+    // de verdad es inminente. Sin nada por pedir, la toma se pone en el primer vencimiento
+    // futuro —meses vista— y la misma regla seguía corriendo contra un viaje que todavía no
+    // existe: entre hoy y diciembre el plan se recalcula en cada consulta.
+    //
+    // EL ARREGLO. La cosecha genérica (33 % y la gracia de abajo) solo corre si la toma cae
+    // dentro de la ventana que este proyecto ya llama "el mismo viaje". Es la misma forma del
+    // guardarraíl que el médico pidió en v17.30.0 para el ANR ("no puedes activar ANR y a su
+    // vez los vencidos, trata de equilibrar"): cuando la fecha la gobierna otra cosa, la
+    // cosecha genérica no se suma encima. Y hace verdadera la frase de pantalla: "se
+    // aprovecha el mismo viaje" ya solo se dice cuando la toma es, de hecho, el mismo viaje.
+    //
+    // QUÉ NO TOCA, a propósito: el ANR (creatinina y el RAC que sincroniza con ella) y el
+    // grupo de lípidos. Ninguno de los dos es una elección logística del script — el ANR lo
+    // ordenó el médico explícitamente, y los lípidos salen del mismo paquete de Everest y no
+    // se pueden pedir sueltos (CONDUCTA_LI_TEXTO_POR_ANALITO no tiene texto propio para
+    // ninguno de los cuatro). El grupo de lípidos, además, solo dispara si YA va un lípido en
+    // esta visita, así que se apaga solo cuando se apaga la cosecha que lo alimentaba.
+    //
+    // MEDIDO ANTES DE ESCRIBIRLO (tools/medir_arrastre_lejano.js, 10.000 pacientes
+    // sintéticos por población, cero datos reales), umbral de 21 días:
+    //   · población de todos los días (la de medir_cercania.js, 84 % con la toma dentro de
+    //     14 días): 39 planes de 10.000 cambian y UN paciente de 10.000 gana un segundo
+    //     viaje. La cosecha sigue intacta donde se gana el sueldo.
+    //   · población "acaba de hacerse el panel completo" —el caso de la captura—: 2.770
+    //     planes cambian y se devuelven 266.000 días de vigencia (21,8 d por examen).
+    //   · Con umbral 14 el coste en la población de todos los días se multiplica por 29
+    //     (1.131 planes); con 30 y con 45 no se gana nada más. 21 es el codo de la curva Y
+    //     además es el número que el proyecto ya usa para decir "el mismo viaje".
+    const diasHastaLaToma = Math.round((mtrFechaDesdeIso(ftl).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000);
+    const tomaEsElMismoViaje = diasHastaLaToma <= MTR_TECHO_ESTADO_A;
     const cosechados = [], diferidos = [];
+    // Se cosecha una COPIA con el motivo y los días de adelanto dentro. El motivo no es
+    // decorado: la pastilla "qué ordenar" lo usa para decir la verdad de por qué ese examen
+    // está en la lista (ver mtrResumenClinico), en vez de rotularlo todo "se aprovecha el
+    // mismo viaje". Copia y no el objeto original para no ensuciar `drivers`, que sale en el
+    // mismo plan y lo leen otras pantallas.
+    const cosechar = (a, motivo) => {
+      const adelanto = (a.vence && ftl)
+        ? Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000)
+        : null;
+      cosechados.push(Object.assign({}, a, { motivoCosecha: motivo, adelantoDias: adelanto }));
+    };
     for (const a of drivers) {
       if (a.estado !== "D" && a.estado !== "R") continue;
       // v17.6.75 — un RAC≥30 vencido (`vencidoBase`) ya está en `vencidos` arriba, con
@@ -36524,7 +36607,7 @@
       // DIVERGENCIA DECLARADA frente al spec, que dice «Creatinina-ancla no se fuerza».
       // Decisión del médico (27-ago) tras ver las cifras de arriba: forzarla siempre.
       // El coste es vigencia: se toma hasta ~46 días antes de vencer, de 121 de vigencia.
-      if (anr && a.clave === "CREATININA") { cosechados.push(a); continue; }
+      if (anr && a.clave === "CREATININA") { cosechar(a, "anr_creatinina"); continue; }
       // v17.7.5 — LA CLÁUSULA DEL RAC DEL SPEC, QUE NUNCA SE CONSTRUYÓ. v68 dice, dentro
       // del mismo bloque del ANR: «RAC sincroniza si venc<=Vc+60d y reinicia». Era la
       // última rama del spec sin implementar, y no era teórica.
@@ -36544,11 +36627,11 @@
       // ya decidió para la Cosecha: «en su población el viaje pesa más que la vigencia».
       if (anr && a.clave === "RAC" && anr.vence && a.vence
           && Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(anr.vence).getTime()) / 86400000) <= MTR_RAC_SINCRONIA_ANR_DIAS) {
-        cosechados.push(a); continue;
+        cosechar(a, "anr_rac"); continue;
       }
-      if (a.vence === ftl) { cosechados.push(a); continue; }
+      if (a.vence === ftl) { cosechar(a, "vence_con_la_toma"); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
-      if (margen <= 0) { cosechados.push(a); continue; }
+      if (margen <= 0) { cosechar(a, "vence_con_la_toma"); continue; }
       // v17.30.0 — ENCARGO DEL MÉDICO (28-ago), reporte en vivo: un paciente con la
       // creatinina forzando la toma a 6 días (ANR activo) traía además glicemia,
       // uroanálisis y HbA1c —cada una a ~65 días de SU PROPIO vencimiento, sin relación
@@ -36562,7 +36645,10 @@
       // ANR gobierna la fecha, para no combinar dos motivos de adelanto distintos sobre
       // el mismo examen. Sin ANR activo (el caso de casi todos los planes), nada cambia.
       if (anr) { diferidos.push(Object.assign({}, a, { margenDias: margen })); continue; }
-      if (margen <= a.vigenciaDias * MTR_COSECHA_MARGEN_PROP) cosechados.push(a);
+      // v18.0.43 — el guardarraíl del reporte del 1-sep (ver el comentario largo arriba): sin
+      // un viaje próximo que compartir, no se adelanta nada por logística.
+      if (!tomaEsElMismoViaje) { diferidos.push(Object.assign({}, a, { margenDias: margen })); continue; }
+      if (margen <= a.vigenciaDias * MTR_COSECHA_MARGEN_PROP) cosechar(a, "vigencia");
       else diferidos.push(Object.assign({}, a, { margenDias: margen }));
     }
 
@@ -36580,10 +36666,21 @@
     const MTR_GRUPO_LIPIDOS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"];
     const _lipYaVaEnEstaVisita = (clave) =>
       faltantes.some((a) => a.clave === clave) || vencidos.some((a) => a.clave === clave) || cosechados.some((a) => a.clave === clave);
+    // v18.0.43 — ESTA REGLA NO LLEVA TOPE DE DÍAS, Y ES CORRECTO QUE NO LO LLEVE. Medido
+    // (tools/medir_arrastre_lejano.js): es la que más adelanta de todas —122 días de media,
+    // hasta 168— y aun así no se acota, porque no es una elección logística del script: los
+    // cuatro lípidos NO se pueden pedir sueltos en Everest (CONDUCTA_LI_TEXTO_POR_ANALITO no
+    // tiene texto de <li> para ninguno; solo existen dentro del paquete). Excluirlos de la
+    // lista no evitaría que el laboratorio los procese — solo le enseñaría al médico una
+    // lista que no coincide con lo que el paquete de verdad agrega. Lo que sí cambia en esta
+    // versión es que se DICE por qué están ahí, en vez de rotularlos "se aprovecha el mismo
+    // viaje" como si el script hubiera decidido adelantarlos.
+    // Y no hace falta acotarla por otro lado: solo dispara si YA va un lípido en esta visita,
+    // así que cuando la cosecha genérica se apaga por toma lejana, esta se apaga con ella.
     if (MTR_GRUPO_LIPIDOS.some(_lipYaVaEnEstaVisita)) {
       for (let i = diferidos.length - 1; i >= 0; i--) {
         if (MTR_GRUPO_LIPIDOS.indexOf(diferidos[i].clave) < 0) continue;
-        cosechados.push(diferidos[i]);
+        cosechar(diferidos[i], "paquete_lipidos");
         diferidos.splice(i, 1);
       }
     }
@@ -36613,8 +36710,15 @@
     // el mismo defecto que el médico reportó, colándose por la puerta de al lado. Mismo
     // principio: con el ANR gobernando la fecha, solo creatinina y el RAC sincronizado
     // se agrupan de forma automática.
+    // v18.0.43 — LA GRACIA TAMBIÉN SE APAGA CON LA TOMA LEJOS, por el mismo motivo que la
+    // cosecha del 33 % que amplía: la gracia existe para no partir en dos viajes al paciente
+    // que ya va a ir al laboratorio en unos días. Sin ese viaje próximo no hay nada que
+    // ahorrar, y sí hay vigencia que tirar — hasta 73 días medidos (0,33·180 + 14). Es el
+    // mismo razonamiento de v17.30.0 con el ANR: la gracia solo mira margen y vigencia, no
+    // sabe nada de la distancia a la toma, así que sin este guardarraíl volvería a arrastrar
+    // por la puerta de al lado justo lo que la línea de arriba acaba de excluir.
     const MTR_GRACIA_COSECHA_DIAS = 14;
-    if (!anr) {
+    if (!anr && tomaEsElMismoViaje) {
       for (let i = diferidos.length - 1; i >= 0; i--) {
         const d = diferidos[i];
         if (typeof d.margenDias !== "number" || typeof d.vigenciaDias !== "number") continue;
@@ -36622,7 +36726,7 @@
         if (exceso > MTR_GRACIA_COSECHA_DIAS) continue;
         // Se conserva margenDias en el objeto (ya lo trae, de la cosecha normal) para que
         // quien lea `cosechados` pueda seguir distinguiendo esto de un faltante/vencido.
-        cosechados.push(d);
+        cosechar(d, "gracia");
         diferidos.splice(i, 1);
       }
     }

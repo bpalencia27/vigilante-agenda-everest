@@ -669,6 +669,139 @@ module.exports = {
       t.falso(plan.ordenar.some((a) => a.clave === "CREATININA"), "y no se ordena en esta visita");
     });
 
+    // =====================================================================
+    //  LA VENTANA DEL MISMO VIAJE (v18.0.43) — REPORTE EN VIVO DEL MÉDICO (1-sep), con
+    //  captura de pantalla: "ESTO TAMPOCO TIENE SENTIDO LA FORMA EN LA QUE SE AGRUPAN
+    //  TODOS LOS EXÁMENES QUE INCLUSO ESTAN A MUCHO TIEMPO SE SUGIERE LA REALIZACION EN
+    //  DICIEMBRE Y NO ES ASÍ". El plan de la captura ponía la toma el 23 de diciembre
+    //  (a 113 días, porque ese día vencía la creatinina) y arrastraba SIETE exámenes que
+    //  vencían el 20 de febrero, cada uno rotulado "se aprovecha el mismo viaje" — 59
+    //  días de vigencia quemados por examen, y ningún viaje real que compartir todavía.
+    //
+    //  La cosecha genérica solo corre si la toma cae dentro de MTR_TECHO_ESTADO_A (21 d),
+    //  que es la ventana que este proyecto ya llamaba "el mismo viaje". Medido antes de
+    //  fijarlo en tools/medir_arrastre_lejano.js.
+    // =====================================================================
+    const ctxCaptura1Sep = (fechaCreatinina) => ({
+      hoyIso: "2026-09-01", programa: "HTA", esDm2: false, edad: 60, rac: 12,
+      ultimos: {
+        CREATININA: { fecha: fechaCreatinina, valor: 1.0 },
+        // Panel completo tomado hace 8 días: vigencia 180 d -> todos vencen el 2027-02-20.
+        GLUCOSA: { fecha: "2026-08-24", valor: 95 },
+        UROANALISIS: { fecha: "2026-08-24", valor: 1 },
+        COLESTEROL_TOTAL: { fecha: "2026-08-24", valor: 180 },
+        COLESTEROL_HDL: { fecha: "2026-08-24", valor: 50 },
+        COLESTEROL_LDL: { fecha: "2026-08-24", valor: 90 },
+        TRIGLICERIDOS: { fecha: "2026-08-24", valor: 120 },
+        RAC: { fecha: "2026-08-24", valor: 12 },
+      },
+    });
+
+    t.caso("VENTANA DEL MISMO VIAJE: con la toma a 113 días, los 7 exámenes que vencen en febrero NO se arrastran a diciembre", () => {
+      // La creatinina del 26-jun vence el 23-dic: exactamente la fecha de la captura.
+      const plan = api.mtrPlanParaclinicos(ctxCaptura1Sep("2026-06-26"));
+      t.igual(plan.ftl, "2026-12-23", "la toma sigue donde manda CERO VENCIDOS: el vencimiento de la creatinina");
+      t.igual(plan.cosechados.length, 1, "solo va la creatinina, que es la que vence ese día");
+      t.igual(plan.cosechados[0].clave, "CREATININA", "y es ella");
+      const claves7 = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS", "GLUCOSA", "UROANALISIS", "RAC"];
+      for (const clave of claves7) {
+        t.cierto(plan.diferidos.some((a) => a.clave === clave), clave + " queda diferido: vence el 20-feb, no tiene por qué adelantarse 59 días");
+        t.falso(plan.ordenar.some((a) => a.clave === clave), clave + " tampoco sale en la lista de qué ordenar");
+      }
+    });
+
+    t.caso("VENTANA DEL MISMO VIAJE: el grupo de lípidos tampoco arrastra, porque nadie del grupo va ya en esa visita", () => {
+      // Contención del guardarraíl: la regla 1.15 no lleva tope de días a propósito (los
+      // 4 lípidos salen del mismo paquete de Everest y no se piden sueltos), así que si
+      // se colara un lípido por otra puerta, los otros 3 vendrían detrás. No se cuela:
+      // 1.15 solo dispara cuando YA va un lípido, y con la toma lejos no va ninguno.
+      const plan = api.mtrPlanParaclinicos(ctxCaptura1Sep("2026-06-26"));
+      const lipidos = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"];
+      t.igual(plan.cosechados.filter((a) => lipidos.indexOf(a.clave) >= 0).length, 0,
+        "ningún lípido se cosecha cuando la cosecha genérica está apagada");
+      t.igual(plan.diferidos.filter((a) => lipidos.indexOf(a.clave) >= 0).length, 4, "los 4 siguen diferidos");
+    });
+
+    t.caso("VENTANA DEL MISMO VIAJE: el borde son 21 días — a 21 se cosecha, a 22 no", () => {
+      // Creatinina del 26-mar: vence el 22-sep, a 21 días exactos de hoy. Los otros 7
+      // vencen el 20-nov (margen 59 d, justo dentro del 33% de 180).
+      const dentro = api.mtrPlanParaclinicos({
+        hoyIso: "2026-09-01", programa: "HTA", esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-03-26", valor: 1.0 },
+          GLUCOSA: { fecha: "2026-05-24", valor: 95 }, UROANALISIS: { fecha: "2026-05-24", valor: 1 },
+          COLESTEROL_TOTAL: { fecha: "2026-05-24", valor: 180 }, COLESTEROL_HDL: { fecha: "2026-05-24", valor: 50 },
+          COLESTEROL_LDL: { fecha: "2026-05-24", valor: 90 }, TRIGLICERIDOS: { fecha: "2026-05-24", valor: 120 },
+          RAC: { fecha: "2026-05-24", valor: 12 },
+        },
+      });
+      t.igual(dentro.ftl, "2026-09-22", "la toma cae a 21 días exactos (control del escenario)");
+      t.igual(dentro.diferidos.length, 0, "dentro de la ventana la cosecha del 33% corre igual que siempre: nadie queda diferido");
+      t.cierto(dentro.cosechados.some((a) => a.clave === "GLUCOSA" && a.adelantoDias === 59),
+        "y sí se adelantan 59 días — el canje que el médico aprobó en v17.6.0, con el viaje a la vuelta de la esquina");
+
+      // Un solo día más allá: mismo escenario, creatinina del 27-mar (vence el 23-sep).
+      const fuera = api.mtrPlanParaclinicos({
+        hoyIso: "2026-09-01", programa: "HTA", esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-03-27", valor: 1.0 },
+          GLUCOSA: { fecha: "2026-05-24", valor: 95 }, UROANALISIS: { fecha: "2026-05-24", valor: 1 },
+          COLESTEROL_TOTAL: { fecha: "2026-05-24", valor: 180 }, COLESTEROL_HDL: { fecha: "2026-05-24", valor: 50 },
+          COLESTEROL_LDL: { fecha: "2026-05-24", valor: 90 }, TRIGLICERIDOS: { fecha: "2026-05-24", valor: 120 },
+          RAC: { fecha: "2026-05-24", valor: 12 },
+        },
+      });
+      t.igual(fuera.ftl, "2026-09-23", "un día más lejos (control del escenario)");
+      t.igual(fuera.cosechados.length, 1, "fuera de la ventana solo va la que vence ese día");
+      t.igual(fuera.diferidos.length, 7, "los otros siete esperan su propio viaje");
+    });
+
+    t.caso("VENTANA DEL MISMO VIAJE: la gracia de 14 días también se apaga con la toma lejos", () => {
+      // Mismo escenario del borde, pero con los 7 acompañantes a 74 días de margen: fuera
+      // del 33% (59,4) y dentro de la gracia (exceso 14,6 -> no, 14,6 > 14). Se busca
+      // exceso <= 14: margen 73 d -> exceso 13,6. Fecha: vence 2026-09-22 + 73 = 2026-12-04.
+      const conGracia = api.mtrPlanParaclinicos({
+        hoyIso: "2026-09-01", programa: "HTA", esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-03-26", valor: 1.0 },       // vence 2026-09-22 (a 21 d)
+          GLUCOSA: { fecha: "2026-06-07", valor: 95 },           // vence 2026-12-04: margen 73, exceso 13,6
+        },
+      });
+      t.cierto(conGracia.cosechados.some((a) => a.clave === "GLUCOSA" && a.motivoCosecha === "gracia"),
+        "con la toma dentro de la ventana, la gracia entra y lo dice");
+
+      // La misma glicemia con la toma a 113 días: la gracia ya no la arrastra.
+      const sinGracia = api.mtrPlanParaclinicos(Object.assign({}, ctxCaptura1Sep("2026-06-26"), {
+        ultimos: Object.assign({}, ctxCaptura1Sep("2026-06-26").ultimos, {
+          GLUCOSA: { fecha: "2026-10-05", valor: 95 },           // vence 2027-04-03: margen 101, exceso 41,6
+        }),
+      }));
+      t.falso(sinGracia.cosechados.some((a) => a.clave === "GLUCOSA"), "con la toma lejos, ni el 33% ni la gracia la traen");
+    });
+
+    t.caso("VENTANA DEL MISMO VIAJE: cada cosechado dice POR QUÉ está en la lista y cuánto se adelanta", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-09-01", programa: "HTA", esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-03-26", valor: 1.0 },
+          GLUCOSA: { fecha: "2026-05-24", valor: 95 }, UROANALISIS: { fecha: "2026-05-24", valor: 1 },
+          COLESTEROL_TOTAL: { fecha: "2026-05-24", valor: 180 }, COLESTEROL_HDL: { fecha: "2026-05-24", valor: 50 },
+          COLESTEROL_LDL: { fecha: "2026-05-24", valor: 90 }, TRIGLICERIDOS: { fecha: "2026-05-24", valor: 120 },
+          RAC: { fecha: "2026-05-24", valor: 12 },
+        },
+      });
+      const creat = plan.cosechados.find((a) => a.clave === "CREATININA");
+      t.igual(creat.motivoCosecha, "vence_con_la_toma", "la que fija la fecha se marca como tal");
+      t.igual(creat.adelantoDias, 0, "y no se adelanta nada");
+      const glu = plan.cosechados.find((a) => a.clave === "GLUCOSA");
+      t.igual(glu.motivoCosecha, "vigencia", "la que entra por el 33% se marca como tal");
+      t.igual(glu.adelantoDias, 59, "y dice los 59 días que se le quitan");
+      // Y no se ensucia el objeto original: `drivers` sale del mismo plan y lo leen otras
+      // pantallas, así que la marca de cosecha vive solo en la copia.
+      const gluDriver = plan.drivers.find((a) => a.clave === "GLUCOSA");
+      t.igual(gluDriver.motivoCosecha, undefined, "el driver original no queda marcado");
+    });
+
     t.caso("los exámenes bloqueados por estadio no entran en la orden", () => {
       const plan = api.mtrPlanParaclinicos(Object.assign({}, ctxErc, {
         estadioAdministrativo: "G1", ultimos: {},
