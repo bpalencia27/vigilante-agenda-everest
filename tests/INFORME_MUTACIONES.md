@@ -8167,3 +8167,88 @@ La **89** es la mutación en dirección contraria, y aquí importa especialmente
 que la v17.6.75 puso ahí a propósito.
 
 Banco completo: **2.825 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.42 — LA REGRESIÓN DE DISEÑO: un comentario mío se comió 878 líneas de CSS
+
+**Reporte del médico, en vivo, sobre la v18.0.32 que tiene instalada:** *«hubo una regresión muy
+grande en temas de diseño en todo el script, actualmente se ve horrible… el azul de Everest se
+mezcla con el nuestro, los botones parecen viejos de Windows 98, todo lo bueno que teníamos se
+perdió»*.
+
+### La causa, y es mía
+
+En la v18.0.28 escribí, dentro de `MTR_RCV_CSS`, un comentario que **nombraba el peligro de la
+Regla Q escribiendo la secuencia de cierre literal**:
+
+```
+   … y la Regla Q (un */ que cierra un
+   comentario CSS antes de tiempo).
+```
+
+Ese cierre **terminó el comentario en mitad de la frase**. Todo lo que venía detrás dejó de ser
+comentario y pasó a ser CSS inválido; el parser perdió el hilo y **descartó las 878 líneas
+restantes de la hoja**. Es exactamente el defecto que ese comentario describía, cometido dentro
+del comentario que lo describe — el mismo error que la v18.0.28 ya había cometido con una
+interpolación viva, en el mismo sitio.
+
+### Medido en Chromium, con el CSS real generado por `buildOverlay()`
+
+```
+                        ANTES        DESPUÉS
+reglas aceptadas         746          1105        (+359 resucitadas)
+.vgl-bento-head       ausente        presente
+.vgl-ux-seccion-tit   ausente        presente
+.vgl-prod-pct         ausente        presente
+muestra de 26 selectores repartidos:  23/26  ->  26/26
+```
+
+La última regla viva era `.vgl-rcv-aviso`. De ahí al final —el tablero «Estado de un vistazo»,
+la vista de productividad, la hoja de UX entera— **no existía para el navegador**. Sin esas
+reglas, cada elemento cae al estilo por defecto del navegador y al CSS global de Everest: de ahí
+los botones de Windows 98 y el azul ajeno.
+
+### Por qué la guarda que existe para esto no lo vio
+
+`suite_25` extraía **solo** el bloque `style.textContent` de `buildOverlay()` y **no resolvía**
+los `${_cssSeguro(() => XXX_CSS)}`. Todo lo que vive en `MTR_CSS`, `MTR_RCV_CSS`,
+`MTR_RCV_CSS_TODOS_LOS_MODALES` y `VGL_UX_CSS` era invisible para **todas** las reglas de la
+suite — la P, la Q y la R incluidas.
+
+Y el propio comentario roto afirmaba que esa suite ya lo veía («invisible para esa suite **hasta
+esta versión**»). Es la quinta vez en esta jornada que aparece el mismo patrón: **un comentario
+que promete una red de seguridad que no existe**. Esta vez costó el diseño entero.
+
+Ahora la suite resuelve los splices —incluida la constante derivada
+`MTR_RCV_CSS_TODOS_LOS_MODALES`, que se compone en tiempo de ejecución— y verifica que **no
+quede ninguno sin resolver**: uno solo deja una hoja completa fuera del alcance de las reglas.
+
+### Dos censos, no uno
+
+El censo histórico de `!important` se calibró sobre el bloque principal y de ahí sale su lista
+detallada de excepciones, así que se queda ahí. Las hojas spliceadas reciben **censo propio**
+(132): hasta hoy no tenían ninguno, y por ese hueco pasó esto.
+
+### Además, en la misma versión
+
+- **`.vgl-uro-arrow`** (la flechita ▾ del acordeón del uroanálisis) no tenía **ninguna** regla
+  de color en toda la hoja: heredaba, y la herencia pierde contra una regla de tipo de Everest
+  con `!important`. Medido: **18,67:1 → 1,10:1**, invisible.
+- **El titular y el icono del aviso flotante, y la insignia de estado de cada tarjeta de cita**,
+  pintaban su color **en línea sin `!important`**. La Regla R —escrita en la v18.0.16 justo para
+  eso— era ciega: su `style="([^"]*)"` se corta en la primera comilla doble, y esos atributos
+  llevan una dentro de la interpolación (`String(color || "AZUL")`). Tres coincidencias en esa
+  línea, **ninguna** con `color:`. Se neutralizan las interpolaciones antes de buscar,
+  conservando los saltos de línea para que los números de línea del informe sigan siendo reales.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 92 | se reintroduce el cierre literal en `MTR_RCV_CSS` | **Regla Q** — ahora sí lo ve (2 fugas) | Sí — 2.825 |
+| 93 | se quita la regla de `.vgl-uro-arrow` | censo de `!important` del bloque principal | Sí — 2.825 |
+| 94 | se quita el `!important` de un color en línea | **Regla R** — con las interpolaciones neutralizadas | Sí — 2.825 |
+| 95 | se deja un splice sin resolver | *no queda ningún splice sin resolver* | Sí — 2.825 |
+
+Banco completo: **2.825 comprobaciones pasan, 0 fallan.**

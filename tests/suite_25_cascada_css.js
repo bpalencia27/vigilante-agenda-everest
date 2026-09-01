@@ -16,6 +16,70 @@ module.exports = {
     }
     t.cierto(css.length > 0, "Se extrajo el bloque CSS de buildOverlay");
 
+    // =================================================================================
+    //  v18.0.42 — EL PUNTO CIEGO QUE COSTÓ EL DISEÑO ENTERO
+    //
+    //  Esta extracción se paraba en el bloque `style.textContent`, y ese bloque SPLICEA
+    //  otras hojas con `${_cssSeguro(() => XXX_CSS)}`. Todo lo que vive en esas constantes
+    //  —MTR_CSS, MTR_RCV_CSS…— era invisible para TODAS las reglas de esta suite.
+    //
+    //  Lo que pasó por ese hueco: un comentario dentro de MTR_RCV_CSS que nombraba el
+    //  peligro de la Regla Q escribiendo la secuencia de cierre LITERAL. Cerró el
+    //  comentario en mitad de la frase y el navegador descartó las 878 líneas siguientes de
+    //  la hoja. Medido en Chromium: 746 reglas aceptadas en vez de 1.105. El médico lo
+    //  reportó como «los botones parecen viejos de Windows 98 y el azul de Everest se
+    //  mezcla con el nuestro». La Regla Q existe exactamente para eso y no podía verlo.
+    //
+    //  Se resuelve cada splice con el valor real de su constante, igual que hace el
+    //  navegador al evaluar la plantilla — el mismo método que `tools/verificar_color_
+    //  chromium.js` ya usaba desde la v17.23.0 por este mismo motivo.
+    // =================================================================================
+    // El bloque PRINCIPAL, tal cual, para las reglas que fueron calibradas sobre él (los
+    // censos de la escala tipográfica hablan de rótulos que viven aquí; las hojas
+    // spliceadas traen los suyos y contarlos juntos mezcla dos cosas distintas).
+    const cssPrincipal = css;
+
+    const _cuerpoDeConstante = (nombre) => {
+      // (a) la forma normal: `const X = \`…\`;`
+      const directa = code.indexOf("const " + nombre + " = `");
+      if (directa >= 0) {
+        const desde = directa + ("const " + nombre + " = `").length;
+        const fin = code.indexOf("`;", desde);
+        if (fin > desde) return code.slice(desde, fin);
+      }
+      // (b) la DERIVADA: `const X = Y.replace(…) + \`…\`;` — se compone en tiempo de
+      //     ejecución, así que no hay un literal que recortar. Se audita su MATERIA PRIMA
+      //     (el cuerpo de Y, que ya se resuelve por (a)) más el literal que se le añade:
+      //     entre las dos está todo el texto que puede romper la hoja. La transformación
+      //     de en medio solo reescribe selectores, no abre ni cierra comentarios.
+      const deriv = new RegExp("const\\s+" + nombre + "\\s*=\\s*(\\w+)\\.replace\\(");
+      const md = deriv.exec(code);
+      if (md) {
+        const base = _cuerpoDeConstante(md[1]) || "";
+        const traslaDecl = code.slice(md.index);
+        const bt1 = traslaDecl.indexOf("`");
+        const bt2 = bt1 >= 0 ? traslaDecl.indexOf("`;", bt1 + 1) : -1;
+        const cola = (bt1 >= 0 && bt2 > bt1) ? traslaDecl.slice(bt1 + 1, bt2) : "";
+        return base + "\n" + cola;
+      }
+      return null;
+    };
+    const _spliced = [];
+    for (let vuelta = 0; vuelta < 5; vuelta++) {
+      const pendientes = [...css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)];
+      if (!pendientes.length) break;
+      for (const m of pendientes) {
+        const cuerpo = _cuerpoDeConstante(m[1]);
+        if (cuerpo === null) continue;
+        css = css.replace(m[0], cuerpo);
+        if (_spliced.indexOf(m[1]) < 0) _spliced.push(m[1]);
+      }
+    }
+    t.cierto(_spliced.length >= 1,
+      "las hojas que buildOverlay splicea se resuelven y entran en la auditoría (" + _spliced.join(", ") + ")");
+    t.falso(/\$\{_cssSeguro/.test(css),
+      "no queda ningún splice sin resolver: uno solo deja una hoja entera fuera del alcance de estas reglas");
+
     const combos = [];
     const combosVistos = new Set();
     const addCombo = (arr) => {
@@ -459,8 +523,13 @@ module.exports = {
       t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
-      const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
-      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
+      // v18.0.42 — se cuenta sobre el bloque PRINCIPAL. Al empezar a resolver los splices
+      // (ver la cabecera), esta cuenta pasó de 1 a 3: las otras dos son de MTR_RCV_CSS y
+      // VGL_UX_CSS, rótulos legítimos que nada tienen que ver con el botón del que habla
+      // esta regla y que llevaban ahí desde siempre, invisibles. Contarlos juntos mezclaba
+      // dos cosas distintas.
+      const conReserva = cssPrincipal.match(/var\(--t-micro,12px\)/g) || [];
+      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez en el bloque principal (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
 
       // v14.0.0 (T5) — el interruptor de modo rendimiento del dock de widgets
       // (#vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none
@@ -567,8 +636,26 @@ module.exports = {
       // color que el script pinte a mano. Regla B de esta misma suite cubre el caso del
       // estilo en línea dentro del HTML.
       // =====================================================================
-      const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 644, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 644 tras el blindaje completo de color de la v18.0.14, salió ${importantTotal})`);
+      // v18.0.42 — el censo histórico se cuenta sobre el bloque PRINCIPAL, que es donde se
+      // calibró y de donde sale su lista detallada de excepciones. Las hojas spliceadas
+      // (MTR_CSS, MTR_RCV_CSS, VGL_UX_CSS) llevan las suyas y hasta esta versión no las
+      // veía nadie: se les da censo propio justo debajo, en vez de sumarlas aquí y perder
+      // el significado de las dos cuentas.
+      const importantTotal = (cssPrincipal.match(/!important/g) || []).length;
+      // v18.0.42 — 644 -> 645: una regla NUEVA, no un cableado. `.vgl-uro-arrow` (la flechita
+      // del acordeón «Ver N analitos» del uroanálisis) no tenía NINGUNA regla en toda la
+      // hoja: su color venía solo por herencia, y la herencia pierde contra una regla de
+      // tipo de Everest con important. Medido en Chromium: 18,67:1 -> 1,10:1, invisible.
+      // Este censo existe justo para que un número así no cambie sin que alguien lo explique.
+      t.cierto(importantTotal === 645, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 645: 644 del blindaje completo de color de la v18.0.14 + 1 de la regla nueva de .vgl-uro-arrow en la v18.0.42; salió ${importantTotal})`);
+
+      // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
+      // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
+      // la hoja a mitad y dejó 878 líneas de CSS sin aplicar. Un número fijo obliga a que
+      // cualquier cambio de blindaje en esas hojas pase por aquí y se explique.
+      const importantSpliceados = (css.match(/!important/g) || []).length - importantTotal;
+      t.cierto(importantSpliceados === 132,
+        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 132, salió ${importantSpliceados})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -1113,25 +1200,59 @@ module.exports = {
     t.caso("Regla R - ningún color pintado EN LÍNEA queda sin !important (la hoja se lo comería)", () => {
       const sitios = [];
 
+      // v18.0.42 — LA REGLA ERA CIEGA JUSTO DONDE VIVÍA EL COLOR. La rama (a) buscaba
+      // `style="([^"]*)"`, y ese `[^"]*` se detiene en la PRIMERA comilla doble que
+      // encuentre — incluidas las que van DENTRO de una interpolación `${...}`. En el
+      // titular del aviso flotante, el atributo empieza así:
+      //
+      //     style="--tk:var(--rgb-${String(color || "AZUL")…);color:var(--c-…)"
+      //                                          ^ aquí se cortaba
+      //
+      // Medido: tres coincidencias de `style="` en esa línea, NINGUNA con `color:`. El
+      // titular y el icono llevaban meses pintando su color en línea sin `!important`
+      // (7,84:1 → 1,02:1 bajo el CSS de Everest) y esta regla, escrita en la v18.0.16
+      // precisamente para eso, pasaba en verde.
+      //
+      // Se neutralizan las interpolaciones ANTES de buscar, conservando los saltos de línea
+      // para que los números de línea del informe sigan siendo los de verdad.
+      const sinInterpolar = (txt) => {
+        let out = "", i = 0;
+        while (i < txt.length) {
+          if (txt[i] === "$" && txt[i + 1] === "{") {
+            let prof = 1, j = i + 2;
+            while (j < txt.length && prof > 0) {
+              if (txt[j] === "{") prof++;
+              else if (txt[j] === "}") prof--;
+              j++;
+            }
+            const trozo = txt.slice(i, j);
+            out += "EXPR" + trozo.replace(/[^\n]/g, "");   // sin comillas, con sus saltos
+            i = j;
+          } else { out += txt[i++]; }
+        }
+        return out;
+      };
+      const codeSinExpr = sinInterpolar(code);
+
       // (a) style="…color:…" escrito dentro del HTML que generamos
       const reHtml = /style="([^"]*)"/g;
       let m;
-      while ((m = reHtml.exec(code)) !== null) {
+      while ((m = reHtml.exec(codeSinExpr)) !== null) {
         const decls = m[1];
         if (!/(^|;)\s*color\s*:/.test(decls)) continue;
         const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
         if (decl.includes("!important")) continue;
-        sitios.push('style="…' + decl.slice(0, 60) + '…"  (línea ' + (code.slice(0, m.index).split("\n").length) + ")");
+        sitios.push('style="…' + decl.slice(0, 60) + '…"  (línea ' + (codeSinExpr.slice(0, m.index).split("\n").length) + ")");
       }
 
       // (b) elemento.style.cssText = "…color:…"  — la vía que la Regla B no miraba
       const reCss = /\.style\.cssText\s*=\s*"([^"]*)"/g;
-      while ((m = reCss.exec(code)) !== null) {
+      while ((m = reCss.exec(codeSinExpr)) !== null) {
         const decls = m[1];
         if (!/(^|;)\s*color\s*:/.test(decls)) continue;
         const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
         if (decl.includes("!important")) continue;
-        sitios.push('cssText "…' + decl.slice(0, 60) + '…"  (línea ' + (code.slice(0, m.index).split("\n").length) + ")");
+        sitios.push('cssText "…' + decl.slice(0, 60) + '…"  (línea ' + (codeSinExpr.slice(0, m.index).split("\n").length) + ")");
       }
 
       // (c) elemento.style.color = "…"  — lo que la Regla B ya cubría, aquí por completitud.

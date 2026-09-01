@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.41
+// @version      18.0.42
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.41";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.42";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13134,7 +13134,7 @@
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").innerHTML = TOAST_ICONO_SVG[color] || TOAST_ICONO_SVG.AZUL;
       const emoji = TOAST_EMOJI[color] || "";
       let titulo = String(title || "");
@@ -14390,8 +14390,19 @@
            declaración de tipo function, que sí está hoisted. El día que alguien la convierta
            en const o en arrow declarada más abajo, el archivo ENTERO deja de evaluarse en
            carga — comprobado en aislamiento. Es la misma frontera JS/plantilla que la
-           Regla H (comentarios // impresos en pantalla) y la Regla Q (un */ que cierra un
-           comentario CSS antes de tiempo).
+           Regla H (comentarios // impresos en pantalla) y la Regla Q (un cierre de comentario
+           CSS escrito dentro del propio comentario, que lo termina antes de tiempo).
+           v18.0.42 — Y ESE CIERRE ESTABA AQUÍ MISMO, ESCRITO LITERAL. La línea de arriba
+           nombraba el peligro poniendo la secuencia de dos caracteres de verdad, así que
+           cerraba este comentario en mitad de la frase. Todo lo que venía detrás dejó de ser
+           comentario y pasó a ser CSS inválido: el navegador perdió el hilo y descartó las
+           878 líneas restantes de la hoja. El médico lo reportó así: «hubo una regresión muy
+           grande en temas de diseño, los botones parecen viejos de Windows 98, el azul de
+           Everest se mezcla con el nuestro». Medido en Chromium: 746 reglas aceptadas de las
+           ~1.150 del texto; .vgl-bento-*, .vgl-ux-* y .vgl-prod-* no existían para el
+           navegador. La Regla Q existe exactamente para cazar esto y no pudo: suite_25 solo
+           leía el bloque style.textContent y no resolvía los splices, así que esta hoja le
+           era invisible. Las dos cosas quedan arregladas en la misma versión.
            (1) las 6 reglas de aquí abajo (tfg b, lista li, lista li b, vencido-item b,
            lista-orden li, det summary) solo llevaban el descendiente real del lado de
            #vgl-labs-modal — el lado de #vgl-ordenar-modal apuntaba a la clase sola, así que
@@ -17192,6 +17203,13 @@
         padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;
         transition:all .15s ease;
       }
+      /* v18.0.42 — .vgl-uro-arrow NO TENIA NINGUNA REGLA en toda la hoja: su color venia
+         solo por herencia del boton, y la herencia pierde contra una regla de tipo de
+         Everest sobre span con important. Medido en Chromium contra el Everest hostil de
+         CLAUDE.md: 18,67:1 -> 1,10:1, o sea invisible. La Regla P de suite_25 no puede
+         cazarlo porque audita declaraciones de color, y aqui no habia ninguna que auditar:
+         el hueco no era una regla mal escrita, era la AUSENCIA de regla. */
+      .vgl-labs-uro-btn .vgl-uro-arrow,.vgl-uro-arrow{color:var(--fg) !important}
       .vgl-labs-uro-btn:hover{background:var(--surface-2);border-color:var(--c-azul)}
       .vgl-labs-uro-btn.abierto{background:var(--surface-2);border-color:var(--c-azul)}
       .vgl-labs-uro-panel{
@@ -28893,7 +28911,7 @@
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}${agendPend}${adicFlag}
-            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(".16")};color:${badgeCol};box-shadow:inset 0 0 0 1px ${badgeRgba(".32")}">${escapeHtml(a.estado)}</span>
+            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(".16")};color:${badgeCol} !important;box-shadow:inset 0 0 0 1px ${badgeRgba(".32")}">${escapeHtml(a.estado)}</span>
           </div>
         </div>
         <div class="vgl-card-mid vgl-card-mid-t1">
