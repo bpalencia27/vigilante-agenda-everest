@@ -8114,3 +8114,56 @@ posición comparaba el aviso contra el **pie del bloque**, así que moverlo deba
 que es lo que de verdad decide si el médico lo ve antes o después de leerse la lista entera.
 
 Banco completo: **2.821 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.41 — Dos afirmaciones falsas en pantalla
+
+### 1. «· albuminuria: vigilancia estrecha» sobre una glicemia (`L35453`)
+
+El sufijo pertenece a la promoción a **R** del RAC con albuminuria, pero colgaba de
+`vencidoBase`, que solo significa «estaba vencido» y vale igual para la glicemia, la creatinina
+y el LDL. Reproducido con el arnés, paciente **sin RAC medido** (`ctx.rac = null`):
+
+```
+GLUCOSA vencida:  «vencido hace 418 día(s) — resultado del 2025-01-10 · albuminuria: vigilancia estrecha»
+LDL vencido:      «vencido hace 396 día(s) — resultado del 2025-02-01 · albuminuria: vigilancia estrecha»
+```
+
+Ese motivo es **literalmente** lo que se pinta en la lista «Ya vencidos» del recuadro clínico. El
+médico leía que su paciente tiene albuminuria y vigilancia estrecha sobre una glicemia, en
+alguien a quien **nadie le midió la albuminuria**. El sufijo se ata ahora a la promoción a R, que
+es de quien de verdad la tiene.
+
+### 2. Anular la cita de control borraba la marca de la toma de muestras (`L19487`)
+
+La toma vive en AppCita y el script **no puede anularla** — el propio comentario de la v15.5.0 lo
+dice. Borrar su marca local era afirmar que ya no está agendada cuando sigue estándolo, y apagaba
+**dos cosas a la vez**:
+
+- el aviso *«la cita de control quedó anulada, la TOMA DE MUESTRAS sigue agendada»*, que se decide
+  leyendo esa misma marca justo después: no podía salir nunca, porque acababa de borrarse;
+- el **antiduplicados** del modal de laboratorio, con lo que tras cancelar el control se podía
+  crear una **segunda** toma para el mismo paciente y el mismo día sin la segunda confirmación.
+
+Paciente que llega en ayunas a una toma huérfana, o con dos tomas el mismo día, y el médico nunca
+fue avisado.
+
+Además, la foto del estado se toma **antes** de anular. Aunque la marca ya no se borre, decidir un
+aviso releyendo un almacén que la operación de al lado acaba de tocar es la forma de que el aviso
+vuelva a desaparecer en silencio la próxima vez que alguien cambie esa limpieza.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 88 | el sufijo vuelve a pegarse a todo examen vencido | *NO se pega a cualquier examen vencido* | Sí — 2.825 |
+| 89 | el sufijo desaparece también del RAC promovido | *(contrapartida)* el RAC SÍ lo conserva | Sí — 2.825 |
+| 90 | anular la cita vuelve a borrar la marca de la toma | *no borra la marca* **+** *foto antes de anular* | Sí — 2.825 |
+| 91 | el aviso vuelve a decidirse releyendo el almacén | *foto antes de anular* | Sí — 2.825 |
+
+La **89** es la mutación en dirección contraria, y aquí importa especialmente: el arreglo se podía
+«cumplir» borrando el sufijo de todas partes, y con eso se habría perdido la prioridad de atención
+que la v17.6.75 puso ahí a propósito.
+
+Banco completo: **2.825 comprobaciones pasan, 0 fallan.**

@@ -109,6 +109,41 @@ module.exports = {
       esDm2: true, edad: 68, rac: 12,
     };
 
+    // =================================================================================
+    //  v18.0.41 — «· ALBUMINURIA: VIGILANCIA ESTRECHA» SOBRE UNA GLICEMIA (hallazgo L35453)
+    //
+    //  El sufijo pertenece a la promoción a R del RAC con albuminuria. Se pegaba al motivo
+    //  de TODO examen vencido porque colgaba de `vencidoBase`, que solo significa «estaba
+    //  vencido» y vale igual para la glicemia, la creatinina y el LDL.
+    //
+    //  Ese motivo es literalmente lo que se pinta en la lista «Ya vencidos» del recuadro
+    //  clínico. El médico leía que su paciente tiene albuminuria y vigilancia estrecha sobre
+    //  una glicemia, en alguien a quien NADIE le midió la albuminuria: dato inventado en
+    //  pantalla, que es lo primero que este proyecto prohíbe.
+    // =================================================================================
+    t.caso("v18.0.41: el sufijo de albuminuria NO se pega a cualquier examen vencido", () => {
+      const sinRac = { hoyIso: "2026-08-31", programa: "HTA", esDm2: false, edad: 60, rac: null };
+      const glu = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2025-01-10", valor: 110 }, sinRac);
+      t.cierto(/vencido hace \d+ día\(s\)/.test(glu.motivo), "la glicemia sí está vencida: " + glu.motivo);
+      t.falso(/albuminuria/i.test(glu.motivo),
+        "pero su motivo no puede mencionar albuminuria en un paciente sin RAC medido: " + glu.motivo);
+
+      const ldl = api.mtrEstadoAnalito("COLESTEROL_LDL", { fecha: "2025-02-01", valor: 160 }, sinRac);
+      t.falso(/albuminuria/i.test(ldl.motivo), "ni el LDL: " + ldl.motivo);
+    });
+
+    t.caso("v18.0.41 (contrapartida): el RAC con albuminuria SÍ conserva su vigilancia estrecha", () => {
+      // Sin esto, el arreglo se podría «cumplir» borrando el sufijo de todas partes, y se
+      // perdería la prioridad de atención que la v17.6.75 puso ahí a propósito.
+      const conRac = { hoyIso: "2026-08-31", programa: "HTA", esDm2: false, edad: 60, rac: 45 };
+      const rac = api.mtrEstadoAnalito("RAC", { fecha: "2025-01-10", valor: 45 }, conRac);
+      t.igual(rac.estado, "R", "el RAC≥30 se promueve a R");
+      t.igual(rac.subestado, "albuminuria", "con su subestado");
+      t.cierto(/vencido hace \d+ día\(s\)/.test(rac.motivo), "sigue diciendo que venció");
+      t.cierto(/albuminuria: vigilancia estrecha/.test(rac.motivo),
+        "y conserva la vigilancia estrecha, que es de quien de verdad la tiene: " + rac.motivo);
+    });
+
     t.caso("un analito sin ningún resultado se declara AUSENTE, no vencido", () => {
       const a = api.mtrEstadoAnalito("CREATININA", null, ctxErc);
       t.igual(a.estado, "A", "estado A");

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.40
+// @version      18.0.41
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.40";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.41";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -19942,10 +19942,15 @@
   // nuevo, y a veces no. Decisión suya del 21-ago.
   async function _cancelarCitaConPregunta(apt) {
     const docId = (apt && apt.doc_id) || extractPacienteAbierto();
+    // v18.0.41 — la foto se toma ANTES de anular. Aunque la marca de la toma ya no se borra
+    // (ver _anularCitaMarcasLocales), decidir un aviso leyendo un estado que la operación de
+    // al lado acaba de tocar es la forma de que el aviso vuelva a desaparecer en silencio la
+    // próxima vez que alguien cambie esa limpieza. Se lee antes y se decide con eso.
+    const labSeguiaAgendado = isLabAgendadaHoy(docId);
     const ok = await _anularCitaAsignadaReal(apt);
     if (!ok) return false;
     try { document.querySelectorAll("#vgl-postcita-panel").forEach((e) => e.remove()); } catch (e) {}
-    if (isLabAgendadaHoy(docId)) {
+    if (labSeguiaAgendado) {
       showToast("AMBAR", "Toma de muestras",
         "La cita de control quedó anulada. La TOMA DE MUESTRAS sigue agendada: si ya no sirve, anúlela usted en Everest; si el control nuevo queda cerca, puede dejarla como está.", true);
     }
@@ -20012,14 +20017,25 @@
       let cambio = false;
       if (p.citas && p.citas.includes(sDoc)) { p.citas = p.citas.filter((x) => x !== sDoc); cambio = true; }
       if (p.citasDetalle && p.citasDetalle[sDoc]) { delete p.citasDetalle[sDoc]; cambio = true; }
-      if (p.labs && p.labs.includes(sDoc)) { p.labs = p.labs.filter((x) => x !== sDoc); cambio = true; }
-      if (cambio) writeJSON(PROC_KEY, p);
+      // v18.0.41 — LA TOMA DE MUESTRAS NO SE ANULA AQUÍ, ASÍ QUE SU MARCA NO SE BORRA.
+      // Esta función limpia lo que dejó de existir tras anular la CITA DE CONTROL. La toma
+      // vive en AppCita y el propio script documenta desde la v15.5.0 que no puede anularla
+      // — borrar su marca era afirmar que ya no está agendada cuando sigue estándolo, y eso
+      // apagaba dos cosas a la vez:
+      //   · el aviso «la TOMA DE MUESTRAS sigue agendada», que se decide leyendo esta misma
+      //     marca justo después: nunca podía salir, porque acababa de borrarse;
+      //   · el antiduplicados del modal de laboratorio, con lo que tras cancelar el control
+      //     se podía crear una SEGUNDA toma para el mismo paciente y el mismo día sin la
+      //     segunda confirmación.
+      // El paciente llegaba en ayunas a una toma huérfana, o con dos tomas el mismo día, y
+      // el médico nunca fue avisado.
       if (state.appointmentsAgendadas) delete state.appointmentsAgendadas[k];
       if (state.lastSnapshot && state.lastSnapshot.list) {
         state.lastSnapshot.list.forEach((a) => {
-          if (normalizeKey(a.doc_id || a.identificacion || "") === k) { a.citaAgendadaHoy = false; a.labAgendadoHoy = false; }
+          if (normalizeKey(a.doc_id || a.identificacion || "") === k) { a.citaAgendadaHoy = false; }
         });
       }
+      if (cambio) writeJSON(PROC_KEY, p);
       state.lastSignature = "";
       try { repaint(); } catch (e) {}
       try { createAccionesDockUI(); } catch (e) {}
@@ -36281,7 +36297,17 @@
         // v17.6.75 — un RAC≥30 vencido, ahora promovido a R, sigue diciendo que está
         // VENCIDO (nunca "vigente hasta" una fecha ya pasada) — la promoción a R es una
         // prioridad de ATENCIÓN (vigilancia estrecha), no una negación de que venció.
-        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha + " · albuminuria: vigilancia estrecha")
+        // v18.0.41 — pero el sufijo se pegaba a TODO examen vencido, no solo al RAC
+        // promovido. `vencidoBase` es simplemente «estaba vencido», y vale para la glicemia,
+        // la creatinina y el LDL igual que para el RAC. Medido con el arnés, paciente SIN
+        // RAC medido (ctx.rac = null): la GLUCOSA del 2025-01-10 devolvía «vencido hace 418
+        // día(s) — resultado del 2025-01-10 · albuminuria: vigilancia estrecha», y el LDL lo
+        // mismo. Ese motivo es literalmente lo que se pinta en la lista «Ya vencidos» del
+        // recuadro clínico: el médico leía que su paciente tiene albuminuria y vigilancia
+        // estrecha sobre una glicemia, en alguien a quien nadie le midió la albuminuria.
+        // El sufijo es de la promoción a R, así que se ata a ella y no a estar vencido.
+        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha
+            + (estado === "R" && subestado === "albuminuria" ? " · albuminuria: vigilancia estrecha" : ""))
         : ("vigente hasta el " + vence))
         + (kdigoFrena === true
             // v18.0.7 — se DICE por qué no se adelanta. La entrevista lo dejó por escrito:

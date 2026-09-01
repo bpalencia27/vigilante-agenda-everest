@@ -11,7 +11,7 @@ module.exports = {
   cubre: [
     "readJSON", "writeJSON", "saveSettings", "getProcessedToday",
     "isCitaAgendadaHoy", "isOrdenesCreadasHoy", "markCitaAgendadaHoy", "markOrdenesCreadasHoy",
-    "isLabAgendadaHoy", "markLabAgendadaHoy", "citaAgendadaFechaHoy",
+    "isLabAgendadaHoy", "markLabAgendadaHoy", "citaAgendadaFechaHoy", "_anularCitaMarcasLocales",
     "applySettings", "darkPreferred", "isLight", "applyTheme", "restartPolling",
   ],
 
@@ -180,6 +180,43 @@ module.exports = {
       t.cierto(A.isLabAgendadaHoy(321), "y también como número");
       A.markLabAgendadaHoy("321");                      // segunda vez: no debe duplicar
       t.igual(A.getProcessedToday().labs, ["321"], "sin duplicados en el registro persistido");
+    });
+
+    t.caso("v18.0.41: anular la CITA DE CONTROL no borra la marca de la TOMA DE MUESTRAS", () => {
+      // Hallazgo L19487. La toma vive en AppCita y el script no puede anularla (v15.5.0 lo
+      // documenta). Borrar su marca era afirmar que ya no está agendada cuando sigue
+      // estándolo, y apagaba dos cosas a la vez:
+      //   · el aviso «la TOMA DE MUESTRAS sigue agendada», que se decide leyendo esta misma
+      //     marca justo después de anular: nunca podía salir, porque acababa de borrarse;
+      //   · el antiduplicados del modal de laboratorio, con lo que se podía crear una
+      //     SEGUNDA toma el mismo día para el mismo paciente sin segunda confirmación.
+      // El paciente llegaba en ayunas a una toma huérfana, o con dos tomas el mismo día.
+      c.env.storage.removeItem(PROC_KEY);
+      A.markCitaAgendadaHoy("555", "2026-11-10");
+      A.markLabAgendadaHoy("555");
+      t.cierto(A.isCitaAgendadaHoy("555"), "la cita de control está marcada");
+      t.cierto(A.isLabAgendadaHoy("555"), "y la toma de muestras también");
+
+      A._anularCitaMarcasLocales("555");
+
+      t.falso(A.isCitaAgendadaHoy("555"), "tras anular, la CITA DE CONTROL sí desaparece");
+      t.cierto(A.isLabAgendadaHoy("555"),
+        "pero la TOMA DE MUESTRAS sigue marcada: no se anuló, y decir lo contrario deja al paciente en ayunas");
+      t.igual(A.getProcessedToday().labs, ["555"], "y sigue persistida, no solo en memoria");
+    });
+
+    t.caso("v18.0.41: el aviso de la toma se decide con una foto tomada ANTES de anular", () => {
+      // Aunque la marca ya no se borre, decidir un aviso leyendo un estado que la operación
+      // de al lado acaba de tocar es la forma de que el aviso vuelva a desaparecer en
+      // silencio la próxima vez que alguien cambie esa limpieza.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/const labSeguiaAgendado = isLabAgendadaHoy\(docId\);\s*\n\s*const ok = await _anularCitaAsignadaReal\(apt\);/.test(codigo),
+        "la lectura va ANTES de la anulación, en ese orden");
+      t.cierto(/if \(labSeguiaAgendado\) \{/.test(codigo),
+        "y el aviso se decide con esa foto, no releyendo el almacén después");
+      t.falso(/p\.labs = p\.labs\.filter\(\(x\) => x !== sDoc\)/.test(codigo),
+        "nadie vuelve a sacar el documento de p.labs al anular la cita de control");
     });
 
     t.caso("markLabAgendadaHoy: con documento vacío no escribe nada", () => {
