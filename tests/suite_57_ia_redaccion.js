@@ -2408,5 +2408,67 @@ module.exports = {
         "y con límite por los dos lados, no solo por delante");
     });
 
+    // =================================================================
+    //  v18.0.55 — REPORTE EN VIVO DEL MÉDICO (1-sep), con la nota generada delante.
+    //  Dos defectos en la misma sección del papel que él firma.
+    // =================================================================
+    t.caso("v18.0.55: la lista de próximos laboratorios va con NOMBRES, no con claves de programador", () => {
+      // Lo que salía en la nota, textual:
+      //     :: PRÓXIMOS LABORATORIOS (EN ~3 MESES):
+      //     COLESTEROL_LDL
+      //     GLUCOSA
+      //     UROANALISIS
+      // Regla C del proyecto incumplida en el peor sitio: el documento clínico.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true, dislipidemia: true },
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 }, HBA1C: { fecha: "2026-05-30", valor: 6.64 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      t.cierto(j.order_list.length > 0, "hay exámenes que ordenar (control del escenario)");
+      // La lista de CLAVES sigue existiendo: sus lectores la cruzan con el catálogo de CUPS.
+      t.cierto(j.order_list.indexOf("GLUCOSA") >= 0, "la lista de claves NO se toca: la usa el cruce con CUPS");
+      // Y la nueva, la que el prompt manda listar, va en castellano.
+      t.igual(j.order_list_legible.length, j.order_list.length, "una entrada legible por cada clave");
+      t.cierto(j.order_list_legible.indexOf("Glicemia") >= 0, "«GLUCOSA» se lee «Glicemia»");
+      const crudas = j.order_list_legible.filter((n) => /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(n));
+      t.igual(crudas, [], "y NINGUNA entrada legible puede tener forma de clave de programador");
+    });
+
+    t.caso("v18.0.55: el prompt manda listar la lista LEGIBLE, no la de claves", () => {
+      // Comprobación de alcance: sin esto, se puede añadir el campo legible y dejar el
+      // prompt pidiendo el de claves — el defecto seguiría igual con el arreglo puesto.
+      const fs2 = require("fs"), path2 = require("path");
+      const src2 = fs2.readFileSync(path2.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/listando order_list_legible uno por línea/.test(src2),
+        "el prompt lista la versión legible");
+      t.falso(/listando order_list uno por línea/.test(src2),
+        "y ya no la de claves");
+    });
+
+    t.caso("v18.0.55: al modelo no le llega NI UNA fecha de calendario, y se le prohíbe calcularla", () => {
+      // La nota decía «CITA ... EL 2026-12-03». Comprobado con el arnés: en el JSON que
+      // recibe el modelo no viaja ninguna fecha exacta —todas se relativizan a propósito,
+      // porque una fecha es un cuasi-identificador—, así que esa fecha la CALCULÓ él solo.
+      // El médico se la encuentra firmada como si fuera una cita agendada.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true },
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      const isos = JSON.stringify(j).match(/\d{4}-\d{2}-\d{2}/g) || [];
+      t.igual(isos, [], "ninguna fecha ISO cruda viaja al modelo");
+      t.cierto(/en .*d[ií]a|en ~|mes/.test(String(j.ftl_date) + " " + String(j.control_date)),
+        "las fechas van como PLAZO relativo: " + j.ftl_date + " / " + j.control_date);
+
+      const fs3 = require("fs"), path3 = require("path");
+      const src3 = fs3.readFileSync(path3.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/NUNCA conviertas un plazo en una fecha de calendario/.test(src3),
+        "y se le prohíbe de frente convertir el plazo en una fecha");
+      t.falso(/CITA CONTROL DE RIESGO CARDIOVASCULAR EL \[control_date\]/.test(src3),
+        "la plantilla ya no lleva el «EL» que invitaba a poner una fecha");
+    });
+
   },
 };

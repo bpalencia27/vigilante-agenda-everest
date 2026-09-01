@@ -8974,3 +8974,60 @@ sean los ids: **nunca se mezclan dos mediciones**.
 | 137 | el respaldo vuelve a no leer la diastólica | *se leen siempre las dos cifras* | Sí — 19 ok |
 
 Banco completo: **2.863 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.55 — claves de programador en el papel que firma el médico, y una fecha que el modelo se inventó
+
+Los otros dos defectos del reporte del 1-sep, encontrados comparando la nota generada contra
+las capturas de la pantalla.
+
+### 1. `COLESTEROL_LDL` en un documento clínico
+
+La sección de la nota salía así:
+
+    :: PRÓXIMOS LABORATORIOS (EN ~3 MESES):
+    COLESTEROL_LDL
+    GLUCOSA
+    UROANALISIS
+
+Es la **Regla C** del proyecto —«lo que lee un humano no lleva identificadores de
+programador», hallazgo #61— incumplida en el peor sitio posible.
+
+La causa no era el JSON: `order_list` lleva claves **a propósito**, y su propio comentario lo
+explica («sus lectores las cruzan con el catálogo de CUPS; meterle nombres libres la
+rompería»). El defecto era que **el prompt le pedía a la IA imprimir esa lista tal cual**. Se
+añade la lista **paralela** `order_list_legible`, construida con el traductor único que ya
+existe y ya está probado (`mtrNombreLegibleAnalito`), y el prompt pasa a listar esa. La de
+claves sigue viajando para quien la necesita.
+
+### 2. Una fecha de calendario que nadie le dio al modelo
+
+La nota decía **«CITA CONTROL DE RIESGO CARDIOVASCULAR EL 2026-12-03»**. Comprobado con el
+arnés sobre el JSON real que recibe el modelo:
+
+    Fechas ISO crudas en el JSON que va a la IA: (ninguna)
+    ftl_date: "en 14 días"   ·   control_date: "en 21 días"
+
+**Ni una sola fecha de calendario viaja al modelo** —todas se relativizan a propósito, porque
+una fecha exacta es un cuasi-identificador—. Así que **esa fecha la calculó él solo** a partir
+del plazo, y el médico se la encuentra firmada como si fuera una cita agendada. Es exactamente
+el primero de los tres daños que el médico marcó en la entrevista: *«se inventa cifras que
+nadie midió»*.
+
+Dos cambios, porque una plantilla no basta para cerrar una tentación: la plantilla pierde el
+«EL» que invitaba a poner una fecha, y se añade una regla explícita —*«NUNCA conviertas un
+plazo en una fecha de calendario … Una fecha que tú calculas es una cita que nadie agendó»*.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 138 | el prompt vuelve a listar las claves crudas | *el prompt manda listar la lista legible* | Sí — 155 ok |
+| 139 | la lista legible se arma sin el traductor | *ninguna entrada puede tener forma de clave* | Sí — 155 ok |
+| 140 | se quita la prohibición de calcular fechas | *se le prohíbe de frente convertir el plazo en fecha* | Sí — 155 ok |
+
+La 139 es la que importa del par: sin ella, añadir el campo y llenarlo con las mismas claves
+habría pasado la prueba del prompt y dejado el defecto intacto.
+
+Banco completo: **2.866 comprobaciones pasan, 0 fallan.**

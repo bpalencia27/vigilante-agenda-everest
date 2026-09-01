@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.54
+// @version      18.0.55
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.54";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.55";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -38106,7 +38106,16 @@
     // afirmación jurídica. Se retira la mención; el médico la escribe a mano cuando aplique.
     // Cuando exista el campo real (`toma_previa_incumplida`), esta cláusula vuelve — atada a
     // él, nunca al criterio del modelo.
-    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list uno por línea (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR EL [control_date].', remisión si aplica).",
+    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list_legible uno por línea, con el nombre tal como viene (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR [control_date].', remisión si aplica).",
+    // v18.0.55 — REPORTE EN VIVO (1-sep): la nota decía «CITA ... EL 2026-12-03». Comprobado
+    // con el arnés: en el JSON que recibe el modelo NO VIAJA NI UNA fecha de calendario —
+    // todas salen relativizadas a propósito («en ~3 meses»), porque una fecha exacta es un
+    // cuasi-identificador. O sea que el modelo CALCULÓ esa fecha él solo a partir del plazo,
+    // y el médico se la encuentra firmada como si fuera una cita agendada. Es exactamente el
+    // primero de los tres daños que el médico marcó: «se inventa cifras que nadie midió».
+    // La plantilla de arriba ya no lleva el «EL» que invitaba a poner una fecha; esta regla
+    // lo dice de frente, porque una plantilla no basta para cerrar una tentación.
+    "NUNCA conviertas un plazo en una fecha de calendario. Los campos de fecha de este JSON vienen como plazo relativo («en 21 días», «en ~3 meses») a propósito: escríbelos TAL CUAL, con esas mismas palabras. No calcules el día, ni el mes, ni el año, ni escribas nada con forma de fecha (2026-12-03, 3/12/2026, «3 de diciembre») que no esté literalmente en el JSON. Una fecha que tú calculas es una cita que nadie agendó.",
     "===== SECCIÓN: SEGURIDAD DEL PACIENTE ===== :: URGENCIAS (pautas de alarma cardio y cerebrovascular en tono humano: dolor opresivo en pecho, dificultad para respirar, pérdida repentina de fuerza o del habla, alteración de la cara, dolor de cabeza intenso inusual). Añade la alerta médico-legal si falla_dispensacion aplica.",
     "",
     "# EJEMPLO DE FORMA (solo el patrón '::' de UNA sección; el contenido real sale del JSON)",
@@ -39514,6 +39523,23 @@
       // asistente realmente va a ordenar (verificado: en ERC G4 con lípidos vencidos,
       // plan.ordenar incluye el HDL cosechado; el order_list viejo no).
       order_list: claves(plan.ordenar),
+      // v18.0.55 — REPORTE EN VIVO DEL MÉDICO (1-sep), con la nota delante: la sección
+      // «PRÓXIMOS LABORATORIOS» salía así, en el papel que él firma:
+      //
+      //     COLESTEROL_LDL
+      //     GLUCOSA
+      //     UROANALISIS
+      //
+      // Claves de programador en un documento clínico. Es la Regla C del proyecto («lo que
+      // lee un humano no lleva identificadores de programador», hallazgo #61) incumplida en
+      // el peor sitio posible.
+      //
+      // `order_list` NO se toca: el comentario de arriba explica por qué lleva claves —sus
+      // lectores las cruzan con el catálogo de CUPS— y meterle nombres libres la rompería.
+      // Lo que faltaba era la lista PARALELA para leer, con el traductor único que ya existe
+      // y ya está probado (mtrNombreLegibleAnalito, Regla C de suite_72). El prompt pasa a
+      // listar ESTA; la de claves sigue viajando para quien la necesita.
+      order_list_legible: claves(plan.ordenar).map((k) => mtrNombreLegibleAnalito(k)).filter(Boolean),
       denied_list: claves(plan.bloqueados),
       // v17.6.76 — auditoría 25-ago (ítem 4): el motor ya calcula, en mtrConsolidarMtt
       // (vía mtrPlanFallas -> resumen.fallas.fusiones/.fechasDedicadas), cuándo el
