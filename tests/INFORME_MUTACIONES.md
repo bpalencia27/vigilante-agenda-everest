@@ -7770,3 +7770,60 @@ clonar, la prohibición dejaría de tener motivo — y la prueba de la premisa c
 en vez de dejar una regla huérfana que nadie sabe por qué existe.
 
 Banco completo: **2.806 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.35 — El Redactor: lo que el médico escribe llega entero, y deja de salirle en rojo
+
+Reporte en consulta: *«no está teniendo muy en cuenta lo que yo escribo en el cuadro de texto
+antes de generar y no entiende los contextos anteriores que yo pego»*. Tres defectos distintos
+detrás de esa frase, los tres del enjambre del 01-sep.
+
+### 1. El corte en seco a 800 caracteres
+
+`slice(0, 800)`, sin aviso a nadie. Medido con una nota de control anterior pegada de **1.339
+caracteres**: llegaban 800 y se perdían 539, con el corte cayendo a mitad de palabra. Y lo que
+se pierde suele ser **la instrucción**, porque uno la escribe al final.
+
+El tope sube a 6.000 y el corte, cuando toca, se hace por **ítem completo** —la misma función
+que ya usa el ancla del control anterior desde la v17.0.1, por este mismo motivo—. La pregunta
+del modo «Preguntar» sube de 300 a 2.000: una pregunta clínica con contexto no cabe en 300.
+
+### 2. El rótulo del bloque contemplaba solo la mitad de lo que trae
+
+Se llamaba «INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN». Pero por ese mismo cuadro el médico
+pega el control anterior entero, que son **datos**, no una orden de estilo — así que una nota
+pegada se leía como instrucción.
+
+Pasa a **LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA**, con la decisión del médico escrita
+dentro: lo que él aporta es **pasado**, lo que el script calcula es **presente**, y ante una
+contradicción manda lo de hoy — pero **no en silencio**: el cambio se escribe en la propia nota,
+con las dos cifras y su dirección, como frase clínica y no como nota al margen.
+
+> Al renombrar el bloque, la prueba *«todo rótulo que el prompt cita, el mensaje lo emite de
+> verdad»* (v17.13.0) se puso roja: había renombrado el bloque en el mensaje y no en la lista de
+> precedencia del prompt. Cazó una desconexión **real** que yo acababa de introducir.
+
+### 3. La caja roja marcaba como inventadas las cifras del propio médico
+
+`mtrVerificarCifrasIA` solo daba por respaldadas las de la **hoja**. El automonitoreo que el
+paciente le trae, la nota del control anterior que él pegó — todo eso salía en rojo como «el
+modelo pudo inventarlas». O sea: **el borrador que usaba fielmente su contexto era justo el que
+salía marcado**. Un aviso que grita con lo que uno mismo aportó enseña a ignorarlo, y entonces
+deja de servir para lo único que importa.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 57 | vuelve el corte en seco a 800 | *ya no se corta en seco* | Sí — 2.810 |
+| 58 | se sube el tope pero se corta a mitad de palabra | *ya no se corta en seco* (la mitad del ítem completo) | Sí — 2.810 |
+| 59 | la caja roja vuelve a ignorar el aporte del médico | *el modal le pasa esas fuentes* | Sí — 2.810 |
+| 60 | `extraConocido` deja de contarse dentro de la función | *las cifras que él aportó NO se marcan* | Sí — 2.810 |
+| 61 | el bloque se renombra en el mensaje y no en la precedencia | *rótulo que el prompt cita* + otras dos | Sí — 2.810 |
+| 62 | se pierde la regla de pasado/presente | **primero NO cayó nadie** → prueba nueva → repetida y cae | Sí — 2.810 |
+
+La **62** es la séptima prueba hueca de la jornada: una **decisión explícita del médico** vivía
+solo en el texto del prompt, sin nada que la vigilara. Se podía borrar y el banco seguía verde.
+
+Banco completo: **2.810 comprobaciones pasan, 0 fallan.**

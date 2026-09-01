@@ -286,6 +286,68 @@ module.exports = {
       t.igual(limpias.length, 0, "PA 120/80 con hechos de 120/80: nada que marcar");
     });
 
+    t.caso("v18.0.35: las cifras que el propio médico aportó NO se le marcan como inventadas por la IA", () => {
+      // El defecto: la caja roja solo daba por respaldadas las cifras de la HOJA. Las que el
+      // médico escribió o pegó en su cuadro de texto —el automonitoreo que le trae el
+      // paciente, la nota del control anterior— se marcaban como «el modelo pudo
+      // inventarlas». O sea: el borrador que usaba fielmente su contexto era justo el que
+      // salía en rojo. Un aviso que grita con lo que uno mismo aportó enseña a ignorarlo, y
+      // entonces deja de servir para lo único que importa, que es cazar la cifra inventada
+      // de verdad.
+      const hojaSinPa = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", imc: 27 }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const borrador = "REFIERE AUTOMONITOREO DOMICILIARIO CON CIFRAS PROMEDIO DE 132/84 mmHg.";
+      const sinRespaldo = api.mtrVerificarCifrasIA(borrador, hojaSinPa);
+      t.cierto(sinRespaldo.length >= 2, "sin el aporte del médico, 132 y 84 se marcan (y está bien: no están en la hoja)");
+
+      const loQueEscribioElMedico = ["TRAE TENSIONES DE CASA, PROMEDIO 132/84, BIEN TOLERADAS"];
+      const conRespaldo = api.mtrVerificarCifrasIA(borrador, hojaSinPa, loQueEscribioElMedico);
+      t.igual(conRespaldo.length, 0,
+        "con lo que él aportó como fuente conocida, esas mismas cifras dejan de marcarse");
+
+      // Y la contrapartida: que contar su aporte no vuelva la caja ciega para lo demás.
+      const inventada = api.mtrVerificarCifrasIA(borrador + " CREATININA 2.7 mg/dL.", hojaSinPa, loQueEscribioElMedico);
+      t.cierto(inventada.some((x) => String(x.numero) === "2.7"),
+        "una creatinina que no está ni en la hoja ni en lo que él escribió se sigue marcando");
+    });
+
+    t.caso("v18.0.35 (decisión del médico): lo que él pega es PASADO, lo calculado es PRESENTE, y el cambio se escribe en la nota", () => {
+      // Su decisión, al pie de la letra: «lo que es contexto se refiere a que es pasado, por
+      // lo que lo que el script calcula se considera presente, pero se debe dejar constancia
+      // del cambio en la misma redacción». Sin esta prueba la regla se puede borrar del
+      // prompt sin que nada se ponga rojo — pasó: la mutación M6 de esta versión no despertó
+      // a nadie hasta que se escribió este caso.
+      const p = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {
+        indicaciones: "EN EL CONTROL PASADO LA TENSION ERA 152/94",
+      });
+      const bloque = p.user.slice(p.user.indexOf("LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ"));
+      t.cierto(/CONTRADICE[\s\S]{0,120}manda la de arriba/.test(bloque),
+        "ante una contradicción manda la cifra de HOY, la que midió el script");
+      t.cierto(/antecedente/i.test(bloque),
+        "y lo que él aporta queda como el antecedente, no como el dato de hoy");
+      t.cierto(/No elijas en\s*\n?\s*silencio|no elijas en silencio/i.test(bloque.replace(/\s+/g, " ")) || /No elijas en silencio/.test(bloque.replace(/\s+/g, " ")),
+        "la elección NO se hace en silencio");
+      t.cierto(/escribe el cambio en la propia nota/i.test(bloque.replace(/\s+/g, " ")),
+        "el cambio se deja por escrito en la propia nota");
+      t.cierto(/con las dos cifras y su dirección/i.test(bloque.replace(/\s+/g, " ")),
+        "con las dos cifras y hacia dónde se movió");
+      t.cierto(/DESCENSO RESPECTO A/.test(bloque),
+        "y con un ejemplo de cómo se lee eso escrito como frase clínica, no como nota al margen");
+    });
+
+    t.caso("v18.0.35: y el modal le pasa de verdad esas fuentes a la caja roja", () => {
+      // La función es pura y ya aceptaba `extraConocido`; lo que faltaba era que el sitio de
+      // llamada le pasara lo que el médico aportó. Vive en el closure del modal, así que se
+      // fija por fuente, sin comentarios.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/mtrVerificarCifrasIA\(salida\.value, hoja, _respaldoDelMedico\)/.test(codigo),
+        "la caja roja se evalúa contra las fuentes del médico, no solo contra la hoja");
+      const decl = codigo.slice(codigo.indexOf("const _respaldoDelMedico"), codigo.indexOf("const _respaldoDelMedico") + 500);
+      t.cierto(/vgl-ia-indicaciones/.test(decl), "incluye el cuadro de datos e indicaciones");
+      t.cierto(/vgl-ia-pregunta/.test(decl), "incluye la pregunta del modo Preguntar");
+      t.cierto(/libreAhora\(\)/.test(decl), "e incluye lo que ya está escrito en la historia");
+    });
+
     t.caso("mtrVerificarCifrasIA: un lab que la IA cambió se marca; el que copió bien no", () => {
       const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17", ultimos: { LDL: { valor: 118, fecha: "2026-06-10" } }, medicamentos: ["LOSARTAN 50 MG"] });
       t.igual(api.mtrVerificarCifrasIA("Colesterol LDL 118 mg/dL. Losartán 50 mg.", hoja).length, 0,
@@ -568,14 +630,40 @@ module.exports = {
       [mo, re, an, cr].forEach((x) => t.cierto(/CERO INFERENCIA/.test(x.system), "todos: prohibido inventar"));
     });
 
-    t.caso("indicaciones del médico: entran al prompt como bloque propio Y pasan por el censor de nombres", () => {
+    t.caso("lo que el médico escribió o pegó: entra al prompt como bloque propio Y pasa por el censor de nombres", () => {
+      // v18.0.35 — el bloque se llamaba «INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN». Ese
+      // nombre solo contemplaba una de sus dos mitades: por ese mismo cuadro el médico pega
+      // el control anterior entero, que son DATOS, no una orden de estilo.
       const p2 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), { indicaciones: "enfatiza adherencia del paciente Pedro Perez y control en un mes" });
-      t.cierto(/INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN/.test(p2.user), "el bloque existe");
+      t.cierto(/LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA/.test(p2.user), "el bloque existe");
       t.cierto(/adherencia/.test(p2.user), "la instrucción llega");
       t.falso(/Pedro Perez/.test(p2.user), "el nombre NO viaja a Google (mtrSanearTextoLibreAI)");
       t.cierto(/NOMBRE_CENSURADO/.test(p2.user), "y queda la marca del censor en su lugar");
       const p3 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), {});
-      t.falso(/INSTRUCCIONES DEL MÉDICO/.test(p3.user), "sin indicaciones no hay bloque vacío");
+      t.falso(/LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ/.test(p3.user), "sin nada escrito no hay bloque vacío");
+    });
+
+    t.caso("v18.0.35: el cuadro del médico ya no se corta en seco a 800 caracteres", () => {
+      // Reporte en consulta: «no entiende los contextos anteriores que yo pego». El corte
+      // era un slice(0,800) sin aviso: de una nota de control anterior de 1.339 caracteres
+      // llegaban 800, y el corte caía en mitad de una palabra. Lo que se perdía solía ser la
+      // instrucción, que va al final de lo que uno escribe.
+      const larga = Array.from({ length: 60 }, (_, i) => "PUNTO " + (i + 1) + " DEL CONTROL ANTERIOR CON SU DETALLE").join("; ");
+      t.cierto(larga.length > 1500, "el texto de prueba es más largo que el tope viejo (" + larga.length + ")");
+      const p = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { indicaciones: larga });
+      t.cierto(p.user.indexOf("PUNTO 60 DEL CONTROL ANTERIOR") >= 0,
+        "el final del texto —donde suele ir la instrucción— sí llega al modelo");
+      // Y cuando de verdad hay que cortar, se corta por ítem completo, no a mitad de palabra.
+      const enorme = Array.from({ length: 400 }, (_, i) => "ITEM " + (i + 1) + " CON TEXTO DE RELLENO SUFICIENTE").join("; ");
+      const p2 = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { indicaciones: enorme });
+      const bloque = p2.user.slice(p2.user.indexOf("LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ"));
+      t.cierto(bloque.length > 5000, "se conserva muchísimo más que los 800 de antes");
+      // La propiedad que importa no es «no hay puntos suspensivos» —el corte los pone a
+      // propósito— sino que lo último que llega es un ÍTEM COMPLETO. El defecto viejo cortaba
+      // a mitad de palabra («PLAN: SE») y un fragmento colgante se puede leer como una orden.
+      const cola = bloque.slice(0, bloque.indexOf("…") + 1);
+      t.cierto(/ITEM \d+ CON TEXTO DE RELLENO SUFICIENTE…$/.test(cola),
+        "lo último que llega es un ítem entero, no media palabra: " + JSON.stringify(cola.slice(-60)));
     });
 
     // v17.3.0 — mismo motivo que la prueba de arriba: "gemini-2.5-flash" salió de

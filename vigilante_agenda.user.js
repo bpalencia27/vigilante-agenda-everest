@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.34
+// @version      18.0.35
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.34";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.35";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -37103,7 +37103,11 @@
   const MTR_PRECEDENCIA_SYS = [
     "# FUENTES Y SU ORDEN DE MANDO",
     "Solo existen los bloques que recibes abajo. Si dos se contradicen, manda el de arriba:",
-    "1. INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN — lo que él te pide expresamente para este borrador.",
+    // v18.0.35 — el bloque 1 se llamaba «INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN», y
+    // ese nombre solo contemplaba una de sus dos mitades: por ese mismo cuadro el médico
+    // pega el control anterior entero, que son DATOS del paciente, no una orden de estilo.
+    // Con el nombre viejo, una nota pegada se leía como instrucción.
+    "1. LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA — trae dos cosas mezcladas y te toca distinguirlas: datos clínicos que él aporta (valen como hechos, son PASADO o aporte suyo) e instrucciones sobre cómo redactar (se obedecen, salvo que pidan afirmar un dato que no está en ningún bloque).",
     "2. DATOS APORTADOS POR EL MÉDICO PARA ESTA NOTA — lo que anotó en la consulta de HOY.",
     "3. TEXTO YA REGISTRADO EN LA HISTORIA HOY — lo que él lleva escrito en la casilla en este momento.",
     "4. LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST (viene dentro de HECHOS DEL PACIENTE) — antecedentes patológicos y familiares, hábitos, revisión por sistemas, examen físico y el texto ya guardado de esta historia.",
@@ -37553,6 +37557,20 @@
     return { hay: true, texto: texto, fecha: previo.fecha };
   }
 
+  // v18.0.35 — REPORTE EN CONSULTA: «no entiende los contextos anteriores que yo pego».
+  // El cuadro «Datos e indicaciones para este borrador» se recortaba EN SECO a 800
+  // caracteres con un slice, sin avisar a nadie. Medido con una nota de control anterior
+  // pegada de 1.339 caracteres: llegaban 800 y se perdían 539, con el corte cayendo en
+  // mitad de una palabra («PLAN: SE»). Lo que el médico creía haber aportado —muchas veces
+  // la instrucción, que va al final— no llegaba al modelo, y el modelo redactaba sin ella.
+  // El tope sube 7,5 veces y el corte, cuando toca, se hace por ítem completo (la función
+  // que ya se usa para el ancla del control anterior desde la v17.0.1, por este mismo
+  // motivo). 6.000 es holgado: el prompt entero con la hoja de hechos ronda los 2.000.
+  const MTR_APORTE_MEDICO_MAX = 6000;
+  // Y la pregunta del modo «consulta», que se cortaba a 300: una pregunta clínica con
+  // contexto no cabe en 300 caracteres.
+  const MTR_PREGUNTA_MAX = 2000;
+
   function mtrRedaccionPrompt(modo, hoja, opts) {
     const o = opts || {};
     const hechos = mtrHojaDeHechosTexto(hoja);
@@ -37595,7 +37613,7 @@
       system = MTR_RECO_SYS;
       instruccion = "redacta las RECOMENDACIONES de hoy para este paciente siguiendo tus reglas.";
     } else { // "consulta"
-      const preg = mtrSanearTextoLibreAI(String(o.pregunta || "").trim().slice(0, 300), o.nombrePaciente);
+      const preg = mtrSanearTextoLibreAI(_mtrRecortarPorItem(String(o.pregunta || "").trim(), MTR_PREGUNTA_MAX), o.nombrePaciente);
       instruccion = "responde la siguiente pregunta del médico USANDO ÚNICAMENTE los datos entregados. Si la respuesta no está, dilo claramente ('ese dato no está en la historia disponible'). Pregunta: \"" + preg + "\"";
     }
 
@@ -37620,8 +37638,34 @@
     if (datosExtra) bloques.push("DATOS APORTADOS POR EL MÉDICO PARA ESTA NOTA:\n" + datosExtra);
     // v15.6.0 — el campo libre «Indicaciones» del redactor: lo que el médico quiera que la
     // IA tenga en cuenta en ESTE borrador. Pasa por el mismo censor de nombres que todo.
-    const indicaciones = o.indicaciones ? mtrSanearTextoLibreAI(String(o.indicaciones).trim().slice(0, 800), o.nombrePaciente) : "";
-    if (indicaciones) bloques.push("INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN (síguelas sin inventar datos clínicos que no estén arriba):\n" + indicaciones);
+    const indicaciones = o.indicaciones ? mtrSanearTextoLibreAI(_mtrRecortarPorItem(String(o.indicaciones).trim(), MTR_APORTE_MEDICO_MAX), o.nombrePaciente) : "";
+    // v18.0.35 — DECISIÓN DEL MÉDICO, al pie de la letra: lo que él pega en este cuadro es
+    // «datos e instrucciones a la vez, y el script las separa; debe entender cualquier tipo
+    // de escrito como un chat LLM cualquiera». Y sobre la contradicción entre lo que él pega
+    // y lo que el script calcula: «lo que es contexto se refiere a que es pasado, y lo que el
+    // script calcula se considera presente, pero se debe dejar constancia del cambio en la
+    // misma redacción». El rótulo anterior («INSTRUCCIONES… síguelas sin inventar datos»)
+    // solo contemplaba una de las dos mitades: un control anterior pegado entero se leía
+    // como una instrucción, no como el pasado del paciente.
+    if (indicaciones) bloques.push([
+      "LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA:",
+      "Este bloque trae DOS cosas mezcladas y te toca a ti distinguirlas, como en cualquier",
+      "conversación: (a) DATOS CLÍNICOS —lo que él observó, lo que el paciente le refirió, o",
+      "una nota de un control anterior que pegó— y (b) INSTRUCCIONES sobre cómo quieres que",
+      "redactes (qué destacar, qué omitir, el tono, la extensión).",
+      "· Los DATOS que trae aquí son PASADO o aporte suyo, y valen: úsalos y trátalos como",
+      "  hechos con respaldo (no son invención tuya).",
+      "· Las INSTRUCCIONES se obedecen, salvo que te pidan afirmar un dato clínico que no",
+      "  esté en ningún bloque: eso no se hace ni pidiéndolo.",
+      "· Si algo de aquí CONTRADICE una cifra de los bloques de arriba, manda la de arriba",
+      "  —es la de HOY, medida en esta consulta— y lo de aquí es el antecedente. No elijas en",
+      "  silencio: escribe el cambio en la propia nota, con las dos cifras y su dirección",
+      "  (por ejemplo «PRESIÓN ARTERIAL DE 128/78 mmHg, CON DESCENSO RESPECTO A 152/94 mmHg",
+      "  DEL CONTROL PREVIO QUE APORTA EL MÉDICO»). Que se lea como una frase clínica, no",
+      "  como una nota al margen.",
+      "---",
+      indicaciones,
+    ].join("\n"));
     if (ejemplos) bloques.push(ejemplos);
     bloques.push("Con base únicamente en la información anterior, " + instruccion);
     return { system: system, user: bloques.join("\n\n") };
@@ -39439,7 +39483,22 @@
       const _pintarCifras = () => {
         try {
           let caja = modal.querySelector("#vgl-ia-cifras");
-          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja, _alertasDosisConocidas);
+          // v18.0.35 — la caja roja solo daba por respaldadas las cifras de la HOJA (más
+          // las alertas de dosis). Las que el propio médico escribió o pegó en el cuadro de
+          // texto, o en su pregunta, o las que ya están escritas en la historia, se le
+          // marcaban como «el modelo pudo inventarlas»: el borrador que usaba fielmente su
+          // contexto era justo el que salía en rojo. Un aviso que grita con lo que él mismo
+          // aportó enseña a ignorarlo, y entonces deja de servir para lo único que importa,
+          // que es cazar la cifra de verdad inventada.
+          // (No se mete aquí `_anclaPrevia`: se declara con `let` DESPUÉS de _pintarCifras y
+          //  el primer repintado caería en zona muerta temporal, tragado por el catch, con la
+          //  caja muerta para siempre. Mismo patrón que la v18.0.29.)
+          const _respaldoDelMedico = _alertasDosisConocidas.concat([
+            (($("#vgl-ia-indicaciones") || {}).value || ""),
+            (($("#vgl-ia-pregunta") || {}).value || ""),
+            (function () { try { return libreAhora().combinado || ""; } catch (e) { return ""; } })(),
+          ]);
+          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja, _respaldoDelMedico);
           if (!hallazgos.length) { if (caja) caja.remove(); return; }
           if (!caja) {
             caja = document.createElement("div");
