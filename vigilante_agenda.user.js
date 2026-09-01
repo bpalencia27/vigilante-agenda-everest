@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.37
+// @version      18.0.38
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.37";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.38";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13611,23 +13611,70 @@
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
       const codigos = new Set((pkg.cups || []).map((c) => String(c.codigo || "").trim()).filter(Boolean));
       const palabras = (pkg.keywords || []).map((k) => stripAccents(String(k)).toLowerCase());
-      let mejorIso = null;
-      for (const lab of labs) {
-        if (!lab || typeof lab !== "object") continue;
-        // Identificación por código CUPS del paquete (inequívoco) o por palabra clave del
-        // título (VIH, SOMF, sangre oculta…) — misma lógica de nombres que el resto.
-        const code = String(lab.CodigoParametro || lab.codigo || "").trim();
-        const name = stripAccents(String(lab.NombreParametro || lab.nombre || lab.examen || "")).toLowerCase();
-        const casa = codigos.has(code) || palabras.some((k) => name.includes(k));
-        if (!casa) continue;
+      // v18.0.38 — UN EXAMEN NO ES UN PAQUETE. Esta función devolvía «hecho» en cuanto UNA
+      // fila casara, y con eso el modal deshabilita la casilla y escribe en pantalla «se
+      // realizó hace N días; por ser tan reciente no la marcamos». Medido con el arnés,
+      // tres defectos distintos:
+      //
+      //   1. Z108 declara SIETE CUPS (perfil lipídico, creatinina, parcial de orina,
+      //      glicemia). Con una creatinina suelta de hace 92 días devolvía
+      //      {"iso":"2026-06-01","dias":92}: el paquete entero por cubierto, y el médico
+      //      leyendo que es «tan reciente» que no hace falta pedirlo.
+      //   2. Z103 «Hemoglobina y Hematocrito» lo daba por hecho una HEMOGLOBINA
+      //      GLICOSILADA, que no pertenece al paquete: la palabra clave «hemoglobina» casa
+      //      por SUBCADENA. Es la misma familia que el defecto de la v18.0.31, donde seis
+      //      nombres del hemograma se llevaban la casilla de la hemoglobina sérica.
+      //   3. Con el paquete completo pero fechas dispares (seis de marzo y uno de agosto)
+      //      devolvía la MÁS RECIENTE: «hecho hace 4 días». Un paquete es tan viejo como su
+      //      miembro más viejo, y esa fecha es justo la que decide si sigue vigente.
+      //
+      // Se exige COBERTURA COMPLETA por código CUPS, que es inequívoco, y se devuelve la
+      // fecha del componente MÁS ANTIGUO. Las palabras clave dejan de contar para la
+      // cobertura: no se puede saber a qué CUPS corresponde un nombre suelto, y ya se vio
+      // lo que pasa cuando se supone. Solo siguen valiendo para los paquetes que no
+      // declaran CUPS, donde no hay nada mejor.
+      // Dirección del error, a propósito: si no se puede establecer que TODO el paquete
+      // está cubierto, no se afirma que esté hecho. Quedarse corto cuesta repetir una
+      // orden; pasarse cuesta una tamización que nadie hizo y que el script dio por hecha.
+      const _fechaUtilDe = (lab) => {
         // Un examen sin resultado ("PENDIENTE", o estado 1 en Athenea) NO cuenta como
         // hecho: escribirlo cubierto sería "ya se lo hizo" cuando la muestra ni siquiera
         // se procesó. Misma regla que ya usa _ultimaFechaPorAnalito (v11.0.1).
         const resultVal = _valorCrudoLab(lab.Resultado) ?? _valorCrudoLab(lab.resultado) ?? _valorCrudoLab(lab.valor);
-        if (resultVal === undefined) continue;
-        if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") continue;
+        if (resultVal === undefined) return null;
+        if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") return null;
         const fi = _extractAtheneaFecha(lab);
-        if (fi && fi.iso && (!mejorIso || fi.iso > mejorIso)) mejorIso = fi.iso;
+        return (fi && fi.iso) ? fi.iso : null;
+      };
+
+      if (codigos.size) {
+        // Por cada CUPS del paquete, la fecha MÁS RECIENTE en que aparece cubierto.
+        const porCups = new Map();
+        for (const lab of labs) {
+          if (!lab || typeof lab !== "object") continue;
+          const code = String(lab.CodigoParametro || lab.codigo || "").trim();
+          if (!code || !codigos.has(code)) continue;
+          const iso = _fechaUtilDe(lab);
+          if (!iso) continue;
+          const prev = porCups.get(code);
+          if (!prev || iso > prev) porCups.set(code, iso);
+        }
+        if (porCups.size < codigos.size) return null;          // falta al menos un componente: no se afirma nada
+        let masAntiguo = null;
+        porCups.forEach((iso) => { if (!masAntiguo || iso < masAntiguo) masAntiguo = iso; });
+        const msAnt = new Date(masAntiguo + "T00:00:00").getTime();
+        return { iso: masAntiguo, dias: Math.round((hoyMs - msAnt) / 86400000), componentes: porCups.size };
+      }
+
+      // Paquete sin CUPS declarados: no hay nada mejor que el nombre. Se conserva la
+      // conducta anterior, acotada a este caso.
+      let mejorIso = null;
+      for (const lab of labs) {
+        if (!lab || typeof lab !== "object") continue;
+        const name = stripAccents(String(lab.NombreParametro || lab.nombre || lab.examen || "")).toLowerCase();
+        if (!palabras.some((k) => name.includes(k))) continue;
+        const iso = _fechaUtilDe(lab);
+        if (iso && (!mejorIso || iso > mejorIso)) mejorIso = iso;
       }
       if (!mejorIso) return null;                              // el examen no aparece: no se puede afirmar que esté hecho
       const fechaMs = new Date(mejorIso + "T00:00:00").getTime();

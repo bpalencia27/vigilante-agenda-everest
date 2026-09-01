@@ -7952,3 +7952,66 @@ La **73** es la mutación en dirección contraria: quitar el `once` sin más hab
 defecto (dejar de escuchar) por otro (escuchar N veces y contar N cambios por uno).
 
 Banco completo: **2.814 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.38 — Un examen no es un paquete
+
+Hallazgo `L25747`. La función devolvía «hecho» **en cuanto UNA fila casara**, y con eso el modal
+deshabilita la casilla y escribe en pantalla *«se realizó hace N días; por ser tan reciente no la
+marcamos»*: una afirmación falsa sobre una tamización que nadie hizo. Reproducido con el arnés:
+
+```
+Z108 (7 CUPS), y Athenea solo trae la creatinina, de hace 3 meses
+  ANTES   {"iso":"2026-06-01","dias":92}     <- el paquete entero por cubierto
+  DESPUÉS null
+
+Z103 «Hemoglobina y Hematocrito», y solo hay una HbA1c (que NO es del paquete)
+  ANTES   {"iso":"2026-08-25","dias":7}      <- «hemoglobina» casa por SUBCADENA
+  DESPUÉS null
+```
+
+### El tercer defecto, que apareció al reproducir los otros dos
+
+Con el paquete **completo** pero fechas dispares —seis componentes de marzo y uno de agosto—
+devolvía la **más reciente**:
+
+```
+  ANTES   {"iso":"2026-08-28","dias":4}                     <- «hecho hace 4 días»
+  DESPUÉS {"iso":"2026-03-01","dias":184,"componentes":7}   <- la verdad
+```
+
+Un perfil lipídico de hace seis meses se daba por actual porque los triglicéridos se repitieron
+la semana pasada. Y esa fecha es exactamente la que decide si el paquete sigue vigente.
+
+### La regla nueva, y su dirección
+
+Se exige **cobertura completa por código CUPS**, que es inequívoco, y se devuelve la fecha del
+componente **más antiguo**. Las palabras clave dejan de contar para la cobertura: no se puede
+saber a qué CUPS corresponde un nombre suelto, y ya se vio lo que pasa cuando se supone (es la
+misma familia que la v18.0.31, donde seis nombres del hemograma se llevaban la casilla de la
+hemoglobina sérica). Siguen valiendo solo para paquetes que no declaran CUPS, donde no hay nada
+mejor.
+
+**La dirección del error es deliberada:** si no se puede establecer que TODO el paquete está
+cubierto, no se afirma que esté hecho. Quedarse corto cuesta repetir una orden; pasarse cuesta
+una tamización que nadie hizo y que el script dio por hecha.
+
+> El banco seguía verde con el defecto puesto: **ninguna prueba cubría esta conducta**. Por eso
+> vivía. Las cuatro mutaciones de abajo existen para que no vuelva a pasar.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 74 | vuelve «basta con uno» | *un paquete de 7 CUPS NO se da por hecho con un examen suelto* | Sí — 2.817 |
+| 75 | vuelve la fecha más reciente en vez de la más antigua | *un paquete es tan viejo como su componente más viejo* | Sí — 2.817 |
+| 76 | las palabras clave vuelven a cubrir un paquete con CUPS | las **tres** pruebas nuevas | Sí — 2.817 |
+| 77 | un PENDIENTE vuelve a contar como hecho | *un examen PENDIENTE no cuenta* (v17.6.99, ya existía) | Sí — 2.817 |
+
+Y una nota sobre el propio banco: la meta-regla **M4-AST** (`suite_34`) rechazó una aserción
+tautológica `t.cierto(true, …)` que yo había puesto como salida defensiva por si el paquete no
+existía en el catálogo. Tenía razón: una prueba que puede pasar sin comprobar nada no es una
+prueba. Se sustituyó por la comprobación real de que Z103 sigue declarando esa palabra clave.
+
+Banco completo: **2.817 comprobaciones pasan, 0 fallan.**
