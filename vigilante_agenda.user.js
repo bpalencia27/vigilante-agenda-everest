@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.90
+// @version      18.0.91
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.90";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.91";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6917,6 +6917,11 @@
     const cerrar = () => { try { modal.remove(); } catch (e) {} };
     close.addEventListener("click", cerrar);
     modal.addEventListener("click", (e) => { if (e.target === modal) cerrar(); });
+    // v18.0.91 — hallazgo #43 del enjambre: era el único modal del script que no pasaba
+    // por el patrón universal de accesibilidad (Escape cierra, Tab queda atrapado dentro)
+    // que ya usan los otros ~9 modales — el médico que se acostumbró a que Escape cierra
+    // cualquier cuadro del Vigilante lo pulsaba aquí y no pasaba nada.
+    if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, cerrar);
 
     (o.opciones || []).forEach((op) => {
       const b = document.createElement("button");

@@ -77,6 +77,7 @@ module.exports = {
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
     "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
     "vglMinimizarPanel", "vglMinBarra", "_vglMinDescartarDeOtroPaciente",
+    "_vglChooserModal", "_activarAccesibilidadModal",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -830,6 +831,22 @@ module.exports = {
       opt._listeners.click[0]({});
       return opt;
     }
+
+    // v18.0.91 — hallazgo #43 del enjambre: _vglChooserModal (selector "Exámenes"/"Examen
+    // normal") era el único modal del script que no pasaba por _activarAccesibilidadModal
+    // — Escape no lo cerraba y Tab no quedaba atrapado dentro, a diferencia de los otros
+    // ~9 modales del proyecto.
+    t.caso("hallazgo #43 — _vglChooserModal ahora pasa por _activarAccesibilidadModal: Escape lo cierra, igual que el resto de modales", () => {
+      const c = cargar({ silencioso: true });
+      const modal = c.api._vglChooserModal({
+        titulo: "Elegir",
+        opciones: [{ id: "x", rotulo: "Opción X", icono: "🧪" }],
+      });
+      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length),
+        "el modal tiene un listener 'keydown' propio (lo instala _activarAccesibilidadModal) — antes solo tenía 'click'");
+      t.cierto(!!(modal._listeners && modal._listeners.click && modal._listeners.click.length),
+        "y sigue conservando su canal de cierre de siempre (clic afuera)");
+    });
 
     t.caso("createLabInjectorUI: crea el botón flotante una sola vez", () => {
       const antes = cLab.env.doc.body.children.length;

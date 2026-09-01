@@ -10572,3 +10572,34 @@ importa que se pudo leer o no, nunca el texto.
 | 226 | vuelve `GM_xmlhttpRequest` directo, sin `_gmReq` (**el defecto original**, función completa restaurada desde v18.0.89) | *suite_05: hallazgo #42 — dos peticiones IDÉNTICAS y simultáneas comparten UNA sola llamada real a Athenea* | Sí |
 
 Banco completo: **2.950 comprobaciones pasan, 0 fallan.**
+
+## v18.0.91 — el selector "Exámenes"/"Examen normal" ya se cierra con Escape, como el resto de modales
+
+Hallazgo #43 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. `_vglChooserModal`
+era el único modal del script que no pasaba por `_activarAccesibilidadModal` (el patrón universal
+del proyecto, usado en ~9 sitios distintos): Escape no lo cerraba y Tab no quedaba atrapado dentro
+de él. El refutador disidente concedió el mecanismo exacto (confirmado con el arnés: el modal solo
+registraba `'click'`, cero `'keydown'`) pero argumentó que el daño se desinfla porque el chooser
+YA tiene otros dos canales de cierre estándar del proyecto (botón "✕" y "clic afuera cierra", el
+mismo patrón `bgClick` que usan `#vgl-paquete-modal`/`#vgl-labs-modal`) — cancelar sigue siendo un
+clic, no una acción bloqueada.
+
+Se aplica de todos modos: el arreglo es gratis (una línea, mismo patrón que los otros ~9 modales),
+no reduce ninguna protección existente, y cierra una inconsistencia real de UX que el médico
+reportaría como "¿por qué Escape no funciona AQUÍ, si funciona en todo lo demás?".
+
+### La reparación
+
+`_vglChooserModal` ahora llama `_activarAccesibilidadModal(modal, cerrar)` justo después de
+cablear los canales de cierre existentes (botón "✕" y clic-afuera), reutilizando la MISMA función
+`cerrar` que ya usan esos dos — sin capturar el cleanup que devuelve, igual que hacen la mayoría
+de los otros call sites del proyecto (el modal se destruye entero al cerrar, así que no hace falta
+desinstalar el listener a mano).
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 227 | se quita la llamada a `_activarAccesibilidadModal` (**el defecto original**) | *suite_15: hallazgo #43 — _vglChooserModal ahora pasa por _activarAccesibilidadModal* | Sí |
+
+Banco completo: **2.951 comprobaciones pasan, 0 fallan.**
