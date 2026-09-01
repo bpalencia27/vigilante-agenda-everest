@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.27
+// @version      18.0.28
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.27";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.28";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14195,8 +14195,20 @@ _vglOfrecerDeshacer(btn);
         #vgl-ordenar-modal .vgl-rcv-tfg b,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
         #vgl-ordenar-modal .vgl-rcv-aviso,#vgl-labs-modal .vgl-rcv-aviso{font-size:var(--t-micro);color:var(--c-azul) !important;line-height:1.45}
         /* v17.24.0 — dos bugs reales, hallados al resolver el punto ciego de suite_25 sobre
-           el CSS que buildOverlay() splicea (${_cssSeguro(() => MTR_RCV_CSS)}, invisible
-           para esa suite hasta esta versión):
+           el CSS que buildOverlay() splicea (la expresión _cssSeguro(() => MTR_RCV_CSS),
+           invisible para esa suite hasta esta versión):
+           v18.0.28 — ESTE NOMBRE ESTABA ESCRITO COMO INTERPOLACIÓN VIVA, con el signo de
+           dólar y las llaves, y esto es una PLANTILLA: la interpolación se
+           ejecutaba al inicializar la constante, la flecha leía MTR_RCV_CSS todavía en su
+           zona muerta temporal, lanzaba ReferenceError y _cssSeguro se lo tragaba
+           devolviendo "". El comentario que se entrega al navegador quedaba como
+           "…splicea (, invisible…". Se pretendía NOMBRAR la expresión, no evaluarla.
+           Y el filo de verdad: esto solo no tumba el arranque porque _cssSeguro es una
+           declaración de tipo function, que sí está hoisted. El día que alguien la convierta
+           en const o en arrow declarada más abajo, el archivo ENTERO deja de evaluarse en
+           carga — comprobado en aislamiento. Es la misma frontera JS/plantilla que la
+           Regla H (comentarios // impresos en pantalla) y la Regla Q (un */ que cierra un
+           comentario CSS antes de tiempo).
            (1) las 6 reglas de aquí abajo (tfg b, lista li, lista li b, vencido-item b,
            lista-orden li, det summary) solo llevaban el descendiente real del lado de
            #vgl-labs-modal — el lado de #vgl-ordenar-modal apuntaba a la clase sola, así que

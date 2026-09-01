@@ -513,5 +513,53 @@ module.exports = {
       t.falso(/\(compEval\.esComplejo \? "🔴 " : "🟢 "\)\s*\+/.test(bloque),
         "ya no se antepone un punto por esComplejo sobre un texto que traía el suyo");
     });
+
+    // =====================================================================
+    // v18.0.28 — REGLA J: UNA INTERPOLACIÓN VIVA DENTRO DE UN COMENTARIO SE EJECUTA IGUAL
+    //
+    // Tercer miembro de la misma familia de frontera JS/plantilla:
+    //   · Regla H (v18.0.6) — un `//` escrito dentro de una plantilla no comenta: se PINTA.
+    //   · Regla Q (v18.0.14) — un `*/` dentro de un comentario CSS lo cierra antes de
+    //     tiempo y el analizador se come la regla siguiente.
+    //   · Regla J (esta)     — un `${…}` dentro de un comentario de bloque SÍ se evalúa:
+    //     al motor de JavaScript el comentario CSS no le dice nada, la plantilla es una
+    //     plantilla y la interpolación corre.
+    //
+    // El caso real: dentro de `MTR_RCV_CSS` se escribió el nombre de la expresión que
+    // inserta ese CSS como si fuera una interpolación. Al inicializar la constante, la
+    // flecha leía `MTR_RCV_CSS` todavía en su ZONA MUERTA TEMPORAL, lanzaba ReferenceError,
+    // y `_cssSeguro` se lo tragaba devolviendo "": el comentario entregado al navegador
+    // quedaba como «…splicea (, invisible…».
+    //
+    // Y el filo que hace que esto no sea cosmético: solo NO tumba el arranque porque
+    // `_cssSeguro` es una declaración de tipo function, que está hoisted. El día que alguien
+    // la convierta en const o en arrow declarada más abajo, el archivo ENTERO deja de
+    // evaluarse en la carga — comprobado en aislamiento. Un userscript que no evalúa es un
+    // Centinela que no existe, en mitad de una consulta.
+    //
+    // Nota honesta: al escribir el arreglo cometí este mismo defecto DENTRO del comentario
+    // que lo explica —puse el ejemplo con su dólar y sus llaves— y el `node --check` lo
+    // cazó al instante. Por eso la regla mira el archivo entero y no solo el sitio conocido.
+    // =====================================================================
+    t.caso("Regla J - ningún comentario de bloque contiene una interpolación viva", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const malos = [];
+      const re = /\/\*[\s\S]*?\*\//g;
+      let m;
+      while ((m = re.exec(src)) !== null) {
+        const bloque = m.group === undefined ? m[0] : m[0];
+        if (bloque.indexOf("${") < 0) continue;
+        const linea = src.slice(0, m.index).split("\n").length;
+        const frag = (/\$\{[^}\n]{0,50}/.exec(bloque) || [""])[0];
+        malos.push(`L${linea}: ${frag}`);
+      }
+
+      t.igual(malos.length, 0,
+        `un \${...} dentro de un comentario de bloque se EJECUTA igual —el comentario es para CSS, no para JavaScript—, y si lee algo en su zona muerta temporal el archivo entero puede dejar de evaluarse. Para nombrar una expresión, escribirla sin el dólar. Casos: ${malos.slice(0, 5).join(" | ")}`);
+    });
+
   },
 };

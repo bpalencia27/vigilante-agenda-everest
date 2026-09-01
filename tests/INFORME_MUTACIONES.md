@@ -7344,3 +7344,56 @@ el recorte se quedaba **entero dentro del comentario** y no veía una sola líne
 ventana se toma ahora sobre el código ya despojado de comentarios.
 
 Banco completo: **2.788 comprobaciones pasan, 0 fallan.**
+
+## v18.0.28 — 1-sep-2026 · UNA INTERPOLACIÓN VIVA DENTRO DE UN COMENTARIO SE EJECUTA IGUAL
+
+Tercer miembro de la misma **familia de frontera JS/plantilla**, y el más silencioso de los
+tres:
+
+| regla | qué caza |
+|---|---|
+| **H** (v18.0.6) | un `//` escrito dentro de una plantilla no comenta: se **pinta** en pantalla |
+| **Q** (v18.0.14) | un `*/` dentro de un comentario CSS lo cierra antes de tiempo y el analizador **se come la regla siguiente** |
+| **J** (esta) | un `${…}` dentro de un comentario de bloque **sí se evalúa** |
+
+### El caso
+
+Dentro de `MTR_RCV_CSS` se escribió el nombre de la expresión que inserta ese CSS **como si
+fuera una interpolación**. Al motor de JavaScript el comentario CSS no le dice nada: la
+plantilla es una plantilla y la interpolación corre al inicializar la constante. La flecha leía
+`MTR_RCV_CSS` **todavía en su zona muerta temporal**, lanzaba `ReferenceError`, y `_cssSeguro`
+se lo tragaba devolviendo `""`. El comentario entregado al navegador quedaba como
+«…splicea **(**, invisible…».
+
+Reproducido en aislamiento con el mismo `_cssSeguro`:
+
+```
+lo que queda en el comentario entregado al navegador: ""
+```
+
+### El filo, que es lo que lo hace grave
+
+Esto **solo no tumba el arranque** porque `_cssSeguro` es una declaración de tipo `function`,
+que está hoisted. El día que alguien la convierta en `const` o en una arrow declarada más
+abajo, **el archivo entero deja de evaluarse en la carga** — comprobado en aislamiento:
+
+```
+ReferenceError: el archivo ENTERO dejaría de evaluarse en la carga
+```
+
+Un userscript que no evalúa es un Centinela que no existe, en mitad de una consulta.
+
+### Nota honesta
+
+Al escribir el arreglo **cometí este mismo defecto dentro del comentario que lo explica** —puse
+el ejemplo con su dólar y sus llaves— y el `node --check` lo cazó al instante. Por eso la
+Regla J mira el archivo entero y no solo el sitio conocido: el patrón es fácil de reintroducir
+justo al documentarlo.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 29 | vuelve la interpolación viva en el comentario CSS | *Regla J — ningún comentario de bloque contiene una interpolación viva* (`suite_72`) | Sí — 2.789 |
+
+Banco completo: **2.789 comprobaciones pasan, 0 fallan.**
