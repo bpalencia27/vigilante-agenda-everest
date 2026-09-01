@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.84
+// @version      18.0.85
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.84";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.85";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9461,8 +9461,13 @@
   function isPending(val) {
     if (val === null || val === undefined || val === "") return false;
     const s = typeof val === "string" ? val : String(val);
-    if (s.length > 32) return false;
+    // v18.0.85 — AUDITORÍA (hallazgo de enjambre #37): el descarte barato medía la cadena
+    // CRUDA, sin recortar. Relleno manual, pegado desde otra celda o Alt+Enter repetidos
+    // en Excel pueden inflar una celda real y corta ("Tamizar con CCU", 15 caracteres
+    // útiles) por encima del límite de 32 sin agregar ningún dato clínico — y la función
+    // la descartaba en silencio, como si no existiera. Se recorta ANTES de medir.
     const t = s.trim().toLowerCase();
+    if (t.length > 32) return false;
     return t === "susceptible" || t === "pendiente" || t.startsWith("tamizar");
   }
   // v7.8.1: exacto "Si"/"Sí" (sin acento insensible, sin distinguir mayúsculas) para

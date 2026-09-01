@@ -10363,3 +10363,27 @@ abundante(s)» no hacía falta agregarlo: ya lo cubría el `.includes("abundante
 | 218 | se quita el chequeo de severidad máxima (**el defecto original**) | *REGRESIÓN — leucocitos/hematíes INCONTABLES/INNUMERABLES/CAMPO CUBIERTO sí se reconocen como alterados* | Sí |
 
 Banco completo: **2.941 comprobaciones pasan, 0 fallan.**
+
+## v18.0.85 — isPending recorta antes de medir la longitud, no después
+
+Hallazgo #37 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+El comentario de la propia función dice la intención correcta ("primero los descartes baratos,
+y solo después se normaliza la cadena"), pero el descarte por longitud (`s.length > 32`) se
+aplicaba sobre la cadena CRUDA, no sobre la recortada. Relleno manual, pegado desde otra celda o
+Alt+Enter repetidos en Excel pueden inflar una celda real y corta ("Tamizar con CCU", 15
+caracteres útiles) por encima del límite de 32 sin agregar ningún dato clínico — la función la
+descartaba en silencio, como si no existiera. La actividad de tamizaje nunca entraba al índice
+de PyM: no aparecía en el panel, no disparaba el aviso al abrir la historia.
+
+### La reparación
+
+Se recorta `s` antes de medir la longitud, exactamente como proponía el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 219 | vuelve a medir la cadena cruda (**el defecto original**) | *REGRESIÓN — isPending recorta ANTES de medir la longitud, no después* | Sí |
+
+Banco completo: **2.942 comprobaciones pasan, 0 fallan.**

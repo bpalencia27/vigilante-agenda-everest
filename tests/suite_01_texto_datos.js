@@ -73,6 +73,19 @@ module.exports = {
       t.falso(api.isPending("x".repeat(40)), "un texto largo se descarta por coste");
     });
 
+    // v18.0.85 — HALLAZGO DE ENJAMBRE #37 (3 de 3 refutadores no lo tumbaron). El descarte
+    // barato por longitud medía la cadena CRUDA: relleno manual, pegado desde otra celda o
+    // Alt+Enter repetidos en Excel pueden inflar una celda real y corta por encima del
+    // límite de 32 sin agregar dato clínico, y la función la descartaba en silencio.
+    t.caso("REGRESIÓN — isPending recorta ANTES de medir la longitud, no después (hallazgo #37)", () => {
+      const conPadding = "   tamizar con ccu                    ";   // 38 sin recortar, 15 recortada
+      t.cierto(conPadding.length > 32, "el relleno por sí solo ya supera el límite: la prueba tiene sentido");
+      t.cierto(api.isPending(conPadding), "antes se descartaba por la longitud SIN recortar — el valor real sigue pendiente");
+      t.cierto(api.isPending("pendiente".padStart(20, " ").padEnd(20, " ")), "lo mismo con relleno a ambos lados");
+      // Y el descarte por longitud sigue funcionando cuando el contenido ÚTIL de verdad es largo.
+      t.falso(api.isPending("  " + "x".repeat(40) + "  "), "un texto realmente largo, con o sin relleno, se sigue descartando");
+    });
+
     // ---------- esSi: abandono del programa cardiovascular ----------
     t.caso("esSi solo acepta sí exacto", () => {
       t.cierto(api.esSi("Si"));
