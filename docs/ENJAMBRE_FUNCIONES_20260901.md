@@ -59,8 +59,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | una fecha de laboratorio con día de calendario imposible (31/04, 30/02) pasaba el rango 1-31/1-12 y llegaba a escribirse en un `<input type="date">`; el navegador la rechaza pero, a diferencia del valor (v17.6.45), nadie comprobaba el retorno — casilla vacía sin aviso, y además «reclamada» en `_fechasYaUsadas` sin poder servir de respaldo a otro analito | `_parseFechaHoraLike` / `injectLabsIntoCronicos` (sus tres escrituras de fecha) | **v18.0.74** | 200–203 |
 | un aviso nuevo del piloto de SharePoint (staff, no el médico en consulta) dentro de la ventana de 260 ms de un dismiss anterior podía desaparecer solo, borrado por el `remove()` diferido de la llamada previa — arreglado por higiene del indicador, no por daño clínico (el refutador tenía razón: el dato ya se había guardado antes del toast) | `spToast` / `dismissSpToast` | **v18.0.75** | 204 |
 | el título de la pestaña que parpadea se capturaba una sola vez por sesión y quedaba fijado para siempre — el arreglo propuesto por el hallazgo no bastaba por sí solo (verificado con una reproducción directa): `startFlash` llama a `stopFlash` ANTES de recapturar, y `stopFlash` restauraba el título sin comprobar si de verdad había un parpadeo activo, corrompiendo el título real antes de que la recaptura pudiera verlo | `startFlash` / `stopFlash` | **v18.0.76** | 205, 206 |
+| Escape y el chip de filtro rápido llamaban a `closeSheet()` directo, sin pasar por `_ajustesIntentarCerrar()`: un cambio sin guardar en Ajustes se perdía en silencio — 3 de 3 refutadores no lo tumbaron | `closeSheet` / `_ajustesIntentarCerrar` | **v18.0.77** | 207 |
 
-Quedan **18 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **17 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

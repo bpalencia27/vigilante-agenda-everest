@@ -10125,3 +10125,31 @@ arreglo completo, `document.title` conserva "Everest — Historia clínica" en v
 | 206 | se revierte la parte 2 (`stopFlash` vuelve a restaurar sin comprobar `habiaFlash`) | *misma prueba* | Sí |
 
 Banco completo: **2.928 comprobaciones pasan, 0 fallan.**
+
+## v18.0.77 — Escape y el chip de filtro ya no descartan un borrador sucio de Ajustes
+
+Hallazgo #30 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron** — el mayor
+consenso de todo el enjambre entre los pendientes.
+
+«Cierre de Ajustes respetando cambios sin guardar» (v15.6.0) documentaba la intención de que
+_ajustesIntentarCerrar() fuera LA puerta de salida, pero Escape y el clic en un chip de filtro
+rápido llamaban a `closeSheet()` directo, sin pasar por ella: un cambio sin guardar (la meta de
+HbA1c, el nombre del consultorio) se perdía en silencio, sin ninguna pregunta ni forma de
+deshacerlo — justo lo que la v15.6.0 decía que ya no podía pasar.
+
+### La reparación
+
+Tal como proponía el hallazgo: en vez de perseguir cada atajo por separado, se protege en el
+punto de unión. `closeSheet()` mismo consulta si hay Ajustes abiertos con un borrador sucio y,
+si los hay, delega en `_ajustesIntentarCerrar()` en vez de cerrar directo — así todo call-site
+presente y futuro queda protegido sin tener que acordarse uno por uno. Los que ya pasaban por
+`_ajustesIntentarCerrar()` no se ven afectados: para cuando llegan a `closeSheet()`, el borrador
+ya quedó vacío.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 207 | `closeSheet()` vuelve a cerrar directo sin consultar el borrador (**el defecto original**) | *REGRESIÓN — closeSheet() directo (Escape, chip de filtro) ya no descarta un borrador sucio* | Sí |
+
+Banco completo: **2.930 comprobaciones pasan, 0 fallan.**

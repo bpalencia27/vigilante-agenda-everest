@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.76
+// @version      18.0.77
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.76";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.77";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28275,7 +28275,19 @@
   }
 
   // ---- Hoja deslizante: Resumen del turno / Ajustes ----
-  function closeSheet() { state.sheet = null; el.root.classList.remove("sheet"); el.sheet.innerHTML = ""; }
+  // v18.0.77 — AUDITORÍA (hallazgo de enjambre #30): «Cierre de Ajustes respetando cambios
+  // sin guardar» (v15.6.0) solo protegía las salidas que pasaban por _ajustesIntentarCerrar
+  // — pero Escape y el clic en un chip de filtro rápido llamaban a closeSheet() DIRECTO,
+  // descartando en silencio un borrador sucio (p. ej. la meta de HbA1c recién tocada) sin
+  // ninguna pregunta ni forma de deshacerlo. Se protege en el punto de unión: closeSheet()
+  // mismo consulta si hay Ajustes abiertos con borrador sucio y, si los hay, delega en
+  // _ajustesIntentarCerrar() en vez de cerrar directo — así todo call-site queda protegido
+  // sin tener que acordarse uno por uno (los que ya pasan por _ajustesIntentarCerrar no se
+  // ven afectados: para cuando llegan aquí el borrador ya quedó vacío).
+  function closeSheet() {
+    if (state.sheet === "ajustes" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(); return; }
+    state.sheet = null; el.root.classList.remove("sheet"); el.sheet.innerHTML = "";
+  }
   // [v17.6.5] Alto contraste de 1 clic (botón de la cabecera): fondo sólido + zoom 1.12 en
   // todo el asistente, sin pasar por Ajustes. Transitorio como el silencio de 15 min: no se
   // persiste; al recargar vuelve el tema normal. El zoom inline gana al del tamaño de letra

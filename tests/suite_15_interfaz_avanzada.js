@@ -265,6 +265,49 @@ module.exports = {
       t.igual(cfg.sonido, false, "saveSettings persistió el cambio");
     });
 
+    // v18.0.77 — HALLAZGO DE ENJAMBRE #30. «Cierre de Ajustes respetando cambios sin
+    // guardar» (v15.6.0) solo protegía las salidas que pasaban por _ajustesIntentarCerrar
+    // — pero Escape y el clic en un chip de filtro llamaban a closeSheet() DIRECTO,
+    // descartando el borrador sin ninguna pregunta. Se arregla en el punto de unión:
+    // closeSheet() mismo, así que basta con llamarlo directo (como hacen Escape y el chip)
+    // para fijar el arreglo, sin tener que simular cada atajo de teclado por separado.
+    t.caso("REGRESIÓN — closeSheet() directo (Escape, chip de filtro) ya no descarta un borrador sucio de Ajustes (hallazgo #30)", () => {
+      // Se fuerza a cerrado primero: la prueba anterior puede dejar Ajustes abierto, y
+      // toggleSheet("ajustes") sobre una hoja YA abierta la cierra en vez de abrirla.
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      t.igual(cv.api.__state.sheet, "ajustes");
+      // _ajustesPonBorrador directo (en vez de simular el checkbox): así el caso no depende
+      // de qué valor le haya dejado a S.sonido una prueba anterior de esta misma suite —
+      // basta con un valor DISTINTO al actual para dejar un borrador de verdad sucio.
+      const sonidoAntes = cv.api.__S.sonido;
+      cv.api._ajustesPonBorrador("sonido", !sonidoAntes);
+      t.cierto(cv.api._ajustesSucio(), "el borrador quedó sucio");
+
+      // El camino que antes se saltaba la pregunta: Escape y el chip de filtro llaman a
+      // closeSheet() SIN pasar por _ajustesIntentarCerrar.
+      cv.api.closeSheet();
+
+      t.igual(cv.api.__state.sheet, "ajustes", "la hoja de Ajustes NO se cierra en silencio: antes sí, perdiendo el cambio");
+      t.igual(cv.api.__S.sonido, sonidoAntes, "S.sonido sigue intacto: el cambio no se descartó ni se guardó solo");
+      const bar = hoja.querySelector("#vgl-set-bar");
+      t.cierto(bar && !bar.classList.contains("vgl-d-none"), "se le pregunta al médico, con la barra de confirmación visible");
+      t.cierto(/Guardar los cambios antes de salir/.test(bar.innerHTML), "con el texto de la pregunta, no el de «tiene cambios sin guardar»");
+
+      // Y desde ahí, «Salir sin guardar» sí cierra de verdad — la salida sigue existiendo.
+      const salirSin = hoja.querySelector("#c-salir-sin");
+      disparar(salirSin, "click");
+      t.igual(cv.api.__state.sheet, null, "con la decisión explícita del médico, la hoja sí se cierra");
+      t.falso(cv.api._ajustesSucio(), "y el borrador quedó descartado, como pidió");
+    });
+
+    t.caso("REGRESIÓN — closeSheet() sin borrador sucio sigue cerrando directo, sin preguntar de más (hallazgo #30)", () => {
+      cv.api.toggleSheet("ajustes");
+      t.falso(cv.api._ajustesSucio(), "sin tocar nada, el borrador está limpio");
+      cv.api.closeSheet();
+      t.igual(cv.api.__state.sheet, null, "cierra directo: no hay nada que proteger");
+    });
+
     t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
       cv.api.closeSheet();
       cv.api.toggleSheet("ajustes");
