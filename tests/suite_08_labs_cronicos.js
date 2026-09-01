@@ -68,6 +68,35 @@ module.exports = {
       t.cierto(!!creatininaSuero && creatininaSuero.key === "CREATININA");
     });
 
+    // v18.0.31 — GUARDA DEL HEMOGRAMA. Medido con el arnés antes de tocar nada: SEIS
+    // nombres del hemograma casaban con la casilla de hemoglobina SÉRICA, y cuál ganaba lo
+    // decidía el orden en que Athenea devolviera las filas (los tres del panel son
+    // numéricos y de la misma fecha, así que _nuevoReemplazaCandidato empata). Una anemia
+    // de 9.8 podía quedar escrita como 30.2 (el HCM, en pg), y una A1c de 7.2 como una
+    // anemia severa que el paciente no tiene.
+    t.caso("_matchLabInWhitelist (v18.0.31): los índices del hemograma NO se llevan la casilla de hemoglobina sérica", () => {
+      const roban = [
+        "HEMOGLOBINA CORPUSCULAR MEDIA",                   // HCM, en pg
+        "CONCENTRACION DE HEMOGLOBINA CORPUSCULAR MEDIA",  // CHCM, en g/dL
+        "HEMOGLOBINA GLOBULAR MEDIA",
+        "HEMOGLOBINA A1C",                                 // glicosilada, en %
+        "HEMOGLOBINA FETAL",
+      ];
+      roban.forEach((n) => {
+        const m = testApi._matchLabInWhitelist({ nombre: n, NombreParametroPadre: "HEMOGRAMA IV (AUTOMATIZADO)" });
+        t.igual(m, null, n + " no puede caer en la casilla de hemoglobina: casilla vacía antes que dato inventado");
+      });
+      // Y la contrapartida, para que la guarda no se pueda «arreglar» excluyéndolo todo:
+      const hb = testApi._matchLabInWhitelist({ nombre: "HEMOGLOBINA" });
+      t.cierto(!!hb && hb.key === "HEMOGLOBINA", "la hemoglobina de verdad sigue casando");
+      // El CUPS exacto manda sobre el nombre y no lo toca ninguna exclusión.
+      const porCups = testApi._matchLabInWhitelist({ codigo: "902207", nombre: "HEMOGLOBINA CORPUSCULAR MEDIA" });
+      t.cierto(!!porCups && porCups.key === "HEMOGLOBINA", "el CUPS 902207 sigue mandando sobre el nombre");
+      // Y la glicosilada sigue yendo a SU casilla, no a la de hemoglobina ni a ninguna.
+      const glico = testApi._matchLabInWhitelist({ nombre: "HEMOGLOBINA GLICOSILADA" });
+      t.cierto(!!glico && glico.key === "HBA1C", "la glicosilada sigue yendo a HbA1c");
+    });
+
     t.caso("_matchLabInWhitelist: Triglicéridos CUPS 903868 no se confunde con RAC (Incidente v12.0.5)", () => {
       const trigli = testApi._matchLabInWhitelist({ codigo: "903868", nombre: "TRIGLICERIDOS" });
       t.cierto(!!trigli);

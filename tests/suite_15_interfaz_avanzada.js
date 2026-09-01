@@ -866,6 +866,18 @@ module.exports = {
     // botón vuelve a su sitio y el «↩ Deshacer» se retira casi en el mismo instante en
     // que aparecen: mirar el DOM al final del flujo no ve nada. Se graba lo que PASÓ:
     // cada texto que el script escribió en el botón y cada nodo que colgó del body.
+    // Esperar 40 ms fijos a que termine una cadena async es una prueba que depende de la
+    // carga de la máquina: con el banco corriendo en paralelo (o con Chromium al lado) la
+    // cadena de Athenea tarda más y la prueba se pone roja sin que haya regresión ninguna.
+    // Se espera A QUE PASE lo que se está midiendo, con un tope generoso.
+    async function esperarA(cond, maxMs) {
+      const t0 = Date.now();
+      while (!cond()) {
+        if (Date.now() - t0 > (maxMs || 5000)) return false;
+        await esperar(5);
+      }
+      return true;
+    }
     function grabarBoton(btn) {
       const visto = [];
       let valor = btn.innerHTML;
@@ -901,7 +913,7 @@ module.exports = {
       const nacidos = grabarBody(cLabOk);
       btn.onclick();
       elegirOpcionChooser(cLabOk, "historial");
-      await esperar(40);
+      await esperarA(() => dicho.some((x) => x.includes("no toqué nada") || x.startsWith("✓")), 5000);
 
       t.cierto(dicho.some((x) => x.includes("no toqué nada")),
         "el botón dice la verdad: no escribió ninguna casilla (" + JSON.stringify(dicho) + ")");
@@ -927,7 +939,10 @@ module.exports = {
       const dicho = grabarBoton(btn);
       btn.onclick();
       elegirOpcionChooser(cKill, "historial");
-      await esperar(40);
+      // dos señales que esperar: el aviso del botón y el aviso flotante (que llega más
+      // tarde, porque showToast agrupa en una cola antes de pintar).
+      await esperarA(() => dicho.some((x) => x.includes("desactivado ahora mismo")), 5000);
+      await esperarA(() => (bandeja.children || []).length > 0, 5000);
       t.cierto(dicho.some((x) => x.includes("desactivado ahora mismo")),
         "el botón llega a decir que el llenado está desactivado (" + JSON.stringify(dicho) + ")");
       t.falso(dicho.some((x) => x.startsWith("✓")), "y nunca canta casillas escritas");

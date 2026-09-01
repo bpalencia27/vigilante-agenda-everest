@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.30
+// @version      18.0.31
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.30";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.31";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1263,7 +1263,20 @@
     // dos anteriores se conservan por si otra vista o laboratorio lo rotula distinto.
     { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO", "FOSFORO INORGANICO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
     { key: "ALBUMINA", names: ["ALBUMINA EN SUERO", "ALBÚMINA EN SUERO"], codes: ["2002", "903801"], resultId: "resultadoAlbumina", dateId: "fechaResultAlbumina" },
-    { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
+    // v18.0.31 — GUARDA DEL HEMOGRAMA. «HEMOGLOBINA» a secas casa por SUBCADENA, y el
+    // hemograma trae varios nombres que la contienen. Medido con el arnés, SEIS nombres
+    // distintos caían en la casilla de hemoglobina sérica: HEMOGLOBINA CORPUSCULAR MEDIA
+    // (HCM, en pg), CONCENTRACION DE HEMOGLOBINA CORPUSCULAR MEDIA (CHCM, g/dL),
+    // HEMOGLOBINA GLOBULAR MEDIA, HEMOGLOBINA A1C, HEMOGLOBINA FETAL y la propia
+    // HEMOGLOBINA. Los tres del panel son numéricos y de la MISMA fecha, así que
+    // _nuevoReemplazaCandidato empata y gana el primero que Athenea devuelva: cuál cifra
+    // acaba en la historia lo decidía el orden de las filas. Una anemia de 9.8 podía
+    // quedar documentada como 30.2 (el HCM), y una A1c de 7.2 como una anemia severa.
+    // Mismo patrón de exclusión que ya protege a CREATININA (v11.0.1) y a COLESTEROL_LDL
+    // (v14.2.10). Los CUPS exactos (2034/902207) siguen mandando, así que ningún examen
+    // legítimo se pierde; y un nombre raro que hoy caía por error queda SIN casar —
+    // casilla vacía antes que dato inventado.
+    { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], excluye: ["CORPUSCULAR", "GLOBULAR", "HCM", "CHCM", "GLICOSILADA", "GLICADA", "A1C", "FETAL"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
 
   // v14.0.2 — CUPS DE ESCRITURA (ordenamiento) para HbA1c/PTH/Fósforo/Albúmina, confirmados

@@ -7517,3 +7517,56 @@ por código fuente, acotado a `_ejecutarLlenadoExamenes`, y la propia prueba lo 
 | 37 | el reintento vuelve a cantar verde con cero casillas | *(la misma)* | Sí — 2.794 |
 
 Banco completo: **2.794 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.31 — Seis nombres del hemograma se llevaban la casilla de la hemoglobina
+
+Hallazgo (C) del frente de laboratorios. `«HEMOGLOBINA»` casa por **subcadena**, y el hemograma
+trae varios nombres que la contienen. Reproducido con el arnés **antes de tocar nada**, contra el
+archivo vivo:
+
+```
+nombre                                             | casa con
+HEMOGLOBINA                                        | HEMOGLOBINA
+HEMOGLOBINA CORPUSCULAR MEDIA                      | HEMOGLOBINA   <- HCM, en pg
+CONCENTRACION DE HEMOGLOBINA CORPUSCULAR MEDIA     | HEMOGLOBINA   <- CHCM, en g/dL
+HEMOGLOBINA GLOBULAR MEDIA                         | HEMOGLOBINA
+HEMOGLOBINA A1C                                    | HEMOGLOBINA   <- la glicosilada, en %
+HEMOGLOBINA FETAL                                  | HEMOGLOBINA
+```
+
+Los tres del panel son **numéricos y de la misma fecha**, así que `_nuevoReemplazaCandidato`
+empata y gana **el primero que Athenea devuelva**: qué cifra acaba escrita en la historia lo
+decidía el orden de las filas, no la clínica. Una anemia de 9,8 podía quedar documentada como
+**30,2** (el HCM); una A1c de 7,2, como una anemia severa que el paciente no tiene.
+
+Mismo patrón de exclusión que ya protege a `CREATININA` (v11.0.1) y a `COLESTEROL_LDL`
+(v14.2.10). Los CUPS exactos (2034/902207) siguen mandando sobre el nombre, así que ningún
+examen legítimo se pierde; y un nombre raro que hoy caía por error queda **sin casar** —
+casilla vacía antes que dato inventado.
+
+### Y la fragilidad de mis propias pruebas de la v18.0.30
+
+Las dos pruebas de conducta de la v18.0.30 esperaban **40 ms fijos** a que terminara la cadena
+async de Athenea. Eso las hacía depender de la carga de la máquina: con el banco corriendo en
+paralelo (o con Chromium al lado) se ponen rojas sin que haya regresión ninguna — que es
+exactamente lo que un revisor externo observó y reportó como «el banco no es determinista».
+**Medido: cinco corridas seguidas del banco completo, todas 2.794/0.** El banco sí es
+determinista; lo frágil era la espera. Se cambia por esperar **a que pase lo que se mide**
+(`esperarA(cond, 5000)`), con tope generoso. No es un cambio de conducta del script, así que no
+lleva mutación propia: lo que fija esas dos pruebas siguen siendo las mutaciones 32–37.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 38 | se quita la exclusión entera (vuelve el defecto) | *los índices del hemograma NO se llevan la casilla de hemoglobina sérica* (`suite_08`) | Sí — 2.795 |
+| 39 | solo se quita `CORPUSCULAR` (el HCM vuelve a robar la casilla) | *(la misma)* | Sí — 2.795 |
+| 40 | solo se quita `A1C` (la glicosilada vuelve a la casilla de hemoglobina) | *(la misma)* | Sí — 2.795 |
+| 41 | la exclusión se pasa de rosca y se come la hemoglobina de verdad | *(la misma)* **+ una prueba vieja de la suite** | Sí — 2.795 |
+
+La mutación 41 es la contrapartida deliberada: una guarda que se «arregla» excluyéndolo todo
+también tiene que ponerse roja, o la prueba solo vigilaría una dirección.
+
+Banco completo: **2.795 comprobaciones pasan, 0 fallan.**
