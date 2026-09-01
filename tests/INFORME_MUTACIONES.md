@@ -9878,3 +9878,59 @@ prueba no da: documenta el mecanismo y reproduce el hallazgo, la de fuente es la
 que el cableado no se vuelva a romper.
 
 Banco completo: **2.915 comprobaciones pasan, 0 fallan.**
+
+## v18.0.71 — un consecutivo con la fecha empotrada podía colarse como el PyM de hoy
+
+Hallazgo #16 del enjambre de funciones, gravedad alta, 2 de 3 refutadores no lo tumbaron.
+
+`esNombreDeHoy` (regla 1 de `pickTodaysFile`) aplicaba la guarda «no cola de otro número»
+(`nameHasToken`) SOLO a los tokens con mes en letras («1 de septiembre»); los numéricos
+(«192026», «20260901»…) usaban `n.includes(t)` a pelo, **sin ninguna protección de borde** — ni
+siquiera la del lado izquierdo que sí tienen los de letras. Un consecutivo, factura o radicado
+de 6-8 dígitos que por casualidad trae la fecha de hoy **empotrada** (p. ej.
+`Reporte_45192026_Final.xlsx` el 1-sep: «192026» vive dentro de «45192026») se tomaba como el
+PyM del día — y a diferencia de la regla 2 (que la v18.0.7 ya restringió a la raíz), esta regla
+buscaba en **las tres carpetas** que junta `fetchSpFilesMultiFolder`, subcarpetas ajenas
+incluidas.
+
+Hoy (1-sep, día y mes de un solo dígito) es justo el peor caso: el token corto («192026», 6
+dígitos) es el que más fácil se empotra en un número más largo.
+
+### La reparación, y su límite deliberado
+
+`nameHasToken` gana un tercer parámetro (`exigirBordeCompleto`): además de que no haya dígito
+ANTES del token (lo de siempre), exige que tampoco haya dígito DESPUÉS. `esNombreDeHoy` gana un
+segundo parámetro (`fueraDeLaRaiz`): fuera de la raíz, los tokens numéricos pasan también por
+`nameHasToken` con el borde completo; dentro de la raíz, nada cambia.
+
+Por qué el corte es solo fuera de la raíz, y por qué solo mira dígitos y no letras: el caso real
+ya conocido, `Agenda_v2_20260806.xlsx`, tiene un dígito pegado a la IZQUIERDA de la fecha (la
+«2» de «v2») y vive en la raíz — es justo el motivo por el que el código nunca aplicó esta
+guarda a los numéricos. Aplicarla en la raíz lo habría roto. Y un candidato con **letras** a los
+dos lados (`Consolidado_192026_v2.xlsx` — el «2» de «v2» viene después, separado por la letra
+«v», no pegado) es estructuralmente el MISMO patrón de confianza que `Agenda_v2_*`: el código no
+puede distinguir con justicia «la letra viene antes» de «la letra viene después», así que trata
+los dos casos igual y los sigue aceptando.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 194 | la regla 1 vuelve a no distinguir raíz de subcarpeta (**el defecto original**) | *un consecutivo con dígito pegado se rechaza fuera de la raíz* | Sí |
+| 195 | el borde completo deja de exigir el lado derecho | *nameHasToken con el borde completo* (prefijo de un número más largo) | Sí |
+| 196 | `fueraDeLaRaiz` deja de activar la guarda estricta | *esNombreDeHoy con fueraDeLaRaiz* (2 fallan) | Sí |
+| 197 | la raíz TAMBIÉN aplica la guarda estricta (**rompe el caso real conocido**) | *Agenda_v2_20260806.xlsx en la raíz sigue intacto* (2 fallan) | Sí |
+
+La 197 es la contención central: sin ella, «cerrar el hueco» habría roto el archivo real que la
+v18.0.7 ya documentó como necesario proteger.
+
+**Precisión de proceso.** Mi primera tanda de pruebas asumía, siguiendo la letra de la
+reproducción del hallazgo, que `Consolidado_192026_v2.xlsx` debía rechazarse igual que los otros
+dos ejemplos — y la implementación (correcta) la seguía aceptando, así que la prueba falló.
+Revisando el porqué: ese nombre no tiene ningún dígito pegado al token, solo la letra «v»
+después — es el mismo patrón de confianza que `Agenda_v2_*`, no una cola de otro número. La
+reproducción del hallazgo mostraba que las TRES cadenas volvían `true` bajo el código VIEJO (sin
+ninguna protección), no que las tres debieran rechazarse bajo el arreglo. Se corrigió la
+prueba, no el código.
+
+Banco completo: **2.920 comprobaciones pasan, 0 fallan.**

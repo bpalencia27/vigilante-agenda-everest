@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.70
+// @version      18.0.71
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.70";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.71";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11767,15 +11767,40 @@
   // un "Agenda_v2_20260806.xlsx" real quedaría rechazado porque al normalizar la "2"
   // de "v2" queda pegada a la fecha (medido en el banco de pruebas) — esos conservan
   // la coincidencia simple de siempre.
-  function nameHasToken(n, t) {
+  //
+  // v18.0.71 — `exigirBordeCompleto`: además de que no haya un dígito ANTES (lo de
+  // siempre), exige que no haya un dígito DESPUÉS tampoco. Sin esto, un token numérico
+  // podía vivir EMPOTRADO a mitad de un número más largo con dígitos a los dos lados
+  // ("Reporte_45192026_Final": "192026" con "45" antes) — la guarda vieja solo miraba un
+  // lado. Se pide aparte (no siempre) porque ese mismo dígito pegado a la izquierda es
+  // justo lo que necesita seguir aceptando "Agenda_v2_20260806.xlsx" en la raíz.
+  function nameHasToken(n, t, exigirBordeCompleto) {
     let i = -1;
-    while ((i = n.indexOf(t, i + 1)) >= 0) { const prev = n[i - 1]; if (!(prev >= "0" && prev <= "9")) return true; }
+    while ((i = n.indexOf(t, i + 1)) >= 0) {
+      const prev = n[i - 1];
+      if (prev >= "0" && prev <= "9") continue;
+      if (exigirBordeCompleto) {
+        const next = n[i + t.length];
+        if (next >= "0" && next <= "9") continue;
+      }
+      return true;
+    }
     return false;
   }
-  function esNombreDeHoy(name) {
+  // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores no
+  // lo tumbaron. `fueraDeLaRaiz`: cuando el archivo NO vive suelto en la carpeta principal
+  // (ver pickTodaysFile), los tokens numéricos pasan TAMBIÉN por nameHasToken, con el borde
+  // completo exigido — cerrando el hueco que dejaba `n.includes(t)` a pelo. Dentro de la
+  // raíz nada cambia: la coincidencia simple de siempre, para no tocar el caso real ya
+  // conocido y protegido.
+  function esNombreDeHoy(name, fueraDeLaRaiz) {
     const toks = todayTokens().map(normName);
     const n = normName(name);
-    return toks.some((t) => (/[a-z]/.test(t) ? nameHasToken(n, t) : n.includes(t)));
+    return toks.some((t) => {
+      if (/[a-z]/.test(t)) return nameHasToken(n, t);
+      if (fueraDeLaRaiz) return nameHasToken(n, t, true);
+      return n.includes(t);
+    });
   }
   // =====================================================================
   //  v18.0.7 — GUARDA DEL LIBRO EQUIVOCADO
@@ -11824,8 +11849,34 @@
   function pickTodaysFile(files) {
     const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
     if (!xls.length) return null;
+    // v18.0.71 — subida aquí arriba (antes solo la usaba la regla 2) para que la regla 1
+    // también sepa si un archivo vive suelto en la raíz. Ver el porqué junto a
+    // esNombreDeHoy, unas líneas más abajo — es el mismo blindaje de v18.0.7, aplicado
+    // ahora también al MATCH POR NOMBRE, no solo al de "modificado hoy sin fecha".
+    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
+    const sueltoEnLaRaiz = (f) => {
+      const ruta = String(f.ServerRelativeUrl || "");
+      if (!raiz || !ruta) return false;
+      if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
+      return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
+    };
     // 1. Coincidencia EXACTA con el nombre de HOY (ej: Agenda_Dia_CMB_20260808.xlsx)
-    const matchName = xls.find((f) => esNombreDeHoy(f.Name));
+    // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
+    // no lo tumbaron. `esNombreDeHoy` solo aplica la guarda "no cola de otro número"
+    // (nameHasToken) a los tokens con MES EN LETRAS; los numéricos usaban `n.includes(t)` a
+    // pelo, sin ninguna protección de borde — ni siquiera la del lado izquierdo que sí
+    // tienen los de letras. Un consecutivo/factura/radicado de 6-8 dígitos que por
+    // casualidad trae la fecha de hoy EMPOTRADA (p. ej. "Reporte_45192026_Final.xlsx" el
+    // día 1 de septiembre: "192026" vive dentro de "45192026") se tomaba como el PyM de
+    // hoy en CUALQUIER subcarpeta que fetchSpFilesMultiFolder junte — no solo la raíz.
+    //
+    // Fuera de la raíz se exige la guarda COMPLETA (ni antes ni después del token puede
+    // haber otro dígito): eso rechaza "Reporte_45192026_Final" y "Factura_00192026" sin
+    // tocar el caso real y ya conocido, "Agenda_v2_20260806.xlsx" en la raíz, que necesita
+    // seguir aceptando un dígito pegado a la izquierda (la "2" de "v2") — es EXACTAMENTE
+    // el caso que el comentario de nameHasToken ya documentaba como motivo de no aplicar
+    // la guarda a los numéricos, y sigue intacto: solo se activa fuera de la raíz.
+    const matchName = xls.find((f) => esNombreDeHoy(f.Name, !sueltoEnLaRaiz(f)));
     if (matchName) return matchName;
 
     // 2. Si no hay coincidencia por nombre, buscar archivos modificados HOY que NO sean de fechas futuras
@@ -11863,13 +11914,8 @@
     // no traer ni una actividad (mtrLibroNoParecePym), se SALTA y se prueba el siguiente,
     // en vez de reintentar el mismo cada diez minutos.
     // =====================================================================
-    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
-    const sueltoEnLaRaiz = (f) => {
-      const ruta = String(f.ServerRelativeUrl || "");
-      if (!raiz || !ruta) return false;
-      if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
-      return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
-    };
+    // v18.0.71 — `raiz`/`sueltoEnLaRaiz` se subieron al principio de la función: ahora las
+    // usa también la regla 1. Se queda un solo sitio que las define.
     const matchMod = xls.find((f) => {
       if (!f.TimeLastModified || /20\d{6}/.test(f.Name)) return false;
       if (!sueltoEnLaRaiz(f)) return false;

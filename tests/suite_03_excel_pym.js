@@ -110,6 +110,89 @@ module.exports = {
       t.cierto(!!sel && sel.Name === "Agenda del dia.xlsx", "se elige el suelto en la raíz");
     });
 
+    // =====================================================================
+    // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
+    // no lo tumbaron. La guarda «no cola de otro número» (nameHasToken) SOLO se aplicaba a
+    // los tokens con mes en LETRAS; los numéricos usaban `n.includes(t)` a pelo, sin
+    // ninguna protección de borde. Un consecutivo/factura de 6-8 dígitos que por
+    // casualidad trae la fecha de hoy EMPOTRADA, en CUALQUIER subcarpeta que
+    // fetchSpFilesMultiFolder junte, se tomaba como el PyM de hoy. Hoy 1-sep (día y mes de
+    // un solo dígito) es el peor caso: el token corto ("192026", 6 dígitos) es el que más
+    // fácil se empotra.
+    // =====================================================================
+    t.caso("v18.0.71: fuera de la raíz, un consecutivo que trae la fecha EMPOTRADA con un dígito PEGADO se rechaza", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // Los dos casos REALMENTE peligrosos de la reproducción del hallazgo: el token
+      // "192026" vive con OTRO DÍGITO pegado justo antes ("45" / "00") — es la cola de
+      // otro número que la guarda existe para evitar, sea cual sea su tipo de token.
+      const casos = ["Reporte_45192026_Final.xlsx", "Factura_00192026.xlsx"];
+      for (const nombre of casos) {
+        const files = [{ Name: nombre, TimeLastModified: "2026-08-20T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/" + nombre }];
+        t.igual(c.api.pickTodaysFile(files), null,
+          "«" + nombre + "» en una subcarpeta ajena ya no se toma como el PyM de hoy");
+      }
+    });
+
+    t.caso("v18.0.71: y la contrapartida — un token con LETRAS a los dos lados sigue aceptándose, fuera de la raíz o no", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // "Consolidado_192026_v2.xlsx": el "2" de "v2" viene DESPUÉS del token, pero
+      // separado por una LETRA ("v"), no pegado. Mismo patrón de confianza que el caso
+      // real ya conocido "Agenda_v2_20260806.xlsx" (letra antes de la fecha) — el código
+      // no puede distinguir "antes" de "después" de forma justa, así que trata los dos
+      // igual: letras a ambos lados = token aislado de verdad, se acepta.
+      const files = [{ Name: "Consolidado_192026_v2.xlsx", TimeLastModified: "2026-08-20T08:00:00Z",
+        ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Consolidado_192026_v2.xlsx" }];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel && sel.Name, "Consolidado_192026_v2.xlsx",
+        "sigue aceptándose: no es cola de otro número, solo comparte vecindario con una letra");
+    });
+
+    t.caso("v18.0.71: el caso real YA conocido sigue intacto — Agenda_v2_20260806.xlsx en la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-06T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-06T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // Dentro de la raíz, el dígito pegado a la izquierda (la "2" de "v2") sigue
+      // aceptándose: es el caso real que el comentario de nameHasToken documenta, y esta
+      // versión no puede romperlo.
+      const files = [{ Name: "Agenda_v2_20260806.xlsx", TimeLastModified: "2026-08-06T08:00:00Z",
+        ServerRelativeUrl: RAIZ_PYM + "/Agenda_v2_20260806.xlsx" }];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel && sel.Name, "Agenda_v2_20260806.xlsx", "sigue eligiéndose: la raíz conserva la coincidencia simple de siempre");
+    });
+
+    t.caso("v18.0.71: nameHasToken con el borde completo exige que NO haya dígito ni antes ni después", () => {
+      t.cierto(api.nameHasToken("reporte45192026final", "192026", true) === false,
+        "192026 con 45 antes: se rechaza con el borde completo");
+      t.cierto(api.nameHasToken("consolidado192026v2", "192026", true) === true,
+        "192026 con v2 después: la letra 'v' separa, el dígito no está PEGADO — sigue aceptándose");
+      t.cierto(api.nameHasToken("consolidado1920264", "192026", true) === false,
+        "pero 192026 seguido DIRECTO por otro dígito (prefijo de un número más largo) sí se rechaza — el espejo del caso de la izquierda");
+      t.cierto(api.nameHasToken("agendadiacmb20260810xlsx", "20260810", true) === true,
+        "un token real con letras a los dos lados SÍ pasa el borde completo");
+      // El comportamiento SIN el tercer argumento no cambia ni un bit: solo mira la
+      // izquierda, como siempre.
+      t.igual(api.nameHasToken("agenda6deagosto", "6deagosto"), true);
+      t.igual(api.nameHasToken("agenda26deagosto", "6deagosto"), false);
+    });
+
+    t.caso("v18.0.71: esNombreDeHoy con fueraDeLaRaiz — mismo nombre, veredicto distinto según de dónde venga", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx"), "sin el argumento (comportamiento de siempre): sigue aceptando — es el bug que se cierra, pero solo fuera de la raíz");
+      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx", false), "fueraDeLaRaiz=false (archivo en la raíz): igual, sigue aceptando");
+      t.falso(c.api.esNombreDeHoy("Factura_00192026.xlsx", true), "fueraDeLaRaiz=true: ahora sí lo rechaza — el dígito pegado a la izquierda lo delata");
+      t.cierto(c.api.esNombreDeHoy("Consolidado_192026_v2.xlsx", true), "pero un token con letras a los dos lados sigue aceptándose, aunque sea fuera de la raíz");
+      // Y un token con mes en LETRAS no cambia con ninguno de los dos: ya estaba protegido.
+      t.cierto(c.api.esNombreDeHoy("Informe del 1 de septiembre.xlsx", true));
+      t.falso(c.api.esNombreDeHoy("Informe del 21 de septiembre.xlsx", true));
+    });
+
     t.caso("v18.0.7: el nombre CON la fecha de hoy sigue mandando sobre todo lo demás", () => {
       const c = cargar();
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
