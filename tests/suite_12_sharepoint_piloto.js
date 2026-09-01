@@ -629,6 +629,28 @@ module.exports = {
       t.falso(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe estar oculto");
     });
 
+    // v18.0.75 — HALLAZGO DE ENJAMBRE #28. dismissSpToast programaba el remove() físico del
+    // nodo en un setTimeout de 260 ms sin guardar su id: si un aviso NUEVO llegaba dentro
+    // de esa ventana, spToast() reutilizaba el mismo nodo #vgl-sp y lo mostraba de nuevo,
+    // pero el remove() diferido de la llamada ANTERIOR seguía en pie y lo borraba igual —
+    // el aviso recién mostrado desaparecía del DOM sin ningún indicio de por qué.
+    await t.casoAsync("REGRESIÓN — un aviso nuevo dentro de la ventana de dismiss no lo borra el remove() diferido del anterior (hallazgo #28)", async () => {
+      const c = cargar({ silencioso: true });
+      c.api.spToast("progreso", 0);
+      const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
+      c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
+      // Se descarta el primero (programa el remove() diferido de 260 ms, capado a ~1 ms en
+      // el sandbox) y, ANTES de que ese remove() llegue a correr, llega el aviso final.
+      c.api.dismissSpToast();
+      c.api.spToast("resultado final", 0);
+      t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "el aviso final queda visible de inmediato");
+      // Se deja correr el bucle de eventos lo suficiente para que el remove() diferido del
+      // PRIMER dismiss, si sigue vivo, ya se haya disparado.
+      await dormir(30);
+      t.cierto(!!nodo._parent, "el nodo del aviso final sigue colgado del body: el remove() de la llamada anterior no debe alcanzarlo");
+      t.cierto(String(nodo.children[0].textContent).indexOf("resultado final") >= 0, "y sigue mostrando el mensaje correcto");
+    });
+
     await t.casoAsync("spToast: con duración se autodescarta solo; dismissSpToast sin toast no lanza", async () => {
       const c = cargar({ silencioso: true });
       c.api.spToast("fugaz", 6000);                       // el sandbox recorta el timer a ~1 ms

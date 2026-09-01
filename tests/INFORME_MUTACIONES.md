@@ -10058,3 +10058,35 @@ poder servir de respaldo a otro analito que la necesitara.
 | 203 | el reintento de uroanálisis deja de comprobarlo | *misma prueba* | Sí |
 
 Banco completo: **2.926 comprobaciones pasan, 0 fallan.**
+
+## v18.0.75 — un aviso nuevo del piloto de SharePoint ya no lo borra el descarte del anterior
+
+Hallazgo #28 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+señaló con razón que esto corre solo en la pestaña de SharePoint (`bootSharepointLite()`,
+staff, no el médico en consulta) y que el dato ya quedó guardado ANTES del toast final — el
+toast es puramente informativo. Aun así, el bug de código es real y el arreglo es trivial: se
+aplica por higiene del indicador (el staff que mira esa pestaña sí merece ver si la captura
+funcionó o no), no como excepción a la disciplina de trazar daño clínico.
+
+`dismissSpToast()` programaba el `remove()` físico del nodo en un `setTimeout` de 260 ms sin
+guardar su id, así que nadie podía cancelarlo. `spToast()` reutiliza el mismo nodo `#vgl-sp` si
+ya existe: si un aviso nuevo llega dentro de esa ventana de 260 ms (el patrón real de
+`bootSharepointLite`: aviso de progreso seguido, segundos después, del resultado final), el
+nodo se reutiliza y se vuelve a mostrar, pero el `remove()` diferido de la llamada ANTERIOR
+sigue en pie y lo borra igual — el aviso recién mostrado desaparece sin ningún indicio de por
+qué.
+
+### La reparación
+
+El id de ese `setTimeout` se guarda en una nueva variable de módulo (`spToastRemoveTimer`,
+mismo patrón que `spToastTimer`) y se cancela en dos puntos: al programar uno nuevo dentro de
+`dismissSpToast()` (por si se llama dos veces seguidas) y, el punto que de verdad cierra el
+hallazgo, al INICIO de `spToast()`, antes de reutilizar o reconstruir el nodo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 204 | se revierte a los dos `setTimeout` sin guardar (**el defecto original**) | *REGRESIÓN — un aviso nuevo dentro de la ventana de dismiss no lo borra el remove() diferido del anterior* | Sí |
+
+Banco completo: **2.927 comprobaciones pasan, 0 fallan.**

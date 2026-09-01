@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.74
+// @version      18.0.75
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.74";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.75";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12452,6 +12452,13 @@
   // esquina de la pantalla el resto de la jornada. Ahora se cierra con la × , con un clic,
   // o solo a los 6 s (durationMs = 0 para dejarlo fijo cuando haga falta).
   let spToastTimer = null;
+  // v18.0.75 — AUDITORÍA (hallazgo de enjambre #28): dismissSpToast programaba el remove()
+  // físico del nodo en un setTimeout de 260 ms que nadie guardaba, así que nadie podía
+  // cancelarlo. Si un mensaje nuevo llegaba dentro de esa ventana, spToast() reutilizaba
+  // el mismo nodo #vgl-sp y lo mostraba de nuevo — pero el remove() diferido de la llamada
+  // ANTERIOR seguía en pie y lo borraba igual, sin avisar: el toast recién mostrado
+  // desaparecía a los 260 ms en vez de su duración real.
+  let spToastRemoveTimer = null;
 
   function dismissSpToast() {
     try {
@@ -12459,13 +12466,17 @@
       const t = document.getElementById("vgl-sp");
       if (t) {
         t.classList.remove("vgl-sp-visible");
-        setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
+        if (spToastRemoveTimer) { clearTimeout(spToastRemoveTimer); spToastRemoveTimer = null; }
+        spToastRemoveTimer = setTimeout(() => { try { t.remove(); } catch (e2) {} spToastRemoveTimer = null; }, 260);
       }
     } catch (e) {}
   }
 
   function spToast(msg, durationMs = 6000) {
     try {
+      // El nodo se reutiliza si ya existe: cancelar el remove() diferido de un dismiss
+      // anterior ANTES de reconstruirlo/reutilizarlo — ver el comentario de arriba.
+      if (spToastRemoveTimer) { clearTimeout(spToastRemoveTimer); spToastRemoveTimer = null; }
       let t = document.getElementById("vgl-sp");
       if (!t) {
         t = document.createElement("div");

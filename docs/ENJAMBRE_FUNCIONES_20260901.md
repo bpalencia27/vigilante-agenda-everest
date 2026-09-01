@@ -57,8 +57,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | la poda de la cola de carpeta (>200 pacientes) podía borrar la clave de un guardado en curso y desincronizar dos escrituras del mismo paciente — refutación de un tercer votante examinada y descartada (defendía la atomicidad de UNA llamada, no la carrera entre llamadas) | `vglCarpetaGuardarInstantanea` | **v18.0.72** | 198 |
 | `_isoAMs` aceptaba fechas de calendario imposibles (31-abr, 29-feb en año no bisiesto) y las rodaba en silencio — sin round-trip, a diferencia de `mtrFechaDesdeIso`; sin camino de clic-a-daño demostrado con datos reales por ninguna de sus tres rutas (Athenea usa DateTime real; la carpeta local usa `todayStamp()`), pero corregido por consistencia interna a costo cero | `_isoAMs` (usada por `mtrLdlBasalDeSerie`, `mtrPenultimaCreatinina`, `mtrAnclaControlAnterior`) | **v18.0.73** | 199 |
 | una fecha de laboratorio con día de calendario imposible (31/04, 30/02) pasaba el rango 1-31/1-12 y llegaba a escribirse en un `<input type="date">`; el navegador la rechaza pero, a diferencia del valor (v17.6.45), nadie comprobaba el retorno — casilla vacía sin aviso, y además «reclamada» en `_fechasYaUsadas` sin poder servir de respaldo a otro analito | `_parseFechaHoraLike` / `injectLabsIntoCronicos` (sus tres escrituras de fecha) | **v18.0.74** | 200–203 |
+| un aviso nuevo del piloto de SharePoint (staff, no el médico en consulta) dentro de la ventana de 260 ms de un dismiss anterior podía desaparecer solo, borrado por el `remove()` diferido de la llamada previa — arreglado por higiene del indicador, no por daño clínico (el refutador tenía razón: el dato ya se había guardado antes del toast) | `spToast` / `dismissSpToast` | **v18.0.75** | 204 |
 
-Quedan **20 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **19 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad
