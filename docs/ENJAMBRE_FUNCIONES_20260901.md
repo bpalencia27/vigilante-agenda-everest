@@ -61,8 +61,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | el título de la pestaña que parpadea se capturaba una sola vez por sesión y quedaba fijado para siempre — el arreglo propuesto por el hallazgo no bastaba por sí solo (verificado con una reproducción directa): `startFlash` llama a `stopFlash` ANTES de recapturar, y `stopFlash` restauraba el título sin comprobar si de verdad había un parpadeo activo, corrompiendo el título real antes de que la recaptura pudiera verlo | `startFlash` / `stopFlash` | **v18.0.76** | 205, 206 |
 | Escape y el chip de filtro rápido llamaban a `closeSheet()` directo, sin pasar por `_ajustesIntentarCerrar()`: un cambio sin guardar en Ajustes se perdía en silencio — 3 de 3 refutadores no lo tumbaron | `closeSheet` / `_ajustesIntentarCerrar` | **v18.0.77** | 207 |
 | el badge «⚠ N inasistencias previas» era inalcanzable con el paciente en «En sala»/«Atendido» — justo cuando el médico lo tiene delante para dialogar sobre eso — 3 de 3 refutadores no lo tumbaron | `refrescarCuentas` / `render` | **v18.0.79** | 212, 213 |
+| un arranque matado por el kill-switch marcaba el aviso de festivos como «ya mostrado hoy» sin haberlo mostrado nunca (`#vgl-toasts` no existía todavía) — el refutador disidente tenía razón en el impacto real (hoy no hay discrepancia, y el aviso no gatea ninguna fecha), pero el arreglo es gratis y sigue el mismo patrón ya usado una vez en este archivo | `_festivosAvisarSiVencida` (orden de llamada en `boot()`) | **v18.0.80** | 214 |
 
-Quedan **16 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **15 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

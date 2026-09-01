@@ -243,6 +243,32 @@ module.exports = {
       t.cierto(c.api._festivosAvisarSiVencida(2026), "marca ya puesta el mismo día: devuelve true sin volver a pintar");
     });
 
+    // v18.0.80 — HALLAZGO DE ENJAMBRE #32. _festivosAvisarSiVencida() vivía en boot() ANTES
+    // del chequeo del kill-switch, y ya dejaba escrita la bandera "ya mostrado hoy" aunque
+    // boot() fuera a abortar por el kill-switch un instante después — #vgl-toasts (donde
+    // showToast() pinta) ni siquiera existía todavía. El aviso quedaba consumido sin
+    // haberse mostrado nunca, y no se repetía el resto del día ni con el kill-switch ya
+    // apagado. Reproducido con boot() real (mismo camino que producción), igual que el
+    // hallazgo original.
+    t.caso("REGRESIÓN — un arranque MATADO por el kill-switch no consume el aviso de festivos sin haberlo mostrado (hallazgo #32)", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      t.cierto(c.api._festivosTablaAgregarParaTest("2026-99-99"), "se pudo sembrar la discrepancia");
+
+      // 1er arranque: kill-switch ACTIVO. boot() debe abortar SIN haber podido pintar nada.
+      c.env.gm["vgl_kill_active"] = true;
+      c.api.boot();
+      t.cierto(c.api.__state.killed, "el primer arranque quedó matado, como se espera");
+      t.igual(c.env.storage.getItem("vgl_festivos_aviso"), null,
+        "la bandera NO debe quedar escrita: el aviso nunca llegó a tener dónde pintarse");
+
+      // 2do arranque, mismo día: kill-switch YA apagado. Ahora sí debe correr de verdad.
+      c.env.gm["vgl_kill_active"] = false;
+      c.api.boot();
+      t.igual(c.env.storage.getItem("vgl_festivos_aviso"), c.api.todayStamp(),
+        "recién ahora, con el asistente de verdad arrancado, se marca como mostrado");
+    });
+
     t.caso("festivos v16.9.0: el mensaje de discrepancia nombra los días exactos de ambos lados", () => {
       const msg = cargar({ silencioso: true }).api._festivosMensajeDiscrepancia(2026, ["2026-01-06"], ["2026-03-19"]);
       t.cierto(msg.includes("2026"), "dice el año de la discrepancia");

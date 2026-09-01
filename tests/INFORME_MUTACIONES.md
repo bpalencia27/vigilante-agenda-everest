@@ -10223,3 +10223,33 @@ inspección de fuente — mismo patrón que v18.0.24 ya estableció aquí mismo.
 | 213 | `render()` deja de pintar el badge en el primer pintado | *REGRESIÓN — render() también pinta el badge de inasistencias...* | Sí |
 
 Banco completo: **2.936 comprobaciones pasan, 0 fallan.**
+
+## v18.0.80 — un arranque matado por el kill-switch ya no se come el aviso de festivos
+
+Hallazgo #32 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente tenía
+razón en varios puntos reales (hoy no existe ninguna discrepancia tabla-vs-cálculo en 2024-2028;
+`esFestivo()`, la que de verdad decide fechas hábiles, no depende de este aviso; el kill-switch
+ya muestra su propio banner rojo permanente) — pero el defecto de código es real y el arreglo es
+gratis, así que se aplica de todos modos: es exactamente el mismo patrón que ya se corrigió una
+vez en este archivo (el aviso de ceguera de agenda, línea ~28646) para no marcar "visto" algo
+que nunca se mostró.
+
+`_festivosAvisarSiVencida()` vivía en `boot()` ANTES del chequeo del kill-switch, y ya dejaba
+escrita `localStorage['vgl_festivos_aviso'] = hoy` aunque `boot()` fuera a abortar por el
+kill-switch un instante después — `#vgl-toasts` (donde `showToast()` necesita pintar) todavía no
+existía en ese punto. El aviso quedaba "consumido" sin haberse mostrado nunca, y no se repetía
+el resto del día ni con el kill-switch ya desactivado.
+
+### La reparación
+
+Se mueve la llamada a después de `buildOverlay()` (que crea `#vgl-toasts`) y del propio chequeo
+del kill-switch (que corta el arranque con `return` si está activo) — la primera de las dos
+salidas que proponía el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 214 | vuelve la llamada temprana, antes del kill-switch (**el defecto original**) | *REGRESIÓN — un arranque MATADO por el kill-switch no consume el aviso de festivos sin haberlo mostrado* | Sí |
+
+Banco completo: **2.937 comprobaciones pasan, 0 fallan.**

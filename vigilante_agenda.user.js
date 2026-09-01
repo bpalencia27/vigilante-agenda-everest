@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.79
+// @version      18.0.80
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.79";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.80";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31765,7 +31765,6 @@
     try { mtrHcEnganchar(); } catch (e) {}
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
-    try { _festivosAvisarSiVencida(); } catch (e) {}
     // v17.48.0 — una sola pasada, con la misma bandera de una-sola-vez que usan las
     // migraciones de arriba: cuenta si algún paciente quedó archivado bajo dos claves
     // (por ceros a la izquierda) antes de que la normalización en la fuente lo impidiera.
@@ -31801,6 +31800,14 @@
     if (document.getElementById("vgl-root")) return;
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
     buildOverlay();
+    // v18.0.80 — AUDITORÍA (hallazgo de enjambre #32): antes esta llamada vivía ANTES del
+    // chequeo del kill-switch (línea ~31768) y ya dejaba escrito localStorage['vgl_festivos_aviso']
+    // = hoy aunque boot() fuera a abortar por el kill-switch un instante después — #vgl-toasts
+    // (que showToast() necesita para pintar) todavía no existía. El aviso quedaba «consumido»
+    // sin haberse mostrado nunca, y no se repetía el resto del día ni con el kill-switch ya
+    // desactivado. Ahora corre después de buildOverlay() (que crea #vgl-toasts) y del propio
+    // chequeo del kill-switch (que ya cortó el arranque con `return` si estaba activo).
+    try { _festivosAvisarSiVencida(); } catch (e) {}
     // v14.2.12 — Si Chrome DESCARTÓ esta pestaña (Ahorro de memoria) y la volvió a cargar,
     // el Vigilante estuvo apagado ese rato: se registra (sin datos de paciente) y se le
     // sugiere al médico, una vez al día, la excepción "mantener siempre activo este sitio".
