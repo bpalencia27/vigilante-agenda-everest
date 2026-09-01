@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.29
+// @version      18.0.30
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.29";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.30";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6733,8 +6733,10 @@
                   if (r.abortadoPorPaciente) {
                       uxTrack("labs.autollenado.abortado_cambio_paciente");
                       showToast("AMBAR", "Exámenes", "No se diligenció nada: la historia abierta cambió mientras el laboratorio respondía. Los resultados que llegaron son del paciente con cédula " + docId + " y en pantalla hay otro. Vuelva a su historia y pulse Exámenes de nuevo.", true);
+                      // v18.0.30 — el botón decía «no escribí nada» durante cero
+                      // milisegundos: la restauración del rótulo iba en la línea de al lado
+                      // y _vglFeedbackBoton ya lo devuelve solo a los 8 s.
                       _vglFeedbackBoton(btn, "🛑 Cambió el paciente: no escribí nada", "ambar", "🧪 Exámenes");
-                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   // v17.1.0 (#136) — Un apagado del kill-switch o del interruptor remoto
@@ -6742,8 +6744,15 @@
                   // se pintaban idénticos: «✓ 0 casillas escritas», en verde, con el visto
                   // bueno. El médico se quedaba creyendo que Auto-Labs había corrido.
                   if (r.abortadoPorKillSwitch || r.desactivadoRemoto) {
+                      // v18.0.30 — la rama era MUDA del todo. _vglFeedbackBoton escribe el
+                      // aviso EN el botón y lo deja 8 s; la línea de abajo se lo borraba en
+                      // el mismo tick, y aquí no había aviso flotante que lo supliera. El
+                      // médico pulsaba Exámenes, no veía pasar nada y se quedaba creyendo
+                      // que el laboratorio no tenía resultados. Se quita el borrado y se
+                      // dice en voz alta que el llenado está apagado.
+                      uxTrack("labs.autollenado.desactivado");
+                      showToast("AMBAR", "Exámenes", "No se diligenció nada: el llenado automático de exámenes está desactivado ahora mismo. Los resultados hay que escribirlos a mano en esta consulta.", false);
                       _vglFeedbackBoton(btn, "🛑 El llenado de exámenes está desactivado ahora mismo", "ambar", "🧪 Exámenes");
-                      btn.innerHTML = "🧪 Exámenes";
                       return;
                   }
                   uxTrack("labs.autollenado.casillas", { n: r.count });
@@ -6772,7 +6781,13 @@
                               : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                       _huboEscritura ? "verde" : "ambar", "🧪 Exámenes");
                   _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
-_vglOfrecerDeshacer(btn);
+                  // v18.0.30 — el «↩ Deshacer» solo si ESTE llenado escribió algo. Con
+                  // count 0 no se guarda lote nuevo (_vglGuardarDeshacer sale en seco si no
+                  // hay pares), así que el botón que aparecía al lado de «no toqué nada»
+                  // deshacía el lote ANTERIOR — el examen físico que el médico ya había
+                  // aceptado, por ejemplo. La guarda de _vglEjecutarDeshacer solo mira que
+                  // sea el mismo paciente, no que sea el mismo lote, y no lo impedía.
+                  if (_huboEscritura) _vglOfrecerDeshacer(btn);
                   // v17.1.0 (#136) — y aunque SÍ haya escrito, el aviso no se repite para el
                   // mismo paciente dentro del mismo minuto: es el mismo remedio que la
                   // v17.0.3 ya aplicó al robot de pre-carga (_labsAvisoDoc/_labsAvisoTs)
@@ -6838,10 +6853,32 @@ _vglOfrecerDeshacer(btn);
                                   btn.innerHTML = "🧪 Exámenes";
                                   return;
                               }
-                              _vglFeedbackBoton(btn, "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : ""), "verde", "🧪 Exámenes");
+                              // v18.0.30 — la rama del reintento (tras iniciar sesión sola)
+                              // cantaba «✓ N casillas escritas» en VERDE aunque N fuera 0, y
+                              // ofrecía «↩ Deshacer» igual. Es el mismo hallazgo que la
+                              // v17.8.1 arregló en la rama principal y que a esta se le quedó
+                              // sin aplicar: dos caminos para lo mismo, uno honesto y otro no.
+                              const _huboEscritura2 = r2.count > 0;
+                              _vglFeedbackBoton(btn,
+                                  _huboEscritura2
+                                      ? "✓ " + r2.count + " casillas escritas" + (r2.respetadas ? " · " + r2.respetadas + " respetadas" : "")
+                                      : (r2.respetadas
+                                          ? "✋ Todo ya estaba escrito: no toqué nada (" + r2.respetadas + " respetadas)"
+                                          : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
+                                  _huboEscritura2 ? "verde" : "ambar", "🧪 Exámenes");
                               _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
-_vglOfrecerDeshacer(btn);
-                              showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                              if (_huboEscritura2) _vglOfrecerDeshacer(btn);
+                              if (_huboEscritura2) showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                          } else if (labs2 === null) {
+                              // v18.0.30 — la misma separación que la v17.6.58 hizo en la
+                              // rama principal y que a la del reintento se le quedó sin
+                              // hacer: labs2===null es «no pude LEER el portal» (timeout,
+                              // 500, red) y labs2===[] es «el paciente de verdad no tiene
+                              // resultados». Decir lo segundo cuando pasó lo primero
+                              // convierte un fallo de red en un hecho clínico que el médico
+                              // da por verificado.
+                              _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
+                              showToast("AMBAR", "Exámenes", "Se inició sesión en el laboratorio, pero no se pudo leer el portal para la cédula " + docId + " (no es que no tenga laboratorios). Intente de nuevo.", false);
                           } else {
                               _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
                           }

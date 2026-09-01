@@ -816,15 +816,158 @@ module.exports = {
       t.igual(cLab.api._mtrLabsSoloUltimaToma([]).length, 0, "lista vacía se devuelve vacía");
     });
 
-    // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
-    // manual del botón también dejaba SIN cachear un resultado vacío, así que el robot
-    // (autoFetchAtheneaLabsForActivePatient) no se enteraba de que ya se había consultado
-    // a ese paciente y podía volver a golpear Athenea enseguida.
-    // [v14.2.0 — auditoría pre-producción 2026-08-18] Esta prueba verificaba el fix vía
-    // checkLabsVencidos (retirado por código muerto, ver CHANGELOG). El mismo `if (labs)`
-    // (línea idéntica en ambas rutas, manual y automática) sigue cubierto por su equivalente
-    // en tests/suite_17_nucleo.js ("con CERO laboratorios en Athenea, el TTL de 10 min SÍ
-    // frena la siguiente consulta"), que lo prueba sin depender de una función eliminada.
+    // ===== v18.0.30 — HONESTIDAD DE AUTO-LABS (hallazgos L6643 / L6614 / L6714) =====
+    // Este contexto SÍ completa la cadena de 3 pasos de Athenea (BusquedaPaciente ->
+    // BuscarPaciente -> DatosPaciente -> consultaDetalleSolicitud), así que
+    // getAtheneaLabsAuto devuelve UN analito de verdad y el flujo entra en la rama
+    // «hay laboratorios» — la que hasta ahora nadie ejercitaba de punta a punta.
+    // Como el documento falso no tiene ninguna casilla `input[id^="resultado"]`,
+    // injectLabsIntoCronicos escribe 0: es exactamente el escenario del defecto.
+    const cargarLabsOk = () => cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        const url = String(o.url || "");
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          o.onload({
+            status: 200,
+            responseText: `CC 999888777
+              <div class="card">
+                <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+                <div class="card-title no-margin">Numero: 26051503125</div>
+                <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte">
+                  <input type="hidden" id="hash" name="hash" value="HASHBTN" />
+                  <input name="__RequestVerificationToken" type="hidden" value="TOKENBTN" />
+                </form>
+              </div>`,
+          });
+        } else if (url.includes("consultaDetalleSolicitud")) {
+          o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.2" }]) }) });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
+    const cLabOk = cargarLabsOk();
+
+    function mockPacienteLabs(c, btn, bandeja) {
+      c.env.doc.getElementById = (id) => {
+        if (id === "vgl-lab-injector") return btn;
+        if (id === "anamesis") return {};
+        if (id === "vgl-toasts" && bandeja) return bandeja;
+        return null;                       // ni #vgl-deshacer-lote ni nada más
+      };
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
+    }
+
+    // El arnés capa TODO setTimeout a 1 ms (ver harness.js), así que el rótulo del
+    // botón vuelve a su sitio y el «↩ Deshacer» se retira casi en el mismo instante en
+    // que aparecen: mirar el DOM al final del flujo no ve nada. Se graba lo que PASÓ:
+    // cada texto que el script escribió en el botón y cada nodo que colgó del body.
+    function grabarBoton(btn) {
+      const visto = [];
+      let valor = btn.innerHTML;
+      Object.defineProperty(btn, "innerHTML", {
+        configurable: true,
+        get: () => valor,
+        set: (v) => { valor = v; visto.push(String(v)); },
+      });
+      return visto;
+    }
+    function grabarBody(c) {
+      const nacidos = [];
+      const cuerpo = c.env.doc.body;
+      const app = cuerpo.appendChild.bind(cuerpo);
+      cuerpo.appendChild = (n) => { nacidos.push(n && n.id ? n.id : ""); return app(n); };
+      const ins = typeof cuerpo.insertBefore === "function" ? cuerpo.insertBefore.bind(cuerpo) : null;
+      if (ins) cuerpo.insertBefore = (n, ref) => { nacidos.push(n && n.id ? n.id : ""); return ins(n, ref); };
+      return nacidos;
+    }
+
+    await t.casoAsync("v18.0.30 (L6643): tras escribir CERO casillas no se ofrece «↩ Deshacer» — ese botón deshacía el lote ANTERIOR", async () => {
+      cLabOk.api.createLabInjectorUI();
+      const btn = cLabOk.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      t.cierto(!!btn, "el botón de exámenes existe");
+      // El médico acaba de aceptar OTRO llenado (el examen físico) hace unos segundos:
+      // ese lote sigue vivo en la única ranura de deshacer.
+      const casillaDelExamenFisico = { value: "texto aceptado por el médico", isConnected: true, type: "text" };
+      cLabOk.api._vglGuardarDeshacer("999888777", [{ el: casillaDelExamenFisico, prev: "" }], "Examen físico");
+      t.cierto(cLabOk.api._vglDeshacerDisponible(), "el lote anterior sigue vivo (menos de 5 min)");
+
+      mockPacienteLabs(cLabOk, btn);
+      const dicho = grabarBoton(btn);
+      const nacidos = grabarBody(cLabOk);
+      btn.onclick();
+      elegirOpcionChooser(cLabOk, "historial");
+      await esperar(40);
+
+      t.cierto(dicho.some((x) => x.includes("no toqué nada")),
+        "el botón dice la verdad: no escribió ninguna casilla (" + JSON.stringify(dicho) + ")");
+      t.falso(dicho.some((x) => x.startsWith("✓")), "y jamás canta casillas escritas");
+      t.falso(nacidos.includes("vgl-deshacer-lote"),
+        "NO se planta «↩ Deshacer»: no hay nada de ESTE llenado que deshacer, y la guarda de " +
+        "_vglEjecutarDeshacer solo mira que sea el mismo paciente — habría borrado el examen físico");
+      t.igual(casillaDelExamenFisico.value, "texto aceptado por el médico", "el lote anterior queda intacto");
+    });
+
+    await t.casoAsync("v18.0.30 (L6614): con el llenado desactivado el aviso del botón se queda a la vista, no se borra en el mismo tick", async () => {
+      const cKill = cargarLabsOk();
+      // _renderToast reparte el cuerpo por dentro con querySelector(".vgl-toast-b"), que el
+      // DOM falso pelado no resuelve: sin enriquecer, el aviso se pierde en el try/catch y
+      // la prueba diría "mudo" tanto si el fix está como si no.
+      enriquecerDom(cKill);
+      cKill.api.createLabInjectorUI();
+      const btn = cKill.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      const bandeja = cKill.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      mockPacienteLabs(cKill, btn, bandeja);
+      cKill.api.emergencyTeardown("Prueba: llenado desactivado");
+      const dicho = grabarBoton(btn);
+      btn.onclick();
+      elegirOpcionChooser(cKill, "historial");
+      await esperar(40);
+      t.cierto(dicho.some((x) => x.includes("desactivado ahora mismo")),
+        "el botón llega a decir que el llenado está desactivado (" + JSON.stringify(dicho) + ")");
+      t.falso(dicho.some((x) => x.startsWith("✓")), "y nunca canta casillas escritas");
+      // El arnés capa el temporizador de 8 s a 1 ms, así que el rótulo vuelve enseguida y
+      // mirar el botón no sirve para probar que el aviso «se queda». Lo que sí prueba que
+      // la rama dejó de ser MUDA es el aviso flotante, que antes no existía en absoluto.
+      const cuerpos = (bandeja.children || []).map((n) => {
+        try { return String(n.querySelector(".vgl-toast-b").textContent || ""); } catch (e) { return ""; }
+      });
+      t.cierto(cuerpos.some((x) => x.includes("llenado automático de exámenes está desactivado")),
+        "y sale un aviso flotante: la rama no puede quedarse muda (" + JSON.stringify(cuerpos) + ")");
+    });
+
+    // La rama del REINTENTO tras el auto-inicio de sesión (S.atheneaAutoLogin + credenciales
+    // guardadas + un portal que falla la primera lectura y contesta la segunda) no se puede
+    // montar con este arnés sin un mock con estado que simule el login real de Athenea. Se
+    // fija por código, acotado a la función donde vive el defecto: cualquiera de los dos
+    // arreglos que se quite deja esto en rojo.
+    t.caso("v18.0.30 (L6643 / L6714): en el reintento tras iniciar sesión, ni «Deshacer» sin escritura ni «no tiene» cuando no se pudo leer", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const ini = src.indexOf("async function _ejecutarLlenadoExamenes");
+      t.cierto(ini > 0, "se localiza el flujo de Auto-Labs");
+      const cuerpo = src.slice(ini, src.indexOf("\n      document.body.appendChild(btn);", ini));
+      const codigo = cuerpo.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+
+      // (a) NINGÚN ofrecimiento de deshacer sin comprobar antes que ESTE llenado escribió.
+      const llamadas = codigo.split("\n").filter((l) => l.includes("_vglOfrecerDeshacer("));
+      t.igual(llamadas.length, 2, "las dos ramas de Auto-Labs ofrecen deshacer (principal y reintento)");
+      llamadas.forEach((l) => t.cierto(/if \(_huboEscritura2?\) _vglOfrecerDeshacer\(/.test(l.trim()),
+        "guardado por la escritura de ESTE lote, no por la del anterior: " + l.trim()));
+
+      // (b) El reintento distingue «no pude leer» (null) de «no tiene» ([]), igual que la
+      //     rama principal desde la v17.6.58.
+      t.cierto(/\} else if \(labs2 === null\) \{/.test(codigo),
+        "labs2===null tiene su propia rama: un fallo de red no se presenta como un hecho del paciente");
+
+      // (c) Y el reintento ya no canta verde con cero casillas.
+      t.falso(/_vglFeedbackBoton\(btn, "✓ " \+ r2\.count[^\n]*"verde"/.test(codigo),
+        "el verde del reintento depende de r2.count, no es incondicional");
+    });
 
     // ================= createAccionesDockUI (T5 — dock de widgets sobre la HC) =================
     // v14.0.0 (T5): el dock flotante con las 3 acciones rápidas (agendar/ordenar/labs) que

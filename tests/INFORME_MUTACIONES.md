@@ -7448,3 +7448,72 @@ hostname de Athenea.
 | 31 | el mensaje vuelve a imprimirse siempre | *el mensaje depende del resultado* (`suite_37`) | Sí — 2.791 |
 
 Banco completo: **2.791 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.30 — Auto-Labs: un «Deshacer» que borraba el lote ANTERIOR, y una rama muda
+
+Tres hallazgos del mismo módulo (el botón «🧪 Exámenes») y de la misma familia: el asistente
+decía —o callaba— cosas que no se correspondían con lo que había hecho.
+
+### 1. El «↩ Deshacer» borraba trabajo ya aceptado (el grave)
+
+Tras un llenado que escribía **cero casillas**, el ofrecimiento de deshacer salía igual. Con
+`count = 0` **no se guarda lote nuevo** (`_vglGuardarDeshacer` sale en seco si no hay pares),
+así que la única ranura de deshacer seguía conteniendo **el lote anterior** — el examen físico
+que el médico ya había aceptado un minuto antes. Y la guarda de `_vglEjecutarDeshacer` solo
+comprueba que sea **el mismo paciente**, no que sea el mismo lote: no lo impedía.
+
+Es decir: el botón aparecía pegado al mensaje «✋ no toqué nada» y, al pulsarlo, deshacía otra
+cosa. Pasaba en las **dos** ramas de Auto-Labs (la principal y la del reintento tras el
+auto-inicio de sesión). Ahora cada una comprueba su propia escritura antes de ofrecerlo.
+
+### 2. Con el llenado desactivado, la rama era muda del todo
+
+`_vglFeedbackBoton` escribe el aviso EN el botón y lo deja 8 s; la línea de al lado
+(`btn.innerHTML = "🧪 Exámenes";`) se lo borraba **en el mismo tick**, y esa rama tampoco tenía
+aviso flotante. El médico pulsaba Exámenes, no veía pasar nada y se quedaba creyendo que el
+laboratorio no tenía resultados. Se quita el borrado y se añade el aviso que faltaba. El mismo
+borrado en la rama de «cambió el paciente» se quita también (allí el toast sí existía, pero el
+mensaje del botón duraba cero milisegundos).
+
+### 3. En el reintento, «no pude leer» seguía diciéndose como «no tiene»
+
+La v17.6.58 separó `labs === null` (fallo de lectura) de `labs === []` (el paciente de verdad no
+tiene) en la rama principal. A la rama del **reintento** se le quedó sin aplicar: los dos casos
+mostraban «Sin resultados en el laboratorio para este paciente». Un fallo de red presentado como
+un hecho clínico verificado. De paso, esa rama cantaba «✓ N casillas escritas» en **verde**
+aunque N fuera 0 — el mismo hallazgo que la v17.8.1 ya había arreglado en la principal.
+
+### Las pruebas son de conducta, y donde no pueden serlo se dice
+
+Los casos 1 y 2 se prueban **de punta a punta**: el contexto nuevo completa la cadena de 3 pasos
+de Athenea (`BusquedaPaciente → BuscarPaciente → DatosPaciente → consultaDetalleSolicitud`), así
+que `getAtheneaLabsAuto` devuelve un analito real y el flujo entra en la rama «hay laboratorios»
+— que hasta ahora **nadie recorría entera en el banco**. Como el documento falso no tiene
+casillas `input[id^="resultado"]`, se escriben 0: exactamente el escenario del defecto.
+
+Dos detalles del arnés obligaron a instrumentar en vez de mirar el DOM al final:
+
+- **capa todo `setTimeout` a 1 ms**, así que el rótulo vuelve y el «Deshacer» se retira casi en
+  el mismo instante en que aparecen. Se graba lo que **pasó** (cada texto escrito en el botón,
+  cada nodo colgado del body), no lo que queda.
+- **`_renderToast` reparte el cuerpo con `querySelector` interno** que el DOM pelado no resuelve:
+  sin `enriquecerDom`, el aviso se pierde en el try/catch y la prueba diría «mudo» tanto con el
+  arreglo puesto como sin él.
+
+La rama del **reintento** pediría un mock con estado que simule el login real de Athenea; se fija
+por código fuente, acotado a `_ejecutarLlenadoExamenes`, y la propia prueba lo dice.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 32 | vuelve el borrado del aviso del kill-switch (y se calla el toast) | *con el llenado desactivado el aviso se queda a la vista* (`suite_15`) | Sí — 2.794 |
+| 33 | solo se quita el aviso flotante del kill-switch | *(la misma)* — el toast por sí solo ya la sostiene | Sí — 2.794 |
+| 34 | el «Deshacer» vuelve a ofrecerse tras escribir 0 casillas (rama principal) | *tras escribir CERO casillas no se ofrece «↩ Deshacer»* + la de fuente (`suite_15`) | Sí — 2.794 |
+| 35 | el «Deshacer» vuelve a ofrecerse sin escritura en el reintento | *en el reintento, ni «Deshacer» sin escritura ni «no tiene» cuando no se pudo leer* (`suite_15`) | Sí — 2.794 |
+| 36 | el reintento vuelve a decir «no tiene» cuando no pudo leer | *(la misma)* | Sí — 2.794 |
+| 37 | el reintento vuelve a cantar verde con cero casillas | *(la misma)* | Sí — 2.794 |
+
+Banco completo: **2.794 comprobaciones pasan, 0 fallan.**
