@@ -319,6 +319,53 @@ module.exports = {
         "una escritura sobre lo leído queda en la caché para el siguiente que la consulte");
     });
 
+    // =================================================================================
+    //  v18.0.37 — DOS FORMAS DE QUE EL MODAL DE AGENDAMIENTO ACTÚE POR SU CUENTA
+    //  «El médico manda, el script sugiere» (CLAUDE.md). Las dos lo violaban en silencio.
+    // =================================================================================
+    t.caso("v18.0.37: el desplegable de la toma de muestras NUNCA nace con una hora puesta", () => {
+      // La v16.4.0 quitó el atributo `selected` de la primera opción pero dejó el marcador
+      // vacío condicionado a un parámetro que la ruta normal no pasaba. Sin una opción vacía
+      // delante, el navegador selecciona la primera por su cuenta; y el bloque de abajo
+      // habilitaba el botón. Un clic reservaba el primer cupo del día —las 6:00 a. m.— que
+      // el médico nunca eligió.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+
+      // Los DOS modales que pintan horas de laboratorio, con la misma regla.
+      const pintados = codigo.match(/labTimeSel\.innerHTML = `<option[^`]*`/g) || [];
+      const conTurnos = pintados.filter((p) => /\$\{escapeHtml\(hRaw\)\}/.test(p) || /turnosConHora/.test(p));
+      t.cierto(pintados.length >= 2, "los dos modales pintan la lista de horas (" + pintados.length + ")");
+      pintados.forEach((p) => {
+        if (!/— elija/.test(p)) return;              // los mensajes de error no llevan lista
+        t.cierto(/<option value="" selected disabled>/.test(p),
+          "el marcador vacío va SIEMPRE y va `disabled`: sin él el navegador elige la primera hora solo");
+      });
+      t.falso(/exigirEleccion/.test(codigo),
+        "y ya no queda ningún parámetro que haya que acordarse de pasar para que esto se cumpla: " +
+        "acordarse era justamente la parte que fallaba");
+      t.falso(/if \(!exigirEleccion\) \{\s*confirmBtn\.disabled = false;/.test(codigo),
+        "nadie habilita el botón al pintar la lista: solo lo habilita el `change` del médico");
+    });
+
+    t.caso("v18.0.37: ningún interruptor del médico se escucha con { once: true }", () => {
+      // «Agendar también la Toma de Muestras» registraba su listener de `change` con
+      // { once: true }: se retiraba tras el PRIMER cambio y la bandera que recuerda la
+      // elección del médico se quedaba congelada. Si él la desmarcaba y se arrepentía, el
+      // siguiente repintado escribía la elección vieja encima de la casilla.
+      // La regla es general porque el defecto lo es: un listener de `change` que solo
+      // escucha una vez es casi siempre un error — la gente cambia de opinión.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      const unaVez = codigo.match(/addEventListener\(\s*["']change["'][\s\S]{0,240}?\{\s*once:\s*true\s*\}/g) || [];
+      t.igual(unaVez.length, 0,
+        "ningún `change` se registra para escuchar una sola vez: " + unaVez.join(" | ").slice(0, 200));
+      // Y la contrapartida: no escuchar una sola vez no puede significar apilar un listener
+      // por cada repintado del modal.
+      t.cierto(/if \(!labChk\.__vglEscuchaPuesta\) \{/.test(codigo),
+        "la escucha se instala UNA vez por elemento, no una por repintado");
+    });
+
     t.caso("v18.0.34: el agendamiento no lee la tensión de la pantalla sin comprobar de quién es la historia", () => {
       // El triaje que decide la franja horaria leía mtrLeerTensionDelDom(document) —ids
       // globales, sin guarda— y la escribía en el resumen cacheado de ESTE paciente.

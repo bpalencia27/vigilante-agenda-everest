@@ -7888,3 +7888,67 @@ La **69** cubre el hueco que la 65 no puede ver por sí sola: una función corre
 llama es código muerto con buena conciencia.
 
 Banco completo: **2.812 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.37 — Dos formas de que el modal de agendamiento actuara por su cuenta
+
+*«El médico manda, el script sugiere»* (CLAUDE.md). Las dos lo violaban en silencio.
+Hallazgos `L24897` y `L23853` del barrido.
+
+### 1. Un clic agendaba una hora que el médico nunca eligió
+
+La v16.4.0 quitó el `selected` de la primera opción, pero dejó el marcador vacío **condicionado
+a un parámetro** (`exigirEleccion`) y dejó vivo el bloque que habilitaba el botón. Por la ruta
+normal —el primer pintado y el clic en un chip de día— la función se llama **sin argumento**:
+
+```js
+const placeholder = exigirEleccion ? `<option value="" selected>…` : "";   // <- vacío
+…
+if (!exigirEleccion) { confirmBtn.disabled = false; confirmBtn.textContent = "✓ Agendar…"; }
+```
+
+Sin una opción vacía delante, el navegador **selecciona la primera por su cuenta**, y el botón
+nacía habilitado. Un clic reservaba el primer cupo del día —las 6:00 a. m.— sin que nadie lo
+hubiera elegido.
+
+El marcador vacío pasa a ir **siempre**, con `disabled`, y el parámetro **desaparece**:
+acordarse de pasarlo era justamente la parte que fallaba. Una regla que depende de que alguien
+la recuerde en cada sitio de llamada no es una regla.
+
+### 2. La casilla que se marcaba sola porque solo se escuchaba una vez
+
+«Agendar también la Toma de Muestras» registraba su `change` con `{ once: true }`. El listener
+se retira tras el **primer** cambio, así que la bandera que recuerda la elección del médico se
+queda congelada:
+
+> desmarca *(queda registrado `false`, listener retirado)* → se arrepiente y la vuelve a marcar
+> *(ya no hay quien lo oiga)* → elige otro día → el repintado escribe `checked = false` encima.
+
+La casilla del médico es sagrada **también cuando cambia de opinión dos veces**. Se escucha
+siempre, con una marca en el elemento para no apilar un listener por repintado — que es lo que
+`{ once: true }` estaba evitando, a costa del defecto.
+
+La regla que lo vigila es **general**, porque el defecto lo es: *ningún `change` se registra
+para escuchar una sola vez*. La gente cambia de opinión.
+
+### La prueba vieja que se rompió por la firma, no por lo vigilado
+
+`suite_15` cortaba el fuente por `indexOf("async function cargarHorasLabSolo(exigirEleccion) {")`.
+Al retirar el parámetro, `indexOf` devolvió **-1** y el `slice` acabó mirando el final del
+archivo. Se corta ahora por el **nombre**, que es lo estable: una prueba no debe romperse porque
+cambie la firma de lo que vigila, solo porque cambie su conducta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 70 | vuelve el marcador vacío condicionado a un parámetro | *nunca nace con una hora puesta* | Sí — 2.814 |
+| 71 | se le quita el `disabled` al marcador vacío | *nunca nace con una hora puesta* | Sí — 2.814 |
+| 72 | vuelve el `{ once: true }` | *ningún interruptor se escucha una sola vez* | Sí — 2.814 |
+| 73 | se quita el `once` pero se apila un listener por repintado | *ningún interruptor…* (la otra mitad) | Sí — 2.814 |
+
+La **73** es la mutación en dirección contraria: quitar el `once` sin más habría cambiado un
+defecto (dejar de escuchar) por otro (escuchar N veces y contar N cambios por uno).
+
+Banco completo: **2.814 comprobaciones pasan, 0 fallan.**

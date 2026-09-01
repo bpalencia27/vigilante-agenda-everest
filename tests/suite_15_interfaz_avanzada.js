@@ -3498,7 +3498,13 @@ module.exports = {
       t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLab), "cargarHorasLab consulta con gmPostJsonEx, no gmPostJson");
       t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLab), "y distingue el caso 'no hubo respuesta' antes de mirar la lista de turnos");
 
-      const fnCargarHorasLabSolo = src.slice(src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {"), src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {") + 1600);
+      // v18.0.37 — se cortaba por la firma LITERAL con su parámetro. Al retirar
+      // `exigirEleccion` (ver más abajo), indexOf devolvía -1 y el slice miraba el final del
+      // archivo: la prueba fallaba por la firma, no por lo que vigila. Se corta por el
+      // nombre, que es lo estable.
+      const iSolo = src.indexOf("async function cargarHorasLabSolo(");
+      t.cierto(iSolo > 0, "la función existe");
+      const fnCargarHorasLabSolo = src.slice(iSolo, iSolo + 1600);
       t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLabSolo), "cargarHorasLabSolo también consulta con gmPostJsonEx");
       t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLabSolo), "y también distingue sin-respuesta de sin-turnos");
     });

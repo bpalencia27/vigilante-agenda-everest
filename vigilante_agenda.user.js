@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.36
+// @version      18.0.37
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.36";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.37";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -24306,7 +24306,20 @@
         // esa elección manda siempre, por encima del default de labs-primero. Sin
         // elección previa, se comporta como antes: marcado si labs-primero, si no vacío.
         labChk.checked = _labChkEditadoManual ? _labChkValorManual : _chkPorDefecto;
-        labChk.addEventListener("change", () => { _labChkEditadoManual = true; _labChkValorManual = labChk.checked; }, { once: true }); }
+        // v18.0.37 — EL `{ once: true }` ERA EL DEFECTO. Con él, el listener se retira
+        // después del PRIMER cambio, así que `_labChkValorManual` se queda congelado en lo
+        // que el médico hizo esa única vez y deja de seguir la casilla. Secuencia real:
+        // desmarca (queda registrado false, listener retirado) → se arrepiente y la vuelve a
+        // marcar (ya no hay quien lo oiga) → elige otro día → cargarHorasLab repinta y
+        // escribe `checked = _labChkValorManual`, o sea false: la casilla que él dejó marcada
+        // aparece desmarcada, y al revés. La casilla del médico es sagrada, también cuando
+        // cambia de opinión dos veces.
+        // Se escucha SIEMPRE, y la marca en el propio elemento impide apilar un listener por
+        // cada repintado (que es lo que `{ once: true }` estaba evitando a costa del bug).
+        if (!labChk.__vglEscuchaPuesta) {
+          labChk.__vglEscuchaPuesta = true;
+          labChk.addEventListener("change", () => { _labChkEditadoManual = true; _labChkValorManual = labChk.checked; });
+        } }
           } else {
             labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${escapeHtml(selectedLabDateInfo.fmt)}. Elija otro día arriba.</option>`;
             if (labChk) { labChk.checked = false; labChk.disabled = true; }
@@ -25401,13 +25414,23 @@
     // y una posible cita de laboratorio duplicada de verdad en AppCita.
     let isSubmitting = false;
 
-    // v12.3.33 — `exigirEleccion` (hallado en revisión adversarial): en el refresco
-    // automático tras un fallo de reserva, preseleccionar el primer cupo del día (las
-    // 6:00 a. m., normalmente) con el botón habilitado permitía que un reclic ciego en
-    // "Agendar" reservara una hora que el médico NUNCA eligió — la misma clase de fallo
-    // de "cupo por defecto" que v11.0.1 eliminó. Con exigirEleccion=true el desplegable
-    // arranca en un marcador vacío y el botón queda bloqueado hasta que el médico ELIJA.
-    async function cargarHorasLabSolo(exigirEleccion) {
+    // v12.3.33 — hallado en revisión adversarial: en el refresco automático tras un fallo
+    // de reserva, preseleccionar el primer cupo del día (las 6:00 a. m., normalmente) con el
+    // botón habilitado permitía que un reclic ciego en "Agendar" reservara una hora que el
+    // médico NUNCA eligió — la misma clase de fallo de "cupo por defecto" que v11.0.1
+    // eliminó. Se resolvió con un parámetro `exigirEleccion` que había que acordarse de
+    // pasar; la v18.0.37 lo retiró porque acordarse resultó ser la parte que fallaba.
+    // v18.0.37 — LA v16.4.0 SE QUEDÓ A MEDIAS AQUÍ. Quitó el atributo `selected` de la
+    // primera opción, pero dejó el marcador vacío condicionado a `exigirEleccion` y dejó
+    // vivo el bloque que habilitaba el botón. Por la ruta normal (el clic en un chip de día
+    // y el primer pintado) esta función se llama SIN argumento, así que `exigirEleccion` era
+    // undefined: sin una opción vacía delante el navegador selecciona la primera por su
+    // cuenta, y el botón nacía habilitado con el rótulo «✓ Agendar Toma de Muestras». Un
+    // clic reservaba el primer cupo del día —las 6:00 a. m.— que el médico nunca eligió.
+    // El modal principal (cargarHorasLab) sí quedó bien; este es el mismo control con la
+    // misma regla del médico: la hora se ELIGE, siempre. El parámetro desaparece porque su
+    // única razón de ser era distinguir un caso que ya no existe.
+    async function cargarHorasLabSolo() {
       if (!selectedLabDateInfo || isSubmitting) return;
       const token = ++_tokenLabSolo;
       const labTimeSel = modal.querySelector("#vgl-agm-lab-time-sel");
@@ -25430,18 +25453,15 @@
         const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
         if (labTimeSel) {
           if (turnosConHora.length > 0) {
-            const placeholder = exigirEleccion ? `<option value="" selected>— elija un horario —</option>` : "";
-            labTimeSel.innerHTML = placeholder + turnosConHora.map((t, idx) => {
+            // El marcador vacío va SIEMPRE y lleva `disabled`: sin él, el navegador
+            // selecciona la primera opción por su cuenta y el desplegable nace con una hora
+            // puesta que nadie eligió. El botón se habilita solo desde el listener de
+            // `change`, es decir, cuando el médico elige de verdad.
+            labTimeSel.innerHTML = `<option value="" selected disabled>— elija la hora de la toma —</option>` + turnosConHora.map((t) => {
               const hRaw = t.hora || t.horaTexto || t.Hora;
               const hFmt = format12hTime(hRaw);
-              // v16.4.0 — decisión del médico: elección explícita SIEMPRE; la rama
-              // `!exigirEleccion` que preseleccionaba el primer cupo se retira.
               return `<option value="${escapeHtml(hRaw)}">${escapeHtml(hFmt)}</option>`;
             }).join("");
-            if (!exigirEleccion) {
-              confirmBtn.disabled = false;
-              confirmBtn.textContent = "✓ Agendar Toma de Muestras";
-            }
           } else {
             labTimeSel.innerHTML = `<option value="">⛔ No hay turnos disponibles para el ${escapeHtml(selectedLabDateInfo.fmt)}</option>`;
           }
@@ -25552,9 +25572,9 @@
         // se queda mostrando la lista de horas vieja: se vuelve a consultar la
         // disponibilidad real en ese mismo momento, así el médico elige sobre datos
         // frescos en vez de reintentar a ciegas contra un cupo que ya no existe.
-        // v12.3.33 — con exigirEleccion=true: el refresco NO preselecciona ningún cupo ni
-        // habilita el botón; el médico debe elegir la hora nueva a conciencia.
-        if (vivo()) cargarHorasLabSolo(true);
+        // v18.0.37 — ya no hace falta pedirlo con un argumento: el refresco NUNCA
+        // preselecciona ni habilita, aquí y en cualquier otra ruta.
+        if (vivo()) cargarHorasLabSolo();
       }
     });
   }
