@@ -65,8 +65,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | el POST de medicamentos (consulta pura) se trataba como escritura por faltarle `__idempotent:true` — cero reintentos y ni siquiera la segunda vía (GM_xmlhttpRequest) ante un blip de red, a diferencia de su hermano GET — 3 de 3 refutadores no lo tumbaron | `mtrPedirMedicamentos` | **v18.0.81** | 215 |
 | `estadioParaDosis` devolvía el estadio MEJOR (no el peor) cuando Cockcroft-Gault (administrativo) era más grave que CKD-EPI (clínico) — justo el caso de peso muy bajo/sarcopenia que el propio aviso de discordancia cita; sin conexión hoy (nadie lo lee todavía), pero un contrato con nombre que ya mentía | `mtrEvaluarErc` | **v18.0.82** | 216 |
 | `dataset.vglVigilado` marcaba el ELEMENTO como vigilado, no el paciente — si Angular reutiliza el mismo `<textarea>` al cambiar de historia (premisa no verificada contra Everest real, admitido por el propio hallazgo, pero el arreglo es gratis y puramente defensivo), la primera edición real sobre el paciente nuevo no invalidaba el resumen en caché | `_vglVigilarTextoLibre` / `_vglNotarTextoLibre` | **v18.0.83** | 217 |
+| leucocitos/hematíes «incontables»/«innumerables»/«campo cubierto» (piuria o hematuria masiva, el hallazgo MÁS grave posible) pasaban como NORMAL — ninguna palabra clave los cubría, aunque el proyecto ya reconoce el mismo léxico como severidad máxima en `mtrUroGrado` — 3 de 3 refutadores no lo tumbaron | `_esUroComponenteAlterado` | **v18.0.84** | 218 |
 
-Quedan **12 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **11 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

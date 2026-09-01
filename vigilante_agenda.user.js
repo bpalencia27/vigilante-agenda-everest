@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.83
+// @version      18.0.84
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.83";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.84";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1574,6 +1574,12 @@
       const val = stripAccents(String(c.resultado || "")).toLowerCase().trim();
       if (!val || val === "negativo" || val === "normal" || val === "0" || val === "0.00" || val === "limpido" || val === "amarillo" || val === "escasas" || val === "no se observan" || val === "no contiene") return false;
       if (val.includes("positivo") || val.includes("+") || val.includes("anormal") || val.includes("abundante") || val.includes("moderad") || val.includes("patologico")) return true;
+      // v18.0.84 — AUDITORÍA (hallazgo de enjambre #36): el hallazgo MÁS GRAVE posible de un
+      // componente (leucocitos/hematíes «incontables», piuria o hematuria masiva) no lo
+      // cubría ninguna de las palabras de arriba — pasaba como NORMAL. Mismo léxico que ya
+      // usa mtrUroGrado (línea ~42707) para el mismo hallazgo, en la misma forma, para no
+      // mantener dos catálogos de «qué es grave» que puedan volver a divergir.
+      if (/^(incontables?|innumerables?|campo\s+cubierto)$/.test(val)) return true;
       const num = parseFloat(val.replace(",", "."));
       const nom = stripAccents(String(c.nombre || "")).toLowerCase();
       if (!isNaN(num)) {

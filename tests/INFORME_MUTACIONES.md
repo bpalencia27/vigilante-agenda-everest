@@ -10337,3 +10337,29 @@ nodo ya está vigilado pero el paciente actual es distinto al guardado, se resie
 | 217 | vuelve el guardián por elemento sin registrar el dueño (**el defecto original**) | *REGRESIÓN — un cambio de paciente sobre el MISMO nodo... resiembra el texto vigilado* | Sí |
 
 Banco completo: **2.940 comprobaciones pasan, 0 fallan.**
+
+## v18.0.84 — el uroanálisis ya reconoce su propio hallazgo más grave
+
+Hallazgo #36 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+`_esUroComponenteAlterado` decide DOS resaltados rojos que el médico usa para escanear la tabla
+de un vistazo (la fila del Uroanálisis en la tabla general de Laboratorios, y cada ítem del
+acordeón). El resultado cualitativo MÁS grave que puede traer un parcial de orina — leucocitos u
+hematíes «incontables»/«innumerables»/«campo cubierto» (piuria o hematuria masiva) — pasaba como
+NORMAL: `parseFloat('incontables')` es `NaN` y ninguna de las palabras clave existentes lo
+cubría. El propio proyecto ya reconoce este léxico exacto como severidad máxima en otra función
+del mismo archivo (`mtrUroGrado`, grado 4).
+
+### La reparación
+
+Se agrega el mismo léxico, en la misma forma (`/^(incontables?|innumerables?|campo\s+cubierto)$/`),
+para no mantener dos catálogos de «qué es grave» que puedan volver a divergir — «muy
+abundante(s)» no hacía falta agregarlo: ya lo cubría el `.includes("abundante")` existente.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 218 | se quita el chequeo de severidad máxima (**el defecto original**) | *REGRESIÓN — leucocitos/hematíes INCONTABLES/INNUMERABLES/CAMPO CUBIERTO sí se reconocen como alterados* | Sí |
+
+Banco completo: **2.941 comprobaciones pasan, 0 fallan.**

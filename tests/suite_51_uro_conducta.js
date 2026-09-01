@@ -73,6 +73,19 @@ module.exports = {
       t.falso(api._esUroComponenteAlterado({ nombre: "DENSIDAD", resultado: "1.015" }), "densidad numérica sin regla: no se inventa alteración");
     });
 
+    // v18.0.84 — HALLAZGO DE ENJAMBRE #36 (3 de 3 refutadores no lo tumbaron). El hallazgo
+    // MÁS GRAVE posible del uroanálisis (piuria o hematuria masiva, «incontables») pasaba
+    // como NORMAL: parseFloat('incontables') es NaN y ninguna de las palabras clave lo
+    // cubría. Mismo léxico que ya usa mtrUroGrado para el mismo hallazgo — se prueban las
+    // tres formas exactas de la reproducción del hallazgo.
+    t.caso("REGRESIÓN — leucocitos/hematíes INCONTABLES/INNUMERABLES/CAMPO CUBIERTO sí se reconocen como alterados (hallazgo #36)", () => {
+      t.cierto(api._esUroComponenteAlterado({ nombre: "Leucocitos", resultado: "INCONTABLES" }), "INCONTABLES: piuria masiva");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "Leucocitos", resultado: "Incontables" }), "sin importar mayúsculas/minúsculas");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "Hematies", resultado: "INNUMERABLES" }), "INNUMERABLES: hematuria masiva");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "Leucocitos", resultado: "CAMPO CUBIERTO" }), "CAMPO CUBIERTO: el mismo hallazgo con otro nombre");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "Leucocitos", resultado: "campo   cubierto" }), "tolera espacios de más entre las dos palabras");
+    });
+
     t.caso("_clasificarComponentesUro: separa fisicoquímico, sedimento y otros sin perder ninguno", () => {
       const r = api._clasificarComponentesUro([
         { nombre: "COLOR", resultado: "AMARILLO" },
