@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.87
+// @version      18.0.88
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.87";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.88";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28410,7 +28410,17 @@
     _vglHcActivo = !_vglHcActivo;
     try {
       const raiz = document.getElementById("vgl-root");
-      if (raiz) { raiz.classList.toggle("vgl-hc", _vglHcActivo); raiz.style.zoom = _vglHcActivo ? "1.12" : ""; }
+      if (raiz) {
+        raiz.classList.toggle("vgl-hc", _vglHcActivo);
+        // v18.0.88 — AUDITORÍA (hallazgo de enjambre #40): un 1.12 fijo ENCOGÍA el panel
+        // principal si el médico ya tenía «letra muy grande» (1.28) elegida en Ajustes —
+        // justo lo opuesto de lo que ambas opciones de accesibilidad prometen. Las demás
+        // superficies del script (VGL_FZ_OBJETIVOS, vía la hoja de S.tamanoLetra) no las
+        // toca este botón y se quedan en 1.28: usar el MAYOR de los dos zooms deja todo el
+        // asistente de acuerdo, en vez de solo el panel principal retrocediendo.
+        const zAltoContraste = _vglHcActivo ? Math.max(1.12, parseFloat(_fzZoomDe(S.tamanoLetra)) || 1) : null;
+        raiz.style.zoom = zAltoContraste ? String(zAltoContraste) : "";
+      }
       for (const id of ["vgl-dock", "vgl-acciones-dock", "vgl-toasts", "vgl-pym-banner"]) {
         const e = document.getElementById(id); if (e) e.classList.toggle("vgl-hc", _vglHcActivo);
       }

@@ -10460,3 +10460,33 @@ existe hasta ese punto, y un aviso disparado antes se pierde sin pintarse.
 | 222 | el aviso corre ANTES de `buildOverlay()` (se perdería, como el hallazgo #32) | *REGRESIÓN — boot() avisa de la configuración reiniciada DESPUÉS de montar #vgl-toasts* | Sí |
 
 Banco completo: **2.945 comprobaciones pasan, 0 fallan.**
+
+## v18.0.88 — Alto Contraste ya no encoge la letra que el médico eligió en Ajustes
+
+Hallazgo #40 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+concedió que el mecanismo es real (`_vglAlternarAltoContraste` fijaba `raiz.style.zoom = "1.12"`
+sin mirar `S.tamanoLetra`) pero calificó el daño de cosmético, no clínico: el resto del asistente
+(`VGL_FZ_OBJETIVOS` vía `aplicarTamanoLetra`) no lo toca este botón y se queda en 1.28, así que
+solo el panel principal retrocede — el médico sigue viendo letra grande en el resto de la
+pantalla, no ceguera total.
+
+Se aplica de todos modos: si el médico ya eligió "letra muy grande" (1.28) en Ajustes por una
+razón real (fatiga visual, consulta larga), un botón de accesibilidad que la ENCOGE al activar
+OTRA accesibilidad (Alto Contraste) es exactamente lo opuesto de lo que ambas opciones prometen
+— y el arreglo es gratis, no reduce ninguna protección existente.
+
+### La reparación
+
+`_vglAlternarAltoContraste` ahora calcula el zoom como el MAYOR entre el 1.12 propio de Alto
+Contraste y el zoom que ya corresponde a `S.tamanoLetra` (vía `_fzZoomDe`, reutilizando el mismo
+helper que usa `aplicarTamanoLetra`). Con letra normal, sigue dando 1.12 como siempre — el
+cambio es transparente para el caso común. Con letra muy grande, da 1.28 en vez de encoger a
+1.12.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 223 | vuelve el 1.12 fijo sin mirar `S.tamanoLetra` (**el defecto original**) | *suite_61: REGRESIÓN — _vglAlternarAltoContraste nunca reduce la letra que el médico ya eligió en Ajustes (hallazgo #40)* | Sí |
+
+Banco completo: **2.946 comprobaciones pasan, 0 fallan.**
