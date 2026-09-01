@@ -7570,3 +7570,77 @@ La mutación 41 es la contrapartida deliberada: una guarda que se «arregla» ex
 también tiene que ponerse roja, o la prueba solo vigilaría una dirección.
 
 Banco completo: **2.795 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.32 — El parcial de orina: dos defectos independientes, los dos cerrando el caso sin urocultivo
+
+Hallazgos (A) `L1496` y (B) `L39755` del barrido. **No son el mismo defecto visto dos veces:**
+arreglar uno dejaba el otro en pie, y cada uno por su cuenta bastaba para que un parcial
+infeccioso saliera rotulado como normal. Reproducidos con el arnés **antes de tocar nada**.
+
+### (A) El agrupador tiraba el ancla de panel
+
+`_agruparUroanalisisParaTabla` comprimía cada fila a `{nombre, resultado}` y descartaba
+`NombreParametroPadre`. Aguas abajo, `mtrHallazgosUroDesdeLabs` exige `_esAnalitoDeOrina(lab)`,
+que sin padre cae al respaldo **por nombre** — y ese respaldo, **a propósito** (v12.3.37), no
+reconoce `LEUCOCITOS`/`HEMATIES`/`SANGRE`, porque esos nombres también existen en el hemograma
+en sangre. Medido:
+
+```
+CRUDO       hallazgos: {"esterasa":"PRESENTE","leucocitos":999,"nitritos":"NEGATIVO"}
+COMPRIMIDO  hallazgos: {"esterasa":"PRESENTE","nitritos":"NEGATIVO"}      <- se pierde la piuria
+COMPRIMIDO  _resumenClinicoUro: {"esPatologico":false, ...}               -> «Sin hallazgos patológicos (Normal)»
+```
+
+No se arregla relajando `_esAnalitoDeOrina` para que reconozca esos nombres: eso reintroduce el
+bug que el comentario de la v12.3.37 prohíbe. Se conserva el dato real, no se amplía la
+heurística.
+
+### (B) Una esterasa en cruces CON número se contaba como recuento de leucocitos
+
+`mtrUroRecuento("3+")` devuelve 3, y la guarda vieja solo reconocía la cruz pelada (`/^[+-]+$/`).
+Una esterasa `3+` entraba al campo del **recuento** como «3 leucocitos por campo»: por debajo del
+umbral de piuria (10) y, peor, **afirmando un conteo normal que nadie midió**.
+
+```
+informe típico: tira LEUCOCITOS «3+» + sedimento «15-20» x campo + NITRITOS negativo
+ANTES:   {"leucocitos":20,"nitritos":"NEGATIVO"}   -> SIN HALLAZGOS
+                                                      «no se pide urocultivo por este resultado»
+DESPUÉS: {"esterasa":"3+","leucocitos":20,...}     -> REQUIERE SÍNTOMAS
+                                                      «confirme síntomas antes de ordenar urocultivo»
+```
+
+Bordes verificados intactos: `20+`, `100+` y `MAYOR A 100` siguen siendo **recuentos** (son cotas
+de conteo, no cruces); `0` sigue siendo 0; el negativo pelado sigue yendo a esterasa. El regex va
+**anclado** a propósito: desanclarlo cambia este defecto por el contrario.
+
+### (A-bis) Una mutación destapó un hueco en mi propio arreglo
+
+**M2 no puso roja a nadie.** Conservar el ancla de panel pero mandar al motor el valor **de
+pantalla** (`"—"`, que es relleno visual para la tabla) hacía que `esValorReal` lo aceptara —solo
+rechaza vacío, `PENDIENTE` e `idEstado 1`— y el motor se inventaba un hallazgo sobre un paciente
+**sin parcial de orina**:
+
+```
+hallazgos:  {"nitritos":"—","esterasa":"—"}
+evaluación: CONFIRMAR — «Hay valores que el asistente no pudo interpretar (nitritos: —;
+            esterasa leucocitaria: —). Revíselos a mano en el parcial y decida.»
+```
+
+El valor **crudo** viaja aparte del de pantalla. Prueba añadida y M2 repetida: ahora sí cae.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 42 | el agrupador vuelve a tirar el ancla de panel | *el bloque agrupado NO pierde la piuria* (`suite_51`) | Sí — 2.799 |
+| 43 | el agrupador manda el «—» de pantalla al motor | **primero NO cayó nadie** → prueba nueva *(A-bis)* → repetida y cae | Sí — 2.799 |
+| 44 | vuelve la guarda vieja: solo la cruz pelada | *(B)* + *(B de punta a punta)* (`suite_51`) | Sí — 2.799 |
+| 45 | el regex se pasa de rosca y se come «20+»/«100+» | *(B)* — los recuentos de verdad siguen siéndolo | Sí — 2.799 |
+| 46 | el regex se desancla (una cruz en medio de otra cosa cuenta) | *(B)* | Sí — 2.799 |
+
+Las mutaciones 45 y 46 van en la **dirección contraria** a propósito: un arreglo que solo se
+vigila en un sentido no está vigilado.
+
+Banco completo: **2.799 comprobaciones pasan, 0 fallan.**

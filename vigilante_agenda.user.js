@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.31
+// @version      18.0.32
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.31";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.32";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1524,14 +1524,33 @@
           // _hayComponenteUroReal ya corrigió arriba (Hematíes=0, Leucocitos=0 son
           // resultados REALES) — este bloque seguía con el || crudo, así que un 0 real se
           // mostraba como "—" (sin dato) en el bloque agrupado de Uroanálisis.
-          const resultado = c.Resultado != null ? c.Resultado : (c.resultado != null ? c.resultado : (c.valor != null ? c.valor : "—"));
+          // v18.0.32 — EL ANCLA DE PANEL VIAJA CON EL COMPONENTE. Este bloque comprimía
+          // cada fila a {nombre, resultado} y tiraba NombreParametroPadre. Aguas abajo,
+          // _resumenClinicoUro -> mtrHallazgosUroDesdeLabs exige _esAnalitoDeOrina(lab),
+          // que sin padre cae al respaldo POR NOMBRE — y ese respaldo, a propósito
+          // (v12.3.37), NO reconoce LEUCOCITOS/HEMATIES/SANGRE, porque esos nombres también
+          // existen en el hemograma EN SANGRE. Medido con el arnés: un parcial con esterasa
+          // PRESENTE y leucocitos INCONTABLES perdía la piuria y el bloque salía rotulado
+          // «Sin hallazgos patológicos (Normal)». Se conserva el padre REAL —no se inventa
+          // uno— y el valor CRUDO aparte del de pantalla: «—» es un relleno visual, no un
+          // resultado, y no puede entrar al motor como si lo fuera.
+          const crudo = c.Resultado != null ? c.Resultado : (c.resultado != null ? c.resultado : (c.valor != null ? c.valor : null));
+          const resultado = crudo != null ? crudo : "—";
           const fechaInfo = _extractAtheneaFecha(c);
           const resultDate = fechaInfo ? fechaInfo.iso : null;
           const previo = porNombre.get(clave);
           if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) return;
-          porNombre.set(clave, { nombre, resultado, resultDate });
+          porNombre.set(clave, { nombre, resultado, resultDate, crudo,
+              padre: (c.NombreParametroPadre != null ? c.NombreParametroPadre : (c.nombreParametroPadre != null ? c.nombreParametroPadre : null)),
+              idEstado: (c.idEstado != null ? c.idEstado : null) });
       });
-      const items = [...porNombre.values()].map((v) => ({ nombre: v.nombre, resultado: v.resultado }));
+      const items = [...porNombre.values()].map((v) => ({
+          nombre: v.nombre, resultado: v.resultado,
+          NombreParametro: v.nombre,
+          NombreParametroPadre: v.padre,
+          Resultado: (v.crudo != null ? v.crudo : ""),
+          idEstado: v.idEstado,
+      }));
       const grupo = Object.assign({}, representante, {
           NombreParametro: "Uroanálisis",
           __vglGrupoUroComponentes: items,
@@ -40356,7 +40375,19 @@
             const rec = mtrUroRecuento(val);
             if (/ESTERASA/.test(nom)) {
               h.esterasa = _uroMayorGrado(h.esterasa, val);
-            } else if (rec !== null && !/^\s*[+\-]+\s*$/.test(String(val))) {
+            // v18.0.32 — LAS CRUCES TAMBIÉN LLEGAN CON NÚMERO DELANTE. La guarda anterior
+            // solo reconocía la cruz pelada (/^[+-]+$/), así que mtrUroRecuento("3+") -> 3
+            // mandaba una ESTERASA 3+ al campo del RECUENTO como «3 leucocitos por campo»:
+            // por debajo del umbral de piuria (10) y, peor, AFIRMANDO un conteo normal que
+            // nadie midió. Medido: esterasa 3+ junto a 15-20 leucocitos x campo salía «SIN
+            // HALLAZGOS». Se reconoce la notación de cruces completa (1 a 4 cruces, con o
+            // sin el dígito 1-4 delante) y se deja intacto lo que es recuento de verdad:
+            // "10-15", "35", "> 50", "0-2" y también "20+"/"100+", que son cotas de conteo,
+            // no cruces. El regex va ANCLADO a propósito: es la única forma de no cambiar
+            // este defecto por el contrario. (El guion del regex viejo se cae y da igual:
+            // mtrUroRecuento("-") devuelve null, así que un negativo pelado nunca llegaba a
+            // esta rama — verificado con el arnés: "-" sale por el else, como esterasa.)
+            } else if (rec !== null && !/^\s*(?:[1-4]\s*)?(?:\+\s*){1,4}$/.test(String(val))) {
               h.leucocitos = (h.leucocitos == null) ? rec : Math.max(mtrUroRecuento(h.leucocitos) || 0, rec);
             } else {
               h.esterasa = _uroMayorGrado(h.esterasa, val);
