@@ -10090,3 +10090,38 @@ hallazgo, al INICIO de `spToast()`, antes de reutilizar o reconstruir el nodo.
 | 204 | se revierte a los dos `setTimeout` sin guardar (**el defecto original**) | *REGRESIÓN — un aviso nuevo dentro de la ventana de dismiss no lo borra el remove() diferido del anterior* | Sí |
 
 Banco completo: **2.927 comprobaciones pasan, 0 fallan.**
+
+## v18.0.76 — la pestaña que parpadea ya no restaura el título de la primera alerta del día
+
+Hallazgo #29 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron.
+
+El arreglo propuesto por el hallazgo («quitar la guarda `origTitle===null` y capturar en cada
+llamada») no bastaba por sí solo: se verificó primero con una reproducción directa (`node -e`
+contra el arnés real) que, incluso quitando esa guarda, el título seguía corrompiéndose, porque
+`startFlash()` llama a `stopFlash()` ANTES de recapturar — y `stopFlash()` restauraba
+`document.title` siempre que `origTitle` no fuera null, SIN comprobar si de verdad había un
+parpadeo activo en ese momento. Con dos alertas de pacientes distintos separadas por una
+navegación real de Everest entre medias, esa restauración incondicional pisaba el título REAL
+(el de la sección donde el médico está ahora) con el título obsoleto de la primera alerta,
+ANTES de que la recaptura pudiera ver el título verdadero — el síntoma persistía, solo que por
+un mecanismo distinto al que describía el hallazgo.
+
+### La reparación (dos partes, verificadas por separado)
+
+1. `startFlash()` captura `origTitle = document.title` en CADA llamada, sin guarda.
+2. `stopFlash()` solo restaura `document.title` si de verdad HABÍA un parpadeo corriendo cuando
+   se le llamó (`habiaFlash = !!flashTimer`, leído ANTES de limpiar el temporizador) — no basta
+   con que `origTitle` no sea null.
+
+Verificado con una reproducción manual antes y después del arreglo: tras la 2a alerta, con el
+arreglo completo, `document.title` conserva "Everest — Historia clínica" en vez de volver a
+"Everest — Agenda del día" (el título de la 1a alerta).
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 205 | se revierte la parte 1 (vuelve la guarda `origTitle===null`) | *REGRESIÓN — una segunda alerta captura el título REAL de ahora* | Sí |
+| 206 | se revierte la parte 2 (`stopFlash` vuelve a restaurar sin comprobar `habiaFlash`) | *misma prueba* | Sí |
+
+Banco completo: **2.928 comprobaciones pasan, 0 fallan.**

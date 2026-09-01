@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.75
+// @version      18.0.76
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.75";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.76";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13200,10 +13200,20 @@
       if (href) l.href = href; else l.remove();
     } catch (e) {}
   }
+  // v18.0.76 — AUDITORÍA (hallazgo de enjambre #29): origTitle se capturaba UNA sola vez
+  // por sesión (`if (origTitle === null)`) y stopFlash() nunca lo volvía a poner en null,
+  // así que tras la primerísima alerta del día quedaba fijado para siempre. Pero quitar
+  // esa guarda a solas NO alcanza: startFlash() llama a stopFlash() ANTES de recapturar
+  // (línea de abajo), y stopFlash() restauraba document.title siempre que origTitle no
+  // fuera null — sin comprobar si de verdad había un parpadeo corriendo. Con dos alertas
+  // seguidas de pacientes distintos, esa restauración incondicional pisaba el título REAL
+  // (que Everest ya había cambiado al navegar entre medias) con el título obsoleto de la
+  // primera alerta, ANTES de que la recaptura pudiera ver el título verdadero. stopFlash()
+  // ahora solo restaura si de verdad había un parpadeo activo cuando se le llamó.
   function startFlash(text, color) {
     stopFlash();
     if (!S.parpadeo) return;
-    if (origTitle === null) origTitle = document.title;
+    origTitle = document.title;
     try { const cur = document.querySelector("link[rel~='icon']:not([data-vgl])"); origIcon = cur ? cur.href : null; } catch (e) {}
     flashTimer = setInterval(() => {
       flashOn = !flashOn;
@@ -13212,8 +13222,9 @@
     }, 900);
   }
   function stopFlash() {
+    const habiaFlash = !!flashTimer;
     if (flashTimer) clearInterval(flashTimer); flashTimer = null;
-    try { if (origTitle !== null) document.title = origTitle; } catch (e) {}
+    try { if (habiaFlash && origTitle !== null) document.title = origTitle; } catch (e) {}
     setFavicon(null);
   }
 

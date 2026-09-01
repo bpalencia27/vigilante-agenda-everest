@@ -210,6 +210,32 @@ module.exports = {
       t.noLanza(() => { c.api.stopFlash(); c.api.stopFlash(); });
     });
 
+    // v18.0.76 — HALLAZGO DE ENJAMBRE #29. origTitle se capturaba UNA sola vez por sesión y
+    // quedaba fijado para siempre tras la primera alerta del día. Reconocer una SEGUNDA
+    // alerta, de otro paciente, después de que Everest navegara a otra sección entre
+    // medias, restauraba el título de la PRIMERA alerta, no el real de ahora mismo.
+    t.caso("REGRESIÓN — una segunda alerta captura el título REAL de ahora, no el de la primera del día (hallazgo #29)", () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.win.document;
+      c.api.__S.parpadeo = true;
+
+      doc.title = "Everest — Agenda del día";
+      c.api.startFlash("🔔 alerta 1", "AMBAR");
+      doc.title = "🔔 alerta 1";                 // como si el intervalo ya hubiera pintado
+      c.api.stopFlash();                          // el médico reconoce la 1a alerta
+      t.igual(doc.title, "Everest — Agenda del día", "la 1a se restaura bien");
+
+      doc.title = "Everest — Historia clínica";   // Everest navegó a otra sección entre medias
+      c.api.startFlash("🔔 alerta 2", "AMBAR");    // llega una 2a alerta, de otro paciente
+      t.igual(doc.title, "Everest — Historia clínica",
+        "startFlash de la 2a alerta NO debe pisar el título real con el de la 1a — antes lo hacía, incluso antes de que corriera el intervalo");
+
+      doc.title = "🔔 alerta 2";
+      c.api.stopFlash();
+      t.igual(doc.title, "Everest — Historia clínica",
+        "y al reconocer la 2a se restaura la sección real de AHORA, no la de la primera alerta del día");
+    });
+
     // ---------- política v15.4.0: UN aviso = UN canal ----------
     // La ventana emergente (popupAlert) se retiró del script: era un canal duplicado.
     // Estas pruebas fijan la política que la reemplaza, canal por canal.
