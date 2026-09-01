@@ -1043,10 +1043,92 @@ module.exports = {
     t.caso("el panel de redacción ya NO congela el texto libre en una foto única al abrir", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
-      const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
-      // v17.34.0 — "Generar todo" se retiró (encargo del médico: "casi ni lo uso, más bien
-      // estorba"); queda un solo disparador de generación.
+      // v18.0.36 — la forma cambió: `contextoLibre` ya no es una sola expresión, porque
+      // además de lo que lee libreAhora() (Revisión por sistemas y Examen físico) ahora
+      // recoge lo que el médico lleva tecleado en las OTRAS casillas de la historia. Lo que
+      // esta prueba fija sigue siendo lo mismo: que se lea EN EL CLIC, no al abrir el panel.
+      const usos = (src.match(/contextoLibre: \[libreAhora\(\)\.combinado,/g) || []).length;
       t.igual(usos, 1, "el disparador de generación lee fresco en el momento del clic");
+      t.cierto(/mtrTextoDeOtrasCasillas\(modo, document, _res\._nombrePaciente\)/.test(src),
+        "y en ese mismo momento recoge lo que él lleva tecleado en las otras casillas");
+    });
+
+    t.caso("v18.0.36: la hoja de hechos se recalcula del resumen vigente, no se arrastra la de la foto", () => {
+      // La promesa de la v17.47.0 era «el JSON que va a la IA no puede ir caducado». Pero la
+      // rama del caso NORMAL —la caché guarda el MISMO objeto que la foto, que es lo que pasa
+      // casi siempre porque el panel saca su resumen de la caché— devolvía la hoja de la
+      // foto sin tocarla. Y ese resumen puede haber cambiado POR DENTRO desde entonces:
+      // hasta la v18.0.34 el agendamiento le escribía la tensión encima. La hoja que leía la
+      // IA quedaba desincronizada de su propio resumen sin que nada lo dijera.
+      const c2 = cargar({ silencioso: true });
+      const a2 = c2.api;
+      const r = a2.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 62, sexo: "M", pesoKg: 70, creatinina: 1.0,
+        paSistolica: 128, paDiastolica: 78, factores: { hta: true },
+      });
+      r._docId = "111111";
+      a2.mtrCacheResumenGuardar("111111", r);
+      const hojaDeLaFoto = { __marcaDePrueba: "esta es la hoja vieja" };
+      const v = a2.mtrIaResumenVigente(r, hojaDeLaFoto);
+      t.cierto(v.resumen === r, "el resumen vigente es el de la caché (aquí, el mismo objeto)");
+      t.falso(v.hoja === hojaDeLaFoto, "pero la hoja NO es la de la foto: se recalcula");
+      t.falso(!!(v.hoja && v.hoja.__marcaDePrueba), "y no conserva nada de la hoja vieja");
+      t.cierto(!!v.hoja, "hay hoja nueva de verdad");
+      t.falso(v.refrescado, "y no se anuncia como «refrescado» cuando el objeto no cambió: eso sería mentir sobre el origen");
+    });
+
+    t.caso("v18.0.36: lo que el médico teclea en las otras casillas SÍ llega al prompt, menos la que está generando", () => {
+      // Hallazgo del enjambre: lo que él escribe en Enfermedad actual, Análisis y plan o
+      // Recomendaciones no llegaba al prompt POR NINGUNA VÍA hasta que guardara la historia
+      // y el script la releyera de la API. mtrLeerTextoLibreHistoria solo mira Revisión por
+      // sistemas y Examen físico. Redactar «con lo que él escribió» sin haberlo leído es
+      // exactamente lo que reportó.
+      // Se prueba EJECUTANDO. La primera versión de esta prueba miraba el fuente y una
+      // mutación la dejó en ridículo: bastaba un `return` temprano para volver el bloque
+      // inalcanzable —el texto seguía escrito— y la prueba pasaba en verde. Es la misma
+      // trampa que ya había caído en la v18.0.33. Por eso la lógica salió del closure a
+      // mtrTextoDeOtrasCasillas, que sí se puede llamar.
+      const casillas = {
+        enfermedad_actual: { value: "  REFIERE CEFALEA OCASIONAL DESDE HACE DOS SEMANAS  " },
+        analisis_plan: { value: "CONTINUAR LOSARTAN, VIGILAR FUNCION RENAL" },
+        recomendaciones: { value: "DIETA HIPOSODICA" },
+        motivo_consulta: { value: "ESTO NO DEBE VIAJAR NUNCA" },
+      };
+      // mtrCasillaAnalisis no busca por nombre: barre los <textarea> y mira el placeholder.
+      casillas.analisis_plan.placeholder = "Ingrese la descripción del análisis y plan";
+      const docFalso = {
+        getElementById: () => null,
+        querySelector: (sel) => {
+          if (/UltimaEnfermedad/.test(sel)) return casillas.enfermedad_actual;
+          if (/RecomendacionesMedicas/.test(sel)) return casillas.recomendaciones;
+          if (/MotivoConsulta/.test(sel)) return casillas.motivo_consulta;
+          return null;
+        },
+        querySelectorAll: (sel) => (sel === "textarea" ? [casillas.analisis_plan] : []),
+      };
+
+      const generandoEA = api.mtrTextoDeOtrasCasillas("enfermedad_actual", docFalso, null);
+      t.falso(/CEFALEA OCASIONAL/.test(generandoEA),
+        "generando Enfermedad actual, NO se le devuelve al modelo el borrador de esa misma casilla");
+      t.cierto(/CONTINUAR LOSARTAN/.test(generandoEA), "pero sí lo que él escribió en Análisis y plan");
+      t.cierto(/ANÁLISIS Y PLAN: /.test(generandoEA), "y va rotulado, no pegado a lo demás");
+      t.falso(/ESTO NO DEBE VIAJAR NUNCA/.test(generandoEA),
+        "Motivo de consulta queda fuera: por decisión C2 (v17.6.3) la IA ve siempre la constante, no la casilla");
+
+      const generandoAP = api.mtrTextoDeOtrasCasillas("analisis_plan", docFalso, null);
+      t.cierto(/CEFALEA OCASIONAL/.test(generandoAP), "generando Análisis y plan, sí llega la Enfermedad actual que él tecleó");
+      t.falso(/CONTINUAR LOSARTAN/.test(generandoAP), "y se excluye la casilla que se está generando");
+
+      // El censor de nombres, que es la barrera que cerró la v18.0.15.
+      const conNombre = { querySelector: (sel) => (/UltimaEnfermedad/.test(sel) ? { value: "PACIENTE PEDRO PEREZ REFIERE MEJORIA" } : null),
+                          querySelectorAll: (sel) => [], getElementById: () => null };
+      const censurado = api.mtrTextoDeOtrasCasillas("analisis_plan", conNombre, "PEDRO PEREZ");
+      t.falso(/PEDRO PEREZ/.test(censurado), "el nombre NO viaja a Google");
+      t.cierto(/MEJORIA/.test(censurado), "pero el contenido clínico sí llega");
+
+      t.igual(api.mtrTextoDeOtrasCasillas("analisis_plan", null, null), "", "sin documento no lanza y devuelve vacío");
+      t.igual(api.mtrRotuloDeModo("enfermedad_actual"), "ENFERMEDAD ACTUAL");
+      t.igual(api.mtrRotuloDeModo("recomendaciones"), "RECOMENDACIONES");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el

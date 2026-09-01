@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.35
+// @version      18.0.36
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.35";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.36";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -38243,6 +38243,57 @@
     } catch (e) {}
   }
 
+  // v18.0.36 — el nombre de la casilla EN IDIOMA DEL MÉDICO, para rotular lo que ya está
+  // escrito en la historia cuando viaja al prompt. Sin rótulo, tres textos pegados uno tras
+  // otro se leen como un solo bloque y el modelo no sabe cuál es cuál.
+  function mtrRotuloDeModo(modo) {
+    if (modo === "motivo_consulta") return "MOTIVO DE CONSULTA";
+    if (modo === "enfermedad_actual") return "ENFERMEDAD ACTUAL";
+    if (modo === "analisis_plan") return "ANÁLISIS Y PLAN";
+    if (modo === "recomendaciones") return "RECOMENDACIONES";
+    if (modo === "comentarios_cronicos") return "COMENTARIOS";
+    return "OTRA CASILLA";
+  }
+
+  // =====================================================================
+  //  v18.0.36 — LO QUE EL MÉDICO LLEVA TECLEADO EN LAS OTRAS CASILLAS
+  //
+  //  Hallazgo del enjambre: lo que él escribe en Enfermedad actual, Análisis y plan o
+  //  Recomendaciones NO llegaba al prompt por ninguna vía hasta que guardara la historia y
+  //  el script la releyera de la API. mtrLeerTextoLibreHistoria solo mira Revisión por
+  //  sistemas y Examen físico. Redactar «con lo que él escribió» sin haberlo leído es
+  //  exactamente lo que él reportó.
+  //
+  //  Dos exclusiones, las dos a propósito:
+  //   · La casilla del modo que se está generando. Devolverle al modelo el borrador que el
+  //     médico está escribiendo en esa misma casilla lo llevaría a parafrasearlo en vez de
+  //     redactar desde los hechos.
+  //   · Motivo de consulta: por decisión C2 (v17.6.3) la IA ve siempre la constante
+  //     «CONTROL DE RIESGO CARDIOVASCULAR», no lo que traiga la casilla.
+  //
+  //  Función NOMBRADA a propósito. Vivía dentro del closure del modal, y una mutación
+  //  demostró el problema de eso: bastaba un `return` temprano para dejar el bloque muerto
+  //  sin que ninguna prueba de fuente se enterara (el texto seguía escrito). Lo que se puede
+  //  ejecutar se puede probar de verdad.
+  // =====================================================================
+  function mtrTextoDeOtrasCasillas(modo, doc, nombrePaciente) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d) return "";
+    const partes = [];
+    try {
+      ["enfermedad_actual", "analisis_plan", "recomendaciones"].forEach((m) => {
+        if (m === modo) return;
+        const el = mtrCasillaDeModo(m, d);
+        const v = (el && typeof el.value === "string") ? el.value.trim() : "";
+        if (!v) return;
+        // Mismo censor que todo lo que sale hacia Google: es la barrera que cerró la v18.0.15.
+        const limpio = (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(v, nombrePaciente) : v;
+        if (limpio) partes.push(mtrRotuloDeModo(m) + ": " + limpio);
+      });
+    } catch (e) { return partes.join("\n\n"); }
+    return partes.join("\n\n");
+  }
+
   function mtrCasillaDeModo(modo, doc) {
     const d = doc || (typeof document !== "undefined" ? document : null);
     if (!d) return null;
@@ -39575,7 +39626,19 @@
           // v17.0.0 — ancla del control anterior, solo para la Enfermedad Actual.
           anclaControlAnterior: (modo === "enfermedad_actual") ? _anclaPrevia : null,
           datosExtra: mtrDatosExtraLeer(_res._docId),
-          contextoLibre: libreAhora().combinado,
+          // v18.0.36 — REPORTE EN CONSULTA: «no está teniendo muy en cuenta lo que yo
+          // escribo». mtrLeerTextoLibreHistoria solo mira Revisión por sistemas y Examen
+          // físico: lo que el médico teclea en Enfermedad actual, Análisis y plan o
+          // Recomendaciones NO llegaba al prompt por ninguna vía hasta que guardara la
+          // historia y el script la releyera de la API. Redactar «con lo que él escribió»
+          // sin haberlo leído es exactamente lo que reportó.
+          // Se EXCLUYE a propósito la casilla del modo que se está generando: devolverle al
+          // modelo el borrador que el médico está escribiendo en esa misma casilla lo
+          // llevaría a parafrasearlo en vez de redactar desde los hechos. También se
+          // excluye Motivo de consulta, que por decisión C2 (v17.6.3) es siempre la
+          // constante «CONTROL DE RIESGO CARDIOVASCULAR» y no lo que traiga la casilla.
+          contextoLibre: [libreAhora().combinado, mtrTextoDeOtrasCasillas(modo, document, _res._nombrePaciente)]
+            .filter(Boolean).join("\n\n"),
           jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(_res, _hoja) : null,
         };
         if (!mtrLeerClaveGemini()) {
@@ -41911,10 +41974,17 @@
         salida.edadMin = mtrCacheResumenEdadMin(docId);
         return salida;
       }
-      if (vigente === resumenFoto) { salida.edadMin = mtrCacheResumenEdadMin(docId); return salida; }
+      // v18.0.36 — LA HOJA SE RECALCULA SIEMPRE, no solo cuando cambia el OBJETO. Esta
+      // rama devolvía la hoja de la FOTO cuando la caché guardaba la misma referencia, que
+      // es el caso normal: el panel obtiene su resumen de la caché, así que `vigente ===
+      // resumenFoto` casi siempre. Y ese resumen puede haber cambiado POR DENTRO desde que
+      // se tomó la foto —hasta la v18.0.34 el agendamiento le escribía la tensión encima—,
+      // con lo que la hoja que leía la IA quedaba desincronizada de su propio resumen sin
+      // que nada lo dijera. mtrHojaDesdeResumen es pura y barata: recalcularla siempre
+      // cuesta menos que razonar cuándo hace falta.
       salida.resumen = vigente;
       salida.hoja = mtrHojaDesdeResumen(vigente);
-      salida.refrescado = true;
+      salida.refrescado = (vigente !== resumenFoto);
       salida.edadMin = mtrCacheResumenEdadMin(docId);
       return salida;
     } catch (e) { return salida; }

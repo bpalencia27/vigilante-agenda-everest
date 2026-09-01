@@ -7827,3 +7827,64 @@ La **62** es la séptima prueba hueca de la jornada: una **decisión explícita 
 solo en el texto del prompt, sin nada que la vigilara. Se podía borrar y el banco seguía verde.
 
 Banco completo: **2.810 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.36 — El grounding deja de ser una foto, y llega lo que el médico lleva tecleado
+
+Dos hallazgos del enjambre del 01-sep, los dos detrás de la misma queja.
+
+### 1. La hoja de hechos se arrastraba de la foto
+
+La v17.47.0 prometía «el JSON que va a la IA no puede ir caducado» y resolvía el resumen
+vigente en el instante del clic. Pero la rama del **caso normal** —la caché guarda el MISMO
+objeto que la foto, que es lo que pasa casi siempre porque el panel saca su resumen de la
+caché— devolvía la hoja de la foto **sin tocarla**:
+
+```js
+if (vigente === resumenFoto) { salida.edadMin = …; return salida; }   // <- se va con la hoja vieja
+```
+
+Y ese resumen puede haber cambiado **por dentro** desde entonces: hasta la v18.0.34 el
+agendamiento le escribía la tensión encima. La hoja que leía la IA quedaba desincronizada de su
+propio resumen sin que nada lo dijera. `mtrHojaDesdeResumen` es pura y barata: se recalcula
+siempre. `refrescado` pasa a significar lo que dice (cambió el objeto), en vez de un `true` fijo.
+
+### 2. Lo que el médico teclea no llegaba hasta que guardara
+
+`mtrLeerTextoLibreHistoria` solo mira **Revisión por sistemas** y **Examen físico**. Lo que él
+escribe en **Enfermedad actual**, **Análisis y plan** o **Recomendaciones** no llegaba al prompt
+por ninguna vía hasta que guardara la historia y el script la releyera de la API. Redactar «con
+lo que él escribió» sin haberlo leído es exactamente lo que reportó.
+
+Dos exclusiones, las dos a propósito: **la casilla del modo que se está generando** (devolverle
+su propio borrador lo llevaría a parafrasearlo en vez de redactar desde los hechos) y **Motivo
+de consulta** (decisión C2 de la v17.6.3: la IA ve siempre la constante).
+
+### La lección de la v18.0.33, aplicada esta vez de verdad
+
+La primera versión de la prueba miraba el **fuente**. Una mutación la dejó en ridículo: bastaba
+un `return` temprano para volver el bloque inalcanzable —el texto seguía escrito— y la prueba
+pasaba en verde. **La misma trampa que había caído dos versiones antes.**
+
+En vez de reforzar otra vez la comprobación de texto, la lógica salió del closure a
+`mtrTextoDeOtrasCasillas(modo, doc, nombrePaciente)` — función **nombrada y ejecutable**. La
+prueba ahora la llama con un DOM falso y comprueba conducta. Es el mismo camino que
+`mtrPanelFactoresDePantalla` en la v18.0.33: *lo que se puede ejecutar se puede probar de verdad*.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 63 | vuelve la rama que arrastra la hoja de la foto | *la hoja se recalcula del resumen vigente* | Sí — 2.812 |
+| 64 | se anuncia «refrescado» sin que cambie el objeto | *la hoja se recalcula…* | Sí — 2.812 |
+| 65 | la función nueva se queda muda (rama inalcanzable) | *lo que teclea SÍ llega* — **la caza porque la ejecuta** | Sí — 2.812 |
+| 66 | se le devuelve su propio borrador de la casilla en curso | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 67 | el texto sale sin pasar por el censor de nombres | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 68 | desaparecen los rótulos por casilla | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 69 | el modal deja de llamar a la función (existe, nadie la usa) | *ya NO congela el texto libre* | Sí — 2.812 |
+
+La **69** cubre el hueco que la 65 no puede ver por sí sola: una función correcta que nadie
+llama es código muerto con buena conciencia.
+
+Banco completo: **2.812 comprobaciones pasan, 0 fallan.**
