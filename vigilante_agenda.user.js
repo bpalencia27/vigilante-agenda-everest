@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.93
+// @version      18.0.94
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.93";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.94";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -29907,8 +29907,16 @@
   function highlight(txt) {
     const q = state.busqueda; const safe = escapeHtml(txt);
     if (!q) return safe;
-    const i = txt.toLowerCase().indexOf(q); if (i < 0) return safe;
-    return escapeHtml(txt.slice(0, i)) + "<mark>" + escapeHtml(txt.slice(i, i + q.length)) + "</mark>" + escapeHtml(txt.slice(i + q.length));
+    // v18.0.94 — hallazgo #46 del enjambre: matchesSearch()/fuzzyMatch() ya son
+    // insensibles a acentos (stripAccents+toLowerCase en los dos lados), así que un
+    // paciente sí aparece en la lista al buscar "jose" sin tilde. Pero esta búsqueda de
+    // POSICIÓN (para pintar el <mark>) comparaba con acentos, así que nunca encontraba
+    // "jose" dentro de "josé" y el nombre se mostraba sin ningún resaltado — misma
+    // normalización que ya usa fuzzyMatch, para que la posición SÍ se encuentre.
+    const qNorm = stripAccents(q).toLowerCase();
+    const txtNorm = stripAccents(txt).toLowerCase();
+    const i = txtNorm.indexOf(qNorm); if (i < 0) return safe;
+    return escapeHtml(txt.slice(0, i)) + "<mark>" + escapeHtml(txt.slice(i, i + qNorm.length)) + "</mark>" + escapeHtml(txt.slice(i + qNorm.length));
   }
   // Cuenta regresiva: cuánto le queda al paciente antes de perder la cita (o cuánto lleva pasado).
   // La lógica pura vive en countdownParts(); countdown() la envuelve en HTML solo para el

@@ -33,6 +33,21 @@ module.exports = {
       const c = cargar();
       t.igual((c.api.__state.busqueda = "juan", c.api.highlight("JUAN PEREZ")), '<mark>JUAN</mark> PEREZ');
     });
+    // v18.0.94 — hallazgo #46 del enjambre: matchesSearch()/fuzzyMatch() ya son
+    // insensibles a acentos, así que un paciente SÍ aparece en la lista al buscar sin
+    // tilde ("jose" encuentra a "José"). Pero highlight() comparaba con acentos y nunca
+    // encontraba la coincidencia: el nombre se mostraba sin ningún <mark>, sin dar pista
+    // visual de por qué apareció en la lista filtrada.
+    t.caso("REGRESIÓN — highlight resalta aunque la búsqueda no lleve la tilde que sí tiene el nombre (hallazgo #46)", () => {
+      const c = cargar();
+      c.api.__state.busqueda = "jose";
+      t.igual(c.api.highlight("José Ramírez"), "<mark>José</mark> Ramírez",
+        "antes: sin ningún <mark>, aunque el paciente sí aparecía en la lista filtrada");
+      c.api.__state.busqueda = "ramirez";
+      t.igual(c.api.highlight("José Ramírez"), "José <mark>Ramírez</mark>", "también en medio de la frase");
+      c.api.__state.busqueda = "MUÑOZ";
+      t.igual(c.api.highlight("ana muñoz"), "ana <mark>muñoz</mark>", "la ñ también normaliza igual en los dos lados");
+    });
 
     t.caso("countdown calcula tiempo faltante", () => {
       const c = cargar();

@@ -10679,3 +10679,38 @@ creación), y SOLO entonces se devuelve.
 | 229 | vuelve el `return` inmediato sin reposicionar (**el defecto original**) | *suite_15: hallazgo #45 — la burbuja de acompañamiento SIGUE al botón cuando su posición cambia entre ticks* | Sí |
 
 Banco completo: **2.953 comprobaciones pasan, 0 fallan.**
+
+## v18.0.94 — highlight() resalta el nombre aunque la búsqueda no lleve la tilde que sí tiene
+
+Hallazgo #46 del enjambre, gravedad baja (estilo), 2 de 3 refutadores no lo tumbaron.
+`matchesSearch()`/`fuzzyMatch()` ya son insensibles a acentos (`stripAccents+toLowerCase` en los
+dos lados), así que un paciente SÍ aparece en la lista filtrada al buscar "jose" sin tilde. Pero
+`highlight()` hacía `txt.toLowerCase().indexOf(q)` SIN quitar acentos, así que nunca encontraba
+"jose" dentro de "josé" (la é no es e) y el nombre se mostraba sin ningún `<mark>` — sin pista
+visual de por qué ese paciente quedó en el resultado.
+
+El refutador disidente concedió el defecto (reproducido byte a byte con el arnés) pero lo llamó
+puramente cosmético: `highlight()` solo decide si se pinta un `<mark>` — el texto que se muestra
+sigue siendo `escapeHtml(a.nombre)` completo y correcto en los dos casos, sin truncado ni dato
+erróneo; `<mark>` no se usa en ningún otro lugar del script (grep confirmado), así que nada
+depende de su presencia; y el propio hecho de que el paciente aparezca en la lista filtrada YA es
+la confirmación de por qué está ahí.
+
+Se aplica de todos modos: el arreglo es gratis, es la misma normalización que el proyecto ya
+decidió y usa en `fuzzyMatch`, y cierra una inconsistencia de UX (un paciente sin resaltar en
+medio de una lista con varios sí resaltados genera un segundo de duda evitable).
+
+### La reparación
+
+`highlight()` normaliza `q` y `txt` con `stripAccents(...).toLowerCase()` (mismo patrón que
+`fuzzyMatch`) para ENCONTRAR la posición de la coincidencia, pero sigue recortando el fragmento a
+mostrar sobre el `txt` ORIGINAL (con sus tildes intactas) — el `<mark>` envuelve el texto real del
+paciente, no una versión sin acentos.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 230 | vuelve la comparación sin `stripAccents` (**el defecto original**) | *suite_06: REGRESIÓN — highlight resalta aunque la búsqueda no lleve la tilde que sí tiene el nombre (hallazgo #46)* | Sí |
+
+Banco completo: **2.954 comprobaciones pasan, 0 fallan.**
