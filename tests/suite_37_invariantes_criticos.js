@@ -383,5 +383,35 @@ module.exports = {
         "y el resultado no se escribe dentro del resumen cacheado: va a una copia local para el triaje");
     });
 
+    // =================================================================
+    //  v18.0.54 — REPORTE EN VIVO DEL MÉDICO (1-sep): la nota decía «PRESIÓN ARTERIAL DE
+    //  110/70 MMHG» y su pantalla tenía 136/85. Peso y cintura sí coincidían.
+    //
+    //  LAS DOS CIFRAS DE LA TENSIÓN VIAJAN JUNTAS O NO VIAJAN. El refresco del resumen
+    //  resolvía sistólica y diastólica con dos `num(nuevo, previo)` INDEPENDIENTES, así
+    //  que una lectura a medias de hoy se completaba en silencio con la mitad de otra
+    //  medición: sistólica de una toma, diastólica de otra, firmadas como una sola
+    //  presión arterial de hoy. Esa tensión no existió nunca.
+    //
+    //  Se fija por fuente, y se dice que la comprobación es ESTRUCTURAL: la función que
+    //  la contiene es asíncrona y golpea la red, así que no se puede ejecutar entera
+    //  aquí; lo que sí se puede fijar es que las dos cifras se decidan con la MISMA
+    //  condición, que es justo lo que faltaba.
+    // =================================================================
+    t.caso("v18.0.54: la sistólica y la diastólica se deciden con la misma condición, nunca por separado", () => {
+      const fs2 = require("fs"), path2 = require("path");
+      const codigo2 = fs2.readFileSync(path2.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.falso(/paSistolica:\s*num\(fNue\.paSistolica,\s*fPrev\.paSistolica\)/.test(codigo2),
+        "ya no se resuelve la sistólica por su cuenta");
+      t.falso(/paDiastolica:\s*num\(fNue\.paDiastolica,\s*fPrev\.paDiastolica\)/.test(codigo2),
+        "ni la diastólica por la suya");
+      const cond = "\\(fNue\\.paSistolica != null \\|\\| fNue\\.paDiastolica != null\\)";
+      t.cierto(new RegExp("paSistolica:\\s*" + cond).test(codigo2),
+        "la sistólica se decide mirando SI HAY lectura nueva (cualquiera de las dos)");
+      t.cierto(new RegExp("paDiastolica:\\s*" + cond).test(codigo2),
+        "y la diastólica con exactamente la misma condición: las dos entran o ninguna");
+    });
+
   },
 };

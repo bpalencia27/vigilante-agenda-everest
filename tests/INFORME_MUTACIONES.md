@@ -8918,3 +8918,59 @@ bitácora esta mañana y aun así reincididas la misma tarde: por eso quedan esc
 del propio comentario**, donde el siguiente que edite esa zona las va a leer.
 
 Banco completo: **2.861 comprobaciones pasan, 0 fallan.** Van **14 de los 47** del enjambre.
+
+---
+
+## v18.0.54 — «PRESIÓN ARTERIAL DE 110/70» en la nota, y 136/85 en la pantalla
+
+**Reporte en vivo del médico (1-sep)**, con captura de su pantalla de Examen físico y de la
+nota generada. Peso (70), cintura (95) e IMC (27,34) coincidían; **solo la tensión estaba
+mal**, y estaba mal de la peor forma: una cifra que nadie midió hoy, firmada en la historia
+como hallazgo del examen físico de hoy.
+
+### Dos defectos encadenados
+
+**(1) Se prefería la casilla equivocada.** Everest tiene DOS pares de tensión: **«T.A:*»**
+—obligatoria, la que el médico llena siempre— y **«T.A Acostado:»** —opcional, vacía en su
+captura—. `mtrLeerTensionDelDom` pedía **primero la de acostado**.
+
+**(2) El respaldo nunca leía la diastólica**: devolvía `pad: null` cableado. Así que en el
+mejor de los casos la tensión de hoy llegaba **a medias**.
+
+**Y entonces la mitad que faltaba se rellenaba sola.** El refresco del resumen resolvía las
+dos cifras con dos `num(nuevo, previo)` **independientes**:
+
+    paSistolica:  num(fNue.paSistolica,  fPrev.paSistolica)
+    paDiastolica: num(fNue.paDiastolica, fPrev.paDiastolica)
+
+Sistólica de una toma + diastólica de otra = una presión arterial **que no existió nunca**,
+impresa como una sola medición de hoy.
+
+### El arreglo
+
+- El lector prefiere la **obligatoria** y lee **siempre las dos cifras**; la de acostado queda
+  como lo que es, un respaldo para cuando sea la única que hay.
+- **Las dos cifras viajan juntas o no viajan**: si la lectura nueva trae al menos una, manda
+  la nueva **entera** (aunque la otra quede vacía — una casilla vacía es honesta); solo si no
+  trae ninguna se usa la anterior, y entonces **las dos** de la anterior. Es el mismo
+  principio todo-o-nada de `mtrPanelFactoresDePantalla` (v18.0.33), pero aquí el cruce no es
+  entre pacientes: es entre **mediciones del mismo paciente**.
+
+### Lo que NO se da por cerrado, y por qué
+
+Los nombres de campo de esta fila **no están verificados contra el DOM real**, y los ids de
+Everest ya engañaron a este proyecto una vez (cuatro campos comparten dos ids; la cintura solo
+es alcanzable por su rótulo — ver `_mtrRotuloDeCampo`). Así que se prueban varios nombres por
+casilla y queda `DIAGNOSTICO_TENSION_CASILLAS.js` para fijarlos **con evidencia** en
+consultorio, igual que se hizo con la cintura. Lo que esta versión sí garantiza, sean cuales
+sean los ids: **nunca se mezclan dos mediciones**.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 135 | vuelven los dos `num()` independientes (**el defecto reportado**) | *la sistólica y la diastólica se deciden con la misma condición* | Sí — 22 ok |
+| 136 | el lector vuelve a preferir la casilla de acostado | *manda la tensión obligatoria* (2 fallan) | Sí — 19 ok |
+| 137 | el respaldo vuelve a no leer la diastólica | *se leen siempre las dos cifras* | Sí — 19 ok |
+
+Banco completo: **2.863 comprobaciones pasan, 0 fallan.**

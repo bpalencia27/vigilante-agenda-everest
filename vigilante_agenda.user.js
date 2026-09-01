@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.53
+// @version      18.0.54
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.53";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.54";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31630,8 +31630,24 @@
       rac: num(fNue.rac, fPrev.rac),
       egfrPrevio: (r.erc && r.erc.egfrPrevio !== undefined) ? r.erc.egfrPrevio : null,
       ct: num(fNue.ct, fPrev.ct), hdl: num(fNue.hdl, fPrev.hdl), ldl: num(fNue.ldl, fPrev.ldl),
-      paSistolica: num(fNue.paSistolica, fPrev.paSistolica),
-      paDiastolica: num(fNue.paDiastolica, fPrev.paDiastolica),
+      // v18.0.54 — REPORTE EN VIVO DEL MÉDICO (1-sep, con captura de la pantalla y de la
+      // nota): la nota decía «AL EXAMEN FÍSICO CON PRESIÓN ARTERIAL DE 110/70 MMHG» y en su
+      // pantalla la tensión de hoy era **136/85**. Peso (70) y cintura (95) sí coincidían.
+      //
+      // LAS DOS CIFRAS DE LA TENSIÓN VIAJAN JUNTAS O NO VIAJAN. Estaban resueltas con dos
+      // `num(nuevo, previo)` INDEPENDIENTES, así que una lectura a medias de hoy se
+      // completaba en silencio con la mitad de otra medición: sistólica de una toma,
+      // diastólica de otra, impresas como si fueran una sola presión arterial tomada hoy.
+      // Una tensión así no existió nunca; es literalmente un dato inventado por promedio de
+      // dos momentos, y va firmado en la historia. Es el mismo principio todo-o-nada de
+      // `mtrPanelFactoresDePantalla` (v18.0.33), que ya se aplicó al cruce de pacientes:
+      // aquí el cruce no es entre pacientes, es entre MEDICIONES del mismo paciente.
+      //
+      // Regla: si la lectura nueva trae AL MENOS una de las dos, manda la nueva ENTERA
+      // (aunque la otra quede vacía — una casilla vacía es honesta). Solo cuando la nueva no
+      // trae ninguna se usa la anterior, y entonces se usan LAS DOS de la anterior.
+      paSistolica: (fNue.paSistolica != null || fNue.paDiastolica != null) ? fNue.paSistolica : fPrev.paSistolica,
+      paDiastolica: (fNue.paSistolica != null || fNue.paDiastolica != null) ? fNue.paDiastolica : fPrev.paDiastolica,
       factores: mezcla, ultimos: ultimos,
       seriesLdl: (r._seriesLargas && r._seriesLargas.COLESTEROL_LDL) || (r._series && r._series.COLESTEROL_LDL) || null,
       seriesCreatinina: (r._seriesLargas && r._seriesLargas.CREATININA) || (r._series && r._series.CREATININA) || null,
@@ -40698,11 +40714,48 @@
   // sistema y Examen físico") y name="sistolica" (Ruta Crónicos). La diastólica de Ruta
   // NO está capturada y por eso no se adivina (el Framingham solo necesita la PAS). Si
   // ninguna casilla tiene valor: null, y el recuadro dirá "falta PAS" — jamás se inventa.
+  // v18.0.54 — REPORTE EN VIVO (1-sep): la nota decía 110/70 y la pantalla del médico tenía
+  // 136/85. Dos cosas mal aquí, las dos visibles en su captura:
+  //
+  //  (1) SE PREFERÍA LA CASILLA EQUIVOCADA. Everest tiene DOS pares de tensión: «T.A:*»
+  //      —obligatoria, la que el médico llena siempre— y «T.A Acostado:» —opcional, vacía
+  //      en la captura—. Esta función pedía primero la de ACOSTADO. Con las dos casillas de
+  //      acostado vacías caía al respaldo, y ahí venía el segundo problema.
+  //  (2) EL RESPALDO NUNCA LEÍA LA DIASTÓLICA: devolvía `pad: null` cableado. Así que en el
+  //      mejor de los casos la tensión de hoy llegaba a medias, y la mitad que faltaba se
+  //      completaba río abajo con la de otra medición (ver mtrCalcularResumenClinico).
+  //
+  // Se invierte la preferencia —manda la obligatoria— y el respaldo lee LAS DOS. El par
+  // acostado queda como lo que es: un respaldo para cuando solo esté llena esa.
+  //
+  // OJO CON LOS NOMBRES DE CAMPO: los ids de esta fila de Everest ya nos engañaron una vez
+  // (ver el comentario de _mtrRotuloDeCampo: cuatro campos comparten dos ids, y la cintura
+  // solo es alcanzable por su rótulo). Los nombres de aquí NO están verificados contra el
+  // DOM real; por eso se prueban VARIOS por casilla y se documenta que hace falta el
+  // diagnóstico en consultorio (tools/DIAGNOSTICO_TENSION.js) para fijarlos con evidencia,
+  // igual que se hizo con la cintura. Mientras tanto, lo que esta versión garantiza es que
+  // NUNCA se mezclen dos mediciones: se lee la tensión entera o no se lee.
+  const MTR_CAMPOS_TA_SIS = ["sistolica", "taSistolica", "presionSistolica", "ta1"];
+  const MTR_CAMPOS_TA_DIA = ["diastolica", "taDiastolica", "presionDiastolica", "ta2"];
+  const MTR_CAMPOS_TA_SIS_ACOSTADO = ["taSistolicaAcostado", "presionSistolicaAcostado"];
+  const MTR_CAMPOS_TA_DIA_ACOSTADO = ["taDiastolicaAcostado", "presionDiastolicaAcostado"];
+  function _mtrPrimerCampoNumerico(nombres, doc) {
+    for (const n of nombres) {
+      const v = mtrLeerCampoNumerico(n, doc);
+      if (v !== null) return v;
+    }
+    return null;
+  }
   function mtrLeerTensionDelDom(doc) {
-    const pas = mtrLeerCampoNumerico("taSistolicaAcostado", doc);
-    const pad = mtrLeerCampoNumerico("taDiastolicaAcostado", doc);
+    // Primero la tensión OBLIGATORIA («T.A:*»), que es la que el médico llena.
+    const pas = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS, doc);
+    const pad = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA, doc);
     if (pas !== null || pad !== null) return { pas: pas, pad: pad };
-    return { pas: mtrLeerCampoNumerico("sistolica", doc), pad: null };
+    // Y solo si esa está vacía, la de acostado — leyendo también LAS DOS cifras.
+    const pasA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS_ACOSTADO, doc);
+    const padA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA_ACOSTADO, doc);
+    if (pasA !== null || padA !== null) return { pas: pasA, pad: padA };
+    return { pas: null, pad: null };
   }
 
   // =====================================================================
