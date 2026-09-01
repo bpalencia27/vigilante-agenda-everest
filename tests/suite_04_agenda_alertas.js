@@ -327,6 +327,86 @@ module.exports = {
       t.cierto(typeof k1 === "string" && k1.includes("VERDE"));
     });
 
+    // =================================================================
+    //  v18.0.50 — REPORTE EN VIVO DEL MÉDICO (1-sep), y el enjambre de funciones lo
+    //  encontró el mismo día por su cuenta:
+    //
+    //  «HOY NO ME AVISÓ SOBRE CUANDO LLEGÓ UN PACIENTE, PASÓ DE ESTADO "SIN PRESENTARSE"
+    //   A "EN SALA" MIENTRAS YO ATENDÍA A OTRA PACIENTE CON SU HISTORIA CLÍNICA ABIERTA
+    //   Y NUNCA ME AVISÓ»
+    //
+    //  El candado de leyendas era UNO por paciente y por día, compartido por tres avisos
+    //  distintos: MORADO («última llamada»), VERDE («ya está en sala») y el checklist de
+    //  cierre. El primero que ocurriera gastaba el único cupo. Y MORADO → VERDE no son
+    //  dos avisos rivales: son las DOS ETAPAS DE LA MISMA ESPERA, con segundos de
+    //  diferencia — cualquier paciente que confirme en el último minuto dispara los dos,
+    //  en ese orden. Así que el médico recibía la alarma de «se está por vencer» y nunca
+    //  la buena noticia de que sí llegó.
+    //
+    //  Se comprueba sobre el CANAL REAL: `crossTabDup("full|<uid>")` escribe su marca en
+    //  localStorage dentro de _dispararAvisoAudible, así que la marca existe si y solo si
+    //  el aviso audible/visible llegó a dispararse. (Cédula sintética.)
+    // =================================================================
+    t.caso("v18.0.50 — el aviso de «última llamada» ya no se come el de «el paciente llegó»", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true;
+      const cita = (color, reason) => ({
+        key: "cita1", doc_id: "111111", nombre: "PACIENTE PRUEBA", hora_texto: "6:20 a. m.",
+        estado: color === "VERDE" ? "En sala" : "Sin presentarse",
+        color: color, reason: reason, sound: true, arrival: color === "VERDE", elapsed: 1,
+      });
+      const marca = (k) => !!c.env.storage.getItem("vgl_n_full|cita1|" + k);
+
+      // 1) Última llamada: queda ~1 min de gracia.
+      const morado = cita("MORADO", "tiempo");
+      c.api.__state.notified.set(morado.key, "siembra");
+      c.api.maybeNotify(morado);
+      t.cierto(marca("MORADO"), "el aviso de última llamada sí sale (control del escenario)");
+      t.falso(marca("VERDE"), "y todavía no hay aviso de llegada, claro");
+
+      // 2) Segundos después, el MISMO paciente entra a sala.
+      const verde = cita("VERDE", "estado");
+      c.api.__state.notified.set(verde.key, "siembra2");
+      c.api.maybeNotify(verde);
+      t.cierto(marca("VERDE"),
+        "EL AVISO DE QUE LLEGÓ SÍ SALE, aunque antes hubiera sonado la última llamada del mismo paciente");
+    });
+
+    t.caso("v18.0.50 — pero una leyenda NO se repite para el mismo paciente en el día", () => {
+      // La contención, comprobada POR CONDUCTA y no solo sobre la función del candado: al
+      // escribir esta prueba, borrar la llamada entera desde `maybeNotify` dejaba el banco
+      // en verde — el candado se probaba a sí mismo y nadie vigilaba que siguiera
+      // conectado. Es el mismo hueco que ya mordió dos veces en esta sesión (v18.0.33 y
+      // v18.0.36): comprobar que una función se porta bien NO comprueba que se llame.
+      //
+      // El segundo VERDE va con OTRA clave de cita y el MISMO paciente: así `crossTabDup`
+      // (que deduplica por uid durante 12 s) no puede tapar el resultado, y lo único que
+      // puede frenarlo es el candado de leyendas.
+      const cc = cargar({ silencioso: true });
+      cc.api.__state.leader = true;
+      const citaDe = (key) => ({
+        key: key, doc_id: "111111", nombre: "PACIENTE PRUEBA", hora_texto: "6:20 a. m.",
+        estado: "En sala", color: "VERDE", reason: "estado", sound: true, arrival: true, elapsed: 1,
+      });
+      const primera = citaDe("cita1");
+      cc.api.__state.notified.set(primera.key, "siembra");
+      cc.api.maybeNotify(primera);
+      t.cierto(!!cc.env.storage.getItem("vgl_n_full|cita1|VERDE"), "la primera llegada del paciente avisa");
+      const segunda = citaDe("cita2");
+      cc.api.__state.notified.set(segunda.key, "siembra");
+      cc.api.maybeNotify(segunda);
+      t.falso(!!cc.env.storage.getItem("vgl_n_full|cita2|VERDE"),
+        "una segunda leyenda VERDE del MISMO paciente en el día ya no vuelve a sonar");
+
+      const c = cargar({ silencioso: true });
+      t.cierto(c.api._legendMarcaUnaVez("111111", "VERDE"), "primera llegada del paciente A: pasa");
+      t.falso(c.api._legendMarcaUnaVez("111111", "VERDE"), "la segunda NO: no se repite la misma leyenda");
+      t.cierto(c.api._legendMarcaUnaVez("111111", "MORADO"), "pero otra leyenda del mismo paciente tiene su propio cupo");
+      t.cierto(c.api._legendMarcaUnaVez("111111", "cierre"), "y el cierre de consulta, el suyo");
+      t.cierto(c.api._legendMarcaUnaVez("222222", "VERDE"), "y otro paciente, el suyo");
+      t.cierto(c.api._legendMarcaUnaVez("", "VERDE"), "sin cédula no se puede deduplicar: pasa, como siempre");
+    });
+
     t.caso("maybeNotify no re-notifica si no hay cambios (basado en nkey)", () => {
       const c = cargar();
       const a = { hora_texto: "08:00 AM", doc_id: "123", estado: "En sala", color: "VERDE", reason: "", key: "123@08:00 AM" };

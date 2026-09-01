@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.49
+// @version      18.0.50
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.49";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.50";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12615,9 +12615,10 @@
     // solo si el médico lo encendió. Sugiere verificar; nunca ordena ni acusa.
     if (S.checkCierre && st.includes("atendido") && prev !== "" && !prev.includes("atendido") && !state.checkCierreAvisados.has(key)) {
       state.checkCierreAvisados.add(key);
-      // Comparte el candado "una leyenda por paciente por día": si ese paciente ya notificó
-      // hoy (VERDE/MORADO), el aviso de cierre no se suma encima de otra leyenda.
-      if (_legendMarcaUnaVez(a.doc_id)) {
+      // v18.0.50 — Usa el candado de leyendas con SU PROPIO tipo. Antes lo compartía con
+      // VERDE/MORADO, así que el cierre de consulta también podía quedarse callado por un
+      // aviso de llegada de la mañana, o callar él la llegada. Cada aviso, su cupo.
+      if (_legendMarcaUnaVez(a.doc_id, "cierre")) {
         try {
           let _rc = null;
           try { _rc = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(a.doc_id) : null; } catch (e) { _rc = null; }
@@ -14013,9 +14014,30 @@
   // terminales con su propia guarda (bumpStatCita) y deben sonar siempre. Usa el mismo
   // mecanismo una-vez-por-día que avisoYaVisto/avisoMarcarVisto (clave `legend|doc_id`),
   // así sobrevive a recargas, cambios de versión y se reinicia solo al cambiar de día.
-  function _legendMarcaUnaVez(docId) {
+  // v18.0.50 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, y ES EL REPORTE
+  // EN VIVO DEL MÉDICO DE ESTA MISMA MAÑANA: «HOY NO ME AVISÓ SOBRE CUANDO LLEGÓ UN
+  // PACIENTE, PASÓ DE ESTADO "SIN PRESENTARSE" A "EN SALA" ... Y NUNCA ME AVISÓ».
+  //
+  // El candado era UNO SOLO por paciente y por día (`legend|<cédula>`), compartido por TRES
+  // avisos que dicen cosas distintas:
+  //   · MORADO — «última llamada», queda ~1 min de gracia;
+  //   · VERDE  — «confirmó a tiempo», el paciente YA ESTÁ EN SALA;
+  //   · AZUL   — checklist de cierre de consulta.
+  // El primero de los tres que ocurra en el día gasta el único cupo. Y MORADO → VERDE no
+  // son dos avisos rivales: son las DOS ETAPAS DE LA MISMA ESPERA, en ese orden y con
+  // segundos de diferencia. Cualquier paciente que confirme en el último minuto dispara el
+  // MORADO y, acto seguido, el VERDE — así que este no era un caso raro, era EL caso.
+  // Resultado: el médico recibía la alarma de «está por vencerse» y nunca la buena noticia
+  // de que sí llegó. Podía creer que el paciente seguía sin confirmar teniéndolo en sala.
+  //
+  // El candado se mantiene —su motivo original sigue en pie: ninguna leyenda se repite para
+  // el mismo paciente en la jornada— pero pasa a ser POR TIPO DE LEYENDA. Tres avisos
+  // distintos, tres cupos; el mismo aviso, uno solo. El `tipo` es obligatorio: dejarlo
+  // opcional habría permitido que un llamador nuevo volviera a compartir cupo sin notarlo,
+  // que es exactamente cómo nació este defecto.
+  function _legendMarcaUnaVez(docId, tipo) {
     if (!docId) return true;                      // sin identidad de paciente: no se puede deduplicar
-    const uid = "legend|" + String(docId);
+    const uid = "legend|" + String(tipo || "sin-tipo") + "|" + String(docId);
     try { if (avisoYaVisto(uid)) return false; } catch (e) {}
     try { avisoMarcarVisto(uid); } catch (e) {}
     return true;
@@ -14080,10 +14102,12 @@
     // interrupción que el médico ordenó callar. `callar` lo dice en voz alta; el conteo y
     // la auditoría de arriba ya corrieron, así que la evidencia para reclamaciones queda.
     if (a.color === "ROJO" && a.callar) return;
-    // Candado "una leyenda por paciente por día": las leyendas rutinarias (VERDE/MORADO)
-    // solo suenan una vez por paciente en la jornada. El conteo y la auditoría de arriba
-    // ya quedaron registrados; aquí solo se frena el cartel/sonido repetido.
-    if ((a.color === "VERDE" || a.color === "MORADO") && !_legendMarcaUnaVez(a.doc_id)) return;
+    // Candado "una leyenda por paciente por día", POR TIPO desde v18.0.50 (ver
+    // _legendMarcaUnaVez): las leyendas rutinarias no se repiten para el mismo paciente,
+    // pero el MORADO ya no se come el VERDE del mismo paciente — son la alarma y su
+    // resolución, no dos veces lo mismo. El conteo y la auditoría de arriba ya quedaron
+    // registrados; aquí solo se frena el cartel/sonido repetido.
+    if ((a.color === "VERDE" || a.color === "MORADO") && !_legendMarcaUnaVez(a.doc_id, a.color)) return;
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     // v16.2.7 — Tercera línea con la hora REAL del hecho. Se dice "Visto" y no
     // "Confirmado" a propósito: el Vigilante consulta la agenda cada pocos segundos, así

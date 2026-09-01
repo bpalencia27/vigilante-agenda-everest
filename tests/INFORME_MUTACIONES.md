@@ -8723,3 +8723,61 @@ principal (la atorvastatina saldría 40 igual si solo se comprobara ese) — por
 comprueba **los dos** principios del mismo texto.
 
 Banco completo: **2.852 comprobaciones pasan, 0 fallan.** Van **10 de los 47** del enjambre.
+
+---
+
+## v18.0.50 — el reporte del médico de esta mañana: «nunca me avisó que el paciente llegó»
+
+**Reporte en vivo (1-sep), textual:** *«HOY NO ME AVISÓ SOBRE CUANDO LLEGÓ UN PACIENTE, PASÓ DE
+ESTADO "SIN PRESENTARSE" A "EN SALA" MIENTRAS YO ATENDÍA A OTRA PACIENTE CON SU HISTORIA
+CLÍNICA ABIERTA Y NUNCA ME AVISÓ»*. El enjambre de funciones lo encontró el mismo día por su
+cuenta, reproducido con el arnés — dos caminos independientes al mismo defecto.
+
+### La causa
+
+El candado de leyendas era **uno solo por paciente y por día** (`legend|<cédula>`), compartido
+por **tres avisos que dicen cosas distintas**:
+
+| aviso | qué dice |
+|---|---|
+| MORADO | «última llamada»: queda ~1 min de gracia |
+| VERDE | **«confirmó a tiempo»: el paciente YA ESTÁ EN SALA** |
+| AZUL | checklist de cierre de consulta |
+
+El primero de los tres que ocurriera en el día **gastaba el único cupo**. Y MORADO → VERDE no
+son dos avisos rivales: son **las dos etapas de la misma espera**, en ese orden y con segundos
+de diferencia. Cualquier paciente que confirme en el último minuto dispara el MORADO y, acto
+seguido, el VERDE. No era un caso raro: era **el** caso.
+
+Resultado: el médico recibía la alarma de «se está por vencer» y **nunca la buena noticia de
+que sí llegó**. Podía creer que el paciente seguía sin confirmar teniéndolo en sala.
+
+El candado se mantiene —su motivo original sigue en pie— pero pasa a ser **por tipo de
+leyenda**. Tres avisos distintos, tres cupos; el mismo aviso, uno solo. El `tipo` es
+obligatorio: dejarlo opcional habría permitido que un llamador nuevo volviera a compartir cupo
+sin notarlo, que es exactamente cómo nació este defecto.
+
+### Y el hueco de siempre, mordiendo por tercera vez en la sesión
+
+La primera versión de la prueba de contención comprobaba `_legendMarcaUnaVez` **directamente**.
+Con eso, **borrar la llamada entera desde `maybeNotify` dejaba el banco en verde**: el candado
+se probaba a sí mismo y nadie vigilaba que siguiera conectado. Es el mismo hueco de v18.0.33 y
+v18.0.36 — **comprobar que una función se porta bien no comprueba que se llame**.
+
+La prueba se rehízo por conducta, sobre el canal real (`crossTabDup` escribe su marca en
+`localStorage` dentro de `_dispararAvisoAudible`, así que la marca existe si y solo si el aviso
+llegó a dispararse), y con el segundo VERDE bajo **otra clave de cita y el mismo paciente**,
+para que la deduplicación de 12 s de `crossTabDup` no pudiera tapar el resultado.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 125 | el candado vuelve a ser uno solo por paciente (**el defecto reportado**) | *el aviso de última llamada ya no se come el de que llegó* (2 fallan) | Sí — 81 ok |
+| 126 | se quita el candado del todo (vuelve el ruido que lo motivó) | *una leyenda NO se repite para el mismo paciente* | Sí — 81 ok |
+
+La 126 es la que hubo que ganarse: en su primer intento **no mordió**, y eso destapó el hueco
+de alcanzabilidad de arriba.
+
+Banco completo: **2.854 comprobaciones pasan, 0 fallan.** Van **11 de los 47** del enjambre, y
+queda cerrado el segundo de los cinco reportes en vivo del médico.
