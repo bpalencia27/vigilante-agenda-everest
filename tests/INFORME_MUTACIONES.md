@@ -8781,3 +8781,48 @@ de alcanzabilidad de arriba.
 
 Banco completo: **2.854 comprobaciones pasan, 0 fallan.** Van **11 de los 47** del enjambre, y
 queda cerrado el segundo de los cinco reportes en vivo del médico.
+
+---
+
+## v18.0.51 — «lo mandé a desactivar y sale en todas las pestañas»: el quinto y último reporte en vivo
+
+**Reporte del médico (1-sep), textual:** *«EL BOTON DE "ORDENAR PENDIENTES" ESTÁ ACTIVO Y YO LO
+MANDÉ A DESACTIVAR. LO PEOR ES QUE SALE EN TODAS LAS PESTAÑAS ENFRENTE DE TODO»*. El enjambre
+de funciones lo confirmó y lo reprodujo con el arnés.
+
+### Un arreglo a medias, de mi propia mano
+
+La **v18.0.7** ya había atendido este mismo reporte… **para uno de los tres widgets
+flotantes**. Los tres usan idéntica arquitectura —se pintan en `document.body` con
+`position:absolute` y coordenadas de PÁGINA, y solo se esconden dentro de **su propio tick**,
+que corre únicamente con `secc === "historia"`— pero el rescate del tick general
+(`mtrOcultarBotonOrdenarPendientes`) tocaba **solo** `#vgl-cw-ordenar-btn`.
+
+Medido por el enjambre: al navegar a «Citas del día», `#vgl-cw-examenes` y `#vgl-cw-farmaco`
+seguían con `display:""` — la pastilla 🧪 de exámenes y la 💊 de alertas farmacológicas
+flotando sobre la lista de citas **con el juicio clínico del PACIENTE ANTERIOR**. Eso no es
+estorbo: es un dato clínico de una persona encima de la pantalla de otra.
+
+### Y la primera mitad del reporte era el mismo defecto por el otro lado
+
+*«Lo mandé a desactivar y sigue activo»*: apagar `S.conductaWidgets` solo surtía efecto **la
+próxima vez que corriera el tick de cada widget**, o sea **solo estando dentro de una
+historia**. Un widget ya huérfano en otra pantalla no se enteraba nunca de que el médico lo
+había apagado.
+
+Por eso el apagador se llama ahora en **las dos** situaciones: fuera de la historia **y** con
+el interruptor apagado. Y los tres widgets se agrupan en una sola función a propósito: **tener
+un apagador por widget es exactamente cómo se quedaron dos sin él.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 127 | el apagador vuelve a tocar solo un widget | *retira LOS TRES widgets flotantes* | Sí — 85 ok |
+| 128 | el tick general vuelve a llamar solo al apagador viejo | *los retira al salir de la historia Y al apagar el interruptor* | Sí — 85 ok |
+
+Banco completo: **2.856 comprobaciones pasan, 0 fallan.**
+
+**Los cinco reportes en vivo del médico quedan cerrados**: la regresión de diseño (v18.0.42),
+el grounding antiguo (v18.0.36), la agrupación de exámenes (v18.0.43), el aviso de llegada del
+paciente (v18.0.50) y este. Del enjambre van **12 de 47**.

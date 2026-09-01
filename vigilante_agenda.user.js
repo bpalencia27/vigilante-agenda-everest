@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.50
+// @version      18.0.51
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.50";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.51";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6096,6 +6096,37 @@
     try {
       const el = document.getElementById("vgl-cw-ordenar-btn");
       if (el) el.style.display = "none";
+    } catch (e) {}
+  }
+
+  // v18.0.51 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
+  // el arnés — Y LA OTRA MITAD DEL REPORTE EN VIVO DEL MÉDICO: «EL BOTON DE "ORDENAR
+  // PENDIENTES" ESTÁ ACTIVO Y YO LO MANDÉ A DESACTIVAR. LO PEOR ES QUE SALE EN TODAS LAS
+  // PESTAÑAS ENFRENTE DE TODO».
+  //
+  // La v18.0.7 arregló esto para UNO de los tres widgets flotantes y dejó a los otros dos.
+  // Los tres usan la misma arquitectura —se pintan en `document.body` con `position:absolute`
+  // y coordenadas de PÁGINA, y solo se esconden dentro de SU PROPIO tick, que únicamente
+  // corre con `secc === "historia"`—, así que al navegar a «Citas del día» nadie volvía a
+  // llamarlos: la pastilla 🧪 de exámenes y la 💊 de alertas farmacológicas se quedaban
+  // flotando sobre la lista de citas **con el juicio clínico DEL PACIENTE ANTERIOR**. Eso no
+  // es solo estorbo: es un dato clínico de una persona encima de la pantalla de otra.
+  //
+  // Y la primera mitad del reporte —«lo mandé a desactivar y sigue activo»— es el mismo
+  // defecto por el otro lado: apagar `S.conductaWidgets` solo surtía efecto la próxima vez
+  // que corriera el tick de cada widget, o sea SOLO estando dentro de una historia. Un
+  // widget ya huérfano en otra pantalla no lo veía nunca. Por eso este apagador se llama
+  // ahora en las DOS situaciones: fuera de la historia, y con el interruptor apagado.
+  //
+  // Se agrupan los tres en una sola función a propósito: tener un apagador por widget es
+  // exactamente cómo se quedaron dos sin él.
+  const MTR_WIDGETS_FLOTANTES = ["vgl-cw-ordenar-btn", "vgl-cw-examenes", "vgl-cw-farmaco"];
+  function mtrOcultarWidgetsConducta() {
+    try {
+      for (const id of MTR_WIDGETS_FLOTANTES) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      }
     } catch (e) {}
   }
 
@@ -29578,7 +29609,11 @@
       // del día nadie lo retiraba y se quedaba flotando sobre la lista de citas (reporte en
       // vivo, 31-ago, con captura). Se retira aquí, en el tick general, siempre que no
       // estemos dentro de una historia abierta — que es donde el médico dijo que vive.
-      if (secc !== "historia") { try { mtrOcultarBotonOrdenarPendientes(); } catch (e) {} }
+      // v18.0.51 — LOS TRES widgets flotantes, no solo uno (ver mtrOcultarWidgetsConducta),
+      // y también cuando el médico apaga el interruptor: hasta aquí apagarlo solo surtía
+      // efecto dentro de una historia, así que un widget ya huérfano en otra pantalla no se
+      // enteraba nunca. Reporte en vivo: «lo mandé a desactivar y sigue activo».
+      if (secc !== "historia" || !S.conductaWidgets) { try { mtrOcultarWidgetsConducta(); } catch (e) {} }
       // v16.2.2 — pedido explícito del médico: el Vigilante NO debe APARECER fuera de
       // HCHealth (ni en Acceso ni en Ordenamiento - Everest, aunque el médico tenga
       // varias pestañas de Everest abiertas a la vez) — ni el panel completo ni la

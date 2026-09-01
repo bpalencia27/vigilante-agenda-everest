@@ -38,8 +38,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | en una combinación de dosis fija se leía la dosis del OTRO principio activo | `mtrDosisDeTexto` | **v18.0.49** | 121, 122, 123 |
 | «PA Descontrolada (0/105)»: un cero impreso pegado a una cifra real | `_evaluarComplejidadPaciente` | **v18.0.49** | 124 |
 | el candado de leyendas compartía MORADO y VERDE: el aviso de llegada del paciente se callaba — **el reporte en vivo del médico** | `_legendMarcaUnaVez` / `maybeNotify` | **v18.0.50** | 125, 126 |
+| los widgets 🧪 y 💊 quedaban flotando sobre «Citas del día» con el juicio del paciente anterior — **el otro reporte en vivo** | `mtrWidgetConductaTick` / tick general | **v18.0.51** | 127, 128 |
 
-Quedan **36 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **35 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

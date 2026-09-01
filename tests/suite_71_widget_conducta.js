@@ -130,7 +130,7 @@ module.exports = {
     "mtrBotonOrdenarConducta", "mtrWidgetExamenesDatos", "mtrWidgetConductaTick", "_cwEstadoParaTest", "_cwResetParaTest",
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
     "mtrItemsOrdenarConducta", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
-    "mtrWidgetOrdenarConductaTick", "mtrOcultarBotonOrdenarPendientes", "_cwoEstadoParaTest", "_cwoResetParaTest",
+    "mtrWidgetOrdenarConductaTick", "mtrOcultarBotonOrdenarPendientes", "mtrOcultarWidgetsConducta", "_cwoEstadoParaTest", "_cwoResetParaTest",
     "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
     "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
   ],
@@ -1193,6 +1193,57 @@ module.exports = {
       t.igual(el.style.display, "none", "retirado sin depender del tick del widget");
       t.noLanza(() => { c.env.doc.getElementById("vgl-cw-ordenar-btn").remove(); c.api.mtrOcultarBotonOrdenarPendientes(); },
         "y no revienta si el botón ni siquiera existe");
+    });
+
+    // =================================================================
+    //  v18.0.51 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, y la otra
+    //  mitad del reporte en vivo del médico:
+    //
+    //  «EL BOTON DE "ORDENAR PENDIENTES" ESTÁ ACTIVO Y YO LO MANDÉ A DESACTIVAR. LO PEOR
+    //   ES QUE SALE EN TODAS LAS PESTAÑAS ENFRENTE DE TODO»
+    //
+    //  La v18.0.7 arregló esto para UNO de los tres widgets flotantes y dejó a los otros
+    //  dos. Los tres se pintan en `document.body` con coordenadas de PÁGINA y solo se
+    //  esconden dentro de SU PROPIO tick, que corre únicamente con `secc === "historia"`.
+    //  Al navegar a «Citas del día» la pastilla 🧪 de exámenes y la 💊 de alertas
+    //  farmacológicas se quedaban flotando sobre la lista de citas **con el juicio clínico
+    //  del PACIENTE ANTERIOR**: no es estorbo, es un dato clínico de una persona encima de
+    //  la pantalla de otra.
+    // =================================================================
+    t.caso("v18.0.51: el apagador retira LOS TRES widgets flotantes, no solo uno", () => {
+      const c = cargar({ silencioso: true });
+      const falsos = {
+        "vgl-cw-ordenar-btn": { style: { display: "" } },
+        "vgl-cw-examenes": { style: { display: "" } },
+        "vgl-cw-farmaco": { style: { display: "" } },
+      };
+      c.env.doc.getElementById = (id) => falsos[id] || null;
+
+      // El apagador de la v18.0.7 solo tocaba el primero: los otros dos se quedaban.
+      c.api.mtrOcultarBotonOrdenarPendientes();
+      t.igual(falsos["vgl-cw-ordenar-btn"].style.display, "none", "el de siempre se retira");
+      t.igual(falsos["vgl-cw-examenes"].style.display, "", "y los otros dos NO — así estaba el defecto");
+      t.igual(falsos["vgl-cw-farmaco"].style.display, "", "el de fármacos tampoco");
+
+      c.api.mtrOcultarWidgetsConducta();
+      t.igual(falsos["vgl-cw-examenes"].style.display, "none",
+        "la pastilla de exámenes ya no se queda flotando con el juicio del paciente anterior");
+      t.igual(falsos["vgl-cw-farmaco"].style.display, "none", "ni la de alertas farmacológicas");
+      t.igual(falsos["vgl-cw-ordenar-btn"].style.display, "none", "y el botón sigue retirándose igual");
+
+      t.noLanza(() => { c.env.doc.getElementById = () => null; c.api.mtrOcultarWidgetsConducta(); },
+        "y no revienta si ninguno existe");
+    });
+
+    t.caso("v18.0.51: el tick general los retira al salir de la historia Y al apagar el interruptor", () => {
+      // Comprobación de ALCANCE, no solo de la función: el defecto no era que el apagador
+      // no supiera apagar, era que nadie lo llamaba en las dos situaciones que importan.
+      // Se fija sobre el fuente porque el tick general es la función más grande del
+      // archivo y no se puede ejecutar entera en el banco; se declara que es estructural.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(secc !== "historia" \|\| !S\.conductaWidgets\) \{ try \{ mtrOcultarWidgetsConducta\(\); \} catch \(e\) \{\} \}/.test(src),
+        "el tick general los retira fuera de la historia Y con el interruptor apagado");
     });
   },
 };
