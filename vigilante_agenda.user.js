@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.69
+// @version      18.0.70
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.69";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.70";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -41241,10 +41241,23 @@
           // (No se mete aquí `_anclaPrevia`: se declara con `let` DESPUÉS de _pintarCifras y
           //  el primer repintado caería en zona muerta temporal, tragado por el catch, con la
           //  caja muerta para siempre. Mismo patrón que la v18.0.29.)
+          // v18.0.70 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #23, gravedad alta, 3 de 3
+          // refutadores no lo tumbaron. Lo que el médico escribió en las OTRAS casillas de
+          // texto libre (Enfermedad actual, Análisis y plan, Recomendaciones — la que NO se
+          // está redactando ahora) SÍ viaja a Gemini como contexto (ver `contextoLibre` más
+          // abajo, en el clic de Generar), pero esta caja roja nunca lo veía como «conocido».
+          // Si Gemini citaba fielmente una cifra que el propio médico ya había dejado
+          // escrita en otra casilla —justo lo que el prompt le pide hacer—, la caja la
+          // marcaba igual como «sin respaldo — el modelo pudo inventarla»: un falso positivo
+          // en el flujo normal de escribir Recomendaciones antes que Análisis y plan (o al
+          // revés), que es el aviso que el propio código llama «el más grave del módulo».
+          // Un falso positivo repetido enseña a ignorar la caja, y entonces deja de servir
+          // para cazar la cifra de verdad inventada.
           const _respaldoDelMedico = _alertasDosisConocidas.concat([
             (($("#vgl-ia-indicaciones") || {}).value || ""),
             (($("#vgl-ia-pregunta") || {}).value || ""),
             (function () { try { return libreAhora().combinado || ""; } catch (e) { return ""; } })(),
+            (function () { try { return mtrTextoDeOtrasCasillas(modo, document, resumen._nombrePaciente) || ""; } catch (e) { return ""; } })(),
           ]);
           const hallazgos = mtrVerificarCifrasIA(salida.value, hoja, _respaldoDelMedico);
           if (!hallazgos.length) { if (caja) caja.remove(); return; }

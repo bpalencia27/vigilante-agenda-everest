@@ -9840,3 +9840,41 @@ propio AppCita lista los horarios libres si el elegido ya no lo está). Quedan c
 paso, con el motor ya construido y probado.
 
 Banco completo: **2.913 comprobaciones pasan, 0 fallan.**
+
+## v18.0.70 — la caja roja de «cifras sin respaldo» no conocía las otras casillas del médico
+
+Hallazgo #23 del enjambre de funciones, gravedad alta, 3 de 3 refutadores no lo tumbaron.
+
+Lo que el médico escribe en OTRA casilla de texto libre (Recomendaciones, Análisis y plan,
+Enfermedad actual — la que NO se está redactando ahora) **sí** viaja a Gemini como contexto vía
+`mtrTextoDeOtrasCasillas` (se añadió en la v18.0.36, para el prompt). Pero `_respaldoDelMedico`
+— la lista de «hechos conocidos» que usa la caja roja «⚠ cifra sin respaldo» — solo juntaba las
+alertas de dosis, el cuadro de indicaciones, la pregunta del modo Preguntar y lo ya escrito en
+la historia: **nunca** esa misma función. Si Gemini citaba fielmente una cifra que el médico ya
+había dejado escrita en otra casilla —justo lo que el prompt le pide hacer—, la caja la marcaba
+igual como inventada. Es el aviso que el propio código llama «el más grave del módulo»: un falso
+positivo en el flujo normal de trabajo (escribir Recomendaciones antes que Análisis y plan, o al
+revés) enseña a ignorarlo, y entonces deja de servir para cazar la cifra de verdad inventada.
+
+La propia prueba de la v18.0.35 (que fija qué fuentes lleva `_respaldoDelMedico`) ya lo advertía
+sin saberlo: `mtrTextoDeOtrasCasillas` se añadió una versión después y esa prueba nunca se
+actualizó para exigirla también aquí — quedó documentado en el propio hallazgo del enjambre.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 193 | se quita `mtrTextoDeOtrasCasillas` de `_respaldoDelMedico` (**el defecto original**) | *la caja roja también conoce lo que el médico escribió en las otras casillas* | Sí |
+
+**Sobre la cobertura de esta versión.** `_pintarCifras` vive dentro del closure del modal del
+Redactor y no es alcanzable por el arnés (mismo caso que documentó la v18.0.35: «se fija por
+fuente, sin comentarios»). Se añadieron DOS pruebas: la de fuente (la única que de verdad
+protege el CABLEADO — la que mordió con M193) y una «EJECUTANDO» que reproduce el escenario
+exacto del hallazgo (la cifra 45 de «TFG de 45 mL/min» escrita en Recomendaciones) llamando
+directamente a `mtrTextoDeOtrasCasillas` + `mtrVerificarCifrasIA` — mecanismo real, pero
+independiente del cableado del modal, así que **no** mordió con M193 y no debe leerse como
+protección de la conexión. Se deja constancia explícita para no sobreclamar cobertura que la
+prueba no da: documenta el mecanismo y reproduce el hallazgo, la de fuente es la que vigila
+que el cableado no se vuelva a romper.
+
+Banco completo: **2.915 comprobaciones pasan, 0 fallan.**

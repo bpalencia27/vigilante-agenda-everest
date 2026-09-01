@@ -52,8 +52,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | un parpadeo del `doc_id` anulaba el antirrebote y fabricaba una segunda llegada | `colorAndAlert` / `state.historical` | **v18.0.62** | 153, 154, 155, 156 |
 | reabrir «Ordenar» creaba una segunda orden REAL del mismo examen — **confirmado por la telemetría del 1-sep** | `openOrdenamientoModal` / `markOrdenesCreadasHoy` | **v18.0.63** | 157–161 |
 | un ícono SVG nuestro se reportaba como de Everest — **confirmado por la telemetría del 1-sep** | `_rageEtiqueta` | **v18.0.63** | 162 |
+| la caja roja «cifras sin respaldo» no conocía lo que el médico escribió en las OTRAS casillas de texto libre | `mtrAbrirPanelRedaccion` / `_respaldoDelMedico` | **v18.0.70** | 193 |
 
-Quedan **25 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **24 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

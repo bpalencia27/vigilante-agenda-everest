@@ -348,6 +348,47 @@ module.exports = {
       t.cierto(/libreAhora\(\)/.test(decl), "e incluye lo que ya está escrito en la historia");
     });
 
+    // v18.0.70 — HALLAZGO DEL ENJAMBRE #23, gravedad alta, 3 de 3 refutadores no lo tumbaron.
+    // La propia nota de la v18.0.35 (arriba) lo advertía sin saberlo: `mtrTextoDeOtrasCasillas`
+    // se añadió UNA VERSIÓN DESPUÉS (v18.0.36, para el prompt de Gemini vía `contextoLibre`) y
+    // esta prueba —fijada antes— nunca se actualizó para exigirlo también aquí. Lo que el
+    // médico escribe en OTRA casilla de texto libre (Recomendaciones, Análisis y plan,
+    // Enfermedad actual) SÍ llega al modelo como contexto, pero la caja roja seguía sin
+    // conocerlo: una cifra que Gemini citaba fielmente de esa otra casilla se marcaba igual
+    // como «sin respaldo — el modelo pudo inventarla», el aviso que el propio código llama
+    // «el más grave del módulo».
+    t.caso("v18.0.70: la caja roja TAMBIÉN conoce lo que el médico escribió en las OTRAS casillas", () => {
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      const decl = codigo.slice(codigo.indexOf("const _respaldoDelMedico"), codigo.indexOf("const _respaldoDelMedico") + 700);
+      t.cierto(/mtrTextoDeOtrasCasillas\(modo/.test(decl),
+        "la misma función que ya alimenta el prompt de Gemini (contextoLibre) también alimenta la caja roja");
+    });
+
+    t.caso("v18.0.70: EJECUTANDO — una cifra que el médico ya escribió en OTRA casilla deja de marcarse falso positivo", () => {
+      // Reproduce la evidencia exacta del hallazgo: el médico escribió "TFG de 45 mL/min" en
+      // Recomendaciones; Gemini la cita fielmente redactando Análisis y plan. Sin conocer esa
+      // casilla, la caja roja la marca como inventada.
+      const docFalso = {
+        getElementById: () => null,
+        querySelector: (sel) => (/RecomendacionesMedicas/.test(sel) ? { value: "TFG DE 45 ML/MIN, DIETA HIPOSODICA" } : null),
+        querySelectorAll: () => [],
+      };
+      const otrasCasillas = api.mtrTextoDeOtrasCasillas("analisis_plan", docFalso, null);
+      t.cierto(/45/.test(otrasCasillas), "mtrTextoDeOtrasCasillas sí trae el 45 que el médico escribió en Recomendaciones");
+
+      const borrador = "Se ajusta la dosis considerando la TFG de 45 mL/min reportada por el medico.";
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+
+      const sinOtrasCasillas = api.mtrVerificarCifrasIA(borrador, hoja, ["", "", ""]);
+      t.cierto(sinOtrasCasillas.some((x) => String(x.numero) === "45"),
+        "reproducido: sin mtrTextoDeOtrasCasillas, el 45 se marca como sin respaldo — el falso positivo del hallazgo");
+
+      const conOtrasCasillas = api.mtrVerificarCifrasIA(borrador, hoja, ["", "", "", otrasCasillas]);
+      t.igual(conOtrasCasillas.length, 0,
+        "arreglado: con lo que el médico ya escribió en Recomendaciones como fuente conocida, el 45 ya no se marca");
+    });
+
     t.caso("mtrVerificarCifrasIA: un lab que la IA cambió se marca; el que copió bien no", () => {
       const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17", ultimos: { LDL: { valor: 118, fecha: "2026-06-10" } }, medicamentos: ["LOSARTAN 50 MG"] });
       t.igual(api.mtrVerificarCifrasIA("Colesterol LDL 118 mg/dL. Losartán 50 mg.", hoja).length, 0,
