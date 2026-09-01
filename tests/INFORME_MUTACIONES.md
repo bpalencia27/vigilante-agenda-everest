@@ -9313,3 +9313,54 @@ La 152 es la contención: sin ella, «arreglarlo» de más habría hecho lo cont
 peso que no existe está mal digitado— y el médico iría a revisar una casilla vacía.
 
 Banco completo: **2.875 comprobaciones pasan, 0 fallan.** Van **19 de los 47** del enjambre.
+
+## v18.0.62 — un parpadeo del documento anulaba el antirrebote y fabricaba una llegada
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+El proyecto ya sabía que **el `doc_id` aparece y desaparece entre lecturas** —la API lo trae, el
+respaldo por DOM a veces no— y lo tiene escrito en el comentario de `apptKey`. Por eso los
+CONJUNTOS de fraude (`fraudWatch`, `alertedFraud`) se leen y se marcan con
+`_apptMarcada`/`_apptMarcar`, que cubren todas las identidades de la cita.
+
+Los MAPAS `state.historical`, `state.historicalAt` y `state.estadoPendiente` no tenían
+equivalente: leían y escribían con la clave **cruda**. Un parpadeo del documento cambia la
+clave de la MISMA cita, y con eso:
+
+1. `esNueva` sale `true` → **el antirrebote de v17.6.21 queda anulado por completo**: la
+   tarjeta salta a VERDE «En Sala» con una sola lectura sin confirmar. Es exactamente el
+   defecto que aquella versión cerró, reabierto por la puerta del documento en vez de la del
+   estado.
+2. Sin ningún cambio real de estado, se genera una **segunda llegada fantasma**
+   (`arrival: true` otra vez): el aviso vuelve a sonar por un paciente que ya estaba en sala.
+3. `historicalAt` vuelve a 0 → «hueco largo» → la guarda de v18.0.8 desactiva el antirrebote
+   por su cuenta, aunque el punto 1 estuviera resuelto.
+
+Ahora los tres mapas usan `_apptMapaLeer` / `_apptMapaEscribir` / `_apptMapaBorrar`. Leer
+tolerante **no basta**: si la vuelta siguiente solo trae el nombre, no hay forma de derivar la
+clave por documento — hay que haberla escrito antes. Por eso se escribe bajo todas las
+identidades, igual que `_apptMarcar`, y por eso el borrado tiene que barrer las mismas
+entradas que la escritura sembró.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 153 | la escritura vuelve a anotar solo bajo la clave cruda (**el defecto**) | *no se cuenta como segunda llegada* + *no anula el antirrebote* + *el candidato no sobrevive* (3 fallan) | Sí — 86 ok |
+| 154 | la lectura de `historical` vuelve a `.get(key)` a pelo | *si el documento APARECE entre lecturas* + *el candidato no sobrevive* (2 fallan) | Sí — 86 ok |
+| 155 | la lectura de `historicalAt` vuelve a `.get(key)` a pelo | *la marca de tiempo del antirrebote sobrevive al parpadeo* | Sí — 86 ok |
+| 156 | el borrado de `estadoPendiente` solo quita la clave cruda | *el candidato del antirrebote no sobrevive bajo la otra identidad* | Sí — 86 ok |
+
+Las cuatro muerden por vías distintas y ninguna es redundante: 153 cubre el parpadeo
+documento→sin-documento, 154 el inverso (sin-documento→documento, donde no hay clave por
+documento que derivar), 155 la mitad del antirrebote que vive en la marca de tiempo, y 156 la
+puerta de atrás —un candidato que sobrevive a su propia confirmación y se acepta a la primera
+lectura la próxima vez que vuelve por la otra vía—.
+
+**Precisión de proceso.** La primera versión de este arreglo solo hacía la lectura tolerante, y
+la sonda seguía dando llegada fantasma: con el documento perdido no existe forma de derivar la
+clave por documento. Y las mutaciones 154 y 155 **no mordieron** contra la primera tanda de
+pruebas, porque escribir bajo todas las identidades ya dejaba el valor bajo la clave cruda: las
+que faltaban eran las pruebas del sentido inverso, no código. Se corrigieron **las pruebas**.
+
+Banco completo: **2.880 comprobaciones pasan, 0 fallan.** Van **20 de los 47** del enjambre.

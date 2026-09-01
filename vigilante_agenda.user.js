@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.61
+// @version      18.0.62
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.61";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.62";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12451,6 +12451,50 @@
     return out;
   }
   // ¿Está esta cita marcada en `conjunto`, con la clave de hoy o con cualquiera de las viejas?
+  // v18.0.62 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta. Los dos helpers
+  // de abajo trabajan sobre CONJUNTOS (fraudWatch, alertedFraud). `state.historical` y
+  // `state.historicalAt` son MAPAS y no tenían equivalente: leían y escribían con la clave
+  // CRUDA. Consecuencia medida: si el doc_id parpadea —la API lo trae, el respaldo por DOM
+  // a veces no, y eso está documentado como real en el comentario de `apptKey`— en el MISMO
+  // tick en que el estado también parpadea, la cita recibe una clave «nueva», `esNueva` sale
+  // true y **el antirrebote de v17.6.21 queda anulado por completo**: la tarjeta salta a
+  // VERDE «En Sala» con una sola lectura sin confirmar. Es el defecto que esa versión cerró,
+  // reabierto por la puerta del documento en vez de la del estado. Y sin ningún cambio real
+  // de estado, un solo parpadeo genera una SEGUNDA llegada fantasma (`arrival: true` otra
+  // vez) porque el historial bajo la clave vieja deja de verse.
+  //
+  // `_apptMapaLeer` devuelve el valor esté bajo la clave que esté; `_apptMapaEscribir` lo anota
+  // bajo TODAS las identidades de la cita para que la memoria de una misma cita no quede
+  // partida en dos según por qué vía llegó la lectura.
+  function _apptMapaLeer(mapa, a, key) {
+    if (!mapa) return undefined;
+    if (mapa.has(key)) return mapa.get(key);
+    for (const k of _apptKeysLegado(a)) { if (mapa.has(k)) return mapa.get(k); }
+    return undefined;
+  }
+  // Escribe el valor bajo TODAS las identidades de la cita, igual que `_apptMarcar` hace con
+  // los conjuntos y por el mismo motivo escrito allí: «el documento aparece y desaparece
+  // entre lecturas, así que una marca anotada solo bajo una de las dos se pierde en cuanto la
+  // siguiente lectura llega por la otra vía». Con un mapa no basta con LEER tolerante: si la
+  // vuelta siguiente solo trae el nombre, no hay forma de derivar la clave por documento —
+  // hay que haberla escrito antes. Cuesta 2-3 entradas por cita en un mapa que se vacía cada
+  // día (`diaNuevo`), que es el mismo canje que ya se aceptó para los conjuntos.
+  function _apptMapaEscribir(mapa, a, key, valor) {
+    if (!mapa) return;
+    mapa.set(key, valor);
+    for (const k of _apptKeysLegado(a)) mapa.set(k, valor);
+  }
+  // Y el borrado tiene que barrer las mismas entradas que la escritura sembró. Con
+  // `estadoPendiente` esto no es cosmético: si al confirmar una lectura se borrase solo la
+  // entrada de la clave de hoy, el candidato quedaría vivo bajo la otra identidad de la
+  // misma cita, y la próxima vez que ese valor volviera a aparecer POR ESA VÍA se daría por
+  // confirmado a la primera lectura — otra vez el antirrebote saltado, ahora por la puerta
+  // de atrás.
+  function _apptMapaBorrar(mapa, a, key) {
+    if (!mapa) return;
+    mapa.delete(key);
+    for (const k of _apptKeysLegado(a)) mapa.delete(k);
+  }
   function _apptMarcada(conjunto, a, key) {
     if (!conjunto) return false;
     if (conjunto.has(key)) return true;
@@ -12513,8 +12557,11 @@
   function colorAndAlert(a, now) {
     const stCrudoRaw = a.estado || ""; const stCrudo = stCrudoRaw.toLowerCase();
     const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
-    const esNueva = !state.historical.has(key);
-    const prevRaw = state.historical.get(key) || ""; const prev = prevRaw.toLowerCase();
+    // v18.0.62 — con respaldo de claves legadas (ver _apptMapaLeer): un parpadeo del doc_id
+    // ya no convierte una cita conocida en «nueva» ni anula el antirrebote.
+    const prevGuardado = _apptMapaLeer(state.historical, a, key);
+    const esNueva = prevGuardado === undefined;
+    const prevRaw = prevGuardado || ""; const prev = prevRaw.toLowerCase();
     // v17.6.21 — REPORTE DE CAMPO (24-ago-2026, con CSV real de auditoría adjunto):
     // "la tarjeta titilaba entre verde y ámbar" y un aviso de confirmación extemporánea
     // llegó "súper tarde". Evidencia del CSV: el MISMO paciente alternaba "En Sala" ↔
@@ -12560,14 +12607,14 @@
     // El corte se ata a la cadencia real de sondeo (cuatro vueltas, mínimo 30 s), no a un
     // número suelto: si el médico pone el refresco a 2 s o a 120 s, la ventana lo acompaña.
     // =====================================================================
-    const prevTs = state.historicalAt.get(key) || 0;
+    const prevTs = _apptMapaLeer(state.historicalAt, a, key) || 0;
     const huecoMax = Math.max(30000, 4 * (CONFIG.POLL_MS || 5000));
     const huecoLargo = !prevTs || (now - prevTs) > huecoMax;
     let stRaw = stCrudoRaw, st = stCrudo;
     if (!esNueva && stCrudo !== prev && !huecoLargo) {
-      if (state.estadoPendiente.get(key) === stCrudo) { state.estadoPendiente.delete(key); stRaw = stCrudoRaw; st = stCrudo; }
-      else { state.estadoPendiente.set(key, stCrudo); stRaw = prevRaw; st = prev; }
-    } else state.estadoPendiente.delete(key);
+      if (_apptMapaLeer(state.estadoPendiente, a, key) === stCrudo) { _apptMapaBorrar(state.estadoPendiente, a, key); stRaw = stCrudoRaw; st = stCrudo; }
+      else { _apptMapaEscribir(state.estadoPendiente, a, key, stCrudo); stRaw = prevRaw; st = prev; }
+    } else _apptMapaBorrar(state.estadoPendiente, a, key);
     const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false, callar = false;
     // v18.0.8 — RECTIFICACIÓN RETROACTIVA. Si de esta cita ya se contó una INASISTENCIA y
     // ahora la agenda dice que el paciente está EN SALA o ATENDIDO, aquella inasistencia no
@@ -12729,7 +12776,7 @@
     // forma de saber a qué hora se confirmó realmente. Pedido textual: "no me dice a qué
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
-    if (!state.leader) { state.historical.set(key, stRaw); state.historicalAt.set(key, now); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
+    if (!state.leader) { _apptMapaEscribir(state.historical, a, key, stRaw); _apptMapaEscribir(state.historicalAt, a, key, now); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, callar, elapsed: Math.round(elapsed * 10) / 10, pym }; }
     // v18.0.13 — LA FILA DEL FRAUDE SE MUDA A maybeNotify, JUNTO A SU CONTEO.
     // Vivía aquí, y el conteo (bumpStatCita) vive allá. Dos funciones distintas, y `tick()`
     // puede llamar a una sin la otra: en el PRIMER sondeo de una pestaña hace
@@ -12744,8 +12791,10 @@
     // Ahora la fila se escribe exactamente donde se cuenta y solo si se contó: contar y
     // registrar dejan de poder separarse.
     else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
-    state.historical.set(key, stRaw);
-    state.historicalAt.set(key, now);
+    // v18.0.62 — bajo TODAS las identidades de la cita (ver _apptMapaEscribir), para que el
+    // parpadeo del doc_id no parta su memoria en dos ni la haga pasar por «nueva».
+    _apptMapaEscribir(state.historical, a, key, stRaw);
+    _apptMapaEscribir(state.historicalAt, a, key, now);
     // [v17.6.7] Checklist de cierre: al pasar a Atendido, si el plan del paciente tiene
     // exámenes pendientes (vencidos o nunca tomados), aviso suave UNA vez por cita. Solo
     // líder, solo transiciones observadas (no el estado inicial del arranque tardío) y

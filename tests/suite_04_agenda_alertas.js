@@ -222,6 +222,113 @@ module.exports = {
       t.cierto(r3.arrival, "y cuenta como llegada, porque el estado confirmado anterior no era 'en sala'");
     });
 
+    // v18.0.62 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta.
+    // `fraudWatch`/`alertedFraud` (conjuntos) ya leían con el respaldo de claves viejas;
+    // `state.historical` y `state.historicalAt` (mapas) no: leían y escribían con la clave
+    // cruda. Y que el doc_id parpadee entre lecturas no es hipotético — está documentado
+    // como real en el comentario de `apptKey`: la API lo trae y el respaldo por DOM a veces
+    // no. Con eso, la MISMA cita cambia de clave y su historial deja de verse.
+    t.caso("v18.0.62: si el doc_id se pierde entre lecturas, la cita NO se cuenta como una segunda llegada", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T07:55:00").getTime();
+      const conDoc = { hora_texto: "08:00 AM", estado: "En sala", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+      const sinDoc = { hora_texto: "08:00 AM", estado: "En sala", nombre: "PACIENTE UNO", index: 1, doc_id: "" };
+      c.api.__state.leader = true;
+
+      const r1 = c.api.colorAndAlert(conDoc, refDate);
+      t.cierto(r1.arrival, "la primera lectura sí es la llegada real");
+
+      const r2 = c.api.colorAndAlert(sinDoc, refDate);
+      t.falso(r1.key === r2.key, "la clave cambia de verdad al perderse el documento: el escenario que se prueba existe");
+      t.falso(r2.arrival, "la MISMA cita leída por la otra vía no puede sonar como una segunda llegada");
+    });
+
+    // El parpadeo va en las DOS direcciones, y cada una la cubre una mitad distinta del
+    // arreglo: doc→sin-doc la cubre la ESCRITURA bajo todas las identidades (la de arriba);
+    // sin-doc→doc la cubre la LECTURA tolerante, porque con la cita ya anotada solo por
+    // nombre no hay forma de derivar la clave por documento sin buscarla.
+    t.caso("v18.0.62: y tampoco al revés — si el documento APARECE entre lecturas", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T07:55:00").getTime();
+      const sinDoc = { hora_texto: "08:00 AM", estado: "En sala", nombre: "PACIENTE UNO", index: 1, doc_id: "" };
+      const conDoc = { hora_texto: "08:00 AM", estado: "En sala", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+      c.api.__state.leader = true;
+
+      const r1 = c.api.colorAndAlert(sinDoc, refDate);
+      t.cierto(r1.arrival, "la primera lectura, sin documento, es la llegada real");
+
+      const r2 = c.api.colorAndAlert(conDoc, refDate);
+      t.falso(r1.key === r2.key, "la clave cambia de verdad al aparecer el documento");
+      t.falso(r2.arrival, "y la cita ya conocida no vuelve a contarse");
+    });
+
+    // `historicalAt` es la OTRA mitad del antirrebote: la guarda de v18.0.8 solo lo aplica si
+    // la lectura anterior es RECIENTE. Leída con la clave cruda, un parpadeo del documento la
+    // deja en 0 → "hueco largo" → la lectura fresca manda de inmediato y el antirrebote se
+    // salta igual, aunque `esNueva` esté bien resuelto.
+    t.caso("v18.0.62: la marca de tiempo del antirrebote sobrevive al parpadeo del documento", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const sinPresSinDoc = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "PACIENTE UNO", index: 1, doc_id: "" };
+      const enSalaConDoc = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+
+      const r1 = c.api.colorAndAlert(sinPresSinDoc, refDate);
+      t.igual(r1.color, "AMBAR", "estado de partida, anotado SOLO bajo la clave por nombre");
+
+      const r2 = c.api.colorAndAlert(enSalaConDoc, refDate);
+      t.igual(r2.estado, "Sin presentarse", "la lectura anterior es reciente: el antirrebote sigue en pie");
+      t.igual(r2.color, "AMBAR");
+    });
+
+    t.caso("v18.0.62: un parpadeo del doc_id no anula el antirrebote de v17.6.21", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const sinPresConDoc = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+      const enSalaSinDoc = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "PACIENTE UNO", index: 1, doc_id: "" };
+
+      const r1 = c.api.colorAndAlert(sinPresConDoc, refDate);
+      t.igual(r1.color, "AMBAR", "estado de partida, ya confirmado");
+
+      // Una sola lectura, con OTRA clave por el parpadeo del documento. Sin el respaldo, la
+      // cita parece nueva, `esNueva` sale true y el antirrebote se salta entero: la tarjeta
+      // saltaría a VERDE «En Sala» con una única lectura sin confirmar.
+      const r2 = c.api.colorAndAlert(enSalaSinDoc, refDate);
+      t.igual(r2.estado, "Sin presentarse", "una sola lectura no confirma, aunque llegue con otra clave");
+      t.igual(r2.color, "AMBAR", "y color y texto siguen viajando juntos");
+      t.falso(r2.arrival, "ni cuenta como llegada");
+    });
+
+    // El candidato del antirrebote vive en `estadoPendiente`, y tiene que borrarse bajo las
+    // MISMAS identidades con las que se sembró. Si no, el candidato sobrevive a su propia
+    // confirmación y la siguiente vez que ese valor vuelva por la otra vía se acepta a la
+    // primera — el antirrebote saltado por la puerta de atrás.
+    t.caso("v18.0.62: el candidato del antirrebote no sobrevive bajo la otra identidad de la cita", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T07:58:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const sinPres = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+      const enSala = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+      const enSalaSinDoc = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "PACIENTE UNO", index: 1, doc_id: "" };
+
+      c.api.colorAndAlert(sinPres, refDate);           // primera lectura: confirma "Sin presentarse"
+      c.api.colorAndAlert(enSala, refDate);            // parpadeo: queda un CANDIDATO "en sala"
+      const r = c.api.colorAndAlert(sinPres, refDate); // el parpadeo se deshace: el candidato debe morir
+      t.igual(r.estado, "Sin presentarse", "el parpadeo quedó absorbido, como en la prueba de v17.6.21");
+
+      // Y ahora la lectura "En Sala" vuelve, una sola vez, por la vía SIN documento. Si al
+      // deshacerse el parpadeo el candidato solo se borró bajo la clave con documento, sigue
+      // vivo bajo la clave por nombre: esta única lectura lo daría por confirmado de golpe y
+      // la tarjeta saltaría a VERDE «En Sala» sin la segunda lectura que exige el antirrebote.
+      const r2 = c.api.colorAndAlert(enSalaSinDoc, refDate);
+      t.igual(r2.estado, "Sin presentarse", "sigue haciendo falta una segunda lectura seguida");
+      t.falso(r2.arrival, "y no hay llegada sin confirmar");
+    });
+
     // ---------- _proximoDeadlineTiempo (Fase 3: notificación en tiempo real) ----------
     t.caso("_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta -> devuelve el instante de la prealerta", () => {
       const c = cargar();
