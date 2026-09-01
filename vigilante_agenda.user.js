@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.80
+// @version      18.0.81
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.80";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.81";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -34440,10 +34440,19 @@
         fechaFinal: mtrFechaEverest(hoy),
         estado: "",
       };
+      // v18.0.81 — AUDITORÍA (hallazgo de enjambre #33): este POST es una consulta pura
+      // (lee los medicamentos, no escribe nada), pero sin __idempotent:true
+      // _pageFetchJsonCore lo clasificaba como ESCRITURA — cero reintentos, ni siquiera el
+      // respaldo por GM_xmlhttpRequest — mientras su hermano (el histórico de frecuencias,
+      // GET) sí se recupera de un blip transitorio de wifi. Un solo hipo de red apagaba
+      // todo el motor de seguridad farmacológica (dosis renal + interacciones) con más
+      // frecuencia de la que la red real lo justificaba. Mismo remedio que ya usa
+      // apiAccesoBuscarCitasDisponibles para su propio POST de solo lectura.
       const datos = await pageFetchJson(MTR_RUTA_MEDICAMENTOS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo),
+        __idempotent: true,
       });
       if (!Array.isArray(datos)) return null;
       return datos;

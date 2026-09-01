@@ -289,6 +289,25 @@ module.exports = {
       t.igual(r, null);
     });
 
+    // v18.0.81 — HALLAZGO DE ENJAMBRE #33 (3 de 3 refutadores no lo tumbaron). Este POST es
+    // una consulta pura (lee medicamentos, no escribe nada) pero, sin __idempotent:true,
+    // _pageFetchJsonCore lo trataba como ESCRITURA: cero reintentos, y ni siquiera probaba
+    // la segunda vía (GM_xmlhttpRequest) ante un fallo transitorio de fetch — a diferencia
+    // de su hermano (el histórico de frecuencias, GET), que sí se recupera del mismo hipo.
+    await t.casoAsync("REGRESIÓN — un blip transitorio de fetch se recupera por GM_xmlhttpRequest, igual que su hermano GET (hallazgo #33)", async () => {
+      let llamadasGm = 0;
+      const c = cargar({
+        silencioso: true,
+        // El primer (y único) intento de fetch falla — la red del consultorio con un hipo.
+        fetch: async () => { throw new Error("red caída transitoria"); },
+        // La segunda vía SÍ responde: esto es lo que antes nunca se intentaba para este POST.
+        gmxhr: (o) => { llamadasGm++; o.onload({ status: 200, responseText: JSON.stringify(["LOSARTAN 50MG"]) }); },
+      });
+      const r = await c.api.mtrPedirMedicamentos(111);
+      t.igual(llamadasGm, 1, "con __idempotent:true, el fallo de fetch SÍ prueba la segunda vía — antes eran 0 llamadas");
+      t.igual(r, ["LOSARTAN 50MG"], "y el resultado real de esa segunda vía llega hasta el llamador, no null");
+    });
+
     await t.casoAsync("sin pacienteId no se pega al servidor siquiera", async () => {
       let n = 0;
       const c = cargar({

@@ -62,8 +62,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | Escape y el chip de filtro rápido llamaban a `closeSheet()` directo, sin pasar por `_ajustesIntentarCerrar()`: un cambio sin guardar en Ajustes se perdía en silencio — 3 de 3 refutadores no lo tumbaron | `closeSheet` / `_ajustesIntentarCerrar` | **v18.0.77** | 207 |
 | el badge «⚠ N inasistencias previas» era inalcanzable con el paciente en «En sala»/«Atendido» — justo cuando el médico lo tiene delante para dialogar sobre eso — 3 de 3 refutadores no lo tumbaron | `refrescarCuentas` / `render` | **v18.0.79** | 212, 213 |
 | un arranque matado por el kill-switch marcaba el aviso de festivos como «ya mostrado hoy» sin haberlo mostrado nunca (`#vgl-toasts` no existía todavía) — el refutador disidente tenía razón en el impacto real (hoy no hay discrepancia, y el aviso no gatea ninguna fecha), pero el arreglo es gratis y sigue el mismo patrón ya usado una vez en este archivo | `_festivosAvisarSiVencida` (orden de llamada en `boot()`) | **v18.0.80** | 214 |
+| el POST de medicamentos (consulta pura) se trataba como escritura por faltarle `__idempotent:true` — cero reintentos y ni siquiera la segunda vía (GM_xmlhttpRequest) ante un blip de red, a diferencia de su hermano GET — 3 de 3 refutadores no lo tumbaron | `mtrPedirMedicamentos` | **v18.0.81** | 215 |
 
-Quedan **15 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **14 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

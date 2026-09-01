@@ -10253,3 +10253,28 @@ salidas que proponía el hallazgo.
 | 214 | vuelve la llamada temprana, antes del kill-switch (**el defecto original**) | *REGRESIÓN — un arranque MATADO por el kill-switch no consume el aviso de festivos sin haberlo mostrado* | Sí |
 
 Banco completo: **2.937 comprobaciones pasan, 0 fallan.**
+
+## v18.0.81 — un blip de red ya no apaga el motor de seguridad farmacológica
+
+Hallazgo #33 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+`mtrPedirMedicamentos` (POST) es una consulta pura — lee los medicamentos del paciente, no
+escribe nada — pero sin `__idempotent: true` en las opciones, `_pageFetchJsonCore` lo trataba
+como ESCRITURA: cero reintentos, y ni siquiera probaba la segunda vía (`GM_xmlhttpRequest`) ante
+el primer fallo. Su hermano (el histórico de frecuencias, GET) sí se recupera del mismo hipo de
+red. Un solo blip transitorio de wifi de consultorio apagaba TODO el motor de seguridad
+farmacológica (avisos de dosis renal + las interacciones) con más frecuencia de la que la red
+real lo justificaba.
+
+### La reparación
+
+Se agrega `__idempotent: true` a la llamada, exactamente como ya hace `apiAccesoBuscarCitasDisponibles`
+para su propio POST de solo lectura — el mismo remedio que el hallazgo señaló por su nombre.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 215 | se quita `__idempotent: true` (**el defecto original**) | *REGRESIÓN — un blip transitorio de fetch se recupera por GM_xmlhttpRequest, igual que su hermano GET* | Sí |
+
+Banco completo: **2.938 comprobaciones pasan, 0 fallan.**
