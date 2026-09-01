@@ -59,6 +59,58 @@ module.exports = {
       t.cierto(hayQuarantine, "Debe aislar el payload malformado en vgl_quarantine_* para auditoría forense");
     });
 
+    // v18.0.87 — HALLAZGO DE ENJAMBRE #39. Antes, un vgl_cfg corrupto se ponía en
+    // cuarentena y S volvía a los valores de FÁBRICA en silencio, pero la clave ROTA en
+    // localStorage nunca se reescribía — solo se curaba si el médico abría Ajustes y
+    // guardaba algo. En una instalación ya madura (todas las migraciones de una sola vez
+    // ya aplicadas) ninguna de ellas repara esto. La autorreparación corre al CARGAR el
+    // script (antes de boot()), así que se prueba con un cargar() fresco y vgl_cfg
+    // corrupto desde el arranque — mismo escenario que la reproducción del hallazgo.
+    t.caso("REGRESIÓN — un vgl_cfg corrupto se autorrepara al cargar, no se queda roto para siempre (hallazgo #39)", () => {
+      const cCorrupto = cargar({
+        silencioso: true,
+        almacen: {
+          vgl_cfg: '{"tamanoLetra":"muygrande","excluir":["vdrl"',   // truncado a propósito
+          // Instalación YA madura: todas las migraciones de una sola vez ya aplicadas —
+          // ninguna de ellas dispararía una reescritura de vgl_cfg por su cuenta.
+          vgl_v73: "1", vgl_v142_notif: "1", vgl_v154_notif: "1", vgl_v1420_estreno: "1",
+        },
+      });
+      t.igual(cCorrupto.api.__S.tamanoLetra, "normal",
+        "S cae a los valores de fábrica, como ya hacía antes (el médico pierde su letra muy grande)");
+      t.noLanza(() => JSON.parse(cCorrupto.env.storage.getItem("vgl_cfg")),
+        "pero la clave en localStorage YA NO se queda rota: se reescribe con algo interpretable");
+      t.igual(JSON.parse(cCorrupto.env.storage.getItem("vgl_cfg")).tamanoLetra, "normal",
+        "reescrita con el mismo valor sano que S está usando ahora mismo — antes seguía siendo el string truncado para siempre");
+      const hayCuarentena = Object.keys(cCorrupto.env.almacen).some((k) => k.startsWith("vgl_quarantine_vgl_cfg_"));
+      t.cierto(hayCuarentena, "y el original roto se conserva en cuarentena, como siempre — la reparación no lo borra sin dejar rastro");
+    });
+
+    t.caso("REGRESIÓN — con vgl_cfg SANO, cargar() no lo toca ni crea cuarentena (hallazgo #39)", () => {
+      const cSano = cargar({
+        silencioso: true,
+        almacen: { vgl_cfg: JSON.stringify({ tamanoLetra: "grande" }), vgl_v73: "1", vgl_v142_notif: "1", vgl_v154_notif: "1", vgl_v1420_estreno: "1" },
+      });
+      t.igual(cSano.api.__S.tamanoLetra, "grande", "un ajuste real y sano se respeta");
+      const hayCuarentena = Object.keys(cSano.env.almacen).some((k) => k.startsWith("vgl_quarantine_vgl_cfg_"));
+      t.falso(hayCuarentena, "sin corrupción, no se pone nada en cuarentena ni se reescribe de más");
+    });
+
+    // El aviso en pantalla depende de #vgl-toasts (buildOverlay()), que el DOM simulado del
+    // arnés no monta por completo sin traer de vuelta el resto de la UI (mismo límite que
+    // suite_42 ya documenta para _renderToast). Se fija por inspección de fuente: que el
+    // aviso se dispare DESPUÉS de buildOverlay(), condicionado a la corrupción detectada.
+    t.caso("REGRESIÓN — boot() avisa de la configuración reiniciada DESPUÉS de montar #vgl-toasts, no antes (hallazgo #39)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iniBoot = src.indexOf("function boot()");
+      const cuerpoBoot = src.slice(iniBoot, src.indexOf("\n  function ", iniBoot + 10));
+      const iBuildOverlay = cuerpoBoot.indexOf("buildOverlay();");
+      const iAviso = cuerpoBoot.indexOf("if (_vglCfgCorrupto)");
+      t.cierto(iBuildOverlay >= 0 && iAviso > iBuildOverlay,
+        "el aviso de configuración reiniciada vive DESPUÉS de buildOverlay(): antes #vgl-toasts no existe y el aviso se perdería, igual que ya le pasó al aviso de festivos (hallazgo #32)");
+      t.cierto(/showToast\("AMBAR", "Configuración reiniciada"/.test(cuerpoBoot), "y de verdad llama a showToast cuando corresponde");
+    });
+
     t.caso("R3.8: safeReadJSON con clave inexistente retorna default sin crear cuarentena", () => {
       const res = A.safeReadJSON("vgl_no_existe_absolutamente", 999);
       t.igual(res, 999);

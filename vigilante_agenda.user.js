@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.86
+// @version      18.0.87
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.86";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.87";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8515,6 +8515,21 @@
   // CHANGELOG.
 
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
+  // v18.0.87 — AUDITORÍA (hallazgo de enjambre #39): si vgl_cfg queda corrupto (JSON
+  // parcial — cierre abrupto del navegador, disco lleno), safeReadJSON ya lo pone en
+  // cuarentena, pero S vuelve a los valores de FÁBRICA en SILENCIO: sin aviso, y sin
+  // reescribir la clave con algo sano. En una instalación ya madura (todas las
+  // migraciones de una-sola-vez de abajo ya aplicadas) ninguna repara esto — el tamaño de
+  // letra de un médico con baja visión, o su lista de PyM excluidos, desaparecen sin
+  // explicación hasta que él mismo abra Ajustes y guarde algo. Se detecta aquí (había una
+  // cadena guardada pero no se pudo interpretar) para autorreparar la clave de una vez —
+  // el aviso en pantalla se dispara más abajo en boot(), después de buildOverlay(), para
+  // no repetir el error de #vgl-toasts inexistente que v18.0.80 ya corrigió una vez.
+  let _vglCfgCorrupto = false;
+  try {
+    const _crudoCfg = localStorage.getItem(SETTINGS_KEY);
+    if (_crudoCfg) { try { JSON.parse(_crudoCfg); } catch (e) { _vglCfgCorrupto = true; writeJSON(SETTINGS_KEY, S); } }
+  } catch (e) {}
   // v17.58.2 — POLÍTICA DEL DUEÑO (29-ago-2026): la telemetría es el precio de usar el
   // script gratis. Nace ENCENDIDA y NO se puede desactivar: este forzado corre en CADA
   // arranque, así que ni una config guardada con `false`, ni una edición manual de
@@ -31819,6 +31834,16 @@
     // desactivado. Ahora corre después de buildOverlay() (que crea #vgl-toasts) y del propio
     // chequeo del kill-switch (que ya cortó el arranque con `return` si estaba activo).
     try { _festivosAvisarSiVencida(); } catch (e) {}
+    // v18.0.87 — AUDITORÍA (hallazgo de enjambre #39): mismo motivo que la línea de arriba
+    // — el aviso necesita #vgl-toasts, que recién existe desde buildOverlay(). La clave ya
+    // se autorreparó (ver la construcción de S, más arriba); esto es solo el aviso.
+    try {
+      if (_vglCfgCorrupto) {
+        showToast("AMBAR", "Configuración reiniciada",
+          "Sus ajustes guardados no se pudieron leer (datos dañados) y volvieron a los valores de fábrica. Revise Ajustes y guarde de nuevo lo que necesite.",
+          true);
+      }
+    } catch (e) {}
     // v14.2.12 — Si Chrome DESCARTÓ esta pestaña (Ahorro de memoria) y la volvió a cargar,
     // el Vigilante estuvo apagado ese rato: se registra (sin datos de paciente) y se le
     // sugiere al médico, una vez al día, la excepción "mantener siempre activo este sitio".

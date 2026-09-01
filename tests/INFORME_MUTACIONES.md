@@ -10426,3 +10426,37 @@ dos lados, y ahora también que el caso numérico usa dígito) — no el código
 | 220 | vuelve el límite de letra para todos los casos (**el defecto original**) | *v18.0.86, suite_31: número clínico no relacionado sobrevive intacto* + *suite_57: límite numérico de dígito* (2 suites, 2 fallan) | Sí |
 
 Banco completo: **2.942 comprobaciones pasan, 0 fallan.**
+
+## v18.0.87 — un vgl_cfg corrupto se autorrepara, en vez de quedarse roto para siempre
+
+Hallazgo #39 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+argumentó bien en dos frentes: (1) no hay un clic real que dispare la corrupción — es un fallo
+externo de almacenamiento sin incidente real registrado, y los backends atómicos de
+localStorage (LevelDB/SQLite) rara vez truncan una sola clave así; (2) aun aceptándola, el daño
+mostrado es cosmético, no clínico — los valores de fábrica a los que cae son prudentes (`excluir`
+nunca oculta VIH, las plantillas de SMS vuelven a `""` que es el fallback "honesto" que la propia
+regla de casa pide), y el único efecto negativo verificado es el tamaño de letra volviendo a
+"normal" — una molestia de accesibilidad de la UI del propio asistente.
+
+Se aplica de todos modos: el arreglo es gratis, no reduce ninguna protección existente, y cierra
+un caso real documentado por el propio código (`safeReadJSON` YA pone en cuarentena y sabe que
+hubo corrupción — simplemente no hacía nada con ese conocimiento para la clave más importante
+del script).
+
+### La reparación
+
+Al construir `S` (la primera línea del script que lee `vgl_cfg`), se detecta si había una cadena
+guardada que no se pudo interpretar y, si la hay, se reescribe la clave con el valor sano que `S`
+ya está usando — autorreparación inmediata, sin esperar a que el médico abra Ajustes. El aviso en
+pantalla (un toast AMBAR) se dispara en `boot()`, DESPUÉS de `buildOverlay()` — el mismo remedio
+que v18.0.80 (hallazgo #32) ya aplicó una vez para el mismo problema de fondo: `#vgl-toasts` no
+existe hasta ese punto, y un aviso disparado antes se pierde sin pintarse.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 221 | nunca se detecta ni se autorrepara la corrupción (**el defecto original**) | *REGRESIÓN — un vgl_cfg corrupto se autorrepara al cargar* | Sí |
+| 222 | el aviso corre ANTES de `buildOverlay()` (se perdería, como el hallazgo #32) | *REGRESIÓN — boot() avisa de la configuración reiniciada DESPUÉS de montar #vgl-toasts* | Sí |
+
+Banco completo: **2.945 comprobaciones pasan, 0 fallan.**
