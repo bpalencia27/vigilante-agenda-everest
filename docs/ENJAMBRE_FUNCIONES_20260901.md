@@ -67,8 +67,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | `dataset.vglVigilado` marcaba el ELEMENTO como vigilado, no el paciente — si Angular reutiliza el mismo `<textarea>` al cambiar de historia (premisa no verificada contra Everest real, admitido por el propio hallazgo, pero el arreglo es gratis y puramente defensivo), la primera edición real sobre el paciente nuevo no invalidaba el resumen en caché | `_vglVigilarTextoLibre` / `_vglNotarTextoLibre` | **v18.0.83** | 217 |
 | leucocitos/hematíes «incontables»/«innumerables»/«campo cubierto» (piuria o hematuria masiva, el hallazgo MÁS grave posible) pasaban como NORMAL — ninguna palabra clave los cubría, aunque el proyecto ya reconoce el mismo léxico como severidad máxima en `mtrUroGrado` — 3 de 3 refutadores no lo tumbaron | `_esUroComponenteAlterado` | **v18.0.84** | 218 |
 | el descarte barato por longitud medía la cadena SIN recortar — relleno de Excel (espacios, Alt+Enter) podía descartar en silencio una actividad de PyM real y corta — 3 de 3 refutadores no lo tumbaron | `isPending` | **v18.0.85** | 219 |
+| el límite de PALABRA (letras) que v18.0.25 fijó para nombres también se aplicaba a las tachaduras numéricas (celular/teléfono/identificación), que no protege contra adyacencia de otros DÍGITOS — un número clínico no relacionado que contuviera el celular como subcadena se partía con [CENSURADO]; el refutador demostró que ningún dato clínico realista lo dispara y que scrubPII es la defensa primaria, pero el arreglo es gratis y no reduce protección en ningún caso real | `mtrHcTachar` | **v18.0.86** | 220 |
 
-Quedan **10 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **9 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

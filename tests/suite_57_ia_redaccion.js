@@ -2476,8 +2476,13 @@ module.exports = {
       const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
       t.cierto(cuerpo.includes("MTR_LETRA_ES"),
         "mtrHcTachar debe usar la misma clase de letras españolas que mtrSanearTextoLibreAI: si las dos defensas discrepan, una tacha lo que la otra deja pasar");
-      t.cierto(/\(\?<!\[/.test(cuerpo) && /\(\?!\[/.test(cuerpo),
+      t.cierto(/\(\?<!"\s*\+\s*limite/.test(cuerpo) && /\(\?!"\s*\+\s*limite/.test(cuerpo),
         "y con límite por los dos lados, no solo por delante");
+      // v18.0.86 — hallazgo #38: para una tachadura NUMÉRICA (celular/teléfono/
+      // identificación) el límite de LETRA no protege de la adyacencia de OTROS dígitos —
+      // el límite correcto ahí es de dígito, no de letra.
+      t.cierto(/const limite = \/\^\\d\+\$\/\.test\(String\(x\)\) \? "\\\\d" : /.test(cuerpo),
+        "las tachaduras puramente numéricas usan límite de DÍGITO, no de letra");
     });
 
     // =================================================================

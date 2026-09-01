@@ -10387,3 +10387,42 @@ Se recorta `s` antes de medir la longitud, exactamente como proponía el hallazg
 | 219 | vuelve a medir la cadena cruda (**el defecto original**) | *REGRESIÓN — isPending recorta ANTES de medir la longitud, no después* | Sí |
 
 Banco completo: **2.942 comprobaciones pasan, 0 fallan.**
+
+## v18.0.86 — el tachado de números ya no corrompe un número clínico no relacionado
+
+Hallazgo #38 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+demostró con datos clínicos realistas (orden de laboratorio, código de barras, dosis) que
+NINGUNO se corrompe hoy, y que la defensa PRIMARIA contra fuga de cédula/celular es `scrubPII`
+(por patrón), no este mecanismo — `mtrHcTachaduras` es defensa en profundidad SECUNDARIA, tal
+como el propio historial del proyecto (v18.0.15, v18.0.25) documenta por escrito. El caso que
+dispara el bug es una coincidencia construida a propósito (un número que contiene el celular
+exacto del paciente como subcadena), no un escenario clínico típico.
+
+Aun así, el defecto de código es real: `mtrHcTachar` usa el límite de PALABRA (`MTR_LETRA_ES`,
+letras españolas) que v18.0.25 diseñó para NOMBRES, también para las tachaduras NUMÉRICAS
+(celular/teléfono/identificación) — y ese límite no protege contra la adyacencia de OTROS
+DÍGITOS, porque las letras no son dígitos. Un celular que aparece como subcadena dentro de un
+número más largo (una orden, un código de barras) se tachaba igual, partiéndolo con
+`[CENSURADO]` en medio — y ese texto es justo el que se manda a la hoja de hechos que lee la IA.
+
+### La reparación
+
+Para una tachadura puramente numérica (`/^\d+$/`), el límite pasa a ser de DÍGITO
+(`(?<!\d)...(?!\d)`) en vez de letra; para todo lo demás (nombres) se conserva exactamente el
+límite que el médico decidió en v18.0.25. No hay compromiso: el celular real, como token propio,
+se sigue tachando igual que siempre — solo deja de partir un número no relacionado que lo
+contenga por coincidencia.
+
+Una prueba existente (`v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra`)
+quedó desactualizada por el refactor — comprobaba literalmente `(?<![` en el código fuente, y la
+nueva construcción usa una variable (`limite`) en vez de la clase de letras inline. Se corrigió
+la PRUEBA para reflejar la nueva forma (que sigue verificando el mismo invariante: límite en los
+dos lados, y ahora también que el caso numérico usa dígito) — no el código, que es correcto.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 220 | vuelve el límite de letra para todos los casos (**el defecto original**) | *v18.0.86, suite_31: número clínico no relacionado sobrevive intacto* + *suite_57: límite numérico de dígito* (2 suites, 2 fallan) | Sí |
+
+Banco completo: **2.942 comprobaciones pasan, 0 fallan.**

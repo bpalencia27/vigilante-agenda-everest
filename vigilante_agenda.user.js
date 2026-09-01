@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.85
+// @version      18.0.86
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.85";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.86";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -43066,8 +43066,17 @@
     for (const x of (tachaduras || [])) {
       if (!x) continue;
       const esc = String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // v18.0.86 — AUDITORÍA (hallazgo de enjambre #38): el límite de PALABRA (letras
+      // españolas) que v18.0.25 fijó para nombres no protege a las tachaduras NUMÉRICAS
+      // (celular/teléfono/identificación) de la adyacencia de OTROS dígitos — MTR_LETRA_ES
+      // son letras, no dígitos. Un celular que aparece como subcadena dentro de un número
+      // más largo (una orden, un código de barras de laboratorio) se tachaba igual,
+      // partiéndolo con [CENSURADO] en medio. Para una cadena puramente numérica, el
+      // límite correcto es de DÍGITO, no de letra; para todo lo demás (nombres) se
+      // conserva exactamente el límite que el médico decidió en v18.0.25.
+      const limite = /^\d+$/.test(String(x)) ? "\\d" : ("[" + MTR_LETRA_ES + "]");
       t = t.replace(
-        new RegExp("(?<![" + MTR_LETRA_ES + "])" + esc + "(?![" + MTR_LETRA_ES + "])", "gi"),
+        new RegExp("(?<!" + limite + ")" + esc + "(?!" + limite + ")", "gi"),
         "[CENSURADO]");
     }
     return t;

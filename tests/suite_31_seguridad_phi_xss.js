@@ -936,6 +936,18 @@ module.exports = {
       t.igual(api.mtrHcTachar("hola (JUAN) adios", ["(JUAN)"]), "hola [CENSURADO] adios",
         "los paréntesis del nombre se escapan en vez de reventar la expresión regular");
 
+      // v18.0.86 — HALLAZGO DE ENJAMBRE #38. El límite de PALABRA (letras españolas) que
+      // v18.0.25 fijó para nombres no protege a las tachaduras NUMÉRICAS de la adyacencia
+      // de OTROS dígitos: un celular que aparece como subcadena dentro de un número más
+      // largo (una orden, un código de barras) se tachaba igual, partiéndolo en dos.
+      const conOrdenClinica = "Se registra el numero de orden 930012345678 en el sistema de laboratorio para seguimiento.";
+      t.igual(api.mtrHcTachar(conOrdenClinica, ["3001234567"]), conOrdenClinica,
+        "un número clínico NO relacionado que contiene el celular como subcadena sobrevive intacto — antes quedaba partido con [CENSURADO] en medio");
+      // Pero el celular SÍ se sigue tachando cuando aparece de verdad, como token propio.
+      t.igual(api.mtrHcTachar("Contactar al celular 3001234567 para confirmar.", ["3001234567"]),
+        "Contactar al celular [CENSURADO] para confirmar.",
+        "el celular real, no pegado a otro número, se sigue tachando igual que siempre");
+
       // Sin identidad no se inventa una tachadura, y el texto pasa igual.
       t.igual(api.mtrHcTachaduras({}), [], "sin datosUsuario, ninguna tachadura");
       t.igual(api.mtrHcTachar("texto intacto", []), "texto intacto", "y sin tachaduras el texto no se toca");
