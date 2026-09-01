@@ -1,3 +1,7 @@
 ## 2024-05-24 - Typed Arrays for Levenshtein Distance
 **Learning:** Using `Uint16Array` combined with array reference swapping significantly improves performance of algorithms like Levenshtein distance by avoiding the overhead of creating and copying dynamic JavaScript arrays. `Uint16Array` avoids size limits for token lengths up to 65535, whereas `Uint8Array` was previously causing an overflow bug because it overflows at 255 which text strings can easily exceed. Re-using buffers across loop iterations avoids Garbage Collector pressure and memory allocations.
 **Action:** Use sufficiently large typed arrays (`Uint16Array`) and reference swapping for dynamic programming matrix rows in frequent operations like fuzzy search. Remember to hoist allocations out of loops.
+
+## 2024-05-25 - Avoid element-wise array copying in loops
+**Learning:** In hot loops like fuzzy search across many items, doing element-wise array copying (e.g. `for (let j=0; j<=n; j++) { prevRow[j] = currRow[j]; }`) is much slower than swapping array references (e.g. `temp = prev; prev = curr; curr = temp;`). Combined with global `Uint16Array` buffers that are dynamically resized when needed, this drastically reduces CPU cycles and prevents Garbage Collection spikes during text filtering.
+**Action:** Always swap references instead of copying contents when rotating dynamic programming rows, and hoist array allocations out of tight loops into module-level variables.
