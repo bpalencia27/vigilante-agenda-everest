@@ -8437,3 +8437,71 @@ faltaba la puerta de al lado. Se añade la cuarta en `suite_26`.
 | 106 | se reintroduce una prueba hueca `t.caso(..., async ...)` | la regla nueva de `suite_26` | Sí — 10 ok |
 
 Banco completo: **0 fallan.**
+
+---
+
+## v18.0.45 — los dos primeros del enjambre de funciones: un aviso farmacológico sobre una cifra que nadie midió, y PHI en el archivo llamado «sanitizado»
+
+Los dos de mayor daño entre los 47 confirmados por el enjambre
+(`docs/ENJAMBRE_FUNCIONES_20260901.md`). Los dos comprobados contra la cabeza actual antes de
+tocar nada — el enjambre corrió contra un HEAD anterior a la v18.0.33.
+
+### 1. `eGFR = null` se evaluaba como `eGFR = 0` (gravedad alta, clínico)
+
+`mtrEvaluarInteracciones` recibe `egfr` en **`null`** cuando la función renal nunca se ha
+medido: paciente nuevo, o falta el peso para calcularla. Las dos comparaciones eran
+`egfr < 30` y `egfr < 60` a pelo, y en JavaScript **`null < 30` es `true`** (null se convierte
+a 0). Un paciente sin función renal medida se evaluaba como si tuviera una eGFR de **cero**.
+
+Medido antes y después con el arnés, mismos fármacos:
+
+| | antes | después |
+|---|---|---|
+| LOSARTÁN + ESPIRONOLACTONA, eGFR `null`, K⁺ 4,0 | `HIPERKALEMIA_SINERGICA` (severidad alta) | — |
+| los mismos, eGFR **25** real | `HIPERKALEMIA_SINERGICA` | `HIPERKALEMIA_SINERGICA` |
+| METFORMINA + CONTRASTE, eGFR `null` | `METFORMINA_CONTRASTE` («suspender 48 h») | — |
+| los mismos, eGFR **45** real | `METFORMINA_CONTRASTE` | `METFORMINA_CONTRASTE` |
+
+Es «casilla vacía antes que dato inventado» del lado peor: un aviso farmacológico falso o
+gasta la atención del médico, o le hace suspender un fármaco por una cifra que no existe.
+
+Se arregla con **una variable** (`egfrMedida`), no parcheando cada comparación: así una regla
+nueva que mire la función renal no puede volver a caer en la coerción sin darse cuenta. El K⁺
+alto sigue disparando por su cuenta — la regla tiene dos disparadores y solo se desactivó el
+que dependía de una cifra ausente.
+
+### 2. La cédula viajaba cruda en el diagnóstico «sanitizado» (gravedad alta, PHI)
+
+`san()`, dentro de `downloadDiagnostic`, tacha con `···` todo el **texto** visible de la
+tarjeta —y ya había pruebas de cero PHI para eso—, pero de los atributos solo vaciaba los
+`data-*`: los cinco de `KEEP` (`class`, `role`, `routerlink`, `type`, `name`) se conservaban
+con su **valor original**. Angular escribe rutas como `[routerLink]="['/paciente', doc.cedula]"`,
+así que la cédula podía salir de la clínica dentro de un archivo llamado
+`diagnostico_vigilante_SANITIZADO.txt`.
+
+No se borran los atributos —su presencia y su forma son justo lo que hace útil el
+diagnóstico—: se va el dato. Cualquier corrida de **4 o más dígitos** pasa a `···`.
+
+    /Paciente/1122334455   ->  /Paciente/···        (identificadores sintéticos)
+    /hc/1122334455/lab/98765 ->  /hc/···/lab/···
+    card patient-link      ->  card patient-link    (las clases no se tocan)
+    col-6                  ->  col-6                (los números cortos tampoco)
+
+**Por qué esto nunca se había probado**, y qué se hizo al respecto: el DOM del banco no tiene
+`cloneNode` ni atributos iterables, así que `san()` entera no se puede ejecutar allí (`grep`
+de `cloneNode` en `tests/`: cero coincidencias). El saneador se saca a **función propia con
+nombre** (`_diagValorAtributoSeguro`) y se prueba de verdad; la rama que lo llama se fija con
+una comprobación **estructural**, declarada como tal en la propia prueba en vez de disfrazarse
+de comprobación de conducta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 107 | vuelve `egfr < 30` (coerción de null) en la hiperkalemia | *sin función renal medida no se inventa una eGFR de cero* | Sí — 21 ok |
+| 108 | vuelve `egfr < 60` en metformina + contraste | la misma | Sí — 21 ok |
+| 109 | el atributo conservado se reescribe con su valor original | *ningún atributo conservado se escribe sin pasar por el saneador* | Sí — 40 ok |
+| 110 | el saneador de atributos no tacha nada | *el diagnóstico «sanitizado» no deja pasar una cédula* | Sí — 40 ok |
+
+Quedan **45 hallazgos confirmados** del enjambre sin aplicar, con su reproducción y su arreglo
+propuesto en `docs/ENJAMBRE_FUNCIONES_20260901.md`.

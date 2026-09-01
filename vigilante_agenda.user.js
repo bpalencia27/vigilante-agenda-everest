@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.44
+// @version      18.0.45
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.44";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.45";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -29734,6 +29734,23 @@
   // Se conserva lo que sirve para diagnosticar (qué vista es, cuántos parámetros había) y
   // se tira lo que identifica. El título no se recorta ni se sanea: se omite. Recortarlo
   // dejaría el principio del nombre, que es justo la parte que identifica.
+  // v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
+  // el arnés: FUGA DE PHI EN EL ARCHIVO QUE SE LLAMA "SANITIZADO". `san()` tacha con "···"
+  // todo el TEXTO visible de la tarjeta —y hay pruebas de cero PHI para eso—, pero de los
+  // atributos solo vaciaba los `data-*`: los cinco de KEEP se conservaban con su VALOR
+  // ORIGINAL. Angular escribe rutas como `[routerLink]="['/paciente', doc.cedula]"`, así
+  // que si la tarjeta real trae ese enlace, la cédula viaja CRUDA en un archivo que el
+  // médico descarga creyéndolo sanitizado y que puede salir de la clínica. La función
+  // hermana `_urlDiagnostico()`, a dos funciones de distancia, ya sabía que eso hay que
+  // redactarlo en `location.href`.
+  //
+  // No se borran los atributos: su presencia y su FORMA son justo lo que hace útil el
+  // diagnóstico ("¿la tarjeta trae un routerlink?"). Lo que se va es el dato: cualquier
+  // corrida de 4 o más dígitos —cédula, historia, consecutivo— se reemplaza por "···".
+  // Función aparte y con nombre para poder probarla: el DOM del banco no tiene cloneNode,
+  // y por eso `san()` entera nunca se había probado (grep de "cloneNode" en tests/: cero).
+  function _diagValorAtributoSeguro(v) { return String(v == null ? "" : v).replace(/\d{4,}/g, "···"); }
+
   function _urlDiagnostico() {
     try {
       const href = String((typeof location !== "undefined" && location.href) || "");
@@ -29759,7 +29776,7 @@
     const counts = {}; sels.forEach((s) => { try { counts[s] = ddoc.querySelectorAll(s).length; } catch (e) { counts[s] = "err"; } });
     const freq = {}; ddoc.querySelectorAll("*").forEach((n) => (n.classList ? [...n.classList] : []).forEach((c) => (freq[c] = (freq[c] || 0) + 1)));
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 120);
-    const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
+    const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); else x.setAttribute(a.name, _diagValorAtributoSeguro(a.value)); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
     let card = ""; try { const h = ddoc.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
     out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "URL: " + _urlDiagnostico(), "Título: " + _tituloDiagnostico(),
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
@@ -33352,6 +33369,20 @@
     if (!medicamentos || !medicamentos.length) return alertas;
 
     const g = mtrDetectarGruposFarmacologicos(medicamentos);
+    // v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido
+    // con el arnés. `egfr` llega en `null` cuando la función renal NUNCA se ha medido —el
+    // caso normal de un paciente nuevo, o cuando falta el peso para calcularla— y las dos
+    // comparaciones de abajo eran `egfr < 30` y `egfr < 60` a pelo. En JavaScript
+    // `null < 30` es `true` (null se convierte a 0), así que un paciente SIN función renal
+    // medida se evaluaba como si tuviera una eGFR de CERO: se disparaban HIPERKALEMIA
+    // SINÉRGICA y METFORMINA + CONTRASTE con severidad alta, sobre una cifra que nadie
+    // midió. Es exactamente lo que "casilla vacía antes que dato inventado" prohíbe, y del
+    // lado peor: un aviso farmacológico falso o gasta la atención del médico, o le hace
+    // suspender un fármaco por un dato que no existe.
+    //
+    // Se resuelve con UNA variable, no parcheando cada comparación: así una regla nueva que
+    // mire la función renal no puede volver a caer en la coerción sin darse cuenta.
+    const egfrMedida = (typeof egfr === "number" && isFinite(egfr)) ? egfr : null;
     const tieneRaas = !!(g.ieca || g.ara2);
     const tieneDiuretico = !!(g.diuretico_tiazida || g.diuretico_asa);
     const tieneAine = !!g.aines;
@@ -33393,7 +33424,7 @@
     const potasioAlto = potasio !== null && potasio !== undefined && potasio >= 5.0;
 
     if ((tieneAhorradorORaas && tieneSupK) ||
-        (tieneRaas && g.espironolactona && (potasioAlto || egfr < 30))) {
+        (tieneRaas && g.espironolactona && (potasioAlto || (egfrMedida !== null && egfrMedida < 30)))) {
       const sev = (potasio !== null && potasio !== undefined && potasio >= 5.5)
         ? MTR_SEV_CRITICAL : MTR_SEV_HIGH;
       alertas.push(mtrAlertaInteraccion(
@@ -33415,7 +33446,7 @@
     }
 
     // 6. Metformina + contraste yodado, solo con función renal ya comprometida
-    if (g.metformina && g.contraste_yodado && egfr < 60) {
+    if (g.metformina && g.contraste_yodado && egfrMedida !== null && egfrMedida < 60) {
       alertas.push(mtrAlertaInteraccion(
         mtrUnirFarmacos(g.metformina, g.contraste_yodado),
         "METFORMINA_CONTRASTE", "SUSPENDER",

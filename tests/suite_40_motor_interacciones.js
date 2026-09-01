@@ -75,6 +75,41 @@ module.exports = {
       t.cierto(tipos(uno(meds, 25, 4.0)).indexOf("HIPERKALEMIA_SINERGICA") >= 0, "eGFR < 30");
     });
 
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta.
+    //
+    //  `egfr` llega en `null` cuando la función renal NUNCA se ha medido: paciente nuevo,
+    //  o falta el peso para calcularla. Las dos comparaciones eran `egfr < 30` y
+    //  `egfr < 60` a pelo, y en JavaScript `null < 30` es TRUE (null se convierte a 0).
+    //  O sea: un paciente sin función renal medida se evaluaba como si tuviera una eGFR
+    //  de CERO, y salían dos avisos farmacológicos de severidad alta sobre una cifra que
+    //  nadie midió. «Casilla vacía antes que dato inventado», del lado peor: un aviso
+    //  falso o gasta la atención del médico, o le hace suspender un fármaco por un dato
+    //  que no existe.
+    // =================================================================
+    t.caso("SIN función renal medida (eGFR null) no se inventa una eGFR de cero", () => {
+      const conEspiro = ["LOSARTAN 50 MG", "ESPIRONOLACTONA 25 MG"];
+      t.igual(tipos(uno(conEspiro, null, 4.0)).indexOf("HIPERKALEMIA_SINERGICA"), -1,
+        "sin eGFR medida y con K+ normal NO se afirma riesgo de hiperkalemia por riñón");
+      t.cierto(tipos(uno(conEspiro, 25, 4.0)).indexOf("HIPERKALEMIA_SINERGICA") >= 0,
+        "y con una eGFR REAL de 25 sigue disparando, como debe (control de la otra dirección)");
+
+      const conContraste = ["METFORMINA 850 MG", "MEDIO DE CONTRASTE YODADO"];
+      t.igual(tipos(uno(conContraste, null, null)).indexOf("METFORMINA_CONTRASTE"), -1,
+        "sin eGFR medida no se manda suspender la metformina");
+      t.cierto(tipos(uno(conContraste, 45, null)).indexOf("METFORMINA_CONTRASTE") >= 0,
+        "con eGFR real de 45 sí se manda, como debe");
+
+      // Y el K+ alto sigue mandando por su cuenta aunque no haya función renal: la regla
+      // tiene DOS disparadores y solo se desactivó el que dependía de una cifra ausente.
+      t.cierto(tipos(uno(conEspiro, null, 5.2)).indexOf("HIPERKALEMIA_SINERGICA") >= 0,
+        "con K+ de 5,2 medido de verdad, el aviso sale aunque la función renal falte");
+
+      // Una eGFR que no es número (texto de una lectura fallida) tampoco vale como cero.
+      t.igual(tipos(uno(conContraste, "no legible", null)).indexOf("METFORMINA_CONTRASTE"), -1,
+        "una eGFR ilegible no es una eGFR baja");
+    });
+
     t.caso("anticoagulante directo + AINE", () => {
       t.cierto(tipos(uno(["RIVAROXABAN 20 MG", "IBUPROFENO 400 MG"])).indexOf("RIESGO_SANGRADO_AINE_DOAC") >= 0);
       t.igual(tipos(uno(["WARFARINA 5 MG", "IBUPROFENO 400 MG"])).indexOf("RIESGO_SANGRADO_AINE_DOAC"), -1,

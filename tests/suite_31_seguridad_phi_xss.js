@@ -190,6 +190,46 @@ module.exports = {
       t.igual(c.api.mtrClasificarEstadioTfg(10), "G5");
     });
 
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  FUGA DE PHI EN EL ARCHIVO QUE SE LLAMA "SANITIZADO".
+    //
+    //  `san()` (dentro de downloadDiagnostic) tacha con "···" todo el TEXTO visible de la
+    //  tarjeta —y esta misma suite ya lo comprobaba—, pero de los atributos solo vaciaba
+    //  los `data-*`: los cinco de KEEP (class, role, routerlink, type, name) se conservaban
+    //  con su VALOR ORIGINAL. Angular escribe rutas como `[routerLink]="['/paciente',
+    //  doc.cedula]"`, así que la cédula podía viajar CRUDA en un archivo que el médico
+    //  descarga creyéndolo sanitizado y que puede salir de la clínica.
+    //
+    //  Todos los identificadores de esta prueba son SINTÉTICOS.
+    // =================================================================
+    t.caso("el diagnóstico «sanitizado» no deja pasar una cédula dentro de un atributo conservado", () => {
+      const f = api._diagValorAtributoSeguro;
+      // Lo que motivó el hallazgo: la ruta de Angular con el documento dentro.
+      t.igual(f("/Paciente/1122334455"), "/Paciente/···",
+        "la corrida de dígitos se va y la FORMA de la ruta se queda: eso es lo que hace útil el diagnóstico");
+      t.igual(f("paciente_987654321"), "paciente_···", "y también en el atributo name");
+      t.igual(f("/hc/1122334455/lab/98765"), "/hc/···/lab/···", "todas las corridas, no solo la primera");
+      // Lo que NO se puede romper: el diagnóstico existe para ver la estructura del DOM.
+      t.igual(f("card patient-link"), "card patient-link", "las clases no se tocan");
+      t.igual(f("col-6"), "col-6", "ni los números cortos de una rejilla CSS");
+      t.igual(f(null), "", "sin valor, cadena vacía — nunca «null» en el archivo");
+      t.igual(f(undefined), "", "ni «undefined»");
+    });
+
+    t.caso("y ningún atributo conservado se escribe de vuelta sin pasar por ese saneador", () => {
+      // Comprobación ESTRUCTURAL, y se dice que lo es: el DOM del banco no tiene cloneNode
+      // ni atributos iterables, así que `san()` entera no se puede ejecutar aquí — que es
+      // exactamente por lo que este camino nunca se había probado. Lo que sí se puede fijar
+      // es que la rama que devuelve un atributo de KEEP a su elemento pase por el saneador,
+      // que es la línea que el hallazgo pedía.
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const m = src.match(/if \(!KEEP\.has\(a\.name\)[\s\S]{0,400}?\}\);/);
+      t.cierto(!!m, "se encontró la rama de atributos de san()");
+      t.cierto(/else x\.setAttribute\(a\.name, _diagValorAtributoSeguro\(a\.value\)\);/.test(m[0]),
+        "el atributo conservado se reescribe saneado, no con su valor original: " + m[0].slice(-160));
+    });
+
     await t.casoAsync("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
       const c = cargar({ silencioso: true });
       const apt = {
