@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.48
+// @version      18.0.49
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.48";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.49";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1745,11 +1745,22 @@
       // cuando solo se había podido leer la sistólica, y «(165/0)» cuando la diastólica
       // llegaba en cero — una tensión imposible. «NaN» es una palabra de programador y un
       // 0 es un dato falso: los dos hacen dudar de la cifra que SÍ es real.
+      // v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep). La guarda de arriba se
+      // escribió para esto mismo y quedó COJA: `dosCifras` exigía `pad > 0` pero nunca
+      // `pas > 0`. Con la sistólica en 0 (lectura fallida, casilla vacía) y una diastólica
+      // real de 105, salía **«PA Descontrolada (0/105)»** — el mismo 0 que el propio
+      // comentario de la v17.8.1 llama «un dato falso», impreso pegado a la cifra que sí es
+      // real. La rama de UNA sola cifra sí exigía `pas > 0`; la de dos, no. Se simetriza:
+      // un 0 (o un negativo de un parseo corrupto) en CUALQUIERA de las dos deja de contar
+      // como cifra leída. La conducta clínica no cambia —`paDescontrolada` ya era cierto por
+      // la diastólica sola— pero lo que el médico lee deja de mezclar un dato falso con uno
+      // verdadero.
       if (paDescontrolada) {
-        const dosCifras = Number.isFinite(pas) && Number.isFinite(pad) && pad > 0;
-        badges.push(dosCifras
+        const pasReal = Number.isFinite(pas) && pas > 0;
+        const padReal = Number.isFinite(pad) && pad > 0;
+        badges.push(pasReal && padReal
           ? "PA Descontrolada (" + pas + "/" + pad + ")"
-          : "PA Descontrolada (" + (Number.isFinite(pas) && pas > 0 ? "sistólica " + pas : "diastólica " + pad) + ")");
+          : "PA Descontrolada (" + (pasReal ? "sistólica " + pas : "diastólica " + pad) + ")");
       }
 
       const sinResumen = !resumen;
@@ -42335,11 +42346,55 @@
   // Alta intensidad = atorvastatina 40-80 o rosuvastatina 20-40. Una falla de
   // LDL sin ella no es (solo) mala adherencia: muchas veces es que la dosis se
   // quedó corta. La norma pide optimizar intensidad/adherencia antes de nada.
+  // v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta: EN UNA
+  // COMBINACIÓN DE DOSIS FIJA SE LEÍA LA DOSIS DEL OTRO PRINCIPIO ACTIVO.
+  //
+  // «Amlodipino/Atorvastatina 5/40mg» es una presentación real y común en HTA +
+  // dislipidemia. `mtrDosisDeTexto` tomaba el PRIMER número que hubiera después del nombre
+  // buscado, y después de «atorvastatina» lo primero que aparece es el **5 del
+  // amlodipino**. Consecuencia medida: `mtrEstatinaAltaIntensidad` devolvía `null` y
+  // `mtrInerciaEstatina` le decía al médico «LDL en falla SIN estatina de alta intensidad:
+  // revise intensidad» — de un paciente que YA está en atorvastatina 40 mg, el techo
+  // habitual de esa dosis fija. Una afirmación clínicamente falsa que empuja a subir una
+  // dosis que ya está bien, o a desconfiar de un dato que sí es correcto.
+  //
+  // En una combinación, los números van en el MISMO ORDEN que los nombres: «A/B N1/N2».
+  // Así que se emparejan por POSICIÓN, que es la única lectura que la presentación permite.
+  // Si no hay pareja clara —los bloques no tienen la misma cantidad de partes, o el número
+  // no está donde debería— NO se adivina: se devuelve null y quien llama se queda sin dato,
+  // que es preferible a un dato de otro fármaco (casilla vacía antes que dato inventado).
+  function _mtrDosisDeCombo(t, p) {
+    // Un bloque de dos o más nombres pegados por "/": "amlodipino/atorvastatina".
+    const reNombres = /[a-z]{4,}(?:\s*\/\s*[a-z]{4,})+/g;
+    let m;
+    while ((m = reNombres.exec(t)) !== null) {
+      const nombres = m[0].split("/").map((x) => x.trim());
+      const pos = nombres.indexOf(p);
+      if (pos < 0) continue;
+      // El bloque de dosis que sigue: "5/40", "10/12,5", "50/12.5"…
+      const resto = t.slice(m.index + m[0].length);
+      const mn = /(\d{1,3}(?:[.,]\d{1,2})?(?:\s*\/\s*\d{1,3}(?:[.,]\d{1,2})?)+)/.exec(resto);
+      // Es un combo, pero no trae un bloque de dosis emparejable: `null` (dato ausente),
+      // NO `undefined` (no es un combo). La diferencia es la que impide que el llamador se
+      // caiga a la lectura de siempre y termine leyendo la dosis del OTRO principio —
+      // «Amlodipino/Atorvastatina 5 mg» tiene un solo número y es ambiguo: no se adivina.
+      if (!mn) return null;
+      const dosis = mn[1].split("/").map((x) => Number(String(x).trim().replace(",", ".")));
+      if (dosis.length !== nombres.length) return null;
+      const v = dosis[pos];
+      return (typeof v === "number" && isFinite(v)) ? v : null;
+    }
+    return undefined;   // no hay ningún bloque de nombres combinados que contenga a `p`
+  }
   function mtrDosisDeTexto(texto, principio) {
     const t = mtrNormalizarTexto(texto || "");
     const p = mtrNormalizarTexto(principio || "");
     const idx = t.indexOf(p);
     if (idx < 0) return null;
+    // v18.0.49 — primero la combinación de dosis fija (ver arriba); si el texto no es una,
+    // sigue exactamente la lectura de siempre.
+    const combo = _mtrDosisDeCombo(t, p);
+    if (combo !== undefined) return combo;
     // primer número tras el nombre del principio (mg)
     const resto = t.slice(idx + p.length);
     const m = /(\d{1,3})/.exec(resto);

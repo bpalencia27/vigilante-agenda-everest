@@ -220,6 +220,43 @@ module.exports = {
       t.cierto(!!api.mtrEstatinaAltaIntensidad([{ nombre: "atorvastatina 40 mg" }]), "acepta objeto con .nombre");
     });
 
+    // =================================================================
+    //  v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  EN UNA COMBINACIÓN DE DOSIS FIJA SE LEÍA LA DOSIS DEL OTRO PRINCIPIO ACTIVO.
+    //
+    //  «Amlodipino/Atorvastatina 5/40mg» es una presentación real y común en HTA +
+    //  dislipidemia. Se tomaba el PRIMER número tras el nombre buscado, y después de
+    //  «atorvastatina» lo primero que aparece es el 5 del amlodipino. Resultado medido:
+    //  el script le decía al médico «LDL en falla SIN estatina de alta intensidad: revise
+    //  intensidad» de un paciente que YA está en atorvastatina 40 mg. Una afirmación
+    //  clínicamente falsa que empuja a subir una dosis que ya está bien.
+    // =================================================================
+    t.caso("dosis fija combinada: cada dosis se empareja con SU principio, no con el primer número", () => {
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg tableta, 1 cada noche", "atorvastatina"), 40,
+        "la atorvastatina es 40, no el 5 del amlodipino");
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg tableta", "amlodipino"), 5,
+        "y el amlodipino sigue siendo 5: se emparejan por posición, no se invierte el error");
+      t.igual(api.mtrDosisDeTexto("Losartan/Hidroclorotiazida 50/12,5 mg", "hidroclorotiazida"), 12.5,
+        "con coma decimal, como lo escribe el laboratorio");
+
+      // La consecuencia clínica, que es lo que el médico veía:
+      const combo = ["Amlodipino/Atorvastatina 5/40mg tableta, 1 cada noche"];
+      const r = api.mtrInerciaEstatina(true, combo);
+      t.falso(r.inercia, "con atorvastatina 40 en un combo NO se declara inercia");
+      t.igual(r.estatina.dosis, 40, "y se reconoce la dosis real");
+    });
+
+    t.caso("dosis fija combinada: si no se puede emparejar, se devuelve VACÍO en vez de adivinar", () => {
+      // Un combo con un solo número es ambiguo: ese 5 puede ser de cualquiera de los dos.
+      // Antes se devolvía 5 como si fuera de la atorvastatina. Casilla vacía antes que dato
+      // inventado — y aquí el dato inventado es la dosis de OTRO fármaco.
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null,
+        "un combo sin bloque de dosis emparejable no da número");
+      // Y lo que NO es un combo sigue leyéndose exactamente igual que siempre.
+      t.igual(api.mtrDosisDeTexto("Atorvastatina 80 mg noche", "atorvastatina"), 80, "un solo principio: sin cambios");
+      t.igual(api.mtrDosisDeTexto("Rosuvastatina 20 mg", "rosuvastatina"), 20, "tampoco aquí");
+    });
+
     t.caso("inercia: una falla de LDL sin estatina de alta intensidad la marca", () => {
       const conInercia = api.mtrInerciaEstatina(true, ["Atorvastatina 20 mg"]);
       t.cierto(conInercia.inercia, "dosis corta con falla = inercia");

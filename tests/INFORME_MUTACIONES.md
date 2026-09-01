@@ -8669,3 +8669,57 @@ la cédula no se puede leer— haría pasar la historia por buena. La regla del 
 contraria: **sin cédula legible, no se escribe.**
 
 Banco completo: **2.849 comprobaciones pasan, 0 fallan.** Van **8 de los 47** del enjambre.
+
+---
+
+## v18.0.49 — la dosis del otro principio activo, y un cero pegado a una cifra real
+
+### 1. En una combinación de dosis fija se leía la dosis del OTRO principio (gravedad alta)
+
+«Amlodipino/Atorvastatina 5/40mg» es una presentación real y común en HTA + dislipidemia.
+`mtrDosisDeTexto` tomaba **el primer número que hubiera después del nombre buscado**, y
+después de «atorvastatina» lo primero que aparece es el **5 del amlodipino**.
+
+Medido de punta a punta:
+
+    mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg …", "atorvastatina")  ->  5   (la real es 40)
+    mtrEstatinaAltaIntensidad([…])                                        ->  null
+    mtrInerciaEstatina(true, […])  ->  "LDL en falla SIN estatina de alta intensidad: revise intensidad"
+
+Esa última frase es **clínicamente falsa** para un paciente que ya está en atorvastatina 40 mg
+—el techo habitual de esa dosis fija— y empuja a subir una dosis que ya está bien, o a
+desconfiar de un dato que sí es correcto.
+
+En una combinación los números van en el **mismo orden que los nombres** («A/B N1/N2»), así
+que se emparejan por posición: es la única lectura que la presentación permite. Y cuando no
+hay pareja clara —un combo con un solo número, como «Amlodipino/Atorvastatina 5 mg», donde ese
+5 puede ser de cualquiera de los dos— **no se adivina**: se devuelve vacío. Ahí estuvo el
+detalle fino del arreglo: hay que distinguir «esto no es un combo» de «es un combo y no se
+puede emparejar», porque confundirlos devuelve el llamador a la lectura vieja y al mismo
+error. Lo primero es `undefined`, lo segundo `null`.
+
+### 2. «PA Descontrolada (0/105)» (gravedad alta según el enjambre; cosmético según su refutador)
+
+La guarda de la v17.8.1 se escribió **justo para esto** —no imprimir un dato falso pegado a
+uno real, «(165/NaN)», «(165/0)»— y quedó **coja**: exigía `pad > 0` pero nunca `pas > 0`. Con
+la sistólica en 0 (lectura fallida) y una diastólica real de 105, salía **«(0/105)»**.
+
+El refutador tenía razón en una cosa y se anota: la **conducta no cambia**, porque
+`paDescontrolada` ya era cierto por la diastólica sola, así que la franja horaria sugerida es
+la misma. Lo que cambia es lo que el médico **lee**. Se arregla igual: la guarda que el
+proyecto ya había decidido tener, completa en vez de a medias.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 121 | se quita el emparejamiento por posición | *cada dosis se empareja con SU principio* (2 fallan) | Sí — 41 ok |
+| 122 | un combo sin emparejar vuelve a caer a la lectura de siempre | *si no se puede emparejar, se devuelve vacío* | Sí — 41 ok |
+| 123 | se emparejan **al revés** | *cada dosis se empareja con SU principio* | Sí — 41 ok |
+| 124 | la guarda de la PA vuelve a quedar coja | *nunca imprime un cero como si fuera media lectura* | Sí — 41 ok |
+
+La 123 merece la pena: sin ella, invertir el emparejamiento habría pasado la prueba del caso
+principal (la atorvastatina saldría 40 igual si solo se comprobara ese) — por eso la prueba
+comprueba **los dos** principios del mismo texto.
+
+Banco completo: **2.852 comprobaciones pasan, 0 fallan.** Van **10 de los 47** del enjambre.

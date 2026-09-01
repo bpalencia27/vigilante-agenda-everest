@@ -35,8 +35,10 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | el `fetch` del núcleo no tenía timeout: una conexión colgada bloqueaba Agendar / Guardar orden | `_pageFetchJsonCore` | **v18.0.47** | 115 |
 | un 401 (sesión caducada) no contaba como fallo ni abría el cortacircuitos | `_pageFetchJsonCore` | **v18.0.47** | 116, 117 |
 | la historia clínica se archivaba bajo el paciente abierto al LLEGAR la respuesta, no aquel para el que se pidió | `mtrHcEnganchar` | **v18.0.48** | 118, 119, 120 |
+| en una combinación de dosis fija se leía la dosis del OTRO principio activo | `mtrDosisDeTexto` | **v18.0.49** | 121, 122, 123 |
+| «PA Descontrolada (0/105)»: un cero impreso pegado a una cifra real | `_evaluarComplejidadPaciente` | **v18.0.49** | 124 |
 
-Quedan **39 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **37 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

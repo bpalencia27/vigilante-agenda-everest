@@ -220,6 +220,33 @@ module.exports = {
       t.igual(r.franjaSugerida, "primera_mitad");
       t.cierto(r.badges.join(" ").includes("Insulinorrequirente"), "con su insignia explicando por qué");
     });
+    // =================================================================
+    //  v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep).
+    //
+    //  La guarda de la v17.8.1 (hallazgo #87) se escribió justo para no imprimir un dato
+    //  falso pegado a uno real —«(165/NaN)», «(165/0)»— y quedó COJA: exigía `pad > 0`
+    //  pero nunca `pas > 0`. Con la sistólica en 0 (lectura fallida, casilla vacía) y una
+    //  diastólica real de 105 salía «PA Descontrolada (0/105)»: el mismo 0 que el propio
+    //  comentario llama «un dato falso», impreso como si fuera media lectura de tensión.
+    //
+    //  La conducta clínica no cambia —`paDescontrolada` ya era cierto por la diastólica
+    //  sola— pero lo que el médico LEE deja de mezclar un dato falso con uno verdadero.
+    // =================================================================
+    t.caso("triaje: la insignia de PA nunca imprime un cero como si fuera media lectura", () => {
+      const pa = (pas, pad) => api._evaluarComplejidadPaciente({}, {
+        factores: { paSistolica: pas, paDiastolica: pad },
+        riesgo: { categoria: "bajo" }, medicamentos: [],
+      }, []).badges.filter((b) => /PA Descontrolada/.test(b))[0] || "";
+
+      t.igual(pa(0, 105), "PA Descontrolada (diastólica 105)",
+        "sistólica en 0: se muestra SOLO la cifra que de verdad se leyó");
+      t.igual(pa(165, 0), "PA Descontrolada (sistólica 165)", "y al revés igual (esto ya funcionaba)");
+      t.igual(pa(-5, 105), "PA Descontrolada (diastólica 105)",
+        "una sistólica negativa —parseo corrupto— tampoco es una lectura");
+      // La otra dirección: con dos cifras reales se siguen mostrando las dos.
+      t.igual(pa(165, 105), "PA Descontrolada (165/105)", "dos lecturas buenas se muestran juntas, como siempre");
+    });
+
     t.caso("triaje v2: polifarmacia (>=5 fármacos DEL PROGRAMA) fuerza primera mitad", () => {
       // v16.4.0 — Reportado con pantallazo ("lista 27 medicamentos pero más de 20 no son
       // de riesgo cardiovascular"): la polifarmacia ahora se mide SOLO sobre fármacos del
