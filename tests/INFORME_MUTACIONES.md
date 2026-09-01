@@ -10714,3 +10714,61 @@ paciente, no una versión sin acentos.
 | 230 | vuelve la comparación sin `stripAccents` (**el defecto original**) | *suite_06: REGRESIÓN — highlight resalta aunque la búsqueda no lleve la tilde que sí tiene el nombre (hallazgo #46)* | Sí |
 
 Banco completo: **2.954 comprobaciones pasan, 0 fallan.**
+
+## v18.0.95 — se retira el potenciador "diabetes sin FR mayores": código muerto desde v18.0.5
+
+Hallazgo #47 del enjambre (el último de los 47), gravedad baja (código muerto), 2 de 3
+refutadores no lo tumbaron. El potenciador "diabetes sin otros factores de riesgo mayores"
+(`mtrContarPotenciadores`, añadido en v17.6.94 para el paso 3 del clasificador) es inalcanzable:
+el piso incondicional por diabetes de `mtrClasificarRiesgoCv` (v18.0.5, "todo diabético entra
+como riesgo ALTO como mínimo" — decisión del médico tras un reporte real en consulta) intercepta
+a TODO paciente con `x.diabetes` y devuelve ANTES de que la función llegue a invocar
+`mtrContarPotenciadores`, que es su única llamada real en todo el archivo (grep: 2 coincidencias,
+la declaración y esa única llamada). El refutador disidente confirmó exactamente el mismo
+mecanismo con el arnés, sin poder tumbarlo.
+
+Sin daño clínico hoy: el piso da "alto", igual o más conservador que el "moderado" que habría
+dado el potenciador muerto, así que ningún paciente sale subvalorado. El daño es de
+mantenimiento: el comentario de v17.6.94 prometía "los de <10 años puntúan igual que antes", una
+garantía que ya no se cumple —esos pacientes ya no llegan nunca hasta esa rama—, y un futuro
+cambio que vuelva condicional el piso (como ya pasó una vez, entre v17.6.94 y v18.0.5) confiaría
+en que este potenciador sigue vivo y cubre el hueco, cuando en realidad ya está muerto.
+
+### La decisión: retirar, no resucitar
+
+El hallazgo proponía dos caminos: (a) borrar la rama muerta, dejando el piso incondicional como
+la única regla vigente; o (b) mover el piso para que corra DESPUÉS del potenciador, devolviendo
+la gradación moderado/alto por años de evolución. Se eligió (a) sin dudarlo: el piso incondicional
+es la decisión MÁS RECIENTE del médico (v18.0.5, 31-ago), tomada explícitamente para corregir un
+reporte real en consulta ("aparecía ALTO y apenas le puse que son 3 años cambió a RCV BAJO").
+Resucitar el potenciador (opción b) revertiría esa corrección y volvería a bajar de categoría a
+diabéticos con evolución corta y sin otros factores de riesgo — exactamente el error que v18.0.5
+ya solucionó. Tocar una regla de clasificación de riesgo cardiovascular en una dirección que
+CONTRADICE la decisión más reciente del médico está fuera de lo que este cambio de mantenimiento
+debe hacer.
+
+### La reparación
+
+Se retira la línea `if (x.diabetes && conteoFr === 0) pot.push(...)` de `mtrContarPotenciadores`
+y su comentario asociado (ya con una garantía falsa), dejando una nota breve que explica por qué
+se retiró y remite al piso de `mtrClasificarRiesgoCv` como la única regla vigente para el
+diabético. Sin cambio de comportamiento observable: la rama nunca fue alcanzable desde el único
+llamador real.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 231 | vuelve la rama de diabetes muerta a `mtrContarPotenciadores` (**el defecto original**) | *suite_45: REGRESIÓN — mtrContarPotenciadores ya no tiene la rama de diabetes muerta (hallazgo #47)* | Sí |
+
+Banco completo: **2.955 comprobaciones pasan, 0 fallan.**
+
+---
+
+## Cierre del enjambre del 01-sep-2026
+
+Los 47 hallazgos confirmados de `docs/ENJAMBRE_FUNCIONES_20260901.md` quedan todos aplicados
+(v18.0.72 a v18.0.95, mutaciones #198 a #231), cada uno con su reproducción empírica contra el
+HEAD real, su refutación adversarial de 3 votos, su mutación verificada en las dos direcciones, y
+su fila en este informe. El banco completo pasa de principio a fin: **2.955 comprobaciones
+pasan, 0 fallan.**

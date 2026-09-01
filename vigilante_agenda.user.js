@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.94
+// @version      18.0.95
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.94";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.95";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -36347,17 +36347,16 @@
     const rac = mtrFloat(x.rac);
     if (rac !== null && rac > 30) pot.push("RAC>30");
     if (x.condicionesEspecificasMujer) pot.push("condiciones específicas de la mujer");
-    // v17.6.94 — DIVERGENCIA DECLARADA con v68, y es una corrección de un hueco suyo.
-    // El paso 3 del consenso dice «DM<10a sin FR». Medido con el harness: un diabético de
-    // 12 años SIN ningún factor de riesgo mayor no lo recoge el paso 1 (no hay daño de
-    // órgano, CONTEO=0, no llega a larga duración), no lo recoge el paso 2 (exige
-    // CONTEO>=1) y el paso 3 lo deja fuera por pasar de 10 — así que cae al paso 4 y sale
-    // **BAJO**, mientras que el MISMO paciente con 5 años de diabetes sale MODERADO.
-    // Tener la enfermedad hace más tiempo lo bajaba de categoría: eso no es una regla,
-    // es un hueco de redacción. Aquí el potenciador es «diabetes sin FR mayores», sin
-    // techo de años. No baja a nadie: los de <10 años puntúan igual que antes, y los que
-    // ya subían por los pasos 1 o 2 ni siquiera llegan hasta aquí.
-    if (x.diabetes && conteoFr === 0) pot.push("diabetes sin otros factores de riesgo mayores");
+    // v17.6.94 introdujo aquí un potenciador «diabetes sin FR mayores» para el paso 3.
+    // v18.0.95 — hallazgo #47 del enjambre: CÓDIGO MUERTO, retirado. El piso incondicional
+    // por diabetes de mtrClasificarRiesgoCv (v18.0.5, "todo diabético entra como riesgo
+    // ALTO como mínimo") intercepta a TODO paciente con x.diabetes antes de que la función
+    // llegue a invocar mtrContarPotenciadores — es la ÚNICA llamada real en todo el
+    // archivo (grep confirmado). Ningún diabético puede alcanzar esta rama, así que
+    // conservarla era un riesgo de mantenimiento: su propio comentario prometía "los de
+    // <10 años puntúan igual que antes", una garantía que ya no se cumplía porque esos
+    // pacientes ya no llegan nunca hasta aquí. Sin daño clínico hoy (el piso es igual o
+    // más conservador que el 'moderado' que habría dado este potenciador).
     if (x.pobrezaMultidimensional) pot.push("pobreza multidimensional");
     return { conteo: pot.length, lista: pot };
   }

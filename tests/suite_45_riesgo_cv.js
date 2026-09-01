@@ -512,6 +512,26 @@ module.exports = {
       t.cierto(c2.some((c) => /ERC eGFR 30-60/.test(c)), "y uno de ellos debía ser la ERC");
     });
 
+    // v18.0.95 — hallazgo #47 del enjambre: el potenciador "diabetes sin otros factores
+    // de riesgo mayores" (v17.6.94) era código muerto — el piso incondicional por
+    // diabetes de mtrClasificarRiesgoCv (v18.0.5) intercepta a TODO diabético antes de
+    // que la función llegue a invocar mtrContarPotenciadores. Retirado por
+    // mantenimiento, sin cambio de comportamiento real: ningún diabético podía alcanzar
+    // esta rama de todos modos.
+    t.caso("REGRESIÓN — mtrContarPotenciadores ya no tiene la rama de diabetes muerta (hallazgo #47)", () => {
+      const diabeticoSinOtrosFR = { diabetes: true, edad: 30, sexo: "M", egfrCkdepi: 95 };
+      const pot = api.mtrContarPotenciadores(diabeticoSinOtrosFR, 0);
+      t.falso(pot.lista.includes("diabetes sin otros factores de riesgo mayores"),
+        "la rama se retiró: nunca fue alcanzable desde mtrClasificarRiesgoCv");
+      t.igual(pot.conteo, 0, "sin ningún otro potenciador, la cuenta queda en cero");
+
+      // Y el comportamiento REAL (a través de mtrClasificarRiesgoCv, el único llamador
+      // real) no cambió: el piso incondicional por diabetes lo sigue clasificando ALTO.
+      const clasificado = api.mtrClasificarRiesgoCv(diabeticoSinOtrosFR);
+      t.igual(clasificado.categoria, "alto");
+      t.cierto(clasificado.pisoPorDiabetes, "sigue entrando por el piso, nunca por el potenciador retirado");
+    });
+
     // ================= LA ESCALA ASCVD =================
     t.caso("las Pooled Cohort Equations dan los dos casos de referencia publicados", () => {
       // Mujer y hombre de 55 años, CT 213, HDL 50, PAS 120 sin tratar.
