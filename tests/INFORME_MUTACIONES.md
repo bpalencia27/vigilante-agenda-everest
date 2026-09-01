@@ -8620,3 +8620,52 @@ defecto que se manifiesta como «nada vuelve nunca» no produce un fallo que se 
 produce silencio, que es justo lo que le pasaba al médico delante del paciente.
 
 Banco completo: **2.847 comprobaciones pasan, 0 fallan.** Van **7 de los 47** del enjambre.
+
+---
+
+## v18.0.48 — el cruce de pacientes, cuarto sitio: la historia clínica se archivaba bajo quien estuviera abierto al LLEGAR
+
+Hallazgo del enjambre de funciones, gravedad alta. `mirar()`, dentro de `mtrHcEnganchar`,
+leía `extractPacienteAbierto()` **en el momento de la llegada de la respuesta**, no en el de
+la petición. Entre las dos hay segundos de red — y Everest **recarga la página** al abrir un
+paciente. Si el médico cambia de historia en ese lapso, los antecedentes, hábitos y examen
+físico del paciente **anterior** quedaban archivados bajo la cédula del **nuevo**, y de ahí
+salen a alimentar al Redactor y al Panel.
+
+Es el mismo defecto, por cuarta vez, en un sitio distinto:
+
+| versión | dónde | qué se cruzaba |
+|---|---|---|
+| v14.1.5 | `injectLabsIntoCronicos` | los laboratorios |
+| v18.0.33 | Panel del paciente | tensión, peso y cintura |
+| v18.0.34 | agendamiento y widget de Fármacos | el resumen clínico |
+| **v18.0.48** | **`mtrHcEnganchar`** | **la historia clínica entera** |
+
+Se cierra con la guarda que ya existía —`_pacienteSigueAbierto(idAlPedir)`—, anotando en el
+`send`/`fetch` quién estaba abierto al **pedirlo**. La rama `"envio"` corre de forma síncrona
+dentro del propio `send`, así que ahí el paciente es por construcción el correcto y no lleva
+guarda; el riesgo vivía solo en los dos caminos asíncronos. Y el descarte **se dice por
+consola**: callarlo sería indistinguible de no haber leído nada.
+
+### Y una prueba que se rompía sola
+
+`v17.12.0 — la escucha no rompe Everest` cortaba el fuente con `iEng + 6000`, un número
+mágico. Mi comentario hizo crecer la función y la prueba se puso **roja sin que el código
+estuviera mal** — la peor forma de fallar, porque la siguiente persona sube el número y no
+mira más. Ahora corta por un **ancla real** y comprueba que el ancla exista, para que un
+renombre la ponga en rojo por el motivo correcto en vez de medir un trozo cualquiera. De paso
+sus dos regexes ahora **exigen** el argumento de identidad.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 118 | se quita la guarda de identidad | *una historia que llega tras cambiar de paciente NO se archiva* | Sí — 42 ok |
+| 119 | el `fetch` vuelve a no anotar quién pidió la historia | la anterior + la de fuente (2 fallan) | Sí — 42 ok |
+| 120 | la guarda acepta que no se pueda LEER la cédula | *tampoco se archiva a ciegas* | Sí — 42 ok |
+
+La 120 es la que importa de las tres: sin ella, un DOM que Angular está re-renderizando —cuando
+la cédula no se puede leer— haría pasar la historia por buena. La regla del proyecto es la
+contraria: **sin cédula legible, no se escribe.**
+
+Banco completo: **2.849 comprobaciones pasan, 0 fallan.** Van **8 de los 47** del enjambre.

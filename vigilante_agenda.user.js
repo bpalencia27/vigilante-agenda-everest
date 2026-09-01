@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.47
+// @version      18.0.48
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.47";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.48";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -41833,7 +41833,23 @@
     //  Pasa por la misma barrera: `datosUsuario` no se lee, y el nombre se tacha con la
     //  identidad del propio paquete, que se descarta sin guardarse.
     // =====================================================================
-    const mirar = (cuerpo, origen) => {
+    // v18.0.48 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta: LA HISTORIA
+    // CLÍNICA SE ATRIBUÍA AL PACIENTE QUE ESTUVIERA ABIERTO CUANDO LLEGABA LA RESPUESTA, NO
+    // A AQUEL PARA EL QUE SE PIDIÓ. `mirar()` leía `extractPacienteAbierto()` en el momento
+    // de la LLEGADA. Entre la petición y la respuesta hay segundos de red, y Everest recarga
+    // la página al abrir un paciente: si el médico cambia de historia en ese lapso, los
+    // antecedentes, hábitos y examen físico del paciente ANTERIOR se archivaban bajo la
+    // cédula del NUEVO — y de ahí salen a alimentar al Redactor y al Panel.
+    //
+    // Es el mismo defecto que v14.1.5 (laboratorios), v18.0.33 (Panel), v18.0.34
+    // (agendamiento y Fármacos), y se cierra con la misma guarda ya escrita:
+    // `_pacienteSigueAbierto(idAlPedir)`, que exige que la cédula se pueda LEER y que sea la
+    // misma. Si el DOM no la deja leer, no se escribe — nunca se asume que sigue siendo él.
+    //
+    // `origen === "envio"` corre de forma SÍNCRONA dentro del propio send/fetch, así que ahí
+    // el paciente abierto es por construcción el correcto y no hace falta la guarda; el
+    // riesgo vive solo en los dos caminos asíncronos ("carga").
+    const mirar = (cuerpo, origen, idAlPedir) => {
       try {
         if (!cuerpo || typeof cuerpo !== "string" || cuerpo.length < 200) return;
         if (cuerpo.indexOf("antecedentePatologicos") < 0) return;   // criba barata primero
@@ -41846,6 +41862,14 @@
         // (v14.1.5), y aquí se aplica la misma regla — sin cédula legible, no se escribe.
         const id = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
         if (!id) return;
+        // v18.0.48 — la guarda del cruce de pacientes (ver arriba). `idAlPedir` es la cédula
+        // que estaba abierta cuando se PIDIÓ esta historia; si ya no es la de ahora, esta
+        // respuesta es de otro paciente y NO se archiva. Se dice por consola en vez de
+        // callarlo: un descarte silencioso es indistinguible de no haber leído nada.
+        if (idAlPedir && !_pacienteSigueAbierto(idAlPedir)) {
+          try { console.warn("[Vigilante] historia clínica descartada: llegó después de cambiar de paciente, no se archiva en la historia equivocada."); } catch (e) {}
+          return;
+        }
         const hechos = mtrHcGuardar(id, datos);
         if (hechos) {
           try { uxTrack("hc.capturado." + (origen || "envio"), { campos: hechos._campos }); } catch (e) {}
@@ -41863,10 +41887,12 @@
         // v17.12.0 — Y TAMBIÉN LA RESPUESTA. Ver el bloque grande de abajo.
         try {
           const xhr = this;
+          // Se anota AQUÍ quién estaba abierto al pedirlo, no al llegar la respuesta.
+          const idAlPedir = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
           xhr.addEventListener("load", function () {
             try {
               if (xhr.responseType && xhr.responseType !== "text") return;
-              mirar(xhr.responseText, "carga");
+              mirar(xhr.responseText, "carga", idAlPedir);
             } catch (e) {}
           });
         } catch (e) {}
@@ -41875,12 +41901,14 @@
       const fetchOriginal = window.fetch;
       window.fetch = function (entrada, opciones) {
         try { mirar(opciones && opciones.body, "envio"); } catch (e) {}
+        // Misma anotación que en el XHR: quién estaba abierto al PEDIRLO.
+        const idAlPedir = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
         const p = fetchOriginal.apply(this, arguments);
         try {
           return p.then(function (resp) {
             try {
               // SE CLONA: leer el cuerpo original dejaría a Everest sin poder leerlo.
-              resp.clone().text().then(function (t) { mirar(t, "carga"); }).catch(function () {});
+              resp.clone().text().then(function (t) { mirar(t, "carga", idAlPedir); }).catch(function () {});
             } catch (e) {}
             return resp;
           });

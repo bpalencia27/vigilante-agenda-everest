@@ -379,6 +379,61 @@ module.exports = {
       ultimaEnfermedad: "Paciente NOMBREPRUEBA APELLIDOUNO, CC 80123456, tel 3001234567, refiere cefalea.",
     });
 
+    // =================================================================
+    //  v18.0.48 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  LA HISTORIA SE ARCHIVABA BAJO EL PACIENTE QUE ESTUVIERA ABIERTO AL LLEGAR LA
+    //  RESPUESTA, NO AQUEL PARA EL QUE SE PIDIÓ.
+    //
+    //  `mirar()` leía `extractPacienteAbierto()` en el momento de la LLEGADA. Entre la
+    //  petición y la respuesta hay segundos de red, y Everest recarga la página al abrir
+    //  un paciente: si el médico cambia de historia en ese lapso, los antecedentes,
+    //  hábitos y examen físico del paciente ANTERIOR quedaban archivados bajo la cédula
+    //  del NUEVO — y de ahí salen a alimentar al Redactor y al Panel.
+    //
+    //  Mismo defecto que v14.1.5 (laboratorios), v18.0.33 (Panel) y v18.0.34
+    //  (agendamiento): se cierra con la misma guarda, `_pacienteSigueAbierto`.
+    //  (Cédulas sintéticas.)
+    // =================================================================
+    const _domPaciente = (c, doc) => {
+      const nodo = { textContent: "C.C. " + doc, closest: () => null };
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [nodo] : []);
+    };
+
+    await t.casoAsync("v18.0.48 CRUCE — una historia que llega después de cambiar de paciente NO se archiva", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      // El fetch de la red devuelve la historia; el enganche la lee sobre un CLON.
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domPaciente(c, "111111");
+      t.igual(c.api.extractPacienteAbierto(), "111111", "montaje: el paciente A está abierto");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+
+      // Se pide la historia con A abierto…
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      // …y ANTES de que la respuesta se procese, el médico abre al paciente B.
+      _domPaciente(c, "222222");
+      await p;
+      await new Promise((r) => setTimeout(r, 0));   // que corra el .then del clone
+
+      t.igual(c.api.mtrHcLeer("222222"), null, "la historia de A NO queda archivada bajo B");
+      t.igual(c.api.mtrHcLeer("111111"), null, "y tampoco se archiva bajo A a ciegas: no se pudo confirmar que siguiera abierto");
+    });
+
+    await t.casoAsync("v18.0.48 CRUCE — sin cambio de paciente, la historia SÍ se archiva (la otra dirección)", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domPaciente(c, "111111");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      await c.env.win.fetch("/api/HistoriaClinica", {});
+      await new Promise((r) => setTimeout(r, 0));
+
+      const guardado = c.api.mtrHcLeer("111111");
+      t.cierto(!!guardado, "con el mismo paciente abierto de punta a punta, la historia sí entra");
+      t.cierto(!!(guardado && guardado.secciones && guardado.secciones.antecedentePatologicos),
+        "y trae las secciones clínicas");
+    });
+
     t.caso("v17.9.0 BARRERA — nada que identifique al paciente sale del paquete de Everest", () => {
       const h = api.mtrHechosDesdeHcEverest(_hcEverestFalso());
       t.cierto(!!h, "el paquete se reconoce y se extrae");
@@ -611,10 +666,17 @@ module.exports = {
       const fs = require("fs"), path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       // El bloque entero de la escucha: la ventana tiene que abarcar los dos enganches
-      // (XHR y fetch), no solo el primero — con 3000 caracteres se quedaba corta y la
-      // prueba fallaba sin que el código estuviera mal.
+      // (XHR y fetch), no solo el primero.
+      // v18.0.48 — la ventana era `iEng + 6000`, un número mágico, y se rompió sola en
+      // cuanto la función creció por un comentario: la prueba se puso roja sin que el
+      // código estuviera mal, que es la peor forma de fallar (la siguiente persona sube el
+      // número y no mira más). Ahora se corta por un ANCLA REAL —el bloque de comentario
+      // que sigue a la función— y se comprueba que el ancla exista, para que un renombre
+      // ponga la prueba en rojo por el motivo correcto en vez de medir un trozo cualquiera.
       const iEng = src.indexOf("function mtrHcEnganchar");
-      const bloque = src.slice(iEng, iEng + 6000);
+      const iFin = src.indexOf("v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE", iEng);
+      t.cierto(iEng >= 0 && iFin > iEng, "el ancla que cierra la ventana sigue existiendo");
+      const bloque = src.slice(iEng, iFin);
       t.cierto(/resp\.clone\(\)\.text\(\)/.test(bloque),
         "la respuesta se lee sobre un clon: sin esto Everest se queda sin su propio cuerpo");
       t.cierto(/return XHRsend\.apply\(this, arguments\)/.test(bloque),
@@ -624,9 +686,12 @@ module.exports = {
         "si Everest pidió otro tipo de respuesta, no se toca: leer responseText ahí lanzaría");
       // Y que la respuesta del XHR se LEA de verdad. Sin esta aserción, borrar la línea
       // dejaba la escucha de carga muerta y el banco seguía verde.
-      t.cierto(/mirar\(xhr\.responseText, "carga"\)/.test(bloque),
-        "la respuesta del XHR se pasa al detector: es la mitad de la escucha de carga");
-      t.cierto(/mirar\(t, "carga"\)/.test(bloque), "y la de fetch, la otra mitad");
+      // v18.0.48 — las dos llamadas asíncronas tienen que llevar AHORA la cédula que
+      // estaba abierta al PEDIR la historia (ver el cruce de pacientes, más abajo). Se
+      // exige el argumento: sin él vuelve a archivarse bajo quien esté abierto al llegar.
+      t.cierto(/mirar\(xhr\.responseText, "carga", idAlPedir\)/.test(bloque),
+        "la respuesta del XHR se pasa al detector CON el paciente para el que se pidió");
+      t.cierto(/mirar\(t, "carga", idAlPedir\)/.test(bloque), "y la de fetch, igual");
     });
 
     t.caso("v17.12.0 — la carga se reconoce con el MISMO detector que el guardado", () => {
