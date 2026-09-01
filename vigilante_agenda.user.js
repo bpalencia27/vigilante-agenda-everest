@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.65
+// @version      18.0.66
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.65";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.66";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10568,11 +10568,20 @@
     } catch (e) { paso("Diagnóstico", false, "no se pudo completar: " + (e && e.message)); }
     return pasos;
   }
+  // v18.0.66 — BLINDAJE 1: la fila que sale a la red lleva SOLO lo que es de la fila. La
+  // contabilidad interna de la cola (los intentos de entrega) vive con el `_` delante y se
+  // queda aquí. Sin esto, el arreglo del canal de errores habría reintroducido por otra
+  // puerta exactamente el defecto que cierra: un campo que la hoja no conoce.
+  function _repFilaLimpia(obj) {
+    const out = {};
+    for (const k of Object.keys(obj || {})) { if (k.charAt(0) !== "_") out[k] = obj[k]; }
+    return out;
+  }
   function repPost(obj) {
     return new Promise((res) => {
       try {
         GM_xmlhttpRequest({
-          method: "POST", url: repUrl(), data: JSON.stringify(obj),
+          method: "POST", url: repUrl(), data: JSON.stringify(_repFilaLimpia(obj)),
           headers: { "Content-Type": "text/plain;charset=utf-8" }, timeout: 20000, // text/plain = sin preflight CORS
           onload: (r) => {
             const rechazoLogin = /accounts\.google|ServiceLogin/i.test(String(r.finalUrl || ""));
@@ -10683,7 +10692,41 @@
     if (repFlushing || !repOn()) return;
     repQLoad(); if (!repQ.length) return;
     repFlushing = true;
-    try { let g = 0; while (repQ.length && g++ < 10) { if (await repPost(repQ[0])) { repQ.shift(); repQSave(); } else break; } }
+    // v18.0.66 — BLINDAJE 2: LA COLA NO SE ATASCA DETRÁS DE UNA FILA ENVENENADA.
+    // El bucle rompía al primer fallo, que es lo correcto cuando el panel está caído (no
+    // tiene sentido insistir con las 80 filas). Pero si el servidor RECHAZA una fila
+    // concreta —cuota, o un campo que no sabe escribir, que es justo lo que le pasó a
+    // `error` desde la v17.2.0—, esa fila falla siempre y se queda de primera para
+    // siempre: todo lo que va detrás no sale nunca. Ahora cada fila lleva su cuenta de
+    // intentos; a los tres, se descarta y se sigue con la siguiente, y el descarte se
+    // ANOTA para que se vea. Un fallo de red sigue rompiendo el bucle como antes: tres
+    // intentos son tres vueltas del temporizador de 10 minutos, media hora, mucho más de
+    // lo que dura un corte.
+    try {
+      let g = 0;
+      while (repQ.length && g++ < 10) {
+        const fila = repQ[0];
+        if (await repPost(fila)) {
+          repQ.shift(); repQSave();
+          // v18.0.66 — BLINDAJE 3: QUE EL SILENCIO SE VEA. Lo que dejó este canal muerto
+          // medio año no fue el campo de más: fue que nadie podía notarlo. `error.js`
+          // cuenta los detectados y viaja por la telemetría de uso, que SÍ funciona; con
+          // este contador de entregados, la diferencia entre los dos delata el canal roto
+          // sin necesidad de exportar la hoja del tablero ni de que el médico lo reporte.
+          if (fila && fila.evento === "error") { try { uxTrack("error.entregado"); } catch (e) {} }
+          continue;
+        }
+        fila._intentos = (fila._intentos || 0) + 1;
+        if (fila._intentos >= 3) {
+          repQ.shift(); repQSave();
+          try { uxTrack("rep.fila.descartada." + String((fila && fila.evento) || "otro")); } catch (e) {}
+          console.warn("[Vigilante] el panel rechazó una fila de tipo «" + ((fila && fila.evento) || "?") + "» tres veces; se descarta para no atascar el resto de la cola.");
+          continue;
+        }
+        repQSave();
+        break;
+      }
+    }
     finally { repFlushing = false; }
   }
   // v17.49.0 (D4) — Vive como funcion CON NOMBRE, no como un closure dentro de boot(),
@@ -10854,12 +10897,38 @@
       // v17.6.14 — H2: repetición -> ya viajó con detalle; huella nueva sin sitio -> el
       // cupo de 40 está agotado y solo suma en su contador agregado. En ambos casos, nada.
       if (!esNueva || !_errVistos.has(huella)) return;
+      // v18.0.66 — EL CANAL DE ERRORES LLEVABA MUERTO DESDE LA v17.2.0.
+      // Encontrado analizando el export del tablero que trajo el médico el 1-sep (ver
+      // docs/TELEMETRIA_20260901.md): la hoja `error` no tiene NI UNA fila de ninguna
+      // versión por encima de 17.2.0, y sin embargo el 27-ago seis equipos en v18.0.4
+      // emitieron 81 `error.js` / 81 `error.distintos` — los contadores que esta misma
+      // función incrementa en su primera línea. `reportarError` corrió 81 veces y no llegó
+      // ninguna.
+      //
+      // No es el transporte: `entorno`, `fraude` y `prueba` SÍ llegan desde v18 por esta
+      // misma cola y este mismo `repPost`. La diferencia está en la FILA. De los cuatro
+      // eventos, `error` es el único que manda un campo sin columna en la hoja:
+      //
+      //     columnas de la hoja: recibido · ts · dia · equipo · ver · lote ·
+      //                          origen · msg · donde · migas
+      //     lo que se mandaba:   origen · msg · donde · migas · VECES
+      //
+      // Y `veces` se añadió en la v17.1.0 (#148) — la versión exacta a partir de la cual
+      // dejan de llegar filas. El receptor envuelve todo su trabajo en un try/catch que
+      // responde «err» con HTTP 200, que `repPost` ya trata como fallo desde la v17.49.0:
+      // una fila que el servidor no puede escribir se queda en la cola para siempre.
+      //
+      // El dato NO se pierde: la cuenta de repeticiones se dobla dentro de `msg`, que sí
+      // tiene columna. Es la tercera vez que este canal se queda mudo (v14.1.6 y v17.1.0
+      // #148 fueron las anteriores), así que además del arreglo van dos blindajes: nada
+      // interno viaja en la fila (ver repPost) y la cola no se puede atascar detrás de una
+      // fila envenenada (ver repFlush).
+      const _veces = _errVeces[huella] || 1;
       reportar("error", {
         origen: String(origen || "js").slice(0, 12),
-        msg: _sanearMensajeError(msg),
+        msg: (_veces > 1 ? "(x" + _veces + ") " : "") + _sanearMensajeError(msg),
         donde: _sanearDondeError(donde),
         migas: migasAntes.join(">").slice(0, 160),
-        veces: _errVeces[huella] || 1,
       });
     } catch (e) {}
   }
@@ -28060,6 +28129,26 @@
   const MTR_PROD_KEY = "vgl_prod";
   const MTR_PROD_DIAS = 62;              // dos meses: alcanza para la vista mensual
 
+  // v18.0.66 — LOS SÁBADOS DEL MÉDICO SON CADA DOS SEMANAS (dicho por él el 1-sep: «LOS
+  // SÁBADOS DE TRABAJO SON CADA 2 SEMANAS, ME TOCA ESTE SÁBADO NUEVAMENTE 5/09/2026»).
+  // La v18.0.64 dejaba fuera de la meta TODO sábado futuro porque no había forma de saber
+  // cuáles le tocaban —su telemetría mostraba que trabajó el 22-ago y no el 29-ago—. Con
+  // el ancla que él dio, sí se sabe: se cuentan las semanas desde el sábado 5-sep-2026 y
+  // los pares le tocan. Un sábado suyo son 24 pacientes: no contarlo subestima la meta de
+  // esa semana en un tercio, y contarlo cuando no le toca se la inventa.
+  //
+  // El ancla es un dato del médico, no una constante técnica: si su turno cambia, se
+  // cambia AQUÍ y en ningún otro sitio.
+  const MTR_PROD_SABADO_ANCLA = "2026-09-05";
+  function _prodEsSabadoDelMedico(iso) {
+    try {
+      const f = mtrFechaDesdeIso(iso), a = mtrFechaDesdeIso(MTR_PROD_SABADO_ANCLA);
+      if (!f || !a || f.getUTCDay() !== 6) return false;
+      const semanas = Math.round((f.getTime() - a.getTime()) / (7 * 86400000));
+      return Math.abs(semanas % 2) === 0;
+    } catch (e) { return false; }
+  }
+
   // v18.0.64 — festivo consultado POR LA CADENA ISO, no por un Date. `esFestivo(d)` arma la
   // fecha con getFullYear/getMonth/getDate (hora LOCAL) y todas las fechas de este módulo se
   // construyen en UTC: en Bogotá (UTC-5) eso corre el día uno hacia atrás y habría contado
@@ -28261,7 +28350,9 @@
         if (m && !m.esDomingo && !_prodEsFestivoIso(cur)) {
           const esFuturo = cur > hoyIso;
           const esHoy = cur === hoyIso;
-          const cuenta = esHoy || (esFuturo ? !m.esSabado : at > 0);
+          // v18.0.66 — un sábado futuro cuenta si es de los SUYOS (cada dos semanas); los
+          // demás días futuros de lunes a viernes cuentan siempre.
+          const cuenta = esHoy || (esFuturo ? (!m.esSabado || _prodEsSabadoDelMedico(cur)) : at > 0);
           if (cuenta) { metaSuma += m.meta; diasConMeta++; if (esFuturo) diasPorDelante++; else metaHastaHoy += m.meta; }
         }
         cur = mtrSumarDias(cur, 1);

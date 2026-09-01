@@ -726,12 +726,22 @@ module.exports = {
       //   · martes 18: pasado y sin ninguna atendida -> no cuenta en contra (regla vieja,
       //     que se conserva: no reprochar un día que no le tocaba);
       //   · miércoles 19 (hoy) + jueves 20 + viernes 21 -> 3 × 18 = 54;
-      //   · sábado 22: futuro, y sus sábados no son fijos -> no se da por hecho.
-      t.igual(v.semanal.meta, 54, "la meta de la semana incluye los días que faltan por delante");
-      t.igual(v.semanal.faltan, 49, "y dice cuántos pacientes le quedan para cumplirla");
+      //   · sábado 22: futuro Y ES DE LOS SUYOS. v18.0.66: el médico fijó el turno —«LOS
+      //     SÁBADOS DE TRABAJO SON CADA 2 SEMANAS, ME TOCA ESTE SÁBADO NUEVAMENTE
+      //     5/09/2026»—, y contando de dos en dos desde ese ancla, el 22-ago le toca (su
+      //     propia telemetría lo confirma: trabajó el 22 y no el 29). Un sábado suyo son 24.
+      t.igual(v.semanal.meta, 78, "3 × 18 de lunes a viernes + 24 del sábado que le toca");
+      t.igual(v.semanal.faltan, 73, "y dice cuántos pacientes le quedan para cumplirla");
       t.igual(v.semanal.metaHastaHoy, 18, "el ritmo se mide contra lo que YA debería estar hecho");
       t.igual(v.semanal.ritmo, 27.8, "5 de 18 al día de hoy — este es el número que decide el color");
-      t.igual(v.semanal.diasPorDelante, 2, "jueves y viernes; el sábado futuro no se cuenta");
+      t.igual(v.semanal.diasPorDelante, 3, "jueves, viernes y el sábado que sí le toca");
+      // v18.0.66 — el turno de sábado, contra su historia real: el 22-ago trabajó (1.534
+      // eventos en el tablero) y el 29-ago no (ni uno). El ancla que él dio reproduce las
+      // dos cosas sin que nadie se lo diga al banco.
+      t.cierto(api._prodEsSabadoDelMedico("2026-08-22"), "el 22-ago le tocaba, y trabajó");
+      t.falso(api._prodEsSabadoDelMedico("2026-08-29"), "el 29-ago no le tocaba, y no trabajó");
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-05"), "el 5-sep le toca — es el ancla que él fijó");
+      t.falso(api._prodEsSabadoDelMedico("2026-09-04"), "un viernes no es sábado de nadie");
       t.cierto(v.mensual.atendidas >= 5, "el mes acumula desde el día 1");
       t.igual(api.mtrProductividadVistas({}, "no es fecha"), null, "sin fecha no hay vistas");
     });

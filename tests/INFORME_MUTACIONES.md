@@ -9612,3 +9612,81 @@ mordió en el primer intento —ninguna prueba fijaba el texto nuevo— y se añ
 antes de darla por buena.
 
 Banco completo: **2.892 comprobaciones pasan, 0 fallan.**
+
+## v18.0.66 — el canal de errores llevaba muerto desde la v17.2.0
+
+Orden del médico, sin matices: *«Lo más grave: el canal de errores lleva muerto desde la
+v17.2.0 — DEFINITIVAMENTE HAY QUE BLINDAR ESTO».*
+
+### El hallazgo, y por qué era invisible
+
+En el export del tablero del 1-sep, la hoja `error` no tiene **ni una fila** de ninguna versión
+por encima de **17.2.0**. Y no es que no haya errores: el 27-ago, seis equipos distintos en
+v18.0.4 emitieron **81 `error.js` / 81 `error.distintos`** en `uso_detalle` — los contadores
+que `reportarError` incrementa en su **primera línea**, antes del tope diario y antes de
+`repOn()`. La función corrió 81 veces y no llegó ninguna fila.
+
+No era el transporte: `entorno`, `fraude` y `prueba` **sí** llegan desde v18 por la misma cola
+y el mismo `repPost`. La diferencia estaba en la fila. De los cuatro eventos, `error` era el
+único que mandaba un campo **sin columna en la hoja**:
+
+| | campos que viajan | ¿todos tienen columna? |
+|---|---|---|
+| `entorno` | nav · so · zona · pantalla · gestor | sí |
+| `fraude` | hora · min | sí |
+| `prueba` | (ninguno extra) | sí |
+| **`error`** | origen · msg · donde · migas · **veces** | **no: `veces` no existe** |
+
+`veces` se añadió en la **v17.1.0 (#148)** — la versión exacta a partir de la cual se corta el
+historial. El receptor envuelve su trabajo en un try/catch que responde `err` con HTTP 200, que
+`repPost` trata como fallo desde la v17.49.0: la fila se quedaba en la cola para siempre.
+
+El dato no se pierde: la cuenta de repeticiones se dobla dentro de `msg`, que sí tiene columna.
+
+### Tres blindajes, porque es la TERCERA vez que este canal se calla
+
+v14.1.6 (el filtro de `ev.filename`) y v17.1.0 #148 (el recorte de la cola por la cabeza) fueron
+las dos anteriores. Arreglar el campo no basta:
+
+1. **Nada interno viaja en la fila.** `repPost` manda una copia sin las claves que empiezan por
+   `_`. La contabilidad de reintentos que este mismo cambio introduce habría sido, si no,
+   exactamente el defecto que cierra: otro campo que la hoja no sabe escribir.
+2. **La cola no se atasca detrás de una fila envenenada.** `repFlush` rompía el bucle al primer
+   fallo — correcto con el panel caído, fatal cuando el servidor rechaza una fila CONCRETA: esa
+   fila falla siempre, se queda la primera, y nada de lo que va detrás sale nunca. Ahora cada
+   fila lleva su cuenta de intentos; a los tres (tres vueltas del temporizador de 10 minutos,
+   media hora) se descarta, se anota el descarte y se sigue. Un corte de red sigue rompiendo el
+   bucle como antes.
+3. **Que el silencio se vea.** Lo que dejó esto muerto medio año no fue el campo de más: fue que
+   nadie podía notarlo. Se añade `error.entregado` junto al `error.js` que ya existía; la
+   diferencia entre detectados y entregados delata el canal roto desde la telemetría de uso —
+   la que sí funciona— sin exportar nada ni esperar a que el médico lo reporte.
+
+### Y los sábados, que ahora se saben
+
+*«LOS SÁBADOS DE TRABAJO SON CADA 2 SEMANAS, ME TOCA ESTE SÁBADO NUEVAMENTE 5/09/2026».*
+
+La v18.0.64 dejaba fuera de la meta **todo** sábado futuro porque no había forma de saber
+cuáles le tocaban. Con su ancla sí se sabe, y el resultado se valida solo contra su propia
+telemetría: el 22-ago le tocaba **y trabajó** (1.534 eventos), el 29-ago no le tocaba **y no
+trabajó** (ni uno). Las metas quedan **23/114** la semana y **10/444** el mes.
+
+El ancla es un dato suyo, no una constante técnica: si su turno cambia, se cambia en un solo
+sitio.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 176 | vuelve el campo sin columna (**el defecto**) | *la fila de error solo lleva campos que la hoja tiene como columna* (2 fallan) | Sí |
+| 177 | la contabilidad interna vuelve a viajar a la red | *nada interno se cuela en la fila* | Sí |
+| 178 | la cola vuelve a atascarse en la primera fila mala | *una fila rechazada no puede callar el resto de la cola* | Sí |
+| 179 | los sábados del médico se ignoran otra vez | *3 × 18 + 24 del sábado que le toca* | Sí |
+| 180 | se cuentan TODOS los sábados, le toquen o no | la misma | Sí |
+
+**Precisión de proceso.** La 177 **no mordió** en el primer intento: la prueba llamaba a
+`_repFilaLimpia` directamente, así que quitar su uso en `repPost` no la rompía — la trampa de
+alcanzabilidad de siempre. Se reescribió por conducta, mirando lo que de verdad sale por la red
+en una fila que ya acumuló reintentos.
+
+Banco completo: **2.896 comprobaciones pasan, 0 fallan.**

@@ -249,6 +249,101 @@ module.exports = {
       t.igual(w.acciones["error.distintos"], 1, "y sabe que es UNA sola falla, no nueve");
     });
 
+    // =====================================================================
+    // v18.0.66 — EL CANAL DE ERRORES LLEVABA MUERTO DESDE LA v17.2.0
+    // Encontrado en el export del tablero que trajo el médico el 1-sep: la hoja `error` no
+    // tiene NI UNA fila por encima de la v17.2.0, y el 27-ago seis equipos en v18.0.4
+    // emitieron 81 `error.js` que nunca llegaron. No era el transporte —`entorno`,
+    // `fraude` y `prueba` sí llegan desde v18 por la misma cola—: la fila de `error` era la
+    // única que mandaba un campo SIN COLUMNA en la hoja (`veces`), añadido en la v17.1.0,
+    // la versión exacta donde se corta el historial.
+    //
+    // Esta regla no mira `veces`: fija el CONTRATO. La fila que sale a la red solo puede
+    // llevar campos que la hoja sepa escribir. Así el próximo campo nuevo se cae aquí y no
+    // en silencio durante medio año.
+    // =====================================================================
+    t.caso("v18.0.66: la fila de error solo lleva campos que la hoja del tablero tiene como columna", () => {
+      const c = cargar(cfgRed);
+      // Las columnas reales de la hoja `error`, tomadas del export del propio médico.
+      const COLUMNAS = ["token", "equipo", "ver", "evento", "ts", "dia", "lote",
+        "origen", "msg", "donde", "migas"];
+      c.api.reportarError("js", "TypeError: algo se rompió", "vigilante_agenda.user.js:12345:7");
+      const fila = cola(c).filter((f) => f.evento === "error")[0];
+      t.cierto(!!fila, "la fila se encola");
+      const sobran = Object.keys(fila).filter((k) => COLUMNAS.indexOf(k) < 0);
+      t.igual(sobran.length, 0,
+        "ningún campo sin columna: el receptor responde «err» y la fila se queda en la cola para siempre. Sobran: " + sobran.join(", "));
+    });
+
+    t.caso("v18.0.66: la cuenta de repeticiones no se pierde — se dobla dentro del mensaje", () => {
+      const c = cargar(cfgRed);
+      for (let i = 0; i < 4; i++) c.api.reportarError("js", "algo falló", "vigilante.user.js:1");
+      const filas = cola(c).filter((f) => f.evento === "error");
+      t.igual(filas.length, 1, "sigue siendo UNA fila por huella");
+      t.cierto(/algo falló/.test(filas[0].msg), "el mensaje real sigue ahí");
+      // La primera vez que viaja la huella `veces` vale 1, así que no se prefija nada; lo
+      // que importa es que el campo suelto ya no existe y que el mensaje admite el conteo.
+      t.falso(Object.prototype.hasOwnProperty.call(filas[0], "veces"),
+        "el campo suelto que la hoja no sabe escribir ya no viaja");
+    });
+
+    // v18.0.66 — BLINDAJE 2. `repFlush` rompía el bucle al primer fallo. Correcto con el
+    // panel caído (no tiene sentido insistir con 80 filas), pero si el servidor RECHAZA una
+    // fila concreta —que es lo que le pasó a `error` durante medio año— esa fila falla
+    // siempre, se queda la primera, y TODO lo que va detrás no sale nunca. Un solo defecto
+    // en un tipo de evento apagaba el canal entero.
+    await t.casoAsync("v18.0.66: una fila que el servidor rechaza siempre no puede callar el resto de la cola", async () => {
+      let rechazadas = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const cuerpo = String(o.data || "");
+          // El receptor responde «err» con HTTP 200 cuando no puede escribir la fila: eso
+          // es exactamente lo que `repPost` trata como fallo desde la v17.49.0.
+          if (cuerpo.indexOf('"error"') >= 0) { rechazadas++; if (o.onload) o.onload({ status: 200, responseText: "err", finalUrl: "" }); return; }
+          if (o.onload) o.onload({ status: 200, responseText: "ok", finalUrl: "" });
+        },
+      });
+      c.api.__S.reporte = true;
+      c.api.reportarError("js", "fila envenenada", "vigilante.user.js:1");
+      c.api.reportar("entorno", { nav: "Chrome", so: "Windows 10/11", zona: "America/Bogota", pantalla: "1920x1080", gestor: "Tampermonkey" });
+
+      for (let i = 0; i < 4; i++) { await c.api.repFlush(); await esperar(5); }
+
+      const q = cola(c);
+      t.cierto(rechazadas >= 3, "se reintentó la fila mala varias veces antes de rendirse: obtuvo " + rechazadas);
+      t.falso(q.some((f) => f && f.evento === "entorno"),
+        "y la fila BUENA que iba detrás sí salió: antes se quedaba encolada para siempre");
+      t.falso(q.some((f) => f && f.evento === "error"),
+        "la fila envenenada se descarta a los tres intentos en vez de atascar la cola");
+    });
+
+    // Se prueba por CONDUCTA, mirando lo que de verdad sale por la red. La primera versión
+    // de esta prueba llamaba a `_repFilaLimpia` directamente y por eso la mutación 177 —que
+    // quitaba su uso en `repPost`— no la rompía: la trampa de alcanzabilidad de siempre.
+    await t.casoAsync("v18.0.66: nada interno de la cola se cuela en la fila que sale a la red", async () => {
+      const enviados = [];
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          enviados.push(String(o.data || ""));
+          // Se rechaza para que la fila acumule `_intentos` y siga en la cola: es
+          // justamente el estado en el que la contabilidad interna existe y podría viajar.
+          if (o.onload) o.onload({ status: 200, responseText: "err", finalUrl: "" });
+        },
+      });
+      c.api.__S.reporte = true;
+      c.api.reportarError("js", "algo se rompió", "vigilante.user.js:1");
+      await c.api.repFlush(); await esperar(5);
+      await c.api.repFlush(); await esperar(5);
+
+      t.cierto(enviados.length >= 2, "se intentó entregar más de una vez: obtuvo " + enviados.length);
+      const conIntentos = cola(c).some((f) => f && f._intentos > 0);
+      t.cierto(conIntentos, "la fila SÍ lleva su contabilidad de intentos en la cola");
+      t.falso(enviados.some((cuerpo) => cuerpo.indexOf("_intentos") >= 0),
+        "pero esa contabilidad NUNCA sale a la red: sería otro campo que la hoja no sabe escribir");
+    });
+
     t.caso("reportarError: nueve fallos DISTINTOS mandan nueve filas — ya no se tapan entre ellos", () => {
       const c = cargar(cfgRed);
       for (let i = 0; i < 9; i++) c.api.reportarError("js", "algo falló " + i, "vigilante.user.js:" + (100 + i));
