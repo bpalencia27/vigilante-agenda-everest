@@ -10309,3 +10309,31 @@ por el hallazgo.
 | 216 | vuelve el `\|\|` de repliegue original (**el defecto original**) | *REGRESIÓN — cuando el estadio ADMINISTRATIVO es PEOR que el clínico, las dosis también lo siguen a él* | Sí |
 
 Banco completo: **2.939 comprobaciones pasan, 0 fallan.**
+
+## v18.0.83 — el guardián del texto libre vigila por PACIENTE, no solo por elemento
+
+Hallazgo #35 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+señaló con razón que la premisa central (Angular reutilizando el MISMO nodo `<textarea>` al
+abrir la historia de un paciente DISTINTO) no está verificada contra Everest real — el propio
+autor del hallazgo lo admite. Aun así, el defecto de código es real e independiente de esa
+duda: `dataset.vglVigilado` marca el ELEMENTO como vigilado, nunca registra DE QUIÉN. Si esa
+reutilización llega a pasar (el código no tiene ninguna guarda que la descarte), la primera
+edición real del médico sobre el paciente nuevo encuentra `antes===undefined` (nunca sembrado
+para ese paciente) y `_vglNotarTextoLibre` la trata como «primera vista» — sin invalidar el
+resumen en caché. Se aplica el arreglo por ser gratis y puramente defensivo (no puede empeorar
+nada aunque la reutilización de nodo nunca ocurra en producción), no como excepción a la
+disciplina de trazar daño real.
+
+### La reparación
+
+Se guarda también `dataset.vglVigiladoDoc` (de quién es el nodo vigilado). En cada tick, si el
+nodo ya está vigilado pero el paciente actual es distinto al guardado, se resiembra
+`_vglTextoPrevio` para la clave nueva — sin volver a añadir un segundo listener de `blur`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 217 | vuelve el guardián por elemento sin registrar el dueño (**el defecto original**) | *REGRESIÓN — un cambio de paciente sobre el MISMO nodo... resiembra el texto vigilado* | Sí |
+
+Banco completo: **2.940 comprobaciones pasan, 0 fallan.**

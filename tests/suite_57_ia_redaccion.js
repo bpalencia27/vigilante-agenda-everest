@@ -759,6 +759,37 @@ module.exports = {
       t.igual(c.api.mtrCasillaDeModo("modo_inventado"), null, "modo desconocido: null");
     });
 
+    // v18.0.83 — HALLAZGO DE ENJAMBRE #35. dataset.vglVigilado marcaba el ELEMENTO como
+    // vigilado, no el PACIENTE. Si Angular reutiliza el mismo <textarea> al cambiar de
+    // historia (el propio hallazgo admite no haberlo verificado contra Everest real, pero
+    // el código no tenía ninguna guarda que lo descartara), la primera edición REAL del
+    // médico sobre el paciente nuevo encontraba `antes===undefined` (nunca sembrado para
+    // ESE paciente) y se trataba como «primera vista» — sin invalidar el resumen en caché.
+    t.caso("REGRESIÓN — un cambio de paciente sobre el MISMO nodo <textarea> resiembra el texto vigilado, no lo ignora en silencio (hallazgo #35)", () => {
+      const c = cargar({ silencioso: true });
+      const textarea = { value: "", dataset: {}, _listeners: {}, addEventListener(t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); } };
+      const anamesis = {};
+      const textMuted = { textContent: "111111", closest: () => null };
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? anamesis : null);
+      c.env.doc.querySelector = (sel) => (sel === 'textarea[name="UltimaEnfermedad"]' ? textarea : null);   // sin app-index: cae a `document` mismo
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [textMuted] : []);
+
+      // PAC_A abre la historia: se vigila la casilla, sembrada vacía para ÉL.
+      c.api._vglVigilarTextoLibre("111111");
+      t.igual(textarea.dataset.vglVigilado, "1", "la casilla queda marcada como vigilada");
+      t.igual(textarea.dataset.vglVigiladoDoc, "111111", "y se guarda DE QUIÉN es, no solo que ya se vigiló");
+
+      // Angular cambia a PAC_B reutilizando el MISMO nodo <textarea> (mismo objeto JS).
+      textMuted.textContent = "222222";
+      c.api._vglVigilarTextoLibre("222222");
+      t.igual(textarea.dataset.vglVigiladoDoc, "222222", "el guardián detecta el cambio de dueño y lo actualiza");
+      t.igual(Object.keys(textarea._listeners.blur || []).length, 1, "sin volver a añadir un segundo listener de blur");
+
+      // El médico escribe algo nuevo y real en la casilla de PAC_B — su primera edición.
+      const invalido = c.api._vglNotarTextoLibre("222222", "enfermedad_actual", "Dolor abdominal de 3 días de evolución");
+      t.cierto(invalido, "la primera edición REAL sobre el paciente nuevo SÍ invalida el resumen en caché — antes no lo hacía");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: vacía inserta; ocupada NO pisa y devuelve el texto previo; sin casilla dice la pestaña", () => {
       const c = cargar({ silencioso: true });
       const caja = { value: "", isConnected: true, dispatchEvent: () => {} };

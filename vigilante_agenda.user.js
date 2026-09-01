@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.82
+// @version      18.0.83
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.82";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.83";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -40161,8 +40161,27 @@
         let el = null;
         try { el = mtrCasillaDeModo(modo, d); } catch (e) { el = null; }
         if (!el || !el.addEventListener) continue;
-        if (el.dataset && el.dataset.vglVigilado === "1") continue;
-        try { if (el.dataset) el.dataset.vglVigilado = "1"; } catch (e) {}
+        let id0 = "";
+        try { id0 = (typeof extractPacienteAbierto === "function") ? (extractPacienteAbierto() || "") : ""; } catch (e) {}
+        const docActual = String(id0 || docId || "");
+        // v18.0.83 — AUDITORÍA (hallazgo de enjambre #35): dataset.vglVigilado marcaba el
+        // ELEMENTO como vigilado, no el paciente. Si Angular reutiliza el mismo nodo al
+        // cambiar de historia (no verificado contra Everest real, pero el código no tenía
+        // ninguna guarda que lo descartara), este `continue` se saltaba TODO el bloque para
+        // el paciente nuevo: ni resembraba _vglTextoPrevio con su clave, ni sabía que el
+        // dueño había cambiado. La primera edición real del médico sobre ese paciente
+        // encontraba `antes===undefined` (nunca sembrado) y _vglNotarTextoLibre la trataba
+        // como «primera vista», así que NO invalidaba el resumen en caché. Ahora se guarda
+        // también DE QUIÉN es el nodo vigilado, y un cambio de dueño resiembra su clave sin
+        // volver a añadir un segundo listener de blur.
+        if (el.dataset && el.dataset.vglVigilado === "1") {
+          if (el.dataset.vglVigiladoDoc !== docActual) {
+            el.dataset.vglVigiladoDoc = docActual;
+            _vglNotarTextoLibre(docActual, modo, el.value);
+          }
+          continue;
+        }
+        try { if (el.dataset) { el.dataset.vglVigilado = "1"; el.dataset.vglVigiladoDoc = docActual; } } catch (e) {}
         const m = modo;
         el.addEventListener("blur", () => {
           let id = "";
@@ -40171,9 +40190,7 @@
         });
         // La primera vista SIEMBRA el texto ya existente sin disparar nada: si el médico
         // llega con la casilla ya escrita de antes, eso es contexto, no una edición.
-        let id0 = "";
-        try { id0 = (typeof extractPacienteAbierto === "function") ? (extractPacienteAbierto() || "") : ""; } catch (e) {}
-        _vglNotarTextoLibre(id0 || docId, m, el.value);
+        _vglNotarTextoLibre(docActual, m, el.value);
       }
     } catch (e) {}
   }

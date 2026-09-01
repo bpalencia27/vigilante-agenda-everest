@@ -64,8 +64,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | un arranque matado por el kill-switch marcaba el aviso de festivos como «ya mostrado hoy» sin haberlo mostrado nunca (`#vgl-toasts` no existía todavía) — el refutador disidente tenía razón en el impacto real (hoy no hay discrepancia, y el aviso no gatea ninguna fecha), pero el arreglo es gratis y sigue el mismo patrón ya usado una vez en este archivo | `_festivosAvisarSiVencida` (orden de llamada en `boot()`) | **v18.0.80** | 214 |
 | el POST de medicamentos (consulta pura) se trataba como escritura por faltarle `__idempotent:true` — cero reintentos y ni siquiera la segunda vía (GM_xmlhttpRequest) ante un blip de red, a diferencia de su hermano GET — 3 de 3 refutadores no lo tumbaron | `mtrPedirMedicamentos` | **v18.0.81** | 215 |
 | `estadioParaDosis` devolvía el estadio MEJOR (no el peor) cuando Cockcroft-Gault (administrativo) era más grave que CKD-EPI (clínico) — justo el caso de peso muy bajo/sarcopenia que el propio aviso de discordancia cita; sin conexión hoy (nadie lo lee todavía), pero un contrato con nombre que ya mentía | `mtrEvaluarErc` | **v18.0.82** | 216 |
+| `dataset.vglVigilado` marcaba el ELEMENTO como vigilado, no el paciente — si Angular reutiliza el mismo `<textarea>` al cambiar de historia (premisa no verificada contra Everest real, admitido por el propio hallazgo, pero el arreglo es gratis y puramente defensivo), la primera edición real sobre el paciente nuevo no invalidaba el resumen en caché | `_vglVigilarTextoLibre` / `_vglNotarTextoLibre` | **v18.0.83** | 217 |
 
-Quedan **13 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **12 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad
