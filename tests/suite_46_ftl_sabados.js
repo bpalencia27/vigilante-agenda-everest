@@ -826,10 +826,18 @@ module.exports = {
       // fuente, igual que la regla única de sábado en la suite 68. Lo que no se puede
       // ejecutar aquí, al menos no se puede borrar sin que caiga una prueba.
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      t.cierto(/_cAlAbrir[\s\S]{0,90}_factoresAlAbrir\.cinturaCm = _cAlAbrir;/.test(src),
-        "al ABRIR el Panel se reconcilia con lo que hay en pantalla");
-      t.cierto(/cTick[\s\S]{0,90}factores\.cinturaCm = cTick;/.test(src),
-        "el repaso de los 20 s la vuelve a leer");
+      // v18.0.33 — los dos primeros puntos (abrir el Panel y el repaso de los 20 s) ya NO se
+      // fijan por texto fuente: leían la cintura con tres lectores sueltos, y solo uno de los
+      // cuatro datos llevaba guarda de identidad, así que con otra historia en pantalla se
+      // colaban las cifras del paciente de al lado. Ahora los dos pasan por
+      // mtrPanelFactoresDePantalla, que es una función NOMBRADA y por tanto EJECUTABLE: la
+      // prueba de conducta vive en suite_63 («Cruce de pacientes»), que es mejor red que
+      // cualquier comprobación de texto. Aquí solo se fija que los dos sitios sigan usándola.
+      const usos = (src.match(/mtrPanelFactoresDePantalla\(apt\.doc_id, document\)/g) || []).length;
+      t.igual(usos, 2,
+        "los DOS sitios (abrir el Panel y el repaso de los 20 s) leen por la función con guarda de identidad");
+      t.cierto(/const c = \(typeof mtrLeerCinturaDelDom === "function"\) \? mtrLeerCinturaDelDom\(d\) : null;\s*\n\s*if \(c != null\) f\.cinturaCm = c;/.test(src),
+        "y esa función sigue leyendo la cintura (si se cae de ahí, se cae de los dos sitios a la vez)");
       t.cierto(/partes\.push\("cintura=" \+ \(cDom == null \? "" : cDom\)\);/.test(src),
         "y entra en la FIRMA: sin esto, escribirla no contaría como «algo cambió» (lección del peso, v17.6.75)");
       t.cierto(/const cinturaDom = _mismoPac \? mtrLeerCinturaDelDom\(\) : null;/.test(src),

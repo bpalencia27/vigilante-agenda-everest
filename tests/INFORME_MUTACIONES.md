@@ -7644,3 +7644,74 @@ Las mutaciones 45 y 46 van en la **dirección contraria** a propósito: un arreg
 vigila en un sentido no está vigilado.
 
 Banco completo: **2.799 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.33 — «Utiliza cifras incorrectas de PA, peso, etc.»: el Panel firmaba con la tensión de otro
+
+Reporte del médico en consulta. Hallazgo `L22392` del barrido, confirmado por el enjambre del
+01-sep como **el de la queja**. Reproducido con el arnés antes de tocar nada.
+
+### La causa: cuatro lectores, una sola guarda
+
+De los cinco datos antropométricos que el Panel mete en el resumen, **solo uno** llevaba guarda
+de identidad:
+
+| dato | lector | guarda |
+|---|---|---|
+| IMC / factores | `mtrLeerFactoresRcvDelDom(docId, doc)` | **sí** — `_pacienteSigueAbierto` |
+| PA | `mtrLeerTensionDelDom(document)` | no — ids globales |
+| Peso | `mtrLeerPesoDelDom(document)` | no — `id="peso"` |
+| Cintura | `mtrLeerCinturaDelDom(document)` | no — por rótulo |
+
+Y un `|| {}` convertía la **negativa** del único protegido («en pantalla hay otro paciente, no
+leo») en «no hay factores», con lo que los otros tres entraban igual:
+
+```
+A) resumen de A recién cacheado:   {"imc":24,"paSistolica":118,"paDiastolica":72,"pesoKg":68,"cinturaCm":86}
+   pantalla ahora = paciente B     PA 186/114 · peso 103 · cintura 121
+B) DESPUÉS de abrir el Panel de A con B en pantalla, BAJO LA CÉDULA DE A:
+   {"imc":24,"paSistolica":186,"paDiastolica":114,"pesoKg":103,"cinturaCm":121}
+   línea que se le manda a la IA:
+   >> Signos vitales: PA 186/114 mmHg · peso 103 kg · IMC 24 · circunferencia abdominal 121 cm
+```
+
+La huella que el médico veía en pantalla era esa línea **internamente incoherente**: el IMC era
+el suyo (único protegido) y los otros tres, los del paciente de al lado. Y se **regrababa en la
+caché** de A, de donde la leen después el Panel y el Redactor IA.
+
+### El arreglo
+
+`mtrPanelFactoresDePantalla(docId, doc)` — función **nombrada**, y por tanto ejecutable desde el
+banco: lee **todo o nada**. Los dos sitios (al abrir y el repaso de 20 s) pasan por ella. Cuando
+se niega, el Panel **lo dice** en su propio aviso, no en un cartel flotante más.
+
+El tick de 20 s ya estaba protegido *de rebote* (`_tableroFirmaDom` devuelve `""` y el `return`
+de arriba corta), pero era un efecto colateral, no una guarda. Se hace explícita.
+
+### La prueba vieja que se puso roja, y por qué se cambió y no se revirtió
+
+`suite_46` fijaba **por texto fuente** las dos líneas de la cintura que este refactor movió. La
+intención («la cintura se lee en los cuatro sitios») sigue viva, así que se actualizó la prueba
+— y se **subió de nivel**: la función nueva sí se puede ejecutar, y la conducta real se fija
+ahora en `suite_63`. Cambiar una comprobación de texto por una de conducta es siempre una
+mejora; al revés, nunca.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 47 | la función deja de negarse con otro paciente | *cruce de pacientes* + *sin cédula legible* (`suite_63`) | Sí — 2.803 |
+| 48 | `\|\| {}` en el sitio de abrir **y** `if (true)` | **primero NO cayó nadie** → prueba reforzada → repetida y cae | Sí — 2.803 |
+| 49 | la cintura se cae de la función con guarda | *CABLEADO* (`suite_46`) + *contrapartida* (`suite_63`) | Sí — 2.803 |
+| 50 | el repaso de 20 s vuelve a leer sin guarda | *CABLEADO* (`suite_46`) | Sí — 2.803 |
+| 51 | el Panel se calla | *y no se calla* (`suite_63`) | Sí — 2.803 |
+| 52 | la guarda se pasa de rosca y devuelve null siempre | *contrapartida* (`suite_63`) | Sí — 2.803 |
+
+**La 48 merece leerse dos veces.** Mi prueba del aviso miraba el fuente y comprobaba que el
+MENSAJE existiera. La mutación dejó el mensaje intacto y volvió su rama **inalcanzable**
+(`if (true)`): el texto seguía escrito, muerto, y la prueba pasaba en verde. Es la sexta forma
+de prueba hueca de la jornada, y la más sutil: *comprobar que algo existe no comprueba que
+pueda llegar a ocurrir*. La prueba ahora fija la FORMA del condicional.
+
+Banco completo: **2.803 comprobaciones pasan, 0 fallan.**

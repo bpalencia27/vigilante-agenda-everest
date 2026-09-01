@@ -16,6 +16,7 @@ module.exports = {
     "_vglModalConfirmarDatos",     // v16.3.2 — modal del reconciliador
     "mtrTableroClinico", "mtrRecalcularConFactores", "_tableroFirmaDom",
     "_tableroQueCambio", "openTableroModal", "mtrPanelResumenAlAbrir",
+    "mtrPanelFactoresDePantalla",   // v18.0.33 — guarda de identidad de los signos vitales
     // v17.58.0 — PARTE A: la escalera de adherencia del reconciliador
     "mtrInsumosAdherencia", "mtrEjesEnFallaAdherencia", "mtrEstadoAdherenciaEje",
     "mtrDebePreguntarTratamientoEje", "mtrDebePreguntarAdecuacionEje",
@@ -272,6 +273,105 @@ module.exports = {
       t.cierto(!!reconciliado, "hay resumen reconciliado");
       t.igual(reconciliado.factores.tabaquismo, true, "el dato que el médico ya había escrito por fin se ve");
       t.igual(reconciliado._docId, "222333", "conserva la identidad del paciente (misma garantía que mtrRecalcularConFactores)");
+    });
+
+    // =================================================================================
+    //  v18.0.33 — CRUCE DE PACIENTES EN EL PANEL (reporte en consulta: «utiliza cifras
+    //  incorrectas de PA, peso, etc.»)
+    //
+    //  De los cinco datos antropométricos que el Panel mete en el resumen, SOLO UNO
+    //  llevaba guarda de identidad:
+    //     PA      -> mtrLeerTensionDelDom(document)   ids globales, SIN guarda
+    //     Peso    -> mtrLeerPesoDelDom(document)      id="peso",   SIN guarda
+    //     Cintura -> mtrLeerCinturaDelDom(document)   por rótulo,  SIN guarda
+    //     IMC     -> mtrLeerFactoresRcvDelDom(docId)  CON guarda
+    //  y un `|| {}` convertía la negativa del único protegido en «no hay factores», así
+    //  que los otros tres entraban igual. La huella que el médico veía era una línea
+    //  internamente incoherente: «peso 103 kg · IMC 24».
+    // =================================================================================
+    function pantallaDe(cedula, vitales) {
+      // Un DOM de Everest con OTRA historia abierta: la cédula manda, los signos vitales
+      // son los que se ven en pantalla ahora mismo.
+      const campos = {
+        taSistolicaAcostado: String(vitales.pas), taDiastolicaAcostado: String(vitales.pad),
+        peso: String(vitales.peso),
+      };
+      const cintura = { value: String(vitales.cintura), id: "alert_message", closest: () => null,
+                        getAttribute: (k) => (k === "aria-label" ? "Circunferencia abdominal (cm):" : null) };
+      return {
+        getElementById: (id) => (id === "anamesis" ? { id: "anamesis" } : null),
+        querySelector: (sel) => {
+          if (sel === "app-index") return null;
+          const m = /^(?:input\[name="|#)([\w.-]+)/.exec(sel);
+          const k = m && m[1];
+          return (k && campos[k] != null) ? { value: campos[k] } : null;
+        },
+        querySelectorAll: (sel) => {
+          if (sel === ".text-muted") return [{ textContent: "CC " + cedula, closest: () => null }];
+          if (sel === "input, select, textarea") return [cintura];
+          return [];
+        },
+      };
+    }
+
+    t.caso("v18.0.33 (cruce de pacientes): con OTRA historia en pantalla no se toma NI UNA cifra de ella", () => {
+      const pantalla = pantallaDe("222222", { pas: 186, pad: 114, peso: 103, cintura: 121 });
+      c.env.doc.getElementById = pantalla.getElementById;
+      c.env.doc.querySelector = pantalla.querySelector;
+      c.env.doc.querySelectorAll = pantalla.querySelectorAll;
+      // El Panel abierto es el del paciente 111111; en pantalla hay otro.
+      t.igual(a.mtrPanelFactoresDePantalla("111111", pantalla), null,
+        "todo o nada: la PA, el peso y la cintura no llevan guarda propia, y meterlas en el " +
+        "resumen de este paciente sería firmar una nota con la tensión de otro");
+    });
+
+    t.caso("v18.0.33 (contrapartida): con la historia CORRECTA delante sí se leen las cuatro", () => {
+      // Sin esta prueba, la guarda se podría «arreglar» devolviendo null siempre y el
+      // Panel dejaría de actualizarse nunca sin que nada se pusiera rojo.
+      const pantalla = pantallaDe("111111", { pas: 128, pad: 78, peso: 78.4, cintura: 94 });
+      c.env.doc.getElementById = pantalla.getElementById;
+      c.env.doc.querySelector = pantalla.querySelector;
+      c.env.doc.querySelectorAll = pantalla.querySelectorAll;
+      const f = a.mtrPanelFactoresDePantalla("111111", pantalla);
+      t.cierto(!!f, "hay factores");
+      t.igual(f.paSistolica, 128, "la sistólica de ESTE paciente");
+      t.igual(f.paDiastolica, 78, "y la diastólica");
+      t.igual(f.pesoKg, 78.4, "y el peso");
+      t.igual(f.cinturaCm, 94, "y la cintura, por rótulo");
+    });
+
+    t.caso("v18.0.33: sin cédula legible en pantalla tampoco se lee (Angular repintando la cabecera)", () => {
+      const pantalla = pantallaDe("222222", { pas: 186, pad: 114, peso: 103, cintura: 121 });
+      pantalla.querySelectorAll = (sel) => (sel === "input, select, textarea" ? [] : []);
+      c.env.doc.getElementById = pantalla.getElementById;
+      c.env.doc.querySelector = pantalla.querySelector;
+      c.env.doc.querySelectorAll = pantalla.querySelectorAll;
+      t.igual(a.mtrPanelFactoresDePantalla("111111", pantalla), null,
+        "si el DOM no deja leer de quién es la pantalla, no se asume que es la misma");
+    });
+
+    t.caso("v18.0.33: y no se calla — el Panel dice que no pudo ponerse al día con la pantalla", () => {
+      // Callarlo dejaría creer que lo que se ve está al día. El aviso vive DENTRO del Panel
+      // (el mismo canal que ya usa «Se actualizó con lo que acaba de escribir»), no como un
+      // cartel flotante más en medio de la consulta.
+      // La apertura del Panel es un closure anidado que el arnés no puede ejecutar, así que
+      // esto se fija por fuente — SIN comentarios, para que el propio comentario que explica
+      // el arreglo no sea lo que hace pasar la prueba (ese error ya se cometió en la v18.0.14).
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const codigo = src.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/_notaAlAbrir = "En pantalla hay otra historia abierta[^"]+";/.test(codigo),
+        "la rama del cruce deja escrito el motivo, en idioma de consultorio");
+      t.cierto(/pintar\(_notaAlAbrir\);/.test(codigo),
+        "y ese motivo llega al pintado del Panel, no se queda en una variable muerta");
+      // Destapado por la mutación M2 de esta misma versión: comprobar que el MENSAJE existe
+      // no basta. Cambiando la guarda por `|| {}` y el `if` por `if (true)`, el texto seguía
+      // en el fuente pero su rama quedaba inalcanzable y el médico dejaba de enterarse —
+      // y esta prueba pasaba en verde. Se fija la FORMA del condicional, que es lo que de
+      // verdad decide si el aviso puede llegar a salir alguna vez.
+      t.cierto(/const _factoresAlAbrir = mtrPanelFactoresDePantalla\(apt\.doc_id, document\);\s*\n\s*if \(_factoresAlAbrir\) \{/.test(codigo),
+        "la reconciliación cuelga de la guarda misma: ni `|| {}` que la anule, ni un `if (true)` que deje muerta la rama del aviso");
+      t.cierto(/\}\s*else\s*\{\s*\n[^\n]*\n[^\n]*\n[^\n]*\n\s*_notaAlAbrir =/.test(codigo) || /\}\s*else\s*\{[\s\S]{0,400}_notaAlAbrir =/.test(codigo),
+        "y el aviso vive en el `else` de esa misma guarda, no en una rama suelta");
     });
 
     t.caso("mtrPanelResumenAlAbrir: sin cambios en pantalla, lo ya archivado se mantiene intacto", () => {

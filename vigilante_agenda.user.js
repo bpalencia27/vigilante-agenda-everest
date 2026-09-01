@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.32
+// @version      18.0.33
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.32";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.33";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -22815,26 +22815,31 @@
       // v17.0.3 — reconciliar el resumen cacheado contra pantalla+archivo AHORA, no
       // esperar un cambio FUTURO para corregir un desfase que ya existía al abrir (ver
       // mtrPanelResumenAlAbrir).
+      let _notaAlAbrir = "";
       try {
-        const _factoresAlAbrir = mtrLeerFactoresRcvDelDom(apt.doc_id, document) || {};
-        const _tAlAbrir = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
-        if (_tAlAbrir) { _factoresAlAbrir.paSistolica = _tAlAbrir.pas; _factoresAlAbrir.paDiastolica = _tAlAbrir.pad; }
-        // v17.6.75 — mismo respaldo de DOM que la tensión, para que el peso recién
-        // escrito llegue a Cockcroft-Gault sin tener que cerrar y reabrir el Panel.
-        const _pAlAbrir = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
-        if (_pAlAbrir != null) _factoresAlAbrir.pesoKg = _pAlAbrir;
-        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
-        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
-        // sin poder contarse nunca.
-        const _cAlAbrir = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
-        if (_cAlAbrir != null) _factoresAlAbrir.cinturaCm = _cAlAbrir;
-        const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
-        if (_reconciliado) {
-          _resumen = _reconciliado;
-          try { mtrCacheResumenGuardar(apt.doc_id, _resumen); } catch (e2) {}
+        // v18.0.33 — aquí había un `|| {}` que convertía la NEGATIVA del único lector con
+        // guarda («en pantalla hay otro paciente, no leo») en «no hay factores», y las tres
+        // lecturas de signos vitales, que no llevan guarda propia, entraban igual. Medido
+        // con el arnés: resumen de A (118/72, 68 kg, 86 cm) con B en pantalla, y la hoja
+        // que lee la IA decía, BAJO LA CÉDULA DE A, «PA 186/114 mmHg · peso 103 kg · IMC 24
+        // · circunferencia abdominal 121 cm» — y se regrababa en la caché de A.
+        // Con otro paciente delante NO se reconcilia: se deja el resumen cacheado de ESTE
+        // paciente tal cual, que es el suyo.
+        const _factoresAlAbrir = mtrPanelFactoresDePantalla(apt.doc_id, document);
+        if (_factoresAlAbrir) {
+          const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
+          if (_reconciliado) {
+            _resumen = _reconciliado;
+            try { mtrCacheResumenGuardar(apt.doc_id, _resumen); } catch (e2) {}
+          }
+        } else {
+          // Y se DICE, dentro del propio Panel: callarlo dejaría creer que lo que se ve
+          // está al día con la pantalla. No es un cartel flotante — el aviso vive en el
+          // Panel, que es donde el médico está mirando cuando lo abre.
+          _notaAlAbrir = "En pantalla hay otra historia abierta: esto es el resumen guardado de este paciente, sin actualizar con lo que hay en pantalla ahora. Abra su historia y vuelva a abrir el Panel para ponerlo al día.";
         }
       } catch (e) {}
-      pintar("");
+      pintar(_notaAlAbrir);
     }
     if (!_resumen) {
       try { _resumen = await mtrCalcularResumenClinico(apt, vivo); } catch (e) { _resumen = null; }
@@ -22870,16 +22875,13 @@
         if (!ahora || ahora === _firma) return;
         const cambios = _tableroQueCambio(_firma, ahora);
         _firma = ahora;
-        const factores = mtrLeerFactoresRcvDelDom(apt.doc_id, document) || {};
-        const t = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
-        if (t) { factores.paSistolica = t.pas; factores.paDiastolica = t.pad; }
-        const pTick = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
-        if (pTick != null) factores.pesoKg = pTick;
-        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
-        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
-        // sin poder contarse nunca.
-        const cTick = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
-        if (cTick != null) factores.cinturaCm = cTick;
+        // v18.0.33 — el tick ya estaba protegido de rebote (_tableroFirmaDom devuelve ""
+        // cuando hay otro paciente en pantalla, y unas líneas arriba se sale por
+        // `if (!ahora || ahora === _firma) return`), pero esa protección era un efecto
+        // colateral, no una guarda. Se hace explícita: si mañana la firma cambia de forma,
+        // esto no vuelve a ser el mismo defecto.
+        const factores = mtrPanelFactoresDePantalla(apt.doc_id, document);
+        if (!factores) return;
         const nuevo = mtrRecalcularConFactores(_resumen, factores, todayStamp());
         if (!nuevo) return;
         // Lo que el médico acaba de escribir puede abrir la compuerta: se
@@ -31046,6 +31048,42 @@
       }
     } catch (e) {}
     return nuevo;
+  }
+
+  // =====================================================================
+  //  v18.0.33 — REPORTE EN CONSULTA: «utiliza cifras incorrectas de PA, peso, etc.».
+  //
+  //  De los cinco datos antropométricos que el Panel mete en el resumen, SOLO UNO tenía
+  //  guarda de identidad. mtrLeerFactoresRcvDelDom empieza por
+  //  `if (docIdEsperado && !_pacienteSigueAbierto(docIdEsperado)) return null` — pero la
+  //  tensión, el peso y la cintura se leen con SUS PROPIOS lectores, que reciben el
+  //  `document` a secas y no saben de qué paciente es la pantalla:
+  //
+  //     PA      -> mtrLeerTensionDelDom(document)   ids globales, SIN guarda
+  //     Peso    -> mtrLeerPesoDelDom(document)      id="peso",   SIN guarda
+  //     Cintura -> mtrLeerCinturaDelDom(document)   por rótulo,  SIN guarda
+  //     IMC     -> mtrLeerFactoresRcvDelDom(docId)  CON guarda
+  //
+  //  Con otra historia delante, la negativa del único protegido se convertía en «no hay
+  //  factores» por un `|| {}`, y los otros tres entraban igual. Por eso la línea salía
+  //  internamente incoherente («peso 103 kg · IMC 24»): el IMC era el del paciente del
+  //  Panel y los otros tres, los de la pantalla de al lado.
+  //
+  //  Aquí se lee TODO O NADA: si en pantalla hay otro paciente, no se toma ni una cifra.
+  //  Función nombrada por el mismo motivo que mtrPanelResumenAlAbrir: la apertura del
+  //  modal es un closure anidado y no se puede probar por api.fn().
+  // =====================================================================
+  function mtrPanelFactoresDePantalla(docId, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    const f = mtrLeerFactoresRcvDelDom(docId, d);
+    if (!f) return null;
+    const t = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(d) : null;
+    if (t) { f.paSistolica = t.pas; f.paDiastolica = t.pad; }
+    const p = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(d) : null;
+    if (p != null) f.pesoKg = p;
+    const c = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(d) : null;
+    if (c != null) f.cinturaCm = c;
+    return f;
   }
 
   // =====================================================================
