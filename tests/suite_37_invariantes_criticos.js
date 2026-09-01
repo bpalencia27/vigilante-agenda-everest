@@ -132,7 +132,7 @@ module.exports = {
   nombre: "Invariantes críticos (mutación olvidada)",
   cubre: [],
 
-  async pruebas(t) {
+  async pruebas(t, api, env, cargar) {
     const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
     t.caso("el userscript se pudo leer y tiene el tamaño que debe — si no, este guard queda ciego", () => {
@@ -252,6 +252,88 @@ module.exports = {
         "el guardado ocurre justo antes del mensaje");
       t.cierto(/if\s*\(/.test(alrededor.slice(alrededor.lastIndexOf("atheneaCredsSet"))),
         "y el mensaje va dentro de un if sobre el resultado: anunciar un guardado que falló es peor que no anunciar nada");
+    });
+
+    // =================================================================================
+    //  v18.0.34 — REGLA ESTRUCTURAL: NADIE ESCRIBE DENTRO DE LA CACHÉ DEL RESUMEN
+    //
+    //  `mtrCacheResumenLeer` devuelve `_mtrCacheResumen.resumen`, que es la REFERENCIA
+    //  VIVA, no una copia. Escribir una propiedad sobre lo que devuelve no es «actualizar
+    //  una variable»: es reescribir la memoria clínica del paciente para todo el que la
+    //  lea después — el Panel, el widget de Fármacos y, sobre todo, el Redactor IA, que es
+    //  quien acaba firmando una nota con ese contenido.
+    //
+    //  Es un defecto de FAMILIA, no un caso suelto: la v18.0.33 cerró el del Panel y esta
+    //  versión el del agendamiento, y al escribir esta regla apareció un tercero (el
+    //  refresco de medicamentos del widget de Fármacos) que nadie había reportado. Por eso
+    //  se vigila la forma, no los sitios: el cuarto no lo va a encontrar una revisión.
+    //
+    //  Escribir sobre una COPIA local (`Object.assign({}, resumen, {...})`) y volver a
+    //  guardarla con `mtrCacheResumenGuardar` sí es correcto, y esta regla lo permite: la
+    //  copia no es una variable leída de la caché.
+    // =================================================================================
+    t.caso("v18.0.34 (regla de familia): nadie escribe dentro del objeto que devuelve mtrCacheResumenLeer", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const lineas = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8").split("\n");
+      // Fuera los comentarios: un comentario que cite `resumen.factores = …` no puede
+      // hacer pasar ni fallar esta regla (lección de las pruebas huecas de la jornada).
+      const codigo = lineas.map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? "" : l.replace(/\/\/.*$/, "")));
+      const declara = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)\s*\?\s*)?mtrCacheResumenLeer\s*\(/;
+
+      let sitios = 0;
+      const escrituras = [];
+      for (let i = 0; i < codigo.length; i++) {
+        const m = declara.exec(codigo[i]);
+        if (!m) continue;
+        sitios++;
+        const esc = m[1].replace(/[$]/g, "\\$");
+        const asigna = new RegExp("(?:^|[^\\w.])" + esc + "\\.[\\w$]+\\s*=(?!=)");
+        // La ventana cubre el bloque donde vive esa variable; una escritura sobre el objeto
+        // vivo siempre está cerca de su lectura (si estuviera lejos, sería aún peor).
+        for (let j = i; j < Math.min(i + 40, codigo.length); j++) {
+          if (asigna.test(codigo[j])) escrituras.push("línea " + (j + 1) + ": " + codigo[j].trim().slice(0, 120));
+        }
+      }
+
+      t.cierto(sitios >= 10, "la regla encuentra los sitios que leen la caché (censo: " + sitios + ")");
+      t.igual(escrituras.length, 0,
+        "ninguna escritura dentro del objeto vivo de la caché — para actualizarlo se hace COPIA y se vuelve a guardar. Sitios: " + escrituras.join(" | "));
+    });
+
+    t.caso("v18.0.34: y la premisa de esa regla es real — mtrCacheResumenLeer devuelve la referencia VIVA", () => {
+      // Sin esto, la regla de arriba sería una manía de estilo. Con esto queda claro por qué
+      // es una regla: lo que devuelve NO es una copia, y escribirle encima reescribe la
+      // memoria clínica del paciente para todos los que la lean después.
+      const c = cargar({ silencioso: true });
+      const a = c.api;
+      const r = a.mtrResumenClinico({ hoyIso: "2026-09-01", edad: 60, sexo: "M", pesoKg: 70, creatinina: 1.0, factores: { hta: true } });
+      a.mtrCacheResumenGuardar("111111", r);
+      const uno = a.mtrCacheResumenLeer("111111");
+      const dos = a.mtrCacheResumenLeer("111111");
+      t.cierto(uno === dos, "dos lecturas devuelven EL MISMO objeto, no dos copias");
+      t.cierto(uno === r, "y es el mismo que se guardó: la caché no clona al guardar ni al leer");
+      // La demostración del daño, en dos líneas:
+      uno.factores = Object.assign({}, uno.factores, { paSistolica: 999 });
+      t.igual(a.mtrCacheResumenLeer("111111").factores.paSistolica, 999,
+        "una escritura sobre lo leído queda en la caché para el siguiente que la consulte");
+    });
+
+    t.caso("v18.0.34: el agendamiento no lee la tensión de la pantalla sin comprobar de quién es la historia", () => {
+      // El triaje que decide la franja horaria leía mtrLeerTensionDelDom(document) —ids
+      // globales, sin guarda— y la escribía en el resumen cacheado de ESTE paciente.
+      // Reproducido: con el paciente A en el modal y B en pantalla, la hoja que lee la IA
+      // para A decía «PA 186/114 mmHg», que es la crisis hipertensiva de B.
+      // Vive dentro del closure del modal de agendamiento, así que se fija por fuente, sin
+      // comentarios (para que el comentario que explica el arreglo no sea lo que la pasa).
+      const fs = require("fs");
+      const path = require("path");
+      const codigo = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/_pacienteSigueAbierto\(apt\.doc_id\)\s*&&\s*typeof mtrLeerTensionDelDom === "function"/.test(codigo),
+        "la lectura de la tensión cuelga de la guarda de identidad, no se hace y luego se pregunta");
+      t.falso(/resumenClin\.factores\s*=/.test(codigo),
+        "y el resultado no se escribe dentro del resumen cacheado: va a una copia local para el triaje");
     });
 
   },

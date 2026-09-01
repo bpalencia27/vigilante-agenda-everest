@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.33
+// @version      18.0.34
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.33";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.34";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6538,9 +6538,16 @@
             try {
               const resumen = mtrCacheResumenLeer(docId);
               if (resumen) {
-                resumen.medicamentos = lista;
-                try { resumen.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
-                mtrCacheResumenGuardar(docId, resumen);
+                // v18.0.34 — COPIA, NO ESCRITURA EN SITIO. Aquí la identidad sí estaba
+                // garantizada (mtrCacheResumenLeer devuelve null si la caché es de otro
+                // paciente), pero mutar el objeto vivo tiene su propio precio: quien tenga
+                // una referencia a él —el panel del Redactor guarda la suya al abrirse— ve
+                // cambiar la lista de medicamentos por debajo sin enterarse, y su hoja de
+                // hechos queda desincronizada de su propio resumen. Con copia, además,
+                // `vigente !== resumenFoto` vuelve a ser una señal fiable de «esto cambió».
+                const copia = Object.assign({}, resumen, { medicamentos: lista });
+                try { copia.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
+                mtrCacheResumenGuardar(docId, copia);
               }
             } catch (e) {}
           })
@@ -23843,7 +23850,7 @@
           const etiquetasPaciente = ((det && det.data && det.data.programasPaciente) || [])
             .map((p) => p && p.descripcion).filter(Boolean);
           
-          const resumenClin = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
+          let resumenClin = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
           // v17.6.74 — REPORTE EN VIVO (26-ago, captura): paciente con PA 140/100 tomada
           // HOY salía "🟢 Paciente estable... Sugerido: Final de la jornada". Causa: este
           // triaje siempre leía `resumenClin.factores.paSistolica/paDiastolica` tal como
@@ -23856,9 +23863,29 @@
           // aquí también, igual que hace el Panel, y se sobreescribe sobre lo cacheado.
           if (resumenClin) {
             try {
-              const _tAgm = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
+              // v18.0.34 — DOS defectos en estas cuatro líneas, hermanos del que cerró la
+              // v18.0.33 en el Panel:
+              //
+              // 1) mtrLeerTensionDelDom(document) NO lleva guarda de identidad: lee los ids
+              //    globales taSistolicaAcostado/taDiastolicaAcostado de LA PANTALLA, sea de
+              //    quien sea. Si el médico agenda a un paciente teniendo otra historia
+              //    delante, el triaje de complejidad decide la franja horaria con la tensión
+              //    del paciente de al lado.
+              // 2) Peor: mtrCacheResumenLeer devuelve `_mtrCacheResumen.resumen`, que es la
+              //    REFERENCIA VIVA de la caché, no una copia. Asignar `resumenClin.factores`
+              //    escribía esa tensión ajena DENTRO del resumen cacheado bajo la cédula de
+              //    ESTE paciente, y de ahí la leen después el Panel y el Redactor IA — que
+              //    es la ruta por la que una cifra de otro acaba en una nota firmada.
+              //
+              // Se arregla lo uno y lo otro: la lectura solo ocurre si la historia abierta
+              // sigue siendo la de este paciente, y el resultado va a una COPIA local que
+              // alimenta el triaje sin tocar la caché de nadie.
+              const _tAgm = (_pacienteSigueAbierto(apt.doc_id) && typeof mtrLeerTensionDelDom === "function")
+                ? mtrLeerTensionDelDom(document) : null;
               if (_tAgm && (_tAgm.pas != null || _tAgm.pad != null)) {
-                resumenClin.factores = Object.assign({}, resumenClin.factores || {}, { paSistolica: _tAgm.pas, paDiastolica: _tAgm.pad });
+                resumenClin = Object.assign({}, resumenClin, {
+                  factores: Object.assign({}, resumenClin.factores || {}, { paSistolica: _tAgm.pas, paDiastolica: _tAgm.pad }),
+                });
               }
             } catch (e) {}
           }

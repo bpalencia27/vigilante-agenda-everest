@@ -7715,3 +7715,58 @@ de prueba hueca de la jornada, y la más sutil: *comprobar que algo existe no co
 pueda llegar a ocurrir*. La prueba ahora fija la FORMA del condicional.
 
 Banco completo: **2.803 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.34 — El mismo cruce, en el agendamiento; y una regla que destapó un tercer sitio
+
+Hallazgo `L23432` del barrido, hermano del que cerró la v18.0.33. Reproducido con el arnés
+antes de tocar nada:
+
+```
+A) resumen de A recién cacheado:                PA 118/72
+   ¿mtrCacheResumenLeer devuelve la MISMA referencia?  true
+B) en pantalla ahora: paciente 222222 con PA    186/114
+   ¿el paciente A sigue abierto?                false      <-- el script YA lo sabía
+C) DESPUÉS de abrir el agendamiento de A con B en pantalla:
+   PA cacheada BAJO LA CÉDULA DE A:             186/114
+   línea que se le manda a la IA para A:        Signos vitales: PA 186/114 mmHg · peso 68 kg
+```
+
+**Dos defectos en cuatro líneas.** El triaje que decide la franja horaria leía
+`mtrLeerTensionDelDom(document)` —ids globales, sin guarda de identidad— y, peor, asignaba el
+resultado sobre `resumenClin.factores`, siendo `resumenClin` la **referencia viva** que devuelve
+`mtrCacheResumenLeer`. La cifra de otro paciente quedaba escrita en la caché de este, y de ahí
+la leen el Panel y el Redactor IA.
+
+### La regla de familia, y el tercer sitio que apareció al escribirla
+
+En vez de un segundo parche puntual, `suite_37` gana una **regresión estructural**: para cada
+variable declarada a partir de `mtrCacheResumenLeer(...)`, ninguna línea de su bloque puede
+asignarle una propiedad. Censo: **14 sitios de lectura, 0 escrituras**.
+
+Al ejecutarla por primera vez encontró **un tercer sitio que nadie había reportado**: el
+refresco de medicamentos del widget de Fármacos (`resumen.medicamentos = lista`). Ahí la
+identidad sí estaba garantizada —`mtrCacheResumenLeer(docId)` devuelve null si la caché es de
+otro—, pero mutar en sitio tiene su propio precio: quien tenga una referencia a ese objeto (el
+Redactor guarda la suya al abrirse) ve cambiar la lista por debajo, y su hoja de hechos queda
+desincronizada de su propio resumen. Pasa a copia.
+
+La regla se acompaña de una prueba de conducta que **demuestra su premisa** (dos lecturas
+devuelven el mismo objeto, y escribirle encima queda en la caché). Sin ella, la regla sería una
+manía de estilo; con ella, es la consecuencia de un hecho medido.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 53 | vuelve la lectura de tensión sin guarda | *el agendamiento no lee sin comprobar de quién es* | Sí — 2.806 |
+| 54 | vuelve la escritura dentro del resumen cacheado | *regla de familia* **+** *el agendamiento…* (las dos) | Sí — 2.806 |
+| 55 | vuelve la escritura en sitio del widget de Fármacos | *regla de familia* | Sí — 2.806 |
+| 56 | la caché pasa a CLONAR al leer | *la premisa de esa regla es real* | Sí — 2.806 |
+
+La **56 es la que le da sentido a la regla**: si algún día `mtrCacheResumenLeer` empezara a
+clonar, la prohibición dejaría de tener motivo — y la prueba de la premisa cae para avisarlo,
+en vez de dejar una regla huérfana que nadie sabe por qué existe.
+
+Banco completo: **2.806 comprobaciones pasan, 0 fallan.**
