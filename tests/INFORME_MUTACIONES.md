@@ -8015,3 +8015,57 @@ existía en el catálogo. Tenía razón: una prueba que puede pasar sin comproba
 prueba. Se sustituyó por la comprobación real de que Z103 sigue declarando esa palabra clave.
 
 Banco completo: **2.817 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.39 — «Paciente Everest» no es un nombre
+
+Hallazgo `L11731`. Es el **relleno** que pone `extractAgenda` cuando la tarjeta de Everest no
+deja leer ningún nombre (`nombre: nombre || "Paciente Everest"`, línea ~11802). Usarlo como
+identidad convierte a **todas** las citas sin nombre legible de una misma hora en una sola cita
+para el script. Reproducido con el arnés:
+
+```
+apptKey(A) = Paciente Everest@m480
+apptKey(B) = Paciente Everest@m480      <- otro paciente, misma clave: true
+tras marcar a A por inasistencia:  ["Paciente Everest@m480"]
+¿B figura marcado?  true
+```
+
+**La variante peor** es la que mide el daño real: A es ilegible y B —otro paciente de la misma
+hora— sí tiene su cédula. La marca de A entra como `Paciente Everest@m480`, y `_apptKeysLegado`
+consulta la forma por nombre: B sale **ROJO con sonido** por algo que hizo A, y con su fila en el
+CSV con el que el médico reclama.
+
+### El genérico deja de identificar en las TRES puertas
+
+No basta con arreglar `apptKey`: la identidad de una cita entra por tres sitios y los tres tenían
+que taparse a la vez — la clave que se **escribe** (`apptKey`), las formas viejas que se **leen**
+(`_apptKeysLegado`) y las que se **marcan** (`_apptMarcar`). Arreglar una sola habría dejado el
+contagio vivo por las otras dos.
+
+Sin documento y sin nombre propio, `apptKey` cae a la **posición** (`#0@m480`): no es una
+identidad —y por eso `_apptPuedeAcusar` dice que no— pero impide que dos filas distintas
+colapsen en la contabilidad interna.
+
+### Y no se acusa a quien no se puede señalar
+
+Una fila que no identifica a nadie **ya no origina** una marca de fraude: queda una línea en la
+bitácora (`CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE`) para que el médico vea que hubo algo raro,
+sin que el script acuse a nadie. *Una acusación que no se puede atribuir tampoco se puede
+reclamar.*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 78 | el genérico vuelve a ser identidad en `apptKey` | *dos citas ilegibles no colapsan* | Sí — 2.820 |
+| 79 | `_apptMarcar` vuelve a escribir la forma por nombre | *dos citas ilegibles no colapsan* | Sí — 2.820 |
+| 80 | `_apptKeysLegado` vuelve a emitirla | *el genérico tampoco contagia a quien SÍ tiene cédula* | Sí — 2.820 |
+| 81 | `_apptPuedeAcusar` se vuelve permisivo | *no se puede acusar a nadie* | Sí — 2.820 |
+| 82 | el reconocedor se vuelve sensible a mayúsculas y espacios | *no se puede acusar a nadie* | Sí — 2.820 |
+
+La **82** cubre lo que casi siempre se escapa: comparar `"Paciente Everest"` con `===` funciona
+hasta que Everest devuelve `"  PACIENTE  EVEREST "`. Se normaliza acentos, espacios y caja.
+
+Banco completo: **2.820 comprobaciones pasan, 0 fallan.**

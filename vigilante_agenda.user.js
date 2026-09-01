@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.38
+// @version      18.0.39
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.38";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.39";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11983,11 +11983,33 @@
   //
   // Y el documento se canonicaliza (v17.48.0): «0005150076» y «5150076» son el mismo
   // paciente y no pueden dar dos claves.
+  // v18.0.39 — «PACIENTE EVEREST» NO ES UN NOMBRE. Es el relleno que pone extractAgenda
+  // cuando la tarjeta de Everest no deja leer ninguno (línea ~11802). Usarlo como identidad
+  // convierte a TODAS las citas sin nombre legible de una misma hora en una sola cita para
+  // el script. Medido con el arnés: dos pacientes distintos de las 8:00 daban la misma clave
+  // «Paciente Everest@m480», y marcar a uno por inasistencia marcaba al otro.
+  const APPT_NOMBRE_GENERICO = "paciente everest";
+  function _apptNombreIdentifica(n) {
+    const s = stripAccents(String(n || "")).trim().toLowerCase().replace(/\s+/g, " ");
+    return !!s && s !== APPT_NOMBRE_GENERICO;
+  }
+  // ¿Hay con qué señalar a ALGUIEN? Sin documento y sin nombre propio, la fila de la agenda
+  // no identifica a ningún paciente: no se origina ninguna marca de fraude contra ella. Una
+  // acusación que no se puede atribuir tampoco se puede reclamar, y la fila del CSV con la
+  // que el médico reclama saldría a nombre de «Paciente Everest».
+  function _apptPuedeAcusar(a) {
+    return !!normalizeKey((a && a.doc_id) || "") || _apptNombreIdentifica(a && a.nombre);
+  }
   function apptKey(a) {
     const min = parseHoraMin(a && a.hora_texto);
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
     const doc = normalizeKey((a && a.doc_id) || "");
-    return (doc ? doc : ((a && a.nombre) || "")) + "@" + hora;
+    if (doc) return doc + "@" + hora;
+    if (_apptNombreIdentifica(a && a.nombre)) return String(a.nombre) + "@" + hora;
+    // Ni documento ni nombre propio: la posición al menos evita que dos filas distintas
+    // colapsen en una. No es una identidad —y por eso _apptPuedeAcusar dice que no— pero
+    // sirve para que la contabilidad interna no confunda una cita con otra.
+    return "#" + String((a && a.index) != null ? a.index : "?") + "@" + hora;
   }
   // Las formas ANTERIORES de la clave, solo para LEER. Una marca de fraude puesta esta misma
   // mañana con la versión anterior vive bajo la clave vieja: si el arreglo la ignorara,
@@ -11999,12 +12021,15 @@
     const out = [];
     const crudo = (a && a.doc_id) || "";
     if (crudo) out.push(crudo + "@" + hora);                                   // doc sin canonicalizar
+    // v18.0.39 — las formas POR NOMBRE solo se emiten si el nombre identifica: con el
+    // genérico, esta lista era la puerta por la que la marca de una cita ilegible se leía
+    // como marca de OTRO paciente de la misma hora que sí tenía cédula.
     // La MISMA cita pudo quedar marcada por NOMBRE si en aquella lectura el documento no se
     // leía, y ahora traerlo. Es justo el salto que perdía la marca: la identidad de una cita
     // se puede establecer por documento O por nombre, y las dos tienen que cruzarse o el
     // arreglo solo cubre la mitad de las veces.
-    if (a && a.nombre) out.push(a.nombre + "@" + hora);                        // nombre solo (clave nueva sin doc)
-    if (a && a.nombre !== undefined && a.index !== undefined) out.push(a.nombre + "|" + a.index + "@" + hora);   // nombre+posición (clave vieja)
+    if (a && _apptNombreIdentifica(a.nombre)) out.push(a.nombre + "@" + hora);  // nombre solo (clave nueva sin doc)
+    if (a && _apptNombreIdentifica(a.nombre) && a.index !== undefined) out.push(a.nombre + "|" + a.index + "@" + hora);   // nombre+posición (clave vieja)
     return out;
   }
   // ¿Está esta cita marcada en `conjunto`, con la clave de hoy o con cualquiera de las viejas?
@@ -12024,7 +12049,9 @@
     conjunto.add(key);
     const min = parseHoraMin(a && a.hora_texto);
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
-    if (a && a.nombre) conjunto.add(a.nombre + "@" + hora);
+    // v18.0.39 — la tercera puerta: escribir también la forma por nombre. Con el genérico,
+    // marcaba a todas las citas ilegibles de esa hora Y a cualquiera que compartiera hora.
+    if (a && _apptNombreIdentifica(a.nombre)) conjunto.add(a.nombre + "@" + hora);
   }
   // Reinicio al cambiar de día: sin esto, una pestaña dejada abierta toda la noche seguía
   // con la lista de "sospechosos" de ayer y marcaba fraude a quien volviera hoy.
@@ -12264,7 +12291,14 @@
           if (_relevoReciente) {
             logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
           } else {
-            _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
+            // v18.0.39 — no se origina una marca contra una fila que no identifica a nadie.
+            // Se deja constancia en la bitácora, que es donde debe vivir lo que no se puede
+            // atribuir: el médico ve que hubo algo raro, sin que el script acuse a nadie.
+            if (_apptPuedeAcusar(a)) {
+              _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
+            } else {
+              logEvent({ t: new Date().toLocaleTimeString(), ev: "CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+            }
           }
         }
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
