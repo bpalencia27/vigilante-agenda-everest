@@ -1081,6 +1081,82 @@ module.exports = {
         "el verde del reintento depende de r2.count, no es incondicional");
     });
 
+    // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba en cada
+    // clic (la propia tabla de validación de Everest, swRequerido:true) pero ningún
+    // llamador lo leía jamás — se tiraba a la basura en silencio.
+    //
+    // El mock de Athenea aquí devuelve un analito que el whitelist del script NO
+    // reconoce (a propósito): así el llenado no escribe nada, no dispara «sin casilla»
+    // ni «implausible», y el ÚNICO aviso AMBAR de «Exámenes» que puede salir en este
+    // clic es el de obligatoriasVacias — aísla la prueba de una colisión de deduplicado
+    // ajena a este hallazgo (showToast deduplica por título+apptKey dentro del mismo
+    // flush; dos avisos «Exámenes» distintos en el mismo clic es un problema de
+    // showToast, no de esta conexión, y queda fuera del alcance del hallazgo #41).
+    const cargarLabsNoMapeado = () => cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        const url = String(o.url || "");
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          o.onload({
+            status: 200,
+            responseText: `CC 999888777
+              <div class="card">
+                <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+                <div class="card-title no-margin">Numero: 26051503125</div>
+                <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte">
+                  <input type="hidden" id="hash" name="hash" value="HASHBTN" />
+                  <input name="__RequestVerificationToken" type="hidden" value="TOKENBTN" />
+                </form>
+              </div>`,
+          });
+        } else if (url.includes("consultaDetalleSolicitud")) {
+          o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "EXAMEN NO CATALOGADO XYZ", Resultado: "1" }]) }) });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
+    await t.casoAsync("hallazgo #41 — un examen que Everest exige (swRequerido) y sigue vacío ahora SÍ se avisa, no se calcula y se descarta", async () => {
+      const cOv = cargarLabsNoMapeado();
+      // Igual que en el caso de "llenado desactivado": sin enriquecer, el aviso flotante
+      // se pierde en el try/catch de _renderToast y la prueba no distingue arreglo de bug.
+      enriquecerDom(cOv);
+      cOv.api.createLabInjectorUI();
+      const btn = cOv.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      const bandeja = cOv.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      mockPacienteLabs(cOv, btn, bandeja);
+      // Tabla oficial (la que Everest publicó al abrir la Ruta Crónicos): HEMOGLOBINA es
+      // obligatoria y su casilla existe pero está vacía.
+      cOv.api._guardarTablaOficialVista([{ codigoExamen: "HEMOGLOBINA", swRequerido: true }]);
+      const casillaHb = { value: "", isConnected: true, type: "text" };
+      const getByIdMock = cOv.env.doc.getElementById;
+      cOv.env.doc.getElementById = (id) => (id === "resultadoHemoglobina" ? casillaHb : getByIdMock(id));
+      btn.onclick();
+      elegirOpcionChooser(cOv, "historial");
+      await esperarA(() => (bandeja.children || []).length > 0, 5000);
+      const cuerpos = (bandeja.children || []).map((n) => {
+        try { return String(n.querySelector(".vgl-toast-b").textContent || ""); } catch (e) { return ""; }
+      });
+      t.cierto(cuerpos.some((x) => x.includes("HEMOGLOBINA") && x.includes("exige")),
+        "Everest exige Hemoglobina, sigue vacía, y ahora SÍ se avisa — antes esta información se calculaba y se tiraba a la basura (" + JSON.stringify(cuerpos) + ")");
+      t.igual(casillaHb.value, "", "de solo lectura: el aviso no rellena nada por su cuenta");
+    });
+
+    // La rama del REINTENTO (tras auto-login) comparte el mismo hallazgo #41, pero —igual
+    // que "L6643 / L6714" arriba— montarla de punta a punta exige simular el login real de
+    // Athenea con estado. Se fija por código, igual que ese precedente.
+    t.caso("hallazgo #41 — la rama de reintento (tras auto-login) también lee r2.obligatoriasVacias, no solo la principal", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const ini = src.indexOf("async function _ejecutarLlenadoExamenes");
+      t.cierto(ini > 0, "se localiza el flujo de Auto-Labs");
+      const cuerpo = src.slice(ini, src.indexOf("\n      document.body.appendChild(btn);", ini));
+      t.cierto(/if \(Array\.isArray\(r2\.obligatoriasVacias\)[^\n]*&&\s*r2\.obligatoriasVacias\.length\)/.test(cuerpo),
+        "el reintento tras auto-login también revisa r2.obligatoriasVacias, no solo r.obligatoriasVacias en la rama principal");
+    });
+
     // ================= createAccionesDockUI (T5 — dock de widgets sobre la HC) =================
     // v14.0.0 (T5): el dock flotante con las 3 acciones rápidas (agendar/ordenar/labs) que
     // T4 sacó de la tarjeta. Usa _enModuloHCHealth() (alcance amplio, por ruta) en vez de

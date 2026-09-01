@@ -10490,3 +10490,45 @@ cambio es transparente para el caso común. Con letra muy grande, da 1.28 en vez
 | 223 | vuelve el 1.12 fijo sin mirar `S.tamanoLetra` (**el defecto original**) | *suite_61: REGRESIÓN — _vglAlternarAltoContraste nunca reduce la letra que el médico ya eligió en Ajustes (hallazgo #40)* | Sí |
 
 Banco completo: **2.946 comprobaciones pasan, 0 fallan.**
+
+## v18.0.89 — un examen que Everest exige (swRequerido) y sigue vacío ya no se calcula y se tira a la basura
+
+Hallazgo #41 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+confirmó la parte "código muerto" al pie de la letra (`r.obligatoriasVacias`/`r2.obligatoriasVacias`
+se calculan en `injectLabsIntoCronicos` pero ningún llamador los lee, grep de 6 apariciones
+confirmado) pero cuestionó el salto a "daño clínico": `swRequerido` viene del propio endpoint de
+validación de Everest (`GetValidacionExamenCronicos`), y es probable que el frontend NATIVO de
+Everest ya le muestre al médico que esa casilla es obligatoria (asterisco rojo, bloqueo al
+guardar) — un patrón que el propio archivo ya documenta para otro campo obligatorio de Everest
+(el celular, línea 19136).
+
+Se aplica de todos modos: aunque Everest avise por su cuenta, el propio motor de Auto-Labs YA
+tiene esa información calculada con datos reales del DOM de esta vista concreta — descartarla en
+silencio en vez de decirla es tirar trabajo ya hecho, y el arreglo sigue exactamente el mismo
+patrón que ya existe para `r.sinCasilla` y `r.implausibles` en el mismo bloque.
+
+### La reparación
+
+En los dos llamadores de `injectLabsIntoCronicos` (la rama principal y la de reintento tras
+auto-login), se lee `r.obligatoriasVacias`/`r2.obligatoriasVacias` y, si trae elementos, se
+muestra un aviso ámbar con los nombres de los exámenes que Everest exige y que la vista actual
+todavía tiene vacíos — mismo patrón (mismo `showToast`, mismo `uxTrack`) que ya usan
+`sinCasilla` e `implausibles` en el bloque de al lado.
+
+**Nota aparte, fuera del alcance de este hallazgo:** al escribir la prueba se confirmó que
+`showToast` deduplica por `título+apptKey` **dentro del mismo flush** (500 ms) — dos avisos
+ámbar de "Exámenes" en el mismo clic (p. ej. `sinCasilla` y `obligatoriasVacias` a la vez, o el
+verde de éxito y `obligatoriasVacias`) hacen que solo el PRIMERO en orden de código se pinte y el
+resto se descarte en silencio. Es un defecto real y verificado del propio `showToast`, preexistente
+a este cambio (ya afectaba a `sinCasilla` contra `implausibles`), pero no es lo que pidió el
+hallazgo #41 ni se toca aquí — la prueba de este hallazgo se aisló a propósito para no depender de
+esa colisión. Se deja constancia para un hallazgo futuro.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 224 | la rama principal deja de leer `r.obligatoriasVacias` (**el defecto original**) | *suite_15: hallazgo #41 — un examen que Everest exige (swRequerido) y sigue vacío ahora SÍ se avisa* | Sí |
+| 225 | la rama de reintento (tras auto-login) deja de leer `r2.obligatoriasVacias` | *suite_15: hallazgo #41 — la rama de reintento también lee r2.obligatoriasVacias* | Sí |
+
+Banco completo: **2.948 comprobaciones pasan, 0 fallan.**

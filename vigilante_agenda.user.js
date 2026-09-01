@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.88
+// @version      18.0.89
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.88";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.89";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7154,6 +7154,16 @@
                           + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false);
                       try { uxTrack("labs.autollenado.implausibles", { n: r.implausibles.length }); } catch (e) {}
                   }
+                  // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba
+                  // en cada clic (Everest exige la casilla, según su propia tabla de
+                  // validación) pero ningún llamador lo leía — se tiraba a la basura en
+                  // silencio en vez de avisarle al médico.
+                  if (Array.isArray(r.obligatoriasVacias) && r.obligatoriasVacias.length) {
+                      const _nombresOv = r.obligatoriasVacias.map((o) => o.nombre);
+                      showToast("AMBAR", "Exámenes",
+                          "Everest exige " + _nombresOv.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
+                      try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r.obligatoriasVacias.length }); } catch (e) {}
+                  }
               } else if (atheneaSesionViva === false) {
                   // v12.3.15 — La causa más común de "sin resultados" es que NO HAY SESIÓN
                   // en Athenea: su cookie es DE SESIÓN pura (muere al cerrar el navegador)
@@ -7197,6 +7207,15 @@
                               _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
                               if (_huboEscritura2) _vglOfrecerDeshacer(btn);
                               if (_huboEscritura2) showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                              // v18.0.89 — hallazgo #41 del enjambre: la misma información
+                              // que se agregó a la rama principal, para el camino de
+                              // reintento tras auto-login (r2 comparte el mismo cálculo).
+                              if (Array.isArray(r2.obligatoriasVacias) && r2.obligatoriasVacias.length) {
+                                  const _nombresOv2 = r2.obligatoriasVacias.map((o) => o.nombre);
+                                  showToast("AMBAR", "Exámenes",
+                                      "Everest exige " + _nombresOv2.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
+                                  try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r2.obligatoriasVacias.length }); } catch (e) {}
+                              }
                           } else if (labs2 === null) {
                               // v18.0.30 — la misma separación que la v17.6.58 hizo en la
                               // rama principal y que a la del reintento se le quedó sin
