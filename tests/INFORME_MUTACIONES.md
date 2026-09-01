@@ -9982,3 +9982,41 @@ exactamente la garantía que el comentario original de esta cola siempre dijo te
 | 198 | se revierte al `.get()`/poda del orden original (**el defecto real, reproducido antes de tocar nada**) | *REGRESIÓN — la poda de la cola de carpeta NO puede desincronizar un guardado en curso (hallazgo #20)* | Sí |
 
 Banco completo: **2.921 comprobaciones pasan, 0 fallan.**
+
+## v18.0.73 — `_isoAMs` ya rechaza fechas que el calendario no tiene
+
+Hallazgo #21 del enjambre, gravedad alta, 2 de 3 refutadores no lo tumbaron. El disidente
+argumentó bien pero solo sobre UNA de las tres rutas reales que llaman a `_isoAMs`: la de
+`mtrLdlBasalDeSerie`/`mtrPenultimaCreatinina`, que recibe series de laboratorio de la API viva
+de Athenea — un backend ASP.NET/SQL Server cuyo tipo `DateTime` no puede representar un 31 de
+abril. Ese argumento es correcto para esa ruta. Pero `_isoAMs` tiene una TERCERA ruta
+(`mtrAnclaControlAnterior`, línea 39239) que lee `control.fecha` del historial LOCAL en disco
+(`vglCarpetaGuardarInstantanea`/`_vglCarpetaGuardarAhora`, ver v18.0.72 arriba) — un JSON de
+texto plano en una carpeta que el médico elige, editable por cualquier programa o persona, no
+protegido por ningún tipo de columna de base de datos. El refutador no la examinó.
+
+Con todo, rastreando esa tercera ruta hasta su origen (`todayStamp()`, que construye `fecha`
+desde `new Date()` sin argumentos) el dato que ESTE script escribe siempre es un calendario
+válido — igual que las fechas de Athenea. El hallazgo, estrictamente, no tiene hoy un camino de
+clic-a-daño demostrado con datos reales por NINGUNA de las tres rutas.
+
+Se aplica el arreglo de todos modos, y no como excepción a la disciplina de «reproducir antes de
+tocar» sino porque lo que hay que corregir aquí no es un camino de daño sino una inconsistencia
+de código verificable sin datos externos: `mtrFechaDesdeIso`, en el mismo archivo y para el
+mismo propósito, ya hace el round-trip que rechaza fechas imposibles; `_isoAMs` no lo hacía. El
+costo del arreglo es cero (una comparación más, sin cambiar el resultado para ninguna fecha
+real) y cierra la brecha frente a cualquier ruta futura que no se haya auditado todavía — la
+carpeta local ya demostró en el hallazgo #20 que no es tan blindada como Athenea.
+
+**No se delega en `mtrFechaDesdeIso`** porque esa construye en UTC y `_isoAMs`, a propósito
+(según su propio comentario, para que el conteo de días de una ventana no se mueva según el
+huso del navegador), en hora LOCAL. El arreglo repite el mismo round-trip pero sobre el `Date`
+local que la función ya construía.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 199 | se revierte a la implementación sin round-trip (**el defecto original**) | *REGRESIÓN — _isoAMs rechaza fechas que el calendario no tiene* y *REGRESIÓN — mtrLdlBasalDeSerie no acepta un basal con fecha de calendario imposible* (2 fallan) | Sí |
+
+Banco completo: **2.923 comprobaciones pasan, 0 fallan.**

@@ -796,6 +796,32 @@ module.exports = {
       t.igual(api._isoAMs(""), null, "ni vacío");
     });
 
+    // v18.0.73 — HALLAZGO DE ENJAMBRE #21. Antes, `_isoAMs` solo validaba el formato con una
+    // regexp de 3 grupos de dígitos y dejaba que `new Date(y, m-1, d)` hiciera el rollover
+    // silencioso de JS: «2026-04-31» pasaba a ser 1-mayo sin ningún aviso, y ese timestamp
+    // fabricado entraba en mtrLdlBasalDeSerie/mtrPenultimaCreatinina como si fuera una lectura
+    // real — justo lo que «casilla vacía antes que dato inventado» prohíbe. mtrFechaDesdeIso,
+    // en este mismo archivo y para el mismo propósito, ya hacía este round-trip.
+    t.caso("REGRESIÓN — _isoAMs rechaza fechas que el calendario no tiene, igual que mtrFechaDesdeIso (hallazgo #21)", () => {
+      t.igual(api._isoAMs("2026-04-31"), null, "30 de abril no tiene un día 31: antes rodaba en silencio a 1-mayo");
+      t.igual(api._isoAMs("2026-02-30"), null, "febrero no tiene 30");
+      t.igual(api._isoAMs("2025-02-29"), null, "2025 no es bisiesto: no hay 29 de febrero");
+      t.cierto(typeof api._isoAMs("2024-02-29") === "number", "pero 2024 SÍ es bisiesto: el 29 de febrero de ese año es real");
+      t.igual(api._isoAMs("2026-13-01"), null, "mes 13 tampoco existe");
+      t.igual(api._isoAMs("2026-08-21"), api._isoAMs("2026-08-21"), "una fecha real sigue dando el mismo milisegundo de siempre");
+    });
+
+    t.caso("REGRESIÓN — mtrLdlBasalDeSerie no acepta un basal con fecha de calendario imposible (hallazgo #21)", () => {
+      // Antes: con «2026-04-31» _isoAMs devolvía un timestamp válido (1-may), la ventana de
+      // días lo dejaba pasar, y el LDL de una fecha que no existe se usaba como basal real.
+      const serie = [
+        { fecha: "2026-04-31", valor: 210 },
+        { fecha: "2026-08-01", valor: 70 },
+      ];
+      const b = api.mtrLdlBasalDeSerie(serie, "2026-08-21", 365);
+      t.igual(b, null, "sin ningún control previo con fecha usable, no hay basal que calcular — antes daba 210");
+    });
+
     t.caso("mtrLdlBasalDeSerie: un solo control no tiene «antes» — no evaluable, que no es «no ha reducido»", () => {
       t.igual(api.mtrLdlBasalDeSerie([{ fecha: "2026-08-01", valor: 70 }], "2026-08-21", 365), null);
       t.igual(api.mtrLdlBasalDeSerie([], "2026-08-21", 365), null, "sin serie tampoco");

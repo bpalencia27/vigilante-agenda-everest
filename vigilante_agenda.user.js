@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.72
+// @version      18.0.73
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.72";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.73";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -33008,11 +33008,23 @@
   // "2026-08-01" -> milisegundos, o null si no es una fecha ISO utilizable. Se parsea a
   // mano (Date.parse de un ISO corto se interpreta en UTC en unos navegadores y en hora
   // local en otros, y esa hora de diferencia mueve el conteo de días de una ventana).
+  // v18.0.73 — AUDITORÍA (hallazgo de enjambre #21): esta función solo validaba el
+  // FORMATO (tres grupos de dígitos) y dejaba que `new Date(y, m-1, d)` hiciera el
+  // rollover silencioso de JS — «2026-04-31» se convertía en 1-may sin ningún aviso, y ese
+  // timestamp fabricado entraba en mtrLdlBasalDeSerie/mtrPenultimaCreatinina como si fuera
+  // una lectura real. mtrFechaDesdeIso, que existe en este mismo archivo para el mismo
+  // propósito, sí hace ese round-trip y rechaza fechas que el calendario no tiene — la
+  // diferencia era pura inconsistencia entre dos validadores del mismo dato. No se delega
+  // en mtrFechaDesdeIso porque esa construye en UTC y ésta, a propósito (ver comentario de
+  // arriba), en hora LOCAL — cambiar eso movería el conteo de días de la ventana.
   function _isoAMs(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
     if (!m) return null;
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return isNaN(d.getTime()) ? null : d.getTime();
+    const y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]);
+    const d = new Date(y, mo - 1, da);
+    if (isNaN(d.getTime())) return null;
+    if (d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== da) return null;
+    return d.getTime();
   }
 
   function mtrLdlBasalDeSerie(serie, hoyIso, diasVentana) {

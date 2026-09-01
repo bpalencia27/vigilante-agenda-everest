@@ -55,8 +55,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | la caja roja «cifras sin respaldo» no conocía lo que el médico escribió en las OTRAS casillas de texto libre | `mtrAbrirPanelRedaccion` / `_respaldoDelMedico` | **v18.0.70** | 193 |
 | un consecutivo/factura con la fecha de hoy empotrada, en una subcarpeta ajena, se colaba como el PyM del día | `esNombreDeHoy` / `nameHasToken` / `pickTodaysFile` | **v18.0.71** | 194–197 |
 | la poda de la cola de carpeta (>200 pacientes) podía borrar la clave de un guardado en curso y desincronizar dos escrituras del mismo paciente — refutación de un tercer votante examinada y descartada (defendía la atomicidad de UNA llamada, no la carrera entre llamadas) | `vglCarpetaGuardarInstantanea` | **v18.0.72** | 198 |
+| `_isoAMs` aceptaba fechas de calendario imposibles (31-abr, 29-feb en año no bisiesto) y las rodaba en silencio — sin round-trip, a diferencia de `mtrFechaDesdeIso`; sin camino de clic-a-daño demostrado con datos reales por ninguna de sus tres rutas (Athenea usa DateTime real; la carpeta local usa `todayStamp()`), pero corregido por consistencia interna a costo cero | `_isoAMs` (usada por `mtrLdlBasalDeSerie`, `mtrPenultimaCreatinina`, `mtrAnclaControlAnterior`) | **v18.0.73** | 199 |
 
-Quedan **22 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **21 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad
