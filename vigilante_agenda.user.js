@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.51
+// @version      18.0.52
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.51";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.52";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -38136,6 +38136,32 @@
   // que es PII. `\b` no es seguro con letras acentuadas (Á no es \w en JS), así que el
   // límite de palabra se arma a mano con el alfabeto español.
   const MTR_LETRA_ES = "A-Za-zÁÉÍÓÚÑÜáéíóúñü";
+  // v18.0.52 — Partículas de apellido compuesto: no identifican a nadie por sí solas y
+  // aparecen a cada línea en cualquier texto clínico en español. Censurarlas dejaría la
+  // nota ilegible, que es el defecto que ya costó la v18.0.25. Se comparan ya normalizadas
+  // (sin tildes, en minúscula).
+  const MTR_PARTICULAS_APELLIDO = new Set([
+    "de", "del", "la", "las", "el", "los", "y", "e", "da", "do", "dos", "das",
+    "van", "von", "di", "san", "santa", "sta", "sto", "mc", "mac",
+  ]);
+  // v18.0.52 — Un patrón que casa la palabra CON o SIN tildes, en las dos direcciones:
+  // «Muñoz» tiene que encontrar «MUNOZ», y «Munoz» tiene que encontrar «MUÑOZ». Se
+  // normaliza el token a ASCII y cada letra que tenga variantes acentuadas se convierte en
+  // una clase que las admite todas. Lo que no sea letra se escapa como literal.
+  const MTR_VARIANTES_TILDE = {
+    a: "aáàäâ", e: "eéèëê", i: "iíìïî", o: "oóòöô", u: "uúùüû", n: "nñ", c: "cç",
+  };
+  function _mtrPatronConTildes(token) {
+    const plano = mtrNormalizarTexto(token);   // NFKD + sin diacríticos + minúscula
+    let out = "";
+    for (const ch of plano) {
+      const v = MTR_VARIANTES_TILDE[ch];
+      if (v) out += "[" + v + "]";
+      else out += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    return out;
+  }
+
   function mtrSanearTextoLibreAI(texto, nombrePaciente) {
     if (!texto) return "";
     // v16.5.0 — conFechas: decisión del médico (entrevista del 20-ago). La cronología es
@@ -38150,11 +38176,30 @@
       "([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,3})\\b",
       "g");
     s = s.replace(reNombre, (todo, nombre) => todo.slice(0, todo.length - nombre.length) + "[NOMBRE_CENSURADO]");
+    // v18.0.52 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
+    // el arnés: EL APELLIDO REAL PODÍA LLEGAR INTACTO A GEMINI, por dos huecos de esta
+    // misma defensa. En texto EN MAYÚSCULAS SOSTENIDAS —el estilo real de Everest— esta
+    // defensa por tokens es la ÚNICA que puede tachar el nombre: la de arriba exige
+    // mayúscula inicial + minúsculas, y no puede actuar. Los dos huecos:
+    //
+    //  (1) `t.length >= 3` descartaba apellidos de dos letras. Li, Wu, Ng, Ho, Vo — reales
+    //      y presentes en cualquier IPS colombiana. Medido: «LA FAMILIA LI EN CASA» salía
+    //      sin tachar.
+    //  (2) Sin normalizar tildes, «Muñoz» no casaba con «MUNOZ». El desajuste es la norma,
+    //      no la excepción: los sistemas que pasan el texto a ASCII lo producen solo.
+    //
+    // POR QUÉ NO SE BAJA A 1 NI SE QUITA EL FILTRO, que era la propuesta del hallazgo: los
+    // apellidos compuestos españoles llevan partículas —DE, LA, DEL, LOS, Y, SAN— y
+    // censurar cada «de» y cada «la» del texto clínico lo dejaría ilegible. Eso ya pasó en
+    // esta misma familia de código (v18.0.25, «la tachadura de nombres destrozaba el texto
+    // clínico»). Así que: mínimo DOS letras, menos una lista corta de partículas que no
+    // identifican a nadie por sí solas.
     if (nombrePaciente) {
       try {
-        const tokens = String(nombrePaciente).trim().split(/\s+/).filter((t) => t.length >= 3);
+        const tokens = String(nombrePaciente).trim().split(/\s+/)
+          .filter((t) => t.length >= 2 && !MTR_PARTICULAS_APELLIDO.has(mtrNormalizarTexto(t)));
         if (tokens.length) {
-          const alt = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+          const alt = tokens.map((t) => _mtrPatronConTildes(t)).join("|");
           const reTokens = new RegExp(
             "(?<![" + MTR_LETRA_ES + "])(?:" + alt + ")(?:\\s+(?:" + alt + "))*(?![" + MTR_LETRA_ES + "])",
             "gi");

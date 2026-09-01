@@ -8826,3 +8826,48 @@ Banco completo: **2.856 comprobaciones pasan, 0 fallan.**
 **Los cinco reportes en vivo del médico quedan cerrados**: la regresión de diseño (v18.0.42),
 el grounding antiguo (v18.0.36), la agrupación de exámenes (v18.0.43), el aviso de llegada del
 paciente (v18.0.50) y este. Del enjambre van **12 de 47**.
+
+---
+
+## v18.0.52 — el apellido real podía llegar intacto a Gemini
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés. Viola
+directamente la regla no negociable de `CLAUDE.md`: **cero PHI**.
+
+En texto **en mayúsculas sostenidas** —el estilo real de Everest— la defensa por TOKENS es la
+**única** capaz de tachar el nombre: la de honoríficos exige mayúscula inicial + minúsculas y
+no puede actuar. Y tenía dos huecos:
+
+| hueco | medido |
+|---|---|
+| `t.length >= 3` descartaba apellidos de dos letras (Li, Wu, Ng, Ho, Vo) | «…CON LA FAMILIA **LI** EN CASA…» salía **sin tachar** |
+| sin normalizar tildes, «Muñoz» no casaba con «MUNOZ» | «PACIENTE **MUNOZ** REFIERE…» salía **sin tachar** |
+
+El segundo no es un caso raro: el desajuste entre el nombre registrado con tilde y su
+aparición sin ella es **la norma** en cualquier sistema que pase el texto a ASCII. Ahora el
+patrón casa en las **dos direcciones** —«Muñoz» encuentra «MUNOZ» y «Munoz» encuentra
+«MUÑOZ»— convirtiendo cada letra con variantes acentuadas en una clase que las admite todas.
+
+### Por qué NO se hizo lo que proponía el hallazgo
+
+El arreglo propuesto era «bajar el filtro a 1 o quitarlo». Eso censuraría **cada «de» y cada
+«la»** del texto clínico y lo dejaría ilegible — exactamente el defecto que ya costó la
+v18.0.25 («la tachadura de nombres destrozaba el texto clínico»). Un hallazgo puede tener
+razón en el diagnóstico y equivocarse en la receta.
+
+Se hizo con **mínimo dos letras, menos una lista corta de partículas** (`de, del, la, los, y,
+san, van, von, di, mac…`) que no identifican a nadie por sí solas. Comprobado: con el nombre
+«Pedro De La Cruz», «CRUZ» se tacha y «DOLOR DE CABEZA DE LA MAÑANA» **queda entero**.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 129 | vuelve el filtro de 3 letras | *un apellido de dos letras también se tacha* | Sí — 45 ok |
+| 130 | se quita la tolerancia a tildes | *la tilde no puede ser un escondite* | Sí — 45 ok |
+| 131 | se quita la lista de partículas | *las partículas NO se censuran: destrozarían la nota* | Sí — 45 ok |
+
+La 131 es la que protege el arreglo **de sí mismo**: sin ella, endurecer la censura un poco
+más habría vuelto a romper el texto clínico y el banco no se habría enterado.
+
+Banco completo: **2.859 comprobaciones pasan, 0 fallan.** Van **13 de los 47** del enjambre.

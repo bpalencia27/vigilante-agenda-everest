@@ -171,6 +171,50 @@ module.exports = {
       t.igual(c.api.mtrSanearTextoLibreAI("¿Cuál fue la última creatinina de Don Pedro?"), "¿Cuál fue la última creatinina de Don [NOMBRE_CENSURADO]?");
     });
 
+    // =================================================================
+    //  v18.0.52 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  EL APELLIDO REAL PODÍA LLEGAR INTACTO A GEMINI.
+    //
+    //  En texto EN MAYÚSCULAS SOSTENIDAS —el estilo real de Everest— la defensa por
+    //  TOKENS es la única capaz de tachar el nombre: la de honoríficos exige mayúscula
+    //  inicial + minúsculas y no puede actuar. Y tenía dos huecos:
+    //    (1) `t.length >= 3` descartaba apellidos de dos letras (Li, Wu, Ng, Ho, Vo);
+    //    (2) sin normalizar tildes, «Muñoz» no casaba con «MUNOZ» — y ese desajuste es la
+    //        norma en cualquier sistema que pase el texto a ASCII.
+    //
+    //  Viola directamente la regla no negociable de CLAUDE.md: cero PHI.
+    //  (Todos los nombres de esta prueba son ficticios.)
+    // =================================================================
+    t.caso("v18.0.52 PHI — un apellido de dos letras en MAYÚSCULAS también se tacha", () => {
+      const c = cargar({ silencioso: true });
+      const s = c.api.mtrSanearTextoLibreAI(
+        "PACIENTE REFIERE QUE SEGUN LO CONVERSADO CON LA FAMILIA LI EN CASA, TOMA BIEN LOS MEDICAMENTOS.", "Li");
+      t.falso(/\bLI\b/.test(s), "el apellido de dos letras NO puede quedar en el texto que va a Gemini: " + s);
+      t.cierto(/\[NOMBRE_CENSURADO\]/.test(s), "y en su lugar queda la marca de censura");
+      t.cierto(/TOMA BIEN LOS MEDICAMENTOS/.test(s), "lo clínico se conserva entero");
+    });
+
+    t.caso("v18.0.52 PHI — la tilde no puede ser un escondite, en las DOS direcciones", () => {
+      const c = cargar({ silencioso: true });
+      const sinTilde = c.api.mtrSanearTextoLibreAI("PACIENTE MUNOZ REFIERE ADHERENCIA COMPLETA.", "Muñoz");
+      t.falso(/MUNOZ/.test(sinTilde), "nombre CON tilde, texto SIN tilde: se tacha igual — " + sinTilde);
+      const conTilde = c.api.mtrSanearTextoLibreAI("PACIENTE MUÑOZ REFIERE ADHERENCIA COMPLETA.", "Munoz");
+      t.falso(/MUÑOZ/.test(conTilde), "y al revés también — " + conTilde);
+    });
+
+    t.caso("v18.0.52 PHI — las partículas del apellido compuesto NO se censuran: destrozarían la nota", () => {
+      // El hallazgo proponía bajar el filtro a 1 letra o quitarlo. Eso censuraría cada
+      // «de» y cada «la» del texto clínico y lo dejaría ilegible — el defecto que ya costó
+      // la v18.0.25 («la tachadura de nombres destrozaba el texto clínico»). Mínimo DOS
+      // letras, menos las partículas, que no identifican a nadie por sí solas.
+      const c = cargar({ silencioso: true });
+      const s = c.api.mtrSanearTextoLibreAI(
+        "PACIENTE DE LA CRUZ REFIERE DOLOR DE CABEZA DE LA MANANA.", "Pedro De La Cruz");
+      t.falso(/\bCRUZ\b/.test(s), "el apellido que identifica sí se tacha: " + s);
+      t.cierto(/DOLOR DE CABEZA DE LA MANANA/.test(s),
+        "y el texto clínico queda entero: ni un «de» ni un «la» censurado — " + s);
+    });
+
     t.caso("mtrClasificarEstadioTfg: devuelve vacío ante NaN, 0, números negativos o entradas inválidas", () => {
       const c = cargar({ silencioso: true });
 
