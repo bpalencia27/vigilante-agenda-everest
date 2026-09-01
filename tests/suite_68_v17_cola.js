@@ -746,6 +746,29 @@ module.exports = {
       t.igual(api.mtrProductividadVistas({}, "no es fecha"), null, "sin fecha no hay vistas");
     });
 
+    // v18.0.68 — CORRECCIÓN DEL PROPIO MÉDICO SOBRE SU PEDIDO ANTERIOR: «no es lo mismo para
+    // todos los médicos, toca indagar médico por médico cuál de todos los sábados le toca
+    // laborar, pero el ancla de 5 septiembre me sirve a mí, a maría edineth pino, a sinai
+    // mijares». El ancla no puede vivir como constante del script: cada médico la pone en
+    // Ajustes (S.sabadoAncla), y el 5-sep queda solo como el valor predeterminado.
+    t.caso("v18.0.68: el ancla de sábado es por médico, no una constante del script", () => {
+      // Otro médico con turno desfasado una semana respecto al 5-sep.
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-12", "2026-09-12"), "su propio ancla, sí");
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", "2026-09-12"), "el 5-sep no es suyo");
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-26", "2026-09-12"), "dos semanas después, sí");
+
+      // Un médico que no trabaja sábados: ancla vacía, nunca cuenta ninguno.
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", ""), "ancla vacía = no trabaja sábados");
+      t.falso(api._prodEsSabadoDelMedico("2026-08-22", ""), "ningún sábado, sea cual sea");
+
+      // Un ancla mal escrita (no cae en sábado) no se adivina: se ignora.
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", "2026-09-08"), "el 8-sep es martes, no un ancla válida");
+
+      // Sin argumento, cae al ajuste guardado (S.sabadoAncla) y, si tampoco existe, al
+      // predeterminado del médico que pidió esta regla.
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-05"), "sin argumento, usa S.sabadoAncla o su default");
+    });
+
     t.caso("mtrProductividadHtml: las tres filas, con el porcentaje y qué falta", () => {
       const v = api.mtrProductividadVistas({ "2026-08-17": { atendidas: { a: 1, b: 1 } } }, "2026-08-17");
       const html = api.mtrProductividadHtml(v);

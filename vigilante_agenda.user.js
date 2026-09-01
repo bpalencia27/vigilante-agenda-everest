@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.67
+// @version      18.0.68
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.67";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.68";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8273,6 +8273,15 @@
   // =====================================================================
   const SETTINGS_KEY = "vgl_cfg";
   const DEFAULTS = {
+    // v18.0.68 — CORRECCIÓN DEL MÉDICO (01-sep): «no es lo mismo para todos los médicos,
+    // toca indagar médico por médico cuál de todos los sábados le toca laborar, pero el
+    // ancla de 5 septiembre me sirve a mí, a maría edineth pino, a sinai mijares».
+    // El turno de sábado es cada dos semanas, pero QUÉ sábado depende del médico. La
+    // v18.0.66 lo dejó como constante del script: correcto para tres médicos y equivocado
+    // para el resto. Aquí es un ajuste, con el valor que él confirmó como predeterminado —
+    // no una lista de nombres cableada, que envejecería mal y no es asunto del código.
+    // Vacío = no trabaja sábados; entonces ningún sábado suma meta.
+    sabadoAncla: "2026-09-05",
     refresco: 5,              // segundos entre lecturas
     tema: "oscuro",           // oscuro | claro | auto (sigue a Windows)
     sonido: true,             // tonos por color
@@ -28203,11 +28212,18 @@
   //
   // El ancla es un dato del médico, no una constante técnica: si su turno cambia, se
   // cambia AQUÍ y en ningún otro sitio.
-  const MTR_PROD_SABADO_ANCLA = "2026-09-05";
-  function _prodEsSabadoDelMedico(iso) {
+  function _prodEsSabadoDelMedico(iso, anclaIso) {
     try {
-      const f = mtrFechaDesdeIso(iso), a = mtrFechaDesdeIso(MTR_PROD_SABADO_ANCLA);
+      const cruda = (anclaIso !== undefined && anclaIso !== null)
+        ? anclaIso
+        : ((typeof S !== "undefined" && S) ? S.sabadoAncla : DEFAULTS.sabadoAncla);
+      // Ancla vacía = este médico no trabaja sábados. No es lo mismo que «no se sabe»: es
+      // una respuesta, y la respuesta es que ningún sábado le suma meta.
+      if (!cruda) return false;
+      const f = mtrFechaDesdeIso(iso), a = mtrFechaDesdeIso(cruda);
       if (!f || !a || f.getUTCDay() !== 6) return false;
+      // Un ancla que no cae en sábado es un ajuste mal escrito: no se adivina de cuál habla.
+      if (a.getUTCDay() !== 6) return false;
       const semanas = Math.round((f.getTime() - a.getTime()) / (7 * 86400000));
       return Math.abs(semanas % 2) === 0;
     } catch (e) { return false; }
@@ -29179,6 +29195,7 @@
         <!-- v15.9.0 — llamada real de «enviar al correo» de Everest. Nunca se adivina: se captura. -->
         <div class="vgl-fld"><label>Envío del recordatorio por correo<span class="vgl-hint">Pegue la dirección de la llamada que hace Everest al pulsar su botón de correo (guía CAPTURAR_MENSAJES). Comodines: <b>{citaId} {correo} {eps} {nombre} {usuarioId}</b>. Vacío = el botón avisa que falta configurarlo.</span></label><textarea id="c-correo-url" rows="2" placeholder="(sin capturar aún)">${escapeHtml(S.correoCitaUrl || "")}</textarea></div>
         <div class="vgl-fld"><label>Nombre de la sede del laboratorio<span class="vgl-hint">Se imprime en el recordatorio de la toma de muestras. Vacío = «Laboratorio de la IPS».</span></label><input type="text" id="c-sede-lab" value="${escapeHtml(S.sedeLabNombre || "")}"></div>
+        <div class="vgl-fld"><label>Un sábado que a usted le toca trabajar<span class="vgl-hint">El turno de sábado es cada dos semanas, pero no todos los médicos comparten el mismo. Ponga cualquier sábado que le corresponda y la Productividad calculará los demás sola. Vacío = no trabaja sábados.</span></label><input type="date" id="c-sabado-ancla" value="${escapeHtml(S.sabadoAncla || "")}"></div>
         <div class="vgl-fld"><label>Estado del envío al panel de seguimiento<span class="vgl-hint">Último envío confirmado: <b>${repUltOk}</b> · filas esperando salir: <b>${repColaN}</b>${repUltErr ? ` · último fallo: <b>${escapeHtml(repUltErr)}</b>` : ""}.</span></label><button class="vgl-btn" id="c-repgo">Probar y diagnosticar</button></div>
         <div class="vgl-fld"><label>Resultado de la prueba<span class="vgl-hint" id="c-repn">—</span></label></div>
         <div class="vgl-fld"><label>Diagnóstico del embudo<span class="vgl-hint" id="c-repdiag" style="white-space:pre-line">Pulse «Probar y diagnosticar» para revisar puerta por puerta.</span></label></div>
@@ -29236,6 +29253,7 @@
     // v15.9.0 — envío por correo y nombre de la sede del laboratorio (modo programador).
     bind("#c-correo-url", "correoCitaUrl", (n) => n.value);
     bind("#c-sede-lab", "sedeLabNombre", (n) => n.value);
+    bind("#c-sabado-ancla", "sabadoAncla", (n) => n.value);
     // v14.2.0 — c-ins / c-car / c-par / c-pop retirados de Ajustes: sus canales los decide
     // el sistema (S.insistir/cartel/parpadeo/popup siguen definidos, en su valor automático).
     bind("#c-exc", "excluir", (n) => n.value);

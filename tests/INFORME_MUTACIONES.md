@@ -9739,3 +9739,36 @@ siempre, cambiado a qué pacientes les aplica la obligatoriedad, y contradicho l
 él fijó entre su regla y KDIGO.
 
 Banco completo: **2.901 comprobaciones pasan, 0 fallan.**
+
+## v18.0.68 — el ancla de sábado es por médico, no una constante del script
+
+**Corrección del propio médico sobre su pedido anterior**, la misma tarde: *«no es lo mismo
+para todos los médicos, toca indagar médico por médico cuál de todos los sábados le toca
+laborar, pero el ancla de 5 septiembre me sirve a mí, a maría edineth pino, a sinai mijares».*
+
+La v18.0.66 escribió `MTR_PROD_SABADO_ANCLA` como constante del script — correcto para tres
+médicos concretos y equivocado para cualquier otro que use el mismo instalador. Ahora es un
+ajuste (`S.sabadoAncla`, campo de fecha en Ajustes), con el 5-sep como valor predeterminado —
+sigue funcionando sin tocar nada para quien ya lo usaba, y cualquier otro médico pone el suyo.
+
+Reglas nuevas explícitas:
+- **Ancla vacía = no trabaja sábados.** No es «no se sabe»: es una respuesta, y la respuesta es
+  que ningún sábado le suma meta.
+- **Un ancla que no cae en sábado no se adivina de cuál habla**: se ignora.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 185 | ancla vacía deja de significar «no trabaja sábados» | ninguna (ver nota) | — |
+| 186 | un ancla mal escrita ya no se ignora | *el 8-sep es martes, no un ancla válida* | Sí |
+| 187 | se ignora `S.sabadoAncla` y siempre usa el predeterminado | *otro médico con turno desfasado* | Sí |
+
+**Nota sobre la 185.** No mordió, y no es una prueba hueca: `mtrFechaDesdeIso("")` ya devuelve
+`null`, así que el `if (!f || !a) return false;` de la línea siguiente cubre el caso vacío por
+otra vía. La guarda explícita es una redundancia **deliberada** — documenta la intención («ancla
+vacía = respuesta, no ausencia de dato») para quien lea el código después, aunque hoy el
+resultado ya esté garantizado aguas abajo. Se deja tal cual: quitarla no cambia el
+comportamiento actual, pero borraría la explicación.
+
+Banco completo: **2.902 comprobaciones pasan, 0 fallan.**

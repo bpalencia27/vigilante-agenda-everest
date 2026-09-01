@@ -62,9 +62,12 @@ Razón de «solo la toma»: el control ya quedó hablado con el paciente.
 
 - **No trabaja domingos ni festivos.** Nunca. *(«ESO JAMÁS PASARÁ… YO NO TRABAJO NI DOMINGOS NI
   FESTIVOS».)*
-- **Sábados: cada dos semanas.** Ancla: **sábado 5-sep-2026** le toca. Implementado en
-  `MTR_PROD_SABADO_ANCLA` (v18.0.66) y validado contra su propia telemetría — trabajó el
+- **Sábados: cada dos semanas.** Ancla predeterminada: **sábado 5-sep-2026** — le sirve a él, a
+  María Edineth Pino y a Sinaí Mijares. Validado contra su propia telemetría — trabajó el
   22-ago (1.534 eventos) y no el 29-ago (ninguno).
+  **Corrección suya, misma tarde (v18.0.68):** el turno no es igual para todos los médicos, así
+  que el ancla es un ajuste (`S.sabadoAncla`, campo de fecha en Ajustes) y no una constante del
+  script. Vacío = ese médico no trabaja sábados.
 - Meta 18 de lunes a viernes, 24 el sábado, +3 de sobreagenda.
 
 ---
