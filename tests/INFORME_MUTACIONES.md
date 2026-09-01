@@ -8505,3 +8505,72 @@ de comprobación de conducta.
 
 Quedan **45 hallazgos confirmados** del enjambre sin aplicar, con su reproducción y su arreglo
 propuesto en `docs/ENJAMBRE_FUNCIONES_20260901.md`.
+
+---
+
+## v18.0.46 — tres más del enjambre: una tilde, un cero y una coma
+
+Tres defectos de gravedad alta que comparten forma: **un carácter** —una tilde, un cero, una
+coma— y en los tres el fallo del programa se le presentaba al médico como un hecho sobre el
+paciente. Los tres comprobados contra la cabeza actual antes de tocar nada.
+
+### 1. Una tilde apagaba el módulo de PyM la jornada entera
+
+`findDocIdx` no quitaba acentos. Los encabezados llegan en mayúsculas y recortados, pero no
+sin tildes, así que una columna llamada **«CÉDULA»** —la ortografía correcta en español—
+fallaba por las dos vías: no coincide exacto con `"CEDULA"` de `DOC_EXACT`, y
+`includes("CEDULA")` tampoco, por la É. `makeIndexer` entonces lanza «No se encontró la
+columna con la identificación del paciente» y **el módulo de Actividades Preventivas queda
+apagado todo el día**.
+
+Se normaliza dentro de la función y no en los llamadores porque son tres, y **uno vive dentro
+del Web Worker** (`findDocIdx` se serializa con `.toString()`): arreglar solo el de arriba
+habría dejado roto el camino normal de un `.xlsx`. `stripAccents` ya se serializa antes que
+ella, así que se puede usar. De paso queda robusto a un encabezado sin `toUpperCase`.
+
+### 2. Un RAC de 0 de hoy perdía contra un RAC de 45 de enero
+
+Auto-Labs escribía en la historia el **45** —albuminuria franca, de hace meses— y decía
+«✓ casillas escritas» en verde. No salía en `sinCasilla` ni en `implausibles`: el médico veía
+y firmaba un dato falso.
+
+La causa estaba a un nivel de distancia. `_labNumerico` termina en `n > 0 ? n : null`, y ese
+cero se rechaza **a propósito** («nunca 0, que en una creatinina sería catastrófico») — pero
+esa exclusión es **global para los 13 analitos**, y el desempate de `_nuevoReemplazaCandidato`
+la reutilizaba como si significara «no es un número». En el RAC, donde 0 sí es un resultado
+posible, el valor real y más reciente quedaba tratado como texto y perdía contra cualquier
+valor viejo distinto de cero.
+
+**No se toca `_labNumerico`**: su cero sigue siendo veneno donde debe serlo. Lo que cambia es
+el desempate, y solo para los dos analitos donde el cero es un resultado de verdad —RAC y
+uroanálisis—, con una lista corta y explícita porque ampliarla es una decisión clínica. Y solo
+un cero **limpio** (`0`, `0.0`, `0,00`): un rango `0-2` o un `NEGATIVO` siguen sin ser número.
+
+### 3. Una coma entrecomillada borraba a un paciente, en silencio
+
+`parseCSV` era `l.split(",")` a pelo. Un apellido escrito `"Pérez, Juan"` —lo que produce
+Excel al exportar cualquier campo con coma— corría todas las columnas siguientes un puesto,
+la del documento devolvía el texto equivocado, y el paciente **no entraba ni en `map` ni en
+`todos`**. Y como tampoco estaba en `todos`, el panel le decía al médico, con toda confianza,
+que ese paciente «NO aparece en la lista de prevención de hoy».
+
+Ahora se lee carácter a carácter con las reglas de CSV de verdad: campo entrecomillado,
+comillas escapadas por duplicación, y **saltos de línea dentro de un campo** (que el
+`split("\n")` de antes tampoco podía manejar).
+
+> **Y una prueba que era el guardaespaldas del defecto.** `suite_16` decía «NO interpreta
+> comillas» *como si fuera una decisión* y clavaba el resultado roto para que nadie lo
+> cambiara. Un comentario que llama «a propósito» a un defecto es peor que el defecto: la
+> prueba deja de proteger y pasa a defenderlo. Reescrita.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 111 | `findDocIdx` vuelve a no quitar tildes | *una tilde no puede apagar el módulo de PyM* | Sí — 14 ok |
+| 112 | el desempate vuelve a usar `_labNumerico` a pelo | *un RAC de 0 de hoy le gana a un RAC de 45* | Sí — 140 ok |
+| 113 | el cero se acepta en TODOS los analitos | *el cero sigue siendo veneno donde un 0 no es un paciente sano* | Sí — 140 ok |
+| 114 | vuelve el `split(",")` ingenuo | *una coma dentro de comillas ya no parte la fila* (2 fallan) | Sí — 26 ok |
+
+Banco completo: **2.845 comprobaciones pasan, 0 fallan.** Quedan **41 hallazgos confirmados**
+del enjambre sin aplicar, documentados en `docs/ENJAMBRE_FUNCIONES_20260901.md`.

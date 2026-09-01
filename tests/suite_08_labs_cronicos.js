@@ -1176,6 +1176,46 @@ module.exports = {
       t.cierto(testApi._nuevoReemplazaCandidato(viejoCualitativo, nuevoNumerico), "más reciente y numérico: gana, como antes");
     });
 
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta.
+    //
+    //  Un RAC de 0 de HOY (paciente sin albuminuria, valor real) PERDÍA contra un RAC de
+    //  45 de hace meses, y Auto-Labs escribía en la historia el 45 —albuminuria franca,
+    //  vencida— diciendo «✓ casillas escritas» en verde. Ni salía en `sinCasilla` ni en
+    //  `implausibles`: el médico veía y firmaba un dato falso.
+    //
+    //  La causa estaba a un nivel de distancia: `_labNumerico` rechaza el 0 A PROPÓSITO
+    //  («nunca 0, que en una creatinina sería catastrófico»), pero esa exclusión es GLOBAL
+    //  para los 13 analitos y este desempate la reutilizaba como «no es un número».
+    //
+    //  La contención importa tanto como el arreglo: en los otros once analitos un 0 sigue
+    //  siendo un dato roto y tiene que seguir perdiendo.
+    // =================================================================
+    t.caso("_nuevoReemplazaCandidato: un RAC de 0 de HOY le gana a un RAC de 45 de hace meses", () => {
+      const rac = (v, d) => ({ matched: { key: "RAC" }, resultVal: v, resultDate: d });
+      t.cierto(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0", "2026-08-30")),
+        "el 0 de agosto (paciente sin albuminuria) reemplaza al 45 de enero");
+      t.falso(testApi._nuevoReemplazaCandidato(rac("0", "2026-08-30"), rac("45", "2026-01-15")),
+        "y en el orden contrario el 45 viejo NO vuelve a desplazarlo: el resultado no depende del orden de llegada");
+      t.cierto(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0,00", "2026-08-30")),
+        "«0,00» con coma decimal es el mismo cero");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: el cero SIGUE siendo veneno donde un 0 no es un paciente sano", () => {
+      const cre = (v, d) => ({ matched: { key: "CREATININA" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(cre("1.2", "2026-01-15"), cre("0", "2026-08-30")),
+        "una creatinina de 0 es una lectura corrupta, no un riñón perfecto: no desplaza a la real");
+      const hb = (v, d) => ({ matched: { key: "HEMOGLOBINA" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(hb("13.5", "2026-01-15"), hb("0", "2026-08-30")),
+        "ni una hemoglobina de 0");
+      // Y dentro del propio RAC, solo un cero LIMPIO cuenta: un rango o un texto no.
+      const rac = (v, d) => ({ matched: { key: "RAC" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0-2", "2026-08-30")),
+        "«0-2» es un rango, no un cero");
+      t.falso(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("NEGATIVO", "2026-08-30")),
+        "y «NEGATIVO» sigue sin ser un número");
+    });
+
     t.caso("_ultimaFechaPorAnalito (integración end-to-end): el componente de orina de AGOSTO gana sobre el de ENERO, en cualquier orden de llegada (bug real reportado en consultorio)", () => {
       const enOrden = testApi._ultimaFechaPorAnalito([
         { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },

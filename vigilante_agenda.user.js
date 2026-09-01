@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.45
+// @version      18.0.46
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.45";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.46";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3042,6 +3042,23 @@
   // real quedaba sin usar aunque sí hubiera llegado. Ahora un candidato con un número
   // usable siempre le gana a uno que no lo es, sin importar la fecha; ver
   // _nuevoReemplazaCandidato.
+  // v18.0.45 — Los DOS únicos analitos monitoreados en los que un CERO es un resultado real
+  // y no una lectura corrupta: la relación albúmina/creatinina (un paciente sin albuminuria
+  // puede salir en 0) y el uroanálisis (un recuento de 0 leucocitos o 0 eritrocitos por campo
+  // es exactamente lo que se espera de una orina normal). En los otros once —creatinina,
+  // hemoglobina, glicemia, HbA1c, los cuatro lípidos, PTH, albúmina y fósforo— un 0 no es un
+  // paciente sano, es un dato roto, y tiene que seguir perdiendo como hasta ahora.
+  const _CERO_ES_RESULTADO_REAL = new Set(["RAC", "UROANALISIS"]);
+  // Un cero LIMPIO: "0", "0.0", "0,00", "00". Nada de "0-2" (un rango), "0 a 5" ni
+  // "NEGATIVO" — para todo eso sigue mandando `_labNumerico`, que los rechaza.
+  const _ES_CERO_LIMPIO = /^\s*0+(?:[.,]0+)?\s*$/;
+  function _esNumeroParaDesempate(cand) {
+    if (!cand) return false;
+    if (_labNumerico(cand.resultVal) !== null) return true;
+    const clave = (cand.matched && cand.matched.key) || "";
+    if (!_CERO_ES_RESULTADO_REAL.has(clave)) return false;
+    return _ES_CERO_LIMPIO.test(String(cand.resultVal == null ? "" : cand.resultVal));
+  }
   function _nuevoReemplazaCandidato(previo, nuevo) {
       // 1) una fila REAL del panel de orina le gana a un respaldo armado con componentes
       //    sueltos (ver el comentario grande de arriba sobre UROANALISIS)... PERO NUNCA SI ES
@@ -3094,8 +3111,25 @@
       // porque el viejo "sí era número" y el fresco no. El juez correcto es _labNumerico,
       // que entiende las desigualdades del LIS ("> 300" → 300) y rechaza los corruptos —
       // el MISMO criterio unificado desde v14.1.3 para el resto del archivo.
-      const previoEsNumero = _labNumerico(previo.resultVal) !== null;
-      const nuevoEsNumero = _labNumerico(nuevo.resultVal) !== null;
+      // v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido
+      // con el arnés: UN RAC DE 0 DE HOY PERDÍA CONTRA UN RAC DE 45 DE ENERO, y Auto-Labs
+      // escribía en la historia el 45 —albuminuria franca, de hace meses— diciendo
+      // «✓ casillas escritas» en verde. Ni aparecía en `sinCasilla` ni en `implausibles`.
+      //
+      // La causa está a un nivel de distancia: `_labNumerico` termina en `n > 0 ? n : null`,
+      // y ese cero se rechaza A PROPÓSITO —«nunca 0, que en una creatinina sería
+      // catastrófico»—. Pero esa exclusión es GLOBAL para los 13 analitos, y esta regla la
+      // reutiliza como si significara «no es un número»: en el RAC, donde 0 SÍ es un
+      // resultado clínicamente posible, el valor real y más reciente quedaba tratado como
+      // texto y perdía el desempate contra cualquier valor viejo distinto de cero.
+      //
+      // NO se toca `_labNumerico`: su cero sigue siendo veneno donde debe serlo (creatinina,
+      // hemoglobina, glicemia, HbA1c, lípidos, PTH, albúmina, fósforo — en todos ellos un 0
+      // es una lectura corrupta, no un paciente sano). Lo que se corrige es este desempate,
+      // y solo para los analitos donde el cero es un resultado de verdad. La lista es corta
+      // y explícita a propósito: ampliarla es una decisión clínica, no un detalle técnico.
+      const previoEsNumero = _esNumeroParaDesempate(previo);
+      const nuevoEsNumero = _esNumeroParaDesempate(nuevo);
       if (previoEsNumero !== nuevoEsNumero) return !previoEsNumero;
       // 3) entre dos candidatos igual de confiables en lo anterior, gana la fecha más
       //    reciente de verdad; en empate (o sin fecha ninguno), se conserva el primero visto.
@@ -9413,7 +9447,45 @@
     }
     return { map: ix.map, todos: ix.todos, abandono: ix.abandono };
   }
-  function parseCSV(text) { return text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length).map((l) => l.split(",")); }
+  // v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con el
+  // arnés: UNA COMA ENTRECOMILLADA BORRABA A UN PACIENTE, EN SILENCIO. Esto era
+  // `l.split(",")` a pelo, sin entender comillas. Un apellido escrito `"Pérez, Juan"` —forma
+  // estándar de CSV, y la que produce Excel al exportar cualquier campo con coma— partía la
+  // fila en una celda de más: todas las columnas siguientes se corren un puesto, la del
+  // documento devuelve el texto equivocado y el paciente NO entra ni en `map` ni en `todos`.
+  // Y el daño no acaba ahí: como tampoco está en `todos`, el panel le dice al médico, con
+  // toda confianza, que ese paciente «NO aparece en la lista de prevención de hoy» — un
+  // fallo del lector presentado como un hecho sobre el paciente, el patrón G otra vez.
+  //
+  // Ahora se lee carácter a carácter con las reglas de CSV de verdad: campo entrecomillado,
+  // comillas escapadas por duplicación (`""`), y saltos de línea DENTRO de un campo (que el
+  // `split("\n")` de antes tampoco podía manejar). Un `"` suelto a media celda se conserva
+  // literal, que es lo que hace Excel: solo abre campo si está al principio.
+  function parseCSV(text) {
+    const src = String(text == null ? "" : text).replace(/\r\n?/g, "\n");
+    const filas = [];
+    let fila = [], campo = "", enComillas = false;
+    const cerrarFila = () => {
+      fila.push(campo); campo = "";
+      // Se conserva el filtro de la versión anterior: una línea en blanco no es una fila.
+      if (fila.some((c) => String(c).trim().length)) filas.push(fila);
+      fila = [];
+    };
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (enComillas) {
+        if (ch !== '"') { campo += ch; continue; }
+        if (src[i + 1] === '"') { campo += '"'; i++; continue; }   // "" -> una comilla
+        enComillas = false; continue;
+      }
+      if (ch === '"' && campo === "") { enComillas = true; continue; }
+      if (ch === ",") { fila.push(campo); campo = ""; continue; }
+      if (ch === "\n") { cerrarFila(); continue; }
+      campo += ch;
+    }
+    if (campo.length || fila.length) cerrarFila();
+    return filas;
+  }
 
   // =====================================================================
   //  LECTOR DE EXCEL BLINDADO (v5.4) + STREAMING (v7.8)
@@ -9650,8 +9722,21 @@
     }
     return mejor;
   }
+  // v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con el
+  // arnés: ESTA FUNCIÓN NO QUITABA TILDES. Los encabezados llegan en mayúsculas y recortados
+  // (`makeIndexer` y `elegirHojaYCabecera`) pero NO sin acentos, así que un archivo cuya
+  // columna se llame **«CÉDULA»** —la ortografía correcta en español, y la que cualquiera
+  // escribiría— fallaba las dos vías: no coincide exacto con "CEDULA" de DOC_EXACT, y
+  // `includes("CEDULA")` tampoco, por la É. `makeIndexer` entonces lanza «No se encontró la
+  // columna con la identificación del paciente» y el módulo de Actividades Preventivas queda
+  // apagado LA JORNADA ENTERA, por una tilde.
+  //
+  // Se normaliza aquí dentro y no en los llamadores porque los llamadores son tres y uno de
+  // ellos vive dentro del Web Worker (esta función se serializa con `.toString()`): arreglar
+  // solo el de arriba habría dejado el del worker —el camino normal de un .xlsx— roto.
+  // `stripAccents` ya se serializa al worker antes que esta función, así que se puede usar.
   function findDocIdx(headers) {
-    const h = (headers || []).map((x) => String(x == null ? "" : x));
+    const h = (headers || []).map((x) => stripAccents(String(x == null ? "" : x)).toUpperCase());
     for (const cand of DOC_EXACT) { const k = h.indexOf(cand); if (k >= 0) return k; }
     return h.findIndex((x) => x.includes("IDENT") || x.includes("CEDULA") || x.includes("DOCUMENTO"));
   }
