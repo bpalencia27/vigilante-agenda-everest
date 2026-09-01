@@ -7103,3 +7103,64 @@ El patrón de las cuatro es el mismo y conviene dejarlo escrito: **una prueba qu
 la lógica que quiere vigilar no vigila nada.** Tiene que llamar al código de producción.
 
 Banco completo: **2.767 comprobaciones pasan, 0 fallan.**
+
+## v18.0.24 — 1-sep-2026 · EL REPINTADO «BARATO» NO ERA BARATO, Y ADEMÁS SE COMÍA UN AVISO
+
+`refrescarCuentas` es el camino **rápido** del repintado: el que corre en cada vuelta del reloj
+cuando la agenda no cambió. Traía dos defectos.
+
+### 1. Coste que crece solo
+
+Llamaba `_noShowPrevia(a.doc_id)` **una vez por tarjeta**, y esa función hace
+`localStorage.getItem` + `JSON.parse` del historial **entero**, más un `_vglBuscarPorDoc` que
+en el caso de fallo —el paciente sin inasistencias previas, o sea casi todos— recorre el mapa
+completo cédula a cédula.
+
+Con 30 tarjetas: **30 lecturas y 30 parses por vuelta**, en el hilo de la interfaz. Y
+`vgl_nosh_hist` **no caduca nunca** (lo dice su propio comentario), así que ese mapa crece sin
+techo con los meses: el coste por vuelta **aumenta solo**, sin que nadie toque nada.
+
+Se parte en dos: `_noShowPreviaEn(hist, docId)`, que recibe el mapa ya leído, y el envoltorio
+`_noShowPrevia` de siempre para los demás llamadores, que no cambian en nada. El historial se
+lee **una vez por vuelta**.
+
+### 2. La cuenta regresiva y el badge se confundían
+
+El badge de inasistencias previas es `<span class="vgl-cd vgl-adh">` y vive en
+`.vgl-card-time-wrap`, que va **antes** que `.vgl-card-badges-wrap` en el árbol. Cuando la
+tarjeta se pintó **sin** cuenta regresiva (faltaba más de hora y media para la cita) y luego
+entró en la ventana, `querySelector(".vgl-cd")` devolvía el **badge**: se le sobrescribían
+`className`, `title` y `textContent` con los de la cuenta —perdía su `.vgl-adh` y su aviso— y
+en la vuelta siguiente se creaba **además** una cuenta nueva. La tarjeta acababa con dos
+cuentas y el aviso de inasistencias convertido en un cronómetro congelado.
+
+De paso: `refrescarCuentas` insertaba la cuenta que faltaba en `.vgl-card-badges-wrap`,
+mientras `render()` la pinta dentro de `.vgl-card-time-wrap`. **La misma tarjeta se veía de
+dos maneras según por qué camino se hubiera pintado.** Ahora las dos vías coinciden.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 21 | el selector vuelve a confundir cuenta y badge | *la cuenta y el badge no se confunden entre sí* (`suite_04`) | Sí — 2.772 |
+| 22 | vuelve la lectura del historial por tarjeta | *lee el historial UNA vez por vuelta* (`suite_04`) | Sí — 2.772 |
+
+### Nota: el termómetro, no la fiebre
+
+Al afinar el selector a `.vgl-cd:not(.vgl-adh)`, **dos pruebas existentes de `suite_15` se
+pusieron rojas**. No era una regresión: el DOM falso de esa suite es un stub memoizado **por
+cadena de selector**, con un nodo por selector, y `:not(...)` le creaba un nodo distinto.
+
+La tentación era bajar producción a un selector más pobre para que el simulador lo entendiera.
+Se hizo al revés: **el stub normaliza `:not(...)`**, porque en ese mundo falso `.vgl-cd` y
+`.vgl-cd:not(.vgl-adh)` designan la misma cosa. Doblar el código de producción para complacer
+al banco es arreglar el termómetro en vez de la fiebre — y habría dejado el defecto vivo en la
+pantalla del médico, que es donde importa.
+
+También se anotó, dentro de las dos comprobaciones de fuente, el filtro de comentarios que ya
+hizo falta en la v18.0.22: los comentarios que explican un arreglo citan los selectores
+literalmente, así que un barrido sobre el texto crudo los encuentra siempre y pasa aunque el
+código vuelva atrás. Segunda vez el mismo día; por eso el filtro se escribe una vez y se
+comparte.
+
+Banco completo: **2.772 comprobaciones pasan, 0 fallan.**

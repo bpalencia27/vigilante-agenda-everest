@@ -22,8 +22,17 @@ function enriquecerDom(c) {
     const e = crearBase(tag);
     const memo = new Map();
     e.querySelector = (sel) => {
-      if (!memo.has(sel)) memo.set(sel, doc.createElement("div"));
-      return memo.get(sel);
+      // v18.0.24 — se normaliza `:not(...)` antes de memoizar. Este DOM falso tiene UN nodo
+      // por selector lógico, así que `.vgl-cd` y `.vgl-cd:not(.vgl-adh)` designan aquí la
+      // misma cosa: la cuenta regresiva de la tarjeta. Sin esta normalización, el día que
+      // producción afinó el selector —para dejar de confundir la cuenta con el badge de
+      // inasistencias, que también lleva `.vgl-cd`— estas pruebas empezaron a fabricar un
+      // nodo distinto y dieron por rota una conducta que estaba bien. El stub tenía que
+      // seguir al código, no al revés: bajar producción a un selector más pobre solo para
+      // que este simulador lo entendiera habría sido arreglar el termómetro.
+      const clave = String(sel).replace(/:not\([^)]*\)/g, "");
+      if (!memo.has(clave)) memo.set(clave, doc.createElement("div"));
+      return memo.get(clave);
     };
     e.querySelectorAll = () => [];
     return e;

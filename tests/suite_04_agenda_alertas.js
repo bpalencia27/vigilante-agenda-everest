@@ -1545,5 +1545,103 @@ module.exports = {
         `todo efecto de una sola vez dentro de colorAndAlert, antes de la guarda de líder, debe estar bajo state.leader — si no, lo ejecuta cada ventana abierta y se duplican filas, contadores y marcas. Sin proteger: ${desprotegidos.join(" | ")}`);
     });
 
+
+    // =====================================================================
+    // v18.0.24 — EL REPINTADO BARATO NO ERA BARATO, Y ADEMÁS SE COMÍA UN AVISO
+    //
+    // `refrescarCuentas` es el camino RÁPIDO del repintado: el que corre en cada vuelta del
+    // reloj cuando la agenda no cambió (`if (sig === state.lastSignature) { refrescarCuentas
+    // (vista); return; }`). Traía dos defectos.
+    //
+    // (a) COSTE. Llamaba `_noShowPrevia(a.doc_id)` una vez POR TARJETA, y esa función hace
+    //     localStorage.getItem + JSON.parse del historial ENTERO más un _vglBuscarPorDoc que,
+    //     en el caso de fallo —el paciente sin inasistencias previas, o sea casi todos—,
+    //     recorre el mapa completo cédula a cédula. Con 30 tarjetas: 30 lecturas y 30 parses
+    //     por vuelta, en el hilo de la interfaz. Y `vgl_nosh_hist` NO CADUCA NUNCA (lo dice
+    //     su propio comentario), así que ese mapa crece sin techo con los meses: el coste
+    //     por vuelta aumenta solo, sin que nadie lo toque.
+    //
+    // (b) COLISIÓN. El badge de inasistencias previas es `<span class="vgl-cd vgl-adh">` y
+    //     vive en `.vgl-card-time-wrap`, que va ANTES que `.vgl-card-badges-wrap` en el
+    //     árbol. Cuando la tarjeta se pintó SIN cuenta regresiva (faltaba más de hora y
+    //     media para la cita) y luego entró en la ventana, `querySelector(".vgl-cd")`
+    //     devolvía el BADGE: se le sobrescribían className, title y textContent con los de
+    //     la cuenta —perdía su `.vgl-adh` y su aviso— y en la vuelta siguiente se creaba
+    //     ADEMÁS una cuenta nueva. La tarjeta acababa con dos cuentas y el aviso de
+    //     inasistencias convertido en un cronómetro congelado.
+    // =====================================================================
+    t.caso("v18.0.24: la cuenta de inasistencias previas se puede hacer sin volver a leer el disco", () => {
+      const c = cargar({ silencioso: true });
+      let lecturas = 0;
+      const orig = c.env.storage.getItem.bind(c.env.storage);
+      c.env.storage.getItem = (k) => { if (String(k).indexOf("nosh") >= 0) lecturas++; return orig(k); };
+
+      const hist = { "5150076": { total: 3, ultima: "2026-08-01" } };
+      t.igual(c.api._noShowPreviaEn(hist, "5150076"), 3, "la cuenta sale igual que siempre");
+      t.igual(lecturas, 0, "y no toca el almacenamiento: el mapa se le entrega ya leído");
+    });
+
+    t.caso("v18.0.24: la de HOY sigue sin contarse (la tarjeta ya la pinta de ámbar)", () => {
+      const c = cargar({ silencioso: true });
+      const hoy = c.api.todayStamp();
+      t.igual(c.api._noShowPreviaEn({ "5150076": { total: 3, ultima: hoy } }, "5150076"), 2,
+        "si la última inasistencia es de hoy, se descuenta: no se avisa dos veces del mismo hecho");
+      t.igual(c.api._noShowPreviaEn({ "5150076": { total: 1, ultima: hoy } }, "5150076"), 0,
+        "y con una sola, de hoy, no queda ninguna previa que avisar");
+      t.igual(c.api._noShowPreviaEn({}, "5150076"), 0, "sin historial, cero");
+      t.igual(c.api._noShowPreviaEn({ "5150076": { total: 3 } }, ""), 0, "sin cédula, cero (no se adivina)");
+    });
+
+    t.caso("v18.0.24: el envoltorio de siempre sigue funcionando para los demás llamadores", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api._noShowPrevia("5150076"), "_noShowPrevia sigue existiendo y no lanza");
+    });
+
+    // Las dos comprobaciones de abajo miran SOLO CÓDIGO: los comentarios que explican el
+    // arreglo citan los selectores literalmente, así que un barrido sobre el texto crudo los
+    // encontraría siempre y pasaría aunque el código volviera atrás. Es exactamente el
+    // tropiezo que ya tuvo la regla de familia de la v18.0.22, cometido dos veces el mismo
+    // día — por eso el filtro se escribe una vez y se comparte.
+    const soloCodigo = (txt) => txt.split("\n")
+      .filter((l) => !/^\s*\/\//.test(l))
+      .map((l) => l.replace(/\/\/.*$/, ""))
+      .join("\n");
+
+    // Regresión de código fuente para las dos mitades que el DOM simulado del arnés no
+    // puede ejercitar (su querySelector no entiende `:not()`, y la colisión solo se ve con
+    // el árbol real de la tarjeta). Lo que hay que fijar aquí son dos cables.
+    t.caso("v18.0.24: refrescarCuentas lee el historial UNA vez por vuelta, no una por tarjeta", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function refrescarCuentas");
+      t.cierto(ini > 0, "se localiza refrescarCuentas");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+
+      const bucle = cuerpo.indexOf("for (let i = 0");
+      t.cierto(bucle > 0, "y su bucle por tarjeta");
+      t.cierto(cuerpo.slice(0, bucle).includes("_noShowLeer()"),
+        "el historial se lee ANTES del bucle: una vez por vuelta");
+      t.falso(cuerpo.slice(bucle).includes("_noShowPrevia("),
+        "y dentro del bucle NO puede llamarse a _noShowPrevia, que vuelve a leer y parsear el historial entero por cada tarjeta");
+      t.cierto(cuerpo.slice(bucle).includes("_noShowPreviaEn("),
+        "dentro del bucle se usa la variante que recibe el mapa ya leído");
+    });
+
+    t.caso("v18.0.24: la cuenta y el badge de inasistencias no se confunden entre sí", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function refrescarCuentas");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+
+      t.cierto(/querySelector\("\.vgl-cd:not\(\.vgl-adh\)"\)/.test(cuerpo),
+        "la cuenta se busca excluyendo el badge, que también lleva la clase .vgl-cd y va antes en el árbol");
+      t.falso(/querySelector\("\.vgl-cd"\)/.test(cuerpo),
+        "el selector a secas ya no puede quedar en el código: es el que devolvía el badge");
+      t.cierto(cuerpo.includes("vgl-card-time-wrap"),
+        "y la cuenta que falta se inserta en el mismo sitio donde la pinta render(), no en el envoltorio de los badges");
+    });
+
   }
 };

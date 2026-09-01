@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.23
+// @version      18.0.24
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.23";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.24";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28443,12 +28443,26 @@ _vglOfrecerDeshacer(btn);
     _noShowGuardar(h);
     return e.total;
   }
-  function _noShowPrevia(docId) {
+  // v18.0.24 — LA MISMA CUENTA, PERO SIN VOLVER A LEER EL DISCO EN CADA TARJETA.
+  // `_noShowPrevia` hace localStorage.getItem + JSON.parse del historial ENTERO, y
+  // `refrescarCuentas` la llamaba UNA VEZ POR TARJETA, en CADA vuelta del reloj (el camino
+  // barato del repintado, que es el caso normal). Con 30 tarjetas eso son 30 lecturas y 30
+  // JSON.parse por vuelta, más un _vglBuscarPorDoc que en el caso de fallo —el paciente sin
+  // inasistencias previas, o sea casi todos— recorre el mapa completo cédula a cédula. Y
+  // `vgl_nosh_hist` no caduca nunca (lo dice su propio comentario), así que ese mapa crece
+  // sin techo con los meses: trabajo bloqueante en el hilo de la interfaz que aumenta solo.
+  // Se parte en dos: la cuenta pura, que recibe el mapa ya leído, y el envoltorio de
+  // siempre para los demás llamadores, que no cambian en nada.
+  function _noShowPreviaEn(hist, docId) {
     if (!docId) return 0;
-    const e = _vglBuscarPorDoc(_noShowLeer(), docId);
+    const e = _vglBuscarPorDoc(hist || {}, docId);
     if (!e || !e.total) return 0;
     // No cuenta el no-show de HOY: la tarjeta ya lo pinta con su color ámbar.
     return (e.ultima === todayStamp()) ? Math.max(0, e.total - 1) : (e.total || 0);
+  }
+  function _noShowPrevia(docId) {
+    if (!docId) return 0;
+    return _noShowPreviaEn(_noShowLeer(), docId);
   }
   function render(list, source, at) {
     if (source) state.ultimaLectura = Date.now();
@@ -28613,10 +28627,30 @@ _vglOfrecerDeshacer(btn);
     try {
       const cards = el.list ? el.list.children : null;
       if (!cards || cards.length !== vista.length) return;
+      // v18.0.24 — el historial de inasistencias se lee UNA vez por vuelta, no una por
+      // tarjeta. Ver la nota de _noShowPreviaEn.
+      const histNoShow = S.adherencia ? _noShowLeer() : null;
       for (let i = 0; i < vista.length; i++) {
         const card = cards[i], a = vista[i];
         if (!card || card.__vglKey !== a.key) return;      // el orden cambió: lo hará el repintado normal
-        const cd = card.querySelector(".vgl-cd"), p = countdownParts(a);
+        // v18.0.24 — `:not(.vgl-adh)` PORQUE EL BADGE DE INASISTENCIAS TAMBIÉN LLEVA
+        // `.vgl-cd`, y vive en `.vgl-card-time-wrap`, que va ANTES que
+        // `.vgl-card-badges-wrap` en el árbol. Cuando la tarjeta se pintó sin cuenta
+        // regresiva (faltaba más de hora y media para la cita) y luego entró en la
+        // ventana, `querySelector(".vgl-cd")` devolvía el BADGE: se le sobrescribían
+        // className, title y textContent con los de la cuenta —perdía su `.vgl-adh` y su
+        // aviso de inasistencias previas— y en la vuelta siguiente se creaba ADEMÁS una
+        // cuenta nueva. La tarjeta acababa con dos cuentas y el aviso de inasistencias
+        // convertido en un cronómetro congelado.
+        // v18.0.24 — `:not(.vgl-adh)` PORQUE EL BADGE DE INASISTENCIAS TAMBIÉN LLEVA
+        // `.vgl-cd`, y vive en `.vgl-card-time-wrap`, que va ANTES que
+        // `.vgl-card-badges-wrap` en el árbol. Cuando la tarjeta se pintó sin cuenta
+        // regresiva (faltaba más de hora y media para la cita) y luego entró en la ventana,
+        // el selector a secas devolvía el BADGE: se le sobrescribían className, title y
+        // textContent con los de la cuenta —perdía su aviso de inasistencias previas— y en
+        // la vuelta siguiente se creaba ADEMÁS una cuenta nueva. La tarjeta acababa con dos
+        // cuentas y el aviso convertido en un cronómetro congelado.
+        const cd = card.querySelector(".vgl-cd:not(.vgl-adh)"), p = countdownParts(a);
         if (!p) { if (cd) cd.remove(); continue; }
         if (cd) {
           const newCls = "vgl-cd" + p.cls;
@@ -28624,9 +28658,22 @@ _vglOfrecerDeshacer(btn);
           if (cd.title !== p.title) cd.title = p.title;
           if (cd.textContent !== p.text) cd.textContent = p.text;
         }
-        else { const badge = card.querySelector(".vgl-badge"); if (badge) badge.insertAdjacentHTML("beforebegin", `<span class="vgl-cd${p.cls}" title="${p.title}">${p.text}</span>`); }
+        else {
+          // v18.0.24 — se inserta DONDE LA PINTA render(): dentro de .vgl-card-time-wrap,
+          // detrás de la hora y delante del badge de inasistencias si ya está. Antes se
+          // colaba en .vgl-card-badges-wrap (beforebegin de .vgl-badge), o sea en otro
+          // sitio distinto del que usa el repintado completo: la misma tarjeta se veía de
+          // dos maneras según por qué camino se hubiera pintado.
+          const tW = card.querySelector(".vgl-card-time-wrap");
+          if (tW) {
+            const adhPrevio = tW.querySelector(".vgl-adh");
+            const html = `<span class="vgl-cd${p.cls}" title="${p.title}">${p.text}</span>`;
+            if (adhPrevio) adhPrevio.insertAdjacentHTML("beforebegin", html);
+            else tW.insertAdjacentHTML("beforeend", html);
+          }
+        }
         // [v17.6.7] Inasistencias previas (días anteriores, apagado por defecto): badge junto al cronómetro.
-        const adhN = S.adherencia ? _noShowPrevia(a.doc_id) : 0;
+        const adhN = S.adherencia ? _noShowPreviaEn(histNoShow, a.doc_id) : 0;
         const adhEl = card.querySelector(".vgl-adh");
         if (adhN > 0) {
           const adhTxt = "⚠ " + adhN;
