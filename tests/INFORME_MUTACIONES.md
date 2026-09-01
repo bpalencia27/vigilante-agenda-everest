@@ -7164,3 +7164,58 @@ código vuelva atrás. Segunda vez el mismo día; por eso el filtro se escribe u
 comparte.
 
 Banco completo: **2.772 comprobaciones pasan, 0 fallan.**
+
+## v18.0.25 — 1-sep-2026 · LA TACHADURA DE NOMBRES DESTROZABA EL TEXTO CLÍNICO
+
+Implementa una **decisión expresa del médico**, y cierra el defecto del que dependía la parte
+que la v18.0.15 dejó declarada como abierta.
+
+### El defecto
+
+`mtrHcTachaduras` admitía todo token del nombre de longitud ≥ 3, y `mtrHcTachar` construía
+`new RegExp(esc, "gi")` **sin límites de palabra**: esas letras se tachaban dentro de cualquier
+palabra clínica. Medido con el arnés, tachando «ANA» sobre un texto normal de consulta:
+
+```
+"Paciente refiere MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan."
+      ->  "MAREO y [CENSURADO]SARCA. [CENSURADO]MNESIS completa. … SEM[CENSURADO]. [CENSURADO]LISIS y plan."
+```
+
+Y «MAR» convierte MAREO en `[CENSURADO]EO`. **El síntoma desaparece del contexto** y el modelo
+redacta la Enfermedad Actual sin él, o con la palabra rota. Nombres cortos y frecuentes aquí
+—ANA, MAR, LUZ, PAZ, CRUZ, MORA, LEÓN— entran de lleno.
+
+### La decisión
+
+Del médico, textual: **«Solo palabras completas, y mínimo 4 letras»**, sobre la regla que él
+mismo había fijado antes: *«solo se sanitiza hasta donde sea seguro para mi proyecto y
+grounding. si va a romper el código entonces no se aplica en ese caso»*.
+
+**Coste aceptado y declarado:** un componente de **tres** letras ya no se tacha por identidad.
+Lo que tiene **forma** —cédula, celular, correo, fechas— lo sigue tachando `scrubPII` aparte.
+Lo que se pierde es la tachadura por identidad de los componentes cortos; lo que se gana es que
+el texto clínico llegue entero. Él eligió el grounding, y queda escrito quién lo eligió.
+
+El límite es el **mismo** que ya usaba `mtrSanearTextoLibreAI`, con la misma clase de letras
+españolas: si las dos defensas del módulo discreparan, una tacharía lo que la otra deja pasar.
+
+### Lo que desbloquea
+
+La v18.0.15 dejó anotado que el nombre propio seguía pasando por la vía de la cosecha del DOM,
+y que cerrarlo **dependía de este defecto** (no se podía aplicar `mtrHcTachar` ahí sin destrozar
+el grounding). Con el límite de palabra, esa puerta queda técnicamente abierta; sigue faltando
+decidir de dónde sale el nombre del paciente en esa vía, que es lo que la v18.0.15 declaró.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 23 | vuelve la tachadura por subcadena | *el límite es de PALABRA, no de subcadena* y *las dos defensas usan el MISMO límite* (`suite_57`) | Sí — 2.777 |
+| 24 | vuelve el mínimo de 3 letras | *mtrHcTachaduras exige 4 letras* (`suite_57`) | Sí — 2.777 |
+
+Las pruebas fijan **las dos direcciones**: que no se pase de frenada (ROSACEA, LEONINA,
+CRUZADO siguen enteras) y que no se quede corta (un apellido de 4+ letras que aparece como
+palabra suelta se sigue tachando). Una defensa que solo se comprueba por un lado acaba siendo
+la que destruye el dato o la que lo deja salir.
+
+Banco completo: **2.777 comprobaciones pasan, 0 fallan.**

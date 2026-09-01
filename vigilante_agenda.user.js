@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.24
+// @version      18.0.25
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.24";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.25";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -40570,7 +40570,13 @@ _vglOfrecerDeshacer(btn);
         if (typeof v !== "string") continue;
         for (const parte of v.split(/\s+/)) {
           const t = parte.trim();
-          if (t.length >= 3) fuera.push(t);
+          // v18.0.25 — MÍNIMO 4 LETRAS, decisión del médico. Con 3 entraban ANA, MAR, LUZ,
+          // PAZ… y, aunque el límite de palabra de mtrHcTachar ya impide que rompan
+          // ANASARCA o MAREO, siguen siendo palabras que aparecen SOLAS en texto clínico
+          // («PAZ» en un apellido compuesto, «LUZ» en «luz pupilar»). Él eligió proteger el
+          // grounding: «solo se sanitiza hasta donde sea seguro para mi proyecto y
+          // grounding. si va a romper el código entonces no se aplica en ese caso».
+          if (t.length >= 4) fuera.push(t);
         }
       }
     } catch (e) {}
@@ -40578,12 +40584,38 @@ _vglOfrecerDeshacer(btn);
     return [...new Set(fuera)].sort((a, b) => b.length - a.length);
   }
 
+  // v18.0.25 — TACHABA POR SUBCADENA, SIN LÍMITE DE PALABRA, Y DESTROZABA EL GROUNDING.
+  //
+  // `mtrHcTachaduras` admitía todo token del nombre de longitud >= 3, y aquí se construía
+  // `new RegExp(esc, "gi")` sin límites: esas letras se tachaban DENTRO de cualquier palabra
+  // clínica. Medido con el arnés, tachando «ANA» sobre un texto normal de consulta:
+  //     "MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan."
+  //  -> "MAREO y [CENSURADO]SARCA. [CENSURADO]MNESIS completa. … SEM[CENSURADO]. [CENSURADO]LISIS"
+  // Y «MAR» convierte MAREO en «[CENSURADO]EO». El síntoma desaparece del contexto y el
+  // modelo redacta la Enfermedad Actual sin él, o con la palabra rota. Nombres cortos y
+  // frecuentes en Colombia —ANA, MAR, LUZ, PAZ, CRUZ, MORA, LEÓN— entran de lleno.
+  //
+  // DECISIÓN DEL MÉDICO (31-ago), al presentarle las tres opciones: «Solo palabras
+  // completas, y mínimo 4 letras», sobre la regla que él mismo había fijado antes:
+  // «solo se sanitiza hasta donde sea seguro para mi proyecto y grounding. si va a romper
+  // el código entonces no se aplica en ese caso».
+  //
+  // COSTE ACEPTADO Y DECLARADO: un nombre o apellido de TRES letras ya no se tacha por esta
+  // vía. Sigue tachándose todo lo que tiene FORMA reconocible —cédula, celular, correo,
+  // fechas— porque eso lo hace scrubPII aparte. Lo que se pierde es la tachadura por
+  // identidad de los componentes de 3 letras; lo que se gana es que el texto clínico llegue
+  // entero. El médico eligió el grounding, y queda escrito quién lo eligió.
+  //
+  // El límite es el MISMO que ya usa mtrSanearTextoLibreAI (línea ~37202) con la misma
+  // clase de letras españolas, para que las dos defensas del módulo no discrepen.
   function mtrHcTachar(texto, tachaduras) {
     let t = String(texto == null ? "" : texto);
     for (const x of (tachaduras || [])) {
       if (!x) continue;
       const esc = String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      t = t.replace(new RegExp(esc, "gi"), "[CENSURADO]");
+      t = t.replace(
+        new RegExp("(?<![" + MTR_LETRA_ES + "])" + esc + "(?![" + MTR_LETRA_ES + "])", "gi"),
+        "[CENSURADO]");
     }
     return t;
   }

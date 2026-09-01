@@ -2166,5 +2166,77 @@ module.exports = {
     });
 
 
+
+    // =====================================================================
+    // v18.0.25 — LA TACHADURA DE NOMBRES DESTROZABA EL TEXTO CLÍNICO
+    //
+    // `mtrHcTachaduras` admitía todo token del nombre de longitud >= 3, y `mtrHcTachar`
+    // construía `new RegExp(esc, "gi")` SIN límites de palabra: esas letras se tachaban
+    // dentro de cualquier palabra clínica. Medido con el arnés, tachando «ANA»:
+    //   "MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan."
+    //   -> "MAREO y [CENSURADO]SARCA. [CENSURADO]MNESIS … SEM[CENSURADO]. [CENSURADO]LISIS"
+    // Y «MAR» convierte MAREO en «[CENSURADO]EO». El síntoma desaparece del contexto y el
+    // modelo redacta la Enfermedad Actual sin él, o con la palabra rota. Nombres cortos y
+    // frecuentes aquí —ANA, MAR, LUZ, PAZ, CRUZ, MORA, LEÓN— entran de lleno.
+    //
+    // DECISIÓN DEL MÉDICO (31-ago), textual: «Solo palabras completas, y mínimo 4 letras»,
+    // sobre la regla que él mismo fijó antes: «solo se sanitiza hasta donde sea seguro para
+    // mi proyecto y grounding. si va a romper el código entonces no se aplica en ese caso».
+    //
+    // COSTE ACEPTADO Y DECLARADO: un componente de TRES letras ya no se tacha por identidad.
+    // Lo que tiene FORMA —cédula, celular, correo, fechas— lo sigue tachando scrubPII aparte.
+    // Estas pruebas fijan las DOS direcciones, porque una defensa que se pasa de frenada
+    // destruye el grounding y una que se queda corta deja salir el nombre.
+    // =====================================================================
+    t.caso("v18.0.25: tachar un nombre no puede romper una palabra clínica", () => {
+      const TXT = "Paciente refiere MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan.";
+      const r = api.mtrHcTachar(TXT, ["ROSA", "MORA"]);
+      t.cierto(/MAREO/.test(r), "MAREO sigue entero");
+      t.cierto(/ANASARCA/.test(r), "ANASARCA sigue entera");
+      t.cierto(/ANAMNESIS/.test(r), "ANAMNESIS sigue entera");
+      t.cierto(/SEMANA/.test(r), "SEMANA sigue entera");
+      t.cierto(/ANALISIS/.test(r), "ANALISIS sigue entero");
+      t.falso(/CENSURADO/.test(r), "y no se tachó nada: ninguno de esos apellidos aparece como palabra suelta");
+    });
+
+    t.caso("v18.0.25: pero un apellido que SÍ aparece como palabra suelta se sigue tachando", () => {
+      const r = api.mtrHcTachar("Acompaña la señora ROSA, refiere MAREO.", ["ROSA"]);
+      t.falso(/ROSA,/.test(r), "el apellido suelto no puede viajar al modelo");
+      t.cierto(/CENSURADO/.test(r), "se tachó");
+      t.cierto(/MAREO/.test(r), "y el dato clínico de la misma frase sobrevive");
+    });
+
+    t.caso("v18.0.25: el límite es de PALABRA, no de subcadena", () => {
+      t.cierto(/ROSACEA/.test(api.mtrHcTachar("Se observa ROSACEA en mejillas.", ["ROSA"])),
+        "ROSACEA contiene ROSA y no debe tocarse");
+      t.cierto(/LEONINA/.test(api.mtrHcTachar("Facies LEONINA.", ["LEON"])),
+        "ni LEONINA con LEON");
+      t.cierto(/CRUZADO/.test(api.mtrHcTachar("Ligamento CRUZADO anterior.", ["CRUZ"])),
+        "ni CRUZADO con CRUZ");
+    });
+
+    t.caso("v18.0.25: mtrHcTachaduras exige 4 letras — decisión del médico, con su coste", () => {
+      const tach = api.mtrHcTachaduras({
+        datosUsuario: { nombre: "ANA", primer_Apellido: "GOMEZ", segundo_Apellido: "PAZ" },
+      });
+      t.cierto(tach.indexOf("GOMEZ") >= 0, "el apellido de 5 letras entra");
+      t.falso(tach.indexOf("ANA") >= 0, "«ANA» (3) NO entra: el médico eligió proteger el grounding");
+      t.falso(tach.indexOf("PAZ") >= 0, "«PAZ» (3) tampoco");
+    });
+
+    t.caso("v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const soloCodigo = (txt) => txt.split("\n")
+        .filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+      const ini = src.indexOf("function mtrHcTachar");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+      t.cierto(cuerpo.includes("MTR_LETRA_ES"),
+        "mtrHcTachar debe usar la misma clase de letras españolas que mtrSanearTextoLibreAI: si las dos defensas discrepan, una tacha lo que la otra deja pasar");
+      t.cierto(/\(\?<!\[/.test(cuerpo) && /\(\?!\[/.test(cuerpo),
+        "y con límite por los dos lados, no solo por delante");
+    });
+
   },
 };
