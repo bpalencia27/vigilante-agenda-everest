@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.46
+// @version      18.0.47
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.46";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.47";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18646,6 +18646,12 @@
   function _apiCorteEstadoParaTest() { return { fallos: _apiFallosSeguidos, hasta: _apiCorteHasta }; }
   function _apiCorteResetParaTest() { _apiFallosSeguidos = 0; _apiCorteHasta = 0; _apiCorteAvisado = false; }
 
+  // v18.0.47 — Mismo tope que ya usaba la segunda vía (GM_xmlhttpRequest) desde siempre:
+  // 15 s. Se saca a constante para que las dos vías no puedan volver a separarse en
+  // silencio, y para que una prueba pueda nombrarlo.
+  // `options.__timeoutMs` lo baja para una llamada concreta (lo usa el banco: esperar 15 s
+  // reales por prueba no es una prueba, es una espera).
+  const PAGE_FETCH_TIMEOUT_MS = 15000;
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
@@ -18668,16 +18674,54 @@
         const f = FETCH0 || window.fetch;
         if (typeof f === "function") {
           const fullUrl = url.indexOf("http") === 0 ? url : (location.origin + (url[0] === "/" ? "" : "/") + url);
-          const resp = await f(fullUrl, Object.assign({
-            headers: { "Content-Type": "application/json", "Accept": "application/json" }
-          }, options || {}));
+          // v18.0.47 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta: ESTA
+          // RAMA NO TENÍA TIMEOUT. La segunda vía (GM_xmlhttpRequest, más abajo) sí lleva
+          // `timeout: 15000` desde siempre; la primera —la que se usa en el 100 % de los
+          // casos normales— quedaba esperando indefinidamente. Una conexión colgada (la red
+          // de la sede cayendo a medias, un proxy que acepta y no responde) no da error: se
+          // queda abierta. Y como todo aquí se hace con `await`, la acción REAL del médico
+          // que la disparó —Agendar, Guardar orden, Buscar paciente— se queda colgada con
+          // ella, sin error, sin aviso y sin forma de saber que ya no va a volver.
+          //
+          // El timeout no reemplaza al de GM: son dos vías distintas y cada una necesita el
+          // suyo. Al abortar, `catch` marca `isError` y el flujo sigue exactamente por donde
+          // ya iba para un fallo de red — incluida la regla de v11.0.1 de NO reenviar una
+          // escritura, que aquí importa más que nunca: la petición abortada pudo haber
+          // llegado al servidor.
+          let _corta = null, _abortar = null;
+          try {
+            if (typeof AbortController !== "undefined" && !(options && options.signal)) {
+              _abortar = new AbortController();
+              const topeMs = (options && typeof options.__timeoutMs === "number" && options.__timeoutMs > 0) ? options.__timeoutMs : PAGE_FETCH_TIMEOUT_MS;
+              _corta = setTimeout(() => { try { _abortar.abort(); } catch (e) {} }, topeMs);
+            }
+          } catch (e) { _abortar = null; }
+          let resp = null;
+          try {
+            resp = await f(fullUrl, Object.assign({
+              headers: { "Content-Type": "application/json", "Accept": "application/json" }
+            }, options || {}, _abortar ? { signal: _abortar.signal } : {}));
+          } finally { if (_corta) clearTimeout(_corta); }
           if (resp && resp.ok) {
             const data = await resp.json();
             if (data) { _apiMarcarResultado(true); return data; }
           } else if (resp && resp.status >= 500) {
             isError = true;
+          } else if (resp && (resp.status === 401 || resp.status === 403)) {
+            // v18.0.47 — HALLAZGO DEL ENJAMBRE, gravedad alta: UNA SESIÓN DE EVEREST
+            // CADUCADA SE TRATABA IGUAL QUE UN «NO EXISTE». Caía en el `return null` de
+            // abajo sin llamar nunca a `_apiMarcarResultado(false)`, así que no contaba
+            // como fallo, no abría el cortacircuitos y no ponía en rojo el panel de salud:
+            // el asistente se quedaba ciego —sin fuente de agenda, sin avisos de llegada—
+            // y por dentro seguía creyéndose sano. El médico no tenía UNA sola señal.
+            //
+            // No se reintenta (reintentar un 401 no lo arregla) pero SÍ se cuenta: un token
+            // vencido es exactamente «el API no responde», que es lo que el cortacircuitos
+            // y el panel de salud existen para decir.
+            _apiMarcarResultado(false);
+            return null;
           } else {
-            return null; // Error 4xx, no reintentar
+            return null; // Otro 4xx (404, 400…): es una respuesta legítima, no un fallo
           }
         } else {
           isError = true;

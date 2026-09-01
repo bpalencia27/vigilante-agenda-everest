@@ -345,6 +345,72 @@ module.exports = {
     // el runner queda colgado esperando para siempre).
     // ---------------------------------------------------------------
 
+    // =================================================================
+    //  v18.0.47 — DOS HALLAZGOS DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, los
+    //  dos en esta misma función.
+    // =================================================================
+
+    await t.casoAsync("_pageFetchJsonCore: una conexión colgada NO deja esperando para siempre", async () => {
+      // La segunda vía (GM_xmlhttpRequest) lleva `timeout: 15000` desde siempre; la
+      // primera —la que se usa en el 100 % de los casos normales— no tenía ninguno. Una
+      // conexión que acepta y no responde no da error: se queda abierta, y como todo aquí
+      // se hace con `await`, la acción REAL del médico que la disparó (Agendar, Guardar
+      // orden, Buscar paciente) se cuelga con ella. Sin error, sin aviso, sin vuelta.
+      let señalRecibida = null;
+      const c = cargar({
+        silencioso: true,
+        // Un fetch que NO resuelve nunca — exactamente la conexión colgada. Solo termina
+        // si alguien aborta su señal, que es lo que esta prueba comprueba que ocurre.
+        fetch: (u, init) => new Promise((_, reject) => {
+          señalRecibida = init && init.signal;
+          if (señalRecibida && señalRecibida.addEventListener) {
+            señalRecibida.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" })));
+          }
+        }),
+        gmxhr: (o) => o.onerror(new Error("red")),
+      });
+      // AbortController no existe en el DOM simulado: se inyecta el real, igual que
+      // suite_16 inyecta Blob/Response/DecompressionStream para probar el inflado.
+      c.ctx.AbortController = AbortController;
+
+      const t0 = Date.now();
+      const r = await c.api._pageFetchJsonCore("/x", { method: "POST", body: "{}", __timeoutMs: 40 });
+      const tardo = Date.now() - t0;
+
+      t.igual(r, null, "la llamada TERMINA (en null), no se queda colgada");
+      t.cierto(!!señalRecibida, "al fetch se le pasó una señal de aborto");
+      t.cierto(tardo < 5000, "y terminó por su propio tope, no por el del banco (tardó " + tardo + " ms)");
+    });
+
+    await t.casoAsync("_pageFetchJsonCore: un 401 (sesión caducada) SÍ cuenta como fallo; un 404 no", async () => {
+      // Un 401 caía en el mismo `return null` que un 404 y nunca llamaba a
+      // `_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y
+      // no ponía en rojo el panel de salud. El asistente se quedaba ciego —sin fuente de
+      // agenda, sin avisos de llegada— y por dentro seguía creyéndose sano.
+      const c401 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c401.api._apiCorteResetParaTest();
+      const r1 = await c401.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(r1, null, "sigue devolviendo null: un 401 no se reintenta, reintentarlo no lo arregla");
+      t.igual(c401.api._apiCorteEstadoParaTest().fallos, 1, "pero AHORA cuenta como fallo del API");
+      t.cierto(c401.api._saludRegParaTest().everest.falloDesde > 0, "y el panel de salud lo registra como caída de Everest");
+
+      const c403 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 403, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c403.api._apiCorteResetParaTest();
+      await c403.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c403.api._apiCorteEstadoParaTest().fallos, 1, "el 403 igual: también es la sesión, no el recurso");
+
+      // La contención: un 404 o un 400 son respuestas LEGÍTIMAS («no existe», «mal
+      // pedido»), no un API caído. Contarlas abriría el cortacircuitos por nada.
+      const c404 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 404, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c404.api._apiCorteResetParaTest();
+      await c404.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c404.api._apiCorteEstadoParaTest().fallos, 0, "un 404 NO es un fallo del API");
+      const c400 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 400, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c400.api._apiCorteResetParaTest();
+      await c400.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c400.api._apiCorteEstadoParaTest().fallos, 0, "ni un 400");
+    });
+
     await t.casoAsync("_pageFetchJsonCore: escritura (POST) con 500 NO reintenta y NO se reenvía por GM", async () => {
       const cont = { fetch: 0, gm: 0 };
       const c = cargar({

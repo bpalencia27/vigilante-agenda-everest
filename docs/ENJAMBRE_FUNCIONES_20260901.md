@@ -32,8 +32,10 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | una tilde en «CÉDULA» apagaba el módulo de PyM el día entero | `findDocIdx` | **v18.0.46** | 111 |
 | un RAC de 0 de hoy perdía contra un RAC de 45 de enero | `_nuevoReemplazaCandidato` | **v18.0.46** | 112, 113 |
 | una coma entrecomillada borraba a un paciente del índice | `parseCSV` | **v18.0.46** | 114 |
+| el `fetch` del núcleo no tenía timeout: una conexión colgada bloqueaba Agendar / Guardar orden | `_pageFetchJsonCore` | **v18.0.47** | 115 |
+| un 401 (sesión caducada) no contaba como fallo ni abría el cortacircuitos | `_pageFetchJsonCore` | **v18.0.47** | 116, 117 |
 
-Quedan **42 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **40 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

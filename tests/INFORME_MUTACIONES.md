@@ -8574,3 +8574,49 @@ comillas escapadas por duplicación, y **saltos de línea dentro de un campo** (
 
 Banco completo: **2.845 comprobaciones pasan, 0 fallan.** Quedan **41 hallazgos confirmados**
 del enjambre sin aplicar, documentados en `docs/ENJAMBRE_FUNCIONES_20260901.md`.
+
+---
+
+## v18.0.47 — dos del enjambre en la misma función: el `fetch` que nunca vuelve y el 401 que nadie contaba
+
+Los dos en `_pageFetchJsonCore`, el núcleo por el que pasa **toda** llamada del asistente a
+Everest.
+
+### 1. Una conexión colgada bloqueaba para siempre la acción REAL del médico
+
+La segunda vía (`GM_xmlhttpRequest`) lleva `timeout: 15000` desde siempre. La primera —la que
+se usa en el 100 % de los casos normales— **no tenía ninguno**. Una conexión que acepta y no
+responde (la red de la sede cayendo a medias, un proxy que no cierra) no da error: se queda
+abierta. Y como todo aquí se hace con `await`, la acción que la disparó —**Agendar**,
+**Guardar orden**, **Buscar paciente**— se cuelga con ella. Sin error, sin aviso, sin vuelta.
+
+Ahora la petición lleva `AbortController` con el **mismo tope de 15 s**, sacado a constante
+(`PAGE_FETCH_TIMEOUT_MS`) para que las dos vías no puedan volver a separarse en silencio. Al
+abortar, el flujo sigue por donde ya iba para un fallo de red — incluida la regla de v11.0.1 de
+**no reenviar una escritura**, que aquí importa más que nunca: la petición abortada pudo haber
+llegado al servidor.
+
+### 2. Una sesión caducada se trataba igual que un «no existe»
+
+Un **401/403** caía en el mismo `return null` que un 404 y **nunca** llamaba a
+`_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y no ponía en
+rojo el panel de salud. El asistente se quedaba ciego —sin fuente de agenda, sin avisos de
+llegada— y por dentro seguía creyéndose sano. El médico no tenía **una sola señal**.
+
+No se reintenta (reintentar un 401 no lo arregla) pero **sí se cuenta**. Y la contención: un
+404 o un 400 son respuestas legítimas, no un API caído, y siguen sin contar — contarlas
+abriría el cortacircuitos por nada.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 115 | se quita el aborto por tiempo del `fetch` | **el banco entero se colgó**: `suite_05` no terminó ni con 180 s de tope — la demostración más literal posible del defecto | Sí — 29 ok |
+| 116 | el 401 vuelve al `return null` mudo | *un 401 SÍ cuenta como fallo* | Sí — 29 ok |
+| 117 | cualquier 4xx cuenta como fallo (contención rota) | *un 404 NO es un fallo del API* | Sí — 29 ok |
+
+La 115 merece subrayarse: **no puso una prueba en rojo, dejó al banco sin terminar.** Un
+defecto que se manifiesta como «nada vuelve nunca» no produce un fallo que se pueda leer —
+produce silencio, que es justo lo que le pasaba al médico delante del paciente.
+
+Banco completo: **2.847 comprobaciones pasan, 0 fallan.** Van **7 de los 47** del enjambre.
