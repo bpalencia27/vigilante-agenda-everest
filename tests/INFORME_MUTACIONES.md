@@ -9364,3 +9364,76 @@ pruebas, porque escribir bajo todas las identidades ya dejaba el valor bajo la c
 que faltaban eran las pruebas del sentido inverso, no código. Se corrigieron **las pruebas**.
 
 Banco completo: **2.880 comprobaciones pasan, 0 fallan.** Van **20 de los 47** del enjambre.
+
+## v18.0.63 — reabrir «Ordenar» creaba una segunda orden real del mismo examen
+
+Dos hallazgos del enjambre de funciones, los dos con respaldo en la telemetría real del
+1-sep (ver `docs/TELEMETRIA_20260901.md`).
+
+### A. El duplicado de órdenes (hallazgo #19, gravedad alta, 3 de 3 refutadores fallaron)
+
+El único filtro antiduplicado que vivía DENTRO del modal era la consulta EN VIVO a Everest, y
+el propio código documenta que **«un fallo de red aquí NO bloquea nada»**. Si esa consulta
+falla —o si Everest simplemente todavía no indexó la orden que el script acaba de crear—
+reabrir el modal ofrecía «Generar» otra vez, en silencio y con el mismo mensaje de éxito. Con
+una mamografía o un PSA eso no es un renglón administrativo de más: **es un examen repetido de
+verdad al paciente**.
+
+La marca local `markOrdenesCreadasHoy` existía desde la v12.3, pero guardaba agrupadores y
+etiquetas del Excel — **nunca QUÉ paquete**. Ahora guarda también los CIE-10, y el modal:
+
+1. **No premarca** un paquete ya ordenado hoy, y lo dice con todas las letras. No lo bloquea:
+   el médico manda y puede tener un motivo real para repetirlo.
+2. **Relee la marca justo antes de cada POST**, no solo al pintar. Y se omite **solo** si la
+   casilla venía premarcada por el script y el médico no la tocó — si la tocó él, la decisión
+   es suya y se respeta.
+3. **Escribe la marca en cuanto el servidor confirma cada orden**, no al terminar el lote. Es
+   lo que cierra la ventana de la reproducción: generar → cancelar a mitad → reabrir.
+4. Cuando todo lo seleccionado se omite por duplicado, el mensaje ya no dice «no se pudo
+   generar ninguna… puede reintentar sin riesgo de duplicar» —que era falso y además el
+   consejo exactamente contrario al correcto—: dice que ya estaban generadas.
+
+**Respaldo en la telemetría del 1-sep:** «Ordenar» es el embudo con más abandono de todo el
+script (6 abiertos, 2 completados, **4 abandonados**), y abandonar a mitad del lote es
+literalmente el gesto de la reproducción.
+
+Una marca ANTERIOR a esta versión no lleva la lista de CIE-10 y por tanto **no dice nada**
+sobre qué paquete se ordenó: se trata como «sin evidencia» y no desmarca nada. Casilla vacía
+antes que dato inventado.
+
+### B. Los íconos propios se reportaban como de Everest (hallazgo #27)
+
+En un `<svg>` —y hay 45 íconos así, varios dentro de botones `.vgl-*`— `className` es un
+`SVGAnimatedString`, no un string: `String(...)` daba `"[object SVGAnimatedString]"`, que nunca
+empieza por `vgl-`, así que un ícono NUESTRO caía en la etiqueta `host` (= de Everest). Es
+justo el error de atribución que el comentario de ese bloque dice evitar.
+
+**Confirmado en el export real del 1-sep:** `rum.self.inp.detalle.host.needs_imp` = 7 —
+interacciones de NUESTRA interfaz (`rum.self.*`) atribuidas a Everest. Ahora se lee la clase
+con `getAttribute("class")`, igual que ya hacía `_rumNodoEsNuestro` dos líneas más arriba.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 157 | se quita la guarda antes del POST (**el defecto**) | *reabrir «Ordenar» y volver a pulsar NO crea una segunda orden real* | Sí — 187 ok |
+| 158 | la guarda ignora que el médico tocó la casilla | *si el médico marca él mismo la casilla, la orden SÍ se repite* | Sí — 187 ok |
+| 159 | el modal vuelve a premarcar lo ya ordenado hoy | *el modal no premarca lo que ya se ordenó hoy, y lo dice* | Sí — 187 ok |
+| 160 | la marca vuelve a escribirse solo al final del lote | *la marca se escribe en cuanto el servidor confirma cada orden* | Sí — 187 ok |
+| 161 | `ordenCreadaHoyParaCie10` afirma sobre una marca vieja | *una marca ANTERIOR no afirma nada* | Sí — 187 ok |
+| 162 | `_rageEtiqueta` vuelve a `String(className)` | *un icono SVG NUESTRO no se reporta como de Everest* | Sí — 103 ok |
+
+Las 158, 159 y 161 son contenciones: sin ellas, «arreglarlo» de más habría bloqueado al
+médico, desmarcado exámenes que quizá nunca se pidieron, o convertido una marca sin datos en
+una afirmación.
+
+**Precisión de proceso — una prueba que pasaba por el motivo equivocado.** La primera versión
+de la prueba del duplicado **compartía el objeto de casilla falsa entre las dos aperturas**, y
+tras crear la orden el propio código la deja `checked = false`: la segunda vuelta no
+seleccionaba nada, así que no había nada que duplicar y la prueba habría pasado igual sin el
+arreglo. **La mutación 157 la destapó** (no mordió). Se da una casilla nueva en cada apertura,
+como hace el DOM real al repintar. Es la décima forma de prueba hueca de estas jornadas, y la
+regla vuelve a ser la misma: *una mutación que no muerde no absuelve al código, acusa a la
+prueba.*
+
+Banco completo: **2.886 comprobaciones pasan, 0 fallan.** Van **22 de los 47** del enjambre.

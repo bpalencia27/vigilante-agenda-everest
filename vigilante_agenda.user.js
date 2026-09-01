@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.62
+// @version      18.0.63
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.62";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.63";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8581,12 +8581,17 @@
   // orden cubrió (las etiquetas de pymPorPaquete): así el aviso al abrir la historia
   // puede mostrar SOLO lo que sigue pendiente (p. ej. las remisiones AV/OD, que no se
   // ordenan desde el panel) en vez de callarse del todo.
-  function markOrdenesCreadasHoy(docId, agrupadores, actividades) {
+  // v18.0.63 — cuarto argumento `cie10s`: QUÉ paquetes se ordenaron, no solo cuántos y con
+  // qué agrupador. Sin ese dato, el modal de Órdenes no tiene forma —sin red— de saber que
+  // el VIH de este paciente ya se pidió hace un minuto, y una segunda corrida crea una
+  // orden REAL duplicada. Con una mamografía o un PSA eso no es un renglón administrativo:
+  // es un examen repetido de verdad al paciente.
+  function markOrdenesCreadasHoy(docId, agrupadores, actividades, cie10s) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
     if (!p.ordenes.includes(sDoc)) p.ordenes.push(sDoc);
-    if ((agrupadores && agrupadores.length) || actividades) {
+    if ((agrupadores && agrupadores.length) || actividades || (cie10s && cie10s.length)) {
       if (!p.ordenesDetalle) p.ordenesDetalle = {};
       const det = p.ordenesDetalle[sDoc] || {};
       det.agrupadores = [...new Set((det.agrupadores || []).concat(agrupadores || []))];
@@ -8595,6 +8600,7 @@
       // coincidencia) y es distinto de "marca vieja sin detalle". Sin esta distinción,
       // el fallback de pymPendientesRestantes silenciaba tamizajes nunca ordenados.
       if (actividades) det.actividades = [...new Set((det.actividades || []).concat(actividades))];
+      if (cie10s && cie10s.length) det.cie10 = [...new Set((det.cie10 || []).concat(cie10s.map(String)))];
       det.ts = Date.now();
       p.ordenesDetalle[sDoc] = det;
     }
@@ -8612,6 +8618,24 @@
     if (!docId) return null;
     const p = getProcessedToday();
     return _vglBuscarPorDoc(p.ordenesDetalle, docId);
+  }
+  // v18.0.63 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, 3 de 3
+  // refutadores no lo tumbaron. ¿Este mismo script ya creó HOY una orden de ESTE paquete
+  // para ESTE paciente? Es la pregunta que el modal de Órdenes nunca hacía: su único filtro
+  // antiduplicado era la consulta EN VIVO a Everest, y el propio código documenta que «un
+  // fallo de red aquí NO bloquea nada». Si esa consulta falla —o simplemente Everest todavía
+  // no indexó la orden que el script acaba de crear— reabrir el modal ofrecía «Generar» otra
+  // vez, en silencio y con el mismo mensaje de éxito. Esta comprobación es local, gratis y
+  // sin red: complementa la consulta a Everest (que sigue haciendo falta para órdenes de
+  // OTRAS sesiones o días), no la reemplaza.
+  function ordenCreadaHoyParaCie10(docId, cie10) {
+    if (!docId || !cie10) return false;
+    const det = ordenesDetalleHoy(docId);
+    // Una marca ANTERIOR a esta versión no lleva la lista de CIE-10, y entonces no dice nada
+    // sobre QUÉ paquete se ordenó. Casilla vacía antes que dato inventado: sin evidencia no
+    // se afirma que ya está pedido —eso desmarcaría exámenes que quizá nunca se pidieron—.
+    if (!det || !Array.isArray(det.cie10)) return false;
+    return det.cie10.indexOf(String(cie10)) >= 0;
   }
   function applySettings() {
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
@@ -11112,7 +11136,16 @@
   function _rageEtiqueta(t) {
     try {
       if (!t) return "generico";
-      const crudo = t.id ? String(t.id) : (t.className ? String(t.className).split(/\s+/)[0] : "");
+      // v18.0.63 — HALLAZGO DEL ENJAMBRE (01-sep) + CONFIRMADO EN LA TELEMETRÍA REAL del
+      // 1-sep: `rum.self.inp.detalle.host.*` = interacciones de NUESTRA interfaz atribuidas
+      // a Everest. La causa: en un <svg> (hay 45 íconos así, dentro de botones .vgl-*)
+      // `t.className` es un SVGAnimatedString, no un string, y `String(...)` daba
+      // "[object SVGAnimatedString]" — nunca empieza por "vgl-", así que el ícono propio
+      // caía en "host". `getAttribute("class")` devuelve el string real en HTML y en SVG,
+      // que es lo que ya hace `_rumNodoEsNuestro` dos líneas más arriba.
+      let clase = "";
+      try { clase = String(t.getAttribute && t.getAttribute("class") || (typeof t.className === "string" ? t.className : "")); } catch (e) { clase = ""; }
+      const crudo = t.id ? String(t.id) : (clase ? clase.split(/\s+/)[0] : "");
       if (!crudo) return "generico";
       const esNuestro = /^vgl-/.test(crudo);
       const limpio = uxClaveLimpia(crudo.replace(/^vgl-/, "")).slice(0, 20);
@@ -27015,17 +27048,22 @@
               // BLOQUEADA (checkbox deshabilitado) con su aviso visible. La lista de la
               // sede (mandaPym) sigue mandando: no se bloquea.
               const bloqueada = !mandaPym && (yaVigente || yaHechoAthenea || hechoYReciente);
-              const marcar = hayCoincidencia && !chocaSexo && !bloqueada && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
+              // v18.0.63 — la marca LOCAL, sin red: este mismo script ya creó hoy la orden de
+              // este paquete. No se BLOQUEA la casilla (el médico manda: puede haber un motivo
+              // real para repetirla), pero no se premarca y se dice con todas las letras.
+              const yaOrdenadaHoy = ordenCreadaHoyParaCie10(apt.doc_id, pkg.cie10);
+              const marcar = hayCoincidencia && !chocaSexo && !bloqueada && !yaOrdenadaHoy && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
               <div class="vgl-ord-item${prio.nivel === "alta" ? " vgl-ord-item-prio" : ""}">
                 ${prio.nivel === "alta" ? `<div class="vgl-ord-prio">⚑ Prioritario — ${escapeHtml(prio.motivo)}</div>` : ""}
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}${bloqueada ? " disabled" : ""}>
+                  <input type="checkbox" class="vgl-ord-chk" data-premarcada="${marcar ? "1" : "0"}" data-idx="${idx}"${marcar ? " checked" : ""}${bloqueada ? " disabled" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pymTituloClinico(pkg))} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">Según la lista de prevención de la sede: <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${yaOrdenadaHoy ? `<div class="vgl-ord-vigwarn">Esta orden <b>ya se generó hoy</b> desde aquí para este paciente. No la dejamos marcada para no duplicarla; si de verdad debe repetirse, márquela usted.</div>` : ""}
                     ${yaVigente ? `<div class="vgl-ord-vigwarn">Ya existe una orden vigente en Everest para esta actividad. Si considera que debe repetirse, comuníquese con el servicio de órdenes.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">Este examen ya se realizó y el resultado está vigente en el sistema de laboratorio. No es necesario repetirlo.</div>` : ""}
                     ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">${mandaPym ? "Se realizó hace poco, pero la lista de prevención de la sede la tiene pendiente; por eso la dejamos marcada." : (hechoYReciente ? `Se realizó hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}; por ser tan reciente no la marcamos. Si considera que debe repetirse, selecciónela manualmente.` : "El último resultado es de hace más de 2 años; la dejamos marcada para que pueda solicitarla de nuevo.")}</div>` : ""}
@@ -27072,6 +27110,10 @@
     // apertura; si no, un medico indeciso inflaria el conteo el solo.
     chks.forEach((c) => c.addEventListener("change", () => {
       if (!_fnSelec) { _fnSelec = true; try { uxTrack("fn.ordenar.selec"); } catch (e) {} }
+      // v18.0.63 — queda constancia de que ESTA casilla la tocó el médico. Es lo que
+      // distingue «el script la premarcó» de «el médico decidió pedirla», y sin esa
+      // distinción la guarda antiduplicado de más abajo se comería una decisión suya.
+      try { c.dataset.vglTocada = "1"; } catch (e) {}
       updateCount();
     }));
     updateCount();
@@ -27105,6 +27147,9 @@
       let creadasCount = 0;
       let agrupadores = [];
       let fallidasCount = 0;
+      let omitidasCount = 0;                 // v18.0.63 — no se pidieron porque ya se pidieron hoy
+      const omitidasTitulos = [];
+      const cie10Creados = [];               // v18.0.63 — QUÉ paquetes quedaron creados
       const actividadesCubiertas = []; // v12.4.0 — etiquetas del Excel cubiertas por las órdenes creadas
       // v17.6.76 — REPORTE EN VIVO: con 2+ órdenes, los botones de imprimir salían
       // rotulados con el agrupador crudo del servidor (un id numérico) — el médico no
@@ -27117,6 +27162,26 @@
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
         if (!pkg) continue;
+
+        // v18.0.63 — LA GUARDA ANTIDUPLICADO, releída AQUÍ y no solo al pintar el modal.
+        // La ventana que cierra es real y está reproducida: el médico pulsa «Generar», la
+        // orden sale, pulsa «Cancelar» mientras el lote sigue en vuelo, reabre «Ordenar» y
+        // vuelve a pulsar. Al reabrir, la lista se pintó ANTES de que existiera la marca, así
+        // que la casilla venía premarcada por el script — no por él. Se omite solo en ese
+        // caso: si la casilla la tocó el médico, la decisión es suya y se respeta.
+        const _premarcada = c.getAttribute("data-premarcada") === "1";
+        const _tocada = !!(c.dataset && c.dataset.vglTocada === "1");
+        if (_premarcada && !_tocada && ordenCreadaHoyParaCie10(apt.doc_id, pkg.cie10)) {
+          omitidasCount++;
+          omitidasTitulos.push(pymTituloCorto(pkg) || String(pkg.cie10));
+          vglLog("ORDEN", "GuardarOrdenOmitidaDuplicada", { cie10: String(pkg.cie10) });
+          if (vivo()) {
+            c.checked = false; c.disabled = true;
+            const lblDup = c.closest("label"); if (lblDup && lblDup.classList) lblDup.classList.add("vgl-op-half");
+          }
+          continue;
+        }
+
         if (vivo()) confirmBtn.textContent = `Generando ${pymTituloCorto(pkg)}... (${creadasCount + fallidasCount + 1} de ${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
@@ -27141,6 +27206,12 @@
           agrupadores.push(agpReal);
           if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pymTituloCorto(pkg) || String(agpReal));
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
+          // v18.0.63 — la marca se escribe AQUÍ, en cuanto el servidor confirma ESTA orden,
+          // y no solo al terminar el lote entero. Es lo que cierra la ventana de la carrera:
+          // si el médico cancela y reabre el modal a mitad del lote, lo ya creado ya consta.
+          // La llamada final de abajo se mantiene y es idempotente (todo se une por Set).
+          cie10Creados.push(String(pkg.cie10));
+          try { markOrdenesCreadasHoy(apt.doc_id, [agpReal], (pymPorPaquete.get(pkg) || []), [pkg.cie10]); } catch (e) {}
           if (vivo()) {
             c.checked = false;
             c.disabled = true;
@@ -27181,7 +27252,7 @@
         // `det.actividades` SIN escribir; mientras el campo faltaba, pymPendientesRestantes
         // caía al fallback de "marca vieja" y el aviso silenciaba VIH, cérvix, mama, colon,
         // próstata y CMB el resto del día. Mismo contrato que la llamada de 21786.
-        markOrdenesCreadasHoy(apt.doc_id, [...new Set(agrupadores)], [...new Set(actividadesCubiertas)]);
+        markOrdenesCreadasHoy(apt.doc_id, [...new Set(agrupadores)], [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
         const agrupadoresUnicos = [...new Set(agrupadores)];
         if (vivo()) {
           if (!parcial) confirmBtn.classList.add("vgl-bg-success");
@@ -27308,7 +27379,7 @@
         // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
         // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
         // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
-        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)]);
+        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
         uxTrack("ordenes.creadas", { n: creadasCount, fallidas: fallidasCount });
         _fnCompletado = true;
         try { uxTrack("fn.ordenar.complete"); } catch (e) {}
@@ -27326,6 +27397,18 @@
         // órdenes ya viaja por uxTrack("ordenes.creadas", {n}), justo arriba.
         // v12.3.x — Ya NO se cierra sola a los 2.6 s: el médico necesita tiempo para
         // escribir el correo del paciente y confirmar el envío. Se cierra con ✕/Cancelar.
+      } else if (omitidasCount > 0 && fallidasCount === 0) {
+        // v18.0.63 — no falló nada: no se pidió nada porque TODO lo seleccionado ya se había
+        // pedido hoy desde aquí. Decir «no se pudo generar ninguna» sería falso, y el
+        // «puede reintentar sin riesgo de duplicar» de la rama de abajo sería justo el
+        // consejo contrario al correcto.
+        if (vivo()) {
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = omitidasCount === 1 ? "Ya estaba generada" : "Ya estaban generadas";
+        }
+        uxTrack("ordenes.omitidas", { n: omitidasCount });
+        showToast("AMBAR", omitidasCount === 1 ? "Esa orden ya se generó hoy" : "Esas órdenes ya se generaron hoy",
+          `No se volvió a pedir ${omitidasTitulos.join(", ")} para ${patientName}: ya se generó hoy desde aquí y repetirla habría creado una orden duplicada de verdad. Si aun así debe repetirse, márquela usted en la lista.`, false); // [COPY-UX]
       } else {
         if (vivo()) {
           confirmBtn.disabled = false;

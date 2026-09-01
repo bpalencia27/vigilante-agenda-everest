@@ -50,8 +50,10 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | la memoria clínica del paciente se orfanizaba bajo una clave nueva | `_vglCosechaGuardar` | **v18.0.60** | 150 |
 | «falta el peso» sobre un peso registrado pero implausible | `_renderEstadioRenalHtml` | **v18.0.61** | 151, 152 |
 | un parpadeo del `doc_id` anulaba el antirrebote y fabricaba una segunda llegada | `colorAndAlert` / `state.historical` | **v18.0.62** | 153, 154, 155, 156 |
+| reabrir «Ordenar» creaba una segunda orden REAL del mismo examen — **confirmado por la telemetría del 1-sep** | `openOrdenamientoModal` / `markOrdenesCreadasHoy` | **v18.0.63** | 157–161 |
+| un ícono SVG nuestro se reportaba como de Everest — **confirmado por la telemetría del 1-sep** | `_rageEtiqueta` | **v18.0.63** | 162 |
 
-Quedan **27 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **25 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

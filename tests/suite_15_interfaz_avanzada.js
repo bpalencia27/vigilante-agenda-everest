@@ -2949,6 +2949,197 @@ module.exports = {
       t.falso(envio.includes("UsuarioId=309"), "nunca el id del médico");
     });
 
+    // =====================================================================
+    // v18.0.63 — HALLAZGO DEL ENJAMBRE #19 (01-sep), gravedad alta, 3 de 3 refutadores no
+    // lograron tumbarlo. El ÚNICO filtro antiduplicado que vivía dentro del modal era la
+    // consulta EN VIVO a Everest, que el propio código documenta como «un fallo de red aquí
+    // NO bloquea nada». Si esa consulta falla —o si Everest todavía no indexó la orden que
+    // el script acaba de crear— reabrir el modal ofrecía «Generar» otra vez, en silencio y
+    // con el mismo mensaje de éxito. Con una mamografía o un PSA eso no es un renglón
+    // administrativo de más: es un examen repetido de verdad al paciente.
+    //
+    // La telemetría del 1-sep lo respalda: «Ordenar» es el embudo con MÁS abandono de todo
+    // el script (6 abiertos, 2 completados, 4 abandonados), y abandonar a mitad del lote es
+    // justo el gesto de la reproducción.
+    // =====================================================================
+    function _dupFixture(postsArr) {
+      return cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("/api/Paciente/BuscarPaciente")) return respuestaJson({ id: 801848 });
+          if (u.includes("ObtenerListadoDiagnostico")) return respuestaJson([{ codigo: "Z108", id: 55, nombre: "TAMIZACION" }]);
+          if (u.includes("ObtenerListadoCupsPorPaciente")) {
+            const cod = /filter=([^&]+)/.exec(u)[1];
+            return respuestaJson([{ codigo: decodeURIComponent(cod), id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]);
+          }
+          if (u.includes("GuardarOrdenamiento")) { postsArr.push(u); return respuestaJson({ error: false, agrupador: "AGP-" + postsArr.length }); }
+          // Everest NO confirma la orden recién creada: devuelve la lista vigente vacía.
+          // Es el «fail-open» que el propio código produce ante un fallo real de esa
+          // consulta, y la condición exacta del hallazgo.
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) return respuestaJson([]);
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+    }
+    // El DOM simulado no interpreta innerHTML, así que la casilla se entrega a mano — pero
+    // con los MISMOS atributos que pinta el modal, que es lo que la guarda lee.
+    function _casillaOrd(premarcada, tocada, idx) {
+      return {
+        checked: true, disabled: false,
+        dataset: tocada ? { vglTocada: "1" } : {},
+        getAttribute: (k) => (k === "data-premarcada" ? (premarcada ? "1" : "0") : String(idx || 0)),
+        addEventListener: () => {}, closest: () => ({ style: {} }),
+      };
+    }
+    function _inyectarCasilla(c, casilla) {
+      const crear = c.env.doc.createElement;
+      c.env.doc.createElement = function (tag) {
+        const e = crear(tag);
+        const qsaBase = e.querySelectorAll;
+        e.querySelectorAll = (sel) => (sel === ".vgl-ord-chk" ? [casilla] : qsaBase(sel));
+        return e;
+      };
+    }
+
+    await t.casoAsync("v18.0.63: reabrir «Ordenar» y volver a pulsar NO crea una segunda orden real del mismo paquete", async () => {
+      const posts = [];
+      const cDup = _dupFixture(posts);
+      enriquecerDom(cDup);
+      cDup.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+      // Premarcada por el script, JAMÁS tocada por el médico: es la reproducción exacta
+      // (el modal se repintó antes de que existiera la marca, así que el «check» no es una
+      // decisión suya sino la sugerencia del propio script).
+      const abrirYGenerar = async () => {
+        // Casilla NUEVA en cada apertura, como en el DOM real: el modal se repinta entero.
+        // Compartir el objeto falso entre las dos vueltas hacía pasar la prueba por el
+        // motivo equivocado — tras crear la orden el propio código la deja `checked=false`,
+        // así que la segunda vuelta no seleccionaba nada y no había nada que duplicar. Lo
+        // destapó la mutación 157.
+        _inyectarCasilla(cDup, _casillaOrd(true, false, 0));
+        await cDup.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE DE PRUEBA", sexo: "M", pym: ["Tamización cardiometabólica"] });
+        await esperar(80);
+        const m = cDup.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+        disparar(m.querySelector("#vgl-ord-confirm"), "click");
+        await esperar(120);
+        return m;
+      };
+
+      await abrirYGenerar();
+      t.igual(posts.length, 1, "la primera corrida sí crea la orden");
+      t.cierto(cDup.api.ordenCreadaHoyParaCie10("21545051", "Z108"), "y queda constancia local de QUÉ paquete se ordenó");
+
+      await abrirYGenerar();
+      t.igual(posts.length, 1, "la segunda pulsación NO crea una orden duplicada de verdad en Everest");
+    });
+
+    await t.casoAsync("v18.0.63 (contención): si el médico marca él mismo la casilla, la orden SÍ se repite — él manda", async () => {
+      const posts = [];
+      const cDup = _dupFixture(posts);
+      enriquecerDom(cDup);
+      cDup.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+      const abrir = async (c) => {
+        await c.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE DE PRUEBA", sexo: "M", pym: ["Tamización cardiometabólica"] });
+        await esperar(80);
+        const m = c.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+        disparar(m.querySelector("#vgl-ord-confirm"), "click");
+        await esperar(120);
+      };
+      _inyectarCasilla(cDup, _casillaOrd(true, false, 0));
+      await abrir(cDup);
+      t.igual(posts.length, 1, "primera orden creada");
+
+      // Segunda vuelta: la casilla la marcó EL MÉDICO (quedó la huella `vglTocada`), no el
+      // script. La guarda no puede comerse una decisión suya: puede haber un motivo real
+      // para repetir el examen, y el script sugiere, no manda.
+      _inyectarCasilla(cDup, _casillaOrd(false, true, 0));
+      await abrir(cDup);
+      t.igual(posts.length, 2, "la decisión explícita del médico se respeta y la orden se crea");
+    });
+
+    await t.casoAsync("v18.0.63: la marca de cada orden se escribe EN CUANTO el servidor la confirma, no al final del lote", async () => {
+      // Esta es la ventana concreta de la reproducción del hallazgo: el médico pulsa
+      // «Generar», pulsa «Cancelar» mientras el lote sigue en vuelo y reabre «Ordenar». Si
+      // la marca solo se escribiera al terminar el lote entero, al reabrir NO constaría
+      // nada y el modal volvería a premarcar lo que ya está creado.
+      const posts = [];
+      const cLote = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("/api/Paciente/BuscarPaciente")) return respuestaJson({ id: 801848 });
+          if (u.includes("ObtenerListadoDiagnostico")) {
+            const cod = /filter=([^&]+)/.exec(u)[1];
+            return respuestaJson([{ codigo: decodeURIComponent(cod), id: 55, nombre: "DX" }]);
+          }
+          if (u.includes("ObtenerListadoCupsPorPaciente")) {
+            await esperar(250);   // Everest tarda: el lote no termina de golpe
+            const cod = /filter=([^&]+)/.exec(u)[1];
+            return respuestaJson([{ codigo: decodeURIComponent(cod), id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]);
+          }
+          if (u.includes("GuardarOrdenamiento")) { posts.push(u); return respuestaJson({ error: false, agrupador: "AGP-" + posts.length }); }
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) return respuestaJson([]);
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cLote);
+      cLote.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+      // Dos paquetes marcados: VIH (1 solo CUPS, termina pronto) y la tamización
+      // cardiometabólica (siete CUPS, tarda). Los índices cubren las dos posiciones.
+      const dos = [_casillaOrd(true, false, 0), _casillaOrd(true, false, 1)];
+      const crear = cLote.env.doc.createElement;
+      cLote.env.doc.createElement = function (tag) {
+        const e = crear(tag);
+        const qsaBase = e.querySelectorAll;
+        e.querySelectorAll = (sel) => (sel === ".vgl-ord-chk" ? dos : qsaBase(sel));
+        return e;
+      };
+      await cLote.api.openOrdenamientoModal({ doc_id: "555", nombre: "ANA LOPEZ", sexo: "F", pym: ["VIH", "Tamización cardiometabólica"] });
+      await esperar(60);
+      const m = cLote.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      disparar(m.querySelector("#vgl-ord-confirm"), "click");
+
+      await esperar(700);   // el primer paquete ya se creó; el segundo sigue en vuelo
+      t.igual(posts.length, 1, "a mitad del lote hay exactamente UNA orden creada");
+      const detMedio = cLote.api.ordenesDetalleHoy("555");
+      t.cierto(!!detMedio && Array.isArray(detMedio.cie10) && detMedio.cie10.length === 1,
+        "y su marca YA consta, con el lote todavía sin terminar — es lo que impide el duplicado al reabrir");
+
+      await esperar(2200);
+      t.igual(posts.length, 2, "el lote termina y crea también la segunda");
+      const detFin = cLote.api.ordenesDetalleHoy("555");
+      t.igual(detFin.cie10.length, 2, "y las dos quedan anotadas, sin perder la primera");
+    });
+
+    await t.casoAsync("v18.0.63: una marca ANTERIOR (sin la lista de CIE-10) no afirma nada — casilla vacía antes que dato inventado", async () => {
+      const c = cargar({ silencioso: true });
+      // Marca al estilo viejo: agrupadores y actividades, pero SIN `cie10`. No dice QUÉ
+      // paquete se ordenó, así que no puede usarse para desmarcar exámenes que quizá nunca
+      // se pidieron.
+      c.api.markOrdenesCreadasHoy("777", ["AGP-9"], ["Tamización cardiometabólica"]);
+      t.cierto(!!c.api.ordenesDetalleHoy("777"), "la marca vieja existe");
+      t.falso(c.api.ordenCreadaHoyParaCie10("777", "Z108"), "pero no permite afirmar que ESE paquete ya se ordenó");
+
+      c.api.markOrdenesCreadasHoy("777", ["AGP-9"], ["Tamización cardiometabólica"], ["Z108"]);
+      t.cierto(c.api.ordenCreadaHoyParaCie10("777", "Z108"), "con la lista nueva sí se sabe, y por paquete");
+      t.falso(c.api.ordenCreadaHoyParaCie10("777", "Z113"), "y solo del paquete que de verdad se ordenó, no de los demás");
+    });
+
+    await t.casoAsync("v18.0.63: el modal no premarca lo que ya se ordenó hoy, y lo dice", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.api.markOrdenesCreadasHoy("888", ["AGP-1"], ["Tamización cardiometabólica"], ["Z108"]);
+      await c.api.openOrdenamientoModal({ doc_id: "888", nombre: "PEDRO RUIZ", sexo: "M", pym: ["Tamización cardiometabólica"] });
+      const modal = c.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      t.cierto(modal.innerHTML.includes("CIE-10 Z108"), "el paquete se sigue ofreciendo: el médico puede tener un motivo para repetirlo");
+      t.cierto(modal.innerHTML.includes("ya se generó hoy"), "pero se dice con todas las letras");
+      t.cierto(modal.innerHTML.includes('data-premarcada="0"'), "y NO viene premarcado");
+      t.falso(modal.innerHTML.includes(' checked'), "ninguna casilla marcada de oficio sobre una orden ya creada hoy");
+      t.falso(modal.innerHTML.includes(" disabled"), "tampoco se bloquea: el médico manda, el script sugiere");
+    });
+
     // ================= v12.5.13 — imprimir recordatorio de cita / orden PyM =================
     // Contrato real, capturado con el grabador de red del propio proyecto (12-08-2026):
     // GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita?CitaId=...&Eps=...

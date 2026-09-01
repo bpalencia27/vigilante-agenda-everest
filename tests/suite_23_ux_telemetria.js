@@ -1217,6 +1217,43 @@ module.exports = {
       t.igual(c.api._rageEtiqueta(null), "generico", "y con nada, no lanza");
     });
 
+    // v18.0.63 — HALLAZGO DEL ENJAMBRE #27 (01-sep), CONFIRMADO en el export real del
+    // tablero del 1-sep: `rum.self.inp.detalle.host.needs_imp` = 7 — interacciones de
+    // NUESTRA interfaz (`rum.self.*`) atribuidas a Everest. En un <svg> (hay 45 íconos así,
+    // varios dentro de botones .vgl-*) `className` es un SVGAnimatedString, no un string:
+    // `String(...)` daba "[object SVGAnimatedString]", que nunca empieza por "vgl-", así
+    // que un ícono NUESTRO caía en "host" y el rastro de la lentitud se perdía. Es justo el
+    // error de atribución que el comentario de este bloque dice evitar.
+    t.caso("v18.0.63: un icono SVG NUESTRO no se reporta como si fuera de Everest", () => {
+      const c = cargar({ silencioso: true });
+      // Así se ve un <svg class="vgl-ico"> de verdad: getAttribute devuelve el string real,
+      // className NO es un string.
+      const svgNuestro = {
+        className: { baseVal: "vgl-ico", animVal: "vgl-ico" },
+        getAttribute: (k) => (k === "class" ? "vgl-ico" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgNuestro), "otro", "es nuestro, aunque sea un SVG: nunca 'host'");
+
+      // Y el SVG de Everest sigue siendo de Everest: el arreglo no puede reclamar lo ajeno.
+      const svgAjeno = {
+        className: { baseVal: "ng-star-inserted", animVal: "ng-star-inserted" },
+        getAttribute: (k) => (k === "class" ? "ng-star-inserted" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgAjeno), "host", "un SVG de Everest se sigue agrupando como host");
+
+      // Un SVG del catálogo conserva su nombre exacto, no cae en el cajón de "otro".
+      const svgCatalogo = {
+        className: { baseVal: "vgl-dock-btn", animVal: "vgl-dock-btn" },
+        getAttribute: (k) => (k === "class" ? "vgl-dock-btn" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgCatalogo), "dock-btn");
+
+      // Contención: el camino de siempre (className string, sin getAttribute) no se rompe.
+      t.igual(c.api._rageEtiqueta({ className: "vgl-tip-btn algo-mas" }), "tip-btn");
+      t.igual(c.api._rageEtiqueta({ className: "form-control ng-pristine" }), "host");
+      t.igual(c.api._rageEtiqueta({}), "generico");
+    });
+
     t.caso("_detectarRageClick: tres clics seguidos en el mismo sitio anotan la friccion UNA vez", () => {
       const c = cargar({ silencioso: true });
       c.api.__S.uxTelemetria = true;
