@@ -78,6 +78,7 @@ module.exports = {
     "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
     "vglMinimizarPanel", "vglMinBarra", "_vglMinDescartarDeOtroPaciente",
     "_vglChooserModal", "_activarAccesibilidadModal",
+    "_acompMostrar", "_acompCerrar",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -846,6 +847,34 @@ module.exports = {
         "el modal tiene un listener 'keydown' propio (lo instala _activarAccesibilidadModal) — antes solo tenía 'click'");
       t.cierto(!!(modal._listeners && modal._listeners.click && modal._listeners.click.length),
         "y sigue conservando su canal de cierre de siempre (clic afuera)");
+    });
+
+    // v18.0.93 — hallazgo #45 del enjambre: _acompMostrar recalculaba 'r' (la posición
+    // del botón objetivo) en CADA vuelta, pero lo descartaba sin usarlo cuando la burbuja
+    // ya mostraba el mismo hint.id — se quedaba pegada a las coordenadas del primer tick
+    // para siempre, en vez de seguir al botón si su posición cambiaba entre vueltas.
+    t.caso("hallazgo #45 — la burbuja de acompañamiento SIGUE al botón cuando su posición cambia entre ticks, no se queda pegada a la vieja", () => {
+      const c = cargar({ silencioso: true });
+      let rect = { top: 90, left: 620, right: 700, bottom: 120, width: 80, height: 30 };
+      const boton = { getBoundingClientRect: () => rect };
+      c.env.doc.querySelector = (sel) => (sel === '[data-accion="agendar"]' ? boton : null);
+      const hint = { id: "agendar", target: '[data-accion="agendar"]', texto: "Falta la cita de control: toque Agendar." };
+
+      c.api._acompMostrar(hint, { doc_id: "999888777" });
+      const burbuja1 = c.env.doc.getElementById("vgl-acomp-burbuja");
+      t.cierto(!!burbuja1, "la burbuja aparece pegada al botón real");
+      t.igual(burbuja1.style.top, "82px");
+      t.igual(burbuja1.style.left, "710px");
+
+      // MISMO hint.id, pero el botón real ya está en otra posición (p. ej. otro botón del
+      // dock apareció/desapareció encima y lo corrió, o el layout cambió).
+      rect = { top: 500, left: 620, right: 700, bottom: 530, width: 80, height: 30 };
+      c.api._acompMostrar(hint, { doc_id: "999888777" });
+      const burbuja2 = c.env.doc.getElementById("vgl-acomp-burbuja");
+      t.cierto(burbuja1 === burbuja2, "es el MISMO nodo — no se recrea, solo se reposiciona");
+      t.igual(burbuja2.style.top, "492px",
+        "la burbuja SIGUE al botón — antes se quedaba fija en 82px, flotando sobre el vacío");
+      t.igual(burbuja2.style.left, "710px");
     });
 
     t.caso("createLabInjectorUI: crea el botón flotante una sola vez", () => {

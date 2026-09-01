@@ -10641,3 +10641,41 @@ dos intentos existentes (exacto, y todo-mayúsculas) y antes del respaldo crudo.
 | 228 | se quita el tercer intento normalizado (**el defecto original**) | *suite_01: REGRESIÓN — friendly traduce 'Último VIH' venga como venga capitalizado (hallazgo #44)* | Sí |
 
 Banco completo: **2.952 comprobaciones pasan, 0 fallan.**
+
+## v18.0.93 — la burbuja del "modo acompañado" ya sigue al botón, no se queda pegada a la posición vieja
+
+Hallazgo #45 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. `_acompMostrar`
+recalcula `r` (el `getBoundingClientRect()` del botón objetivo) en CADA vuelta, pero cuando la
+burbuja ya está mostrando el MISMO `hint.id`, ese `r` recién medido se descarta sin usarlo — la
+función devuelve antes de tocar `previa.style.top/left`. La burbuja se queda pegada a las
+coordenadas del primer tick para siempre, aunque el botón (o el resto del dock a su alrededor)
+cambie de posición mientras tanto.
+
+El refutador disidente tenía razón en un punto técnico real y verificado: los CUATRO objetivos
+posibles de `hint.target` son elementos `position:fixed` con coordenadas absolutas de viewport
+(`#vgl-acciones-dock{top:200px;left:8px}`, `.vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj{position:fixed;
+left:8px...}`), así que un SCROLL de la página —el disparador que proponía el hallazgo— nunca
+mueve su `getBoundingClientRect()`; ese camino específico está cerrado. Pero el defecto de código
+en sí es real e independiente de esa vía concreta: el dock tiene un botón de colapsar
+(`#vgl-acciones-dock.colapsado .vgl-dock-btns{display:none}`, línea ~15930) que cambia qué
+botones existen dentro del contenedor fijo, y cualquier cambio en el layout INTERNO del dock
+(otro botón que aparece/desaparece en el stack) puede correr la posición de un botón concreto sin
+mover el contenedor — el mismo síntoma, sin necesidad de scroll.
+
+Se aplica de todos modos: el arreglo es gratis, no depende de qué dispare el reflow, y cierra
+exactamente el defecto de código que el propio comentario de v17.0.3 dice haber eliminado para
+siempre ("nunca flotando en el aire").
+
+### La reparación
+
+Cuando `previa && previa.dataset.vglHint === hint.id`, en vez de devolver de inmediato se
+actualiza `previa.style.top`/`left` con el `r` ya medido (misma fórmula que usa la rama de
+creación), y SOLO entonces se devuelve.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 229 | vuelve el `return` inmediato sin reposicionar (**el defecto original**) | *suite_15: hallazgo #45 — la burbuja de acompañamiento SIGUE al botón cuando su posición cambia entre ticks* | Sí |
+
+Banco completo: **2.953 comprobaciones pasan, 0 fallan.**

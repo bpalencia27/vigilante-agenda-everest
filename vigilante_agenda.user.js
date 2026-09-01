@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.92
+// @version      18.0.93
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.92";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.93";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31692,7 +31692,16 @@
       const visible = !!(r && r.width > 0 && r.height > 0);
       if (!visible) { _acompCerrar(false); return; }
       const previa = document.getElementById("vgl-acomp-burbuja");
-      if (previa && previa.dataset && previa.dataset.vglHint === hint.id) return;   // ya está esa misma
+      if (previa && previa.dataset && previa.dataset.vglHint === hint.id) {
+        // v18.0.93 — hallazgo #45 del enjambre: 'r' ya se acaba de medir de nuevo arriba,
+        // pero se descartaba sin usarlo — la burbuja se quedaba pegada a las coordenadas
+        // del primer tick para siempre, aunque el botón (o el resto del dock a su
+        // alrededor) hubiera cambiado de posición mientras tanto. Se actualiza igual que
+        // en la creación, para que siga al blanco en cada vuelta, no solo en la primera.
+        previa.style.top = Math.max(8, r.top - 8) + "px";
+        previa.style.left = (r.right + 10) + "px";
+        return;
+      }
       _acompCerrar(false);
       const b = document.createElement("div");
       b.id = "vgl-acomp-burbuja";
