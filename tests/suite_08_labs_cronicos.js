@@ -309,6 +309,55 @@ module.exports = {
       t.cierto(/if \(actual === "" && setNgValue\(el, r\.resultVal\)\) escritas\+\+;/.test(src), "debe exigir que setNgValue haya devuelto true");
     });
 
+    // v18.0.74 — HALLAZGO DE ENJAMBRE #26. A diferencia del VALOR (protegido desde
+    // v17.6.45, prueba de arriba), la escritura de FECHA no comprobaba el retorno de
+    // setNgValue: un <input type="date"> que el navegador rechaza queda vacío en silencio,
+    // pero _fechasYaUsadas la marcaba «reclamada» igual — vacía Y bloqueada para que otro
+    // analito la use de respaldo.
+    t.caso("v18.0.74: injectLabsIntoCronicos no reclama una casilla de fecha que el navegador rechazó", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => {
+        if (id === "resultadoColesterolTotal") {
+          return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return mockDOM[id].value; }, set value(v) { mockDOM[id].value = v; } };
+        }
+        if (id === "fechaResultColesterolTotal") {
+          // Casilla de fecha que rechaza CUALQUIER valor (simula el <input type="date">
+          // real rechazando una fecha de calendario imposible): tras asignarla, value
+          // sigue vacío — lo que setNgValue mide para devolver false.
+          return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return ""; }, set value(v) { /* el navegador rechaza */ } };
+        }
+        return null;
+      };
+      try {
+        const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(mockDOM["resultadoColesterolTotal"].value, "180", "el valor sí se escribe: es una casilla distinta");
+        t.igual(res.count, 1, "y sí cuenta como diligenciado — la fecha es un dato aparte");
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
+    t.caso("v18.0.74: las tres escrituras de fecha de injectLabsIntoCronicos comprueban el retorno de setNgValue", () => {
+      // Las tres rutas (whitelist principal, reintento de uroanálisis, y la de «sin
+      // casilla de resultado pero sí de fecha») deben condicionar su efecto (marcar
+      // _fechasYaUsadas, sacar de sinCasilla) al ÉXITO real de la escritura.
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/setNgValue\(dateInput, resultDate\);\s*\n\s*try \{ _fechasYaUsadas\.add\(dateInput\); \} catch/.test(src),
+        "ya no debe marcar _fechasYaUsadas sin comprobar el retorno de setNgValue");
+      t.cierto(/if \(setNgValue\(dateInput, resultDate\)\) \{\s*\n\s*try \{ _fechasYaUsadas\.add\(dateInput\); \} catch/.test(src),
+        "debe exigir que setNgValue haya devuelto true antes de reclamar la casilla");
+      t.cierto(/if \(setNgValue\(soloFecha, resultDate\)\) \{/.test(src),
+        "y la ruta 'sin casilla de resultado' también comprueba el retorno antes de sacarla de sinCasilla");
+      t.cierto(/let fechaEscrita = false;\s*\n\s*if \(dateInput && resultDate && fechaVacia\) fechaEscrita = setNgValue\(dateInput, resultDate\);/.test(src),
+        "y el reintento de uroanálisis guarda si la escritura de verdad quedó, en vez de darla por hecha");
+      t.cierto(/\} else if \(!fechaEscrita\) \{\s*\n\s*console\.warn\("\[Vigilante\] uroanálisis: la fecha/.test(src),
+        "y avisa cuando el navegador la rechazó — la cuarta razón que antes faltaba en el diagnóstico");
+    });
+
     t.caso("_parseFechaLike: reconoce ISO, dd/mm/aaaa y fecha .NET /Date(ms)/, y descarta lo que no es fecha", () => {
       t.igual(testApi._parseFechaLike("2026-08-01"), "2026-08-01");
       t.igual(testApi._parseFechaLike("2026-08-01T00:00:00"), "2026-08-01", "corta la parte de hora");

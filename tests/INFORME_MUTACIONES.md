@@ -10020,3 +10020,41 @@ local que la función ya construía.
 | 199 | se revierte a la implementación sin round-trip (**el defecto original**) | *REGRESIÓN — _isoAMs rechaza fechas que el calendario no tiene* y *REGRESIÓN — mtrLdlBasalDeSerie no acepta un basal con fecha de calendario imposible* (2 fallan) | Sí |
 
 Banco completo: **2.923 comprobaciones pasan, 0 fallan.**
+
+## v18.0.74 — una fecha de laboratorio que el calendario no tiene ya no se escribe ni se reclama
+
+Hallazgo #26 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. Verificado contra
+HEAD antes de tocar nada: el defecto sigue exactamente como lo describe el hallazgo.
+
+`_parseFechaHoraLike` solo validaba el rango 1-31/1-12 (día y mes por separado), no si el día
+existe DENTRO de ese mes — «31/04/2026» pasa ese rango entero aunque abril no tenga 31. Ese ISO
+fabricado (`"2026-04-31"`) llegaba entero hasta `injectLabsIntoCronicos`, que lo escribía en un
+`<input type="date">` real; el navegador la rechaza y la casilla queda vacía — pero, a
+diferencia del VALOR (blindado desde v17.6.45, ver arriba en este mismo informe), la escritura
+de fecha no comprobaba el retorno de `setNgValue`: el médico veía un resultado numérico sin su
+fecha, sin ningún aviso, y la casilla vacía quedaba además «reclamada» en `_fechasYaUsadas`, sin
+poder servir de respaldo a otro analito que la necesitara.
+
+### La reparación, en dos capas
+
+1. **Raíz.** `_parseFechaHoraLike` gana `_diaValidoParaMes(año, mes, día)` — el mismo round-trip
+   de `new Date(...)` que ya usa `mtrFechaDesdeIso` en otra parte del archivo — aplicado en las
+   dos ramas (ISO y dd/mm/aaaa). Una fecha de calendario imposible se rechaza en el origen, antes
+   de que ningún consumidor tenga que descubrirlo por su cuenta.
+2. **Red de seguridad.** Las TRES escrituras de fecha de `injectLabsIntoCronicos` (la principal,
+   el reintento de uroanálisis, y la ruta «sin casilla de resultado pero sí de fecha» — esta
+   última no citada por el hallazgo original pero con el mismo defecto exacto, corregida por la
+   misma razón) ahora comprueban el retorno de `setNgValue` antes de reclamar la casilla o
+   avisar éxito, y avisan por consola cuando el navegador rechaza la fecha — mismo patrón que ya
+   protege el valor.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 200 | se quita `_diaValidoParaMes` de las dos ramas de `_parseFechaHoraLike` (**el defecto original**) | *REGRESIÓN — _parseFechaHoraLike rechaza un día que el mes no tiene* | Sí |
+| 201 | la escritura PRINCIPAL de fecha deja de comprobar el retorno de `setNgValue` | *v18.0.74: las tres escrituras de fecha... comprueban el retorno* | Sí |
+| 202 | la ruta «sin casilla de resultado» deja de comprobarlo | *misma prueba* | Sí |
+| 203 | el reintento de uroanálisis deja de comprobarlo | *misma prueba* | Sí |
+
+Banco completo: **2.926 comprobaciones pasan, 0 fallan.**

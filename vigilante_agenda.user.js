@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.73
+// @version      18.0.74
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.73";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.74";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2890,6 +2890,17 @@
   // y terminaba como "Sin fecha": la hora no solo se perdía, se llevaba la fecha entera.
   // Ahora el parseador devuelve {iso, hora} y todos los consumidores conservan ambas.
   // La hora se valida (0-23:0-59) y acepta el formato del portal ("7:35 a. m.").
+  // v18.0.74 — AUDITORÍA (hallazgo de enjambre #26): el rango 1-31/1-12 de abajo deja
+  // pasar un día que el mes no tiene ("31/04/2026", "30/02/2026") — un dato mal tecleado
+  // en el LIS es un caso real de entrada de datos. Ese ISO fabricado llegaba entero hasta
+  // injectLabsIntoCronicos, que lo escribía en un <input type="date"> real; el navegador
+  // lo rechaza y la casilla queda vacía, pero nada lo comprobaba: el valor numérico se
+  // guardaba igual, sin su fecha y sin ningún aviso. Se rechaza aquí, en el origen, en vez
+  // de dejar que cada consumidor lo descubra por su cuenta.
+  function _diaValidoParaMes(anio, mes, dia) {
+      const d = new Date(anio, mes - 1, dia);
+      return d.getFullYear() === anio && d.getMonth() === mes - 1 && d.getDate() === dia;
+  }
   function _parseFechaHoraLike(v) {
       if (v === null || v === undefined) return null;
       const s = String(v).trim();
@@ -2920,7 +2931,8 @@
       // "2026-99-99" pasaba entero. Se exige que tras el día NO siga otro dígito y que
       // mes/día estén en rango — igual de estricto que la rama dd/mm/aaaa de abajo.
       let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/);
-      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31) {
+      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31
+          && _diaValidoParaMes(Number(m[1]), Number(m[2]), Number(m[3]))) {
           const r = analizarResto(s.slice(m[0].length));
           return r.ok ? { iso: `${m[1]}-${m[2]}-${m[3]}`, hora: r.hora } : null;
       }
@@ -2944,7 +2956,8 @@
       m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/);
       if (m) {
           const dd = m[1].padStart(2, "0"), mm = m[2].padStart(2, "0");
-          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) {
+          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31
+              && _diaValidoParaMes(Number(m[3]), Number(mm), Number(dd))) {
               const r = analizarResto(s.slice(m[0].length));
               return r.ok ? { iso: `${m[3]}-${mm}-${dd}`, hora: r.hora } : null;
           }
@@ -3657,11 +3670,17 @@
               try {
                   const soloFecha = _findLabField(matched.dateId, matched.altDateIds);
                   const vacia = soloFecha && !String(soloFecha.value == null ? "" : soloFecha.value).trim();
+                  // v18.0.74 — AUDITORÍA (hallazgo de enjambre #26): igual que las otras dos
+                  // escrituras de fecha de esta función, se comprueba el retorno antes de
+                  // celebrar el "SÍ se pudo escribir algo" — el navegador puede rechazarla.
                   if (soloFecha && vacia && resultDate) {
-                      setNgValue(soloFecha, resultDate);
-                      // Se saca de sinCasilla: SÍ se pudo escribir algo de este analito.
-                      const iSc = sinCasilla.lastIndexOf(matched.key);
-                      if (iSc >= 0) sinCasilla.splice(iSc, 1);
+                      if (setNgValue(soloFecha, resultDate)) {
+                          // Se saca de sinCasilla: SÍ se pudo escribir algo de este analito.
+                          const iSc = sinCasilla.lastIndexOf(matched.key);
+                          if (iSc >= 0) sinCasilla.splice(iSc, 1);
+                      } else {
+                          console.warn("[Vigilante] Auto-Labs: " + matched.key + " — la fecha " + resultDate + " no quedó escrita en la casilla (rechazada por el navegador).");
+                      }
                   }
               } catch (e) {}
               return;
@@ -3688,9 +3707,17 @@
 
           // v12.3.35 — la fecha SOLO se escribe en una casilla de fecha VACÍA: si el
           // médico la corrigió a mano (p. ej. la fecha real de la toma), se respeta.
+          // v18.0.74 — AUDITORÍA (hallazgo de enjambre #26): a diferencia del VALOR (línea
+          // ~3637), esta escritura no comprobaba el retorno de setNgValue. Un <input
+          // type="date"> real rechaza una fecha que el calendario no tiene y queda VACÍO
+          // en silencio; sin comprobar, _fechasYaUsadas la marcaba «reclamada» igual,
+          // dejando la casilla vacía Y bloqueada para que otro analito la use de respaldo.
           if (dateInput && resultDate && String(dateInput.value == null ? "" : dateInput.value).trim() === "") {
-              setNgValue(dateInput, resultDate);
-              try { _fechasYaUsadas.add(dateInput); } catch (e) {}
+              if (setNgValue(dateInput, resultDate)) {
+                  try { _fechasYaUsadas.add(dateInput); } catch (e) {}
+              } else {
+                  console.warn("[Vigilante] Auto-Labs: " + matched.key + " — la fecha " + resultDate + " no quedó escrita en la casilla (rechazada por el navegador).");
+              }
           } else if (dateInput && resultDate) {
               // Ya tenía algo escrito: se respeta (puede haberlo puesto el médico), pero se
               // marca para que otro analito no la tome por suya.
@@ -3806,15 +3833,21 @@
                   const grupo = inputEl.closest ? inputEl.closest(".input-group") : null;
                   const dateInput = (grupo && grupo.querySelector('input[type="date"]')) || _findLabField(matched.dateId, matched.altDateIds);
                   const fechaVacia = dateInput && String(dateInput.value == null ? "" : dateInput.value).trim() === "";
-                  if (dateInput && resultDate && fechaVacia) setNgValue(dateInput, resultDate);
+                  // v18.0.74 — AUDITORÍA (hallazgo de enjambre #26): se guarda si la escritura
+                  // de verdad quedó (setNgValue devuelve false si el navegador la rechazó), en
+                  // vez de darla por hecha — la misma cuarta razón que faltaba abajo.
+                  let fechaEscrita = false;
+                  if (dateInput && resultDate && fechaVacia) fechaEscrita = setNgValue(dateInput, resultDate);
                   // Diagnóstico dirigido: si la fecha SIGUE sin escribirse, esto dice por cuál
-                  // de las tres razones posibles, en vez de dejar al médico adivinando.
+                  // de las cuatro razones posibles, en vez de dejar al médico adivinando.
                   if (!resultDate) {
                       console.warn("[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.");
                   } else if (!dateInput) {
                       console.warn("[Vigilante] uroanálisis: no se escribió la fecha porque NO se encontró su casilla (ni como hermana input[type=date] del .input-group, ni por el id " + matched.dateId + ").");
                   } else if (!fechaVacia) {
                       console.log("[Vigilante] uroanálisis: la fecha ya tenía valor, se respeta la del médico.");
+                  } else if (!fechaEscrita) {
+                      console.warn("[Vigilante] uroanálisis: la fecha " + resultDate + " no quedó escrita en la casilla (rechazada por el navegador).");
                   }
                   console.log("[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).");
               } catch (e) {}
