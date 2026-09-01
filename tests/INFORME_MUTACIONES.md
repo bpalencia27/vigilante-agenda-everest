@@ -10532,3 +10532,43 @@ esa colisión. Se deja constancia para un hallazgo futuro.
 | 225 | la rama de reintento (tras auto-login) deja de leer `r2.obligatoriasVacias` | *suite_15: hallazgo #41 — la rama de reintento también lee r2.obligatoriasVacias* | Sí |
 
 Banco completo: **2.948 comprobaciones pasan, 0 fallan.**
+
+## v18.0.90 — fetchAtheneaLabs ya no duplica tráfico contra un portal que el propio código ya sabe frágil
+
+Hallazgo #42 del enjambre, gravedad media, 3 de 3 refutadores no lo tumbaron. `fetchAtheneaLabs`
+(la función que trae los RESULTADOS de laboratorio, llamada desde `_getAtheneaLabsAutoNucleo` para
+cada solicitud del paciente) llamaba a `GM_xmlhttpRequest` directamente, sin pasar por `_gmReq` —
+el "seguro anti-doble-disparo" que la v16.7.0 instaló por orden explícita del médico ("todas las
+llamadas a endpoint deben tener ese seguro") y que las demás llamadas GM a Athenea de este mismo
+archivo (`_atheneaToken`, búsqueda de paciente) sí usan. Confirmado con el arnés: dos peticiones
+idénticas simultáneas para la misma solicitud/año generaban DOS llamadas reales a Athenea. El
+propio archivo documenta (línea ~2627) que Athenea "contestó las tres primeras [solicitudes] y se
+cayó" bajo carga — este hueco duplicaba exactamente el tipo de tráfico que ya se sabe que la hace
+fallar, justo cuando el médico más lo necesita (abriendo la historia).
+
+### La reparación
+
+`fetchAtheneaLabs` ahora llama a `_gmReq({method, url, headers, data})` en vez de
+`GM_xmlhttpRequest` directo. `_gmReq` está declarada MÁS ABAJO en el archivo, pero es una
+`function` de nivel superior (hoisted) — la referencia hacia adelante es idiomática en este
+proyecto y no necesita reordenar nada. El parseo de la respuesta (fechas heredadas, blindaje de
+formato, distinción `bolValido===false` vs "no encontrado" vs error de red) se conserva IDÉNTICO,
+movido de los callbacks `onload`/`onerror`/`ontimeout` a un `.then(onCumplida, onRechazada)` sobre
+la promesa que `_gmReq` ya da. La clave de deduplicación de `_gmReq` (`method|url|data`) incluye el
+`ano` dentro de `data`, así que el reintento por año (2026/2025/2024) nunca se confunde entre sí —
+solo dos peticiones REALMENTE idénticas (mismo idSolicitud, mismo año) comparten una sola llamada
+real, verificado con una prueba dedicada que confirma lo uno (dedup dentro del mismo año) y lo
+otro (sin dedup entre años distintos).
+
+El mensaje exacto de error (`"NetErr"` vs `"Timeout"` de `_gmReq`, en vez del texto crudo de GM)
+se simplifica, pero no cambia nada observable: el único consumidor de la promesa
+(`_getAtheneaLabsAutoNucleo`) ya descarta el motivo del rechazo con `.catch(() => null)` — solo le
+importa que se pudo leer o no, nunca el texto.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 226 | vuelve `GM_xmlhttpRequest` directo, sin `_gmReq` (**el defecto original**, función completa restaurada desde v18.0.89) | *suite_05: hallazgo #42 — dos peticiones IDÉNTICAS y simultáneas comparten UNA sola llamada real a Athenea* | Sí |
+
+Banco completo: **2.950 comprobaciones pasan, 0 fallan.**

@@ -228,6 +228,44 @@ module.exports = {
       t.cierto(fetchCalls.includes(new Date().getFullYear()));
     });
 
+    // v18.0.90 — hallazgo #42 del enjambre: fetchAtheneaLabs no pasaba por el seguro
+    // anti-doble-disparo (_gmReq, v16.7.0) que ya protege a las demás llamadas GM de
+    // Athenea de este archivo. Dos flujos pidiendo el MISMO laboratorio casi a la vez
+    // (el prefetch al abrir la historia + un clic del médico) duplicaban tráfico real
+    // contra un portal que el propio código documenta como frágil bajo carga.
+    await t.casoAsync("hallazgo #42 — dos peticiones IDÉNTICAS y simultáneas comparten UNA sola llamada real a Athenea", async () => {
+      let llamadasReales = 0;
+      let pendiente = null;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => { llamadasReales++; pendiente = opts; },   // no resuelve todavía: "en vuelo"
+      });
+
+      const p1 = c.api.fetchAtheneaLabs(7777, 2026);
+      const p2 = c.api.fetchAtheneaLabs(7777, 2026);
+      t.igual(llamadasReales, 1,
+        "dos peticiones idénticas mientras la primera sigue en el aire comparten UNA sola llamada real — antes (sin _gmReq) eran 2, duplicando tráfico");
+
+      pendiente.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.2" }]) }) });
+      const [r1, r2] = await Promise.all([p1, p2]);
+      t.igual(r1.length, 1);
+      t.igual(r1[0].NombreParametro, "CREATININA");
+      t.igual(JSON.stringify(r1), JSON.stringify(r2), "las dos llamadas ven exactamente el mismo resultado");
+    });
+
+    await t.casoAsync("hallazgo #42 — dos peticiones para AÑOS distintos NO se deduplican entre sí: cada año pide de verdad", async () => {
+      let llamadasReales = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => {
+          llamadasReales++;
+          opts.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.0" }]) }) });
+        },
+      });
+      await Promise.all([c.api.fetchAtheneaLabs(7777, 2025), c.api.fetchAtheneaLabs(7777, 2024)]);
+      t.igual(llamadasReales, 2, "años distintos son peticiones distintas: la deduplicación no se pasa de lista");
+    });
+
     // --- Pruebas de guardas de SMS (TAREA B1) ---
     // Montaje común para (a)-(d): mock de fetch que registra URLs
     await t.casoAsync("apiAccesoAsignarTurno dispara SMS correctamente al paciente (caso base)", async () => {

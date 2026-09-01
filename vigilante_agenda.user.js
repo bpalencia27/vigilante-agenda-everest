@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.89
+// @version      18.0.90
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.89";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.90";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1854,72 +1854,77 @@
 
       const tryFetchYear = (yearIndex) => {
           const ano = yearsToTry[yearIndex];
-          return new Promise((resolve, reject) => {
-              const siguiente = (motivoFinal) => {
-                  if (yearIndex + 1 < yearsToTry.length) tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
-                  else reject(motivoFinal);
-              };
-              GM_xmlhttpRequest({
-                  method: "POST",
-                  url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-                  headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                  data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
-                  // v12.3.12 — sin `timeout`, el ontimeout de abajo era código muerto: una
-                  // conexión que Athenea aceptara y nunca respondiera dejaba esta promesa
-                  // colgada para siempre. 15 s, el mismo margen que usa _gmReq en este puente.
-                  timeout: 15000,
-                  onload: function (response) {
-                      try {
-                          if (response.status === 200) {
-                              const res = JSON.parse(response.responseText);
-                              if (res && res.dataObject) {
-                                  const data = JSON.parse(res.dataObject);
-                                  if (Array.isArray(data) && data.length > 0) {
-                                      // v12.3.32 — BLINDAJE de fechas: hasta ahora solo se leía
-                                      // res.dataObject (los analitos) y se DESCARTABA el resto de
-                                      // la respuesta. Si la fecha vive a nivel de SOLICITUD (no de
-                                      // analito, patrón común en estos backend), se buscaba donde
-                                      // nunca iba a estar. Se escanea el nivel superior con el
-                                      // mismo detector por forma y, si aparece, se hereda a cada
-                                      // analito como último respaldo (__vglFechaSolicitud). El
-                                      // registro de abajo es de UNA vez y deja evidencia decisiva:
-                                      // qué claves trae el nivel superior y si alguna es fecha.
-                                      try {
-                                          // v12.3.33 — solo claves de nombre inequívoco (ver
-                                          // _extractFechaSolicitudTopLevel); las demás fechas del
-                                          // envoltorio se REGISTRAN pero jamás se escriben.
-                                          const fechaSol = _extractFechaSolicitudTopLevel(res);
-                                          if (!_diagSolicitudFechaLogged) {
-                                              _diagSolicitudFechaLogged = true;
-                                              const otrasFechas = Object.keys(res)
-                                                  .filter((k) => k !== "dataObject" && _parseFechaLike(res[k]))
-                                                  .map((k) => k + "=" + _parseFechaLike(res[k]));
-                                              console.log("[Vigilante Athenea] consultaDetalleSolicitud — claves de nivel superior:", Object.keys(res),
-                                                  "· fecha de solicitud ACEPTADA:", fechaSol ? (fechaSol.key + " → " + fechaSol.iso) : "NINGUNA",
-                                                  "· otros valores con pinta de fecha (solo evidencia, NO se usan):", otrasFechas,
-                                                  "· claves del primer analito:", Object.keys(data[0] || {}));
-                                          }
-                                          // v12.4.1 — la HORA del envoltorio también se hereda (antes se calculaba y se tiraba).
-                                          if (fechaSol) data.forEach((a) => { if (a && typeof a === "object") { a.__vglFechaSolicitud = fechaSol.iso; if (fechaSol.hora) a.__vglHoraSolicitud = fechaSol.hora; } });
-                                      } catch (eDiag) {}
-                                      resolve(data); return;
+          const siguiente = (motivoFinal) => {
+              if (yearIndex + 1 < yearsToTry.length) return tryFetchYear(yearIndex + 1);
+              return Promise.reject(motivoFinal);
+          };
+          // v18.0.90 — hallazgo #42 del enjambre: antes llamaba a GM_xmlhttpRequest
+          // directamente, sin el seguro anti-doble-disparo (_gmReq, v16.7.0) que ya usan
+          // las demás llamadas GM a Athenea de este archivo. Dos flujos que piden el
+          // MISMO laboratorio casi a la vez (prefetch al abrir la historia + un clic del
+          // médico que también dispara la lectura) duplicaban tráfico real contra un
+          // portal que el propio código ya documenta como frágil bajo carga (línea
+          // ~2627: "contestó las tres primeras [solicitudes] y se cayó"). La clave de
+          // deduplicación de _gmReq (method|url|data) ya distingue por año — dos años
+          // distintos del reintento nunca se confunden entre sí, solo dos peticiones
+          // REALMENTE idénticas (mismo idSolicitud, mismo año) comparten una sola llamada.
+          return _gmReq({
+              method: "POST",
+              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
+              headers: { "Content-Type": "application/json", "Accept": "application/json" },
+              data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
+          }).then((response) => {
+              try {
+                  if (response.status === 200) {
+                      const res = JSON.parse(response.responseText);
+                      if (res && res.dataObject) {
+                          const data = JSON.parse(res.dataObject);
+                          if (Array.isArray(data) && data.length > 0) {
+                              // v12.3.32 — BLINDAJE de fechas: hasta ahora solo se leía
+                              // res.dataObject (los analitos) y se DESCARTABA el resto de
+                              // la respuesta. Si la fecha vive a nivel de SOLICITUD (no de
+                              // analito, patrón común en estos backend), se buscaba donde
+                              // nunca iba a estar. Se escanea el nivel superior con el
+                              // mismo detector por forma y, si aparece, se hereda a cada
+                              // analito como último respaldo (__vglFechaSolicitud). El
+                              // registro de abajo es de UNA vez y deja evidencia decisiva:
+                              // qué claves trae el nivel superior y si alguna es fecha.
+                              try {
+                                  // v12.3.33 — solo claves de nombre inequívoco (ver
+                                  // _extractFechaSolicitudTopLevel); las demás fechas del
+                                  // envoltorio se REGISTRAN pero jamás se escriben.
+                                  const fechaSol = _extractFechaSolicitudTopLevel(res);
+                                  if (!_diagSolicitudFechaLogged) {
+                                      _diagSolicitudFechaLogged = true;
+                                      const otrasFechas = Object.keys(res)
+                                          .filter((k) => k !== "dataObject" && _parseFechaLike(res[k]))
+                                          .map((k) => k + "=" + _parseFechaLike(res[k]));
+                                      console.log("[Vigilante Athenea] consultaDetalleSolicitud — claves de nivel superior:", Object.keys(res),
+                                          "· fecha de solicitud ACEPTADA:", fechaSol ? (fechaSol.key + " → " + fechaSol.iso) : "NINGUNA",
+                                          "· otros valores con pinta de fecha (solo evidencia, NO se usan):", otrasFechas,
+                                          "· claves del primer analito:", Object.keys(data[0] || {}));
                                   }
-                              }
-                              if (res && res.bolValido === false) {
-                                  reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
-                                  return;
-                              }
-                              siguiente("No se encontraron resultados en Athenea para la solicitud #" + idSolicitud + " (años " + yearsToTry.join(", ") + ").");
-                          } else {
-                              siguiente("La sesión con Athenea ha caducado (HTTP " + response.status + "). Inicia sesión en Athenea.");
+                                  // v12.4.1 — la HORA del envoltorio también se hereda (antes se calculaba y se tiraba).
+                                  if (fechaSol) data.forEach((a) => { if (a && typeof a === "object") { a.__vglFechaSolicitud = fechaSol.iso; if (fechaSol.hora) a.__vglHoraSolicitud = fechaSol.hora; } });
+                              } catch (eDiag) {}
+                              return data;
                           }
-                      } catch (e) {
-                          siguiente("Error al procesar la respuesta de Athenea: " + e);
                       }
-                  },
-                  onerror: function (err) { siguiente("No se pudo conectar con Athenea: " + err); },
-                  ontimeout: function () { siguiente("Athenea no respondió a tiempo."); },
-              });
+                      if (res && res.bolValido === false) {
+                          return Promise.reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
+                      }
+                      return siguiente("No se encontraron resultados en Athenea para la solicitud #" + idSolicitud + " (años " + yearsToTry.join(", ") + ").");
+                  }
+                  return siguiente("La sesión con Athenea ha caducado (HTTP " + response.status + "). Inicia sesión en Athenea.");
+              } catch (e) {
+                  return siguiente("Error al procesar la respuesta de Athenea: " + e);
+              }
+          }, (err) => {
+              // _gmReq unifica onerror/ontimeout en un solo rechazo (Error("NetErr") /
+              // Error("Timeout")); el mensaje exacto no lo lee nadie —
+              // _getAtheneaLabsAutoNucleo solo distingue "se pudo leer" de "no se pudo"
+              // (.catch(() => null))— así que perder el texto crudo de GM no cambia nada.
+              return siguiente((err && err.message === "Timeout") ? "Athenea no respondió a tiempo." : "No se pudo conectar con Athenea: " + err);
           });
       };
 
