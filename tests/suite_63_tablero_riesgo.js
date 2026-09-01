@@ -1002,6 +1002,92 @@ module.exports = {
         "y el cuadro deja de tener motivo para frenar: es lo que él vio que NO pasaba");
     });
 
+    // =====================================================================
+    // v18.0.65 — BLOQUEO EN CONSULTA, REPORTADO EN VIVO CON CAPTURA (01-sep):
+    // «ME ESTÁ SALIENDO ESTE MENSAJE Y NO ME DEJA AVANZAR, NI CERRAR EL MÓDULO, LE DOY QUE
+    // SÍ TIENE ESAS ENFERMEDADES Y AÚN ASÍ VUELVE Y ME APARECE INDEFINIDAMENTE».
+    //
+    // El cuadro frena un ítem si NO está confirmado O si está desfasado. Responder guardaba
+    // la respuesta pero NO cambiaba la casilla de la historia, así que la contradicción
+    // seguía ahí y el ítem volvía a frenar en la vuelta siguiente. La única respuesta capaz
+    // de cerrar el cuadro era la que coincidiera con la historia: si el médico sabía que el
+    // paciente SÍ es diabético y la casilla decía que no, quedaba encerrado sin salida.
+    // =====================================================================
+    t.caso("v18.0.65: responder cierra el cuadro aunque la historia siga diciendo lo contrario", () => {
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+      const pintar = (v) => {
+        const radios = domRadios({ [CAMPO_HTA]: v });
+        d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+          ? radios(sel)
+          : (sel === ".text-muted"
+              ? [{ textContent: "CC 777000222", closest: () => null }]
+              : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+      };
+
+      pintar(false);   // la historia dice que NO es hipertenso; la cabecera dice que sí
+      t.cierto(c.api.mtrReconciliarAhora("777000222", d).frenan.some((x) => x.clave === "hta"),
+        "de entrada sí frena: las fuentes no coinciden y nadie lo ha resuelto");
+
+      // El médico responde «Sí tiene» CON la historia delante diciendo que no.
+      c.api._vglConfirmacionGuardar("777000222", "hta", true, false);
+
+      const r1 = c.api.mtrReconciliarAhora("777000222", d);
+      t.falso(r1.frenan.some((x) => x.clave === "hta"),
+        "ya no frena: él vio esta contradicción y la resolvió — repetírsela lo dejaba encerrado");
+      t.igual(r1.leidos.hta, false,
+        "y la historia SIGUE mandando sobre el valor: resolver el bloqueo no cambia el documento oficial");
+
+      // Repetir la vuelta del reloj no lo vuelve a encerrar.
+      t.falso(c.api.mtrReconciliarAhora("777000222", d).frenan.some((x) => x.clave === "hta"),
+        "ni en la siguiente vuelta, ni en las que sigan");
+    });
+
+    t.caso("v18.0.65 (contención): una contradicción NUEVA sí se vuelve a preguntar", () => {
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+      const pintar = (v) => {
+        const radios = domRadios({ [CAMPO_HTA]: v });
+        d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+          ? radios(sel)
+          : (sel === ".text-muted"
+              ? [{ textContent: "CC 777000333", closest: () => null }]
+              : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+      };
+
+      pintar(false);
+      c.api._vglConfirmacionGuardar("777000333", "hta", true, false);   // resuelve el choque
+      t.falso(c.api.mtrReconciliarAhora("777000333", d).frenan.some((x) => x.clave === "hta"),
+        "resuelto");
+
+      // Alguien cambia la casilla a «Sí»: ya no hay contradicción con su respuesta.
+      pintar(true);
+      const r = c.api.mtrReconciliarAhora("777000333", d);
+      t.igual(r.desfasadas.length, 0, "coinciden: no hay nada que avisar");
+      t.igual(r.leidos.hta, true, "y el valor es el de la historia");
+
+      // Y si el médico hubiera respondido «No» viendo un «Sí» en pantalla, ese choque es
+      // OTRO distinto del que ya resolvió: ese sí tiene que volver a preguntarse.
+      const c2 = cargar({ silencioso: true });
+      const d2 = c2.env.doc;
+      const geb2 = d2.getElementById.bind(d2);
+      d2.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : geb2(id)));
+      const radios2 = domRadios({ [CAMPO_HTA]: true });
+      d2.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios2(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 777000444", closest: () => null }]
+            : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+      // Respondió «No» cuando la pantalla decía «No»; ahora la pantalla dice «Sí».
+      c2.api._vglConfirmacionGuardar("777000444", "hta", false, false);
+      t.cierto(c2.api.mtrReconciliarAhora("777000444", d2).desfasadas.indexOf("hta") >= 0,
+        "la historia cambió desde que él respondió: es un choque nuevo y se avisa");
+    });
+
     t.caso("v17.31.0 — con TFG por Cockcroft-Gault <60 ya calculada, el reconciliador NO pregunta por ERC", () => {
       const cErc = cargar({ silencioso: true });
       const d = cErc.env.doc;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.64
+// @version      18.0.65
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.64";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.65";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5024,14 +5024,36 @@
       return (c && c.confirmaciones) || {};
     } catch (e) { return {}; }
   }
-  function _vglConfirmacionGuardar(docId, clave, valor) {
+  // v18.0.65 — BLOQUEO EN CONSULTA REPORTADO EN VIVO (01-sep, con captura): «ME ESTÁ
+  // SALIENDO ESTE MENSAJE Y NO ME DEJA AVANZAR … LE DOY QUE SÍ TIENE ESAS ENFERMEDADES Y AÚN
+  // ASÍ VUELVE Y ME APARECE INDEFINIDAMENTE».
+  //
+  // El cuadro frena un ítem si NO está confirmado O si está «desfasado» (su respuesta dice
+  // una cosa y la casilla de la historia dice la contraria). Responder guardaba la
+  // respuesta… pero NO cambiaba la casilla de la historia, así que la contradicción seguía
+  // ahí en la vuelta siguiente y el ítem volvía a frenar. Con eso, la única respuesta que
+  // podía cerrar el cuadro era la que coincidiera con la historia: si el médico sabía que
+  // el paciente SÍ es diabético y la casilla decía que no, quedaba encerrado sin salida.
+  // El propio comentario del reconciliador decía la intención («vuelve a preguntar UNA vez
+  // en lugar de callarse») — pero no existía el mecanismo del «una vez».
+  //
+  // Ahora la respuesta guarda TAMBIÉN qué decía la pantalla cuando él respondió (`vp`). El
+  // desfase solo vuelve a frenar si la historia dice algo DISTINTO de lo que él ya vio y
+  // resolvió: una contradicción nueva sí merece preguntarse otra vez; la misma de siempre,
+  // no. El aviso ámbar se sigue mostrando —el dato de que las fuentes no coinciden no se
+  // oculta—, pero deja de retener el flujo.
+  function _vglConfirmacionGuardar(docId, clave, valor, vistoEnPantalla) {
     try {
       if (!docId || !clave || (valor !== true && valor !== false)) return null;
       // Fusión PROFUNDA a mano: _vglCosechaGuardar fusiona plano, y escribir
       // {confirmaciones:{x}} tal cual borraría las confirmaciones anteriores.
       const previas = _vglConfirmacionesLeer(docId);
       const nuevas = Object.assign({}, previas);
-      nuevas[String(clave)] = { v: valor, ts: Date.now() };
+      const reg = { v: valor, ts: Date.now() };
+      // Solo se anota si de verdad se leyó algo de la pantalla; `undefined` significa «no
+      // se sabe», y en ese caso no se afirma nada (casilla vacía antes que dato inventado).
+      if (vistoEnPantalla === true || vistoEnPantalla === false) reg.vp = vistoEnPantalla;
+      nuevas[String(clave)] = reg;
       return _vglCosechaGuardar(docId, { confirmaciones: nuevas });
     } catch (e) { return null; }
   }
@@ -5836,7 +5858,13 @@
       // confirmación. Ahí se vuelve a preguntar UNA vez, porque manda la pantalla.
       const frenan = mtrDiscrepanciasQueFrenan(discrepancias).filter((x) =>
         !Object.prototype.hasOwnProperty.call(confirmadas, x.clave) || desfasadas.indexOf(x.clave) >= 0);
-      frenan.forEach((x) => { if (desfasadas.indexOf(x.clave) >= 0) x.desfasada = true; });
+      frenan.forEach((x) => {
+        if (desfasadas.indexOf(x.clave) >= 0) x.desfasada = true;
+        // v18.0.65 — lo que la historia dice AHORA para esta clave, para que la respuesta
+        // del médico quede anotada junto a lo que él tenía delante al responder.
+        const vp = f._pantalla ? f._pantalla[x.clave] : undefined;
+        if (vp === true || vp === false) x.vPantalla = vp;
+      });
 
       // La pregunta de embarazo entra por aquí, y SOLO cuando cambia la conducta: mujer en
       // edad fértil con parcial de orina sugestivo. Su respuesta caduca a los 30 días
@@ -23913,7 +23941,10 @@
       discrepancias.forEach((d) => { if (d.severidad !== "alta") _mtrMediaMarcarPreguntada(apt.doc_id, d.clave); });
       let cerrar = () => { try { modal.remove(); } catch (e) {} };
       const responder = (clave, valor) => {
-        _vglConfirmacionGuardar(apt.doc_id, clave, valor);
+        // v18.0.65 — se guarda TAMBIÉN qué decía la historia cuando él respondió: es lo que
+        // impide que la misma contradicción vuelva a frenar el cuadro para siempre.
+        const _d = discrepancias.find((x) => x && x.clave === clave);
+        _vglConfirmacionGuardar(apt.doc_id, clave, valor, _d ? _d.vPantalla : undefined);
         pendientes.delete(clave);
         pendientesBloquean.delete(clave);
         try {
@@ -25735,7 +25766,11 @@
             ? `<div style="margin-top:4px">Para que no llegue vencido, la toma se adelanta al <b>${escapeHtml(mtrFechaLegible(sug))}</b> — antes del piso habitual de 14 días. <b>Verifique que el paciente pueda ir ese día.</b></div>`
             : sinSalidaEnLaVentana
             ? `<div style="margin-top:4px">No hay una fecha de toma dentro de la ventana mínima de 14–21 días que evite esto: el examen ya venció (o vence) antes de que se pueda agendar. Tome la muestra lo antes posible dentro de esa ventana.</div>`
-            : (sug ? `<div style="margin-top:4px">La fecha que el asistente sugiere para este paciente es el <b>${escapeHtml(mtrFechaLegible(sug))}</b>.</div>` : ""))
+            // v18.0.65 — se retira «La fecha que el asistente sugiere … es el X»: el recuadro
+            // de arriba ya la dice y el botón de abajo se llama «Pasar a la fecha sugerida».
+            // Decirla tres veces en el mismo cuadro es justo el abarrotamiento que el médico
+            // pidió quitar, y con dos fechas distintas en pantalla se leía como contradicción.
+            : "")
         + `<div>`
         + ((pisoCedio || !sinSalidaEnLaVentana) && sug ? `<button type="button" class="vgl-agm-pbtn" id="vgl-agm-venc-fix">🎯 Pasar a la fecha sugerida</button>` : "")
         + `<button type="button" class="vgl-agm-pbtn" id="vgl-agm-venc-ok">Continuar con mi fecha</button>`
@@ -32237,11 +32272,15 @@
     return {
       analito: primero.nombre, vence: primero.vence, refLabIso: refLabIso,
       diasDeMas: dias, cuantos: vencidosEnEsaFecha.length,
-      texto: "Con esa fecha, la toma de laboratorios quedaría el " + mtrFechaLegible(refLabIso) +
-        " — " + dias + " día(s) después de que vence " + primero.nombre +
-        " (" + mtrFechaLegible(primero.vence) + ")" +
-        (otros > 0 ? " y otro(s) " + otros + " examen(es)" : "") +
-        ". Ese resultado llegaría vencido a la consulta.",
+      // v18.0.65 — ORDEN DEL MÉDICO (01-sep): «SOLO QUIERO SIMPLIFICAR LO MÁS POSIBLE EL
+      // MÓDULO YA QUE MUY POCO LO USAN Y SI LO ABARROTAMOS DE TEXTO MENOS LO USARÍAN». El
+      // texto anterior decía en tres frases lo que cabe en una, y repetía la fecha de la
+      // toma que el recuadro de arriba ya mostraba. Se deja el hecho y nada más: QUÉ examen
+      // llega vencido y POR CUÁNTO. Los días de más siguen ahí porque son lo que le permite
+      // decidir si mover la fecha vale la pena.
+      texto: primero.nombre + " llegaría vencido a la consulta: vence el " +
+        mtrFechaLegible(primero.vence) + " y la toma caería " + dias + " día(s) después" +
+        (otros > 0 ? ", junto con otro(s) " + otros + " examen(es)" : "") + ".",
     };
   }
 
@@ -36065,6 +36104,10 @@
       ? _vglConfirmacionesLeer(docIdEsperado) : {};
     const leidos = {};
     const desfasadas = [];
+    // v18.0.65 — lo que dice LA PANTALLA por clave, sin mezclar con archivo ni con la
+    // respuesta del médico. Es el dato que el reconciliador necesita para saber si una
+    // contradicción es NUEVA o es la misma que él ya vio y resolvió.
+    const pantalla = {};
     // v17.6.10 — los contadores de fuente y el mapa `origen` se retiraron con los
     // campos de trazabilidad muertos (_origen/_dePantalla/_deArchivo/_deCabecera/
     // _confirmadoContraHistoria/_sinDocumentar): nada en producción los leía.
@@ -36076,6 +36119,7 @@
       // pestaña que él visitó hace rato no es «la historia que tiene delante», y tratarlo
       // como tal deja el cuadro preguntando lo mismo para siempre (lo cazó suite_63).
       const vPantalla = v;
+      if (vPantalla === true || vPantalla === false) pantalla[clave] = vPantalla;
       if (v === null || v === undefined) {
         const a = archivados[clave];
         if (a === true || a === false) { v = a; }
@@ -36089,8 +36133,11 @@
       const conf = confirmados[clave];
       if (conf && (conf.v === true || conf.v === false)) {
         if (vPantalla === true || vPantalla === false) {
-          if (vPantalla !== conf.v) desfasadas.push(clave);   // la pantalla manda, y se avisa
-          v = vPantalla;
+          // v18.0.65 — el desfase solo FRENA si es NUEVO: si la pantalla dice lo mismo que
+          // decía cuando el médico respondió, él ya vio esta contradicción y la resolvió.
+          // Repetírsela en cada vuelta lo dejaba encerrado (ver _vglConfirmacionGuardar).
+          if (vPantalla !== conf.v && conf.vp !== vPantalla) desfasadas.push(clave);
+          v = vPantalla;   // la pantalla manda igual: la historia es el documento oficial
         } else {
           v = conf.v;                 // la historia no dice nada: su respuesta rellena el hueco
         }
@@ -36145,6 +36192,7 @@
       // que hay escrito en la historia de hoy. Manda la historia; esta lista existe para que
       // el reconciliador pueda volver a preguntar por ellas en vez de darlas por zanjadas.
       _confirmacionesDesfasadas: desfasadas,
+      _pantalla: pantalla,
       _documentados: documentados,
       _total: total,
       _fuente: "DOM Everest (mapa del 2026-08-14) + contexto archivado de las pestañas ya visitadas",

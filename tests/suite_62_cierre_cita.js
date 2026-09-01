@@ -77,6 +77,18 @@ module.exports = {
       t.cierto(av.texto.includes("Creatinina sérica"), "el texto lo dice en lenguaje de consultorio");
       t.cierto(av.texto.includes("llegaría vencido"), "…y explica la consecuencia");
       t.falso(av.texto.includes("driver") || av.texto.includes("estado"), "cero jerga interna");
+
+      // v18.0.65 — ORDEN DEL MÉDICO (01-sep): «SOLO QUIERO SIMPLIFICAR LO MÁS POSIBLE EL
+      // MÓDULO YA QUE MUY POCO LO USAN Y SI LO ABARROTAMOS DE TEXTO MENOS LO USARÍAN». El
+      // aviso decía en tres frases lo que cabe en una, y repetía la fecha de la toma que el
+      // recuadro de arriba ya mostraba — el médico lo leyó como dos textos contradictorios.
+      t.falso(av.texto.includes("Con esa fecha"),
+        "ya no abre repitiendo la fecha que el recuadro de arriba acaba de decir");
+      t.falso(av.texto.includes("toma de laboratorios quedaría"),
+        "ni repite la fecha de la toma: era la mitad de la contradicción que él reportó");
+      t.cierto(av.texto.length <= 160,
+        "y cabe en una línea: " + av.texto.length + " caracteres — " + av.texto);
+      t.cierto(av.texto.includes("20 día"), "sin perder el dato que le sirve para decidir: cuántos días de más");
     });
 
     t.caso("aviso: sin plan, sin fecha o sin exámenes vigilados NO se inventa nada", () => {

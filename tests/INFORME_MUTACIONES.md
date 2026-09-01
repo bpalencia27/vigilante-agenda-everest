@@ -9556,3 +9556,59 @@ principal y las spliceadas **no era el que deduje leyendo el diff** — hubo que
 escrito en la propia suite: *si vuelven a moverse, medirlos otra vez antes de tocarlos.*
 
 Banco completo: **2.890 comprobaciones pasan, 0 fallan.**
+
+## v18.0.65 — el cuadro «Las fuentes no coinciden» lo dejaba encerrado
+
+**Bloqueo en consulta real, reportado en vivo con captura (01-sep):** *«ME ESTÁ SALIENDO ESTE
+MENSAJE Y NO ME DEJA AVANZAR, NI CERRAR EL MÓDULO, LE DOY QUE SÍ TIENE ESAS ENFERMEDADES Y AÚN
+ASÍ VUELVE Y ME APARECE INDEFINIDAMENTE».*
+
+El cuadro frena un ítem si NO está confirmado **o** si está «desfasado» (su respuesta dice una
+cosa y la casilla de la historia dice la contraria). Responder guardaba la respuesta… pero no
+cambiaba la casilla de la historia, así que la contradicción seguía ahí en la vuelta siguiente
+y el ítem volvía a frenar. **La única respuesta capaz de cerrar el cuadro era la que coincidiera
+con la historia**: si el médico sabía que el paciente SÍ es diabético y la casilla decía que no,
+quedaba encerrado sin salida.
+
+Lo más incómodo es que el propio comentario del reconciliador ya decía la intención —«vuelve a
+preguntar **UNA vez** en lugar de callarse»— pero **el mecanismo del “una vez” no existía**.
+
+Ahora la respuesta guarda también qué decía la pantalla cuando él respondió (`vp`), y el
+desfase solo vuelve a frenar si la historia dice algo **distinto** de lo que él ya vio y
+resolvió. Una contradicción nueva sí merece preguntarse otra vez; la misma de siempre, no. Lo
+que NO cambia: la historia sigue mandando sobre el valor — resolver el bloqueo no reescribe el
+documento oficial. Y una respuesta guardada por una versión anterior (sin `vp`) se sigue
+tratando como antes: se vuelve a preguntar una vez, que es el comportamiento documentado.
+
+### Y los textos del módulo de agendamiento
+
+*«NO QUIERO QUE APAREZCAN ESOS DOS TEXTOS CONTRADICTORIOS EN MI PUNTO DE VISTA, SOLO QUIERO
+SIMPLIFICAR LO MÁS POSIBLE EL MÓDULO YA QUE MUY POCO LO USAN Y SI LO ABARROTAMOS DE TEXTO MENOS
+LO USARÍAN».*
+
+En su captura, el recuadro de sugerencia decía «toma de laboratorios **21 nov**» y justo debajo
+el aviso decía «la toma quedaría el **lun 23 nov**»: dos fechas de toma en pantalla a la vez —
+una la sugerida, otra la derivada de la fecha que él eligió— leídas como una contradicción. Y
+la fecha sugerida aparecía **tres veces** en el mismo cuadro: en el recuadro, en el cuerpo del
+aviso y en el botón.
+
+- El aviso deja de repetir la fecha de la toma: dice el hecho y nada más — qué examen llega
+  vencido y por cuántos días. De 3 frases a 1.
+- Se retira la frase «La fecha que el asistente sugiere … es el X»: el recuadro de arriba ya la
+  dice y el botón se llama «Pasar a la fecha sugerida».
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 172 | vuelve el bucle: se ignora lo que el médico ya vio (**el defecto**) | *responder cierra el cuadro aunque la historia siga diciendo lo contrario* (2 fallan) | Sí |
+| 173 | se deja de guardar lo que la historia decía al responder | las mismas dos | Sí |
+| 174 | el candado se hace ciego y calla también un choque NUEVO | *una contradicción NUEVA sí se vuelve a preguntar* (3 fallan) | Sí |
+| 175 | el aviso vuelve al texto largo que repetía la fecha | *ya no abre repitiendo la fecha* | Sí |
+
+La 174 es la contención, y es la que importa: «arreglarlo» de más habría convertido un cuadro
+que molesta demasiado en uno que se calla cuando de verdad hay algo nuevo que decir. La 175 no
+mordió en el primer intento —ninguna prueba fijaba el texto nuevo— y se añadió la que faltaba
+antes de darla por buena.
+
+Banco completo: **2.892 comprobaciones pasan, 0 fallan.**
