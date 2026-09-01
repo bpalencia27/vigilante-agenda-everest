@@ -118,6 +118,19 @@ module.exports = {
     t.caso("friendly arregla los encabezados en mayúsculas", () => {
       t.igual(api.friendly("OTRA_COSA_RARA"), "Otra cosa rara");
     });
+    // v18.0.92 — hallazgo #44 del enjambre: "Último VIH"/"Última SOMF" están en el
+    // diccionario con capitalización MIXTA específica, y el segundo intento de friendly()
+    // solo compara contra TODO-MAYÚSCULAS — cualquier otra variante caía al respaldo
+    // crudo, sin traducir, en la única actividad de ETS que el propio código señala como
+    // la que se conserva siempre visible.
+    t.caso("REGRESIÓN — friendly traduce 'Último VIH' venga como venga capitalizado (hallazgo #44)", () => {
+      t.igual(api.friendly("Último VIH"), "VIH", "la forma exacta del diccionario sigue funcionando");
+      t.igual(api.friendly("Último Vih"), "VIH", "antes: se quedaba crudo, sin traducir");
+      t.igual(api.friendly("ÚLTIMO VIH"), "VIH", "antes: 'ÚLTIMO VIH' no calzaba con la clave mixta 'Último VIH'");
+      t.igual(api.friendly("ultimo vih"), "VIH", "minúsculas también");
+      t.igual(api.friendly("Última SOMF"), "SOMF (sangre oculta en materia fecal)");
+      t.igual(api.friendly("Ultima somf"), "SOMF (sangre oculta en materia fecal)", "mismo arreglo para SOMF");
+    });
     t.caso("activityLabel añade el detalle cuando lo hay", () => {
       t.igual(api.activityLabel("TAMIZACION_VIH", "Susceptible"), "VIH");
       t.igual(api.activityLabel("TAMIZACION_CERVIX", "Tamizar con CCU"), "Cáncer de cuello uterino — Tamizar con CCU");

@@ -10603,3 +10603,41 @@ desinstalar el listener a mano).
 | 227 | se quita la llamada a `_activarAccesibilidadModal` (**el defecto original**) | *suite_15: hallazgo #43 — _vglChooserModal ahora pasa por _activarAccesibilidadModal* | Sí |
 
 Banco completo: **2.951 comprobaciones pasan, 0 fallan.**
+
+## v18.0.92 — friendly() traduce "Último VIH" en CUALQUIER capitalización, no solo dos formas exactas
+
+Hallazgo #44 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. Para las claves con
+guion bajo (`CITA_PF`, `TAMIZACION_*`) el segundo intento de `friendly()` (comparar en
+mayúsculas) cubre cualquier capitalización porque el diccionario ya las tiene en mayúsculas. Pero
+`"Último VIH"`/`"Última SOMF"` están guardadas con una capitalización MIXTA específica (inicial
+mayúscula + resto en mayúsculas), así que ese mismo segundo intento —que compara contra la
+versión TODO-MAYÚSCULAS del encabezado— nunca puede calzar con esas claves: `"ÚLTIMO VIH"` no es
+igual a `"Último VIH"`. Cualquier variante de capitalización que no fuera exactamente una de las
+dos formas guardadas caía al respaldo crudo, y el médico veía el encabezado del Excel tal cual
+("Último Vih") en vez de la etiqueta clínica limpia "VIH".
+
+El refutador disidente concedió el defecto técnico exacto (verificado con el arnés) pero lo llamó
+puramente cosmético por dos motivos: (1) no hay clic del médico en la cadena causal — el header
+viene de un Excel de SharePoint cuya capitalización exacta el propio código documenta como
+"confirmado con captura real"; (2) `isExcludedActivity()` decide si el chip de VIH se OCULTA
+comparando en minúsculas sin acentos, así que es inmune a este bug — el pendiente de VIH nunca
+deja de mostrarse, solo cambia el texto visible.
+
+Se aplica de todos modos: aunque el peor caso verificable sea cosmético, el arreglo es gratis, no
+depende de que el Excel escriba el encabezado en una de dos formas exactas, y cierra la brecha
+para cualquier fuente futura del mismo header (no solo SharePoint).
+
+### La reparación
+
+Se añade `FRIENDLY_NORM`, un índice auxiliar construido UNA sola vez a partir de `FRIENDLY`
+(`stripAccents(clave).toUpperCase()` → mismo valor), y un tercer intento en `friendly()` que
+compara el encabezado entrante normalizado de la misma forma contra ese índice, después de los
+dos intentos existentes (exacto, y todo-mayúsculas) y antes del respaldo crudo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 228 | se quita el tercer intento normalizado (**el defecto original**) | *suite_01: REGRESIÓN — friendly traduce 'Último VIH' venga como venga capitalizado (hallazgo #44)* | Sí |
+
+Banco completo: **2.952 comprobaciones pasan, 0 fallan.**

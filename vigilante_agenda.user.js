@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.91
+// @version      18.0.92
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.91";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.92";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9002,6 +9002,16 @@
     "Último VIH": "VIH", "Ultimo VIH": "VIH",
     "Última SOMF": "SOMF (sangre oculta en materia fecal)", "Ultima SOMF": "SOMF (sangre oculta en materia fecal)",
   };
+  // v18.0.92 — hallazgo #44 del enjambre: índice auxiliar SIN TILDES y EN MAYÚSCULAS,
+  // construido una sola vez. Las claves con guion bajo (CITA_PF, TAMIZACION_*) ya calzan
+  // con cualquier capitalización gracias al segundo intento de friendly() (toUpperCase());
+  // pero "Último VIH"/"Última SOMF" están guardadas con una capitalización MIXTA
+  // específica, así que ese mismo segundo intento (que compara contra TODO-MAYÚSCULAS)
+  // nunca puede calzar con ellas — "ÚLTIMO VIH" no es igual a "Último VIH". Se resuelve
+  // comparando ambos lados por la MISMA normalización (stripAccents + mayúsculas), sin
+  // exigir que el Excel escriba el encabezado en una de dos formas exactas.
+  const FRIENDLY_NORM = {};
+  for (const _kFriendly of Object.keys(FRIENDLY)) FRIENDLY_NORM[stripAccents(_kFriendly).toUpperCase()] = FRIENDLY[_kFriendly];
   // [COPY-UX] Detalle clínico de la prueba de cérvix
   function detalleTipoCervix(valorCrudo) {
     const s = stripAccents(String(valorCrudo || "").toLowerCase());
@@ -9536,6 +9546,11 @@
     if (FRIENDLY[raw]) return FRIENDLY[raw];
     const upper = raw.toUpperCase();
     if (FRIENDLY[upper]) return FRIENDLY[upper];
+    // v18.0.92 — hallazgo #44: tercer intento, normalizado (ver FRIENDLY_NORM más arriba)
+    // — cubre las claves de capitalización mixta ("Último VIH") en cualquier variante que
+    // el Excel traiga ("Último Vih", "ÚLTIMO VIH", "ultimo vih"...).
+    const norm = stripAccents(raw).toUpperCase();
+    if (FRIENDLY_NORM[norm]) return FRIENDLY_NORM[norm];
     const bruto = raw.replace(/_/g, " ").trim();
     // Si el encabezado ya viene escrito como texto normal ("Última tamización CMB"),
     // se respeta tal cual; solo se arregla el que viene TODO EN MAYÚSCULAS.
