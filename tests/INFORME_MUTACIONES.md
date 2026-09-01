@@ -8871,3 +8871,50 @@ La 131 es la que protege el arreglo **de sí mismo**: sin ella, endurecer la cen
 más habría vuelto a romper el texto clínico y el banco no se habría enterado.
 
 Banco completo: **2.859 comprobaciones pasan, 0 fallan.** Van **13 de los 47** del enjambre.
+
+---
+
+## v18.0.53 — el kill-switch se activaba en silencio total
+
+Hallazgo del enjambre de funciones, gravedad alta, **verificado en Chromium con el CSS real**.
+
+El médico usa «modo oculto» (Ctrl+Shift+V) para trabajar sin la interfaz del Vigilante *«sin
+apagar su trabajo de fondo»* — es la promesa explícita de esa función, y el estado **sobrevive
+recargas** por diseño. Si el consultorio dispara el kill-switch remoto con el modo oculto
+encendido, `emergencyTeardown` para el reloj y borra la interfaz… y el **único** aviso que lo
+delata (el cartel rojo de Pausa de seguridad) lo escondía **nuestra propia hoja de estilos**,
+porque su id estaba dentro del grupo que el modo oculto apaga.
+
+    SIN modo oculto  → #vgl-pausa-clinica: block   · #vgl-root: flex
+    CON modo oculto  → #vgl-pausa-clinica: none    · #vgl-root: none     (antes)
+    CON modo oculto  → #vgl-pausa-clinica: block   · #vgl-root: none     (después)
+
+El médico seguía tecleando creyendo que el asistente vigilaba vigencias, fraude y PyM cuando
+ya no vigilaba nada. **Y el propio comentario de ese bloque de CSS ya tenía escrita la regla,
+dos líneas más arriba**: *«los sonidos críticos de fraude NO se apagan: son seguridad, no
+decoración»*. El cartel del kill-switch es exactamente eso.
+
+**Dos capas, y ninguna sobra.** (1) Su id sale del grupo: inmune al modo oculto por diseño.
+(2) `_mostrarAvisoPausaClinica` apaga el modo oculto entero — si mañana alguien añade otra
+regla que esconda cosas, este aviso ya no depende de que se acuerde de excluirlo.
+
+Verificador nuevo: `tools/verificar_pausa_modo_oculto.js`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 132 | el aviso vuelve a la lista del modo oculto | *es inmune al modo oculto* | Sí — 11 ok |
+| 133 | el kill-switch deja de apagar el modo oculto | *le gana a una preferencia de interfaz* | Sí — 11 ok |
+| 134 | se vacía la lista entera en vez de sacar un id | *el modo oculto sigue escondiendo el panel* | Sí — 11 ok |
+
+La 134 es la contención: sin ella, «arreglarlo» borrando el grupo entero habría dejado el modo
+oculto sin ocultar nada, y el banco no se habría enterado.
+
+Y una nota de proceso: el comentario de este arreglo se escribió **dos veces**. El primero
+llevaba backticks y la palabra de prioridad dentro de un comentario de CSS — las dos trampas
+que ya mordieron hoy (v18.0.42 rompió el parseo, v18.0.44 falseó el censo). Documentadas en la
+bitácora esta mañana y aun así reincididas la misma tarde: por eso quedan escritas **dentro
+del propio comentario**, donde el siguiente que edite esa zona las va a leer.
+
+Banco completo: **2.861 comprobaciones pasan, 0 fallan.** Van **14 de los 47** del enjambre.

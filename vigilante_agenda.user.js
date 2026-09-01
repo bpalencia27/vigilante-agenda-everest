@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.52
+// @version      18.0.53
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.52";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.53";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15259,7 +15259,22 @@
          document.body y se sumaron después de esta lista nunca quedaron incluidos aquí
          (#vgl-confirma-modal, #vgl-llenar-modal, #vgl-min-bar, #vgl-deshacer-llenado,
          #vgl-deshacer-lote, #vgl-ia-inj-ea, #vgl-ia-inj-an) — el modo oculto (pensado
-         para ocultar TODO de un vistazo) los dejaba visibles. */
+         para ocultar TODO de un vistazo) los dejaba visibles.
+         v18.0.53 — Y AL REVÉS: uno que NO puede estar aquí y estaba. #vgl-pausa-clinica es
+         el cartel rojo del kill-switch remoto, y este mismo comentario ya decía la regla
+         dos líneas más arriba: «los sonidos críticos de fraude NO se apagan: son seguridad,
+         no decoración». El cartel de Pausa de seguridad es exactamente eso. Con el modo
+         oculto heredado de una sesión anterior (sobrevive recargas, por diseño), el
+         kill-switch se activaba EN SILENCIO TOTAL: emergencyTeardown paraba el reloj y
+         borraba la interfaz, y el único aviso que lo delataba lo escondía nuestra propia
+         hoja, con marca de prioridad y todo. Medido en Chromium con el CSS real: el cartel
+         se pinta sin la clase y desaparece con ella. El médico seguía tecleando creyendo
+         que el asistente vigilaba.
+         (Ni backticks ni la palabra de prioridad escritos aquí: en un comentario de CSS
+         dentro de una plantilla, lo primero rompe el parseo de JavaScript y lo segundo le
+         suma al censo de la suite 25 una regla que no existe. Las dos trampas ya mordieron
+         hoy — v18.0.42 y v18.0.44.)
+         Sale de la lista: este aviso es inmune al modo oculto POR DISEÑO. */
       body.vgl-modo-oculto #vgl-root,body.vgl-modo-oculto #vgl-acciones-dock,body.vgl-modo-oculto #vgl-lab-injector,
       body.vgl-modo-oculto #vgl-examen-normalidad,body.vgl-modo-oculto #vgl-examen-guardar,body.vgl-modo-oculto #vgl-examen-aplicar,
       body.vgl-modo-oculto #vgl-sp,body.vgl-modo-oculto #vgl-dock,body.vgl-modo-oculto #vgl-pym-banner,
@@ -15267,7 +15282,7 @@
       body.vgl-modo-oculto #vgl-modal,body.vgl-modo-oculto #vgl-agendar-modal,body.vgl-modo-oculto #vgl-ordenar-modal,
       body.vgl-modo-oculto #vgl-labs-modal,body.vgl-modo-oculto #vgl-labsv-modal,body.vgl-modo-oculto #vgl-ia-modal,
       body.vgl-modo-oculto #vgl-riesgo-modal,body.vgl-modo-oculto #vgl-ficha-modal,body.vgl-modo-oculto #vgl-tablero-modal,body.vgl-modo-oculto #vgl-acomp-burbuja,body.vgl-modo-oculto #vgl-pes-modal,body.vgl-modo-oculto #vgl-panel-modal,
-      body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica,
+      body.vgl-modo-oculto #vgl-pym-modal,
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
       body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
@@ -30256,6 +30271,13 @@
   function _mostrarAvisoPausaClinica(motivo) {
     try {
       if (typeof document === "undefined" || !document.body) return;
+      // v18.0.53 — SEGUNDA CAPA, y no sobra. La primera (sacar este id del grupo de CSS del
+      // modo oculto) lo hace inmune a ESA regla; esta apaga el modo oculto entero, porque
+      // el kill-switch no es una pantalla más: es el aviso de que el asistente DEJÓ de
+      // vigilar. Una preferencia de interfaz heredada no puede ganarle a eso, y si mañana
+      // alguien añade otra regla que esconda cosas en modo oculto, este aviso ya no depende
+      // de que se acuerde de excluirlo.
+      try { document.body.classList.remove("vgl-modo-oculto"); } catch (e) {}
       let aviso = document.getElementById("vgl-pausa-clinica");
       if (aviso) aviso.remove();
       aviso = document.createElement("div");

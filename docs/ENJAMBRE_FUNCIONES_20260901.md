@@ -40,8 +40,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | el candado de leyendas compartía MORADO y VERDE: el aviso de llegada del paciente se callaba — **el reporte en vivo del médico** | `_legendMarcaUnaVez` / `maybeNotify` | **v18.0.50** | 125, 126 |
 | los widgets 🧪 y 💊 quedaban flotando sobre «Citas del día» con el juicio del paciente anterior — **el otro reporte en vivo** | `mtrWidgetConductaTick` / tick general | **v18.0.51** | 127, 128 |
 | el apellido real podía llegar intacto a Gemini (dos letras, o tilde desajustada) | `mtrSanearTextoLibreAI` | **v18.0.52** | 129, 130, 131 |
+| el kill-switch remoto se activaba en silencio total con «modo oculto» encendido | `_mostrarAvisoPausaClinica` / CSS | **v18.0.53** | 132, 133, 134 |
 
-Quedan **34 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **33 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad
