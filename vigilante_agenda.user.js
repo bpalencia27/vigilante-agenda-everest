@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.71
+// @version      18.0.72
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.71";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.72";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28878,11 +28878,25 @@
     // con dígitos, así que «12.345.678» y «12345678» abrían DOS colas sobre el mismo
     // archivo — la carrera que esto viene a cerrar sobrevivía en ese caso. La cola se
     // indexa por el nombre de archivo, y se poda para no crecer sin fin.
+    // v18.0.72 — AUDITORÍA (hallazgo de enjambre #20): `Map.set()` sobre una clave YA
+    // existente no cambia su posición de inserción, así que un paciente con actividad
+    // solo al principio de la jornada quedaba SIEMPRE al frente del Map — «el más viejo»
+    // para la poda, aunque tuviera un guardado en curso ahora mismo. La poda por >200
+    // podía elegirlo como víctima, y un guardado siguiente para ESE MISMO paciente
+    // encontraba su propia clave ya borrada y arrancaba SIN encadenar detrás del que
+    // seguía en vuelo: la carrera exacta que esta cola existe para impedir (reproducido:
+    // dos escrituras concurrentes sobre el mismo archivo). Ahora la clave propia se saca
+    // del Map (si ya existía) ANTES de decidir la poda, así nunca puede podarse a sí
+    // misma, y al reinsertarse queda al FINAL: la posición de cada clave refleja su
+    // ÚLTIMO uso, no el primero, y la poda solo alcanza a quien de verdad lleva 200
+    // pacientes distintos sin actividad.
     const nombreCola = mtrNombreArchivoPaciente(docId) || String(docId == null ? "" : docId);
+    let previoEnCola = _vglCarpetaCola.get(nombreCola);
+    if (previoEnCola !== undefined) _vglCarpetaCola.delete(nombreCola);
     if (_vglCarpetaCola.size > 200) {
       try { const k = _vglCarpetaCola.keys().next(); if (!k.done) _vglCarpetaCola.delete(k.value); } catch (e) {}
     }
-    const previoEnCola = _vglCarpetaCola.get(nombreCola) || Promise.resolve();
+    if (previoEnCola === undefined) previoEnCola = Promise.resolve();
     const corrida = previoEnCola.then(() => _vglCarpetaGuardarAhora(docId, instantanea, fs), () => _vglCarpetaGuardarAhora(docId, instantanea, fs));
     _vglCarpetaCola.set(nombreCola, corrida.catch(() => {}));
     return corrida;

@@ -9934,3 +9934,51 @@ ninguna protección), no que las tres debieran rechazarse bajo el arreglo. Se co
 prueba, no el código.
 
 Banco completo: **2.920 comprobaciones pasan, 0 fallan.**
+
+## v18.0.72 — la poda de la cola de carpeta podía desincronizar un guardado en curso
+
+Hallazgo #20 del enjambre de funciones, gravedad alta, 2 de 3 refutadores no lo tumbaron. Un
+tercer refutador sostenía que era imposible («no hay ningún `await` entre el chequeo de poda y
+el `.set()` dentro de una sola llamada, así que corre de forma atómica») — cierto, pero no
+refuta el hallazgo: la atomicidad de UNA llamada no protege la clave que dejó una llamada
+ANTERIOR, todavía en vuelo.
+
+Reproducido primero contra el código real, sin tocar nada (`vglCarpetaGuardarInstantanea`,
+`_vglCarpetaCola`), antes de decidir si aplicar el arreglo:
+
+`Map.set()` sobre una clave YA existente no cambia su posición de inserción — solo una clave
+NUEVA se añade al final. Un paciente («P») cuya única actividad ocurrió al principio de la
+jornada queda entonces SIEMPRE al frente del `Map`, y la poda por >200 pacientes distintos lo
+elige como «el más viejo» sin mirar si tiene un guardado en curso ahora mismo.
+
+Secuencia exacta que lo dispara:
+1. Primer guardado de P: su clave queda al frente de la cola.
+2. 199 pacientes distintos se cuelan por delante — la cola llega a 200, todavía sin podar.
+3. Segundo guardado de P arranca (su lectura de disco tarda): la cola sigue en 200, no poda
+   todavía. `.set()` reutiliza la clave de P sin moverla de posición: sigue siendo la más vieja.
+4. Un paciente distinto más cruza el umbral de 200.
+5. Tercer guardado de P arranca MIENTRAS el segundo sigue en vuelo: la cola ya tiene 201, poda
+   la más vieja — que sigue siendo la de P — y la borra. Este tercer guardado busca la clave de
+   P para encadenarse detrás del segundo, no la encuentra (se acaba de borrar A SÍ MISMA) y
+   arranca de cero, en paralelo con el segundo: dos lecturas/escrituras concurrentes sobre el
+   mismo archivo, la carrera exacta que la cola existe para impedir.
+
+`tests/repro_hallazgo20b.js` (guion suelto, no forma parte del banco) confirmó la secuencia paso
+a paso contra `vglCarpetaGuardarInstantanea` real: el tercer guardado arrancaba su lectura antes
+de que el segundo (todavía colgado en la suya) terminara.
+
+### La reparación
+
+Antes de decidir si podar, la llamada saca su PROPIA clave de la cola (si ya existía) y la
+vuelve a insertar al reencolarse: eso la mueve al FINAL, así que nunca puede podarse a sí misma,
+y la posición de cada clave pasa a reflejar su ÚLTIMO uso, no el primero. La poda solo alcanza
+ahora a un paciente que de verdad lleva 200 pacientes distintos sin ninguna actividad —
+exactamente la garantía que el comentario original de esta cola siempre dijo tener.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 198 | se revierte al `.get()`/poda del orden original (**el defecto real, reproducido antes de tocar nada**) | *REGRESIÓN — la poda de la cola de carpeta NO puede desincronizar un guardado en curso (hallazgo #20)* | Sí |
+
+Banco completo: **2.921 comprobaciones pasan, 0 fallan.**

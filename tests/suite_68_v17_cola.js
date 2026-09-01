@@ -352,6 +352,72 @@ module.exports = {
       t.falso(r.ok, "sin cédula, no");
     });
 
+    // v18.0.72 — HALLAZGO DE ENJAMBRE #20, reproducido antes de tocar nada. `Map.set()`
+    // sobre una clave YA existente no cambia su posición de inserción: un paciente con
+    // actividad solo al principio de la jornada quedaba SIEMPRE al frente del Map, «el
+    // más viejo» para la poda por >200 pacientes, aunque tuviera un guardado en curso
+    // AHORA MISMO. La poda lo podía elegir como víctima, y un guardado siguiente para ESE
+    // MISMO paciente encontraba su propia clave ya borrada y arrancaba sin encadenar
+    // detrás del que seguía en vuelo — la carrera exacta que la cola existe para impedir.
+    await t.casoAsync("REGRESIÓN — la poda de la cola de carpeta NO puede desincronizar un guardado en curso (hallazgo #20)", async () => {
+      const disco = {};
+      const orden = [];
+      const fsInstant = () => ({
+        leer: async (n) => disco[n],
+        escribir: async (n, txt) => { disco[n] = txt; return true; },
+      });
+      let liberarLectura2 = null;
+      const bloqueoLectura2 = new Promise((r) => { liberarLectura2 = r; });
+      const fsLentoParaGuardado2 = () => ({
+        leer: async (n) => { orden.push("2:leyendo"); await bloqueoLectura2; orden.push("2:leyó"); return disco[n]; },
+        escribir: async (n, txt) => { orden.push("2:escribiendo"); disco[n] = txt; orden.push("2:escribió"); return true; },
+      });
+      const fsInstantParaGuardado3 = () => ({
+        leer: async (n) => { orden.push("3:leyendo"); return disco[n]; },
+        escribir: async (n, txt) => { orden.push("3:escribiendo"); disco[n] = txt; orden.push("3:escribió"); return true; },
+      });
+
+      // 1) Primer guardado de P: siembra su clave AL FRENTE de la cola.
+      const r1 = await api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-01", laboratorios: { A: 1 } }, fsInstant());
+      t.cierto(r1.ok, "primer guardado de P");
+
+      // 2) 199 pacientes distintos se cuelan por delante: la cola llega a 200, justo bajo
+      //    el umbral de poda, sin tocar todavía la clave de P.
+      for (let i = 0; i < 199; i++) {
+        await api.vglCarpetaGuardarInstantanea(String(20000000 + i), { fecha: "2026-08-01" }, fsInstant());
+      }
+
+      // 3) Segundo guardado de P, con su lectura retenida a mano (simula I/O lento real).
+      //    Al arrancar la cola tiene 200 (no poda todavía): su clave se reutiliza sin
+      //    moverse de posición — sigue siendo la más vieja.
+      const p2 = api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-02" }, fsLentoParaGuardado2());
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+
+      // 4) Un paciente distinto más cruza el umbral de 200: la PRÓXIMA llamada poda.
+      await api.vglCarpetaGuardarInstantanea("30000000", { fecha: "2026-08-01" }, fsInstant());
+
+      // 5) Tercer guardado de P, MIENTRAS el segundo sigue colgado en su lectura. Antes del
+      //    fix, la poda de esta misma llamada borraba la clave de P (la más vieja) y esta
+      //    llamada arrancaba sin encadenar detrás del segundo: los dos leían/escribían el
+      //    mismo archivo a la vez.
+      const p3 = api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-03" }, fsInstantParaGuardado3());
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+
+      t.falso(orden.indexOf("3:leyendo") >= 0, "el tercer guardado NO arranca mientras el segundo sigue colgado en su lectura");
+
+      liberarLectura2();
+      const [res2, res3] = await Promise.all([p2, p3]);
+      t.cierto(res2.ok && res3.ok, "los dos terminan bien");
+      t.igual(orden.join(","), "2:leyendo,2:leyó,2:escribiendo,2:escribió,3:leyendo,3:escribiendo,3:escribió",
+        "el tercero espera a que el segundo termine de punta a punta, no solo a que empiece: " + orden.join(","));
+
+      const historial = await api.vglCarpetaLeerHistorial("900000001", fsInstant());
+      t.igual(historial.controles.length, 3, "no se pierde ninguna de las tres instantáneas de P");
+    });
+
     t.caso("_mtrInstantaneaAlMenosTanRica: qué cuenta como «no perder nada»", () => {
       const rica = { laboratorios: { A: 1, B: 1 }, riesgo: { categoria: "ALTO" }, medicamentos: ["x"], renal: { egfr: 55 } };
       const pobre = { laboratorios: {}, riesgo: {}, medicamentos: [], renal: {} };

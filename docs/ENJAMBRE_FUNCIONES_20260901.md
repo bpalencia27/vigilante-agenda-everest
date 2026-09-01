@@ -54,8 +54,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | un ícono SVG nuestro se reportaba como de Everest — **confirmado por la telemetría del 1-sep** | `_rageEtiqueta` | **v18.0.63** | 162 |
 | la caja roja «cifras sin respaldo» no conocía lo que el médico escribió en las OTRAS casillas de texto libre | `mtrAbrirPanelRedaccion` / `_respaldoDelMedico` | **v18.0.70** | 193 |
 | un consecutivo/factura con la fecha de hoy empotrada, en una subcarpeta ajena, se colaba como el PyM del día | `esNombreDeHoy` / `nameHasToken` / `pickTodaysFile` | **v18.0.71** | 194–197 |
+| la poda de la cola de carpeta (>200 pacientes) podía borrar la clave de un guardado en curso y desincronizar dos escrituras del mismo paciente — refutación de un tercer votante examinada y descartada (defendía la atomicidad de UNA llamada, no la carrera entre llamadas) | `vglCarpetaGuardarInstantanea` | **v18.0.72** | 198 |
 
-Quedan **23 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **22 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad
