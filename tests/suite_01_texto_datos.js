@@ -246,6 +246,47 @@ module.exports = {
     // lo AFIRMA — justo lo opuesto de lo que decía.
     const RE_FUMA = /\bfumador|tabaquism|\bfuma\b/i;
     const RE_HTA = /\bhta\b|hipertens/i;
+    // =================================================================
+    //  v18.0.57 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  UNA NEGACIÓN SE LLEVABA POR DELANTE TODO LO QUE COMPARTIERA FRASE CON ELLA.
+    //
+    //  La lista vieja de negadores se probaba como substring sobre la frase ENTERA, sin
+    //  mirar dónde estaba el negador respecto del término clínico — y corría ANTES del
+    //  arreglo por proximidad de la v18.0.17, cortocircuitándolo.
+    //
+    //  El daño no es cosmético en ninguna de las dos direcciones: una discrepancia de
+    //  severidad ALTA FRENA la apertura del Panel del paciente hasta que el médico
+    //  responda un cuadro sobre un dato que él mismo acaba de afirmar; y leer como NO
+    //  diabético a un diabético decide qué tabla de vigencias rige y baja el riesgo
+    //  cardiovascular.
+    // =================================================================
+    const RE_DIAB = /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i;
+    t.caso("v18.0.57: negar UN hecho no niega los demás de la misma frase", () => {
+      const f = api.mtrTextoOpinaSobre;
+      // Las cinco frases con las que el enjambre lo reprodujo, todas normales en una historia.
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_DIAB), true,
+        "la diabetes está AFIRMADA: lo que se niega es el tabaquismo");
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_HTA), true, "y la hipertensión también");
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_FUMA), false,
+        "el tabaquismo sí queda negado — el negador está pegado a él");
+      t.igual(f("No fuma, pero es diabético.", RE_DIAB), true, "«no fuma» no niega la diabetes");
+      t.igual(f("Paciente diabético e hipertenso, niega tabaquismo.", RE_DIAB), true,
+        "y da igual el orden: la negación va al final y no alcanza a lo de antes");
+    });
+
+    t.caso("v18.0.57: y lo que SÍ era negación sigue siéndolo (las dos listas unificadas)", () => {
+      const f = api.mtrTextoOpinaSobre;
+      t.igual(f("Niega diabetes.", RE_DIAB), false, "«niega» pegado al término");
+      t.igual(f("No refiere diabetes.", RE_DIAB), false, "el negador de dos palabras");
+      t.igual(f("Sin antecedente de diabetes.", RE_DIAB), false, "y el de tres, con palabras en medio");
+      t.igual(f("Paciente no diabético, no fumador.", RE_DIAB), false, "la negación sin verbo (v18.0.17)");
+      t.igual(f("Nunca fumador.", RE_FUMA), false, "«nunca» delante");
+      // La contención que el comentario de v18.0.17 protege, y que no se puede perder:
+      t.igual(f("Sin control, diabético descompensado.", RE_DIAB), true,
+        "«sin control, diabético» es una AFIRMACIÓN: la coma corta la ventana del negador");
+      t.igual(f("Padre diabético.", RE_DIAB), null, "y lo de un tercero sigue sin opinar");
+    });
+
     t.caso("v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo', no solo las frases largas", () => {
       t.igual(api.mtrTextoOpinaSobre("Paciente no fuma.", RE_FUMA), false, "'no fuma' debe negar, no afirmar");
       t.igual(api.mtrTextoOpinaSobre("No es hipertenso, tensión normal en consulta.", RE_HTA), false, "'no es hipertenso' debe negar");

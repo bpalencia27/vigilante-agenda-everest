@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.56
+// @version      18.0.57
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.56";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.57";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5294,6 +5294,16 @@
   // Conservador a propósito: ante la duda devuelve null. Reconoce la negación clínica
   // ("niega tabaquismo") y descarta lo que sea de un tercero ("padre diabético"), que son
   // las dos formas en que un lector ingenuo de prosa se equivoca en una historia.
+  // v18.0.57 — TODOS los negadores, en UNA sola comprobación por proximidad (ver dentro de
+  // mtrTextoOpinaSobre). Ordenados de la forma MÁS LARGA a la más corta: la alternancia de
+  // JavaScript casa la primera que pueda, así que con «no» delante «no refiere» nunca se
+  // reconocería entero y la ventana quedaría corta.
+  //  · `[^,;.]{0,25}$` — el negador tiene que estar cerca Y en la misma cláusula. La coma es
+  //    la frontera que salva el caso real «sin control, diabético descompensado», que es una
+  //    AFIRMACIÓN y tiene que seguir siéndolo.
+  const MTR_RE_NEGADOR_CERCA = new RegExp(
+    "\\b(?:sin antecedente|no refiere|no presenta|no consume|no padece|nunca ha|descarta|no tiene|no fuma|no usa|niega|no es|no fue|no ha|nunca|jamas|sin|no)\\b[^,;.]{0,25}$");
+
   function mtrTextoOpinaSobre(texto, re) {
     try {
       const t = String(texto || "");
@@ -5313,7 +5323,31 @@
         // así calzaba con niega/no refiere/sin antecedente/descarta/no presenta/no tiene/
         // nunca ha, así que caía en la afirmación de la línea de abajo: el texto libre que
         // NIEGA un hecho terminaba usándose como fuente que lo AFIRMA.
-        if (/\b(niega|no refiere|sin antecedente|descarta|no presenta|no tiene|nunca ha|no es|no fue|no fuma|no consume|no padece|no usa|no ha)\b/.test(f)) { if (veredicto === null) veredicto = false; continue; }
+        // v18.0.57 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta: ESTA LISTA
+        // NEGABA CUALQUIER HECHO QUE COMPARTIERA FRASE CON LA NEGACIÓN DE OTRO. Se probaba
+        // como substring sobre la frase ENTERA, sin mirar dónde estaba el negador respecto
+        // del término clínico — y encima corría ANTES del arreglo por proximidad de la
+        // v18.0.17, así que lo cortocircuitaba. Medido con el arnés, cinco frases normales:
+        //
+        //   «Niega tabaquismo, es diabético e hipertenso»      -> diabetes: NEGADA
+        //   «No fuma, pero es diabético»                       -> diabetes: NEGADA
+        //   «Paciente diabético e hipertenso, niega tabaquismo» -> las dos NEGADAS
+        //
+        // El daño no es cosmético: `mtrDiscrepanciasDeFuentes` marca diabetes e HTA con
+        // severidad ALTA, y una discrepancia alta FRENA la apertura del Panel del paciente
+        // hasta que el médico responda un cuadro «Las fuentes no coinciden» — sobre un dato
+        // que él mismo acaba de afirmar por escrito. Y al revés es peor: un paciente
+        // diabético podía quedar leído como no diabético, que decide qué tabla de vigencias
+        // rige y pone el riesgo cardiovascular en ALTO como mínimo.
+        //
+        // Las dos listas se unifican en UNA sola comprobación por proximidad, la que la
+        // v18.0.17 ya había escrito bien: el negador tiene que estar cerca del término Y en
+        // la misma cláusula (la coma es la frontera). Se conserva el caso real que ese
+        // comentario protege —«sin control, diabético descompensado» es una AFIRMACIÓN—
+        // porque la ventana no puede cruzar la coma.
+        //
+        // Se dejan las dos formas en la misma alternancia, de la más larga a la más corta:
+        // sin ese orden, «no» casaría antes que «no refiere» y acortaría la ventana.
         // v18.0.17 — NEGACIÓN POR SUSTANTIVO O ADJETIVO, no solo por verbo.
         // La lista de arriba (v17.6.30) cubre «no + VERBO»: «no fuma», «no es diabético».
         // No cubre la forma en que el médico escribe de verdad, que es sin verbo:
@@ -5334,7 +5368,7 @@
         //   · `f.search(re)` y no `re.exec` — `re` puede venir con la marca /g, y exec
         //     guardaría lastIndex entre llamadas; search la ignora y siempre empieza en 0.
         const donde = f.search(re);
-        if (donde > 0 && /\b(?:no|sin|nunca|jamas)\b[^,;.]{0,20}$/.test(f.slice(Math.max(0, donde - 30), donde))) {
+        if (donde > 0 && MTR_RE_NEGADOR_CERCA.test(f.slice(Math.max(0, donde - 45), donde))) {
           if (veredicto === null) veredicto = false;
           continue;
         }

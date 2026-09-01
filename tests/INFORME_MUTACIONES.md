@@ -9086,3 +9086,57 @@ parcial se vigilan es una decisión clínica, no técnica.
 
 Banco completo: **2.868 comprobaciones pasan, 0 fallan.** Los **cuatro** defectos del reporte
 del 1-sep quedan cerrados.
+
+---
+
+## v18.0.57 — una negación se llevaba por delante todo lo que compartiera frase con ella
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+La lista vieja de negadores (v17.6.30) se probaba como **substring sobre la frase entera**, sin
+mirar dónde estaba el negador respecto del término clínico — y encima corría **antes** del
+arreglo por proximidad de la v18.0.17, cortocircuitándolo. Cinco frases perfectamente normales
+en una historia:
+
+| texto | diabetes leída como |
+|---|---|
+| «Niega tabaquismo, es diabético e hipertenso» | **NEGADA** (y la HTA también) |
+| «No fuma, pero es diabético» | **NEGADA** |
+| «Paciente diabético e hipertenso, niega tabaquismo» | **NEGADA** |
+
+El daño va en las dos direcciones, y ninguna es cosmética. `mtrDiscrepanciasDeFuentes` marca
+diabetes e HTA con severidad **ALTA**, y una discrepancia alta **frena la apertura del Panel
+del paciente** hasta que el médico responda un cuadro «Las fuentes no coinciden» sobre un dato
+que él mismo acaba de afirmar por escrito. Y al revés es peor: un paciente diabético leído como
+no diabético cambia qué tabla de vigencias rige y baja su riesgo cardiovascular.
+
+Las dos listas se unifican en **una sola comprobación por proximidad**, la que la v18.0.17 ya
+había escrito bien: el negador tiene que estar cerca del término **y en la misma cláusula**. Se
+conserva el caso real que ese comentario protege —«sin control, diabético descompensado» es una
+AFIRMACIÓN— porque la ventana no puede cruzar la coma.
+
+Detalle que costó una vuelta: la alternancia va **de la forma más larga a la más corta**. Con
+`no` delante, `no refiere` nunca se reconocería entero y la ventana quedaría corta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 144 | vuelve la lista vieja sin proximidad (**el defecto**) | *negar UN hecho no niega los demás de la misma frase* | Sí — 50 ok |
+| 145 | se pierde la frontera de coma | *«sin control, diabético» es una afirmación* (3 fallan) | Sí — 50 ok |
+
+### Y una trampa de PROCESO, nueva y de las que engañan
+
+Las mutaciones 145 y 146 **salieron verdes en el primer intento**, y estuve a punto de
+apuntarlo como «la prueba no muerde». No era eso: mi `replace(..., 1)` sustituía la **primera**
+aparición del patrón en el archivo, que estaba **dentro del comentario que acababa de escribir**
+—porque el comentario cita la regla textualmente—, no en la línea de código. La mutación editaba
+prosa y dejaba el código intacto.
+
+**Una mutación que no muerde exige comprobar primero que la mutación se aplicó.** Un verde
+después de mutar puede significar dos cosas muy distintas —la prueba es hueca, o la mutación
+no llegó— y confundirlas hace descartar una prueba que sí servía. Al repetirlas contra la línea
+real, la 145 tumbó 3 comprobaciones. La 146 (reordenar la alternancia) sigue sin morder de
+verdad: se anota como hueco conocido en vez de inventarle una prueba a medida.
+
+Banco completo: **2.870 comprobaciones pasan, 0 fallan.** Van **15 de los 47** del enjambre.
