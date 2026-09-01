@@ -647,7 +647,15 @@ module.exports = {
       // hoja: su color venía solo por herencia, y la herencia pierde contra una regla de
       // tipo de Everest con important. Medido en Chromium: 18,67:1 -> 1,10:1, invisible.
       // Este censo existe justo para que un número así no cambie sin que alguien lo explique.
-      t.cierto(importantTotal === 645, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 645: 644 del blindaje completo de color de la v18.0.14 + 1 de la regla nueva de .vgl-uro-arrow en la v18.0.42; salió ${importantTotal})`);
+      // v18.0.43 — 645 -> 649: CUATRO reglas nuevas para el chip y la línea del respaldo
+      // (`.vgl-chip-resp`, `.vgl-none.resp`, cada una con su gemela de tema oscuro), que
+      // pintan en ámbar lo que viene de la base piloto y no de la lista oficial de hoy.
+      // Viven en la tarjeta de cita, dentro de #vgl-root, pero llevan su marca de prioridad
+      // igual: la regla del proyecto es que TODO color la lleve, no solo los de fuera.
+      // De paso, el primer intento sumaba CINCO: el quinto era la palabra escrita dentro de
+      // un comentario del propio CSS. Este censo cuenta texto crudo, así que una mención en
+      // prosa le inventa una regla — anotado en el comentario de esa hoja para no repetirlo.
+      t.cierto(importantTotal === 649, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 649: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.43
+// @version      18.0.44
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.43";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.44";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8624,6 +8624,19 @@
 
   const rawState = {
     pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "",
+    // v18.0.43 — SEGUNDO ÍNDICE, DE SOLO CONSULTA: la base piloto (el respaldo), viva a la
+    // vez que la lista oficial del día, no en su lugar. Pedido del médico (1-sep): "SI ES
+    // POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE 'Dato faltante: sin registro en PyM' SE PUEDA
+    // CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL PACIENTE TIENE ACTIVIDADES
+    // PENDIENTES PORQUE ESO SIGNIFICA QUE NO APARECE EN LA LISTA DEL CMB OFICIAL PERO PODRÍA
+    // APARECER EN EL RESPALDO".
+    //
+    // POR QUÉ APARTE Y NO MEZCLADO. `state.pym` es la lista oficial del día y sigue siendo
+    // la única verdad: quien está en ella se lee SOLO de ella, incluido su "al día". Este
+    // índice existe para los pacientes que la oficial NO conoce —y solo para ellos—, así
+    // que no puede vivir en el mismo mapa: fusionarlos haría imposible distinguir de dónde
+    // salió cada dato, y un pendiente de mayo pasaría por un pendiente de hoy.
+    pymResp: new Map(), pymRespTodos: null, pymRespNombre: "", pymRespMTime: "", pymRespCargado: "",
     // v18.0.11 — POR QUÉ no hay lista de prevención. Los tres mensajes que lo explicaban
     // vivían dentro de `if (!silent)` y las TRES llamadas de producción pasan silent=true
     // (ver loadPymDiario): el diagnóstico se calculaba y se tiraba en cada vuelta, y el
@@ -9150,6 +9163,78 @@
     return CONFIG.EXCLUDE_PYM.some((k) => hay.includes(k));
   }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
+
+  // =====================================================================
+  //  v18.0.43 — CONSULTA AL RESPALDO, SOLO PARA QUIEN NO ESTÁ EN LA OFICIAL
+  //  ------------------------------------------------------------------
+  //  Pedido del médico (1-sep). Un paciente puede no aparecer en el Agenda_Dia_CMB de
+  //  hoy —es nuevo, lo agregaron tarde, su identificación no cruza— y sí estar en la base
+  //  piloto. Hasta esta versión eso salía como "Dato faltante: sin registro en PyM" y ahí
+  //  moría, aunque el respaldo estuviera cargado en la misma máquina.
+  //
+  //  LAS CUATRO REGLAS QUE HACEN QUE ESTO NO ROMPA NADA:
+  //   1. NUNCA sustituye a la oficial. Se consulta SOLO cuando `pymTodos` (la oficial) no
+  //      tiene al paciente. Quien está en la oficial se lee solo de la oficial, incluido
+  //      su "al día" — si la oficial dice que no le falta nada, eso manda.
+  //   2. NUNCA se mezcla en `state.pym`. Vive en su propio mapa, así que ningún consumidor
+  //      existente (getActivities, pymPendientesRestantes, el módulo de ordenamiento, el
+  //      aviso al abrir la historia) cambia de comportamiento sin pedirlo.
+  //   3. NUNCA se presenta como dato de hoy. El respaldo es una base de referencia, con
+  //      fecha propia y meses de antigüedad posibles: todo lo que salga de aquí viaja con
+  //      su procedencia pegada, para que el médico lo pese. Es la Regla D del proyecto —
+  //      un mensaje tranquilizador exige evidencia—, y aquí también al revés: un pendiente
+  //      de mayo no puede presentarse como un pendiente de hoy.
+  //   4. NUNCA dice "al día". Si el respaldo tiene al paciente y sin pendientes, eso NO
+  //      prueba que hoy no le falte nada: solo prueba que en esa base no había nada
+  //      anotado. Se dice exactamente eso.
+  //
+  //  De dónde sale el dato: de la MISMA copia que el script ya guarda (`vgl_piloto`,
+  //  escrita por pilotoGuardar desde v7.8.1). No se descarga nada nuevo por esta función;
+  //  si esa copia no existe todavía, el respaldo sencillamente no responde y la pantalla
+  //  se queda como estaba.
+  // =====================================================================
+  let _respCargaEnCurso = null;
+  async function cargarRespaldoParaConsulta() {
+    // Ya cargado hoy: nada que hacer. Se reintenta al día siguiente por si la copia cambió.
+    if (state.pymRespCargado === todayStamp()) return true;
+    if (_respCargaEnCurso) return _respCargaEnCurso;
+    _respCargaEnCurso = (async () => {
+      try {
+        if (typeof GM_getValue === "undefined") return false;
+        const raw = GM_getValue(PILOTO_KEY, "");
+        if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return false;
+        const u = await unpackPym(raw, makeYielder(15));
+        if (!u || !u.map) return false;
+        state.pymResp = u.map;
+        state.pymRespTodos = u.todos || null;
+        state.pymRespNombre = (u.meta && u.meta.name) || "Base piloto";
+        state.pymRespMTime = (u.meta && u.meta.mtime) || "";
+        state.pymRespCargado = todayStamp();
+        return true;
+      } catch (e) { return false; } finally { _respCargaEnCurso = null; }
+    })();
+    return _respCargaEnCurso;
+  }
+
+  // PURA sobre el estado: qué dice el respaldo de este paciente. Devuelve null cuando no
+  // hay nada que decir —sin respaldo cargado, o el paciente sí está en la oficial, o el
+  // respaldo ES la lista activa (entonces consultarlo sería preguntarle dos veces a la
+  // misma fuente)—, y en ese caso la pantalla se queda exactamente como antes.
+  //   { estado: "con_pendientes", lista: [...], fuente, fecha }
+  //   { estado: "sin_pendientes", lista: [],    fuente, fecha }
+  //   { estado: "tampoco_esta",                 fuente, fecha }
+  function respaldoDiceDe(docId, est) {
+    const e = est || state;
+    if (!docId) return null;
+    if (e.pymFallback === true) return null;                       // la activa YA es el respaldo
+    if (!e.pymTodos || !e.pymTodos.size) return null;              // sin oficial cargada no se compara nada
+    if (e.pymTodos.has(normalizeKey(docId))) return null;          // está en la oficial: manda ella
+    if (!e.pymRespTodos || !e.pymRespTodos.size) return null;      // no hay respaldo que consultar
+    const info = { fuente: e.pymRespNombre || "Base piloto", fecha: e.pymRespMTime || "" };
+    if (!e.pymRespTodos.has(normalizeKey(docId))) return Object.assign({ estado: "tampoco_esta" }, info);
+    const lista = (e.pymResp && e.pymResp.get(normalizeKey(docId))) || [];
+    return Object.assign({ estado: lista.length ? "con_pendientes" : "sin_pendientes", lista: lista }, info);
+  }
   // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS de la tarjeta, por
   // pedido del consultorio: saturaban la fila y no son órdenes que se generen desde ahí.
   // SIGUEN en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra igual.
@@ -9704,6 +9789,15 @@
     state.pymDia = esDiarioRealDeHoy ? todayStamp() : "";
     if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
     state.lastSignature = ""; tick();
+    // v18.0.43 — el respaldo se deja listo EN SEGUNDO PLANO para poder consultarlo por los
+    // pacientes que la lista oficial no conozca. No descarga nada: lee la copia que el
+    // script ya guarda (`vgl_piloto`). Si no hay copia, no pasa nada y todo sigue igual.
+    // Se repinta al terminar porque la primera tarjeta ya se dibujó sin él.
+    try {
+      cargarRespaldoParaConsulta().then((ok) => {
+        if (ok && state.pymRespTodos && state.pymRespTodos.size) { state.lastSignature = ""; tick(); }
+      }).catch(() => {});
+    } catch (e) {}
     // [COPY-UX]
     setSummary(`Actividades preventivas cargadas: ${state.pym.size} paciente(s) — ${fileName}`);
   }
@@ -9737,7 +9831,11 @@
   // lo único que faltaba era no tirarlos.
   //
   // Función PURA para poder probarla: recibe el estado, devuelve el motivo y el texto.
-  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes"];
+  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes",
+    // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
+    // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
+    // situaciones distintas y el médico hace cosas distintas con cada una.
+    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio"];
   function pymMotivoSinActividades(est) {
     const e = est || {};
     if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
@@ -9747,9 +9845,32 @@
       };
     }
     if (e.pacienteEnLista === false) {
+      // v18.0.43 — PEDIDO DEL MÉDICO (1-sep): justo en este caso —y SOLO en este— se
+      // consulta el respaldo. No aparecer en el CMB oficial no significa que no haya nada
+      // pendiente; puede significar que el paciente entró por otra vía. Lo que conteste el
+      // respaldo sale con su procedencia pegada y nunca se presenta como dato de hoy: es
+      // una base de referencia que puede llevar meses. Y si el respaldo no tiene nada
+      // anotado NO se dice "al día" — eso sería la Regla D al revés.
+      const r = e.respaldo;
+      const deDonde = r ? (" (" + r.fuente + (r.fecha ? ", " + String(r.fecha).slice(0, 10) : "") + ")") : "";
+      if (r && r.estado === "con_pendientes" && r.lista && r.lista.length) {
+        return {
+          motivo: "no_esta_en_lista_pero_en_respaldo",
+          texto: "Este paciente NO aparece en la lista de prevención de hoy, pero SÍ está en la base de respaldo" + deDonde
+            + ", y allí figura con: " + r.lista.join(", ") + ". Ojo: el respaldo es una base de referencia, no la agenda de hoy — puede estar desactualizado, así que confírmelo antes de ordenar. Si aplica, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+        };
+      }
+      if (r && r.estado === "sin_pendientes") {
+        return {
+          motivo: "no_esta_en_lista_respaldo_vacio",
+          texto: "Este paciente NO aparece en la lista de prevención de hoy. Sí está en la base de respaldo" + deDonde
+            + ", donde no tiene ninguna actividad anotada — pero eso NO quiere decir que esté al día: esa base no es la lista de hoy. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+        };
+      }
       return {
         motivo: "no_esta_en_lista",
-        texto: "Este paciente NO aparece en la lista de prevención de hoy (puede ser nuevo, o su identificación no cruza con la del archivo). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+        texto: "Este paciente NO aparece en la lista de prevención de hoy" + (r && r.estado === "tampoco_esta" ? ", ni en la base de respaldo" + deDonde : "")
+          + " (puede ser nuevo, o su identificación no cruza con la del archivo). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
       };
     }
     return {
@@ -15900,6 +16021,20 @@
       }
       #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado) !important}
       #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado) !important}
+      /* v18.0.43 — chip de un pendiente que NO viene de la lista oficial de hoy sino del
+         respaldo (base piloto). Ámbar y con borde punteado a propósito: tiene que leerse
+         distinto de un chip normal de un vistazo, porque su antigüedad es distinta. El
+         color lleva su marca de prioridad, como todo color de este proyecto — escrita en la
+         declaración de abajo y NO en este comentario, porque el censo de la suite 25 cuenta
+         texto crudo y una mención aquí le sumaría una regla que no existe. */
+      .vgl-chip.vgl-chip-resp{
+        color:var(--c-ambar) !important;
+        border:1px dashed rgba(var(--rgb-ambar),.45);
+        background:rgba(var(--rgb-ambar),.08);
+      }
+      #vgl-root:not(.light) .vgl-chip.vgl-chip-resp{color:var(--c-ambar) !important}
+      .vgl-none.resp{color:var(--c-ambar) !important;font-style:normal;font-weight:700}
+      #vgl-root:not(.light) .vgl-none.resp{color:var(--c-ambar) !important}
       .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2) !important;font-style:italic} /* Mínimo 12px */
       .vgl-none.falta{color:var(--fg3) !important;font-style:normal;font-weight:700}
 
@@ -26276,6 +26411,10 @@
       pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
         ? state.pymTodos.has(normalizeKey(apt.doc_id))
         : null,
+      // v18.0.43 — lo que diga el respaldo de este paciente, si es que aplica consultarlo
+      // (ver respaldoDiceDe: null en cuanto el paciente sí está en la oficial, no hay
+      // respaldo cargado, o el respaldo YA es la lista activa).
+      respaldo: (apt && apt.doc_id) ? respaldoDiceDe(apt.doc_id) : null,
     };
     let _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades(_pymSinActOpts);
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
@@ -28892,12 +29031,28 @@
       // cédula que no coincide, hay que revisarlo). Nunca se dice "al día" sin haber
       // podido comprobarlo (Regla D).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
+      // v18.0.43 — pedido del médico (1-sep): al que la lista OFICIAL de hoy no conoce, se
+      // le pregunta al respaldo. Solo a ese; y lo que conteste sale marcado como del
+      // respaldo, nunca confundido con un pendiente de hoy. respaldoDiceDe() devuelve null
+      // en cuanto algo no aplica (paciente en la oficial, sin respaldo cargado, o el
+      // respaldo YA es la lista activa), y entonces esta tarjeta se pinta igual que antes.
+      const resp = enBase ? null : respaldoDiceDe(a.doc_id);
+      const respTitulo = resp ? escapeHtml("Del respaldo: " + resp.fuente + (resp.fecha ? " · " + String(resp.fecha).slice(0, 10) : "") + ". No es la lista de hoy.") : "";
+      const faltaHtml = (resp && resp.estado === "con_pendientes")
+        ? `<div class="vgl-none resp" title="${respTitulo}">Sin registro en el PyM de hoy · según el respaldo:</div>`
+          + `<div class="vgl-pyms">${panelActivities(resp.lista).slice(0, 3).map((p) => `<span class="vgl-chip vgl-chip-resp" title="${respTitulo}">${escapeHtml(p)}</span>`).join("")}`
+          + `${panelActivities(resp.lista).length > 3 ? `<span class="vgl-chip vgl-chip-resp" title="${escapeHtml(panelActivities(resp.lista).slice(3).join(", "))}">+${panelActivities(resp.lista).length - 3} más</span>` : ""}</div>`
+        : (resp && resp.estado === "sin_pendientes")
+          // Regla D al revés: NO se dice "al día". Que en una base de referencia no hubiera
+          // nada anotado no prueba que hoy no le falte nada — solo que ahí no había nada.
+          ? `<div class="vgl-none falta" title="${respTitulo}">Sin registro en el PyM de hoy · en el respaldo tampoco hay nada anotado</div>`
+          : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`;
       const pyms = pymsVisibles.length
         ? `<div class="vgl-pyms">${pymsVisibles.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipDeMas}${chipOcultas}</div>`
         : ((a.pym || []).length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
           : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
           : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
-                   : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
+                   : faltaHtml);
       card.innerHTML = `
         <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"})">
           <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">

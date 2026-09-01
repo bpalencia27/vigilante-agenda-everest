@@ -8339,3 +8339,55 @@ que vence en una semana y mentira para uno que vence en febrero, y los dos salí
 La mutación 97 es la que importa en la dirección contraria: prueba que el guardarraíl **no**
 apaga la cosecha donde el médico la aprobó — con el viaje a la vuelta de la esquina sigue
 adelantando sus 59 días.
+
+---
+
+## v18.0.44 — al paciente que la lista oficial no conoce, ahora se le pregunta al respaldo
+
+**Pedido del médico (1-sep), con captura:** *"HAY ALGUNOS PACIENTES QUE ME APARECEN ASÍ CON LA
+BASE DE DATOS OFICIAL PERO QUERÍA PREGUNTARTE SI ES POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE
+'Dato faltante: sin registro en PyM' SE PUEDA CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL
+PACIENTE TIENE ACTIVIDADES PENDIENTES ... COMO SE PODRÍA HACER SIN ROMPER LO QUE YA FUNCIONA?"*
+
+Hasta esta versión la base piloto era **excluyente**: se cargaba en lugar de la lista del día
+cuando esa no aparecía, y en cuanto llegaba la oficial se reemplazaba entera. Un paciente que
+no cruza con el `Agenda_Dia_CMB` de hoy salía como *"Dato faltante: sin registro en PyM"* y ahí
+moría, aunque el respaldo estuviera guardado en la misma máquina.
+
+### Cómo se hizo sin romper lo que ya funciona
+
+**Un segundo índice de solo consulta** (`state.pymResp*`), que convive con la oficial en vez de
+sustituirla. Cuatro contenciones, cada una con su prueba:
+
+1. **Nunca sustituye a la oficial.** Se consulta SOLO cuando `pymTodos` no tiene al paciente.
+   Quien está en la oficial se lee solo de ella, incluido su *"al día"*.
+2. **Nunca se mezcla en `state.pym`.** Ningún consumidor existente —`getActivities`,
+   `pymPendientesRestantes`, el módulo de ordenamiento, el aviso al abrir la historia— cambia
+   de comportamiento. El respaldo **no** alimenta el ordenamiento automático: informa, y el
+   médico decide.
+3. **Nunca se presenta como dato de hoy.** Todo lo que sale del respaldo viaja con su
+   procedencia y su fecha pegadas, en ámbar y con borde punteado en la tarjeta.
+4. **Nunca dice "al día".** Si el respaldo tiene al paciente sin nada anotado, eso no prueba
+   que hoy no le falte nada. Se dice exactamente eso — la Regla D del proyecto, aplicada al
+   revés.
+
+**No descarga nada nuevo:** lee la copia que el script ya guarda (`vgl_piloto`, escrita por
+`pilotoGuardar` desde v7.8.1). Si esa copia no existe todavía, el respaldo no responde y la
+pantalla se queda exactamente como estaba.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 100 | se quita la contención *"está en la oficial"* | *al paciente que SÍ está en la lista oficial no se le consulta el respaldo* | Sí — 23 ok |
+| 101 | se quita la contención *"la activa YA es el respaldo"* | *no se le pregunta dos veces a la misma fuente* | Sí — 23 ok |
+| 102 | el respaldo vacío se presenta como *"está al día"* | *REGLA D al revés* | Sí — 23 ok |
+| 103 | el mensaje deja de decir de dónde salió el dato | *dice de dónde salió el dato* | Sí — 23 ok |
+
+### Y una trampa nueva, anotada
+
+El primer intento sumaba **cinco** `!important` al censo de la suite 25 en vez de cuatro: el
+quinto era la palabra escrita **dentro de un comentario del propio CSS**. Ese censo cuenta texto
+crudo, así que una mención en prosa le inventa una regla que no existe. Misma familia que la
+trampa del `*/` de la v18.0.42: **el comentario de una hoja de estilos no es un lugar neutral**.
+Queda anotado en el comentario de esa regla para no repetirlo. Censo: 645 → 649.

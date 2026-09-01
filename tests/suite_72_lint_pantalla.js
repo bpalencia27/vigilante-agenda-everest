@@ -379,6 +379,84 @@ module.exports = {
         "sin_pendientes", "sin poder comprobar la pertenencia no se inventa una exclusión");
     });
 
+    // =================================================================
+    //  v18.0.43 — CONSULTA AL RESPALDO (pedido del médico, 1-sep)
+    //
+    //  "SI ES POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE 'Dato faltante: sin registro en
+    //  PyM' SE PUEDA CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL PACIENTE TIENE
+    //  ACTIVIDADES PENDIENTES ... COMO SE PODRÍA HACER SIN ROMPER LO QUE YA FUNCIONA?"
+    //
+    //  Estas pruebas son justamente el "sin romper lo que ya funciona": las cuatro
+    //  contenciones de respaldoDiceDe(), cada una por separado.
+    // =================================================================
+    const _estado = (extra) => Object.assign({
+      pymFallback: false,
+      pymTodos: new Set(["111"]),
+      pymRespTodos: new Set(["222", "333"]),
+      pymResp: new Map([["222", ["Tamización cardiometabólica", "Mamografía"]], ["333", []]]),
+      pymRespNombre: "BASE PILOTO", pymRespMTime: "2026-05-20T10:00:00Z",
+    }, extra || {});
+
+    t.caso("RESPALDO — al paciente que SÍ está en la lista oficial no se le consulta el respaldo", () => {
+      // La contención número uno: la oficial manda. Si ella lo conoce, su respuesta es la
+      // única — incluido su "al día". El respaldo no puede contradecirla ni completarla.
+      t.igual(api.respaldoDiceDe("111", _estado()), null,
+        "está en la oficial: el respaldo no se consulta, y la pantalla se pinta igual que antes");
+    });
+
+    t.caso("RESPALDO — solo responde por quien la oficial NO conoce", () => {
+      const con = api.respaldoDiceDe("222", _estado());
+      t.igual(con.estado, "con_pendientes", "no está en la oficial y el respaldo sí lo tiene, con actividades");
+      t.igual(con.lista.length, 2, "y devuelve las que tiene anotadas");
+      t.igual(con.fuente, "BASE PILOTO", "con el nombre del archivo de donde salió");
+      t.igual(con.fecha, "2026-05-20T10:00:00Z", "y su fecha: el médico tiene que poder pesar la antigüedad");
+
+      const vacio = api.respaldoDiceDe("333", _estado());
+      t.igual(vacio.estado, "sin_pendientes", "está en el respaldo pero sin nada anotado — y eso NO es 'al día'");
+
+      const nadie = api.respaldoDiceDe("999", _estado());
+      t.igual(nadie.estado, "tampoco_esta", "no está en ninguna de las dos: se dice, no se calla");
+    });
+
+    t.caso("RESPALDO — si la lista ACTIVA ya es el respaldo, no se le pregunta dos veces a la misma fuente", () => {
+      t.igual(api.respaldoDiceDe("222", _estado({ pymFallback: true })), null,
+        "con la piloto como lista activa, consultar el respaldo sería preguntarle dos veces a la misma base");
+    });
+
+    t.caso("RESPALDO — sin lista oficial cargada, o sin respaldo, no se inventa nada", () => {
+      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: new Set() })), null,
+        "sin oficial cargada no hay con qué comparar: no se consulta");
+      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: null })), null,
+        "ni cuando todavía no se ha indexado ninguna base");
+      t.igual(api.respaldoDiceDe("222", _estado({ pymRespTodos: null })), null,
+        "y sin respaldo cargado tampoco: la tarjeta se queda como estaba");
+      t.igual(api.respaldoDiceDe("", _estado()), null, "sin documento no se consulta nada");
+    });
+
+    t.caso("RESPALDO — el mensaje del modal dice de dónde salió el dato y nunca lo pasa por dato de hoy", () => {
+      const con = api.pymMotivoSinActividades({
+        listaCargada: true, pacienteEnLista: false,
+        respaldo: { estado: "con_pendientes", lista: ["Tamización cardiometabólica"], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
+      });
+      t.igual(con.motivo, "no_esta_en_lista_pero_en_respaldo", "es un motivo propio, no el genérico");
+      t.cierto(/BASE PILOTO/.test(con.texto), "nombra el archivo del que salió");
+      t.cierto(/2026-05-20/.test(con.texto), "y su fecha");
+      t.cierto(/Tamización cardiometabólica/.test(con.texto), "dice qué figura pendiente");
+      t.cierto(/no es la agenda de hoy|puede estar desactualizado/i.test(con.texto),
+        "y advierte que no es la lista de hoy antes de que el médico ordene nada");
+
+      const vacio = api.pymMotivoSinActividades({
+        listaCargada: true, pacienteEnLista: false,
+        respaldo: { estado: "sin_pendientes", lista: [], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
+      });
+      t.igual(vacio.motivo, "no_esta_en_lista_respaldo_vacio", "motivo propio también");
+      t.cierto(/NO quiere decir que esté al día/i.test(vacio.texto),
+        "REGLA D al revés: que una base vieja no tenga nada anotado no prueba que hoy no le falte nada");
+
+      const nada = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false, respaldo: null });
+      t.igual(nada.motivo, "no_esta_en_lista", "sin respaldo que consultar, el mensaje de siempre, intacto");
+    });
+
     t.caso("REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada", () => {
       // Eran dos estados para tres situaciones: con ultimaLectura en 0 el reloj afirmaba
       // «Datos al día» sobre datos que no existen. No alarmar al arrancar está bien; decir
