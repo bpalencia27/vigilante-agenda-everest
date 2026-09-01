@@ -8069,3 +8069,48 @@ La **82** cubre lo que casi siempre se escapa: comparar `"Paciente Everest"` con
 hasta que Everest devuelve `"  PACIENTE  EVEREST "`. Se normaliza acentos, espacios y caja.
 
 Banco completo: **2.820 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.40 — Una interacción borraba el aviso de que no se juzgó ninguna dosis
+
+Hallazgo `L33460`. La cabecera de esa vista promete *«el silencio SIEMPRE lleva motivo»*, y lo
+cumplía. Faltaba el caso en que **no hay silencio**: con `n > 0` el motivo colapsa a `"OK"` y con
+eso desaparecía el único rastro de que la dosis renal no se había podido juzgar.
+
+Reproducido con el arnés (`__S.motorPortado = true`), paciente **sin TFG**:
+
+```
+A) METFORMINA sola                       → «Falta la función renal… no se puede juzgar la dosis»  ✔
+B) + LOSARTAN + IBUPROFENO (1 interacción) → el aviso DESAPARECE
+                                            pie: «Calculado con la función renal de arriba»       ✘
+contraste: los MISMOS tres con TFG 25    → 3 avisos de dosis renal
+```
+
+El médico veía un panel completo y tranquilizador —«1 para revisar», con su pie de calculado—
+donde el motor **no juzgó ni una sola dosis**. Con TFG 25 uno de esos avisos es metformina
+CONTRAINDICADA.
+
+### El arreglo
+
+El motivo de la **dosis** viaja aparte del motivo del **conjunto** (`motivoDosisRenal`), así que
+colapsar el segundo ya no borra el primero. El aviso se pinta **encima de la lista** —donde no
+hay forma de no verlo, misma decisión que la caja de cifras del Redactor (v17.14.0)— y el pie
+dice la verdad en vez de lo contrario.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 83 | el motivo de la dosis deja de viajar aparte | *una interacción no puede borrar el aviso* | Sí — 2.821 |
+| 84 | el aviso vuelve a pintarse solo cuando no hay nada | *idem* | Sí — 2.821 |
+| 85 | el pie vuelve a afirmar que se calculó | *idem* | Sí — 2.821 |
+| 86 | el aviso se pinta DEBAJO de la lista | **primero NO cayó nadie** → aserción reescrita → cae | Sí — 2.821 |
+| 87 | el aviso se pinta siempre, también con TFG real | *idem* (la contrapartida) | Sí — 2.821 |
+
+**La 86 es la octava prueba hueca de la jornada**, y de una variedad nueva: mi aserción de
+posición comparaba el aviso contra el **pie del bloque**, así que moverlo debajo de la lista
+—pero encima del pie— la seguía cumpliendo. Ahora se compara contra el **primer aviso pintado**,
+que es lo que de verdad decide si el médico lo ve antes o después de leerse la lista entera.
+
+Banco completo: **2.821 comprobaciones pasan, 0 fallan.**

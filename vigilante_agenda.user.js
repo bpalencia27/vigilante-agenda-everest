@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.39
+// @version      18.0.40
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.39";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.40";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -34242,6 +34242,16 @@
       interacciones: inter.concat(interCatalogo),
       todo: todo,
       motivo: n ? "OK" : (base.motivo === "SIN_MEDICAMENTOS_ACTIVOS" || base.motivo === "SIN_FUNCION_RENAL" ? base.motivo : "SIN_HALLAZGOS"),
+      // v18.0.40 — EL HECHO NO SE PIERDE AL COLAPSAR EL MOTIVO. Con n>0 el motivo pasa a
+      // "OK", y con eso desaparecía el único rastro de que la dosis renal NO se había podido
+      // juzgar. Medido con el arnés: un paciente sin TFG con METFORMINA sola muestra «Falta
+      // la función renal… no se puede juzgar la dosis»; al añadirle LOSARTAN e IBUPROFENO
+      // —que disparan UNA interacción, calculable sin función renal— el aviso desaparece y
+      // el pie afirma «Calculado con la función renal de arriba». Los mismos tres fármacos
+      // con TFG 25 producen TRES avisos de dosis, uno de ellos metformina CONTRAINDICADA.
+      // El médico veía un panel completo y tranquilizador donde el motor no juzgó ni una
+      // sola dosis. El motivo de la DOSIS viaja aparte del motivo del conjunto.
+      motivoDosisRenal: base.motivo,
       legible: n ? (n + " aviso(s) de seguridad farmacológica") : base.legible,
     };
   }
@@ -34353,10 +34363,25 @@
       ? `${criticos} de ${todo.length} requieren acción inmediata`
       : `${todo.length} para revisar`;
 
+    // v18.0.40 — «El silencio SIEMPRE lleva motivo» (cabecera de esta vista). Faltaba el
+    // caso en que NO hay silencio: cuando sí hay avisos que mostrar pero la dosis renal no
+    // se pudo juzgar, el recuadro salía completo y el pie afirmaba que se había calculado
+    // con la función renal. Ahora el aviso va ENCIMA de la lista —donde no hay forma de no
+    // verlo, misma decisión que la caja de cifras del Redactor (v17.14.0)— y el pie dice la
+    // verdad en lugar de lo contrario.
+    const sinRenal = r.motivoDosisRenal === "SIN_FUNCION_RENAL";
+    const avisoRenal = sinRenal
+      ? `<div class="vgl-mtr-sinjuicio">⚠ Falta la función renal (creatinina, peso, talla o edad): lo de abajo son interacciones entre medicamentos, NO se juzgó ninguna dosis.</div>`
+      : "";
+    const pie = sinRenal
+      ? "No se pudo juzgar la dosis renal: falta la función renal. No se ordena ni se cambia nada: la decisión es suya."
+      : "Calculado con la función renal de arriba. No se ordena ni se cambia nada: la decisión es suya.";
+
     return `<div class="vgl-mtr-bloque" role="region" aria-label="Avisos de seguridad farmacológica">
         <div class="vgl-mtr-tope">💊 <b>Seguridad farmacológica</b> <span class="vgl-mtr-cuenta">${escapeHtml(cabecera)}</span></div>
+        ${avisoRenal}
         ${todo.map(mtrPintarAviso).join("")}
-        <div class="vgl-mtr-pie">Calculado con la función renal de arriba. No se ordena ni se cambia nada: la decisión es suya.</div>
+        <div class="vgl-mtr-pie">${escapeHtml(pie)}</div>
       </div>`;
   }
 
