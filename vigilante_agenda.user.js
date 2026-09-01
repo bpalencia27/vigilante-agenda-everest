@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.28
+// @version      18.0.29
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -919,6 +919,25 @@
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame
 
+  // v18.0.29 — ESTAS DOS DECLARACIONES TIENEN QUE VIVIR ANTES DEL BLOQUE DE ATHENEA.
+  // Estaban 1.340 líneas más abajo, y el bloque de Athenea hace `return` al terminar: en la
+  // web de Athenea el hilo sale de este ámbito ANTES de evaluarlas, así que quedaban en su
+  // ZONA MUERTA TEMPORAL para siempre en esa página. `atheneaCredsSet`/`atheneaCredsGet` sí
+  // existen —son declaraciones de tipo function, izadas— pero al tocar ATH_CRED_KEY lanzaban
+  // ReferenceError, que sus propios try/catch se tragaban devolviendo false/null.
+  //
+  // Consecuencia medida: en la pantalla de inicio de sesión de Athenea, guardar las
+  // credenciales fallaba SIEMPRE y la consola imprimía igual «Credenciales capturadas y
+  // guardadas para auto-login permanente» — un fallo del sistema presentado como un hecho,
+  // que es el mismo patrón del Framingham (v18.0.27) y del aviso de ceguera (v18.0.17).
+  // Reproducido en aislamiento: dentro del camino que hace return temprano la función
+  // devuelve false; solo tras evaluarse el const empieza a funcionar.
+  //
+  // Tercera zona muerta temporal de la jornada, con la de MTR_CSS de la flota (771 errores,
+  // ya resuelta en ramas v17+) y la del comentario de MTR_RCV_CSS (v18.0.28).
+  const ATH_CRED_KEY = "vgl_ath_creds";
+  let atheneaLoginBloqueado = false;  // credencial compartida rechazada: NO reintentar sola
+
   // --- MÓDULO ATHENEA SOLUCIONES (AUTOLOGIN & AUTOBÚSQUEDA EN 1-CLIC) ---
   if (location.hostname.includes("atheneasoluciones.com")) {
     window.addEventListener("DOMContentLoaded", () => {
@@ -943,8 +962,14 @@
               // origen de Athenea), justo al lado de atheneaCredsSet(u, p) que YA la
               // guarda ofuscada — anulando por completo la protección documentada más
               // abajo. atheneaCredsSet es ahora la ÚNICA vía de escritura.
-              if (typeof atheneaCredsSet === "function") atheneaCredsSet(u, p);
-              console.log("[Vigilante Athenea] Credenciales capturadas y guardadas para auto-login permanente.");
+              // v18.0.29 — el mensaje se condiciona al RESULTADO. Antes se imprimía siempre,
+              // sin mirar el retorno, así que un guardado fallido se anunciaba como logrado.
+              const _guardadas = (typeof atheneaCredsSet === "function") && atheneaCredsSet(u, p);
+              if (_guardadas) {
+                console.log("[Vigilante Athenea] Credenciales capturadas y guardadas para auto-login permanente.");
+              } else {
+                console.warn("[Vigilante Athenea] NO se pudieron guardar las credenciales: el auto-login no funcionará. Avísele al programador.");
+              }
             } catch (e) {}
           }
         };
@@ -1007,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.28";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.29";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2259,8 +2284,9 @@
   //  repetidos bloquean la cuenta institucional para TODA la sede): se
   //  marca y se avisa una vez para volver a guardarlas.
   // =====================================================================
-  const ATH_CRED_KEY = "vgl_ath_creds";
-  let atheneaLoginBloqueado = false;  // credencial compartida rechazada: NO reintentar sola
+  // v18.0.29 — ATH_CRED_KEY y atheneaLoginBloqueado SE MUDARON ARRIBA DEL TODO, por encima
+  // del bloque de Athenea. Ver la nota que los acompaña allí: aquí quedaban en zona muerta
+  // temporal PARA SIEMPRE en la web de Athenea, y guardar las credenciales fallaba siempre.
   let atheneaLoginEnVuelo = false;
   // Ofuscación reversible (XOR + base64) — anti-vistazo, NO cifrado (ver arriba).
   function _vglXor(s) { const k = "Vgl-Athenea-2026-local"; let o = ""; for (let i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }

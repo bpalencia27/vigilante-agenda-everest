@@ -200,5 +200,59 @@ module.exports = {
         "todo invariante lleva escrito QUÉ PASA EN CONSULTA si se invierte; sin eso, el que " +
         "lo encuentre roto no puede decidir si el cambio era legítimo");
     });
+
+    // =====================================================================
+    // v18.0.29 — UNA ZONA MUERTA TEMPORAL DEJABA EL AUTO-LOGIN ROTO, Y LA CONSOLA MENTÍA
+    //
+    // `ATH_CRED_KEY` y `atheneaLoginBloqueado` se declaraban 1.340 líneas por DEBAJO del
+    // bloque de Athenea, y ese bloque hace `return` al terminar: en la web de Athenea el
+    // hilo sale del ámbito ANTES de evaluarlas, así que quedaban en su zona muerta temporal
+    // PARA SIEMPRE en esa página. `atheneaCredsSet`/`atheneaCredsGet` sí existen —son
+    // declaraciones de tipo function, izadas— pero al tocar `ATH_CRED_KEY` lanzaban
+    // ReferenceError, que sus propios try/catch se tragaban devolviendo false/null.
+    //
+    // Resultado: en la pantalla de inicio de sesión, guardar las credenciales fallaba
+    // SIEMPRE, y la consola imprimía igual «Credenciales capturadas y guardadas para
+    // auto-login permanente». Un fallo del sistema presentado como un hecho — el mismo
+    // patrón del Framingham (v18.0.27) y del aviso de ceguera (v18.0.17).
+    //
+    // Esto es una regresión de ORDEN DE DECLARACIÓN, y por eso se vigila sobre el fuente:
+    // el arnés carga el script con hostname de Everest, no de Athenea, así que ese camino
+    // —el único donde el defecto se manifiesta— no se recorre nunca en el banco. Una prueba
+    // de conducta aquí daría verde con el defecto puesto.
+    // =====================================================================
+    t.caso("v18.0.29: ATH_CRED_KEY se declara ANTES del bloque de Athenea (o queda en zona muerta)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const decl = src.indexOf('const ATH_CRED_KEY');
+      const bloque = src.indexOf('location.hostname.includes("atheneasoluciones.com")');
+      t.cierto(decl > 0, "sigue existiendo la clave de credenciales");
+      t.cierto(bloque > 0, "y el bloque de Athenea");
+      t.cierto(decl < bloque,
+        "la declaración tiene que ir ANTES: el bloque de Athenea hace return, y lo declarado después queda en zona muerta temporal en esa página — atheneaCredsSet lanzaría ReferenceError y su try/catch lo devolvería como un simple false");
+
+      const declB = src.indexOf('let atheneaLoginBloqueado');
+      t.cierto(declB > 0 && declB < bloque,
+        "lo mismo con atheneaLoginBloqueado, que atheneaCredsSet toca en la misma línea");
+    });
+
+    t.caso("v18.0.29: el mensaje de «credenciales guardadas» depende del resultado, no se imprime siempre", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const soloCodigo = (txt) => txt.split("\n")
+        .filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+
+      const i = src.indexOf("Credenciales capturadas y guardadas");
+      t.cierto(i > 0, "sigue existiendo el mensaje");
+      const alrededor = soloCodigo(src.slice(Math.max(0, i - 700), i));
+      t.cierto(/atheneaCredsSet\([^)]*\)/.test(alrededor),
+        "el guardado ocurre justo antes del mensaje");
+      t.cierto(/if\s*\(/.test(alrededor.slice(alrededor.lastIndexOf("atheneaCredsSet"))),
+        "y el mensaje va dentro de un if sobre el resultado: anunciar un guardado que falló es peor que no anunciar nada");
+    });
+
   },
 };

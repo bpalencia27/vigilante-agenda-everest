@@ -7397,3 +7397,54 @@ justo al documentarlo.
 | 29 | vuelve la interpolación viva en el comentario CSS | *Regla J — ningún comentario de bloque contiene una interpolación viva* (`suite_72`) | Sí — 2.789 |
 
 Banco completo: **2.789 comprobaciones pasan, 0 fallan.**
+
+## v18.0.29 — 1-sep-2026 · EL AUTO-LOGIN DE ATHENEA LLEVABA ROTO DESDE SIEMPRE, Y LA CONSOLA DECÍA LO CONTRARIO
+
+### El defecto
+
+`ATH_CRED_KEY` y `atheneaLoginBloqueado` se declaraban **1.340 líneas por debajo** del bloque
+de Athenea, y ese bloque hace `return` al terminar. En la web de Athenea el hilo **sale del
+ámbito antes de evaluarlas**, así que quedaban en su **zona muerta temporal para siempre** en
+esa página.
+
+`atheneaCredsSet` / `atheneaCredsGet` sí existen —son declaraciones de tipo `function`,
+izadas— pero al tocar `ATH_CRED_KEY` lanzaban `ReferenceError`, que **sus propios try/catch se
+tragaban** devolviendo `false`/`null`. Reproducido en aislamiento:
+
+```
+dentro del bloque que hace return temprano:      false
+tras evaluar el const, ya fuera de ese camino:   "valor:vgl_ath_creds"
+```
+
+Resultado en el consultorio: el médico teclea usuario y contraseña en Athenea, el script los
+captura, **el guardado falla siempre**, y la consola imprime igual «Credenciales capturadas y
+guardadas para auto-login permanente». El auto-login nunca funcionó, y nada lo decía.
+
+**Un fallo del sistema presentado como un hecho** — el mismo patrón del Framingham (v18.0.27) y
+del aviso de ceguera (v18.0.17). Y la **tercera zona muerta temporal** de la jornada, con la de
+`MTR_CSS` que la flota reporta 771 veces (ya resuelta en ramas v17+) y la del comentario de
+`MTR_RCV_CSS` (v18.0.28).
+
+### El arreglo, en tres partes
+
+1. Las dos declaraciones suben por encima del bloque de Athenea.
+2. El mensaje se condiciona al **resultado**: si el guardado falla, sale un `console.warn`
+   diciendo que el auto-login no funcionará.
+3. Queda anotado en el sitio de donde se movieron, para que nadie las devuelva.
+
+### Por qué la prueba es de código fuente, y se dice
+
+El arnés carga el script con hostname de **Everest**, no de Athenea, así que **ese camino —el
+único donde el defecto se manifiesta— no se recorre nunca en el banco**. Una prueba de conducta
+aquí daría verde con el defecto puesto. Lo que hay que fijar es el **orden de declaración**, y
+eso se vigila sobre el fuente: `const ATH_CRED_KEY` debe aparecer antes que el `if` del
+hostname de Athenea.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 30 | las declaraciones vuelven abajo (zona muerta) | *ATH_CRED_KEY se declara ANTES del bloque de Athenea* (`suite_37`) | Sí — 2.791 |
+| 31 | el mensaje vuelve a imprimirse siempre | *el mensaje depende del resultado* (`suite_37`) | Sí — 2.791 |
+
+Banco completo: **2.791 comprobaciones pasan, 0 fallan.**
