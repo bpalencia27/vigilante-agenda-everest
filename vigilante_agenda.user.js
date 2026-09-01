@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.25
+// @version      18.0.26
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.25";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.26";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -22186,7 +22186,20 @@ _vglOfrecerDeshacer(btn);
   // comprobar es exactamente el defecto que la auditoría #6 encontró en las casillas de
   // resultado (se cantaban éxitos con la casilla vacía).
   function _vglMarcarRadio(el) {
-    if (!el) return false;
+    // v18.0.26 — LA COMPROBACIÓN DE «DESHABILITADO» ESTABA DESPUÉS DE ESCRIBIR.
+    // Everest presenta el par Sí/No deshabilitado en varios casos (historia cerrada, solo
+    // lectura, permisos), y `mtrCamposLlenables` los ofrece igual —solo mira que sean
+    // radios, no `disabled`—, así que el emergente preguntaba por ellos. Al responder, esta
+    // función hacía `el.click()`, `el.checked = true` y despachaba un `change` hacia Angular
+    // ANTES de llegar a `if (el.disabled === true) return false`. Devolvía false, el
+    // llamador hacía `pares.pop()`, y el resultado era el peor de los tres mundos:
+    //   · la casilla quedaba MARCADA en pantalla, con su evento ya emitido;
+    //   · fuera de la foto de «Deshacer», así que no había forma de revertirla;
+    //   · `escritas` seguía en 0 y el toast decía «No había ninguna casilla que llenar».
+    // Se escribía algo en la historia del paciente sin contarlo, sin avisarlo y sin poder
+    // deshacerlo — las tres cosas que la regla de la casilla existe para impedir.
+    // La comprobación se sube al principio: lo que está deshabilitado no se toca.
+    if (!el || el.disabled === true) return false;
     // v17.0.1 — AUDITORÍA DE LA v17: la comprobación anterior (`return el.checked ===
     // true` justo después de haber hecho `el.checked = true`) era tautológica: leía la
     // propiedad que ella misma acababa de escribir, y el navegador nunca la rechaza. Se
@@ -22198,7 +22211,7 @@ _vglOfrecerDeshacer(btn);
     try { if (el.checked !== true) el.checked = true; } catch (e) {}
     try { if (typeof el.dispatchEvent === "function" && typeof Event === "function") el.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
     try {
-      if (el.disabled === true) return false;
+      // (la guarda de `disabled` se movió arriba, antes de escribir: ver la nota de v18.0.26)
       const d = (typeof document !== "undefined") ? document : null;
       const nombre = String(el.name || "");
       if (d && nombre && typeof d.querySelectorAll === "function") {
@@ -34550,9 +34563,25 @@ _vglOfrecerDeshacer(btn);
     const reduccion = mtrReduccionLdlPct(ldlBasal, actual);
     const bajoMeta = actual < metas.ldl;
     const exigeReduccion = metas.reduccion !== null;
+    // v18.0.26 — «NO EVALUABLE» SE CONVERTÍA EN «FALLA PARCIAL», Y ESO ACABA FIRMADO.
+    // El comentario de esta función ya lo decía —«no evaluable por falta de LDL basal no es
+    // lo mismo que no está en meta»— y el código no lo cumplía: `cumpleReduccion` colapsaba
+    // `reduccion === null` a false, igual que una reducción medida e insuficiente.
+    // El caso es el del PACIENTE NUEVO, que es lo normal: `mtrLdlBasalDeSerie` devuelve null
+    // cuando la serie tiene menos de dos puntos. Un paciente de riesgo MUY ALTO con LDL 45
+    // (meta < 55) y sin LDL previo salía con estado "meta_parcial" y `enMeta` false, y
+    // mtrStatusV68 lo traduce a «FALLA PARCIAL». Ese texto viaja al JSON que alimenta la
+    // nota clínica de la IA y al registro permanente del paciente: la historia que el
+    // médico FIRMA decía falla terapéutica parcial de alguien que está en meta, y lo único
+    // que faltaba era el laboratorio anterior.
+    //
+    // Se separan los tres estados de verdad. `reduccionEvaluable` viaja aparte para que
+    // ningún consumidor tenga que deducirlo del texto.
+    const reduccionEvaluable = !exigeReduccion || reduccion !== null;
     const cumpleReduccion = exigeReduccion ? (reduccion !== null && reduccion >= metas.reduccion) : true;
     let estado;
     if (!exigeReduccion) estado = bajoMeta ? "en_meta" : "fuera_de_meta";
+    else if (!reduccionEvaluable) estado = bajoMeta ? "en_meta_reduccion_no_evaluable" : "fuera_de_meta";
     else if (bajoMeta && cumpleReduccion) estado = "en_meta";
     else if (bajoMeta || cumpleReduccion) estado = "meta_parcial";
     else estado = "fuera_de_meta";
@@ -34572,7 +34601,13 @@ _vglOfrecerDeshacer(btn);
     // en un OR con `falla`, y `fallaGrave` siempre implicaba `falla`, así que quitarlo no
     // cambia el resultado de ninguno.
     return {
-      metas: metas, estado: estado, enMeta: estado === "en_meta",
+      // v18.0.26 — `enMeta` incluye el estado nuevo: el LDL está por debajo de la meta, y
+      // eso es un hecho medido; lo único que no se pudo evaluar es la REDUCCIÓN, por falta
+      // de un LDL previo. Decir que no está en meta por eso sería afirmar algo que no se
+      // sabe, que es justo lo contrario de lo que este proyecto hace con los huecos.
+      metas: metas, estado: estado,
+      enMeta: estado === "en_meta" || estado === "en_meta_reduccion_no_evaluable",
+      reduccionEvaluable: reduccionEvaluable,
       reduccionPct: reduccion, falla: falla,
       ldlActual: actual,
     };
@@ -38212,6 +38247,11 @@ _vglOfrecerDeshacer(btn);
   // que dato inventado.
   const MTR_STATUS_V68 = {
     en_meta: "EN META",
+    // v18.0.26 — el estado que antes se colapsaba a «FALLA PARCIAL». No afirma falla porque
+    // no la hubo: el LDL está bajo meta y la reducción no se pudo evaluar por falta de un
+    // LDL previo — el caso del paciente nuevo, que es lo normal. El texto dice las dos
+    // cosas, para que quien lea la nota sepa qué se midió y qué no.
+    en_meta_reduccion_no_evaluable: "EN META (reducción no evaluable: falta LDL previo)",
     meta_parcial: "FALLA PARCIAL",
     fuera_de_meta: "FUERA DE META",
   };

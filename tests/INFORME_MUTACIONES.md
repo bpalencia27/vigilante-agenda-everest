@@ -7219,3 +7219,61 @@ palabra suelta se sigue tachando). Una defensa que solo se comprueba por un lado
 la que destruye el dato o la que lo deja salir.
 
 Banco completo: **2.777 comprobaciones pasan, 0 fallan.**
+
+## v18.0.26 — 1-sep-2026 · UNA FALLA TERAPÉUTICA QUE NUNCA OCURRIÓ, Y UNA CASILLA ESCRITA A ESCONDIDAS
+
+### 1. «No evaluable» se convertía en «FALLA PARCIAL», y eso acaba firmado
+
+El comentario de `mtrEvaluarMetaLdl` **ya lo decía**: *«devuelve un objeto explícito en vez de
+un booleano, porque no evaluable por falta de LDL basal no es lo mismo que no está en meta»*.
+El código no lo cumplía: `cumpleReduccion` colapsaba `reduccion === null` a `false`, igual que
+una reducción **medida** e insuficiente.
+
+El caso es el del **paciente nuevo**, que es lo normal: `mtrLdlBasalDeSerie` devuelve `null`
+cuando la serie tiene menos de dos puntos. Medido:
+
+| paciente | antes | ahora |
+|---|---|---|
+| MUY ALTO, LDL 45 (meta <55), **sin** LDL previo | `meta_parcial` → **«FALLA PARCIAL»** | `en_meta_reduccion_no_evaluable` → «EN META (reducción no evaluable: falta LDL previo)» |
+| MUY ALTO, LDL 45, basal 120 (−62,5 %) | «EN META» | «EN META» |
+| MUY ALTO, LDL 45, basal 60 (−25 %, corta) | «FALLA PARCIAL» | **«FALLA PARCIAL»** — la falla real sigue siendo falla |
+| MUY ALTO, LDL 90, sin basal | «FUERA DE META» | «FUERA DE META» |
+| MODERADO, LDL 90 (no exige reducción) | «EN META» | «EN META» |
+
+Ese texto viaja al JSON que alimenta la nota clínica de la IA **y al registro permanente del
+paciente**: la historia que el médico **firma** decía falla terapéutica parcial de alguien que
+está en meta, y lo único que faltaba era el laboratorio anterior.
+
+`reduccionEvaluable` viaja aparte para que ningún consumidor tenga que deducirlo del texto, y
+`enMeta` incluye el estado nuevo: el LDL bajo meta **es un hecho medido**; lo que no se pudo
+evaluar es la reducción.
+
+Es **otro comentario que prometía una red que no existía** — el mismo patrón que costó dos
+defectos en la v18.0.13 y uno en la v18.0.19.
+
+**Comprobado que no rompe el corpus dorado**: el banco completo, con los 991 vectores de
+`suite_45`, sigue en verde.
+
+### 2. Se escribía en una casilla deshabilitada, sin contarlo ni poder deshacerlo
+
+`_vglMarcarRadio` hacía `el.click()`, `el.checked = true` y despachaba un `change` hacia
+Angular **antes** de llegar a su `if (el.disabled === true) return false`. Devolvía `false`, el
+llamador hacía `pares.pop()`, y salía el peor de los tres mundos a la vez:
+
+- la casilla quedaba **marcada** en pantalla, con su evento ya emitido hacia Everest;
+- **fuera de la foto de «Deshacer»**, así que no había forma de revertirla;
+- `escritas` seguía en 0 y el toast decía «No había ninguna casilla que llenar en esta
+  pantalla».
+
+Se escribía en la historia del paciente **sin contarlo, sin avisarlo y sin poder deshacerlo**
+— las tres cosas que la regla de la casilla existe para impedir. La guarda se sube al
+principio: lo que está deshabilitado no se toca.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 25 | la guarda de `disabled` vuelve abajo, después de escribir | *una casilla deshabilitada no se toca* (`suite_32`) | Sí — 2.783 |
+| 26 | «no evaluable» vuelve a colapsar en falla | *sin LDL previo, un paciente bajo meta NO se declara en falla* (`suite_45`) | Sí — 2.783 |
+
+Banco completo: **2.783 comprobaciones pasan, 0 fallan.**

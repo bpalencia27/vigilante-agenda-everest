@@ -1078,5 +1078,60 @@ module.exports = {
           "toda vía a «muy alto» sale del paso 1, que corre ANTES del piso por diabetes · " + l.trim().slice(0, 110));
       });
     });
+
+    // =====================================================================
+    // v18.0.26 — «NO EVALUABLE» SE CONVERTÍA EN «FALLA PARCIAL», Y ESO ACABA FIRMADO
+    //
+    // El comentario de `mtrEvaluarMetaLdl` ya lo decía —«devuelve un objeto explícito en vez
+    // de un booleano, porque no evaluable por falta de LDL basal no es lo mismo que no está
+    // en meta»— y el código NO lo cumplía: `cumpleReduccion` colapsaba `reduccion === null`
+    // a false, igual que una reducción medida e insuficiente.
+    //
+    // El caso es el del PACIENTE NUEVO, que es lo normal: `mtrLdlBasalDeSerie` devuelve null
+    // cuando la serie tiene menos de dos puntos. Un paciente de riesgo MUY ALTO con LDL 45
+    // (meta < 55) y sin LDL previo salía "meta_parcial" y `enMeta` false, y mtrStatusV68 lo
+    // traduce a «FALLA PARCIAL». Ese texto viaja al JSON que alimenta la nota clínica de la
+    // IA y al registro permanente: la historia que el médico FIRMA decía falla terapéutica
+    // parcial de alguien que está en meta, y lo único que faltaba era el laboratorio previo.
+    //
+    // Otro comentario que prometía una red que no existía — el mismo patrón que costó dos
+    // defectos en la v18.0.13 y uno en la v18.0.19.
+    // =====================================================================
+    t.caso("v18.0.26: sin LDL previo, un paciente bajo meta NO se declara en falla", () => {
+      const r = api.mtrEvaluarMetaLdl("muy alto", 45, null, null);
+      t.igual(r.estado, "en_meta_reduccion_no_evaluable",
+        "LDL 45 con meta <55 y sin basal: está en meta, y la reducción no se pudo evaluar");
+      t.cierto(r.enMeta, "enMeta es cierto: el LDL bajo meta es un hecho medido");
+      t.falso(r.reduccionEvaluable, "y se dice aparte que la reducción no era evaluable");
+      const txt = api.mtrStatusV68({ riesgo: { categoria: "muy alto", datosCompletos: true }, meta: r });
+      t.falso(/FALLA/.test(txt), `el texto que se firma no puede afirmar falla (salió: ${txt})`);
+      t.cierto(/EN META/.test(txt), "dice que está en meta");
+      t.cierto(/no evaluable/i.test(txt), "y declara lo que no se pudo evaluar, en vez de callarlo");
+    });
+
+    t.caso("v18.0.26: y la falla REAL sigue diciendo falla — no se sobre-corrigió", () => {
+      // Reducción medida y de verdad insuficiente: 60 -> 45 son 25 %, y se exige 50 %.
+      const r = api.mtrEvaluarMetaLdl("muy alto", 45, 60, null);
+      t.igual(r.estado, "meta_parcial", "con basal medido y reducción corta, sigue siendo falla parcial");
+      t.falso(r.enMeta, "y no está en meta");
+      t.cierto(r.reduccionEvaluable, "porque aquí SÍ se pudo evaluar");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "muy alto", datosCompletos: true }, meta: r }), "FALLA PARCIAL");
+    });
+
+    t.caso("v18.0.26: fuera de meta sigue siendo fuera de meta, haya basal o no", () => {
+      const sin = api.mtrEvaluarMetaLdl("muy alto", 90, null, null);
+      t.igual(sin.estado, "fuera_de_meta", "LDL 90 con meta <55 está fuera, y eso no depende del basal");
+      t.falso(sin.enMeta);
+      const con = api.mtrEvaluarMetaLdl("muy alto", 90, 200, null);
+      t.igual(con.estado, "en_meta_reduccion_no_evaluable" === con.estado ? con.estado : "meta_parcial",
+        "con basal 200 la reducción sí llega al 55 %, así que es parcial, no «fuera»");
+    });
+
+    t.caso("v18.0.26: donde la norma NO exige reducción, nada cambia", () => {
+      const r = api.mtrEvaluarMetaLdl("moderado", 90, null, null);
+      t.igual(r.estado, "en_meta", "moderado no exige reducción: bajo meta es «en meta», sin matices");
+      t.cierto(r.reduccionEvaluable, "y se considera evaluable porque no se exige");
+    });
+
   },
 };

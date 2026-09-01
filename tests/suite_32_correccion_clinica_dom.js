@@ -817,5 +817,50 @@ module.exports = {
         "y su sello NO se renueva: viaja bajo la clave «Antecedentes», que la guarda de escritura no ignora, así que renovarlo reescribía el almacén cada 2–5 s");
     });
 
+
+    // =====================================================================
+    // v18.0.26 — SE ESCRIBÍA EN UNA CASILLA DESHABILITADA, SIN CONTARLO NI PODER DESHACERLO
+    //
+    // Everest presenta el par Sí/No deshabilitado en varios casos (historia cerrada, solo
+    // lectura, permisos), y `mtrCamposLlenables` los ofrece igual —solo mira que sean
+    // radios, no `disabled`—, así que el emergente preguntaba por ellos. Al responder,
+    // `_vglMarcarRadio` hacía `el.click()`, `el.checked = true` y despachaba un `change`
+    // hacia Angular ANTES de llegar a su `if (el.disabled === true) return false`.
+    //
+    // Devolvía false, el llamador hacía `pares.pop()`, y salía el peor de los tres mundos:
+    //   · la casilla quedaba MARCADA en pantalla, con su evento ya emitido;
+    //   · fuera de la foto de «Deshacer», así que no había forma de revertirla;
+    //   · `escritas` seguía en 0 y el toast decía «No había ninguna casilla que llenar».
+    // Se escribía en la historia del paciente sin contarlo, sin avisarlo y sin poder
+    // deshacerlo — las tres cosas que la regla de la casilla existe para impedir.
+    // =====================================================================
+    t.caso("v18.0.26: una casilla deshabilitada no se toca — ni click, ni checked, ni evento", () => {
+      const c = cargar({ silencioso: true });
+      let clicks = 0, eventos = 0;
+      const radio = {
+        name: "factor1", type: "radio", disabled: true, checked: false,
+        click() { clicks++; this.checked = true; },
+        dispatchEvent() { eventos++; return true; },
+      };
+      t.falso(c.api._vglMarcarRadio(radio), "devuelve false, como antes");
+      t.igual(clicks, 0, "pero NO hizo click: en la pantalla del médico no queda nada marcado");
+      t.igual(eventos, 0, "ni despachó un change hacia Angular, que es lo que Everest sí escucha");
+      t.falso(radio.checked, "y la casilla sigue vacía");
+    });
+
+    t.caso("v18.0.26: el camino normal no cambió — una casilla habilitada sí se marca", () => {
+      const c = cargar({ silencioso: true });
+      let clicks = 0, eventos = 0;
+      const radio = {
+        name: "factor1", type: "radio", disabled: false, checked: false,
+        click() { clicks++; this.checked = true; },
+        dispatchEvent() { eventos++; return true; },
+      };
+      t.cierto(c.api._vglMarcarRadio(radio), "se marca y se confirma");
+      t.igual(clicks, 1, "un solo click");
+      t.igual(eventos, 1, "y un solo change: Everest se entera una vez");
+      t.cierto(radio.checked);
+    });
+
   }
 };
