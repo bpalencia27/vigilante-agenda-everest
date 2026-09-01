@@ -2125,6 +2125,71 @@ module.exports = {
       t.cierto(botonTurno.classList.contains("active"));
     });
 
+    // v18.0.78 — HALLAZGO PENDIENTE (docs/REGLAS_MEDICO_20260901.md, «hazlo»): en modo
+    // control-primero (el normal, sin _labsPrimero), la fecha de toma sugerida (5 días
+    // hábiles antes del control) tampoco verificaba cupo real en AppCita — mismo defecto
+    // que labs-primero (v18.0.69) y que la toma sola (arriba), mismo motor. Caso universal
+    // (sin cupo NUNCA, para cualquier fecha): la sugerencia no se inventa nada y se avisa.
+    await t.casoAsync("REGRESIÓN — openAgendamientoModal (control-primero) avisa, sin inventar fecha, si no hay cupo de laboratorio (hallazgo pendiente REGLAS_MEDICO #2)", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cSinCupo = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        // Ningún día responde con cupo — regla 4 del médico: AppCita SÍ contesta, y
+        // contesta que no, así que el motivo debe ser "sin cupo en el margen", no
+        // "no se pudo verificar".
+        gmxhr: (o) => {
+          if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify({ turnos: [] }) });
+          else if (o.onerror) o.onerror("url no simulada");
+        },
+      });
+      enriquecerDom(cSinCupo);
+      cSinCupo.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cSinCupo.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cSinCupo.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const labLbl = modal.querySelector("#vgl-lab-date-lbl");
+      const textoAntes = labLbl.textContent;
+      t.cierto(!!textoAntes, "la fecha de toma (sin verificar) se pinta de inmediato");
+      const nota = modal.querySelector("#vgl-lab-disp-nota");
+      t.cierto(!!nota, "el recuadro de disponibilidad existe en este modal");
+      t.falso(nota.classList.contains("vgl-d-none"), "y queda visible: no se pudo confirmar cupo en ningún día del margen");
+      t.cierto(/Sin cupo confirmado/.test(nota.innerHTML), "con el motivo correcto (AppCita respondió que no), no «sin verificar»: " + nota.innerHTML);
+      t.igual(labLbl.textContent, textoAntes, "la fecha de toma sigue siendo la clínica: no se inventa una que nadie verificó");
+    });
+
+    // v18.0.78 — el afinado en segundo plano no se puede reproducir con el arnés en el
+    // caso «SÍ hay cupo hacia atrás» sin fijar la fecha exacta que openAgendamientoModal
+    // elige por defecto (depende de festivos y del día en que corra la prueba). Se fija por
+    // inspección de fuente, mismo patrón que ya usa este archivo para _afinarLabsPrimeroConCupos.
+    t.caso("REGRESIÓN — el afinado de cargarHoras respeta labs-primero y la elección manual, y busca hacia atrás sin pasar del ideal (hallazgo pendiente REGLAS_MEDICO #2)", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const zonaCargarHoras = src.slice(src.indexOf("async function cargarHoras("), src.indexOf("async function cargarHoras(") + 2000);
+      t.cierto(/if \(!_labsPrimero && !_labFechaTomaElegidaManual\) \{/.test(zonaCargarHoras),
+        "no se afina en modo labs-primero (ese modo ya se afina con _afinarLabsPrimeroConCupos) ni si el médico ya eligió a mano");
+      const zonaAfinar = src.slice(src.indexOf("async function _afinarTomaControlPrimeroConCupos("), src.indexOf("async function _afinarTomaControlPrimeroConCupos(") + 1500);
+      t.cierto(/mtrBuscarCupoLaboratorio\(\s*idealIso, todayStamp\(\), idealIso, 5,/.test(zonaAfinar),
+        "piso=hoy, techo=el propio ideal: nunca se sugiere una toma después de los 5 días hábiles antes del control (regla 2 y 3 del médico)");
+      t.cierto(/if \(!sigueVivo\(\)\) return;/.test(zonaAfinar), "si el médico eligió algo distinto mientras tanto, no se le pisa");
+      // El token se invalida en los DOS sitios donde el médico puede elegir la toma a mano:
+      // el clic en un chip de día y el calendario manual de la toma.
+      const zonaChip = src.slice(src.indexOf("_labFechaTomaElegidaManual = true;   // v17.6.53 (1.9)"), src.indexOf("_labFechaTomaElegidaManual = true;   // v17.6.53 (1.9)") + 300);
+      t.cierto(/_tomaControlAfinarToken\+\+;/.test(zonaChip), "el clic en un chip de toma invalida el afinado en vuelo");
+      t.cierto(/lInp\.addEventListener\("change", \(\) => \{[\s\S]{0,300}_tomaControlAfinarToken\+\+;[\s\S]{0,100}renderLabDayChips\(v\);/.test(src),
+        "y el calendario manual de la toma también");
+    });
+
     // [auditoría 25-ago, hallazgo 1.8] cargarHorasLab() desmarcaba el interruptor "Agendar
     // también la Toma de Muestras" al INICIO de cada recarga, y solo lo volvía a marcar si
     // era el default de labs-primero (no aplica aquí) Y el médico nunca lo había tocado. Si
@@ -2818,6 +2883,68 @@ module.exports = {
       const sug = cLab.api.calcBusinessDaysBefore("2026-08-20", 5);
       t.cierto(modal.innerHTML.includes(sug.fmt), "el día sugerido de toma es el que calcula calcBusinessDaysBefore, 5 días hábiles antes");
       t.cierto(modal.innerHTML.includes(sug.dayLbl), "y se muestra con su nombre de día");
+    });
+
+    // v18.0.78 — HALLAZGO PENDIENTE (docs/REGLAS_MEDICO_20260901.md, «hazlo»): el sitio
+    // exacto del reporte del médico («hoy me sugiere un examen para mañana porque ya venció,
+    // pero para mañana ya no hay citas de laboratorio»). El ideal SIN verificar se pinta de
+    // inmediato (no bloquea), y en segundo plano se busca hacia atrás con las 4 reglas ya
+    // probadas en _afinarLabsPrimeroConCupos (v18.0.69) — mismo motor, mismo gmxhr mock.
+    const _gmxhrLabSolo = (mapaPorFecha) => (o) => {
+      const m = /fechaBuscar=([\d-]+)/.exec(String(o.url) || "");
+      const iso = m ? m[1] : null;
+      const cuerpo = (iso && Object.prototype.hasOwnProperty.call(mapaPorFecha, iso)) ? mapaPorFecha[iso] : { turnos: [] };
+      if (o.onload) o.onload({ status: 200, responseText: JSON.stringify(cuerpo) });
+    };
+
+    await t.casoAsync("REGRESIÓN — openLabSoloModal afina la toma con cupo real, hacia atrás (hallazgo pendiente REGLAS_MEDICO #2)", async () => {
+      // Cita de control: 20-sep-2026. Ideal (5 días hábiles antes): 14-sep-2026 — sin cupo.
+      // El motor busca hacia atrás: 12-sep (sin cupo), 11-sep (CON cupo) — debe quedarse ahí.
+      const cLab = cargar({
+        silencioso: true,
+        gmxhr: _gmxhrLabSolo({
+          "2026-09-14": { turnos: [] },
+          "2026-09-12": { turnos: [] },
+          "2026-09-11": { turnos: [{ hora: "08:00" }] },
+        }),
+      });
+      enriquecerDom(cLab);
+      cLab.api.markCitaAgendadaHoy("777000", "2026-09-20");
+      await cLab.api.openLabSoloModal({ doc_id: "777000", nombre: "CON CUPO ATRAS" });
+      const modal = cLab.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!modal, "el modal quedó pintado");
+      const ideal = cLab.api.calcBusinessDaysBefore("2026-09-20", 5);
+      t.igual(ideal.iso, "2026-09-14", "el ideal (sin verificar) es el 14-sep, como antes");
+      // El HTML estático (no el nodo memoizado del DOM falso) es lo que refleja el primer
+      // pintado, síncrono y sin bloquear — igual que la prueba «flujo completo» de arriba.
+      t.cierto(modal.innerHTML.includes(ideal.fmt), "el ideal se pinta primero, sin bloquear, mientras se verifica");
+      const sugTxt = modal.querySelector("#vgl-labsolo-sugerida-txt");
+
+      await esperar(60);   // deja correr el afinado en segundo plano (gmxhr resuelve síncrono)
+
+      const verificado = cLab.api.calcBusinessDaysBefore("2026-09-11", 0);
+      t.cierto(sugTxt.textContent.includes(verificado.fmt), "tras verificar, se repinta con el 11-sep — el primero CON cupo real hacia atrás: " + sugTxt.textContent);
+      const nota = modal.querySelector("#vgl-labsolo-disp-nota");
+      t.cierto(nota && nota.classList.contains("vgl-d-none"), "con cupo encontrado, no hay aviso de disponibilidad");
+    });
+
+    await t.casoAsync("REGRESIÓN — openLabSoloModal avisa, sin inventar fecha, si no hay cupo en todo el margen (hallazgo pendiente REGLAS_MEDICO #2)", async () => {
+      // Ningún día del margen de 5 hábiles responde con cupo: la sugerencia se queda en la
+      // fecha clínica (nunca se inventa una) y se avisa en pantalla — regla 2 y 4 del médico.
+      const cLab = cargar({ silencioso: true, gmxhr: _gmxhrLabSolo({}) });   // todo responde "sin turnos"
+      enriquecerDom(cLab);
+      cLab.api.markCitaAgendadaHoy("777001", "2026-09-20");
+      await cLab.api.openLabSoloModal({ doc_id: "777001", nombre: "SIN CUPO EN TODO EL MARGEN" });
+      const modal = cLab.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      await esperar(60);
+
+      const ideal = cLab.api.calcBusinessDaysBefore("2026-09-20", 5);
+      // Sin ningún hallazgo, la etiqueta del ideal NUNCA se toca (el HTML estático original
+      // sigue siendo la verdad, igual que en la prueba «flujo completo» de arriba).
+      t.cierto(modal.innerHTML.includes(ideal.fmt), "la sugerencia se queda en la fecha clínica: no se inventa una que nadie verificó");
+      const nota = modal.querySelector("#vgl-labsolo-disp-nota");
+      t.falso(nota.classList.contains("vgl-d-none"), "y se avisa que no se pudo confirmar cupo");
+      t.cierto(/Sin cupo confirmado/.test(nota.innerHTML), "con el texto que ya usa el motor: " + nota.innerHTML);
     });
 
     // ================= openOrdenamientoModal =================

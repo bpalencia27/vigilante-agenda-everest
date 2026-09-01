@@ -64,9 +64,16 @@ nunca (el bucle viejo se rendía a los 8 intentos y tomaba el noveno sin verific
 extracción de la respuesta de AppCita solo reconocía dos de las seis formas reales en que esa
 API envuelve la lista de turnos.
 
-**Pendiente**: los otros dos sitios que sugieren una toma sin verificar cupo
-(`cargarHoras`/control-primero, y el modal de «toma sola») — mismo motor, ya construido y
-probado, falta solo conectarlo.
+**Los otros dos sitios, conectados en v18.0.78** (pedido explícito suyo — «hazlo»): mismo motor
+(`mtrBuscarCupoLaboratorio` + `mtrVerificarCupoLab` + `mtrNotaDisponibilidadLab`), pintado
+primero sin verificar (no bloquea la interfaz) y afinado en segundo plano, sin pisar nunca una
+fecha de toma que usted ya haya elegido a mano:
+
+- `cargarHoras` (control-primero): la fecha de toma sugerida es 5 días hábiles antes del
+  control ya elegido — el control nunca se toca (regla 3).
+- El modal de «toma sola», en el caso exacto de su reporte: cuando ya hay una cita de control
+  agendada y se sugiere la toma 5 días hábiles antes. El modo libre (sin cita de control) usa
+  otra lógica —el próximo día hábil, no «antes de un control»— y queda fuera de esta regla.
 
 ---
 

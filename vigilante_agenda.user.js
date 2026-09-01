@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.77
+// @version      18.0.78
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.77";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.78";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -24545,6 +24545,7 @@
               <button type="button" id="vgl-agm-plan-cambiar" class="vgl-agm-btn sec vgl-sm" style="align-self:flex-start;margin:2px 0 4px">✎ Cambiar fecha u hora</button>
               <div id="vgl-agm-plan-det" class="vgl-d-none">
                 <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="margin:2px 0 6px;gap:4px;flex-wrap:wrap"></div>
+                <div id="vgl-lab-disp-nota" class="vgl-agm-sug-nota vgl-agm-sug-aviso vgl-d-none"></div>
                 <div class="vgl-agm-fieldrow" style="margin:0 0 6px">
                   <button type="button" id="vgl-agm-lab-manual-btn" class="vgl-agm-pbtn vgl-sm">📅 Otra fecha para la toma…</button>
                   <input type="date" id="vgl-agm-lab-manual-fecha" class="vgl-agm-input vgl-d-none" style="max-width:170px;padding:5px 8px">
@@ -24877,6 +24878,13 @@
 
     let _cargarHorasToken = 0;
     let _cargarHorasLabToken = 0;
+    // v18.0.78 — AUDITORÍA (pendiente documentado en docs/REGLAS_MEDICO_20260901.md, pedido
+    // explícito del médico): igual que _afinarLabsPrimeroConCupos (v18.0.69) cerró el hueco
+    // para el modo labs-primero, este token es para el modo NORMAL (control-primero): la
+    // fecha de toma que cargarHoras() sugiere (5 días hábiles antes del control) se pinta
+    // primero SIN verificar — no bloquea la interfaz — y esta ronda la afina en segundo
+    // plano contra AppCita, con las mismas 4 reglas del médico.
+    let _tomaControlAfinarToken = 0;
     // v17.6.53 — auditoría 25-ago (1.8): mismo patrón que _celularSmsEditadoManual
     // (v17.0.3). cargarHorasLab() desmarca el interruptor "Agendar también la Toma de
     // Muestras" al INICIO de cada recarga (cambio de chip de día, cambio de especialidad)
@@ -24919,6 +24927,12 @@
 
       renderLabDayChips(suggestedLab.iso);
       try { _pintarAvisoVencimiento(); } catch (e) {}   // v15.9.0 — al elegir el día
+      // v18.0.78 — el modo labs-primero ya se afina por su cuenta (_afinarLabsPrimeroConCupos);
+      // aquí solo se afina el modo normal, y solo si el médico no eligió ya su propia fecha.
+      if (!_labsPrimero && !_labFechaTomaElegidaManual) {
+        const _miTokenToma = ++_tomaControlAfinarToken;
+        try { _afinarTomaControlPrimeroConCupos(suggestedLab.iso, _miTokenToma); } catch (e) {}
+      }
 
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Buscando agendas de ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}...</div>`;
 
@@ -25472,6 +25486,7 @@
           selectedLabDateInfo = item;
           _labFechaTomaElegidaManual = true;   // v17.6.53 (1.9) — esta elección ya no se pisa
           _labsAfinarToken++;   // v17.0.3 — el médico ya eligió día de toma: no se le pisa después
+          _tomaControlAfinarToken++;   // v18.0.78 — mismo remedio para el afinado de modo normal
           if (labLblEl) labLblEl.textContent = `${item.fmt} (${item.lbl})`;
           cargarHorasLab();
           try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}   // v15.9.0 — la toma es la referencia del aviso
@@ -25641,6 +25656,7 @@
         const v = String(lInp.value || "").trim();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < todayStamp()) return;
         try { uxTrack("fn.agendar.lab_manual"); } catch (e) {}
+        _tomaControlAfinarToken++;   // v18.0.78 — no dejar que un afinado en vuelo pise esta elección
         renderLabDayChips(v);
       });
     }
@@ -26117,6 +26133,36 @@
       return p;
     }
 
+    // v18.0.78 — AUDITORÍA (pendiente documentado en docs/REGLAS_MEDICO_20260901.md desde
+    // v18.0.69, pedido explícito del médico: «hazlo»). Hermana de _afinarLabsPrimeroConCupos
+    // de aquí abajo, pero para el modo NORMAL (control-primero): aquí el CONTROL ya está
+    // fijo (lo eligió el médico o el paciente) y solo se mueve la TOMA, nunca al revés —
+    // la regla 3 del médico se cumple sola porque `idealIso`/`techoIso` nunca tocan
+    // `selectedDateInfo` (el control). Corre en segundo plano tras el pintado inicial (sin
+    // verificar, para no bloquear la interfaz) y repinta SOLO si el médico no ha elegido ya
+    // su propia fecha de toma mientras tanto (mismo remedio de token que su hermana).
+    async function _afinarTomaControlPrimeroConCupos(idealIso, miToken) {
+      const sigueVivo = () => vivo() && miToken === _tomaControlAfinarToken && !_labFechaTomaElegidaManual;
+      try {
+        const r = await mtrBuscarCupoLaboratorio(
+          idealIso, todayStamp(), idealIso, 5,
+          async (iso) => (sigueVivo() ? mtrVerificarCupoLab(iso) : null)
+        );
+        if (!sigueVivo()) return;   // el médico ya eligió algo distinto: no se le pisa
+        const notaEl = modal.querySelector("#vgl-lab-disp-nota");
+        if (notaEl) {
+          if (r.encontrada) { notaEl.innerHTML = ""; notaEl.classList.add("vgl-d-none"); }
+          else { notaEl.innerHTML = mtrNotaDisponibilidadLab(r); notaEl.classList.remove("vgl-d-none"); }
+        }
+        if (r.encontrada && r.iso !== idealIso) {
+          const f = calcBusinessDaysBefore(r.iso, 0);   // daysBefore=0: solo formatea r.iso
+          const labLbl2 = modal.querySelector("#vgl-lab-date-lbl");
+          if (labLbl2) labLbl2.textContent = `${f.fmt} (${f.dayLbl})`;
+          renderLabDayChips(r.iso);
+        }
+      } catch (e) {}
+    }
+
     // v15.4.0 — Afinado asíncrono de la toma: dentro de la ventana 14–21 se busca el
     // PRIMER día hábil con cupos reales de laboratorio en AppCita (decisión del médico).
     // Si el médico no ha tocado los chips, la fecha de control se recentra sola.
@@ -26497,8 +26543,9 @@
         </div>
 
         <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">Elija el día de toma de muestras (sugerido: <b>${escapeHtml(suggestedLab.fmt)} — ${escapeHtml(suggestedLab.dayLbl)}</b>)</label>
+          <label class="vgl-agm-lbl">Elija el día de toma de muestras (sugerido: <b id="vgl-labsolo-sugerida-txt">${escapeHtml(suggestedLab.fmt)} — ${escapeHtml(suggestedLab.dayLbl)}</b>)</label>
           <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="gap:5px;flex-wrap:wrap"></div>
+          <div id="vgl-labsolo-disp-nota" class="vgl-agm-sug-nota vgl-agm-sug-aviso vgl-d-none"></div>
           <div class="vgl-agm-fieldrow" style="margin-top:6px">
             <button type="button" id="vgl-labsolo-manual-btn" class="vgl-agm-pbtn vgl-sm">📅 Elegir fecha en el calendario…</button>
             <input type="date" id="vgl-labsolo-manual-fecha" class="vgl-agm-input vgl-d-none" style="max-width:170px;padding:5px 8px">
@@ -26540,6 +26587,36 @@
 
     let selectedLabDateInfo = null;
     let _tokenLabSolo = 0;
+    // v18.0.78 — AUDITORÍA (pendiente documentado en docs/REGLAS_MEDICO_20260901.md desde
+    // v18.0.69, pedido explícito del médico: «hazlo»). Mismo motor que _afinarLabsPrimeroConCupos
+    // y _afinarTomaControlPrimeroConCupos (openAgendamientoModal), aquí para el caso exacto
+    // que el médico reportó: «hoy me sugiere un examen para mañana porque ya venció, pero
+    // para mañana ya no hay citas de laboratorio». Solo aplica cuando hay una cita de
+    // control real de la que restar los 5 días hábiles (citaFechaIso) — el modo libre
+    // calcula la fecha con otra lógica (próximo día hábil, no «antes de un control») y no
+    // es el caso reportado.
+    let _labSoloElegidaManual = false, _labSoloAfinarToken = 0;
+    async function _afinarLabSoloConCupos(idealIso, miToken) {
+      const sigueVivo = () => vivo() && miToken === _labSoloAfinarToken && !_labSoloElegidaManual;
+      try {
+        const r = await mtrBuscarCupoLaboratorio(
+          idealIso, todayStamp(), idealIso, 5,
+          async (iso) => (sigueVivo() ? mtrVerificarCupoLab(iso) : null)
+        );
+        if (!sigueVivo()) return;
+        const notaEl = modal.querySelector("#vgl-labsolo-disp-nota");
+        if (notaEl) {
+          if (r.encontrada) { notaEl.innerHTML = ""; notaEl.classList.add("vgl-d-none"); }
+          else { notaEl.innerHTML = mtrNotaDisponibilidadLab(r); notaEl.classList.remove("vgl-d-none"); }
+        }
+        if (r.encontrada && r.iso !== idealIso) {
+          const f = calcBusinessDaysBefore(r.iso, 0);   // daysBefore=0: solo formatea r.iso
+          const sugTxt = modal.querySelector("#vgl-labsolo-sugerida-txt");
+          if (sugTxt) sugTxt.textContent = `${f.fmt} — ${f.dayLbl}`;
+          renderLabDayChipsSolo(r.iso);
+        }
+      } catch (e) {}
+    }
     // v12.3.29 — BLOQUEANTE hallado en revisión adversarial: sin este candado, un clic en
     // un chip de día MIENTRAS la reserva ya estaba en curso reactivaba el botón Confirmar
     // (la consulta de horas, de una sola llamada, resolvía antes que apiLaboratorioAgendarAuto,
@@ -26628,6 +26705,8 @@
           labChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           selectedLabDateInfo = item;
+          _labSoloElegidaManual = true;   // v18.0.78 — el médico ya eligió: no se le pisa después
+          _labSoloAfinarToken++;
           cargarHorasLabSolo();
         });
         _labChipsNodosSolo.push(btn);
@@ -26637,6 +26716,12 @@
       cargarHorasLabSolo();
     }
     renderLabDayChipsSolo();
+    // v18.0.78 — se afina en segundo plano SOLO el caso que el médico reportó (hay una cita
+    // de control real de la que restar los 5 días hábiles) y solo si aún no ha elegido nada.
+    if (citaFechaIso && !_labSoloElegidaManual) {
+      const _miTokenLabSolo = ++_labSoloAfinarToken;
+      try { _afinarLabSoloConCupos(suggestedLab.iso, _miTokenLabSolo); } catch (e) {}
+    }
     // v15.7.0 — calendario manual del SOLO Laboratorios (misma modalidad que la cita).
     {
       const lBtn = modal.querySelector("#vgl-labsolo-manual-btn");
@@ -26649,6 +26734,8 @@
         const v = String(lInp.value || "").trim();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < todayStamp()) return;
         try { uxTrack("fn.labsolo.manual"); } catch (e) {}
+        _labSoloElegidaManual = true;   // v18.0.78 — mismo remedio que el clic en un chip
+        _labSoloAfinarToken++;
         renderLabDayChipsSolo(v);
       });
     }

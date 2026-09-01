@@ -10153,3 +10153,37 @@ ya quedó vacío.
 | 207 | `closeSheet()` vuelve a cerrar directo sin consultar el borrador (**el defecto original**) | *REGRESIÓN — closeSheet() directo (Escape, chip de filtro) ya no descarta un borrador sucio* | Sí |
 
 Banco completo: **2.930 comprobaciones pasan, 0 fallan.**
+
+## v18.0.78 — el motor de disponibilidad de laboratorio llega a los otros dos sitios
+
+Pedido explícito del médico, dicho en el mismo momento en que reportó otro tema («Lo que dejé
+explícito como pendiente, no oculto... [hazlo]»). No es un hallazgo del enjambre: es la
+conexión, documentada como pendiente desde v18.0.69 en `docs/REGLAS_MEDICO_20260901.md`, del
+motor de disponibilidad de laboratorio (`mtrBuscarCupoLaboratorio` + `mtrVerificarCupoLab` +
+`mtrNotaDisponibilidadLab`, ya construido y probado) en los otros dos sitios del módulo que
+sugerían una fecha de toma sin verificar cupo real en AppCita:
+
+- **`cargarHoras`** (modo control-primero, dentro de `openAgendamientoModal`): el control ya
+  está elegido y la toma se sugiere 5 días hábiles antes. Se pinta primero SIN verificar (no
+  bloquea la interfaz) y se afina en segundo plano — mismo patrón que `_afinarLabsPrimeroConCupos`
+  (v18.0.69), con un token propio (`_tomaControlAfinarToken`) para no pisar una elección manual
+  del médico (chip de día o calendario de la toma) hecha mientras la ronda de red seguía en vuelo.
+- **`openLabSoloModal`** («toma sola»), en el caso exacto que el médico reportó: cuando ya hay
+  una cita de control agendada y la toma se sugiere 5 días hábiles antes de ella. El modo libre
+  (sin cita de control) usa otra lógica —el próximo día hábil, no «antes de un control»— y queda
+  fuera de esta conexión: no es el caso reportado.
+
+En ambos sitios, sin cupo confirmado en ningún día del margen de 5 hábiles hacia atrás, la
+sugerencia se queda en la fecha clínica (nunca se inventa una) y se avisa en pantalla — reglas
+2 y 4 del médico, exactamente como ya hace `_afinarLabsPrimeroConCupos`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 208 | `openLabSoloModal` nunca dispara el afinado | *REGRESIÓN — openLabSoloModal afina la toma con cupo real, hacia atrás* y *REGRESIÓN — openLabSoloModal avisa, sin inventar fecha* (2 fallan) | Sí |
+| 209 | `cargarHoras` nunca dispara el afinado | *REGRESIÓN — openAgendamientoModal (control-primero) avisa, sin inventar fecha* y *REGRESIÓN — el afinado de cargarHoras respeta labs-primero...* (2 fallan) | Sí |
+| 210 | el techo de `_afinarTomaControlPrimeroConCupos` deja de ser el propio ideal (podría sugerir una toma DESPUÉS de los 5 días hábiles antes del control) | *REGRESIÓN — el afinado de cargarHoras respeta labs-primero y la elección manual...* | Sí |
+| 211 | el clic en un chip de toma deja de invalidar el afinado en vuelo (`_tomaControlAfinarToken++` retirado) | *misma prueba* | Sí |
+
+Banco completo: **2.934 comprobaciones pasan, 0 fallan.**
