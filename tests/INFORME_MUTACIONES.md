@@ -9276,3 +9276,40 @@ exactamente para eso: **los duplicados viejos ya están en las máquinas.**
 | 150 | vuelve a escribir bajo la clave cruda (**el defecto**) | *una cosecha nueva no orfaniza la memoria archivada* | Sí — 45 ok |
 
 Banco completo: **2.873 comprobaciones pasan, 0 fallan.** Van **18 de los 47** del enjambre.
+
+---
+
+## v18.0.61 — «falta el peso» sobre un peso que sí estaba
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+El motor **ya distingue** «dato ausente» de «dato presente pero implausible»: por eso existe
+`peso_fuera_de_rango` (20–300 kg) además de `peso`. Pero solo la creatinina tenía su bloque
+propio de mensaje; el peso caía en la rama genérica y el diccionario `ETIQUETA` lo traducía
+**igual que si nunca se hubiera tomado**:
+
+    peso = 15 kg registrado  ->  «Función renal: no se puede calcular — falta el peso.»
+
+Un 15 en vez de 51, o la talla escrita en la casilla del peso, es **exactamente** el error de
+transcripción que ese rango existe para atrapar. Y el mensaje hace dos cosas mal a la vez: dice
+algo **falso** —el dato sí está en Everest— y manda al médico a **tomar signos vitales otra
+vez** en vez de a corregir una casilla concreta.
+
+Ahora recibe el mismo trato explícito que su caso gemelo, **con el valor delante**:
+
+> 🫘 **Función renal:** no se puede calcular — el peso registrado (**15** kg) queda fuera del
+> rango plausible (20–300 kg). **El dato SÍ está en Everest**, así que no hace falta volver a
+> tomar los signos vitales: revise esa casilla, suele ser un dígito de más o de menos, o la
+> talla escrita en el lugar del peso.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 151 | se quita el bloque propio (**el defecto**) | *un peso implausible NO se anuncia como ausente* | Sí — 43 ok |
+| 152 | el bloque nuevo se traga también el peso AUSENTE | *un peso realmente ausente sigue diciendo que falta* (2 fallan) | Sí — 43 ok |
+
+La 152 es la contención: sin ella, «arreglarlo» de más habría hecho lo contrario —decir que un
+peso que no existe está mal digitado— y el médico iría a revisar una casilla vacía.
+
+Banco completo: **2.875 comprobaciones pasan, 0 fallan.** Van **19 de los 47** del enjambre.

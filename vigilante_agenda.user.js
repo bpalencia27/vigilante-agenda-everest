@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.60
+// @version      18.0.61
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.60";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.61";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -20148,6 +20148,24 @@
     if ((r.faltan || []).indexOf("creatinina_fuera_de_rango") !== -1) {
       const v = r.entradas && r.entradas.creatininaCruda;
       return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
+    }
+    // v18.0.61 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta: UN PESO
+    // REGISTRADO PERO IMPLAUSIBLE SE ANUNCIABA COMO «FALTA EL PESO».
+    //
+    // El motor YA distingue «dato ausente» de «dato presente pero implausible»: por eso
+    // existe `peso_fuera_de_rango` (20–300 kg) además de `peso`. Pero solo la creatinina
+    // tenía su bloque propio; el peso caía en la rama genérica de abajo, y el diccionario
+    // ETIQUETA lo traducía IGUAL que si nunca se hubiera tomado.
+    //
+    // Un 15 en vez de 51, o la talla escrita en la casilla del peso, es exactamente el
+    // error de transcripción que ese rango existe para atrapar. Decirle al médico «falta el
+    // peso» es información FALSA —el dato sí está en Everest— y encima lo manda a tomar
+    // signos vitales otra vez en vez de a corregir un valor concreto. Se le da el mismo
+    // trato explícito que a su caso gemelo, con el valor real delante para que sepa qué
+    // corregir.
+    if ((r.faltan || []).indexOf("peso_fuera_de_rango") !== -1) {
+      const v = r.entradas && r.entradas.peso;
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular — el peso registrado (<b>${escapeHtml(String(v))}</b> kg) queda fuera del rango plausible (20–300 kg). <b>El dato SÍ está en Everest</b>, así que no hace falta volver a tomar los signos vitales: revise esa casilla, suele ser un dígito de más o de menos, o la talla escrita en el lugar del peso.</div>`;
     }
     if (!r.estadio) {
       const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);

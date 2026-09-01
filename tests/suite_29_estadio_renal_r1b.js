@@ -447,6 +447,39 @@ module.exports = {
       t.cierto(result.includes("88"));
     });
 
+    // =================================================================
+    //  v18.0.61 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  UN PESO REGISTRADO PERO IMPLAUSIBLE SE ANUNCIABA COMO «FALTA EL PESO».
+    //
+    //  El motor ya distingue «ausente» de «presente pero implausible» —por eso existe
+    //  `peso_fuera_de_rango` además de `peso`—, pero solo la creatinina tenía su bloque
+    //  propio: el peso caía en la rama genérica y el diccionario ETIQUETA lo traducía
+    //  IGUAL que si nunca se hubiera tomado.
+    //
+    //  Un 15 en vez de 51, o la talla escrita en la casilla del peso, es exactamente el
+    //  error de transcripción que ese rango existe para atrapar. «Falta el peso» es
+    //  información FALSA —el dato SÍ está en Everest— y manda al médico a tomar signos
+    //  vitales otra vez en vez de a corregir una casilla concreta.
+    // =================================================================
+    t.caso("v18.0.61: un peso implausible NO se anuncia como ausente, y se muestra el valor", () => {
+      const r = api.estadioRenalDelPaciente({ edad: 70, peso: 15, creatininaCruda: "1.0", sexo: "FEMENINO" });
+      t.igual(r.faltan, ["peso_fuera_de_rango"], "el motor ya lo clasificaba bien (control del caso)");
+      const html = api._renderEstadioRenalHtml(r);
+      t.falso(/falta el peso/i.test(html), "NO puede decir que falta: el dato está en Everest");
+      t.cierto(html.indexOf("15") >= 0, "muestra el valor real, que es lo que hay que ir a corregir");
+      t.cierto(/fuera del rango plausible/i.test(html), "y dice por qué no sirve");
+      t.cierto(/S[ÍI] est[áa] en Everest/i.test(html),
+        "y que no hace falta volver a tomar los signos vitales");
+    });
+
+    t.caso("v18.0.61: y un peso REALMENTE ausente sigue diciendo que falta (la otra dirección)", () => {
+      const r = api.estadioRenalDelPaciente({ edad: 70, creatininaCruda: "1.0", sexo: "FEMENINO" });
+      const html = api._renderEstadioRenalHtml(r);
+      t.cierto(/falta el peso/i.test(html), "aquí sí falta de verdad");
+      t.cierto(/signos vitales de Everest/i.test(html), "y la pista de siempre sigue estando");
+      t.falso(/fuera del rango plausible/i.test(html), "sin mezclarse con el mensaje del valor implausible");
+    });
+
     t.caso("_renderEstadioRenalHtml: muestra mensaje de error indicando qué falta", () => {
       const result = api._renderEstadioRenalHtml({ faltan: ["edad", "peso"] });
       t.cierto(result.includes("falta la edad y el peso"));
