@@ -23178,13 +23178,13 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  let _fuzzyPrev = new Uint16Array(256);
+  let _fuzzyCurr = new Uint16Array(256);
+  let _fuzzyPrevPrev = new Uint16Array(256);
+
   function fuzzyMatch(q, text) {
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
-
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -23199,6 +23199,16 @@ _vglOfrecerDeshacer(btn);
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+        if (n >= _fuzzyPrev.length) {
+          const newSize = Math.max(n + 1, _fuzzyPrev.length * 2);
+          _fuzzyPrev = new Uint16Array(newSize);
+          _fuzzyCurr = new Uint16Array(newSize);
+          _fuzzyPrevPrev = new Uint16Array(newSize);
+        }
+
+        let prevRow = _fuzzyPrev;
+        let currRow = _fuzzyCurr;
+        let prevPrevRow = _fuzzyPrevPrev;
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -23218,11 +23228,11 @@ _vglOfrecerDeshacer(btn);
               currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          // Swap rows via references instead of element-wise copying
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
