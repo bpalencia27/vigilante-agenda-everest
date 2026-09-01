@@ -647,6 +647,18 @@ module.exports = {
       // hoja: su color venía solo por herencia, y la herencia pierde contra una regla de
       // tipo de Everest con important. Medido en Chromium: 18,67:1 -> 1,10:1, invisible.
       // Este censo existe justo para que un número así no cambie sin que alguien lo explique.
+      // v18.0.64 — 649 -> 651 aquí, y 132 -> 133 en el censo de las hojas spliceadas de más
+      // abajo. Son DOS reglas nuevas, las dos por reportes en vivo del médico del 1-sep con
+      // captura:
+      //   · la clase .vgl-prod-cap («atendidas de su agenda»), la única del bloque de
+      //     Productividad sin ninguna declaración de color propia: heredaba, y un valor
+      //     heredado pierde SIEMPRE contra una regla que apunte al elemento;
+      //   · el blindaje de las otras 34 clases en el mismo caso (una sola declaración para
+      //     todas), encontradas con tools/auditar_color_todo_chromium.js.
+      // Las dos suman aquí (+2) y una de ellas suma ADEMÁS en el censo spliceado (+1), que
+      // es por lo que el total de los dos censos crece 3 y no 2: el CSS resuelto duplica
+      // MTR_RCV_CSS en MTR_RCV_CSS_TODOS_LOS_MODALES. Los números están medidos, no
+      // deducidos; si vuelven a moverse, medirlos otra vez antes de tocarlos.
       // v18.0.43 — 645 -> 649: CUATRO reglas nuevas para el chip y la línea del respaldo
       // (`.vgl-chip-resp`, `.vgl-none.resp`, cada una con su gemela de tema oscuro), que
       // pintan en ámbar lo que viene de la base piloto y no de la lista oficial de hoy.
@@ -655,15 +667,15 @@ module.exports = {
       // De paso, el primer intento sumaba CINCO: el quinto era la palabra escrita dentro de
       // un comentario del propio CSS. Este censo cuenta texto crudo, así que una mención en
       // prosa le inventa una regla — anotado en el comentario de esa hoja para no repetirlo.
-      t.cierto(importantTotal === 649, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 649: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43; salió ${importantTotal})`);
+      t.cierto(importantTotal === 651, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 651: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
       // la hoja a mitad y dejó 878 líneas de CSS sin aplicar. Un número fijo obliga a que
       // cualquier cambio de blindaje en esas hojas pase por aquí y se explique.
       const importantSpliceados = (css.match(/!important/g) || []).length - importantTotal;
-      t.cierto(importantSpliceados === 132,
-        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 132, salió ${importantSpliceados})`);
+      t.cierto(importantSpliceados === 133,
+        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 133: 132 + la clase .vgl-prod-cap blindada en la v18.0.64; salió ${importantSpliceados})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -1254,9 +1266,18 @@ module.exports = {
       }
 
       // (b) elemento.style.cssText = "…color:…"  — la vía que la Regla B no miraba
-      const reCss = /\.style\.cssText\s*=\s*"([^"]*)"/g;
+      //
+      // v18.0.64 — LA MISMA CEGUERA DE LA v18.0.42, EN LA OTRA RAMA. El patrón capturaba
+      // UNA sola cadena entrecomillada, y un `cssText` largo se escribe partido en varias
+      // unidas con `+`. En la pastilla del Redactor IA («⏳ Abriendo la pestaña Conducta…»)
+      // el color vive en la SEGUNDA cadena, así que esta regla miraba la primera —sin
+      // ningún `color:`—, no encontraba nada y pasaba en verde mientras el médico veía el
+      // azul de Everest en pantalla. Ahora se consume la concatenación entera.
+      const reCss = /\.style\.cssText\s*=\s*((?:"[^"]*"|'[^']*'|\s*\+\s*)+)/g;
       while ((m = reCss.exec(codeSinExpr)) !== null) {
-        const decls = m[1];
+        // Se unen todos los literales de la expresión: es el valor que de verdad recibe el
+        // elemento, no solo su primer trozo.
+        const decls = (m[1].match(/"[^"]*"|'[^']*'/g) || []).map((t) => t.slice(1, -1)).join("");
         if (!/(^|;)\s*color\s*:/.test(decls)) continue;
         const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
         if (decl.includes("!important")) continue;

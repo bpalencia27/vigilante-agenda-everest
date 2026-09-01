@@ -329,6 +329,64 @@ module.exports = {
       t.falso(r2.arrival, "y no hay llegada sin confirmar");
     });
 
+    // =====================================================================
+    // v18.0.64 — EL CSV DE AUDITORÍA DEL MÉDICO SE INUNDABA
+    // Reporte con el CSV real del 1-sep adjunto: «49 AVISOS HOY? NO ES MUCHO?». De esos 49
+    // eventos, 36 eran legítimos (10 pacientes × 2 CAMBIO_ESTADO + 10 INGRESO_A_TIEMPO, más
+    // 3 inasistencias con su ÚLTIMA_LLAMADA) y 13 eran esta constancia repetida — una MISMA
+    // cita la generó SIETE veces (8:32, 8:53, 9:11, 9:17, 9:40 y dos a las 11:07, con cuatro
+    // segundos entre ellas).
+    //
+    // La causa: esta rama escribe una línea y, a propósito, NO marca fraudWatch (la
+    // evidencia queda a la espera de una lectura sin sospecha de estar estancada). Sin un
+    // candado propio, volvía a escribirla en cada vuelta del reloj mientras durase la gracia
+    // del relevo — y la gracia se reabre cada vez que el médico cambia de pestaña.
+    //
+    // El CSV es el documento con el que él reclama: repetir un hecho siete veces no añade
+    // evidencia, la entierra.
+    // =====================================================================
+    t.caso("v18.0.64: la constancia de «lectura tras relevo» se escribe UNA vez por cita, no una por tick", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" };
+
+      const cuantas = () => c.api.eventsOf(c.api.todayStamp())
+        .filter((e) => e && e.ev === "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR").length;
+
+      // Relevo recién ocurrido: la gracia está activa, así que esta rama es la que corre.
+      c.api._setUltimoRelevoParaTest(Date.now());
+      c.api.colorAndAlert(a, refDate);
+      c.api.colorAndAlert(a, refDate);
+      c.api.colorAndAlert(a, refDate);
+      t.igual(cuantas(), 1, "tres vueltas del reloj, UNA sola línea en la bitácora");
+
+      // Y el médico cambia de pestaña, que es lo que reabre la gracia una y otra vez.
+      c.api._setUltimoRelevoParaTest(Date.now());
+      c.api.colorAndAlert(a, refDate);
+      c.api._setUltimoRelevoParaTest(Date.now());
+      c.api.colorAndAlert(a, refDate);
+      t.igual(cuantas(), 1, "ni aunque el relevo se repita: el hecho ya está registrado");
+    });
+
+    t.caso("v18.0.64 (contención): la constancia sigue registrándose para OTRA cita distinta", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cuantas = () => c.api.eventsOf(c.api.todayStamp())
+        .filter((e) => e && e.ev === "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR").length;
+
+      c.api._setUltimoRelevoParaTest(Date.now());
+      c.api.colorAndAlert({ hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "PACIENTE UNO", index: 1, doc_id: "222222" }, refDate);
+      c.api._setUltimoRelevoParaTest(Date.now());
+      // 07:30 y no 08:20: a las 08:20 una cita de las 08:20 lleva 0 minutos de retraso y no
+      // entra siquiera en la rama que escribe la constancia.
+      c.api.colorAndAlert({ hora_texto: "07:30 AM", estado: "Sin presentarse", nombre: "PACIENTE DOS", index: 2, doc_id: "333333" }, refDate);
+      t.igual(cuantas(), 2, "el candado es por cita: callar la segunda sería perder evidencia real");
+    });
+
     // ---------- _proximoDeadlineTiempo (Fase 3: notificación en tiempo real) ----------
     t.caso("_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta -> devuelve el instante de la prealerta", () => {
       const c = cargar();

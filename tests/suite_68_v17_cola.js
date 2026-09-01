@@ -712,7 +712,26 @@ module.exports = {
       t.igual(v.diaria.faltan, 16, "y cuántas faltan para la meta");
       t.igual(v.semanal.atendidas, 5, "la semana suma lunes y miércoles");
       t.igual(v.semanal.dias, 2, "dos días trabajados: el martes sin ninguna atendida NO cuenta");
-      t.igual(v.semanal.meta, 36, "así que la meta de la semana son 2 × 18, no 3 × 18");
+      // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura): «¿CÓMO ASÍ QUE 23/36? ¿NO DEBERÍA
+      // MÁS BIEN MOSTRAR CUÁNTOS PACIENTES HE VISTO DE LOS QUE TENGO QUE VER A LA SEMANA?».
+      // El denominador pasa de «la meta de los días ya trabajados» a la meta COMPLETA del
+      // periodo. Esta semana (17 al 23-ago), con hoy = miércoles 19:
+      //   · lunes 17: FESTIVO en Colombia (Asunción, trasladado) -> no pone meta. El médico
+      //     lo confirmó por escrito el 1-sep: «YO NO TRABAJO NI DOMINGOS NI FESTIVOS», así
+      //     que un festivo nunca debe pedirle 18 pacientes.
+      //   · sus 3 atendidas de ese día SÍ se cuentan igual. No porque se espere que trabaje
+      //     un festivo, sino porque el numerador no puede depender de que nuestra tabla de
+      //     festivos esté bien: ya tuvo un 2024-11-18 equivocado (ver esFestivo), y un error
+      //     de esa tabla jamás puede borrarle pacientes que sí atendió.
+      //   · martes 18: pasado y sin ninguna atendida -> no cuenta en contra (regla vieja,
+      //     que se conserva: no reprochar un día que no le tocaba);
+      //   · miércoles 19 (hoy) + jueves 20 + viernes 21 -> 3 × 18 = 54;
+      //   · sábado 22: futuro, y sus sábados no son fijos -> no se da por hecho.
+      t.igual(v.semanal.meta, 54, "la meta de la semana incluye los días que faltan por delante");
+      t.igual(v.semanal.faltan, 49, "y dice cuántos pacientes le quedan para cumplirla");
+      t.igual(v.semanal.metaHastaHoy, 18, "el ritmo se mide contra lo que YA debería estar hecho");
+      t.igual(v.semanal.ritmo, 27.8, "5 de 18 al día de hoy — este es el número que decide el color");
+      t.igual(v.semanal.diasPorDelante, 2, "jueves y viernes; el sábado futuro no se cuenta");
       t.cierto(v.mensual.atendidas >= 5, "el mes acumula desde el día 1");
       t.igual(api.mtrProductividadVistas({}, "no es fecha"), null, "sin fecha no hay vistas");
     });

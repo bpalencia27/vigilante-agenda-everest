@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.63
+// @version      18.0.64
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.63";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.64";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6814,18 +6814,43 @@
     return modal;
   }
 
-  // v17.x.x — REFACTOR S+ (30-ago): opción 1 de «Exámenes» — solo la tanda más reciente.
-  // Dado el labsArray de Athenea, devuelve SOLO los resultados cuya fecha es la MÁXIMA
-  // (la toma más fresca), conservando el objeto intacto para que la escritura no cambie.
-  // Sin fechas resolubles, devuelve la lista tal cual (no se descarta nada a ciegas).
-  function _mtrLabsSoloUltimaToma(labs) {
+  // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura del selector): «EL BOTÓN DE ÚLTIMA
+  // TOMA COMPLETA DEBE FUNCIONAR COMO EL DE ABAJO DE TODOS LOS ANALITOS, LA DIFERENCIA ES
+  // QUE SOLAMENTE TRAE A LA PANTALLA LOS RESULTADOS DE LOS ÚLTIMOS 90 DÍAS … PARA AMBOS
+  // DEBE SER EL ÚLTIMO RESULTADO DISPONIBLE POR CADA ANALITO PERO RESPETANDO ESAS
+  // CONDICIONES».
+  //
+  // NO estaba configurado así. La versión anterior (_mtrLabsSoloUltimaToma, v17.x.x) se
+  // quedaba con los resultados de UNA sola fecha: la máxima. Si la toma más fresca solo
+  // traía creatinina y glicemia, el LDL de doce días antes —dentro de los 90— DESAPARECÍA
+  // de la pantalla, aunque fuera el último resultado disponible de ese analito. Las dos
+  // opciones deben elegir igual (el último de cada analito, que es lo que ya hace
+  // injectLabsIntoCronicos); lo único que cambia es la VENTANA: aquí 90 días, abajo sin
+  // límite.
+  const MTR_LABS_VENTANA_RECIENTE_DIAS = 90;
+  function _mtrLabsRecientes(labs, hoyIso) {
     if (!Array.isArray(labs) || !labs.length) return labs;
-    let maxIso = null;
+    const hoy = mtrFechaDesdeIso(hoyIso || todayStamp());
+    if (!hoy) return labs;
+    let algunaFechaLegible = false;
+    const dentro = [];
     for (const lab of labs) {
-      try { const f = _extractAtheneaFecha(lab); const iso = f && f.iso ? f.iso : null; if (iso && (!maxIso || iso > maxIso)) maxIso = iso; } catch (e) {}
+      let iso = null;
+      try { const f = _extractAtheneaFecha(lab); iso = f && f.iso ? f.iso : null; } catch (e) { iso = null; }
+      if (!iso) continue;                       // sin fecha no se puede afirmar que es reciente
+      const f = mtrFechaDesdeIso(iso);
+      if (!f) continue;
+      algunaFechaLegible = true;
+      const dias = Math.round((hoy.getTime() - f.getTime()) / 86400000);
+      // El -1 absorbe el desfase de zona horaria de un resultado de HOY; no es una ventana
+      // hacia el futuro, es el mismo día visto desde otro huso.
+      if (dias >= -1 && dias <= MTR_LABS_VENTANA_RECIENTE_DIAS) dentro.push(lab);
     }
-    if (!maxIso) return labs;
-    return labs.filter((lab) => { try { const f = _extractAtheneaFecha(lab); return f && f.iso === maxIso; } catch (e) { return true; } });
+    // Si NINGUNA fecha se pudo leer, el filtro no sabe nada y devolver una lista vacía
+    // sería borrarle la pantalla al médico por un fallo de parseo. Se devuelve tal cual,
+    // igual que hacía la versión anterior: no se descarta nada a ciegas.
+    if (!algunaFechaLegible) return labs;
+    return dentro;
   }
 
   function createLabInjectorUI() {
@@ -6865,7 +6890,7 @@
               titulo: "Exámenes",
               descripcion: "¿Qué resultados traigo a la historia?",
               opciones: [
-                  { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "Solo los resultados de la fecha de laboratorio más reciente." },
+                  { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "El último resultado de cada analito, solo si se hizo en los últimos " + MTR_LABS_VENTANA_RECIENTE_DIAS + " días." },
                   { id: "historial", icono: "🗂", rotulo: "Historial por analito", desc: "El último resultado de cada analito, sin importar cuándo se hizo." },
               ],
               onPick: (modo) => { _ejecutarLlenadoExamenes(docId, btn, modo); },
@@ -6884,12 +6909,13 @@
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
               let labs = await getAtheneaLabsAuto(docId);
-              // v17.x.x — REFACTOR S+ (30-ago): opción «Última toma completa» — descarta
-              // los resultados de tomas anteriores y deja solo la fecha más reciente.
+              // v18.0.64 — opción «Última toma completa»: se recorta la VENTANA a los
+              // últimos 90 días y la elección del último por analito la sigue haciendo
+              // injectLabsIntoCronicos, igual que en la opción de abajo.
               if (modo === "ultima" && labs && labs.length > 0) {
                   const _antes = labs.length;
-                  labs = _mtrLabsSoloUltimaToma(labs);
-                  if (labs.length !== _antes) uxTrack("labs.autollenado.solo_ultima_toma", { antes: _antes, despues: labs.length });
+                  labs = _mtrLabsRecientes(labs);
+                  if (labs.length !== _antes) uxTrack("labs.autollenado.solo_recientes", { antes: _antes, despues: labs.length });
               }
               // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
               // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
@@ -7013,7 +7039,7 @@
                       if (okl) {
                           btn.innerHTML = "⏳ Reintentando…";
                           let labs2 = await getAtheneaLabsAuto(docId);
-                          if (modo === "ultima" && labs2 && labs2.length > 0) labs2 = _mtrLabsSoloUltimaToma(labs2);
+                          if (modo === "ultima" && labs2 && labs2.length > 0) labs2 = _mtrLabsRecientes(labs2);
                           if (labs2 && labs2.length > 0) {
                               const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
@@ -8842,6 +8868,20 @@
     // del backlog). Solo en memoria (como state.pym/pymAbandono): se limpia en diaNuevo().
     perfilAdicionalCache: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
+    // v18.0.64 — «¿ya dejé constancia en la bitácora de ESTA cita?». Las dos constancias de
+    // colorAndAlert (LECTURA_TRAS_RELEVO_SIN_CONFIRMAR y CONFIRMACION_SIN_PACIENTE_
+    // IDENTIFICABLE) escriben una línea y NO marcan nada, a diferencia de la rama que sí
+    // origina la marca de fraude — así que volvían a escribirla en CADA vuelta del reloj
+    // mientras durase la condición. Medido en el CSV real del médico del 1-sep: de 49
+    // eventos del día, 13 eran esta constancia, y una MISMA cita la generó SIETE veces
+    // (8:32, 8:53, 9:11, 9:17, 9:40 y dos a las 11:07, con cuatro segundos entre ellas).
+    // El CSV de auditoría es el documento con el que el médico reclama: repetir el mismo
+    // hecho siete veces no añade evidencia, la entierra. Se vacía en diaNuevo() como los
+    // demás conjuntos de la jornada.
+    // Dos conjuntos y no uno: `_apptMarcar` añade además las claves LEGADAS de la cita
+    // SIN prefijo, así que con un solo conjunto la constancia de un tipo habría tapado la
+    // del otro por la puerta de esas claves.
+    bitacoraRelevo: new Set(), bitacoraSinId: new Set(),
     // v18.0.8 — CUÁNDO se confirmó cada estado de `historical`. El antirrebote de v17.6.21
     // necesita saber si la lectura anterior es de HACE UN INSTANTE (dos ticks seguidos, que
     // es el parpadeo que existe para absorber) o de hace media hora (una memoria vieja, que
@@ -12560,6 +12600,9 @@
     state.historical.clear(); state.estadoPendiente.clear(); state.notified.clear();
     try { localStorage.removeItem(SIEMBRA_KEY); } catch (e) {}   // v14.1.5 — día nuevo, siembra nueva
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
+    // v18.0.64 — día nuevo, constancias nuevas: si no se vaciaran, una cita de ayer podría
+    // callar la constancia de la de hoy y el CSV de auditoría perdería un hecho real.
+    state.bitacoraRelevo.clear(); state.bitacoraSinId.clear();
     state.contadas.clear();   // v17.1.0 (#72/#146) — día nuevo, contadores nuevos
     try { state.checkCierreAvisados.clear(); } catch (e) {}   // v17.6.7 — avisos de cierre por cita, día nuevo
     try { if (typeof _mtrMediaPreguntadas !== "undefined" && _mtrMediaPreguntadas && typeof _mtrMediaPreguntadas.clear === "function") _mtrMediaPreguntadas.clear(); } catch (e) {}   // v17.58.0 — PARTE A: la escalera de adherencia se ofrece de nuevo cada jornada
@@ -12787,14 +12830,26 @@
         const _relevoReciente = (Date.now() - _ultimoRelevoVisibilidad) < RELEVO_GRACIA_FRAUDE_MS;
         if (state.leader && !_apptMarcada(state.fraudWatch, a, key)) {
           if (_relevoReciente) {
-            logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+            // v18.0.64 — UNA constancia por cita, no una por vuelta del reloj. Esta rama no
+            // marca fraudWatch a propósito (la evidencia queda pendiente de una lectura
+            // futura sin sospecha de estar estancada), así que sin este candado volvía a
+            // escribir la MISMA línea en cada tick mientras durase la gracia del relevo —y
+            // la gracia se reabre cada vez que el médico cambia de pestaña, cosa que hace
+            // decenas de veces en una consulta—. Ver el CSV del 1-sep en la nota de
+            // `state.bitacoraRelevo`: siete líneas para un solo hecho.
+            if (!_apptMarcada(state.bitacoraRelevo, a, key)) {
+              _apptMarcar(state.bitacoraRelevo, a, key);
+              logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+            }
           } else {
             // v18.0.39 — no se origina una marca contra una fila que no identifica a nadie.
             // Se deja constancia en la bitácora, que es donde debe vivir lo que no se puede
             // atribuir: el médico ve que hubo algo raro, sin que el script acuse a nadie.
             if (_apptPuedeAcusar(a)) {
               _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
-            } else {
+            } else if (!_apptMarcada(state.bitacoraSinId, a, key)) {
+              // Mismo candado, mismo motivo: esta rama tampoco marca fraudWatch.
+              _apptMarcar(state.bitacoraSinId, a, key);
               logEvent({ t: new Date().toLocaleTimeString(), ev: "CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
             }
           }
@@ -15048,7 +15103,18 @@
            TODO el documento, #vgl-root incluido, y sin !important una declaración de
            color de una sola clase pierde el empate de especificidad. Misma Regla E de
            siempre, aplicada aquí por primera vez de verdad. */
-        .vgl-prod .vgl-prod-cap{font-size:10px;font-weight:700;opacity:.7}
+        /* v18.0.64 — REPORTE EN VIVO (01-sep, captura): «SE SIGUE COLANDO EL AZUL DE
+           EVEREST EN ESTA SECCIÓN». Tenía razón, y era la ÚNICA clase del bloque sin
+           ninguna declaración de color: las cinco de abajo (.vgl-prod-rot/-num/-pct/-extra/
+           -nota) recibieron su color con prioridad en la v17.6.2 y a esta se le olvidó.
+           Sin color propio el elemento depende de HEREDAR de .vgl-chart-cap, y un valor
+           heredado pierde SIEMPRE contra cualquier regla de Everest que apunte al elemento
+           —da igual su especificidad—. Medido en Chromium con el CSS real contra el Everest
+           hostil (tools/auditar_resumen_chromium.js): salía #111827, el color del
+           adversario, en Productividad y también en Telemetría local, que reusa la clase.
+           Es la Regla E de siempre; aquí faltaba por descuido, no por criterio. */
+        .vgl-prod .vgl-prod-cap,
+        .vgl-prod-cap{font-size:10px;font-weight:700;opacity:.7;color:var(--fg3) !important}
         .vgl-prod-fila{
           display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
           padding:7px 10px;margin-bottom:5px;
@@ -15604,6 +15670,45 @@
       #vgl-toasts :where(:not([class])),
       #vgl-dock :where(:not([class])),
       #vgl-acciones-dock :where(:not([class])){color:inherit !important}
+      /* =====================================================================
+         v18.0.64 — LA OTRA MITAD DEL BLINDAJE: LAS CLASES SIN COLOR PROPIO
+         Encargo del médico (01-sep, dos capturas): «SE SIGUE COLANDO EL AZUL DE EVEREST…
+         LOCALÍZALO EN TODO EL SCRIPT Y ELIMÍNALO, SOLAMENTE MI SCRIPT DEBE TENER MI PROPIO
+         CSS NADA DE EVEREST».
+
+         El blindaje de arriba lleva :not([class]) a propósito, para no competir nunca con
+         una clase de acento nuestra. Perfecto — pero deja fuera un tercer caso que no es
+         ninguno de los dos que documenta CLAUDE.md: una clase NUESTRA que **no declara
+         color en absoluto** y depende de HEREDAR. Un valor heredado no participa en la
+         cascada: pierde SIEMPRE contra cualquier regla que apunte al elemento, tenga la
+         especificidad que tenga. Por eso «atendidas de su agenda» (.vgl-prod-cap) y el 🫀
+         de «Abandono Programa RCV» (.vgl-pym-sec-ic) salían con el azul de Everest.
+
+         color:inherit con prioridad, en vez de un color fijo: así el elemento toma EL NUESTRO
+         (el de #vgl-root o el de .vgl-pym-card, los dos con su !important), no cambia ni un
+         píxel de lo que el médico ya ve, y queda inmune. Con el id delante la regla vale
+         Se escribe como CLASE A SECAS (0,1,0), que es la forma del resto de la hoja, y no
+         con el id delante ni con :where(). Las dos alternativas se probaron y las dos las
+         cazó el banco: con  #vgl-root .clase  (1,1,0) la Regla A encontró un empate real
+         con  #vgl-paquete-modal .vgl-paq-aldia , que convive con .vgl-paq-badge en el mismo
+         elemento —el bug 1 de CLAUDE.md, nuestra regla nueva peleando con la nuestra
+         vieja—; y con  #vgl-root :where(.clase)  (1,0,0) el id habría ganado a cualquier
+         clase de acento suelta, que es el mismo bug por la puerta de atrás. A secas, una
+         clase de acento (0,1,0 en la hoja, o con id, 1,1,0) empata o gana según el orden de
+         la hoja, exactamente igual que entre las otras ~500 declaraciones de color, y la
+         Regla A vigila esos empates. Contra Everest basta y sobra: su regla de tipo con
+         prioridad vale (0,0,1).
+
+         La lista NO está escrita a mano: sale de tools/auditar_color_todo_chromium.js, que
+         deriva los candidatos de la hoja real y del HTML real y los mide en Chromium contra
+         un Everest hostil. suite_25 exige que ese barrido siga dando cero.
+         ===================================================================== */
+      .vgl-grp,.vgl-min-pill,.vgl-paq-fila,.vgl-paq-badge,.vgl-paq-programa,.vgl-paq-sec,
+      .vgl-paq-lista,.vgl-labs-uro,.vgl-agm-sec,.vgl-tab-riesgo,.vgl-tab-tfgs,.vgl-tab-fila,
+      .vgl-tab-lista,.vgl-tend-serie,.vgl-llenar-btns,.vgl-prod-fila,.vgl-col,.vgl-bars,
+      .vgl-empty-msg,.vgl-card-badges-wrap,.vgl-card-btm,.vgl-acomp-txt,.vgl-acomp-botones,
+      .vgl-dup-bloque,.vgl-mtr-ico,.vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,
+      .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico{color:inherit !important}
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
          especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
@@ -27920,6 +28025,19 @@
   const MTR_PROD_KEY = "vgl_prod";
   const MTR_PROD_DIAS = 62;              // dos meses: alcanza para la vista mensual
 
+  // v18.0.64 — festivo consultado POR LA CADENA ISO, no por un Date. `esFestivo(d)` arma la
+  // fecha con getFullYear/getMonth/getDate (hora LOCAL) y todas las fechas de este módulo se
+  // construyen en UTC: en Bogotá (UTC-5) eso corre el día uno hacia atrás y habría contado
+  // como festivo el día equivocado. Mismo contrato que `esFestivo`, sin el desfase.
+  function _prodEsFestivoIso(iso) {
+    try {
+      if (typeof FESTIVOS !== "undefined" && FESTIVOS && FESTIVOS.has(iso)) return true;
+      const y = parseInt(String(iso).slice(0, 4), 10);
+      if (y >= 2024 && y <= 2027) return false;   // dentro de la tabla y no está: no es festivo
+      return !!mtrEsFestivoCO(iso);
+    } catch (e) { return false; }
+  }
+
   // La meta del día según el calendario, con la sobreagenda ya sumada aparte.
   function mtrProductividadMeta(iso) {
     const f = mtrFechaDesdeIso(iso);
@@ -28069,30 +28187,73 @@
     const f = mtrFechaDesdeIso(hoyIso);
     if (!f) return null;
 
-    const acumular = (desdeIso) => {
-      let atendidas = 0, metaSuma = 0, diasConMeta = 0;
+    // v18.0.64 — REPORTE EN VIVO (01-sep, con captura): «LOS RANGOS DE PRODUCTIVIDAD NO
+    // COINCIDEN, ¿CÓMO ASÍ QUE 23/36? ¿NO DEBERÍA MÁS BIEN MOSTRAR CUÁNTOS PACIENTES HE
+    // VISTO DE LOS QUE TENGO QUE VER A LA SEMANA? ¿Y ASÍ TAMBIÉN CON EL DEL MES?»
+    //
+    // Tenía razón sobre lo que el número DEBE decir. El denominador anterior era «la meta
+    // de los días que ya trabajó» (un martes: 2 días × 18 = 36), que responde a «¿cómo voy
+    // contra lo que llevo?». Él pide lo otro: «¿cuántos me faltan para la semana?», y para
+    // eso el denominador tiene que ser la meta COMPLETA del periodo, con los días que
+    // todavía no han llegado incluidos.
+    //
+    // Qué días cuentan, y por qué:
+    //   · domingo y festivo: nunca (no hay agenda).
+    //   · un día YA PASADO sin ninguna atendida: tampoco. Es la protección que ya existía
+    //     —vacaciones, incapacidad, otra sede— y sigue valiendo: contarla sería un reproche
+    //     falso por un día que no le tocaba.
+    //   · hoy: siempre, esté como esté.
+    //   · un día FUTURO de lunes a viernes: sí. Es trabajo que le queda por delante, que es
+    //     justo lo que él quiere ver.
+    //   · un SÁBADO futuro: no. Sus sábados no son fijos —su propia telemetría lo muestra:
+    //     trabajó el sábado 22-ago y no el 29-ago—, así que darlo por hecho inflaría la
+    //     meta en 24 pacientes que quizá no le corresponden. Si trabaja ese sábado, pasa a
+    //     ser un día trabajado y entra solo.
+    const acumular = (desdeIso, hastaIso) => {
+      let atendidas = 0, metaSuma = 0, diasConMeta = 0, diasTrabajados = 0, diasPorDelante = 0;
+      let metaHastaHoy = 0;   // la meta de lo que YA debería estar hecho: el ritmo
       let cur = desdeIso;
       let guarda = 0;
-      while (cur <= hoyIso && guarda++ < 400) {
+      while (cur <= hastaIso && guarda++ < 400) {
         const m = mtrProductividadMeta(cur);
         const at = mtrProdAtendidasDe(base, cur);
-        if (m && !m.esDomingo) {
-          // Un día sin ningún registro es un día que el médico no trabajó (vacaciones,
-          // incapacidad, otra sede): no se le cuenta la meta en contra. Contar metas de
-          // días que nadie trabajó convertiría el indicador en un reproche falso.
-          if (at > 0) { metaSuma += m.meta; diasConMeta++; }
-          atendidas += at;
+        // Las ATENDIDAS se suman SIEMPRE, pase lo que pase con el calendario. Si el médico
+        // atendió a alguien un festivo o un domingo, esos pacientes existieron: descontarlos
+        // del numerador porque el almanaque dice que no tocaba sería borrarle trabajo real.
+        // Lo que el calendario decide es solo la META (el denominador).
+        atendidas += at;
+        if (at > 0) diasTrabajados++;
+        if (m && !m.esDomingo && !_prodEsFestivoIso(cur)) {
+          const esFuturo = cur > hoyIso;
+          const esHoy = cur === hoyIso;
+          const cuenta = esHoy || (esFuturo ? !m.esSabado : at > 0);
+          if (cuenta) { metaSuma += m.meta; diasConMeta++; if (esFuturo) diasPorDelante++; else metaHastaHoy += m.meta; }
         }
         cur = mtrSumarDias(cur, 1);
       }
-      return { atendidas: atendidas, meta: metaSuma, dias: diasConMeta,
+      return { atendidas: atendidas, meta: metaSuma, dias: diasTrabajados,
+        diasConMeta: diasConMeta, diasPorDelante: diasPorDelante,
+        faltan: Math.max(0, metaSuma - atendidas),
+        metaHastaHoy: metaHastaHoy,
+        // v18.0.64 — DOS medidas, porque responden a dos preguntas distintas y mezclarlas
+        // engañaría. `cumplimiento` es lo que el médico pidió ver: cuántos de los del
+        // periodo lleva. `ritmo` es contra lo que YA debería estar hecho a día de hoy, y es
+        // el que decide el COLOR: sin él, el día 1 del mes la tarjeta saldría en rojo con un
+        // 2,5 % que no significa que vaya mal, sino que el mes acaba de empezar.
+        ritmo: metaHastaHoy > 0 ? Math.round((atendidas / metaHastaHoy) * 1000) / 10 : null,
         cumplimiento: metaSuma > 0 ? Math.round((atendidas / metaSuma) * 1000) / 10 : null };
     };
 
     const metaHoy = mtrProductividadMeta(hoyIso) || { meta: 0, citadosEsperados: 0 };
     const atHoy = mtrProdAtendidasDe(base, hoyIso);
     const lunes = mtrSumarDias(hoyIso, -(((f.getUTCDay() + 6) % 7)));   // lunes de esta semana
+    const domingo = mtrSumarDias(lunes, 6);                              // y su domingo
     const primero = hoyIso.slice(0, 8) + "01";
+    // Último día del mes: el día 0 del mes siguiente. En UTC, que es como se construyen
+    // todas las fechas de este módulo.
+    const _fm = mtrFechaDesdeIso(primero);
+    const _fin = new Date(Date.UTC(_fm.getUTCFullYear(), _fm.getUTCMonth() + 1, 0));
+    const ultimo = _fin.getUTCFullYear() + "-" + String(_fin.getUTCMonth() + 1).padStart(2, "0") + "-" + String(_fin.getUTCDate()).padStart(2, "0");
 
     return {
       diaria: {
@@ -28102,9 +28263,22 @@
         cumplimiento: metaHoy.meta > 0 ? Math.round((atHoy / metaHoy.meta) * 1000) / 10 : null,
         faltan: Math.max(0, metaHoy.meta - atHoy),
       },
-      semanal: Object.assign({ desde: lunes }, acumular(lunes)),
-      mensual: Object.assign({ desde: primero }, acumular(primero)),
+      semanal: Object.assign({ desde: lunes, hasta: domingo }, acumular(lunes, domingo)),
+      mensual: Object.assign({ desde: primero, hasta: ultimo }, acumular(primero, ultimo)),
     };
+  }
+
+  // v18.0.64 — el pie de cada fila de periodo. Antes decía solo «N día(s) trabajado(s)»,
+  // que describía el DENOMINADOR viejo (la meta de los días ya trabajados). Con la meta
+  // completa del periodo lo que hace falta saber es cuántos faltan y sobre cuántos días se
+  // está midiendo, que es la pregunta que hizo el médico.
+  function _prodExtraPeriodo(o, rotulo) {
+    const partes = [];
+    if (o.faltan > 0) partes.push("faltan " + o.faltan + " para la meta " + rotulo + " (" + o.meta + ")");
+    else if (o.meta > 0) partes.push("meta " + rotulo + " cumplida");
+    partes.push(o.dias + " día(s) trabajado(s)" + (o.diasPorDelante > 0 ? " · " + o.diasPorDelante + " por delante" : ""));
+    if (o.ritmo !== null && o.ritmo !== undefined) partes.push("al día de hoy va al " + o.ritmo + " %");
+    return partes.join(" · ");
   }
 
   // El bloque del Resumen. Puro: recibe las vistas ya calculadas.
@@ -28117,7 +28291,9 @@
     }
     const pct = (x) => (x === null || x === undefined) ? "—" : x + " %";
     const clase = (x) => (x === null || x === undefined) ? "" : (x >= 100 ? " ok" : (x >= 80 ? " casi" : " bajo"));
-    const fila = (rot, o, extra) => '<div class="vgl-prod-fila' + clase(o.cumplimiento) + '">'
+    // El color sigue al RITMO (contra lo que ya debería estar hecho); el porcentaje grande
+    // sigue siendo el avance sobre el periodo completo, que es lo que el médico pidió leer.
+    const fila = (rot, o, extra) => '<div class="vgl-prod-fila' + clase(o.ritmo !== undefined && o.ritmo !== null ? o.ritmo : o.cumplimiento) + '">'
       + '<span class="vgl-prod-rot">' + rot + '</span>'
       + '<span class="vgl-prod-num">' + o.atendidas + '<i> / ' + o.meta + '</i></span>'
       + '<span class="vgl-prod-pct">' + pct(o.cumplimiento) + '</span>'
@@ -28129,12 +28305,14 @@
     return '<div class="vgl-grp vgl-prod">'
       + '<div class="vgl-chart-cap"><span>PRODUCTIVIDAD</span><span class="vgl-prod-cap">atendidas de su agenda</span></div>'
       + fila("Hoy", d, extraHoy)
-      + fila("Semana", v.semanal, v.semanal.dias + " día(s) trabajado(s)")
-      + fila("Mes", v.mensual, v.mensual.dias + " día(s) trabajado(s)")
+      + fila("Semana", v.semanal, _prodExtraPeriodo(v.semanal, "de la semana"))
+      + fila("Mes", v.mensual, _prodExtraPeriodo(v.mensual, "del mes"))
       + '<div class="vgl-prod-nota">Meta ' + MTR_PROD_META_LABORAL + ' de lunes a viernes y ' + MTR_PROD_META_SABADO
       + ' el sábado, con ' + MTR_PROD_SOBREAGENDA + ' de sobreagenda encima (' + (MTR_PROD_META_LABORAL + MTR_PROD_SOBREAGENDA)
       + ' y ' + (MTR_PROD_META_SABADO + MTR_PROD_SOBREAGENDA) + ' citados). Cada cita se cuenta UNA vez aunque el asistente la vea muchas: '
-      + 'los días sin ninguna cita atendida no suman meta en contra.</div>'
+      + 'los días sin ninguna cita atendida no suman meta en contra. La meta de la semana y la '
+      + 'del mes incluyen los días que faltan por delante; un sábado futuro no se cuenta hasta '
+      + 'que usted lo trabaje.</div>'
       + '<button class="vgl-btn" id="vgl-prod-exp" style="margin-top:8px">⬇ Exportar semana (CSV)</button>'
       + '</div>';
   }
@@ -40864,8 +41042,16 @@
           if (!_pastilla.el) {
             const pill = document.createElement("div");
             pill.id = "vgl-ia-pastilla";
+            // v18.0.64 — REPORTE EN VIVO (01-sep): «ENCONTRÉ COLOR DEL CSS DE EVEREST EN EL
+            // MENSAJE … "ABRIENDO PESTAÑA DE CONDUCTA" … SALE EN EL AZUL OSCURO ESE QUE ME
+            // TIENE HARTO YA». Un color EN LÍNEA es inmune a cualquier regla normal, pero
+            // NO a una con !important: la de Everest lo pisaba. La Regla R del banco existe
+            // exactamente para esto y no lo vio — su patrón solo miraba la PRIMERA cadena
+            // del `cssText`, y aquí el color vive en la segunda (ver la corrección de la
+            // regla en suite_25, misma ceguera que ya se cerró en la v18.0.42 para la otra
+            // rama). Con !important el estilo en línea vuelve a ser inalcanzable.
             pill.style.cssText = "position:fixed;bottom:18px;right:18px;z-index:2147483647;pointer-events:auto;" +
-              "background:var(--bg-solid);color:var(--fg);border:1px solid var(--edge);border-radius:999px;" +
+              "background:var(--bg-solid);color:var(--fg) !important;border:1px solid var(--edge);border-radius:999px;" +
               "padding:10px 16px;font:700 13px/1.3 var(--font-stack);box-shadow:var(--shadow-card)";
             modal.appendChild(pill);
             _pastilla.el = pill;

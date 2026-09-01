@@ -9437,3 +9437,122 @@ regla vuelve a ser la misma: *una mutación que no muerde no absuelve al código
 prueba.*
 
 Banco completo: **2.886 comprobaciones pasan, 0 fallan.** Van **22 de los 47** del enjambre.
+
+## v18.0.64 — cuatro reportes en vivo del médico en una sola tarde
+
+Todo lo de esta versión salió de reportes con captura del 1-sep, con el script corriendo en
+consulta real. El análisis de la telemetría que los acompaña está en
+`docs/TELEMETRIA_20260901.md`.
+
+### A. «Se sigue colando el azul de Everest» — y esta vez en TODO el script
+
+Dos capturas: «atendidas de su agenda» (Productividad) y el 🫀 de «Abandono Programa RCV»
+(recuadro clínico), los dos en el azul oscuro de Everest. Y la orden: *«LOCALÍZALO EN TODO EL
+SCRIPT Y ELIMÍNALO, SOLAMENTE MI SCRIPT DEBE TENER MI PROPIO CSS NADA DE EVEREST»*.
+
+`CLAUDE.md` documenta dos formas de fuga. Esta es **una tercera que no estaba escrita**: una
+clase NUESTRA que **no declara color en absoluto** y depende de heredar. Un valor heredado no
+participa en la cascada — pierde SIEMPRE contra cualquier regla que apunte al elemento, tenga
+la especificidad que tenga. El blindaje tipográfico existente no la cubre porque lleva
+`:not([class])` a propósito, justo para no competir con nuestras clases de acento.
+
+Se escribió `tools/auditar_color_todo_chromium.js`, que **no lleva lista escrita a mano**:
+deriva los candidatos de la hoja real y del HTML real, los monta en su contenedor real y los
+mide en Chromium contra un Everest hostil. Resultados:
+
+| censo | antes | después |
+|---|---|---|
+| declaraciones de color sin prioridad | 0 | 0 |
+| clases con texto propio y sin color declarado | **36** | **0** |
+
+Dos correcciones del propio programa durante el barrido, las dos porque el resultado no era
+creíble: (1) su primer filtro descartaba las costuras de concatenación y con eso se le escapó
+`.vgl-pym-ic` —el círculo del emoji que el médico ve azul en su captura—; (2) leía el CSS por
+extracción textual y no podía resolver `MTR_RCV_CSS_TODOS_LOS_MODALES`, dejando **14.500
+caracteres de CSS real sin medir**. Ahora ejecuta el script en el arnés y lee el `<style>` que
+de verdad genera: 267.336 caracteres, cero marcadores sin resolver.
+
+Y una cuarta fuga, de otra familia: la pastilla «⏳ Abriendo la pestaña Conducta…» del Redactor
+IA pinta su color **en línea**, que es inmune a cualquier regla normal pero NO a una con
+prioridad. La **Regla R** del banco existe exactamente para esto y no la vio: su patrón miraba
+solo la PRIMERA cadena del `cssText`, y aquí el color vive en la segunda. Es la misma ceguera
+que la v18.0.42 ya cerró en la otra rama de esa regla; ahora consume la concatenación entera.
+
+**Dos intentos descartados por el propio banco**, los dos por el bug #1 de `CLAUDE.md` (nuestra
+regla nueva peleando con la nuestra vieja): escribir el blindaje como `#vgl-root .clase`
+(1,1,0) empataba con `#vgl-paquete-modal .vgl-paq-aldia` —la Regla A lo cazó—, y escribirlo
+como `#vgl-root :where(.clase)` (1,0,0) habría ganado a cualquier clase de acento suelta, que
+es el mismo bug por la puerta de atrás. Queda como clase a secas, la forma del resto de la hoja.
+
+### B. «¿Cómo así que 23/36?» — Productividad medía otra cosa
+
+*«¿NO DEBERÍA MÁS BIEN MOSTRAR CUÁNTOS PACIENTES HE VISTO DE LOS QUE TENGO QUE VER A LA
+SEMANA? ¿Y ASÍ TAMBIÉN CON EL DEL MES?»*
+
+El denominador era «la meta de los días que ya trabajó» (un martes: 2 × 18 = 36), que responde
+a otra pregunta. Ahora es la meta COMPLETA del periodo, con los días que faltan incluidos:
+**23/90** la semana, **10/396** el mes. Qué días cuentan:
+
+- domingo y festivo: nunca — él lo confirmó por escrito: *«YO NO TRABAJO NI DOMINGOS NI FESTIVOS»*;
+- un día pasado sin ninguna atendida: tampoco (protección que ya existía, no reprochar un día
+  que no le tocaba);
+- hoy y los días futuros de lunes a viernes: sí;
+- un **sábado futuro**: no. Sus sábados no son fijos y su propia telemetría lo prueba — trabajó
+  el sábado 22-ago y no el 29-ago. Darlo por hecho inflaría la meta en 24 pacientes.
+
+Y el COLOR pasa a seguir al **ritmo** (contra lo que ya debería estar hecho), no al avance
+sobre el periodo: sin eso, el día 1 del mes la tarjeta saldría en rojo con un 2,5 % que no
+significa que vaya mal, sino que el mes acaba de empezar.
+
+Las atendidas se suman siempre, aunque el calendario diga que ese día no tocaba: el numerador
+no puede depender de que nuestra tabla de festivos esté bien (ya tuvo un 2024-11-18 erróneo).
+
+### C. «¿49 avisos hoy? ¿No es mucho?» — el CSV de auditoría se inundaba
+
+De los 49 eventos de su CSV real, **36 eran legítimos** (10 pacientes × 2 CAMBIO_ESTADO + 10
+INGRESO_A_TIEMPO, más 3 inasistencias con su ÚLTIMA_LLAMADA) y **13 eran una misma constancia
+repetida**: una sola cita la generó SIETE veces. La rama que la escribe no marca `fraudWatch`
+a propósito, así que sin candado propio volvía a escribirla en cada vuelta del reloj mientras
+durase la gracia del relevo — y esa gracia se reabre cada vez que el médico cambia de pestaña.
+El CSV es el documento con el que él reclama: repetir un hecho siete veces no añade evidencia,
+la entierra. Ahora es UNA por cita, con dos conjuntos separados (uno por tipo de constancia),
+porque `_apptMarcar` añade además las claves legadas SIN prefijo y con un solo conjunto un
+tipo habría tapado al otro.
+
+### D. «Última toma completa» no hacía lo que dice
+
+*«DEBE FUNCIONAR COMO EL DE ABAJO … LA DIFERENCIA ES QUE SOLAMENTE TRAE LOS RESULTADOS DE LOS
+ÚLTIMOS 90 DÍAS … PARA AMBOS DEBE SER EL ÚLTIMO RESULTADO DISPONIBLE POR CADA ANALITO».*
+
+**No estaba configurado así.** Se quedaba con los resultados de UNA sola fecha, la máxima: si
+la toma más fresca solo traía creatinina y glicemia, el LDL de doce días antes —dentro de los
+90— desaparecía de la pantalla aunque fuera el último disponible de ese analito. Ahora la
+ventana es de 90 días y la elección del último por analito la sigue haciendo
+`injectLabsIntoCronicos`, igual que la opción de abajo. Si ninguna fecha se puede leer, se
+devuelve la lista tal cual: un fallo de parseo no puede borrarle la pantalla.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Cómo se destapó | Restaurado y verde |
+|---|---|---|---|
+| 163 | `.vgl-prod-cap` se queda sin color (**el defecto de la captura**) | el barrido del Resumen: 2 nodos secuestrados | Sí |
+| 164 | se quita el blindaje de las 34 clases | el barrido completo: 35 clases secuestradas | Sí |
+| 165 | la pastilla del Redactor pierde su prioridad | *Regla R* de suite_25 | Sí |
+| 166 | la ventana de 90 días vuelve a ser «solo la fecha máxima» | *conserva el último de CADA analito* (2 fallan) | Sí |
+| 167 | sin fechas legibles se devuelve vacío | *no se le borra la pantalla al médico* | Sí |
+| 168 | la meta del periodo vuelve a ser la de los días trabajados | *la meta incluye los días por delante* | Sí |
+| 169 | las atendidas de un festivo vuelven a perderse | *la semana suma lunes y miércoles* | Sí |
+| 170 | la constancia vuelve a escribirse en cada tick (**el defecto del CSV**) | *UNA vez por cita, no una por tick* | Sí |
+| 171 | el candado se hace global y calla otra cita | *sigue registrándose para OTRA cita distinta* | Sí |
+
+Las 167, 169 y 171 son contenciones: sin ellas, «arreglarlo» de más habría dejado la pantalla
+de laboratorios en blanco, borrado pacientes realmente atendidos, o enterrado evidencia de una
+cita distinta.
+
+**Precisión de proceso.** La corrección del CSS entró tres veces y las tres la rechazó el
+banco antes de llegar al médico: dos por colisión de especificidad con nuestras propias clases
+de acento (Reglas A y P) y una por los censos de `!important`, cuyo reparto entre la hoja
+principal y las spliceadas **no era el que deduje leyendo el diff** — hubo que medirlo. Queda
+escrito en la propia suite: *si vuelven a moverse, medirlos otra vez antes de tocarlos.*
+
+Banco completo: **2.890 comprobaciones pasan, 0 fallan.**

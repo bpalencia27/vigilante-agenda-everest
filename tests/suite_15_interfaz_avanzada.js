@@ -803,17 +803,45 @@ module.exports = {
       t.igual(btn.innerHTML, "🧪 Exámenes", "el botón vuelve a su rótulo");
     });
 
-    t.caso("_mtrLabsSoloUltimaToma: opción 1 deja solo la tanda de la fecha más reciente", () => {
+    // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura del selector de «Exámenes»): las dos
+    // opciones deben elegir IGUAL —el último resultado de cada analito— y diferenciarse solo
+    // en la ventana: 90 días arriba, sin límite abajo. La versión anterior se quedaba con los
+    // de UNA sola fecha (la máxima), así que un analito cuyo último resultado fuera de doce
+    // días antes desaparecía de la pantalla aunque estuviera dentro de los 90.
+    t.caso("v18.0.64: la opción de 90 días conserva el último de CADA analito dentro de la ventana", () => {
+      const hoy = "2026-09-01";
       const labs = [
-        { NombreParametro: "CREATININA", fechaResultado: "2026-08-01", Resultado: "1.0" },
-        { NombreParametro: "LDL", fechaResultado: "2026-08-20", Resultado: "100" },
-        { NombreParametro: "GLICEMIA", fechaResultado: "2026-08-20", Resultado: "90" },
-        { NombreParametro: "HBA1C", fechaResultado: "2026-07-15", Resultado: "6.5" },
+        { NombreParametro: "CREATININA", fechaResultado: "2026-08-20", Resultado: "1.0" },   // dentro
+        { NombreParametro: "GLICEMIA", fechaResultado: "2026-08-20", Resultado: "90" },      // dentro
+        { NombreParametro: "LDL", fechaResultado: "2026-08-08", Resultado: "100" },          // dentro, OTRA fecha
+        { NombreParametro: "HBA1C", fechaResultado: "2026-01-15", Resultado: "6.5" },        // fuera (229 días)
       ];
-      const solo = cLab.api._mtrLabsSoloUltimaToma(labs);
-      t.igual(solo.length, 2, "solo los dos de la toma del 20-ago");
-      t.cierto(solo.every((l) => l.fechaResultado === "2026-08-20"), "conserva únicamente la fecha máxima");
-      t.igual(cLab.api._mtrLabsSoloUltimaToma([]).length, 0, "lista vacía se devuelve vacía");
+      const r = cLab.api._mtrLabsRecientes(labs, hoy);
+      const nombres = r.map((l) => l.NombreParametro).sort();
+      t.igual(nombres.join(","), "CREATININA,GLICEMIA,LDL",
+        "el LDL de otra fecha SIGUE ahí: es el último disponible de ese analito y está dentro de los 90 días");
+      t.falso(nombres.includes("HBA1C"), "y lo de hace más de 90 días no entra");
+    });
+
+    t.caso("v18.0.64: los bordes de la ventana de 90 días", () => {
+      const hoy = "2026-09-01";
+      const enBorde = [
+        { NombreParametro: "A", fechaResultado: "2026-06-03", Resultado: "1" },   // 90 días justos
+        { NombreParametro: "B", fechaResultado: "2026-06-02", Resultado: "1" },   // 91 días
+        { NombreParametro: "C", fechaResultado: "2026-09-01", Resultado: "1" },   // hoy
+      ];
+      const r = cLab.api._mtrLabsRecientes(enBorde, hoy).map((l) => l.NombreParametro).sort();
+      t.igual(r.join(","), "A,C", "el día 90 entra, el 91 no, y el de hoy por supuesto");
+    });
+
+    t.caso("v18.0.64: sin ninguna fecha legible NO se le borra la pantalla al médico", () => {
+      const sinFecha = [
+        { NombreParametro: "CREATININA", Resultado: "1.0" },
+        { NombreParametro: "LDL", Resultado: "100" },
+      ];
+      t.igual(cLab.api._mtrLabsRecientes(sinFecha, "2026-09-01").length, 2,
+        "si el parseo de fechas falla entero, se devuelve la lista tal cual — no se descarta a ciegas");
+      t.igual(cLab.api._mtrLabsRecientes([], "2026-09-01").length, 0, "lista vacía se devuelve vacía");
     });
 
     // ===== v18.0.30 — HONESTIDAD DE AUTO-LABS (hallazgos L6643 / L6614 / L6714) =====
