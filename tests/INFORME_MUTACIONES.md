@@ -9690,3 +9690,52 @@ alcanzabilidad de siempre. Se reescribió por conducta, mirando lo que de verdad
 en una fila que ya acumuló reintentos.
 
 Banco completo: **2.896 comprobaciones pasan, 0 fallan.**
+
+## v18.0.67 — el 50 % por fuera de metas ahora lo decide el médico
+
+Regla nueva suya (01-sep), con la instrucción explícita de comprobar que no chocara con lo que
+ya existe. Chocaba en dos sitios; los dos los resolvió él en la entrevista. Todo queda escrito
+en `docs/REGLAS_MEDICO_20260901.md`.
+
+### La regla
+
+> *«Cuando un paciente se encuentra fuera de metas al momento de calcular los exámenes que se
+> ordenarán en el siguiente control se le debe preguntar al médico que si en ese paciente desea
+> repetir los exámenes fuera de metas sí o no. Si la respuesta es sí se repiten al 50 % de la
+> vigencia original, si la respuesta es no se repiten en su vigencia normal sin adelantar.»*
+
+- **UNA pregunta por paciente**, con la lista de exámenes fuera de meta delante (decisión suya:
+  menos interrupciones). Severidad media: se ofrece, no retiene el flujo.
+- **Vale solo para esta consulta.** El estado del paciente cambia entre citas.
+- **Se repiten sí o sí, sin preguntar:** creatinina en suero con **TFG por Cockcroft-Gault < 60**
+  y **RAC > 30 mg/g**.
+- **Mientras no responda, manda la conducta de siempre** (adelantar). El script no cambia nada
+  por su cuenta: hace falta un «no» explícito suyo para relajar una vigencia.
+
+### Las dos colisiones, y cómo las resolvió él
+
+**KDIGO manda sobre su respuesta.** Con TFG < 60 el perfil lipídico no se adelanta aunque
+responda que sí, y por eso los lípidos ni siquiera entran en la pregunta — pero la pantalla lo
+DICE, con el motivo. Callar por qué un examen no aparece en la lista convertiría la regla en una
+caja negra.
+
+**La creatinina obligatoria usa Cockcroft-Gault**, como él la dictó, mientras la regla vecina
+(KDIGO) usa CKD-EPI 2021. Son números distintos y un mismo paciente puede quedar a un lado u
+otro del 60 según cuál se mire. Se respeta lo que pidió y queda escrito en el código para que
+nadie las unifique creyendo que es un descuido.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 181 | el «no» del médico se ignora (la regla no se implementa) | *el NO del médico relaja la vigencia* | Sí |
+| 182 | el «no» apaga también los dos obligatorios | *la creatinina y la RAC no dependen de la respuesta* | Sí |
+| 183 | la creatinina obligatoria pasa a CKD-EPI | *manda Cockcroft-Gault* (2 fallan) | Sí |
+| 184 | KDIGO deja de mandar y el lípido entra en la pregunta | *el lípido lo frena KDIGO* | Sí |
+
+Las 182, 183 y 184 son contenciones, y las tres protegen una decisión clínica que él tomó
+explícitamente: sin ellas, «implementar la regla» habría desactivado dos exámenes que él quiere
+siempre, cambiado a qué pacientes les aplica la obligatoriedad, y contradicho la precedencia que
+él fijó entre su regla y KDIGO.
+
+Banco completo: **2.901 comprobaciones pasan, 0 fallan.**

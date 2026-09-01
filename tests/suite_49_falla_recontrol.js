@@ -557,6 +557,86 @@ module.exports = {
         "y con CKD-EPI 45 sí se frena, aunque Cockcroft-Gault diga 90");
     });
 
+    // =====================================================================
+    // v18.0.67 — REGLA DEL MÉDICO (01-sep): EL 50 % LO DECIDE ÉL
+    // «Cuando un paciente se encuentra fuera de metas … se le debe preguntar al médico que si
+    // en ese paciente desea repetir los exámenes fuera de metas sí o no. Si la respuesta es sí
+    // se repiten al 50 % de la vigencia original, si la respuesta es no se repiten en su
+    // vigencia normal sin adelantar. Los únicos exámenes que se repiten sí o sí es la
+    // creatinina en suero si la TFG por C-G es menor a 60 y la RAC si el resultado es mayor a
+    // 30 mg/gr.»
+    // Ver docs/REGLAS_MEDICO_20260901.md.
+    // =====================================================================
+    t.caso("v18.0.67: creatinina obligatoria con TFG por COCKCROFT-GAULT < 60 (no CKD-EPI)", () => {
+      t.cierto(api.mtrRepeticionObligatoria("CREATININA", { crclCockcroftGault: 59.9 }),
+        "59,9 por C-G: se repite sí o sí");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", { crclCockcroftGault: 60 }),
+        "60 exactos no: él dijo MENOR a 60");
+      // La distinción con KDIGO es deliberada y el médico la confirmó: son fórmulas
+      // distintas y un paciente puede quedar a un lado u otro del 60 según cuál se mire.
+      t.cierto(api.mtrRepeticionObligatoria("CREATININA", { erc: { crcl: 40, egfr: 90 } }),
+        "manda Cockcroft-Gault, aunque CKD-EPI diga 90");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", { erc: { crcl: 90, egfr: 40 } }),
+        "y no al revés: CKD-EPI bajo no la vuelve obligatoria");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", {}),
+        "sin el dato no se afirma nada: la decisión vuelve a ser del médico");
+    });
+
+    t.caso("v18.0.67: RAC obligatoria por encima de 30 mg/g", () => {
+      t.cierto(api.mtrRepeticionObligatoria("RAC", {}, 30.1), "31 mg/g: se repite sí o sí");
+      t.falso(api.mtrRepeticionObligatoria("RAC", {}, 30), "30 exactos no: él dijo MAYOR a 30");
+      t.falso(api.mtrRepeticionObligatoria("RAC", {}, null), "sin valor no se afirma nada");
+      t.falso(api.mtrRepeticionObligatoria("HBA1C", { crclCockcroftGault: 20 }, 300),
+        "la obligatoriedad es SOLO de esos dos exámenes, no de todos los del paciente renal");
+    });
+
+    t.caso("v18.0.67: sin respuesta manda la conducta de siempre; el NO del médico la relaja", () => {
+      // Todavía no ha respondido: se adelanta, que es lo conservador y lo que ya hacía.
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", {}, 9),
+        "el script no cambia nada por su cuenta: hace falta un «no» explícito");
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", { repetirFueraMeta: true }, 9), "y con el sí, igual");
+      t.falso(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", { repetirFueraMeta: false }, 9),
+        "con el NO se repite en su vigencia normal, sin adelantar");
+      // Pero su «no» no puede desactivar los dos obligatorios.
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("CREATININA", { repetirFueraMeta: false, crclCockcroftGault: 40 }, 1.6),
+        "la creatinina con C-G < 60 se repite igual: no depende de la respuesta");
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("RAC", { repetirFueraMeta: false }, 45),
+        "y la RAC > 30, también");
+    });
+
+    t.caso("v18.0.67: la pregunta es UNA por paciente y dice qué queda fuera de ella", () => {
+      const plan = { drivers: [
+        { clave: "HBA1C", fueraMeta: true, valor: 9 },
+        { clave: "COLESTEROL_LDL", fueraMeta: true, valor: 160 },
+        { clave: "CREATININA", fueraMeta: true, valor: 1.6 },
+        { clave: "RAC", fueraMeta: true, valor: 45 },
+        { clave: "GLUCOSA", fueraMeta: false, valor: 100 },
+      ] };
+      const r = api.mtrExamenesParaPreguntaFueraMeta(plan, { crclCockcroftGault: 40, egfrCkdEpi: 45 });
+      t.igual(_claves(r.dentro).join(","), "HBA1C", "solo la HbA1c entra en la pregunta");
+      t.igual(_claves(r.obligatorios).sort().join(","), "CREATININA,RAC", "los dos obligatorios salen aparte");
+      t.igual(_claves(r.frenadosKdigo).join(","), "COLESTEROL_LDL",
+        "y el lípido lo frena KDIGO: con TFG < 60 no se adelanta aunque él diga que sí (decisión suya)");
+      t.falso(_claves(r.dentro).indexOf("GLUCOSA") >= 0, "lo que está en meta no se pregunta");
+
+      const q = api.mtrPreguntaFueraMeta(r);
+      t.igual(q.clave, "repetirFueraMeta");
+      t.igual(q.vigenciaDias, 1, "vale solo para esta consulta");
+      t.igual(q.severidad, "media", "se ofrece, no retiene el flujo: él manda");
+      t.cierto(/Hemoglobina glicosilada/.test(JSON.stringify(q.afirman)), "la lista va delante, con nombre clínico");
+      t.cierto(/no dependen de esta respuesta/.test(JSON.stringify(q.niegan)),
+        "y se DICE por qué los obligatorios no están en la pregunta: callarlo la volvería una caja negra");
+    });
+
+    t.caso("v18.0.67: sin nada fuera de meta que dependa de él, no se pregunta", () => {
+      const vacio = api.mtrExamenesParaPreguntaFueraMeta({ drivers: [{ clave: "HBA1C", fueraMeta: false }] }, {});
+      t.falso(api.mtrDebePreguntarFueraMeta(vacio, null), "no hay nada que preguntar");
+      const conUno = api.mtrExamenesParaPreguntaFueraMeta({ drivers: [{ clave: "HBA1C", fueraMeta: true, valor: 9 }] }, {});
+      t.cierto(api.mtrDebePreguntarFueraMeta(conUno, null), "con uno dentro, sí");
+      t.falso(api.mtrDebePreguntarFueraMeta(conUno, { v: true, ts: Date.now() }),
+        "y si ya respondió en esta consulta, no se le vuelve a preguntar");
+    });
+
     t.caso("D11: la falla terapéutica NO se apaga — el LDL sigue estando fuera de meta", () => {
       const ctx = _ctxKdigo(52);
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 110, ctx), true,

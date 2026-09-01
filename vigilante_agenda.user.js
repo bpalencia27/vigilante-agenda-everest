@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.66
+// @version      18.0.67
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.66";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.67";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5616,6 +5616,55 @@
   }
 
   // =====================================================================
+  //  v18.0.67 — LA PREGUNTA DEL 50 % POR FUERA DE METAS
+  //  ------------------------------------------------------------------
+  //  UNA sola pregunta por paciente, con la lista de exámenes fuera de meta delante — no una
+  //  por examen (decisión suya en la entrevista del 1-sep: menos interrupciones, que es lo
+  //  que viene pidiendo). Vale SOLO PARA ESTA CONSULTA: el estado del paciente cambia entre
+  //  citas y adelantar exámenes es una decisión clínica del momento.
+  //
+  //  «Un día» es como se expresa «esta consulta» con la maquinaria que ya existe, igual que
+  //  la escalera de adherencia de la v17.57.0.
+  const MTR_REPETIR_VIGENCIA_DIAS = 1;
+  const MTR_REPETIR_CLAVE = "repetirFueraMeta";
+  // Los que NO entran en la pregunta, y por qué. Se devuelven aparte para poder DECIRLO en
+  // pantalla: callar por qué un examen no aparece en la lista es lo que convierte una regla
+  // en una caja negra.
+  function mtrExamenesParaPreguntaFueraMeta(plan, ctx) {
+    const c = ctx || {};
+    const dentro = [], obligatorios = [], frenadosKdigo = [];
+    const drivers = (plan && Array.isArray(plan.drivers)) ? plan.drivers : [];
+    for (const a of drivers) {
+      if (!a || a.fueraMeta !== true) continue;
+      if (mtrRepeticionObligatoria(a.clave, c, a.valor)) { obligatorios.push(a); continue; }
+      if (mtrKdigoNoRepiteLipidos(a.clave, c)) { frenadosKdigo.push(a); continue; }
+      dentro.push(a);
+    }
+    return { dentro: dentro, obligatorios: obligatorios, frenadosKdigo: frenadosKdigo };
+  }
+  function mtrDebePreguntarFueraMeta(reparto, respuestaVigente) {
+    if (respuestaVigente) return false;                 // ya contestó en esta consulta
+    return !!(reparto && reparto.dentro && reparto.dentro.length);
+  }
+  function mtrPreguntaFueraMeta(reparto) {
+    const lista = ((reparto && reparto.dentro) || []).map((a) => mtrNombreLegibleAnalito(a.clave)).filter(Boolean);
+    const obl = ((reparto && reparto.obligatorios) || []).map((a) => mtrNombreLegibleAnalito(a.clave)).filter(Boolean);
+    const kd = ((reparto && reparto.frenadosKdigo) || []).map((a) => mtrNombreLegibleAnalito(a.clave)).filter(Boolean);
+    const niegan = [];
+    if (obl.length) niegan.push({ fuente: "Se repiten igual", detalle: obl.join(", ") + " — no dependen de esta respuesta" });
+    if (kd.length) niegan.push({ fuente: "No se adelantan", detalle: kd.join(", ") + " — TFG por CKD-EPI menor de 60 (KDIGO)" });
+    return {
+      clave: MTR_REPETIR_CLAVE,
+      severidad: "media",
+      etiqueta: "¿Repetir antes los exámenes fuera de meta de este paciente?",
+      porQue: "si responde que sí se piden al 50 % de su vigencia; si responde que no, en su vigencia normal, sin adelantar",
+      afirman: [{ fuente: "Fuera de meta", detalle: lista.join(", ") }],
+      niegan: niegan,
+      vigenciaDias: MTR_REPETIR_VIGENCIA_DIAS,
+    };
+  }
+
+  // =====================================================================
   //  v17.57.0 — PARTE A: LA ESCALERA DE ADHERENCIA (preguntar antes de repetir)
   //  ------------------------------------------------------------------
   //  DECISIÓN DEL MÉDICO (29-ago): cuando un eje está en falla terapéutica
@@ -5873,6 +5922,21 @@
         if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
           res, _vglConfirmacionVigente(docId, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
         ))) frenan.push(mtrPreguntaEmbarazo());
+      } catch (e) {}
+
+      // v18.0.67 — «¿repetir antes los exámenes fuera de meta de este paciente?». UNA por
+      // paciente y por consulta (regla del médico, 01-sep). Severidad MEDIA a propósito: se
+      // ofrece, pero no retiene el flujo — él manda, el script sugiere.
+      try {
+        const _reparto = mtrExamenesParaPreguntaFueraMeta(res && res.plan, {
+          crclCockcroftGault: (res && res.erc && res.erc.crcl != null) ? res.erc.crcl : null,
+          egfrCkdEpi: (res && res.erc && res.erc.egfr != null) ? res.erc.egfr : null,
+        });
+        if (mtrDebePreguntarFueraMeta(_reparto,
+              _vglConfirmacionVigente(docId, MTR_REPETIR_CLAVE, MTR_REPETIR_VIGENCIA_DIAS))
+            && !_mtrMediaFuePreguntada(docId, MTR_REPETIR_CLAVE)) {
+          frenan.push(mtrPreguntaFueraMeta(_reparto));
+        }
       } catch (e) {}
 
       // v17.57.0 — PARTE A: la escalera de adherencia, SOLO con ejes en falla. El examen
@@ -37173,6 +37237,55 @@
   // El corte de la guía: TFG < 60 (G3a en adelante).
   var MTR_KDIGO_TFG_LIPIDOS = 60;
 
+  // =====================================================================
+  //  v18.0.67 — REGLA DEL MÉDICO (01-sep): EL 50 % POR FUERA DE METAS LO DECIDE ÉL
+  //  ------------------------------------------------------------------
+  //  «Cuando un paciente se encuentra fuera de metas al momento de calcular los exámenes que
+  //  se ordenarán en el siguiente control se le debe preguntar al médico que si en ese
+  //  paciente X o Y específico desea repetir los exámenes fuera de metas sí o no. Si la
+  //  respuesta es sí se repiten al 50 % de la vigencia original, si la respuesta es no se
+  //  repiten en su vigencia normal sin adelantar.»
+  //
+  //  DOS EXÁMENES NO SE PREGUNTAN NUNCA — se repiten sí o sí (palabras suyas):
+  //    · Creatinina en suero con TFG por COCKCROFT-GAULT < 60.
+  //    · RAC > 30 mg/g.
+  //
+  //  Sobre la fórmula: él dictó Cockcroft-Gault para ESTA regla, y la regla vecina (KDIGO,
+  //  más arriba) usa CKD-EPI 2021. Son números distintos y un mismo paciente puede quedar a
+  //  un lado u otro del 60. Se respeta lo que pidió, se deja escrito aquí para que nadie las
+  //  unifique por parecer un descuido, y la pantalla dice cuál se aplicó.
+  //  Ver docs/REGLAS_MEDICO_20260901.md.
+  const MTR_TFG_CG_CREATININA_OBLIGATORIA = 60;
+  const MTR_RAC_OBLIGATORIA = 30;
+  function mtrRepeticionObligatoria(clave, ctx, valor) {
+    const k = String(clave == null ? "" : clave).trim().toUpperCase();
+    const c = ctx || {};
+    if (k === "CREATININA") {
+      let crudo = null;
+      if (c.crclCockcroftGault !== undefined && c.crclCockcroftGault !== null) crudo = c.crclCockcroftGault;
+      else if (c.erc && c.erc.crcl !== undefined && c.erc.crcl !== null) crudo = c.erc.crcl;
+      const tfg = (typeof mtrFloat === "function") ? mtrFloat(crudo) : null;
+      // Sin el dato NO se afirma nada: la obligatoriedad se apoya en un número, y sin ese
+      // número la decisión vuelve a ser del médico como cualquier otro examen.
+      return tfg !== null && tfg < MTR_TFG_CG_CREATININA_OBLIGATORIA;
+    }
+    if (k === "RAC") {
+      const v = (typeof mtrFloat === "function") ? mtrFloat(valor) : null;
+      return v !== null && v > MTR_RAC_OBLIGATORIA;
+    }
+    return false;
+  }
+  // ¿Se puede adelantar al 50 % este examen de este paciente?
+  //   · si es de los obligatorios, sí, sin preguntar;
+  //   · si el médico respondió que NO, no;
+  //   · mientras no haya respondido, sí — que es la conducta de siempre y la conservadora
+  //     (repetir antes, no después). El script no cambia nada por su cuenta: hace falta un
+  //     «no» explícito suyo para relajar la vigencia.
+  function mtrPuedeAdelantarPorFueraDeMeta(clave, ctx, valor) {
+    if (mtrRepeticionObligatoria(clave, ctx, valor)) return true;
+    return !(ctx && ctx.repetirFueraMeta === false);
+  }
+
   // La mitad, nunca menos de 1 día. Se aplica DESPUÉS de colapsar el rango y
   // DESPUÉS del ajuste renal, sobre el número que de verdad se iba a usar.
   //
@@ -37336,7 +37449,11 @@
     // estando fuera de meta (el panel y el eje lipídico lo dicen igual), lo único que no pasa
     // es que ese hecho adelante la toma. Ocultar la falla sería otra cosa, y no es lo pedido.
     const kdigoFrena = mtrKdigoNoRepiteLipidos(clave, c) && fueraMeta === true;
-    const vigencia = kdigoFrena ? vigenciaNorma : mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
+    // v18.0.67 — y ahora también la decisión del médico. KDIGO manda sobre ella (decisión
+    // suya en la entrevista del 1-sep: con TFG < 60 los lípidos no se adelantan aunque él
+    // diga que sí), así que se evalúa después y no puede resucitar lo que KDIGO frenó.
+    const medicoFrena = !kdigoFrena && fueraMeta === true && !mtrPuedeAdelantarPorFueraDeMeta(clave, c, valor);
+    const vigencia = (kdigoFrena || medicoFrena) ? vigenciaNorma : mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
     if (!fecha) {
       // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
       // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
@@ -40263,6 +40380,15 @@
       // v18.0.7 — D11 (KDIGO). CKD-EPI 2021, nunca Cockcroft-Gault (que en este proyecto es
       // solo administrativa y para dosificar): `erc.egfr` es CKD-EPI 2021, `erc.crcl` es C-G.
       egfrCkdEpi: (erc && erc.egfr !== undefined) ? erc.egfr : null,
+      // v18.0.67 — la TFG por COCKCROFT-GAULT, que es la que el médico dictó para la
+      // creatinina obligatoria (a diferencia de la de KDIGO, que es CKD-EPI 2021). Las dos
+      // viajan a propósito y con nombre distinto: son números distintos y un paciente puede
+      // quedar a un lado u otro del 60 según cuál se mire. Ver docs/REGLAS_MEDICO_20260901.md.
+      crclCockcroftGault: (erc && erc.crcl !== undefined) ? erc.crcl : null,
+      // Su respuesta a «¿repetir antes los exámenes fuera de meta?», válida solo para esta
+      // consulta. `undefined` = todavía no ha respondido, y entonces manda la conducta de
+      // siempre (adelantar), que es la conservadora.
+      repetirFueraMeta: c.repetirFueraMeta,
       funcionRenalInestable: erc.sospechaIra,
       ultimos: c.ultimos || {},
       grupoSabado: c.grupoSabado || null,
