@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.78
+// @version      18.0.79
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.78";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.79";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30060,6 +30060,15 @@
     if (!docId) return 0;
     return _noShowPreviaEn(_noShowLeer(), docId);
   }
+  // v18.0.79 — texto y título del badge de inasistencias previas, compartidos entre
+  // render() (primer pintado) y refrescarCuentas() (repintados posteriores) para que no
+  // diverjan entre sí.
+  function _adhBadgeInfo(adhN) {
+    return {
+      txt: "⚠ " + adhN,
+      tit: adhN + (adhN === 1 ? " inasistencia previa" : " inasistencias previas") + " registradas en días anteriores (historial de este computador)",
+    };
+  }
   function render(list, source, at) {
     if (source) state.ultimaLectura = Date.now();
     const sinCruce = state.pymFile && state.pym.size > 0 && list.length > 0 && list.every((a) => !a.pym || !a.pym.length);
@@ -30213,6 +30222,20 @@
               if (pe === "cola") return '<span class="vgl-precon-dot cola" title="En cola de pre-consulta: sus laboratorios se están trayendo en segundo plano"></span>';
               return ""; } catch (e) { return ""; } })()}
             ${countdown(a)}
+            ${(() => {
+              // v18.0.79 — AUDITORÍA (hallazgo de enjambre #31): antes este badge SOLO lo
+              // pintaba refrescarCuentas(), en la vuelta siguiente al primer pintado — y,
+              // por el mismo hallazgo, esa vuelta se saltaba entera para «En sala»/
+              // «Atendido». Se pinta aquí también, en el primer pintado, igual que ya hace
+              // countdown(a) arriba.
+              try {
+                if (!S.adherencia) return "";
+                const adhN = _noShowPrevia(a.doc_id);
+                if (!adhN) return "";
+                const info = _adhBadgeInfo(adhN);
+                return `<span class="vgl-cd vgl-adh" title="${info.tit}">${info.txt}</span>`;
+              } catch (e) { return ""; }
+            })()}
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}${agendPend}${adicFlag}
@@ -30263,8 +30286,15 @@
         // la vuelta siguiente se creaba ADEMÁS una cuenta nueva. La tarjeta acababa con dos
         // cuentas y el aviso convertido en un cronómetro congelado.
         const cd = card.querySelector(".vgl-cd:not(.vgl-adh)"), p = countdownParts(a);
-        if (!p) { if (cd) cd.remove(); continue; }
-        if (cd) {
+        // v18.0.79 — AUDITORÍA (hallazgo de enjambre #31): este `continue` saltaba TAMBIÉN
+        // el bloque de abajo (adhN/adhEl), que es la ÚNICA parte del código que pinta el
+        // badge de inasistencias previas — render() nunca lo incluye en su plantilla
+        // inicial. countdownParts() da null exactamente para «En sala»/«Atendido», así que
+        // el badge quedaba inalcanzable todo el tiempo que el médico tiene al paciente
+        // delante, que es cuando el aviso sirve. Ya no hay `continue`: sin cuenta regresiva
+        // se quita la cuenta (si la había) y se sigue de largo hasta el badge.
+        if (!p) { if (cd) cd.remove(); }
+        else if (cd) {
           const newCls = "vgl-cd" + p.cls;
           if (cd.className !== newCls) cd.className = newCls;
           if (cd.title !== p.title) cd.title = p.title;
@@ -30288,14 +30318,13 @@
         const adhN = S.adherencia ? _noShowPreviaEn(histNoShow, a.doc_id) : 0;
         const adhEl = card.querySelector(".vgl-adh");
         if (adhN > 0) {
-          const adhTxt = "⚠ " + adhN;
-          const adhTit = adhN + (adhN === 1 ? " inasistencia previa" : " inasistencias previas") + " registradas en días anteriores (historial de este computador)";
+          const info = _adhBadgeInfo(adhN);
           if (adhEl) {
-            if (adhEl.textContent !== adhTxt) adhEl.textContent = adhTxt;
-            if (adhEl.title !== adhTit) adhEl.title = adhTit;
+            if (adhEl.textContent !== info.txt) adhEl.textContent = info.txt;
+            if (adhEl.title !== info.tit) adhEl.title = info.tit;
           } else {
             const tW = card.querySelector(".vgl-card-time-wrap");
-            if (tW) tW.insertAdjacentHTML("beforeend", `<span class="vgl-cd vgl-adh" title="${adhTit}">${adhTxt}</span>`);
+            if (tW) tW.insertAdjacentHTML("beforeend", `<span class="vgl-cd vgl-adh" title="${info.tit}">${info.txt}</span>`);
           }
         } else if (adhEl) adhEl.remove();
       }

@@ -1888,5 +1888,50 @@ module.exports = {
         "y la cuenta que falta se inserta en el mismo sitio donde la pinta render(), no en el envoltorio de los badges");
     });
 
+    // =====================================================================
+    // v18.0.79 — HALLAZGO DE ENJAMBRE #31. El `continue` de la línea de arriba (la que el
+    // caso anterior ya fija en `if (!p) { if (cd) cd.remove(); continue; }`... salvo que ESE
+    // `continue` también se saltaba el bloque de abajo, el ÚNICO que pinta el badge de
+    // inasistencias previas — countdownParts() da null exactamente para «En sala»/«Atendido»,
+    // así que el badge quedaba inalcanzable todo el tiempo que el médico tiene al paciente
+    // delante. Mismo defecto en render(): su plantilla inicial nunca incluía el badge, solo
+    // la cuenta regresiva — el badge dependía ENTERO de que refrescarCuentas() lo agregara
+    // en una vuelta posterior, vuelta que el `continue` de arriba también le negaba.
+    // No se puede reproducir con el DOM simulado del arnés (mismo límite que el caso
+    // anterior: no entiende `:not()` ni el árbol real de la tarjeta), así que se fija por
+    // inspección de fuente, mismo patrón que v18.0.24 ya estableció para esta función.
+    // =====================================================================
+    t.caso("REGRESIÓN — refrescarCuentas ya no se salta el badge de inasistencias cuando no hay cuenta regresiva (hallazgo #31)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function refrescarCuentas");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+
+      t.falso(/if \(!p\) \{ if \(cd\) cd\.remove\(\); continue; \}/.test(cuerpo),
+        "el defecto original: el continue saltaba también el bloque de abajo");
+      t.cierto(/if \(!p\) \{ if \(cd\) cd\.remove\(\); \}/.test(cuerpo),
+        "sin cuenta regresiva se quita la cuenta, pero YA NO se corta el paso: sigue hasta el badge");
+      // El bloque de adhN/adhEl debe seguir existiendo en el cuerpo, fuera de cualquier rama
+      // que dependa de `p` — la comprobación de arriba ya descarta el `continue`; esta
+      // confirma que el bloque en sí no desapareció en el arreglo.
+      t.cierto(/const adhN = S\.adherencia \? _noShowPreviaEn\(histNoShow, a\.doc_id\) : 0;/.test(cuerpo),
+        "el cálculo del badge sigue presente");
+    });
+
+    t.caso("REGRESIÓN — render() también pinta el badge de inasistencias en el primer pintado, no solo refrescarCuentas() (hallazgo #31)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iniRender = src.indexOf("function render(list, source, at)");
+      t.cierto(iniRender > 0, "se localiza render()");
+      const cuerpoRender = src.slice(iniRender, src.indexOf("\n  function ", iniRender + 10));
+      t.cierto(/\$\{countdown\(a\)\}/.test(cuerpoRender), "la cuenta regresiva sigue en la plantilla, como siempre");
+      t.cierto(/_noShowPrevia\(a\.doc_id\)/.test(cuerpoRender),
+        "y ahora la plantilla también consulta las inasistencias previas de ESTE paciente");
+      t.cierto(/vgl-cd vgl-adh/.test(cuerpoRender.slice(cuerpoRender.indexOf("card.innerHTML"))),
+        "con el mismo span y las mismas clases que refrescarCuentas() usa para el mismo badge");
+    });
+
   }
 };

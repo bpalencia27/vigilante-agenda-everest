@@ -10187,3 +10187,39 @@ sugerencia se queda en la fecha clínica (nunca se inventa una) y se avisa en pa
 | 211 | el clic en un chip de toma deja de invalidar el afinado en vuelo (`_tomaControlAfinarToken++` retirado) | *misma prueba* | Sí |
 
 Banco completo: **2.934 comprobaciones pasan, 0 fallan.**
+
+## v18.0.79 — el badge de inasistencias previas ya se ve con el paciente en sala
+
+Hallazgo #31 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+El badge «⚠ N inasistencias previas» solo lo pintaba `refrescarCuentas()`, nunca la plantilla
+inicial de `render()`. Y dentro de `refrescarCuentas()`, `if (!p) { if (cd) cd.remove();
+continue; }` saltaba TAMBIÉN el bloque que calcula y pinta ese badge en cuanto
+`countdownParts(a)` daba `null` — y da `null` exactamente para «En sala» y «Atendido». Como
+cualquier cambio de estado dispara un repintado completo (`signatureOf` incluye `a.estado`) que
+arma una tarjeta fresca sin el badge, el aviso quedaba inalcanzable todo el tiempo que el
+médico tiene al paciente delante — justo cuando el propio tooltip del interruptor dice que
+sirve «para priorizar el recordatorio o el diálogo» con él. El dato (`_noShowPrevia`) seguía
+correcto en el historial; solo dejaba de mostrarse cuando servía.
+
+### La reparación
+
+1. Se quita el `continue`: sin cuenta regresiva se retira la cuenta (si la había) y se sigue de
+   largo hasta el bloque del badge, que ahora corre siempre.
+2. `render()` también pinta el badge en el primer pintado (igual que ya hace con `countdown(a)`),
+   para no depender de una vuelta posterior de `refrescarCuentas()`.
+3. El texto y el título del badge se extraen a `_adhBadgeInfo(adhN)`, compartida entre las dos
+   rutas, para que no puedan divergir entre sí.
+
+No se pudo reproducir con el DOM simulado del arnés (mismo límite que v18.0.24 ya documentó
+para esta función: no entiende `:not()` ni el árbol real de la tarjeta), así que se verifica por
+inspección de fuente — mismo patrón que v18.0.24 ya estableció aquí mismo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 212 | vuelve el `continue` (**el defecto original**) | *REGRESIÓN — refrescarCuentas ya no se salta el badge de inasistencias...* | Sí |
+| 213 | `render()` deja de pintar el badge en el primer pintado | *REGRESIÓN — render() también pinta el badge de inasistencias...* | Sí |
+
+Banco completo: **2.936 comprobaciones pasan, 0 fallan.**
