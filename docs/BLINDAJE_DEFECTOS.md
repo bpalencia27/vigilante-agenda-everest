@@ -13,8 +13,10 @@ ni sobreviven a la sesión.
 83 hallazgos con evidencia; los «72» de los que se habla son los que sobrevivieron a la
 refutación adversarial.
 
+**Última actualización:** v18.0.40. Banco: 2.821 comprobaciones, 0 fallan.
 
-## Gravedad ALTA — 27 hallazgos: 17 cerrados y blindados, 1 en curso, 9 abiertos
+
+## Gravedad ALTA — 27 hallazgos: **24 cerrados y blindados**, 3 abiertos
 
 | Línea | Estado | Versión | Defecto |
 |---|---|---|---|
@@ -26,7 +28,7 @@ refutación adversarial.
 | L5131 | ✅ blindado | v18.0.17 | mtrTextoOpinaSobre lee "no diabético" / "no fumador" / "sin diabetes" como AFIRMACIÓN, no como negación |
 | L6614 | ✅ blindado | v18.0.30 | «Exámenes»: el mensaje de fallo se borra en la línea siguiente — el apagado del kill-switch queda completamente mudo |
 | L7583 | ⬜ **abierto** | — | «Examen normal» → opción «Revisión por sistemas»: la comprobación de conteo que impide pegar en la casilla equivocada es inalcanzable |
-| L11731 | ⬜ **abierto** | — | El nombre genérico «Paciente Everest» se usa como identidad de cita, así que una marca de fraude contagia a otro paciente de la misma hora |
+| L11731 | ✅ blindado | v18.0.39 | El nombre genérico «Paciente Everest» se usa como identidad de cita, así que una marca de fraude contagia a otro paciente de la misma hora |
 | L11797 | ✅ blindado | v18.0.21 | Una pestaña NO líder crea y comparte la marca alertedFraud, y con eso se pierden la fila FRAUDE_EXTEMPORANEO de la auditoría y el reporte de fraude al tablero |
 | L11910 | ✅ blindado | v18.0.17 / 18.0.21 | La rectificación de inasistencia (v18.0.8) no está guardada por `state.leader`: con dos pestañas descuenta DOS veces del contador de auditoría y escribe dos filas RECTIFICACION_INASISTENCIA |
 | L11910 | ✅ blindado | v18.0.17 / 18.0.21 | La rectificación retroactiva de INASISTENCIA corre en TODAS las pestañas, así que el contador del día se descuenta una vez por pestaña abierta |
@@ -34,19 +36,19 @@ refutación adversarial.
 | L15778 | ✅ blindado | v18.0.14 | En #vgl-pym-modal todo el texto quedó blindado en v12.10.5 menos los chips, que son justamente el dato clínico |
 | L16357 | ✅ blindado | v18.0.14 | .vgl-agm-err — la caja de «no se pudo leer» declara su rojo sin !important y vive en cuatro modales colgados de document.body |
 | L19487 | ⬜ **abierto** | — | Anular la cita de control borra también la marca local de la toma de laboratorio: el aviso «la TOMA DE MUESTRAS sigue agendada» es inalcanzable y el antiduplicados de labs queda apagado |
-| L22392 | 🔧 en curso | 18.0.33 (parche escrito, sin aplicar) | El Panel del paciente mete la tensión, el peso y la cintura del paciente que está EN PANTALLA dentro del resumen cacheado de OTRO paciente, y lo reclasifica con ellos |
-| L23432 | ⬜ **abierto** | — | El agendamiento escribe la tensión leída del DOM dentro del objeto VIVO de la caché del resumen, sin comprobar de quién es la historia abierta |
-| L23853 | ⬜ **abierto** | — | «Agendar también la Toma de Muestras» se vuelve a marcar sola después de que el médico la desmarca (listener con {once:true}) |
-| L24897 | ⬜ **abierto** | — | El modal «solo laboratorio» deja el primer cupo del día preseleccionado y el botón habilitado: un clic agenda una hora que el médico nunca eligió |
-| L25747 | ⬜ **abierto** | — | Un solo examen de Athenea (a veces uno ajeno) da por HECHO un paquete PyM completo, bloquea la casilla y afirma en pantalla un hecho falso |
+| L22392 | ✅ blindado | v18.0.33 | El Panel del paciente mete la tensión, el peso y la cintura del paciente que está EN PANTALLA dentro del resumen cacheado de OTRO paciente, y lo reclasifica con ellos |
+| L23432 | ✅ blindado | v18.0.34 | El agendamiento escribe la tensión leída del DOM dentro del objeto VIVO de la caché del resumen, sin comprobar de quién es la historia abierta |
+| L23853 | ✅ blindado | v18.0.37 | «Agendar también la Toma de Muestras» se vuelve a marcar sola después de que el médico la desmarca (listener con {once:true}) |
+| L24897 | ✅ blindado | v18.0.37 | El modal «solo laboratorio» deja el primer cupo del día preseleccionado y el botón habilitado: un clic agenda una hora que el médico nunca eligió |
+| L25747 | ✅ blindado | v18.0.38 | Un solo examen de Athenea (a veces uno ajeno) da por HECHO un paquete PyM completo, bloquea la casilla y afirma en pantalla un hecho falso |
 | L28646 | ✅ blindado | v18.0.17 | El aviso de «Vigilante sin lectura de la agenda» se dispara en el PRIMER tick del arranque y, como solo sale una vez al día, deja mudo el aviso real de ceguera durante el resto de la jornada |
-| L33460 | ⬜ **abierto** | — | Sin función renal, basta UNA interacción para que desaparezca el aviso «no se pudo juzgar la dosis» y el pie afirme que sí se calculó con la función renal |
+| L33460 | ✅ blindado | v18.0.40 | Sin función renal, basta UNA interacción para que desaparezca el aviso «no se pudo juzgar la dosis» y el pie afirme que sí se calculó con la función renal |
 | L35453 | ⬜ **abierto** | — | El sufijo «· albuminuria: vigilancia estrecha» se pega al motivo de TODO examen vencido, no solo al RAC con albuminuria |
 | L39755 | ✅ blindado | v18.0.32 | La esterasa leucocitaria reportada en cruces CON número ("3+", "2 +") se enruta como recuento de leucocitos y el uroanálisis sale «SIN HALLAZGOS» |
 | L40145 | ✅ blindado | v18.0.25 | mtrHcTachar tacha por subcadena sin límite de palabra: un nombre de 3-4 letras (ANA, MAR, ROSA) destroza el grounding clínico que se le manda a Gemini |
 | L40456 | ✅ blindado | v18.0.15 | La cosecha en vivo de la historia manda el texto libre de la pantalla a Gemini SIN pasar por scrubPII (fuga de PHI real). |
 
-## Gravedad MEDIA — 36 hallazgos: 2 cerrados y blindados, 0 en curso, 34 abiertos
+## Gravedad MEDIA — 36 hallazgos: **2 cerrados y blindados**, 34 abiertos
 
 | Línea | Estado | Versión | Defecto |
 |---|---|---|---|
@@ -87,7 +89,7 @@ refutación adversarial.
 | L38720 | ⬜ **abierto** | — | La caja roja de «cifras sin respaldo» valida el borrador contra la hoja de hechos CONGELADA al abrir el panel, no contra la que la IA usó de verdad |
 | L40460 | ⬜ **abierto** | — | `mtrCosecharHcDelDom` vuelve a consultar el documento entero una o dos veces por CADA grupo de radios, teniendo ya los nodos agrupados en la mano |
 
-## Gravedad BAJA — 20 hallazgos: 0 cerrados y blindados, 0 en curso, 20 abiertos
+## Gravedad BAJA — 20 hallazgos: **0 cerrados y blindados**, 20 abiertos
 
 | Línea | Estado | Versión | Defecto |
 |---|---|---|---|
@@ -121,21 +123,34 @@ refutación adversarial.
 
 | Estado | Defecto |
 |---|---|
-| ✅ v18.0.30 | Auto-Labs: «Deshacer» tras 0 casillas borraba el lote anterior; rama del apagado muda; «no tiene» por «no pude leer» en el reintento |
+| ✅ v18.0.30 | Auto-Labs: «Deshacer» tras 0 casillas borraba el lote anterior; rama del apagado muda |
 | ✅ v18.0.31 | Seis nombres del hemograma se llevaban la casilla de la hemoglobina sérica |
-| ✅ v18.0.32 | Parcial de orina: ancla de panel perdida + esterasa en cruces con número contada como recuento |
-| ⬜ **abierto** | El Panel mete PA/peso/cintura del paciente EN PANTALLA en el resumen cacheado de OTRO (parche escrito, v18.0.33) |
-| ⬜ **abierto** | Lo que el médico teclea en Enfermedad actual / Análisis y plan / Recomendaciones NO llega al prompt hasta que guarda |
-| ⬜ **abierto** | El contexto pegado se recorta en seco a 800 caracteres, sin avisar |
-| ⬜ **abierto** | El texto del médico viaja el último y con un rótulo que le dice al modelo que lo ignore |
-| ⬜ **abierto** | La caja roja marca como inventadas las cifras que el propio médico aportó (valida contra la hoja congelada) |
+| ✅ v18.0.32 | Parcial de orina: ancla de panel perdida + esterasa en cruces contada como recuento |
+| ✅ v18.0.33 | El Panel metía PA/peso/cintura del paciente EN PANTALLA en el resumen cacheado de OTRO |
+| ✅ v18.0.34 | El agendamiento escribía la tensión en la caché VIVA sin comprobar de quién es la historia (+ un tercer sitio que apareció al escribir la regla) |
+| ✅ v18.0.35 | El contexto pegado se recortaba en seco a 800 caracteres; la caja roja marcaba como inventadas las cifras del propio médico |
+| ✅ v18.0.36 | Lo que el médico teclea no llegaba al prompt hasta guardar; la hoja de hechos se arrastraba de la foto |
 | ⬜ **abierto** | `mtrSanearTextoLibreAI` destroza texto en Mayúscula Inicial: la regex de honoríficos se come hasta 4 palabras clínicas |
 | ⬜ **abierto** | `scrubPII` censura cifras de laboratorio con separador de miles («PLAQUETAS 250.000» → `[CENSURADO]`) |
 | ⬜ **abierto** | El aviso al abrir la historia se corta: con 10 actividades el botón «Entendido» queda 21,5 px FUERA |
-| ⬜ **abierto** | `.vgl-uro-arrow` no tiene NINGUNA regla de color en la hoja: 18,67:1 → 1,10:1 bajo el CSS de Everest (+8 iconos por `svg`) |
+| ⬜ **abierto** | `.vgl-uro-arrow` no tiene NINGUNA regla de color: 18,67:1 → 1,10:1 bajo el CSS de Everest (+8 iconos por `svg`) |
 | ⬜ **abierto** | El titular y el icono de los avisos flotantes pierden su color ante Everest: 7,84:1 → 1,02:1 |
 | ⬜ **abierto** | `#vgl-root{max-height:84vh}` + `zoom` (letra grande / alto contraste): el panel se sale de la pantalla |
 | ⬜ **abierto** | Regla A de `suite_25` es ciega a colisiones de orden entre reglas del MISMO conjunto de clases |
+| ⬜ **abierto** | Los prompts de la IA en el estilo que eligió el médico (híbrido, natural) — pendiente |
+
+## Enjambre de funciones en curso (`wf_df8f59cb-aed`)
+
+24 cazadores en Sonnet 5 cruzando estados × acciones sobre las 1.007 funciones, con
+reproducción obligatoria en el arnés y tres escépticos por hallazgo. **Sin aplicar todavía:
+esperan la refutación.** Entre lo reproducido hasta ahora:
+
+- `normalizeKey`: una cédula en notación científica se «arregla» con solo 6 cifras
+  significativas — dos pacientes distintos pueden colapsar en la misma clave.
+- `parseCSV`: una coma entrecomillada en el `.csv` del PyM borra en silencio a un paciente.
+- `_nuevoReemplazaCandidato`: un RAC = 0 de HOY (valor real de un paciente sano) pierde contra
+  un RAC = 45 de hace meses, y se escribe el viejo.
+- `_vglCosechaGuardar`: escribe bajo una clave nueva sin consultar `_vglClaveDeDoc`.
 
 ---
 
@@ -143,6 +158,5 @@ refutación adversarial.
 
 - **✅ blindado** — arreglado **y** con prueba que cae al deshacerlo, con su fila en
   `tests/INFORME_MUTACIONES.md`.
-- **🔧 en curso** — parche escrito y medido, todavía sin aplicar ni blindar.
 - **⬜ abierto** — ni arreglado ni vigilado. Si alguien lo toca sin querer, nada se pone rojo.
 
