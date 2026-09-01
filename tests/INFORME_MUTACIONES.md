@@ -8391,3 +8391,49 @@ quinto era la palabra escrita **dentro de un comentario del propio CSS**. Ese ce
 crudo, así que una mención en prosa le inventa una regla que no existe. Misma familia que la
 trampa del `*/` de la v18.0.42: **el comentario de una hoja de estilos no es un lugar neutral**.
 Queda anotado en el comentario de esa regla para no repetirlo. Censo: 645 → 649.
+
+### v18.0.44 (segunda entrega) — el respaldo se trae solo, y una prueba hueca de la peor clase
+
+**El hueco que hacía inútil lo anterior.** La copia `vgl_piloto` solo se escribe cuando el
+respaldo se carga como lista ACTIVA, y eso solo pasa los días en que la lista de la sede llega
+tarde (`loadPymBase` corta con `if (state.pymFile) return true`). En una máquina donde el
+`Agenda_Dia_CMB` llega puntual varios días seguidos, la copia puede no existir — y la consulta
+al respaldo no respondería nunca. Se añade `traerRespaldoSoloParaConsulta()`: una vez al día,
+solo la pestaña líder, solo con la base automática encendida, **después** de que la lista del
+día esté cargada, y sin pasar por `applyPymIdx` ni tocar `state.pym` / `pymFile` / `pymFallback`.
+
+**Un error de diseño propio, corregido por su prueba.** El primer intento marcaba el día
+*antes* de descargar, "para no reintentar en bucle". Efecto real: un fallo de red al arrancar
+la jornada —la sesión de SharePoint a medio despertar, que es exactamente cuando esto corre—
+dejaba el respaldo mudo el día entero, justo lo que el médico pidió evitar. Ahora la marca se
+pone **solo al conseguirlo**, y el bucle se corta con un contador en memoria (3 por pestaña).
+
+**LA PRUEBA HUECA #9 DE LA SESIÓN, Y LA MÁS CARA.** La prueba que descubrió lo anterior estaba
+escrita como `t.caso("…", async () => { … })`. `t.caso` llama a `fn()` de forma **síncrona** y
+suma un acierto en el acto; una función `async` devuelve una promesa ahí mismo, así que la
+prueba se cuenta como pasada **antes de ejecutar una sola afirmación**. Al convertirla a
+`await t.casoAsync` se puso roja contra el código sin mutar — y así apareció el error de diseño.
+
+Un barrido del banco encontró **cinco**, cuatro de ellas anteriores a esta sesión:
+
+| suite | prueba | qué comprobaba (o creía comprobar) |
+|---|---|---|
+| 18 | `atheneaAutoLogin` (a) | que con el interruptor apagado no hace nada |
+| 18 | `atheneaAutoLogin` sin credenciales | que no exige médico identificado |
+| 18 | `atheneaAutoLogin` v12.5.8 | que el motivo ya no es mudo |
+| **31** | **`openLaboratoriosModal`** | **inyección de atributos en `<a>` vía `doc_id` — una prueba de SEGURIDAD que llevaba tiempo sin comprobar nada** |
+| 72 | respaldo (nueva) | la de arriba |
+
+Las cuatro pasan de verdad tras convertirlas. Se verificó rompiendo a propósito la afirmación
+de la de seguridad (suite 31): ahora sí cae, y antes no.
+
+El banco ya tenía tres reglas para `t.casoAsync` sin `await` y para suites sin `async pruebas`;
+faltaba la puerta de al lado. Se añade la cuarta en `suite_26`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 104 | la marca del día se pone antes de conseguirlo | *un fallo de red NO quema el intento del día* | Sí — 24 ok |
+| 105 | la descarga fallida igual escribe el índice de consulta | *sin descarga no se inventa un índice* | Sí — 24 ok |
+| 106 | se reintroduce una prueba hueca `t.caso(..., async ...)` | la regla nueva de `suite_26` | Sí — 10 ok |
+
+Banco completo: **0 fallan.**

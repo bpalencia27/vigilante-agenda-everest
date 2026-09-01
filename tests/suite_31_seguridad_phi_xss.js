@@ -190,7 +190,7 @@ module.exports = {
       t.igual(c.api.mtrClasificarEstadioTfg(10), "G5");
     });
 
-    t.caso("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
+    await t.casoAsync("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
       const c = cargar({ silencioso: true });
       const apt = {
         doc_id: '123456" onclick="alert(1)',

@@ -29,9 +29,10 @@ module.exports = {
   cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
     "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
     "_tableroQueCambio", "mtrTextoDestinoTelemetria",
-    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades"],
+    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades",
+    "respaldoDiceDe", "traerRespaldoSoloParaConsulta"],
 
-  pruebas(t, api) {
+  async pruebas(t, api, env) {
     const src = fs.readFileSync(RUTA, "utf8");
 
     // =================================================================
@@ -455,6 +456,29 @@ module.exports = {
 
       const nada = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false, respaldo: null });
       t.igual(nada.motivo, "no_esta_en_lista", "sin respaldo que consultar, el mensaje de siempre, intacto");
+    });
+
+    await t.casoAsync("RESPALDO — un fallo de red NO quema el intento del día, y la lista activa queda intacta", async () => {
+      // El primer diseño marcaba el día ANTES de descargar, "para no reintentar en bucle".
+      // Con eso, un fallo de red al arrancar la jornada —la sesión de SharePoint a medio
+      // despertar, que es exactamente cuando esto corre— dejaba al respaldo sin responder
+      // el día entero: el médico volvía a ver "Dato faltante" en pacientes que SÍ están en
+      // la base, que es justo lo que pidió evitar. La marca se pone solo al conseguirlo.
+      const st = api.__state;
+      st.pym = new Map([["111", ["Tamización cardiometabólica"]]]);
+      st.pymTodos = new Set(["111"]);
+      st.pymFile = "Agenda_Dia_CMB.xlsx"; st.pymFallback = false;
+      st.pymResp = new Map(); st.pymRespTodos = null; st.pymRespCargado = "";
+      // En el banco no hay SharePoint: la descarga falla siempre, que es el caso a fijar.
+      const hecho = await api.traerRespaldoSoloParaConsulta();
+      t.falso(hecho, "sin poder bajar el archivo, devuelve que no lo consiguió");
+      t.igual(env.win.GM_getValue("vgl_resp_dl", ""), "",
+        "y NO marca el día: el siguiente intento puede volver a probarlo");
+      // Las contenciones que hacen que esto no rompa nada, comprobadas tras ejecutarlo:
+      t.igual(st.pymFile, "Agenda_Dia_CMB.xlsx", "la lista activa sigue siendo la oficial");
+      t.falso(st.pymFallback, "y no se marca como respaldo");
+      t.igual(st.pym.size, 1, "ni se toca el mapa de la lista activa");
+      t.igual(st.pymRespTodos, null, "y sin descarga no se inventa un índice de consulta");
     });
 
     t.caso("REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada", () => {

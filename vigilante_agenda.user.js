@@ -9216,6 +9216,65 @@
     return _respCargaEnCurso;
   }
 
+  // v18.0.43 — EL HUECO QUE HABÍA QUE CERRAR PARA QUE ESTO SIRVA DE VERDAD. La copia
+  // `vgl_piloto` solo se escribe cuando el respaldo se carga como lista ACTIVA, y eso solo
+  // pasa los días en que la lista de la sede llega tarde (loadPymBase corta en seco con
+  // `if (state.pymFile) return true`). En una máquina donde el Agenda_Dia_CMB llega puntual
+  // varios días seguidos, la copia puede no existir o ser vieja — y entonces la consulta al
+  // respaldo, que es justo lo que el médico pidió, no respondería nunca.
+  //
+  // Así que se trae UNA VEZ AL DÍA, y con todas las cautelas:
+  //   · solo la pestaña líder (heartbeat), para no bajar el archivo N veces;
+  //   · solo con la base automática encendida (S.baseAuto — el interruptor que el médico ya
+  //     tiene en Ajustes sirve también para esto, no se inventa uno nuevo);
+  //   · DESPUÉS de que la lista del día ya esté cargada, nunca compitiendo con ella;
+  //   · y sin tocar NADA de la lista activa: no pasa por applyPymIdx, no toca state.pym,
+  //     state.pymFile ni state.pymFallback. Solo llena el índice de consulta y la copia.
+  // Cuesta una descarga (~14 MB) al día en la pestaña líder. Se apaga con el mismo
+  // interruptor de la base automática.
+  const RESP_DL_KEY = "vgl_resp_dl";
+  const RESP_INTENTOS_MAX = 3;
+  let _respIntentos = 0;
+  async function traerRespaldoSoloParaConsulta() {
+    try {
+      if (!S.baseAuto || typeof GM_getValue === "undefined" || typeof GM_xmlhttpRequest === "undefined") return false;
+      if (!heartbeat()) return false;                       // solo la pestaña líder
+      // La marca del día se pone SOLO al conseguirlo (abajo). El primer diseño la ponía
+      // aquí arriba "para no reintentar en bucle", y eso significaba que UN fallo de red
+      // —la sesión de SharePoint a medio despertar al arrancar la jornada, que es
+      // exactamente cuando esto corre— dejaba al respaldo sin responder el día entero, que
+      // es justo lo que el médico pidió evitar. El bucle se corta con un contador en
+      // memoria: como mucho RESP_INTENTOS_MAX por pestaña, y la marca del día impide que
+      // otra pestaña vuelva a bajar 14 MB una vez que ya se consiguió.
+      if (GM_getValue(RESP_DL_KEY, "") === todayStamp()) return false;   // ya se consiguió hoy
+      if (_respIntentos >= RESP_INTENTOS_MAX) return false;
+      _respIntentos++;
+      const fb = CONFIG.SP.respaldo;
+      if (!fb || !fb.id) return false;
+      let buf = null;
+      for (const url of spFallbackUrls(fb.id)) {
+        try {
+          const dl = await gmGet(url, "arraybuffer", "", T_DESCARGA);
+          if (!esLibroValido(dl.response, fb.name)) continue;
+          buf = dl.response; break;
+        } catch (e) {}
+      }
+      if (!buf) return false;
+      const idx = await readPym(fb.name, buf);
+      if (!idx || !idx.todos || !idx.todos.size) return false;
+      const meta = await pilotoMeta();
+      await pilotoGuardar(idx, { name: (meta && meta.name) || fb.name, mtime: (meta && meta.mtime) || "", fp: pymFP(fb.name, (meta && meta.mtime) || "") });
+      // Solo el índice de consulta. La lista activa no se entera de que esto pasó.
+      state.pymResp = idx.map;
+      state.pymRespTodos = idx.todos;
+      state.pymRespNombre = (meta && meta.name) || fb.name;
+      state.pymRespMTime = (meta && meta.mtime) || "";
+      state.pymRespCargado = todayStamp();
+      GM_setValue(RESP_DL_KEY, todayStamp());               // solo al conseguirlo: ver arriba
+      return true;
+    } catch (e) { return false; }
+  }
+
   // PURA sobre el estado: qué dice el respaldo de este paciente. Devuelve null cuando no
   // hay nada que decir —sin respaldo cargado, o el paciente sí está en la oficial, o el
   // respaldo ES la lista activa (entonces consultarlo sería preguntarle dos veces a la
@@ -9795,7 +9854,12 @@
     // Se repinta al terminar porque la primera tarjeta ya se dibujó sin él.
     try {
       cargarRespaldoParaConsulta().then((ok) => {
-        if (ok && state.pymRespTodos && state.pymRespTodos.size) { state.lastSignature = ""; tick(); }
+        if (ok && state.pymRespTodos && state.pymRespTodos.size) { state.lastSignature = ""; tick(); return; }
+        // Sin copia guardada (o vacía): se trae una vez al día, en la pestaña líder, sin
+        // tocar la lista activa. Ver traerRespaldoSoloParaConsulta.
+        return traerRespaldoSoloParaConsulta().then((ok2) => {
+          if (ok2) { state.lastSignature = ""; tick(); }
+        });
       }).catch(() => {});
     } catch (e) {}
     // [COPY-UX]

@@ -647,7 +647,7 @@ module.exports = {
     // atheneaAutoLogin — v12.5.2: ya NO depende de un médico identificado en
     // Everest (la cuenta es la misma para cualquiera que use el equipo).
     // =====================================================================
-    t.caso("atheneaAutoLogin: (a) con S.atheneaAutoLogin en false no hace NADA aunque haya credenciales", async () => {
+    await t.casoAsync("atheneaAutoLogin: (a) con S.atheneaAutoLogin en false no hace NADA aunque haya credenciales", async () => {
       const e = entornoAthenea();
       e.c.api.atheneaCredsSet(USR, PWD);
       e.c.api.__S.atheneaAutoLogin = false;
@@ -661,7 +661,7 @@ module.exports = {
       t.cierto(c.api.__S.atheneaAutoLogin, "el interruptor debe venir encendido de fábrica (v12.5.2)");
     });
 
-    t.caso("atheneaAutoLogin: interruptor encendido pero SIN credenciales guardadas -> nada, y NO exige médico identificado", async () => {
+    await t.casoAsync("atheneaAutoLogin: interruptor encendido pero SIN credenciales guardadas -> nada, y NO exige médico identificado", async () => {
       const e = entornoAthenea();
       e.c.api.__state.activeDoctor = { id: 0, name: "" }; // nadie identificado en Everest todavía
       const r = await e.c.api.atheneaAutoLogin();
@@ -669,7 +669,7 @@ module.exports = {
       t.igual(e.llamadas.length, 0);
     });
 
-    t.caso("atheneaAutoLogin v12.5.8: sin credenciales guardadas, el motivo ya NO es mudo — se explica por consola (reportado en campo: 'el auto-login no hace nada y nadie dice por qué')", async () => {
+    await t.casoAsync("atheneaAutoLogin v12.5.8: sin credenciales guardadas, el motivo ya NO es mudo — se explica por consola (reportado en campo: 'el auto-login no hace nada y nadie dice por qué')", async () => {
       const e = entornoAthenea();
       const logs = espiarConsola(e.c);
       const r = await e.c.api.atheneaAutoLogin();
