@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.59
+// @version      18.0.60
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.59";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.60";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4893,8 +4893,8 @@
 
   function _vglCosechaGuardar(docId, datos) {
     try {
-      const id = String(docId || "");
-      if (!id || !datos) return null;
+      const idCrudo = String(docId || "");
+      if (!idCrudo || !datos) return null;
       // v18.0.4 — ENJAMBRE (31-ago): se guarda la foto ANTERIOR para comparar. Antes se
       // releía tras fusionar, se reescribía TODO el almacén (hasta 80 pacientes) en cada
       // vuelta del reloj (2-5 s) y en TODAS las pestañas con historia abierta: tirón de
@@ -4903,6 +4903,28 @@
       // guarda de escritura de abajo solo persiste cuando algo cambió de verdad (la
       // comparación ignora los sellos de tiempo).
       const previoTodo = _vglCosechaTodo();
+      // v18.0.60 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido
+      // con el arnés: LA MEMORIA CLÍNICA DEL PACIENTE SE ORFANIZABA EN SILENCIO.
+      //
+      // Aquí se escribía SIEMPRE bajo el docId crudo. Pero un registro archivado antes de la
+      // canonicalización de v17.48.0 vive bajo la clave con ceros de relleno («0000111111»),
+      // mientras `extractPacienteAbierto()` entrega hoy la forma canónica («111111»). La
+      // primera cosecha del día —basta con que el médico entre a Antecedentes o Hábitos—
+      // creaba una clave NUEVA y vacía, y el almacén quedaba con DOS entradas del mismo
+      // paciente. La tolerancia de lectura no salva: `_vglBuscarPorDoc` devuelve la
+      // coincidencia EXACTA antes de buscar la canónica, así que a partir de ahí gana
+      // siempre la vacía.
+      //
+      // Lo que desaparece sin un solo aviso: la confirmación de embarazo (severidad alta,
+      // vigencia 30 días), la de adherencia, los programas de Ruta Crónicos y los factores
+      // de riesgo que el médico ya había documentado. La compuerta vuelve a preguntar lo ya
+      // respondido y el clasificador de riesgo se queda sin comorbilidades.
+      //
+      // Se resuelve la clave de ESCRITURA con el mismo patrón que `_noShowRegistrar` ya usa
+      // desde v17.53.0 para su propio almacén: si el paciente ya tiene una entrada bajo
+      // cualquier forma de su cédula, se escribe ENCIMA de esa; solo si no existe ninguna se
+      // crea con la forma canónica de hoy.
+      const id = _vglClaveDeDoc(previoTodo, idCrudo) || idCrudo;
       const previo = previoTodo[id] || {};
       const fusion = Object.assign({}, previo, datos, { ts: Date.now() });
       const todo = Object.assign({}, previoTodo);

@@ -683,6 +683,63 @@ module.exports = {
       t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
     });
 
+    // =================================================================
+    //  v18.0.60 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  LA MEMORIA CLÍNICA DEL PACIENTE SE ORFANIZABA EN SILENCIO.
+    //
+    //  `_vglCosechaGuardar` escribía SIEMPRE bajo el docId crudo. Pero un registro
+    //  archivado antes de la canonicalización de v17.48.0 vive bajo la clave con ceros de
+    //  relleno («0000111111»), y `extractPacienteAbierto()` entrega hoy la canónica
+    //  («111111»). La primera cosecha del día —basta con entrar a Antecedentes o Hábitos—
+    //  creaba una clave NUEVA y vacía, y el almacén quedaba con DOS entradas del mismo
+    //  paciente. La tolerancia de lectura no salva: `_vglBuscarPorDoc` devuelve la
+    //  coincidencia EXACTA antes de buscar la canónica, así que a partir de ahí gana la
+    //  vacía.
+    //
+    //  Lo que desaparece sin un solo aviso: la confirmación de embarazo (severidad alta),
+    //  la de adherencia, los programas de Ruta Crónicos y los factores de riesgo ya
+    //  documentados. La compuerta vuelve a preguntar lo ya respondido y el clasificador de
+    //  riesgo se queda sin comorbilidades. (Cédula sintética.)
+    // =================================================================
+    t.caso("v18.0.60 — una cosecha nueva no orfaniza la memoria archivada bajo la clave vieja", () => {
+      const c = cargar({ silencioso: true });
+      // Lo que quedó archivado ANTES de la canonicalización: cédula con ceros de relleno.
+      c.env.storage.setItem("vgl_cosecha", JSON.stringify({
+        "0000111111": {
+          confirmaciones: { embarazo: { v: false, ts: 1 } },
+          programas: { diabetes: true, hta: true },
+          factores: { hta: { v: true, ts: 1 } },
+          ts: 1,
+        },
+      }));
+      // Hoy el paciente se abre con la forma canónica y el médico entra a Hábitos.
+      c.api._vglCosechaGuardar("111111", { factores: { tabaquismo: { v: false, ts: 2 } } });
+
+      const todo = JSON.parse(c.env.storage.getItem("vgl_cosecha"));
+      t.igual(Object.keys(todo).length, 1, "UNA sola entrada para el paciente, no dos");
+      const reg = c.api._vglCosechaLeer("111111");
+      t.cierto(!!(reg && reg.programas && reg.programas.diabetes),
+        "los programas de Ruta Crónicos siguen ahí — antes desaparecían en silencio");
+      t.cierto(!!(reg && reg.confirmaciones && reg.confirmaciones.embarazo),
+        "y la confirmación de embarazo, que es de severidad alta y vigencia 30 días");
+      t.cierto(!!(reg && reg.factores && reg.factores.tabaquismo), "con lo nuevo de hoy encima");
+      // PRECISIÓN, comprobada al escribir esta prueba y anotada para no exagerar el daño:
+      // `factores` NO era lo que se perdía. `_vglCosecharFactoresVisibles` relee el archivo
+      // con `_vglCosechaLeer` (que sí es tolerante con la forma de la cédula) y entrega el
+      // mapa YA fusionado, así que los factores se rescataban solos por esa vía. Lo que se
+      // perdía eran las claves de primer nivel que nadie prefusiona: `programas`,
+      // `confirmaciones`, y cualquier otra que se añada mañana — exactamente las de arriba.
+    });
+
+    t.caso("v18.0.60 — y un paciente NUEVO se sigue archivando con su forma canónica de hoy", () => {
+      // La contención: resolver la clave existente no puede convertirse en «reutilizar
+      // cualquier clave parecida». Sin registro previo, se crea con la cédula de hoy.
+      const c = cargar({ silencioso: true });
+      c.api._vglCosechaGuardar("222222", { factores: { hta: { v: true, ts: 1 } } });
+      const todo = JSON.parse(c.env.storage.getItem("vgl_cosecha"));
+      t.igual(Object.keys(todo), ["222222"], "clave canónica, tal cual llegó");
+    });
+
     // v17.46.0 — PÉRDIDA SILENCIOSA POR CUOTA. Hallazgo de auditoría de persistencia.
     // `_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un
     // `try/catch` que devuelve null: con el almacén del navegador lleno, el

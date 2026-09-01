@@ -47,8 +47,9 @@ real**, no contra una copia, y (b) **sobrevivir a una refutación adversarial de
 | una negación negaba todo lo de su misma frase | `mtrTextoOpinaSobre` | **v18.0.57** | 144, 145 |
 | la base piloto vieja podía pisar el PyM real de hoy | `loadPymBaseDescarga` | **v18.0.58** | 147 |
 | «Deshacer» revertía una casilla distinta de la que el médico creía | `_vglGuardarDeshacer` | **v18.0.59** | 148, 149 |
+| la memoria clínica del paciente se orfanizaba bajo una clave nueva | `_vglCosechaGuardar` | **v18.0.60** | 150 |
 
-Quedan **30 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
+Quedan **29 de los 47** por aplicar. El detalle de cada uno, con su reproducción y su arreglo
 propuesto, sigue abajo.
 
 ## Índice por gravedad

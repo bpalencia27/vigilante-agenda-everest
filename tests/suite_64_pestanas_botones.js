@@ -288,8 +288,16 @@ module.exports = {
 
   t.caso("v17.48.0 — CERO PHI: el detector anota el conteo, jamás una cédula", () => {
     const c = cargar({ silencioso: true });
-    c.api._vglCosechaGuardar("0005150076", { programas: { hta: true } });
-    c.api._vglCosechaGuardar("5150076", { programas: { dm: true } });
+    // v18.0.60 — el duplicado YA NO se puede fabricar llamando dos veces a
+    // `_vglCosechaGuardar`: desde esta versión resuelve la clave existente antes de
+    // escribir, justo para no partir al paciente en dos (ver suite_32). Así que se monta
+    // como se produce DE VERDAD: un registro que quedó en disco escrito por una versión
+    // anterior a la canonicalización, y el de hoy con la forma canónica. El detector sigue
+    // haciendo falta exactamente para eso — los duplicados viejos ya están en las máquinas.
+    c.env.storage.setItem("vgl_cosecha", JSON.stringify({
+      "0005150076": { programas: { hta: true }, ts: 1 },
+      "5150076": { programas: { dm: true }, ts: 2 },
+    }));
     c.env.storage.removeItem("vgl_flight_recorder_logs");
     const n = c.api._vglRevisarClavesDuplicadas();
     t.igual(n, 1, "debe encontrar el paciente partido");

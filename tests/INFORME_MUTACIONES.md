@@ -9227,3 +9227,52 @@ La 149 es la que protege el arreglo de sí mismo: acumular mal deja la casilla c
 también escribimos nosotros, y el toast seguiría diciendo «volvió exactamente a como estaba».
 
 Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **17 de los 47** del enjambre.
+
+---
+
+## v18.0.60 — la memoria clínica del paciente se orfanizaba en silencio
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+`_vglCosechaGuardar` escribía **siempre bajo el docId crudo**. Pero un registro archivado antes
+de la canonicalización de v17.48.0 vive bajo la clave con ceros de relleno («0000111111»), y
+`extractPacienteAbierto()` entrega hoy la canónica («111111»). La primera cosecha del día
+—basta con que el médico entre a Antecedentes o Hábitos— creaba una clave **nueva y vacía**, y
+el almacén quedaba con **dos entradas del mismo paciente**.
+
+Y la tolerancia de lectura no salva: `_vglBuscarPorDoc` devuelve la coincidencia **exacta**
+antes de buscar la canónica, así que a partir de ahí gana siempre la vacía.
+
+Lo que desaparecía sin un solo aviso: la **confirmación de embarazo** (severidad alta, vigencia
+30 días), la de adherencia, los **programas de Ruta Crónicos** y el resto del contexto ya
+documentado. La compuerta vuelve a preguntar lo ya respondido y el clasificador de riesgo se
+queda sin comorbilidades.
+
+Se resuelve la clave de **escritura** con el patrón que `_noShowRegistrar` ya usa desde
+v17.53.0 para su propio almacén: si el paciente ya tiene entrada bajo cualquier forma de su
+cédula, se escribe encima de esa; solo si no existe ninguna se crea con la canónica de hoy.
+
+### Una precisión que salió al escribir la prueba, y se anota en vez de exagerar el daño
+
+**`factores` NO era lo que se perdía.** `_vglCosecharFactoresVisibles` relee el archivo con
+`_vglCosechaLeer` —que sí es tolerante con la forma de la cédula— y entrega el mapa ya
+fusionado, así que los factores se rescataban solos por esa vía. Lo que se perdía eran las
+claves de primer nivel que **nadie prefusiona**: `programas`, `confirmaciones` y cualquier otra
+que se añada mañana. La primera versión de la prueba afirmaba lo contrario y se puso roja: se
+corrigió la prueba, no el código.
+
+### Una prueba ajena que este arreglo dejó sin sentido, y por qué se reescribió
+
+`suite_64` fabricaba el duplicado **llamando dos veces a `_vglCosechaGuardar`** con las dos
+formas de la cédula. Desde esta versión eso ya no produce un duplicado — que es justo el
+objetivo. La prueba se rehace montando el duplicado **como se produce de verdad**: un registro
+que quedó en disco escrito por una versión anterior. El detector sigue haciendo falta
+exactamente para eso: **los duplicados viejos ya están en las máquinas.**
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 150 | vuelve a escribir bajo la clave cruda (**el defecto**) | *una cosecha nueva no orfaniza la memoria archivada* | Sí — 45 ok |
+
+Banco completo: **2.873 comprobaciones pasan, 0 fallan.** Van **18 de los 47** del enjambre.
