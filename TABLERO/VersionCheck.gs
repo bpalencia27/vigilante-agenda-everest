@@ -20,7 +20,7 @@
   toda la flota en vez de esperar el ciclo propio de cada Tampermonkey.
 */
 
-const MIN_VERSION = "18.0.4";  // ← Versión mínima requerida (31-ago 05:00 UTC-05:00: despliegue estable — fixes de enjambre sobre v18.0.3)
+const MIN_VERSION = "18.0.32";  // ← Versión mínima requerida (01-sep: hemoglobina del hemograma, parcial de orina, Auto-Labs honesto, blindaje CSS y fuga de PHI)
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
 
 // Configuración de Kill-Switch remoto de emergencia (R5.3)
@@ -36,7 +36,7 @@ const CANARY = {
   enabled: false,
   percentage: 0,               // 0-100% de equipos
   allowedEquipos: [],          // Lista blanca de consultorios piloto
-  minVersion: "18.0.4",
+  minVersion: "18.0.32",
   enabledFeatures: []
 };
 
