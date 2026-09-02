@@ -604,15 +604,21 @@ module.exports = {
     t.caso("paintMute: pinta el silencio activo con minutos restantes y vuelve al estado normal", () => {
       const botonMute = cv.env.doc.createElement("button");
       cv.env.doc.getElementById = (id) => (id === "vgl-mute" ? botonMute : null);
+      // v18.0.128 — el rótulo vive en su propio <span> (el botón conserva su ícono SVG). Se lee
+      // de donde de verdad se escribe, funcione el DOM falso con o sin querySelector enriquecido.
+      const _rotulo = (el) => { const n = el.querySelector && el.querySelector(".vgl-sb-txt"); return String((n && n.textContent) || el.textContent || ""); };
       cv.api.__state.muteUntil = Date.now() + 300000; // 5 minutos
       cv.api.paintMute();
       t.cierto(botonMute.classList.contains("off"));
-      t.cierto(botonMute.textContent.startsWith("🔕"));
-      t.cierto(botonMute.textContent.includes("5 min"));
+      // v18.0.128 (fila 47) — el estado ya no viaja en un emoji dentro del texto: el ícono es un
+      // SVG fijo (mismo trazo que sus tres vecinos de la columna) y lo que cambia es el rótulo y
+      // la clase .off. Antes `textContent` sobre el botón se llevaba el ícono por delante.
+      t.falso(_rotulo(botonMute).indexOf("🔕") >= 0, "el estado no se cuenta con un emoji");
+      t.cierto(_rotulo(botonMute).includes("5 min"), "dice los minutos que quedan");
       cv.api.__state.muteUntil = 0;
       cv.api.paintMute();
       t.falso(botonMute.classList.contains("off"));
-      t.igual(botonMute.textContent, "🔉 Silenciar");
+      t.igual(_rotulo(botonMute), "Silenciar");
     });
 
     // ================= setSummary =================
@@ -3766,6 +3772,34 @@ module.exports = {
       t.cierto(/avisoUniversal\(_nom, \{ abandono: _p\.abandono, pym: _p\.pym, labs: _p\.labs, adelantar: _p\.adelantar/.test(bloque),
         "pinta el mismo cuadro con los mismos datos");
       t.falso(/avisoMarcarVisto/.test(bloque), "y NO marca nada como visto: lo pidió él, no consume el aviso del día");
+    });
+
+    t.caso("v18.0.128 (filas 31 y 47): una sola numeración en Agendar, y un solo lenguaje de íconos en la columna", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      // Fila 31 — la barra de pasos numera «1 · 2 · 3»; los rótulos de dentro numeraban otra vez
+      // por su cuenta, y dentro del paso 2 convivían una insignia «2» y una «3».
+      t.falso(/<span class="vgl-agm-step">[123]<\/span>/.test(src),
+        "ningún rótulo de paso vuelve a numerar: la barra de arriba es la única numeración");
+      t.igual((src.match(/<div class="vgl-stepper-step[^"]*"[^>]*><span class="vgl-step-num">[123]<\/span>/g) || []).length, 3,
+        "y la barra sigue teniendo sus tres pasos numerados");
+      // La leyenda ya no cita entre comillas un rótulo que el botón casi nunca lleva.
+      t.falso(/nada se confirma hasta que pulse "Confirmar y asignar cita"/.test(src),
+        "no se le pide buscar un botón con un nombre que no está en pantalla");
+      t.cierto(/Nada se confirma hasta el último paso, y el botón dice en cada momento qué falta/.test(src),
+        "se dice el hecho, que sí es siempre cierto");
+
+      // Fila 47 — los cinco botones de la columna, con el mismo trazo.
+      t.falso(/id="vgl-bell"[^>]*>🔔/.test(src), "el botón de alertas ya no abre con emoji");
+      t.falso(/id="vgl-mute"[^>]*>🔉/.test(src), "ni el de silenciar");
+      t.igual((src.match(/class="vgl-sb-btn[^"]*"[^>]*>(?=<svg)/g) || []).length, 5,
+        "los cinco botones de la columna arrancan con su SVG");
+      // Y el rótulo tiene nodo propio: escribir el estado ya no se lleva el ícono por delante.
+      t.igual((src.match(/<span class="vgl-sb-txt">/g) || []).length, 2, "los dos con estado tienen rótulo propio");
+      t.cierto(/\(_t \|\| b\)\.textContent = perm === "granted"/.test(src), "updateBell escribe en el rótulo");
+      t.cierto(/\(_tm \|\| b\)\.textContent = on \?/.test(src), "y paintMute también");
     });
 
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"

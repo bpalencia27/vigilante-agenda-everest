@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.127
+// @version      18.0.128
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.127";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.128";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15374,7 +15374,10 @@
     const perm = (typeof Notification !== "undefined") ? Notification.permission : "unsupported";
     b.classList.toggle("on", perm === "granted");
     b.classList.toggle("off", perm === "denied");
-    b.textContent = perm === "granted" ? "Alertas ✓" : perm === "denied" ? "Alertas ✕" : "Alertas";
+    // v18.0.128 (fila 47) — se escribe en el rótulo, no en el botón: `textContent` sobre el
+    // botón borraba el ícono. El estado va en el texto y en las clases .on/.off, que ya existen.
+    const _t = b.querySelector ? b.querySelector(".vgl-sb-txt") : null;
+    (_t || b).textContent = perm === "granted" ? "Alertas ✓" : perm === "denied" ? "Alertas ✕" : "Alertas";
     b.title = perm === "granted" ? "Notificaciones de Windows activas" : perm === "denied" ? "BLOQUEADAS: candado de la barra de direcciones → Notificaciones → Permitir" : "Activar notificaciones de Windows";
   }
   // Prueba manual: dispara una de cada color para verificar que Windows las muestra.
@@ -19676,8 +19679,14 @@
           <div id="vgl-stats"></div>
           <div id="vgl-actions">
             <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Cargar prevención</button>
-            <button class="vgl-sb-btn" id="vgl-bell" title="Activar notificaciones de Windows">🔔 Alertas</button>
-            <button class="vgl-sb-btn" id="vgl-mute" title="Silenciar el sonido 15 minutos">🔉 Silenciar</button>
+            <!-- v18.0.128 (auditoría UI/UX, fila 47 · UI-21) — estos dos eran los únicos de la
+                 columna con emoji: sus tres vecinos ya llevan el mismo trazo Lucide. Dos lenguajes
+                 de ícono en la misma lista de cinco botones se lee como un descuido, y el emoji
+                 además cambia de dibujo según el sistema. El rótulo va en su propio <span> porque
+                 updateBell/paintMute lo reescriben: con textContent a pelo se llevaban el ícono
+                 por delante (que es justo por lo que el 🔔 desaparecía al conceder el permiso). -->
+            <button class="vgl-sb-btn" id="vgl-bell" title="Activar notificaciones de Windows"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg><span class="vgl-sb-txt">Alertas</span></button>
+            <button class="vgl-sb-btn" id="vgl-mute" title="Silenciar el sonido 15 minutos"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg><span class="vgl-sb-txt">Silenciar</span></button>
             <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Resumen</button>
             <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
           </div>
@@ -25913,7 +25922,13 @@
           <button type="button" id="vgl-agm-btn-anular" class="vgl-btn-undo">🗑️ Cancelar / Anular Cita</button>
         </div>
 
-        <div class="vgl-ux-caption" id="vgl-agm-caption">Agenda la cita directamente en Everest, igual que si usted la asignara a mano — con la opción de dejar también programada la toma de muestras y avisar por SMS. Siga los pasos 1 a 3; nada se confirma hasta que pulse "Confirmar y asignar cita". Para pedir exámenes use Ordenamiento; para ver resultados ya tomados, Laboratorios.</div>
+        <!-- v18.0.128 (auditoría UI/UX, fila 31 · UX-18) — la leyenda citaba entre comillas un
+             rótulo que el botón NO lleva la mayor parte del tiempo: mientras falta algo dice qué
+             falta («Seleccione un horario», «Elija la hora de la toma…», «Elija el programa…») y
+             mientras trabaja dice «⏳ Asignando cita…». Un texto que le pide buscar un botón con
+             un nombre que no está en pantalla es peor que no decir nada. Se dice el hecho, que
+             sí es siempre cierto: nada se confirma hasta el último paso. -->
+        <div class="vgl-ux-caption" id="vgl-agm-caption">Agenda la cita directamente en Everest, igual que si usted la asignara a mano — con la opción de dejar también programada la toma de muestras y avisar por SMS. Nada se confirma hasta el último paso, y el botón dice en cada momento qué falta. Para pedir exámenes use Ordenamiento; para ver resultados ya tomados, Laboratorios.</div>
         <!-- v18.0.117 (UI/UX #2) — FUERA de las vistas de paso. El segundo aviso de vencimiento (el
              que sale al pulsar Confirmar, en el paso 3) se pintaba aquí dentro del paso 2, oculto:
              el médico veía el botón pidiendo otro clic y nunca el motivo ni «Pasar a la fecha
@@ -25922,7 +25937,11 @@
 
         <!-- ==================== PASO 1: ¿Qué desea agendar? ==================== -->
         <div id="vgl-step-view-1" class="vgl-step-view">
-          <label class="vgl-agm-lbl"><span class="vgl-agm-step">1</span>Seleccione el tipo de cita a programar:</label>
+          <!-- v18.0.128 (fila 31) — NUMERACIÓN DOBLE: la barra de pasos de arriba dice «1 · 2 · 3»
+               y estos rótulos numeraban otra vez por su cuenta, con números que no casaban: dentro
+               del paso 2 convivían una insignia «2» y una «3». Una sola numeración en pantalla, la
+               de la barra; aquí queda el marcador neutro que ya usaban los otros dos rótulos. -->
+          <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Seleccione el tipo de cita a programar:</label>
           
           <div class="vgl-type-cards-grid" id="vgl-agm-que">
             <button type="button" class="vgl-type-card active" data-que="control_lab">
@@ -25964,7 +25983,7 @@
           <div id="vgl-agm-pref-chip" class="vgl-agm-pref-chip vgl-d-none"><span class="vgl-agm-pref-txt"></span><button type="button" class="vgl-agm-pbtn vgl-sm" id="vgl-agm-pref-cambiar" title="Volver al paso 1 para elegir otro tipo de cita o especialidad">cambiar</button></div>
           <div class="vgl-agm-grid">
             <div class="vgl-agm-cell vgl-agm-c12">
-              <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±7 días hábiles + sábados)</label>
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Plazo y fecha objetivo (±7 días hábiles + sábados)</label>
               <div class="vgl-agm-presets" id="vgl-time-presets">
                 <button type="button" class="vgl-agm-pbtn" data-m="0" data-d="15">15 días</button>
                 <button type="button" class="vgl-agm-pbtn" data-m="1" data-d="0">1 mes</button>
@@ -25995,7 +26014,7 @@
             </div>
 
             <div class="vgl-agm-cell vgl-agm-c12">
-              <label class="vgl-agm-lbl"><span class="vgl-agm-step">3</span>Horarios disponibles en la agenda del servicio${vglTip("Son los cupos reales de la agenda de Everest a esa fecha. Cuando hay turno clínico recomendado, queda preseleccionado con ⭐; si no hay recomendación, usted elige — nunca se agendará una hora que nadie decidió.")}</label>
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Horarios disponibles en la agenda del servicio${vglTip("Son los cupos reales de la agenda de Everest a esa fecha. Cuando hay turno clínico recomendado, queda preseleccionado con ⭐; si no hay recomendación, usted elige — nunca se agendará una hora que nadie decidió.")}</label>
               <div id="vgl-agm-slots" class="vgl-agm-slots"><div class="vgl-agm-loading">Consultando horarios disponibles...</div></div>
             </div>
           </div>
@@ -31657,7 +31676,9 @@
     if (!on && b.dataset.vglMuteOn === "0") return;
     b.dataset.vglMuteOn = on ? "1" : "0";
     b.classList.toggle("off", on);
-    b.textContent = on ? "🔕 " + Math.max(1, Math.ceil((state.muteUntil - Date.now()) / 60000)) + " min" : "🔉 Silenciar";
+    // v18.0.128 (fila 47) — igual que en updateBell: el rótulo tiene su propio nodo.
+    const _tm = b.querySelector ? b.querySelector(".vgl-sb-txt") : null;
+    (_tm || b).textContent = on ? Math.max(1, Math.ceil((state.muteUntil - Date.now()) / 60000)) + " min" : "Silenciar";
     b.title = on ? "Silenciado. Clic para reactivar el sonido." : "Silenciar el sonido 15 minutos (se sigue registrando todo)";
   }
   function repaint() { if (state.lastSnapshot) render(state.lastSnapshot.list, state.lastSnapshot.source, state.lastSnapshot.at); }

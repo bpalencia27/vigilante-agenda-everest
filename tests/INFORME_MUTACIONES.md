@@ -12197,4 +12197,28 @@ siguen entrando 5.
 | 436 | la vara se parte: el dock cuenta distinto que el aviso | *suite_04: v18.0.127: _pendientesUniversales es la única vara…* | Sí |
 | 437 | vuelve el espaciado ancho en 1366×768 | *suite_25: v18.0.127 - la densidad de 1366x768…* | Sí |
 
-Banco completo: **3.094 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.094 comprobaciones pasan, 0 fallan.** *(v18.0.127)*
+
+---
+
+## v18.0.128 — auditoría UI/UX, filas 31 y 47
+
+**Una sola numeración en Agendar** (fila 31 · UX-18). La barra de pasos dice «1 · 2 · 3» y los
+rótulos de dentro numeraban **otra vez** por su cuenta, con números que no casaban: dentro del
+paso 2 convivían una insignia «2» y una «3». Y la leyenda citaba entre comillas «Confirmar y
+asignar cita», un rótulo que el botón **no lleva la mayor parte del tiempo** — mientras falta
+algo dice qué falta, y mientras trabaja dice «⏳ Asignando cita…». Pedirle buscar un botón con un
+nombre que no está en pantalla es peor que no decir nada.
+
+**Un solo lenguaje de íconos en la columna del panel** (fila 47 · UI-21). «🔔 Alertas» y
+«🔉 Silenciar» eran los únicos dos con emoji entre cinco botones; sus tres vecinos ya llevan el
+mismo trazo Lucide. Al hacerlo apareció el motivo por el que el emoji del timbre **desaparecía
+al conceder el permiso**: `updateBell` escribía `textContent` sobre el botón entero y se llevaba
+el ícono por delante. El rótulo pasa a tener su propio nodo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 438 | vuelve la numeración doble dentro del paso 2 | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
+| 439 | el estado vuelve a escribirse sobre el botón y borra el ícono | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
+
+Banco completo: **3.095 comprobaciones pasan, 0 fallan.**
