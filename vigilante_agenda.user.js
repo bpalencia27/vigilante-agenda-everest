@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.108
+// @version      18.0.109
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.108";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.109";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7058,6 +7058,9 @@
       btn.className = "vgl-lab-inj";
 
       btn.onclick = () => {
+          // v18.0.109 (S+ robustez, B11) — con una consulta en vuelo, un segundo clic no abre otro
+          // chooser ni pisa el veredicto del primero.
+          if (btn.dataset && btn.dataset.vglEnCurso === "1") { try { uxTrack("labs.autollenado.doble_clic"); } catch (e) {} return; }
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
           if (!docId) {
               _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧪 Exámenes");
@@ -7075,6 +7078,7 @@
       };
 
       async function _ejecutarLlenadoExamenes(docId, btn, modo) {
+          try { btn.dataset.vglEnCurso = "1"; } catch (e) {}
           btn.innerHTML = "⏳ Buscando resultados de laboratorio...";
           uxTrack("labs.autollenado.click");
           try {
@@ -7316,6 +7320,8 @@
           } catch (e) {
               _vglFeedbackBoton(btn, "❌ El laboratorio no respondió", "ambar", "🧪 Exámenes");
               showToast("ROJO", "Exámenes", "No se pudo conectar con el portal de laboratorios. Verifique la red o intente desde el portal.", true);
+          } finally {
+              try { btn.dataset.vglEnCurso = ""; } catch (e2) {}   // v18.0.109 (B11)
           }
           // v15.5.0 — el rótulo ya no se restaura aquí a la brava: cada rama deja su
           // resultado contado en el botón y _vglFeedbackBoton lo devuelve solo a los 8 s.
@@ -14266,7 +14272,9 @@
       t.addEventListener("click", cerrar);
       const critico = color === "ROJO" || color === "MORADO" || color === "AMBAR";
       t.__vglCritico = critico;
-      if (critico) wrap.prepend(t); else { wrap.appendChild(t); setTimeout(cerrar, 9000); }
+      // v18.0.109 (S+ flujo, C14) — `persist` también manda en VERDE/AZUL: la leyenda de colores y
+      // «Órdenes generadas» (persist=true) se cerraban solos a los 9 s.
+      if (critico) wrap.prepend(t); else { wrap.appendChild(t); if (persist !== true) setTimeout(cerrar, 9000); }
       const vivos = () => [...wrap.children].filter((n) => !n.classList.contains("out"));
       while (vivos().length > 4) {
         const lista = vivos();
@@ -14501,12 +14509,19 @@
   //     mismo que el cartel y que la notificación del sistema, sumándose a ellos.
   // El silencio temporal (muteFor) y el interruptor S.sonido siguen mandando sobre todo
   // tono, como siempre (beep ya los respeta por dentro).
+  // v18.0.109 (S+ robustez, B9) — lo que sale al SISTEMA (Centro de actividades de Windows, en
+  // un PC compartido) va sin cédula: el nombre basta para saber de quién es el aviso. El aviso
+  // dentro de la página conserva el texto completo.
+  function _vglSinCedulas(texto) {
+    return String(texto == null ? "" : texto).replace(/\b\d{6,12}\b/g, (m) => "●●●" + m.slice(-3));
+  }
   function _notificarSistema(color, title, body, persist, uid) {
+    const titleSO = _vglSinCedulas(title), bodySO = _vglSinCedulas(body);
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      osNotify(color, title, body, persist, uid);   // con su propia escalada interna si Windows lo suprime
+      osNotify(color, titleSO, bodySO, persist, uid);   // con su propia escalada interna si Windows lo suprime
       return true;
     }
-    return _gmNotify(color, title, body, persist, uid);
+    return _gmNotify(color, titleSO, bodySO, persist, uid);
   }
   function _dispararAvisoAudible(p) {
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
@@ -20447,7 +20462,9 @@
       // v11.0.1 — Un número fijo estaba CABLEADO: se enviaba como teléfono de
       // TODOS los pacientes. Ahora, sin celular real conocido, va el literal 0 — lo que
       // manda la aplicación oficial cuando no lleva número (4 de 6 capturas reales).
-      const telParam = celular ? String(celular).replace(/\D/g, "") : "0";
+      // v18.0.109 (S+ flujo, C8) — el interruptor «Enviar SMS de recordatorio» de Ajustes apagaba el
+      // SMS de la cita pero el de la toma salía igual: mismo interruptor para los dos.
+      const telParam = (celular && !(typeof S !== "undefined" && S.smsRecordatorio === false)) ? String(celular).replace(/\D/g, "") : "0";
       // v12.3.31 — NombrePaciente=%20 (espacio CODIFICADO): la captura real del front
       // manda el espacio como %20; el literal " " sin codificar que había antes quedaba
       // como URL mal formada, aunque el servidor lo tolerara.
@@ -21111,6 +21128,35 @@
   // Celular al que se envió el último SMS de recordatorio (para mostrarlo en el aviso de
   // confirmación: el médico debe poder ver a qué número salió). Vacío = no se envió.
   let ultimoSmsEnviado = "";
+  // v18.0.109 (S+ flujo, C5) — EL DESENLACE DEL SMS AUTOMÁTICO SE DICE EN EL PANEL. Solo se
+  // conocía por consola; el panel post-cita no decía si salió o fue rechazado. Se anota por
+  // turno y, si el panel de esa cita está en pantalla, se pinta en su nota de SMS.
+  const _smsDesenlaces = new Map();   // turnoId -> { ok, cel, motivo, ts }
+  function _smsTextoDesenlace(turnoId) {
+    const d = _smsDesenlaces.get(String(turnoId || ""));
+    if (!d) return "";
+    return d.ok
+      ? "✓ SMS de recordatorio enviado al " + _mtrCelularMascarado(d.cel) + "."
+      : "⚠ El SMS de recordatorio NO se entregó" + (d.motivo ? " (" + d.motivo + ")" : "") + ". Reenvíelo desde aquí o entregue el recordatorio impreso.";
+  }
+  function _smsPintarDesenlace(turnoId) {
+    try {
+      const panel = document.getElementById("vgl-postcita-panel");
+      if (!panel || !panel.dataset || panel.dataset.turnoId !== String(turnoId || "")) return;
+      const n = panel.querySelector("#vgl-postcita-smsnota");
+      const txt = _smsTextoDesenlace(turnoId);
+      if (n && txt) { n.textContent = txt; if (n.classList) n.classList.remove("vgl-d-none"); }
+    } catch (e) {}
+  }
+  function _smsAnotarDesenlace(turnoId, ok, cel, motivo) {
+    try {
+      const k = String(turnoId || "");
+      if (!k) return;
+      _smsDesenlaces.set(k, { ok: !!ok, cel: String(cel || ""), motivo: String(motivo || ""), ts: Date.now() });
+      if (_smsDesenlaces.size > 50) { const primero = _smsDesenlaces.keys().next().value; _smsDesenlaces.delete(primero); }
+      _smsPintarDesenlace(k);
+    } catch (e) {}
+  }
 
   // [v14.2.0 — auditoría pre-producción 2026-08-18] Médicos para quienes TODA cita se
   // considera del programa RCV/Prevención, sin excepción (encargo del consultorio). Antes
@@ -21233,10 +21279,11 @@
               // a qué número la mandó. Se deja el celular usado en el propio registro para
               // que la próxima vez se pueda comparar, de un vistazo, contra el que el médico
               // cree haber escrito.
+              _smsAnotarDesenlace(turnoId, ok, cel, ok ? "" : (errorEnCuerpo ? "rechazado por el proveedor" : "respuesta " + ((r && r.status) || "sin conexión")));   // v18.0.109 (C5)
               if (ok) console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId, "· celular usado:", _mtrCelularMascarado(cel));
-              else console.warn("[Vigilante] EnviarSMS NO entregó el mensaje para el turno", turnoId, "· celular usado:", _mtrCelularMascarado(cel), "→ estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)", errorEnCuerpo ? ("· rechazo: " + String(errorEnCuerpo.mensaje || "").slice(0, 120)) : "");
+              else console.warn("[Vigilante] EnviarSMS NO entregó el mensaje para el turno", turnoId, "· celular usado:", _mtrCelularMascarado(cel), "→ estado", (r && r.status), "· cuerpo:", cuerpo ? sanitizePII(String(cuerpo)).slice(0, 120) : "(sin cuerpo legible)", errorEnCuerpo ? ("· rechazo: " + String(errorEnCuerpo.mensaje || "").slice(0, 120)) : "");
             })
-            .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
+            .catch((e) => { _smsAnotarDesenlace(turnoId, false, cel, "sin conexión"); console.warn("[Vigilante] falló el envío del SMS:", e); });
           ultimoSmsEnviado = cel;
         } else if (creada && S.smsRecordatorio) {
           console.warn("[Vigilante] sin celular válido: no se envía SMS");
@@ -21693,7 +21740,7 @@
       // v17.0.3 — mismo motivo que en el envío automático: el celular usado queda en el
       // registro para poder comparar, la próxima vez, contra el que el médico cree haber
       // escrito en la casilla.
-      console.log("[Vigilante] EnviarSMS (reenvío) → celular usado:", _mtrCelularMascarado(cel), "· estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)");
+      console.log("[Vigilante] EnviarSMS (reenvío) → celular usado:", _mtrCelularMascarado(cel), "· estado", (r && r.status), "· cuerpo:", cuerpo ? sanitizePII(String(cuerpo)).slice(0, 120) : "(sin cuerpo legible)");
       return {
         ok: ok,
         motivo: errorEnCuerpo
@@ -21738,6 +21785,46 @@
       const ex = extra || {};
       const lab = ex.lab || null;
       const cita = ex.cita || {};
+      const bloqueLab = !lab ? "" : `
+          ${ex.soloLab ? "" : `<div class="vgl-postcita-sep vgl-postcita-labsep"></div>`}
+          <div class="vgl-postcita-lab"><b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
+          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">Imprimir recordatorio de la toma</button>`;
+      const lineaLabFallo = ex.labFallo ? `<div class="vgl-postcita-warn vgl-postcita-labfallo">⚠ La toma de muestras NO quedó agendada: ${escapeHtml(String(ex.labFallo))}. Agéndela desde «Agendar labs» o directamente en AppCita.</div>` : "";
+      // ---- Recordatorio de la toma de laboratorio (no existe en Everest: se arma aquí) ----
+      const enlazarLabPrint = (p) => {
+        const labBtn = p.querySelector("#vgl-postcita-labprint");
+        if (labBtn && lab) labBtn.addEventListener("click", () => {
+          uxTrack("lab.imprimir");
+          imprimirRecordatorioLab({
+            nombre: nombreCompleto || patientNameFallback || "",
+            documento: ex.documento || "",
+            fechaIso: lab.fechaIso || "", fechaLegible: lab.fechaLegible || "",
+            hora: lab.hora || "", sede: lab.sede || S.sedeLabNombre || "",
+            radicado: lab.radicado || "",
+          });
+        });
+      };
+      // v18.0.109 (S+ flujo, C6) — si el panel de ESTA cita ya está en pantalla (el médico puede
+      // estar escribiendo el celular del reenvío), no se destruye para añadir la toma: solo se
+      // añade o actualiza el bloque de laboratorio.
+      const previo = document.getElementById("vgl-postcita-panel");
+      if (previo && previo.dataset && previo.dataset.citaId === String(citaId) && !ex.reabierto && (lab || ex.labFallo)) {
+        try {
+          const card = previo.querySelector(".vgl-postcita-card");
+          if (card) {
+            try { (previo.querySelectorAll(".vgl-postcita-labbloque") || []).forEach((n) => { try { n.remove(); } catch (e2) {} }); } catch (e) {}
+            try { if (previo.__vglLabBloque && typeof previo.__vglLabBloque.remove === "function") previo.__vglLabBloque.remove(); } catch (e) {}
+            const cont = document.createElement("div");
+            cont.className = "vgl-postcita-labbloque";
+            cont.innerHTML = lineaLabFallo + bloqueLab;
+            card.appendChild(cont);
+            previo.__vglLabBloque = cont;
+            enlazarLabPrint(cont);
+            try { uxTrack("cita.postcita.actualizado"); } catch (e) {}
+            return;
+          }
+        } catch (e) {}
+      }
       document.querySelectorAll("#vgl-postcita-panel").forEach((e) => e.remove());
       const panel = document.createElement("div");
       panel.id = "vgl-postcita-panel";
@@ -21754,23 +21841,19 @@
       const soloLab = !!ex.soloLab;
       const lineaCita = [cita.fechaLegible || "", cita.hora ? "· " + cita.hora : "", cita.servicio ? "· " + cita.servicio : ""]
         .filter(Boolean).join(" ");
-      const bloqueLab = !lab ? "" : `
-          ${ex.soloLab ? "" : `<div class="vgl-postcita-sep"></div>`}
-          <div class="vgl-postcita-lab"><b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
-          <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">Imprimir recordatorio de la toma</button>`;
+      const smsInicial = _smsTextoDesenlace(ex.turnoId) || (ex.turnoId && ultimoSmsEnviado ? "⏳ SMS de recordatorio: enviando al " + _mtrCelularMascarado(ultimoSmsEnviado) + "…" : "");
       panel.innerHTML = `
         <div class="vgl-postcita-card">
           <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
           <div class="vgl-postcita-title">${soloLab ? "✅ Toma de muestras agendada" : (ex.reabierto ? "🖨 Recordatorio de la cita" : "✅ Cita creada")}</div>
           <div class="vgl-postcita-sub">${escapeHtml(nombreCompleto || patientNameFallback || "")}${lineaCita ? " · " + escapeHtml(lineaCita) : ""}</div>
           ${soloLab ? "" : avisoEpsFaltante}
-          ${ex.labFallo ? `<div class="vgl-postcita-warn">⚠ La toma de muestras NO quedó agendada: ${escapeHtml(String(ex.labFallo))}. Agéndela desde «Agendar labs» o directamente en AppCita.</div>` : ""}
           ${soloLab ? "" : `<button class="vgl-agm-btn sec" id="vgl-postcita-print">🖨️ Imprimir recordatorio de cita</button>
           ${ex.turnoId ? `<div id="vgl-postcita-smsbox" class="vgl-postcita-smsbox">
             <div class="vgl-postcita-smstit">📱 Reenviar el recordatorio al celular</div>
             <input type="tel" id="vgl-postcita-smsto" class="vgl-agm-input" placeholder="celular del paciente" autocomplete="off" value="${escapeHtml(String(ex.celular || ""))}">
             <button class="vgl-agm-btn pri" id="vgl-postcita-smsgo">Enviar mensaje</button>
-            <div class="vgl-postcita-nota vgl-d-none" id="vgl-postcita-smsnota"></div>
+            <div class="vgl-postcita-nota${smsInicial ? "" : " vgl-d-none"}" id="vgl-postcita-smsnota">${escapeHtml(smsInicial)}</div>
           </div>` : `<div class="vgl-postcita-nota" id="vgl-postcita-smsnota">Esta cita no dejó el número interno que el mensaje necesita. Entréguele el recordatorio impreso.</div>`}
           ${/* v17.1.0 (#147) — «Enviar al correo» RETIRADO por decisión del médico. Nunca
                 llegó a funcionar: necesitaba que se capturara la llamada real que hace
@@ -21781,9 +21864,11 @@
           ${ex.reabierto ? `<div class="vgl-postcita-sep"></div>
           <button class="vgl-agm-btn sec" id="vgl-postcita-cancelar">🗑 Cancelar esta cita</button>
           <div class="vgl-postcita-nota">Anula la cita en Everest. Si ya se le mandó el mensaje al paciente, avísele.</div>` : ""}`}
-          ${bloqueLab}
+          <div class="vgl-postcita-labbloque">${lineaLabFallo}${bloqueLab}</div>
         </div>
       `;
+      panel.dataset.citaId = String(citaId);
+      panel.dataset.turnoId = String(ex.turnoId || "");
       document.body.appendChild(panel);
       const cerrar = () => { try { panel.innerHTML = ""; panel.remove(); } catch (e) {} };
       panel.querySelector("#vgl-postcita-x").addEventListener("click", cerrar);
@@ -21890,18 +21975,7 @@
           uxTrack("cita.correo.fallo");
         }
       });
-      // ---- Recordatorio de la toma de laboratorio (no existe en Everest: se arma aquí) ----
-      const labBtn = panel.querySelector("#vgl-postcita-labprint");
-      if (labBtn && lab) labBtn.addEventListener("click", () => {
-        uxTrack("lab.imprimir");
-        imprimirRecordatorioLab({
-          nombre: nombreCompleto || patientNameFallback || "",
-          documento: ex.documento || "",
-          fechaIso: lab.fechaIso || "", fechaLegible: lab.fechaLegible || "",
-          hora: lab.hora || "", sede: lab.sede || S.sedeLabNombre || "",
-          radicado: lab.radicado || "",
-        });
-      });
+      enlazarLabPrint(panel);
       setTimeout(cerrar, 300000); // 5 min: no queda pegado en pantalla toda la jornada si el médico lo ignora
     } catch (e) {}
   }
@@ -24913,8 +24987,8 @@
 
             <div id="vgl-agm-sms-box" class="vgl-agm-cell vgl-agm-c6 vgl-agm-cell-sms">
               <label class="vgl-agm-check-lbl">
-                <input type="checkbox" id="vgl-agm-sms-chk" checked>
-                <span>📱 Enviar SMS de recordatorio al paciente</span>
+                <input type="checkbox" id="vgl-agm-sms-chk" ${(typeof S !== "undefined" && S.smsRecordatorio === false) ? "disabled" : "checked"}>
+                <span>📱 Enviar SMS de recordatorio al paciente${(typeof S !== "undefined" && S.smsRecordatorio === false) ? " (apagado en Ajustes)" : ""}</span>
               </label>
               <div class="vgl-agm-fieldrow">
                 <label for="vgl-agm-sms-tel">Celular:</label>
@@ -25773,7 +25847,9 @@
         confirmBtn.disabled = false;
         confirmBtn.textContent = `✓ Sí, Crear Cita en ${selectedEspName} (${_preseleccion.horaTxt})`;
         if (step2Next) step2Next.disabled = false;
-        markAgendamientoPendiente(apt.doc_id);
+        // v18.0.109 (S+ flujo, C16) — la PRESELECCIÓN ⭐ no es una decisión del médico: abrir el
+        // cuadro para mirar no deja «🗓️ SIN TERMINAR» en la tarjeta (contrato de markAgendamientoPendiente).
+        // La marca la pone solo el clic en un turno (arriba).
         try { _pintarPlanLinea(); } catch (e) {}
       } else {
         // v17.6.13 — sin sugerencia, el botón explica por qué sigue apagado en vez de
@@ -26856,7 +26932,9 @@
         // (rechazo del proveedor de SMS, sin red) el médico leía "enviado" sobre un mensaje
         // que nunca llegó. Se cambia el verbo a lo único que aquí se sabe con certeza: que
         // la petición se envió, no que el paciente la recibió.
-        notify("VERDE", "✅ Cita asignada exitosamente",
+        // v18.0.109 (S+ flujo, C18) — «UN AVISO = UN CANAL VISIBLE»: el panel post-cita ya lo dice;
+        // el aviso solo sale si la pestaña no se está mirando (entonces va al sistema).
+        if (_pestanaSinAtencion()) notify("VERDE", "✅ Cita asignada exitosamente",
           `Paciente: ${patientName}\nFecha: ${fechaElegida.fmt} · Hora: ${horaTxt}`
           + (ultimoSmsEnviado ? `\nSe solicitó el envío del SMS de recordatorio al ${ultimoSmsEnviado} (revise la consola si el paciente dice no haberlo recibido).` : `\nSin SMS de recordatorio.`),
           false, "cita|" + apt.doc_id + "|" + fechaElegida.iso);
@@ -28390,7 +28468,8 @@
         if (parcial) {
           notify("AMBAR", "Órdenes incompletas", `${patientName} · ${creadasCount} de ${creadasCount + fallidasCount} órdenes quedaron creadas. ${fallidasCount === 1 ? "Falta 1: reintente solo esa" : `Faltan ${fallidasCount}: reintente solo esas`} en el módulo.`, true); // [COPY-UX]
         } else {
-          notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]
+          // v18.0.109 (C18) — el bloque verde del modal ya lo dice; el aviso solo si la pestaña no se mira.
+          if (_pestanaSinAtencion()) notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]
         }
         // v17.1.0 (#146) — RETIRADO `bumpStat("atiempo")`, misma razón que en el
         // agendamiento: generar órdenes de PyM no es una llegada puntual, y estaba
@@ -28417,7 +28496,7 @@
         }
         uxTrack("ordenes.fallo");
         // Aquí ya sí es cierto: creadasCount === 0, no quedó NADA en el sistema.
-        alert("No se pudo generar ninguna de las órdenes en el sistema de órdenes. No quedó nada creado: puede reintentar sin riesgo de duplicar."); // [COPY-UX]
+        showToast("ROJO", "Órdenes · ninguna se creó", "No se pudo generar ninguna de las órdenes en el sistema de órdenes. No quedó nada creado: puede reintentar sin riesgo de duplicar.", true, "ord|fallo|" + apt.doc_id);   // v18.0.109 (C13): sin alert() nativo // [COPY-UX]
       }
     });
   }
@@ -42129,10 +42208,18 @@
       };
       const closeMod = () => {
         try {
-          if (_hayBorradoresSinInsertar() && typeof confirm === "function") {
-            try {
-              if (!confirm("Hay borradores sin insertar en la historia. ¿Cerrar de todos modos? Se perderán.")) return;
-            } catch (e) {}
+          // v18.0.109 (S+ flujo, C13) — sin confirm() nativo (regla propia del proyecto): doble toque
+          // en el mismo ✕, como el resto de confirmaciones del script. El primer toque avisa y
+          // arma; el segundo, dentro de 8 s, cierra y pierde los borradores.
+          if (_hayBorradoresSinInsertar()) {
+            const x = $("#vgl-ia-x");
+            if (x && x.dataset && x.dataset.cerrarOk !== "1") {
+              x.dataset.cerrarOk = "1";
+              try { x.setAttribute("title", "Hay borradores sin insertar: pulse otra vez para cerrar y perderlos"); } catch (e) {}
+              try { showToast("AMBAR", "Redactor · borradores sin insertar", "Hay borradores sin insertar en la historia. Pulse otra vez ✕ para cerrar y perderlos, o insértelos primero.", false, "ia|cerrar"); } catch (e) {}
+              setTimeout(() => { try { x.dataset.cerrarOk = ""; } catch (e) {} }, 8000);
+              return;
+            }
           }
           if (!completado) uxTrack("fn.ia.abandon");
           modal.remove();

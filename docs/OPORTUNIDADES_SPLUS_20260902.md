@@ -61,9 +61,9 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | B6 | «Enviar órdenes al correo» da por enviado con solo `resp.ok` (un 200 con `error:true` se anuncia como enviado) | media | ✅ v18.0.108 (un 200 con `error:true` ya no es «enviado»; cuerpo vacío o no JSON no cambia el veredicto) |
 | B7 | Bitácora (flight recorder) pisada entre pestañas | baja | pendiente |
 | B8 | `repBeacon` manda `_intentos` (el blindaje de v18.0.66 solo en `repPost`) | baja | ✅ v18.0.108 |
-| B9 | Las notificaciones del SO llevan nombre + cédula (Centro de actividades de Windows en un PC compartido) | baja | pendiente |
-| B10 | La consola de EnviarSMS imprime 500 caracteres del cuerpo crudo | baja | pendiente |
-| B11 | Doble clic en «Exámenes»: sin deshabilitar ni guarda de vuelo; el segundo pisa el veredicto | baja | pendiente |
+| B9 | Las notificaciones del SO llevan nombre + cédula (Centro de actividades de Windows en un PC compartido) | baja | ✅ v18.0.109 (cédula enmascarada en lo que sale al sistema) |
+| B10 | La consola de EnviarSMS imprime 500 caracteres del cuerpo crudo | baja | ✅ v18.0.109 (extracto saneado de 120) |
+| B11 | Doble clic en «Exámenes»: sin deshabilitar ni guarda de vuelo; el segundo pisa el veredicto | baja | ✅ v18.0.109 (guarda de vuelo en el botón) |
 | B12 | Respaldo de identidad por equipo `S.medicoId/S.medicoNombre` en 7 llamadas, sin campo en Ajustes pese al mensaje que manda a buscarlo | baja | ⚖️ decidir (retirarlo o exponerlo atado al login) |
 
 ## C. El flujo real de la consulta (prioridad del auditor: 1 = máxima)
@@ -74,20 +74,20 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | C2 | El aviso «Pendientes de este paciente» llega 5-15 s después de abrir la historia y roba el foco mientras el médico escribe (Enter pulsa «Entendido» y no vuelve en la jornada) | 1 | ✅ v18.0.107 (no roba el foco si el activo es un campo editable de Everest fuera del cuadro) |
 | C3 | Al salir de una casilla de texto libre se borra el resumen: el botón «Panel» desaparece, los widgets de Conducta se esconden hasta 30 s + red, Agendar vuelve a «Analizando…» | 1 | ✅ v18.0.107 (recalculado en el acto con lo de pantalla, marcado «desactualizado», cálculo completo en segundo plano; el dock dice «actualizando…») |
 | C4 | Si la cita se crea pero la toma de muestras falla, todo lo visible dice éxito y el fallo sale por el HUD «Centinela PyM» | 1 | ✅ v18.0.107 (motivo real del fallo en el botón, aviso ámbar fijo y línea roja en el panel post-cita) |
-| C5 | El resultado del SMS automático solo se conoce en la consola | 2 | pendiente |
-| C6 | El panel post-cita se destruye y se recrea cuando AppCita confirma la toma | 2 | pendiente |
+| C5 | El resultado del SMS automático solo se conoce en la consola | 2 | ✅ v18.0.109 (desenlace por turno, pintado en la nota de SMS del panel post-cita) |
+| C6 | El panel post-cita se destruye y se recrea cuando AppCita confirma la toma | 2 | ✅ v18.0.109 (solo se añade o sustituye el bloque de laboratorio) |
 | C7 | Redactor: «Generando con…» fijo hasta 7 modelos × 25 s, sin cancelar ni «Generar todo» | 2 | pendiente |
-| C8 | Ajuste «SMS de recordatorio» apagado: la casilla nace marcada, el SMS de la cita se suprime y el de laboratorio sale igual | 2 | pendiente |
+| C8 | Ajuste «SMS de recordatorio» apagado: la casilla nace marcada, el SMS de la cita se suprime y el de laboratorio sale igual | 2 | ✅ v18.0.109 (casilla apagada y rotulada; la toma va con Telefono=0) |
 | C9 | Terminología cruzada («Exámenes» nombra tres cosas; captions remiten a nombres que no están en el dock) | 2 | pendiente (diccionario único + prueba) |
 | C10 | Uroanálisis: nadie pregunta si hay síntomas urinarios; el motor queda en «REQUIERE SÍNTOMAS» | 2 | pendiente (pregunta en la escalera del reconciliador) |
 | C11 | El modal «Laboratorios» ignora la precarga y recalcula todo (3-6 s y red duplicada) | 2 | ⚖️ decidir (regla «el clic consulta en vivo», v12.3.35) |
 | C12 | Con factores pendientes el botón «Panel» no existe y el ayudante «Faltan antecedentes» queda inalcanzable | 2 | ⚖️ decidir (botón atenuado «📝 Faltan antecedentes») |
-| C13 | `alert()`/`confirm()` nativos siguen vivos en Ordenar y Redactor | 3 | pendiente |
-| C14 | `persist` no hace nada en toasts VERDE/AZUL (la leyenda de colores se cierra sola) | 3 | pendiente |
+| C13 | `alert()`/`confirm()` nativos siguen vivos en Ordenar y Redactor | 3 | ✅ v18.0.109 (doble toque en el ✕ del Redactor; aviso rojo en Ordenar) |
+| C14 | `persist` no hace nada en toasts VERDE/AZUL (la leyenda de colores se cierra sola) | 3 | ✅ v18.0.109 |
 | C15 | Salto de maquetación del recuadro renal en «Laboratorios» | 3 | pendiente |
-| C16 | «SIN TERMINAR» se marca con solo abrir Agendar (la preselección ⭐ llama a `markAgendamientoPendiente`) | 3 | pendiente |
+| C16 | «SIN TERMINAR» se marca con solo abrir Agendar (la preselección ⭐ llama a `markAgendamientoPendiente`) | 3 | ✅ v18.0.109 (solo el clic en un turno) |
 | C17 | Agendar exige 3-7 clics por cita | 3 | ⚖️ decidir (stepper de 3 pasos) |
-| C18 | Éxitos anunciados dos veces (panel + toast) | 4 | pendiente |
+| C18 | Éxitos anunciados dos veces (panel + toast) | 4 | ✅ v18.0.109 (el toast solo si la pestaña no se mira) |
 | C19 | Red que compite consigo misma al abrir Agendar (sondeo ±7 días con 3 en vuelo + `cargarHoras` duplicado; `BuscarPacienteDetallado` repetido) | 4 | pendiente |
 | C20 | «Exámenes» siempre dos clics (el chooser no recuerda ni admite teclado) | 4 | ⚖️ decidir |
 | C21 | Cerrar con clic fuera solo en algunos modales | 5 | pendiente (regla única) |

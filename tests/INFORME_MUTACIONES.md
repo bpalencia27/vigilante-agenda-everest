@@ -11432,3 +11432,52 @@ el blindaje de v18.0.66 solo estaba en `repPost`. Una línea.
 | 309 | `repBeacon` vuelve a mandar la fila cruda (**el defecto B8**) | *suite_23: v18.0.108 (S+ B8): repBeacon manda la fila LIMPIA, sin campos internos (_intentos), como repPost* | Sí |
 
 Banco completo: **3.014 comprobaciones pasan, 0 fallan.**
+
+## v18.0.109 — oportunidades S+ de flujo (prioridad 2-4) y de robustez (baja): diez ítems de bajo riesgo
+
+Tercera entrega de lo que el médico pidió («aplica la corrección que sugieres a las
+oportunidades S+»). Quedan fuera, a propósito, los que cambian hábitos o son proyectos (C7,
+C9, C10, C15, C19, C21, B7) y los ⚖️ que son decisión suya.
+
+- **C5 — el desenlace del SMS automático se dice en el panel post-cita.** Solo se conocía por
+  consola. Ahora se anota por turno (`_smsAnotarDesenlace`) y, si el panel de esa cita está
+  en pantalla, su nota de SMS dice «✓ enviado al 300****33» o «NO se entregó (motivo):
+  reenvíelo desde aquí».
+- **C6 — el panel post-cita no se destruye cuando AppCita confirma la toma.** Se recreaba
+  entero (lo que el médico tecleaba se perdía). Si el panel de ESTA cita ya está, solo se añade
+  o sustituye el bloque de laboratorio.
+- **C8 — el interruptor «Enviar SMS de recordatorio» manda sobre los dos SMS.** Apagado en
+  Ajustes, la casilla del modal de Agendar nacía marcada, el SMS de la cita se suprimía y el de
+  la toma salía igual. Ahora la casilla nace apagada (y lo dice) y la toma va con `Telefono=0`.
+- **C13 — sin `confirm()` ni `alert()` nativos.** El cierre del Redactor con borradores sin
+  insertar pasa a doble toque en el mismo ✕ (con aviso ámbar); el «no se pudo generar ninguna
+  orden» de Ordenar pasa a un aviso rojo fijo.
+- **C14 — `persist` también manda en VERDE/AZUL.** La leyenda de colores y «Órdenes generadas»
+  (persist=true) se cerraban solos a los 9 s.
+- **C16 — «🗓️ SIN TERMINAR» solo con el clic del médico en un turno.** La preselección ⭐ lo
+  marcaba con solo abrir Agendar para mirar, contra el contrato de `markAgendamientoPendiente`.
+- **C18 — un aviso = un canal visible.** El toast verde de «Cita asignada» y el de «Órdenes
+  generadas» duplicaban el panel post-cita y el bloque verde del modal; ahora solo salen si la
+  pestaña no se está mirando (entonces van al sistema).
+- **B9 — las notificaciones del sistema van sin cédula.** En el Centro de actividades de un PC
+  compartido salían nombre y cédula; ahora la cédula va enmascarada (●●●455) y el nombre queda.
+  Dentro de la página el texto sigue completo.
+- **B10 — la consola de EnviarSMS ya no imprime 500 caracteres del cuerpo crudo**, sino un
+  extracto saneado de 120.
+- **B11 — doble clic en «Exámenes».** Con una consulta en vuelo, el segundo clic no abre otro
+  chooser ni pisa el veredicto del primero (`btn.dataset.vglEnCurso`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 310 | `persist` vuelve a ignorarse en VERDE/AZUL (**C14**) | *suite_42: v18.0.109 (C14): un aviso VERDE con persist=true NO se cierra solo; sin persist, sí* | Sí |
+| 311 | `_vglSinCedulas` devuelve el texto tal cual (**B9**) | *suite_42: v18.0.109 (B9): lo que sale al sistema va sin cédula…* | Sí |
+| 312 | `_smsPintarDesenlace` nunca pinta (**C5**) | *suite_15: v18.0.109 (C5/C6): el panel post-cita dice el desenlace del SMS automático…* | Sí |
+| 313 | el panel post-cita vuelve a recrearse para añadir la toma (**C6**) | *suite_15: v18.0.109 (C5/C6)…* («es el MISMO panel») | Sí |
+| 314 | el SMS de la toma ignora el interruptor de Ajustes (**C8**) | *suite_15: v18.0.109 (C8): con «Enviar SMS de recordatorio» apagado en Ajustes, la toma de laboratorio tampoco manda SMS…* | Sí |
+| 315 | la preselección ⭐ vuelve a marcar «SIN TERMINAR» (**C16**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 316 | sin la guarda de vuelo del botón «Exámenes» (**B11**) | *suite_15: v18.0.109 (B11): con una consulta de exámenes en vuelo, un segundo clic en «Exámenes» no abre otro chooser* | Sí |
+| 317 | el toast verde de «Cita asignada» vuelve a salir siempre (**C18**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 318 | la consola vuelve a imprimir 500 caracteres del cuerpo (**B10**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 319 | el Redactor cierra sin preguntar con borradores sin insertar (**C13**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+
+Banco completo: **3.020 comprobaciones pasan, 0 fallan.**

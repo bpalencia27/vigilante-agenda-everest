@@ -4958,5 +4958,88 @@ module.exports = {
       t.noLanza(() => c.api._vglMinDescartarDeOtroPaciente("333333333"),
         "sin paneles minimizados no hay nada que descartar");
     });
+
+    // =====================================================================
+    // v18.0.109 — OPORTUNIDADES S+ DEL FLUJO (C5, C6, C8, C13, C16, C18) Y DE ROBUSTEZ (B10, B11)
+    // =====================================================================
+    t.caso("v18.0.109 (C5/C6): el panel post-cita dice el desenlace del SMS automático y, cuando AppCita confirma la toma, no se destruye: solo se añade el bloque de laboratorio", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      let panelNode = null;
+      const getOrig = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-postcita-panel" ? panelNode : getOrig(id));
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { turnoId: "900", celular: "3001112233", cita: { fechaLegible: "01/10/2026" } });
+      panelNode = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      t.igual(panelNode.dataset.citaId, "7813686", "el panel sabe de qué cita es");
+      t.igual(panelNode.dataset.turnoId, "900", "y de qué turno (para el SMS)");
+      c.api._smsAnotarDesenlace("900", true, "3001112233", "");
+      t.cierto(/SMS de recordatorio enviado/.test(panelNode.querySelector("#vgl-postcita-smsnota").textContent), "cuando el SMS sale, el panel lo dice (antes: solo la consola)");
+      c.api._smsAnotarDesenlace("900", false, "3001112233", "rechazado por el proveedor");
+      t.cierto(/NO se entregó/.test(panelNode.querySelector("#vgl-postcita-smsnota").textContent) && /rechazado por el proveedor/.test(panelNode.querySelector("#vgl-postcita-smsnota").textContent), "y si lo rechazan, también, con el motivo");
+      c.api._smsAnotarDesenlace("901", true, "3001112233", "");
+      t.cierto(/NO se entregó/.test(panelNode.querySelector("#vgl-postcita-smsnota").textContent), "el desenlace de OTRO turno no pisa la nota de este panel");
+      // AppCita confirma la toma: el panel de ESTA cita no se recrea
+      const cuantos = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").length;
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { turnoId: "900", cita: { fechaLegible: "01/10/2026" }, lab: { fechaIso: "2026-09-25", fechaLegible: "25/09/2026", hora: "7:00 a. m." } });
+      const ahora = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel");
+      t.cierto(ahora.length === cuantos && ahora.pop() === panelNode, "es el MISMO panel (antes: se destruía y se recreaba, y lo tecleado se perdía)");
+      const card = panelNode.querySelector(".vgl-postcita-card");
+      t.cierto(card.children.some((n) => String(n.innerHTML || "").includes("Toma de laboratorio")), "y el bloque de la toma quedó añadido");
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { turnoId: "900", cita: { fechaLegible: "01/10/2026" }, labFallo: "motivo de prueba" });
+      t.cierto(card.children.filter((n) => String(n.innerHTML || "").includes("NO quedó agendada")).length === 1 && card.children.filter((n) => String(n.innerHTML || "").includes("Toma de laboratorio")).length === 0, "una actualización posterior sustituye el bloque, no lo duplica");
+      // una cita DISTINTA sí abre panel nuevo
+      c.api.mostrarPanelPostCita(9999, "EPS", "OTRO PACIENTE PRUEBA", "", { turnoId: "950", cita: { fechaLegible: "02/10/2026" } });
+      t.cierto(c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop() !== panelNode, "otra cita: panel nuevo");
+      c.env.doc.getElementById = getOrig;
+    });
+
+    await t.casoAsync("v18.0.109 (C8): con «Enviar SMS de recordatorio» apagado en Ajustes, la toma de laboratorio tampoco manda SMS (Telefono=0) y la casilla del modal nace apagada", async () => {
+      const urls = [];
+      const gmxhr = (o) => {
+        const u = String(o.url || "");
+        if (/ObtenerTurnosPorFecha/.test(u)) { setTimeout(() => o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ Hora: "07:00:00", AgendaId: 5 }] }) }), 0); return; }
+        if (/AgendarCita/.test(u)) { urls.push(u); setTimeout(() => o.onload({ status: 200, responseText: JSON.stringify({ error: false, radicado: 9001 }) }), 0); return; }
+        if (o.onerror) o.onerror("url no simulada");
+      };
+      const cOn = cargar({ silencioso: true, gmxhr });
+      cOn.api.__S.smsRecordatorio = true;
+      await cOn.api.apiLaboratorioAgendarAuto("111111", "2026-10-01", "07:00:00", "300 111 2233");
+      t.cierto(urls.length === 1 && /Telefono=3001112233/.test(urls[0]), "con el ajuste encendido, el SMS de la toma lleva el celular");
+      const cOff = cargar({ silencioso: true, gmxhr });
+      cOff.api.__S.smsRecordatorio = false;
+      await cOff.api.apiLaboratorioAgendarAuto("111111", "2026-10-01", "07:00:00", "300 111 2233");
+      t.cierto(urls.length === 2 && /Telefono=0(&|$)/.test(urls[1]), "con el ajuste apagado, Telefono=0 (antes: el SMS de la toma salía igual): " + urls[1]);
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-agm-sms-chk" \$\{\(typeof S !== "undefined" && S\.smsRecordatorio === false\) \? "disabled" : "checked"\}/.test(src), "la casilla del modal de Agendar nace apagada y deshabilitada cuando el ajuste está apagado (antes: marcada)");
+    });
+
+    t.caso("v18.0.109 (C13/C16/C18/B10, fuente): sin confirm()/alert() nativos, «SIN TERMINAR» solo con el clic en un turno, un solo canal visible de éxito, y la consola sin cuerpos crudos", () => {
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const codigo = src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      t.falso(/[^A-Za-z_.$]confirm\(/.test(codigo), "no queda ningún confirm() nativo en código (el del Redactor pasó a doble toque)");
+      t.falso(/[^A-Za-z_.$]alert\(/.test(codigo), "ni ningún alert() nativo (el de Ordenar pasó a un aviso rojo)");
+      t.cierto(/if \(_hayBorradoresSinInsertar\(\)\) \{\s*const x = \$\("#vgl-ia-x"\);\s*if \(x && x\.dataset && x\.dataset\.cerrarOk !== "1"\)/.test(src) && /showToast\("AMBAR", "Redactor · borradores sin insertar"/.test(src), "el cierre del Redactor con borradores sin insertar arma un segundo toque y avisa");
+      t.igual((src.match(/markAgendamientoPendiente\(apt\.doc_id\)/g) || []).length, 1, "«🗓️ SIN TERMINAR» se marca desde UN solo sitio: el clic en un turno (la preselección ⭐ ya no)");
+      t.cierto(/if \(_pestanaSinAtencion\(\)\) notify\("VERDE", "✅ Cita asignada exitosamente"/.test(src) && /if \(_pestanaSinAtencion\(\)\) notify\("VERDE", "Órdenes generadas"/.test(src), "el aviso verde de éxito solo sale si la pestaña no se está mirando (el panel/bloque ya lo dice)");
+      t.falso(/cuerpo\.slice\(0, 500\)/.test(src), "la consola de EnviarSMS ya no imprime 500 caracteres del cuerpo crudo");
+      t.cierto(/sanitizePII\(String\(cuerpo\)\)\.slice\(0, 120\)/.test(src), "sino un extracto saneado");
+    });
+
+    t.caso("v18.0.109 (B11): con una consulta de exámenes en vuelo, un segundo clic en «Exámenes» no abre otro chooser", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : null);
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 111111", closest: () => null }] : []);
+      c.api.createLabInjectorUI();
+      const btn = c.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      const choosers = () => c.env.doc.body.children.filter((n) => n.id === "vgl-chooser-modal").length;
+      btn.dataset.vglEnCurso = "1";
+      btn.onclick();
+      t.igual(choosers(), 0, "en vuelo: el clic no abre el chooser (antes: el segundo pisaba el veredicto del primero)");
+      btn.dataset.vglEnCurso = "";
+      btn.onclick();
+      t.igual(choosers(), 1, "sin nada en vuelo, el clic abre el chooser como siempre");
+    });
+
   },
 };

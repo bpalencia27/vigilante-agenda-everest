@@ -702,5 +702,42 @@ module.exports = {
         "la constante debe derivarse de GM_info, no ser solo un literal que alguien pueda olvidar de actualizar");
     });
 
+
+    // v18.0.109 — S+ flujo (C14): `persist` no hacía nada en los avisos VERDE/AZUL: la leyenda
+    // de colores y «Órdenes generadas» (persist=true) se cerraban solos a los 9 s.
+    await t.casoAsync("v18.0.109 (C14): un aviso VERDE con persist=true NO se cierra solo; sin persist, sí", async () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.doc; const crearBase = doc.createElement;
+      doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { const k = String(sel).replace(/:not\([^)]*\)/g, ""); if (!memo.has(k)) memo.set(k, doc.createElement("div")); return memo.get(k); }; e.querySelectorAll = () => []; return e; };
+      const bandeja = doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      const getOrig = doc.getElementById;
+      doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : getOrig(id));
+      c.api._renderToast("VERDE", "Leyenda de colores", "se queda", true, "");
+      c.api._renderToast("VERDE", "Aviso normal", "se va solo", false, "");
+      t.igual(bandeja.children.length, 2, "montaje: los dos avisos se pintaron");
+      await new Promise((r) => setTimeout(r, 40));   // el arnés capa los 9 s de autocierre a 1 ms
+      const vivos = bandeja.children.filter((n) => !(n.classList && n.classList.contains && n.classList.contains("out")));
+      const titulos = vivos.map((n) => { try { return String(n.querySelector(".vgl-toast-title").textContent); } catch (e) { return ""; } });
+      t.cierto(titulos.includes("Leyenda de colores"), "el persistente sigue (antes: se cerraba a los 9 s): " + JSON.stringify(titulos));
+      t.falso(titulos.includes("Aviso normal"), "el normal se cerró solo, como siempre");
+      doc.getElementById = getOrig;
+    });
+
+    // v18.0.109 — S+ robustez (B9): las notificaciones del SISTEMA (Centro de actividades de
+    // Windows, PC compartido) llevaban nombre + cédula. Ahora van sin cédula; el aviso dentro de
+    // la página conserva el texto completo.
+    t.caso("v18.0.109 (B9): lo que sale al sistema va sin cédula (nombre sí); dentro de la página el texto sigue completo", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._vglSinCedulas("PACIENTE PRUEBA UNO · CC 1122334455 · 07:00"), "PACIENTE PRUEBA UNO · CC ●●●455 · 07:00", "la cédula se enmascara y el nombre y la hora quedan");
+      const capturadas = [];
+      c.ctx.Notification = class { constructor(titulo, opciones) { capturadas.push([titulo, (opciones && opciones.body) || ""]); } static get permission() { return "granted"; } close() {} };
+      const salio = c.api._notificarSistema("ROJO", "⛔ PACIENTE PRUEBA UNO", "CC 1122334455 · llegó tarde", true, "prueba|b9");
+      t.cierto(salio && capturadas.length === 1, "montaje: salió por el sistema");
+      t.cierto(!/1122334455/.test(capturadas[0][1]) && /●●●455/.test(capturadas[0][1]), "el cuerpo que ve Windows no lleva la cédula: " + capturadas[0][1]);
+      t.cierto(/PACIENTE PRUEBA UNO/.test(capturadas[0][0]), "y el nombre sí, para saber de quién es");
+      delete c.ctx.Notification;
+    });
+
   },
 };
