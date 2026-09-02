@@ -2853,8 +2853,21 @@ module.exports = {
       t.falso(textoSlots.includes("OTRO PROFESIONAL"), "nunca se muestra un turno de otro profesional, ni de paso ni como último recurso");
       t.cierto(textoSlots.includes("ANA MARIA PEREZ") && textoSlots.includes("07:00 AM"), "terminó mostrando el turno de la agenda propia, en el día que sí la tenía");
       const chipsEl = modal.querySelector("#vgl-day-chips");
-      const activo = [...chipsEl.children].find((b) => b.classList.contains("active"));
+      // v18.0.122 — REPORTE EN VIVO (02-sep): esto usaba `find`, que se queda con el PRIMER
+      // chip marcado y por eso no habría notado nunca lo que el médico vio en pantalla: DOS
+      // chips marcados como «fecha seleccionada» a la vez. Se cuenta, no se busca.
+      const activos = [...chipsEl.children].filter((b) => b.classList.contains("active"));
+      t.igual(activos.length, 1, "un solo día marcado como seleccionado, nunca dos");
+      const activo = activos[0];
       t.cierto(!!activo && activo.className.includes("vgl-agm-pbtn-sabado"), "el chip activo saltó solo al sábado, el único día del rango con agenda propia real");
+      // Y el día que se ABANDONÓ —el centro, el del 🎯, que es de donde salió el salto— deja
+      // de ofrecerse como si fuera elegible. Se identifica por su 🎯, no por «alguno apagado»:
+      // el sondeo de fondo apaga otros días por su cuenta y eso no probaría nada de esto.
+      const centro = [...chipsEl.children].find((b) => String(b.innerHTML || "").includes("🎯"));
+      t.cierto(!!centro, "el chip central (🎯) sigue en la fila");
+      t.falso(centro.classList.contains("active"), "y ya NO está marcado como seleccionado: la selección se movió");
+      t.cierto(centro.disabled === true && centro.classList.contains("vgl-agm-pbtn-sinagenda"),
+        "queda apagado y tachado, no compitiendo con el día al que se saltó");
     });
 
     // v17.58.1 — TELEMETRÍA (29-ago): BuscarCitasDisponibles promedia ~4,7 s en la flota.
@@ -3531,12 +3544,42 @@ module.exports = {
       const modal = cA.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const chipsEl = modal.querySelector("#vgl-day-chips");
       await esperar(500);
-      const activo = [...chipsEl.children].find((b) => b.classList.contains("active"));
+      // v18.0.122 — contar, no buscar: ver la nota del caso de v14.0.1 más arriba.
+      const activos = [...chipsEl.children].filter((b) => b.classList.contains("active"));
+      t.igual(activos.length, 1, "un solo día marcado como seleccionado tras el sondeo");
+      const activo = activos[0];
       t.cierto(!!activo, "el chip activo (día centro) sigue en el DOM tras el sondeo, aunque estaba confirmado vacío");
       // v18.0.118 (UI/UX #9) — se apagan en vez de retirarse; el activo nunca se toca.
       const apagados = [...chipsEl.children].filter((b) => b.disabled === true && b.classList.contains("vgl-agm-pbtn-sinagenda"));
       t.cierto(apagados.length > 0, "los días NO activos confirmados vacíos quedaron apagados");
       t.falso(activo.disabled === true, "y el chip activo sigue vivo");
+    });
+
+    // =====================================================================
+    // v18.0.122 — REPORTE EN VIVO (02-sep). La causa raíz (una fecha duplicada en el rango)
+    // está fijada en suite_02. Esto fija la SEGUNDA línea de defensa: la limpieza de la marca
+    // «seleccionado» no puede volver a depender de un registro por ISO. Un mapa pierde un
+    // botón en cuanto dos chips comparten fecha, y el botón perdido se queda marcado para
+    // siempre — que es exactamente lo que el médico vio. `renderDayChips` vive en el cierre
+    // de `openAgendamientoModal`, así que se protege por texto fuente.
+    // =====================================================================
+    t.caso("v18.0.122: la marca «seleccionado» se limpia sobre la lista COMPLETA de chips, nunca sobre el mapa por fecha", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      t.cierto(/let diaBotonesTodos = \[\];/.test(src), "existe la lista completa de chips del día");
+      t.cierto(/const _limpiarDiaActivo = \(\) => \{/.test(src), "y una sola función que limpia la marca");
+      t.cierto(/diaBotonesTodos\.forEach\(\(b\) => \{ if \(b && b\.classList\) b\.classList\.remove\("active"\); \}\);/.test(src),
+        "que recorre esa lista");
+      // Lo prohibido: volver a quitar «active» recorriendo el mapa por ISO.
+      t.falso(/diaBotonesPorIso\.forEach\(\(b\) => b\.classList\.remove\("active"\)\)/.test(src),
+        "ningún camino limpia la marca recorriendo el mapa por fecha");
+      t.falso(/botonesPorIso\.forEach\(\(b\) => b\.classList\.remove\("active"\)\)/.test(src),
+        "tampoco el registro local del render");
+      // Y los dos sitios que la limpiaban usan ahora la función única.
+      t.igual((src.match(/_limpiarDiaActivo\(\);/g) || []).length, 2,
+        "los dos caminos que mueven la selección (clic del médico y salto automático) la usan");
     });
 
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"

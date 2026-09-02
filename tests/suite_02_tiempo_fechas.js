@@ -91,6 +91,45 @@ module.exports = {
       t.cierto(range.every(r => !api.esFestivo(r.dateObj))); // ningún festivo (07/08, 17/08)
     });
 
+    // =====================================================================
+    // v18.0.122 — REPORTE EN VIVO DEL MÉDICO (02-sep), con captura: «aparecen dos resaltados
+    // en morado "fecha seleccionada"; primero había elegido sábado pero ese sábado al parecer
+    // no se trabaja, entonces eligió el viernes pero quedó seleccionado el sábado como
+    // principal».
+    //
+    // La causa raíz vivía AQUÍ: el barrido de sábados recorría todo el intervalo, el propio
+    // centro incluido, así que un centro en sábado salía DOS VECES en el rango. Los dos casos
+    // de arriba usan un centro en JUEVES — por eso el banco nunca lo vio. Ese es el hueco de
+    // cobertura, y esto lo cierra.
+    // =====================================================================
+    t.caso("v18.0.122: con el centro en SÁBADO, su fecha aparece UNA sola vez en el rango", () => {
+      const range = api.calcRangoSondeoIso("2026-11-07");   // sábado — la fecha de su captura
+      const isos = range.map((r) => r.iso);
+      t.igual(isos.length, new Set(isos).size,
+        "ninguna fecha se repite: dos entradas con el mismo ISO son dos chips para el mismo día");
+      const delCentro = range.filter((r) => r.iso === "2026-11-07");
+      t.igual(delCentro.length, 1, "el centro entra una vez, no una como centro y otra como sábado");
+      t.igual(range.filter((r) => r.isCenter).length, 1, "y sigue habiendo exactamente un centro");
+      t.igual(delCentro[0].isCenter, true, "que es el propio centro");
+      // Y dice la verdad sobre sí mismo: antes iba fijo en `esSabado:false`, así que el día
+      // que el médico estaba mirando perdía el estilo y el `title` que explican qué significa
+      // un sábado en esta agenda.
+      t.igual(delCentro[0].esSabado, true, "un centro en sábado ES sábado");
+      // Los otros sábados del rango siguen estando, sin que el centro se los coma.
+      const sabados = range.filter((r) => r.esSabado === true).map((r) => r.iso);
+      t.cierto(sabados.indexOf("2026-10-31") >= 0 && sabados.indexOf("2026-11-14") >= 0,
+        "los sábados vecinos siguen ofreciéndose (" + sabados.join(", ") + ")");
+    });
+
+    t.caso("v18.0.122: ningún centro de la semana duplica su fecha (barrido de los 7 días)", () => {
+      // La regresión solo aparecía con el centro en sábado, pero la guarda se fija para
+      // cualquier día: un rango con fechas repetidas rompe todo registro por ISO aguas abajo.
+      for (const iso of ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08"]) {
+        const isos = api.calcRangoSondeoIso(iso).map((r) => r.iso);
+        t.igual(isos.length, new Set(isos).size, "centro " + iso + ": sin fechas repetidas");
+      }
+    });
+
     // ---------- todayStamp ----------
     t.caso("todayStamp: devuelve YYYY-MM-DD del día actual", () => {
       runWithMockDate("2026-08-10T12:00:00", (mockApi) => {

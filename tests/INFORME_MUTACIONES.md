@@ -11956,4 +11956,44 @@ compartido por las dos ramas del banner.
 | 407 | solo una de las dos ramas del banner usa la nota única | *suite_15: v18.0.121: …las dos ramas usan la MISMA nota* | Sí |
 | 408 | la nota vuelve a repetir la fecha que ya está en la cabecera | *suite_15: v18.0.121: …la nota NO repite la fecha* | Sí |
 
-Banco completo: **3.071 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.071 comprobaciones pasan, 0 fallan.** *(v18.0.121)*
+
+---
+
+## v18.0.122 — dos chips de día marcados como «seleccionado» a la vez
+
+**Reporte en vivo del médico (02-sep), con captura:** «*aparecen dos resaltados en verde el
+borde «los sábados» no sé si sea normal, y aparecen dos resaltados en morado «fecha
+seleccionada»; primero había elegido sábado pero ese sábado al parecer no se trabaja, entonces
+eligió el viernes pero quedó seleccionado el sábado como principal. Este tipo de cosas tuvo que
+haber salido en las auditorías pero nunca pasó*».
+
+**Causa raíz: una línea de más, y una fecha que salía dos veces.** En `calcRangoSondeoIso` el
+día central se añade aparte, y el barrido de sábados recorre TODO el intervalo — el centro
+incluido. Con la fecha sugerida en sábado, el mismo ISO salía **dos veces**. Medido con el
+arnés sobre `2026-11-07`, la fecha de su captura: **18 entradas, 17 ISO únicos**.
+
+**La cadena hasta la pantalla:** `renderDayChips` pintaba dos botones «Sáb 07/11», y su
+registro `botonesPorIso` —una clave por ISO— se quedaba con el segundo. El chip central, el del
+🎯 y la marca `active`, quedaba **huérfano del registro**; todas las limpiezas de «seleccionado»
+recorren ese registro, así que ese chip no perdía la marca nunca. Al saltar del sábado sin
+agenda al viernes, el viernes se marcaba **y el sábado seguía marcado**. Dos «fecha
+seleccionada» a la vez, con el pie del cuadro diciendo, correctamente, solo una.
+
+**Los dos bordes verdes eran otra cosa** y sí son normales: son dos sábados distintos de la
+fila. El tercero —el duplicado— quedaba tachado por el sondeo y su verde se perdía al lado del
+gemelo morado.
+
+**Por qué la auditoría no lo vio, en una frase:** midió pantallas, no recorridos. Y el banco
+tampoco: `suite_02` fijaba `calcRangoSondeoIso` con el centro en **jueves**, nunca en sábado, y
+las dos pruebas del salto buscaban «el primer chip marcado» con `find` — con dos marcados
+habrían pasado igual. Las tres cosas quedan corregidas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 409 | vuelve la fecha duplicada del centro en sábado | *suite_02: v18.0.122: con el centro en SÁBADO, su fecha aparece UNA sola vez…* (y el barrido de los 7 días) | Sí |
+| 410 | el centro en sábado vuelve a negar que es sábado | *suite_02: v18.0.122: …un centro en sábado ES sábado* | Sí |
+| 411 | la limpieza de «seleccionado» vuelve al mapa por ISO | *suite_15: v18.0.122: la marca «seleccionado» se limpia sobre la lista COMPLETA…* | Sí |
+| 412 | el día abandonado sigue ofreciéndose como elegible | *suite_15: openAgendamientoModal v14.0.1: …salta solo al día más cercano…* | Sí |
+
+Banco completo: **3.074 comprobaciones pasan, 0 fallan.**

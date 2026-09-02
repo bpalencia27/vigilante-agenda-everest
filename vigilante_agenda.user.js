@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.121
+// @version      18.0.122
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.121";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.122";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -22824,14 +22824,37 @@
     const curSab = new Date(prevDays[0].dateObj);
     curSab.setDate(curSab.getDate() + 1);
     const ultimoHabil = nextDays[nextDays.length - 1].dateObj;
+    // v18.0.122 — REPORTE EN VIVO DEL MÉDICO (02-sep), con captura: «aparecen dos resaltados
+    // en morado "fecha seleccionada"; primero había elegido sábado pero ese sábado al parecer
+    // no se trabaja, entonces eligió el viernes pero quedó seleccionado el sábado como
+    // principal». Aquí estaba la causa raíz, y es una sola línea de más.
+    //
+    // El día central se añadía abajo con `getInfo(baseDate, true, false)`, y este barrido de
+    // sábados recorre TODO el intervalo —incluido el propio centro—, así que cuando la fecha
+    // sugerida caía en sábado el mismo ISO salía DOS VECES en el rango: una como centro
+    // (isCenter:true) y otra como sábado (esSabado:true). Medido con el arnés sobre
+    // 2026-11-07, la fecha de su captura: 18 entradas, 17 ISO únicos.
+    //
+    // Lo que eso provocaba en pantalla, en cadena: `renderDayChips` pintaba DOS botones
+    // «Sáb 07/11», y su registro `botonesPorIso` —una clave por ISO— se quedaba solo con el
+    // segundo. El chip central, el que lleva el 🎯 y la marca `active`, quedaba huérfano del
+    // registro: cada limpieza de «seleccionado» recorre ese registro, así que ese chip NUNCA
+    // perdía la marca. Al saltar del sábado sin agenda al viernes, el viernes se marcaba y el
+    // sábado se quedaba marcado también. Dos «fecha seleccionada» a la vez.
+    const isoDe = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+    const isoCentro = isoDe(baseDate);
     while (curSab < ultimoHabil) {
-      if (curSab.getDay() === 6 && !esFestivo(curSab)) {
+      if (curSab.getDay() === 6 && !esFestivo(curSab) && isoDe(curSab) !== isoCentro) {
         sabados.push(getInfo(curSab, false, true));
       }
       curSab.setDate(curSab.getDate() + 1);
     }
 
-    return [...prevDays, getInfo(baseDate, true, false), ...nextDays, ...sabados]
+    // v18.0.122 — y el centro dice la verdad sobre sí mismo: si cae en sábado, ES sábado.
+    // Antes iba fijo en `false`, así que un centro en sábado no recibía ni el estilo ni el
+    // `title` que explican qué significa un sábado en esta agenda — la mitad del dato se
+    // perdía justo en el día que el médico estaba mirando.
+    return [...prevDays, getInfo(baseDate, true, baseDate.getDay() === 6), ...nextDays, ...sabados]
       .sort((a, b) => (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0));
   }
 
@@ -25866,6 +25889,15 @@
     let _labFechaTomaElegidaManual = false;
     let diaRangeActual = [];
     let diaBotonesPorIso = new Map();
+    // v18.0.122 — TODOS los chips del día, en el orden en que se pintaron. La limpieza de la
+    // marca «seleccionado» recorre ESTO y no el mapa por ISO: un mapa pierde un botón en
+    // cuanto dos chips comparten fecha, y cuando eso pasó (ver calcRangoSondeoIso) el chip
+    // perdido se quedó marcado para siempre. Defensa en profundidad: la causa raíz ya está
+    // arreglada, pero la limpieza no debería volver a depender de que las fechas sean únicas.
+    let diaBotonesTodos = [];
+    const _limpiarDiaActivo = () => {
+      try { diaBotonesTodos.forEach((b) => { if (b && b.classList) b.classList.remove("active"); }); } catch (e) {}
+    };
     let pacienteIdAcceso = null;
     let pacienteEpsNombre = "";
     let pacienteNombreCompleto = "";
@@ -26416,7 +26448,19 @@
           const otroDia = await _buscarDiaConAgendaPropia(token);
           if (!vivo() || token !== _cargarHorasToken) return;
           if (otroDia) {
-            diaBotonesPorIso.forEach((b) => b.classList.remove("active"));
+            // v18.0.122 — el día que se abandona se APAGA, con el mismo tratamiento que ya
+            // recibe cualquier día sin agenda propia (v18.0.118): tachado, deshabilitado y
+            // con el porqué. Antes solo se le quitaba la marca de seleccionado y seguía
+            // ofreciéndose como si fuera elegible, al lado del día al que acabábamos de
+            // saltar — el médico no tenía forma de saber cuál de los dos era el bueno.
+            const _btnViejo = selectedDateInfo && diaBotonesPorIso.get(selectedDateInfo.iso);
+            _limpiarDiaActivo();   // v18.0.122 — la lista completa: ver la nota de diaBotonesTodos
+            if (_btnViejo && _btnViejo.classList && otroDia.item.iso !== selectedDateInfo.iso) {
+              _btnViejo.disabled = true;
+              _btnViejo.classList.add("vgl-agm-pbtn-sinagenda");
+              _btnViejo.title = "Ese día solo tiene agenda de otro profesional";
+              if (_btnViejo.setAttribute) _btnViejo.setAttribute("aria-disabled", "true");
+            }
             const btnNuevo = diaBotonesPorIso.get(otroDia.item.iso);
             if (btnNuevo) btnNuevo.classList.add("active");
             selectedDateInfo = otroDia.item;
@@ -26837,6 +26881,7 @@
       const miToken = ++_sweepAgendaToken;
       const botonesPorIso = new Map();
       diaBotonesPorIso = botonesPorIso;
+      diaBotonesTodos = _chipsNodos;   // v18.0.122 — la lista completa, sin colisiones por fecha
 
       range.forEach((item) => {
         const btn = document.createElement("button");
@@ -26873,7 +26918,7 @@
           }
         }
         btn.addEventListener("click", () => {
-          botonesPorIso.forEach((b) => b.classList.remove("active"));
+          _limpiarDiaActivo();   // v18.0.122 — sobre la lista completa, no sobre el mapa por ISO
           btn.classList.add("active");
           selectedDateInfo = item;
           _controlElegidoManual = true;   // v15.4.0 — la regla labs-primero ya no lo mueve sola
