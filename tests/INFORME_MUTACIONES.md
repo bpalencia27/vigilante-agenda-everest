@@ -10837,3 +10837,63 @@ fijado a propósito igual al botón nativo de Everest) y por extraer el CSS por 
 | 232 | se quita `color:var(--fg) !important` de `.vgl-complex-pill` (**el defecto original**) | *suite_25: Regla S* (y el censo de Regla G, −1); `auditar_color_todo_chromium.js` → «CENSO 2: 1 · .vgl-complex-pill»; `auditar_html_real_chromium.js` → «SECUESTRADO» en oscuro y claro, «NO blindado» | Sí — suite_25 25/25, censo 0/0, «VEREDICTO: blindado» |
 
 Banco completo: **2.956 comprobaciones pasan, 0 fallan.**
+
+## v18.0.97 — cuatro brechas del enjambre adversarial de cierre, reproducidas y cerradas
+
+Madrugada del 02-sep. Terminados los 47 hallazgos, se lanzó un enjambre DISTINTO al que los
+produjo, con la orden inversa: demostrar que cada arreglo falta, está incompleto, tiene prueba
+hueca o dejó un sitio hermano sin tocar (8 auditores, 3 refutadores por brecha). Estas cuatro las
+reprodujo el auditor con el arnés y las volví a reproducir yo contra HEAD antes de tocar nada;
+las cuatro se arreglaron en un worktree aparte para no moverle la base a los refutadores.
+
+### Fila 8 — `mtrHcEnganchar`: la guarda de cruce se saltaba cuando la cédula no se pudo leer al pedir
+
+`if (idAlPedir && !_pacienteSigueAbierto(idAlPedir))` se cortocircuitaba con `idAlPedir = ""`
+—cabecera sin renderizar, que es justo la petición que Everest hace al ABRIR el paciente— y la
+historia se archivaba bajo quien estuviera abierto AL LLEGAR: el defecto original de v18.0.48,
+de vuelta, y en contra del comentario del propio arreglo. Descartar a secas cuando no se leyó
+mataría esa misma captura «al abrir». La salida está en el propio paquete: Everest manda la
+cédula en `datosUsuario.identificacion`. Ahora, si viene, ella decide (se archiva solo si
+coincide con el paciente abierto ahora); si no viene, la guarda de v18.0.48 se aplica en su
+forma ESTRICTA. El montaje de la prueba «sin cambio de paciente, la historia SÍ se archiva» abría
+a «111111» con un paquete de «80123456» — dos personas —; se corrigió el montaje, no la regla.
+
+### Fila 9 — `mtrDosisDeTexto`: las combinaciones con «+» y «-» leían la dosis del otro principio
+
+El emparejamiento por posición de v18.0.49 solo se activaba con «/». «Amlodipino + Atorvastatina
+5/40 mg» → 5, y `mtrInerciaEstatina` volvía a acusar «LDL en falla sin estatina de alta
+intensidad» a un paciente en atorvastatina 40. Se admiten «/», «+» y «-» en los nombres y, en
+las dosis, «5/40», «5 mg + 40 mg» y «5mg/40mg». Lo ambiguo sigue devolviendo null.
+
+### Fila 13a — `mtrSanearTextoLibreAI`: un apellido de dos letras que es palabra de la lengua destrozaba la nota
+
+Bajar el mínimo a dos letras (v18.0.52) dejó pasar «Ha», «Su», «Lo», «Le», «No»: con un paciente
+de apellido «Ha» la regex tachaba cada «HA» del texto («NO [NOMBRE_CENSURADO] PRESENTADO
+DOLOR»). Exactamente el destrozo de la v18.0.25. Se añade `MTR_PALABRAS_FUNCION_ES` (palabras
+cortas de altísima frecuencia clínica) al filtro. Residuo aceptado por el médico el 01-sep («sí,
+acepto» que un nombre que coincide con una palabra pueda quedar) antes que una nota ilegible.
+«Li» no es palabra de la lengua y se sigue tachando.
+
+### Fila 13b — `mtrHcTachar` (canal del paquete de Everest → hoja de hechos → Gemini): sin tolerancia a tildes
+
+El token se casaba LITERAL: «MUÑOZ» registrado no tachaba «MUNOZ» escrito, ni al revés — el mismo
+hueco de tildes que la v18.0.52 cerró en el otro canal. Ahora usa `_mtrPatronConTildes`, el
+mismo patrón. Los números se casan tal cual y conservan su límite de dígito (v18.0.86). El
+mínimo de 4 letras de este canal NO se toca: es decisión explícita del médico (v18.0.25); un
+apellido de dos letras sigue pasando por aquí y se le pregunta a él si quiere alinearlo con el
+otro canal.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 233 | vuelve la guarda cortocircuitable `idAlPedir && …`, sin mirar la cédula del paquete (**el defecto**) | *suite_31: v18.0.97 CRUCE — cédula ILEGIBLE al pedir + paquete de otra persona: NO se archiva* y *… paquete SIN cédula: no se archiva* (2 fallan) | Sí |
+| 234 | vuelve el separador «/» a secas en los nombres (**el defecto**) | *suite_49: v18.0.97: las combinaciones con «+» y «-» … emparejan por posición* | Sí |
+| 235 | se quita la lista de palabras funcionales del filtro (**el defecto**) | *suite_31: v18.0.97 PHI — un apellido que es palabra funcional … NO destroza la nota* | Sí |
+| 236 | el token vuelve a casarse literal, sin tolerancia a tildes (**el defecto**) | *suite_31: v18.0.97 PHI — el canal del paquete de Everest tolera tildes en las DOS direcciones* | Sí |
+
+La prueba de fuente de suite_57 («las dos defensas del módulo usan el MISMO límite de palabra»)
+se actualizó a la forma nueva de `mtrHcTachar` y ahora exige, además, que el token no numérico
+pase por `_mtrPatronConTildes` — las dos defensas comparten límite Y tolerancia a tildes.
+
+Banco completo: **2.962 comprobaciones pasan, 0 fallan.**

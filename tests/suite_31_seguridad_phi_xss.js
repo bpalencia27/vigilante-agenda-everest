@@ -467,15 +467,82 @@ module.exports = {
     await t.casoAsync("v18.0.48 CRUCE — sin cambio de paciente, la historia SÍ se archiva (la otra dirección)", async () => {
       const cuerpo = JSON.stringify(_hcEverestFalso());
       const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
-      _domPaciente(c, "111111");
+      // v18.0.97 — el paciente abierto es el MISMO que declara el paquete (datosUsuario.
+      // identificacion = 80123456): desde el cierre del enjambre la cédula del paquete
+      // decide, y un paquete de otra cédula que la del paciente abierto se descarta.
+      // Antes este montaje abría a «111111» con un paquete de «80123456» — dos personas.
+      _domPaciente(c, "80123456");
       t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
       await c.env.win.fetch("/api/HistoriaClinica", {});
       await new Promise((r) => setTimeout(r, 0));
 
-      const guardado = c.api.mtrHcLeer("111111");
+      const guardado = c.api.mtrHcLeer("80123456");
       t.cierto(!!guardado, "con el mismo paciente abierto de punta a punta, la historia sí entra");
       t.cierto(!!(guardado && guardado.secciones && guardado.secciones.antecedentePatologicos),
         "y trae las secciones clínicas");
+    });
+
+    // v18.0.97 — CIERRE DEL ENJAMBRE (02-sep): la guarda de v18.0.48 tenía un hueco que un
+    // auditor adversarial reprodujo: `idAlPedir && …` se cortocircuitaba cuando la cédula NO
+    // se pudo leer al PEDIR (cabecera sin renderizar, justo la petición que Everest hace al
+    // abrir el paciente) y la historia se archivaba bajo quien estuviera abierto AL LLEGAR.
+    const _domSinCedula = (c) => {
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = () => [];
+    };
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir + paquete de otra persona: NO se archiva bajo quien esté abierto al llegar", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());   // el paquete es de 80123456
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.igual(c.api.extractPacienteAbierto(), "", "montaje: al pedir, la cédula no se puede leer");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");                            // al llegar hay OTRO paciente abierto
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "la historia de 80123456 NO queda archivada bajo 222222 — antes sí (el defecto original, de vuelta)");
+      t.igual(c.api.mtrHcLeer("80123456"), null, "y tampoco bajo el suyo a ciegas: no estaba abierto");
+    });
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir, pero el paquete trae la del paciente abierto: SÍ se archiva (la captura «al abrir» sigue viva)", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "80123456");                          // la cabecera ya se renderizó: es él
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.cierto(!!c.api.mtrHcLeer("80123456"), "el paquete dice de quién es y coincide con el abierto: se archiva");
+    });
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir y paquete SIN cédula: no se archiva (no se sabe de quién es)", async () => {
+      const sinId = _hcEverestFalso(); delete sinId.datosUsuario;
+      const cuerpo = JSON.stringify(sinId);
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "sin cédula legible al pedir y sin cédula en el paquete, no se escribe — nunca se asume que es él");
+    });
+
+    t.caso("v18.0.97 PHI — un apellido que es palabra funcional del español (Ha, Su, Lo, Le, No) NO destroza la nota; uno que no lo es (Li) sí se tacha", () => {
+      const c = cargar({ silencioso: true });
+      const T = "PACIENTE HA TENIDO BUENA ADHERENCIA. NO HA PRESENTADO DOLOR. SE LE INDICA CONTINUAR SU TRATAMIENTO. LO REFIERE SIN CAMBIOS.";
+      for (const n of ["Kim Ha", "Wang Su", "Chen Lo", "Nguyen Le", "Park No"]) {
+        t.igual(c.api.mtrSanearTextoLibreAI(T, n), T, "con apellido «" + n.split(" ")[1] + "» el texto clínico queda entero (antes: «NO [NOMBRE_CENSURADO] PRESENTADO DOLOR»)");
+      }
+      const s = c.api.mtrSanearTextoLibreAI("LA FAMILIA LI EN CASA. " + T, "Ana Li");
+      t.falso(/\bLI\b/.test(s), "«Li» no es palabra de la lengua: se tacha — " + s.slice(0, 40));
+      t.cierto(s.indexOf(T) >= 0, "y el resto del texto queda entero");
+    });
+
+    t.caso("v18.0.97 PHI — el canal del paquete de Everest (mtrHcTachar) tolera tildes en las DOS direcciones, igual que el del texto libre", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrHcTachar("PACIENTE MUNOZ REFIERE. Munoz sin cambios.", ["MUÑOZ"]),
+        "PACIENTE [CENSURADO] REFIERE. [CENSURADO] sin cambios.", "«MUÑOZ» registrado tacha «MUNOZ» escrito");
+      t.igual(c.api.mtrHcTachar("PACIENTE MUÑOZ REFIERE.", ["MUNOZ"]), "PACIENTE [CENSURADO] REFIERE.", "y al revés");
+      t.igual(c.api.mtrHcTachar("ANASARCA y ANA", ["ANA"]), "ANASARCA y [CENSURADO]", "el límite de palabra de la v18.0.25 sigue intacto");
+      t.igual(c.api.mtrHcTachar("cel 3001234567 orden 930012345678", ["3001234567"]), "cel [CENSURADO] orden 930012345678", "y el límite de dígito de la v18.0.86 también");
     });
 
     t.caso("v17.9.0 BARRERA — nada que identifique al paciente sale del paquete de Everest", () => {

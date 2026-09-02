@@ -257,6 +257,24 @@ module.exports = {
       t.igual(api.mtrDosisDeTexto("Rosuvastatina 20 mg", "rosuvastatina"), 20, "tampoco aquí");
     });
 
+    // v18.0.97 — CIERRE DEL ENJAMBRE (02-sep): el emparejamiento por posición solo se
+    // activaba con «/». El catálogo INVIMA/CUM nombra las combinaciones con «+» y a veces
+    // con «-»; con esos separadores se caía a la lectura vieja y volvía a leer la dosis del
+    // OTRO principio — y mtrInerciaEstatina volvía a acusar «sin estatina de alta
+    // intensidad» a un paciente en atorvastatina 40.
+    t.caso("v18.0.97: las combinaciones con «+» y «-», y las dosis «5 mg + 40 mg» / «5mg/40mg», emparejan por posición igual que con «/»", () => {
+      t.igual(api.mtrDosisDeTexto("Amlodipino + Atorvastatina 5/40 mg", "atorvastatina"), 40, "«+» entre nombres — antes 5");
+      t.igual(api.mtrDosisDeTexto("AMLODIPINO + ATORVASTATINA 5 MG + 40 MG", "atorvastatina"), 40, "«+» entre nombres y entre dosis con unidad — antes 5");
+      t.igual(api.mtrDosisDeTexto("Ezetimiba + Rosuvastatina 10/20 mg", "rosuvastatina"), 20, "otra pareja real — antes 10");
+      t.igual(api.mtrDosisDeTexto("Amlodipino-Atorvastatina 5/40 mg", "atorvastatina"), 40, "«-» entre nombres — antes 5");
+      t.igual(api.mtrDosisDeTexto("AMLODIPINO/ATORVASTATINA 5MG/40MG TABLETA", "atorvastatina"), 40, "unidad pegada a cada dosis — antes null");
+      t.igual(api.mtrDosisDeTexto("Amlodipino + Atorvastatina 5/40 mg", "amlodipino"), 5, "y el primero de la pareja sigue leyendo el suyo");
+      t.igual(api.mtrDosisDeTexto("Losartan 50 mg + Hidroclorotiazida 12.5 mg", "losartan"), 50, "dos principios con su dosis cada uno no son un combo: lectura de siempre");
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null, "y lo ambiguo sigue siendo null, no la dosis del otro");
+      t.falso(api.mtrInerciaEstatina(true, ["Amlodipino + Atorvastatina 5/40 mg"]).inercia,
+        "el médico ya NO recibe «LDL en falla sin estatina de alta intensidad» por un paciente en atorvastatina 40");
+    });
+
     t.caso("inercia: una falla de LDL sin estatina de alta intensidad la marca", () => {
       const conInercia = api.mtrInerciaEstatina(true, ["Atorvastatina 20 mg"]);
       t.cierto(conInercia.inercia, "dosis corta con falla = inercia");

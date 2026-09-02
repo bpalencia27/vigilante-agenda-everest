@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.96
+// @version      18.0.97
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.96";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.97";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -39428,6 +39428,21 @@
     "de", "del", "la", "las", "el", "los", "y", "e", "da", "do", "dos", "das",
     "van", "von", "di", "san", "santa", "sta", "sto", "mc", "mac",
   ]);
+  // 02-sep (cierre del enjambre) — la misma familia, un paso más: bajar el mínimo a dos
+  // letras (v18.0.52) dejó pasar apellidos reales de dos letras que además son palabras
+  // funcionales del español clínico. Con un paciente de apellido «Ha», la regex tachaba
+  // cada «HA» del texto («NO [NOMBRE_CENSURADO] PRESENTADO DOLOR»); con «Su», «SU
+  // TRATAMIENTO»; con «Lo», «LO REFIERE»; con «Le», «SE LE INDICA»; con «No», «NO HA
+  // PRESENTADO». Exactamente el destrozo de la v18.0.25. Se acepta el residuo (el médico
+  // lo aceptó el 01-sep: un apellido que coincide con una palabra de la lengua puede
+  // quedar) antes que una nota ilegible. Solo palabras cortas y de altísima frecuencia en
+  // una nota clínica; se comparan normalizadas.
+  const MTR_PALABRAS_FUNCION_ES = new Set([
+    "ha", "he", "han", "hay", "su", "sus", "lo", "le", "les", "no", "si", "se", "es", "son",
+    "un", "una", "uno", "mi", "mis", "me", "te", "tu", "tus", "ya", "va", "da", "dio",
+    "con", "por", "sin", "mas", "muy", "hoy", "al", "en", "ni", "o", "u", "a", "que",
+    "para", "como", "pero", "este", "esta", "esto", "ese", "esa", "eso", "aun", "fue", "ser",
+  ]);
   // v18.0.52 — Un patrón que casa la palabra CON o SIN tildes, en las dos direcciones:
   // «Muñoz» tiene que encontrar «MUNOZ», y «Munoz» tiene que encontrar «MUÑOZ». Se
   // normaliza el token a ASCII y cada letra que tenga variantes acentuadas se convierte en
@@ -39481,7 +39496,8 @@
     if (nombrePaciente) {
       try {
         const tokens = String(nombrePaciente).trim().split(/\s+/)
-          .filter((t) => t.length >= 2 && !MTR_PARTICULAS_APELLIDO.has(mtrNormalizarTexto(t)));
+          .filter((t) => t.length >= 2 && !MTR_PARTICULAS_APELLIDO.has(mtrNormalizarTexto(t))
+                         && !MTR_PALABRAS_FUNCION_ES.has(mtrNormalizarTexto(t)));
         if (tokens.length) {
           const alt = tokens.map((t) => _mtrPatronConTildes(t)).join("|");
           const reTokens = new RegExp(
@@ -43171,16 +43187,13 @@
     let t = String(texto == null ? "" : texto);
     for (const x of (tachaduras || [])) {
       if (!x) continue;
-      const esc = String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // v18.0.86 — AUDITORÍA (hallazgo de enjambre #38): el límite de PALABRA (letras
-      // españolas) que v18.0.25 fijó para nombres no protege a las tachaduras NUMÉRICAS
-      // (celular/teléfono/identificación) de la adyacencia de OTROS dígitos — MTR_LETRA_ES
-      // son letras, no dígitos. Un celular que aparece como subcadena dentro de un número
-      // más largo (una orden, un código de barras de laboratorio) se tachaba igual,
-      // partiéndolo con [CENSURADO] en medio. Para una cadena puramente numérica, el
-      // límite correcto es de DÍGITO, no de letra; para todo lo demás (nombres) se
-      // conserva exactamente el límite que el médico decidió en v18.0.25.
-      const limite = /^\d+$/.test(String(x)) ? "\\d" : ("[" + MTR_LETRA_ES + "]");
+      const esNumero = /^\d+$/.test(String(x));
+      // 02-sep (cierre del enjambre) — el token se casaba LITERAL, así que «MUÑOZ» registrado
+      // no tachaba «MUNOZ» escrito, ni al revés: el mismo hueco de tildes que la v18.0.52
+      // cerró en mtrSanearTextoLibreAI seguía abierto en este otro canal hacia Gemini. Mismo
+      // patrón tolerante a tildes (_mtrPatronConTildes); los números se casan tal cual.
+      const esc = esNumero ? String(x) : _mtrPatronConTildes(x);
+      const limite = esNumero ? "\\d" : ("[" + MTR_LETRA_ES + "]");
       t = t.replace(
         new RegExp("(?<!" + limite + ")" + esc + "(?!" + limite + ")", "gi"),
         "[CENSURADO]");
@@ -43400,9 +43413,31 @@
         // que estaba abierta cuando se PIDIÓ esta historia; si ya no es la de ahora, esta
         // respuesta es de otro paciente y NO se archiva. Se dice por consola en vez de
         // callarlo: un descarte silencioso es indistinguible de no haber leído nada.
-        if (idAlPedir && !_pacienteSigueAbierto(idAlPedir)) {
-          try { console.warn("[Vigilante] historia clínica descartada: llegó después de cambiar de paciente, no se archiva en la historia equivocada."); } catch (e) {}
-          return;
+        // 02-sep (cierre del enjambre) — LA GUARDA TENÍA UN HUECO: `idAlPedir && …` se
+        // cortocircuitaba cuando la cédula NO se pudo leer al pedir (cabecera sin renderizar
+        // todavía, que es justo el caso de la petición que Everest hace al ABRIR el
+        // paciente), y la respuesta se archivaba bajo quien estuviera abierto AL LLEGAR: el
+        // defecto original de nuevo. Descartar a secas cuando no se leyó mataría esa misma
+        // captura «al abrir». La salida está en el propio paquete: Everest manda la cédula
+        // del paciente en `datosUsuario.identificacion`. Si viene, ella decide — se archiva
+        // solo si coincide con el paciente abierto ahora; si no viene, se aplica la guarda de
+        // v18.0.48 en su forma ESTRICTA (sin cédula legible al pedir, no se escribe).
+        const idDelPaquete = (typeof _vglDocCanon === "function" && datos && datos.datosUsuario)
+          ? _vglDocCanon(String(datos.datosUsuario.identificacion == null ? "" : datos.datosUsuario.identificacion)) : "";
+        if (idDelPaquete) {
+          if (idDelPaquete !== _vglDocCanon(String(id))) {
+            try { console.warn("[Vigilante] historia clínica descartada: el paquete es de otra cédula que la del paciente abierto, no se archiva en la historia equivocada."); } catch (e) {}
+            return;
+          }
+        } else if (origen === "carga") {
+          if (!idAlPedir) {
+            try { console.warn("[Vigilante] historia clínica descartada: al pedirla no se pudo leer la cédula del paciente abierto y el paquete no trae la suya — no se archiva sin saber de quién es."); } catch (e) {}
+            return;
+          }
+          if (!_pacienteSigueAbierto(idAlPedir)) {
+            try { console.warn("[Vigilante] historia clínica descartada: llegó después de cambiar de paciente, no se archiva en la historia equivocada."); } catch (e) {}
+            return;
+          }
         }
         const hechos = mtrHcGuardar(id, datos);
         if (hechos) {
@@ -43888,21 +43923,28 @@
   // que es preferible a un dato de otro fármaco (casilla vacía antes que dato inventado).
   function _mtrDosisDeCombo(t, p) {
     // Un bloque de dos o más nombres pegados por "/": "amlodipino/atorvastatina".
-    const reNombres = /[a-z]{4,}(?:\s*\/\s*[a-z]{4,})+/g;
+    // 02-sep (cierre del enjambre) — el catálogo INVIMA/CUM nombra las combinaciones con
+    // «+» («AMLODIPINO + ATORVASTATINA») y a veces con «-»; con esos separadores el
+    // emparejamiento no se activaba y el llamador caía a la lectura vieja: «Amlodipino +
+    // Atorvastatina 5/40 mg» → 5 (la dosis del amlodipino), y mtrInerciaEstatina volvía a
+    // declarar «sin estatina de alta intensidad» a un paciente en atorvastatina 40. Se
+    // admiten los tres separadores en los nombres y, en las dosis, «5/40», «5 mg + 40 mg»
+    // y «5mg/40mg». Lo que no empareje sigue devolviendo null, nunca la dosis del otro.
+    const reNombres = /[a-z]{4,}(?:\s*[\/+\-]\s*[a-z]{4,})+/g;
     let m;
     while ((m = reNombres.exec(t)) !== null) {
-      const nombres = m[0].split("/").map((x) => x.trim());
+      const nombres = m[0].split(/\s*[\/+\-]\s*/).map((x) => x.trim());
       const pos = nombres.indexOf(p);
       if (pos < 0) continue;
       // El bloque de dosis que sigue: "5/40", "10/12,5", "50/12.5"…
       const resto = t.slice(m.index + m[0].length);
-      const mn = /(\d{1,3}(?:[.,]\d{1,2})?(?:\s*\/\s*\d{1,3}(?:[.,]\d{1,2})?)+)/.exec(resto);
+      const mn = /(\d{1,3}(?:[.,]\d{1,2})?(?:\s*(?:mg)?\s*[\/+]\s*\d{1,3}(?:[.,]\d{1,2})?)+)/.exec(resto);
       // Es un combo, pero no trae un bloque de dosis emparejable: `null` (dato ausente),
       // NO `undefined` (no es un combo). La diferencia es la que impide que el llamador se
       // caiga a la lectura de siempre y termine leyendo la dosis del OTRO principio —
       // «Amlodipino/Atorvastatina 5 mg» tiene un solo número y es ambiguo: no se adivina.
       if (!mn) return null;
-      const dosis = mn[1].split("/").map((x) => Number(String(x).trim().replace(",", ".")));
+      const dosis = mn[1].split(/[\/+]/).map((x) => Number(String(x).replace(/mg/g, "").trim().replace(",", ".")));
       if (dosis.length !== nombres.length) return null;
       const v = dosis[pos];
       return (typeof v === "number" && isFinite(v)) ? v : null;

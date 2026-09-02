@@ -2481,8 +2481,14 @@ module.exports = {
       // v18.0.86 — hallazgo #38: para una tachadura NUMÉRICA (celular/teléfono/
       // identificación) el límite de LETRA no protege de la adyacencia de OTROS dígitos —
       // el límite correcto ahí es de dígito, no de letra.
-      t.cierto(/const limite = \/\^\\d\+\$\/\.test\(String\(x\)\) \? "\\\\d" : /.test(cuerpo),
+      // v18.0.97 — cierre del enjambre: la decisión numérico/letra se saca a `esNumero`, y
+      // el token NO numérico se casa con el mismo patrón tolerante a tildes que usa
+      // mtrSanearTextoLibreAI (_mtrPatronConTildes): «MUÑOZ» registrado tacha «MUNOZ»
+      // escrito. Las dos defensas comparten límite Y tolerancia a tildes.
+      t.cierto(/const limite = esNumero \? "\\\\d" : /.test(cuerpo),
         "las tachaduras puramente numéricas usan límite de DÍGITO, no de letra");
+      t.cierto(/const esc = esNumero \? String\(x\) : _mtrPatronConTildes\(x\)/.test(cuerpo),
+        "y el token no numérico se casa con el patrón tolerante a tildes que comparte con mtrSanearTextoLibreAI");
     });
 
     // =================================================================
