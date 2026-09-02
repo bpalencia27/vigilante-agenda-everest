@@ -1652,7 +1652,11 @@ module.exports = {
       c.api.createAccionesDockUI();
       dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
-      t.cierto(bAg.disabled, "las dos hechas: bloqueado para evitar duplicados");
+      // v18.0.114 — reporte en vivo del médico: «no tengo forma de volver al módulo una vez queda
+      // agendada la cita». El botón gris e inerte desaparece: con las dos hechas y sin radicado
+      // guardado, el botón sigue vivo y abre Agendar de nuevo (el cuadro avisa de la cita de hoy).
+      t.falso(bAg.disabled, "las dos hechas: el botón sigue VIVO (antes: gris e inerte, sin camino de vuelta)");
+      t.cierto(bAg.children.some((n) => n.className === "vgl-dock-lbl" && n.textContent === "Agendado · abrir"), "y dice que abre");
     });
 
     t.caso("createAccionesDockUI: botón de ordenar se bloquea cuando las órdenes ya se generaron hoy", () => {
@@ -1729,17 +1733,18 @@ module.exports = {
     });
 
     t.caso("createAccionesDockUI: clic en un botón bloqueado (disabled) no hace nada", () => {
+      // v18.0.114 — el de Agendar ya no se bloquea (reporte en vivo: hacía falta un camino de
+      // vuelta al módulo); el que sigue bloqueado con las órdenes ya generadas es Ordenar.
       const c = cargar({ silencioso: true });
       mockPacienteDock(c, "777777777");
-      c.api.markCitaAgendadaHoy("777777777", "2026-08-20");
-      c.api.markLabAgendadaHoy("777777777");
+      c.api.markOrdenesCreadasHoy("777777777", [], []);
       c.api.createAccionesDockUI();
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
-      const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
-      t.cierto(bAg.disabled);
-      bAg._listeners.click[0]({ stopPropagation() {} });
+      const bOrd = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "ordenar");
+      t.cierto(bOrd.disabled);
+      bOrd._listeners.click[0]({ stopPropagation() {} });
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
-      t.falso(w && w.acciones && (w.acciones["widget.agendar.abrir"] || w.acciones["widget.agendar.sololab"]), "un botón disabled no dispara ninguna acción ni telemetría, aunque el listener siga cableado");
+      t.falso(w && w.acciones && w.acciones["widget.ordenar.abrir"], "un botón disabled no dispara ninguna acción ni telemetría, aunque el listener siga cableado");
     });
 
     t.caso("createAccionesDockUI: usa la cita REAL de state.lastSnapshot.list cuando existe (no inventa el nombre)", () => {
@@ -5230,6 +5235,100 @@ module.exports = {
       t.cierto(!!llenar || !!aviso, "el clic abre el ayudante de llenado o, si esas casillas no se pueden llenar desde aquí, lo dice con la pestaña (toasts: " + toasts.length + ")");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/else if \(_autorizado && _resumenListoParaGate && _factoresParaGate && _pendientesPanel\.length > 0\)/.test(src), "solo con resumen y factores leídos: nunca se inventa un faltante mientras carga");
+    });
+
+    // =====================================================================
+    // v18.0.114 — REPORTES EN VIVO (02-sep): la anulación muda y sin camino de vuelta a Agendar
+    // =====================================================================
+    t.caso("v18.0.114: el veredicto de la anulación acepta las formas conocidas de Everest y el motivo dice qué pasó de verdad", () => {
+      const c = cargar({ silencioso: true });
+      const ok = c.api._anulacionConfirmada, mot = c.api._anulacionMotivo;
+      t.cierto(ok({ error: false, mensaje: "Cancelado Correctamente" }), "la forma capturada el 19-ago");
+      t.cierto(ok({ isError: false, mensaje: "Cancelado Correctamente" }), "isError:false también confirma");
+      t.cierto(ok({ isError: false }) && ok({ Error: false }), "isError:false / Error:false confirman por sí solos, sin mensaje");
+      t.cierto(ok({ mensaje: "Cita cancelada correctamente" }), "un mensaje que dice «cancelada» confirma");
+      t.falso(ok({ error: true, mensaje: "Cancelado Correctamente" }), "error:true manda sobre cualquier mensaje");
+      t.falso(ok({ mensaje: "No se pudo cancelar la cita" }), "«no se pudo cancelar» no confirma");
+      t.falso(ok(null) || ok("texto") || ok({}), "sin cuerpo, texto suelto o un objeto vacío: no se confirma");
+      t.cierto(/tope de 15 s/.test(mot({ red: true, error: "The operation was aborted" })), "tope de red: lo dice, con los segundos");
+      t.cierto(/sesión de Everest caducó \(HTTP 401\)/.test(mot({ status: 401 })), "401: sesión caducada");
+      t.cierto(/servidor de Everest \(HTTP 503\)/.test(mot({ status: 503 })), "5xx: error del servidor");
+      t.cierto(/rechazó la petición \(HTTP 400: parámetro inválido\)/.test(mot({ status: 400, data: { mensaje: "parámetro inválido" } })), "4xx: rechazo con el mensaje de Everest");
+      t.cierto(/respondió «Cita no encontrada» sin confirmar/.test(mot({ status: 200, data: { mensaje: "Cita no encontrada" } })), "200 con mensaje que no confirma: se cita el mensaje");
+      t.cierto(/sin datos legibles \(HTTP 200\)/.test(mot({ status: 200, data: null })), "200 sin JSON: se dice");
+    });
+
+    await t.casoAsync("v18.0.114: «Cancelar esta cita» dice el motivo real (antes: «NO confirmó» a secas y null en todo fallo) y el reintento sustituye el aviso; con confirmación limpia las marcas", async () => {
+      let modo = "500";
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        if (!/CancelarCita/.test(String(url))) return respuestaJson({});
+        if (modo === "500") return { ok: false, status: 500, headers: { get: () => null }, text: async () => "Internal Server Error", json: async () => ({}), clone() { return this; } };
+        if (modo === "red") throw new Error("The operation was aborted");
+        if (modo === "200raro") return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ mensaje: "Cita no encontrada" }), json: async () => ({ mensaje: "Cita no encontrada" }), clone() { return this; } };
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ isError: false, mensaje: "Cancelado Correctamente" }), json: async () => ({ isError: false }), clone() { return this; } };
+      } });
+      enriquecerDom(c);
+      const toasts = [];
+      c.api.showToast = undefined;   // no se puede sustituir: se observa por la bandeja
+      const bandeja = c.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n._parent = bandeja; toasts.push(n); };
+      const getOrig = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : getOrig(id));
+      c.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+      c.api.markCitaAgendadaHoy("111222333", "2026-10-01", { citaId: "7813686", pacienteId: "5150", eps: "EPS", hora: "8:40 AM" });
+      t.falso(await c.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "HTTP 500: no se anula");
+      t.cierto(/servidor de Everest \(HTTP 500\)/.test(c.api._anularUltimoMotivoLeer()), "y el motivo guardado es el real: " + c.api._anularUltimoMotivoLeer());
+      await esperar(30);
+      t.cierto(toasts.length === 1 && /HTTP 500/.test(toasts[0].querySelector(".vgl-toast-b").textContent), "el aviso rojo lleva el motivo (antes: «NO confirmó la anulación» a secas)");
+      t.cierto(c.api.isCitaAgendadaHoy("111222333"), "las marcas locales no se tocan");
+      modo = "red";
+      t.falso(await c.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "sin red: no se anula");
+      t.cierto(/tope de 15 s/.test(c.api._anularUltimoMotivoLeer()), "motivo: tope de red");
+      await esperar(30);
+      t.igual(bandeja.children.filter((n) => !n.classList.contains("out")).length, 1, "el reintento SUSTITUYE el aviso anterior (misma clave), no lo apila (la captura del médico mostraba dos)");
+      modo = "200raro";
+      t.falso(await c.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "200 con «Cita no encontrada»: no se da por anulada");
+      modo = "ok";
+      t.cierto(await c.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "con isError:false Everest confirmó (antes: solo error:false valía)");
+      t.igual(c.api._anularUltimoMotivoLeer(), "", "sin motivo pendiente");
+      t.falso(c.api.isCitaAgendadaHoy("111222333"), "y las marcas locales se limpian");
+      c.env.doc.getElementById = getOrig;
+    });
+
+    await t.casoAsync("v18.0.114: el recordatorio ofrece «Abrir Agendar de nuevo», el motivo de una anulación fallida se ve en el sitio, y abrirRecordatorioCita lo cablea", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      let panelNode = null, abiertos = 0;
+      const getOrig = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-postcita-panel" ? panelNode : getOrig(id));
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { reabierto: true, turnoId: "900", cita: { fechaLegible: "01/10/2026" }, onAgendarOtra: () => { abiertos++; }, onCancelar: async () => false });
+      panelNode = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      const cancelar = panelNode.querySelector("#vgl-postcita-cancelar");
+      await Promise.all((cancelar._listeners.click || []).map((f) => f({})));
+      t.cierto(/No se anuló/.test(panelNode.querySelector("#vgl-postcita-anular-nota").textContent), "la nota bajo el botón dice que no se anuló y por qué");
+      t.igual(cancelar.textContent, "🗑 Reintentar la cancelación", "el botón invita a reintentar");
+      const otra = panelNode.querySelector("#vgl-postcita-agendar-otra");
+      (otra._listeners.click || []).forEach((f) => f({}));
+      t.igual(abiertos, 1, "«Abrir Agendar de nuevo» abre el módulo");
+      t.falso(c.env.doc.body.children.some((n) => n.id === "vgl-postcita-panel"), "y cierra el recordatorio");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/onAgendarOtra: \(\) => openAgendamientoModal\(apt \|\| \{ doc_id: docId, nombre: det\.nombre \|\| "" \}\)/.test(src), "abrirRecordatorioCita cablea el camino de vuelta");
+      c.env.doc.getElementById = getOrig;
+    });
+
+    t.caso("v18.0.114: con cita y toma agendadas hoy y sin radicado guardado, el dock ya no deja un botón gris e inerte: abre Agendar de nuevo", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      mockPacienteDock(c, "555666777");
+      c.api.markCitaAgendadaHoy("555666777", "2026-10-01");   // sin citaId: no hay recordatorio que reabrir
+      c.api.markLabAgendadaHoy("555666777");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      t.cierto(!!bAg && !bAg.disabled, "el botón existe y está VIVO (antes: disabled «Agendado»)");
+      t.cierto(bAg.children.some((n) => n.className === "vgl-dock-lbl" && n.textContent === "Agendado · abrir"), "y dice que abre");
+      (bAg._listeners.click || []).forEach((f) => f({ stopPropagation() {} }));
+      t.cierto(c.env.doc.body.children.some((n) => n.id === "vgl-agendar-modal"), "el clic abre el módulo Agendar");
     });
 
   },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.113
+// @version      18.0.114
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.113";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.114";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7666,10 +7666,12 @@
           bAg.title = "\uD83D\uDDA8 Imprimir o reenviar el recordatorio de la cita de hoy, o cancelarla.";
           _vglDockRotulo(bAg, "\uD83D\uDDA8", "Recordatorio");
         } else {
-          bAg.disabled = true;
-          bAg.setAttribute("aria-label", "Cita y toma de muestras ya agendadas hoy");
-          bAg.title = "\u2705 Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.";
-          _vglDockRotulo(bAg, "\uD83D\uDCC5", "Agendado");
+          // v18.0.114 — antes: botón gris e inerte («Bloqueado para evitar duplicados») y sin
+          // ningún camino de vuelta al módulo. Ahora abre Agendar; el cuadro ya avisa de la cita
+          // de hoy y el antiduplicado sigue en pie.
+          bAg.setAttribute("aria-label", "Cita y toma de muestras ya agendadas hoy. Abrir Agendar de nuevo");
+          bAg.title = "\u2705 Cita de control y toma de muestras ya agendadas hoy. Clic para abrir Agendar de nuevo (otra cita o especialidad); el cuadro avisa de la cita de hoy.";
+          _vglDockRotulo(bAg, "\uD83D\uDCC5", "Agendado · abrir");
         }
       } else if (soloFaltaLab) {
         bAg.setAttribute("aria-label", "Falta agendar toma de muestras");
@@ -7683,7 +7685,10 @@
       bAg.addEventListener("click", (e) => {
         e.stopPropagation(); if (bAg.disabled) return;
         // v17.1.0 (#147) — tercer destino: con todo agendado, el botón lleva al recordatorio.
-        if (citaHechaHoy && labHechoHoy) { uxTrack("widget.recordatorio.abrir"); abrirRecordatorioCita(apt); return; }
+        if (citaHechaHoy && labHechoHoy) {
+          if (citaDetalleHoy(docId)) { uxTrack("widget.recordatorio.abrir"); abrirRecordatorioCita(apt); return; }
+          uxTrack("widget.agendar.reabrir"); openAgendamientoModal(apt); return;   // v18.0.114: sin radicado guardado, se vuelve al módulo
+        }
         uxTrack(soloFaltaLab ? "widget.agendar.sololab" : "widget.agendar.abrir");
         soloFaltaLab ? openLabSoloModal(apt) : openAgendamientoModal(apt);
       });
@@ -21562,6 +21567,7 @@
       // v17.1.0 (#147) — cancelar viaja con el panel: es donde el médico ya está mirando
       // la cita que quiere deshacer, no en otro menú.
       onCancelar: () => _cancelarCitaConPregunta(apt || { doc_id: docId }),
+      onAgendarOtra: () => openAgendamientoModal(apt || { doc_id: docId, nombre: det.nombre || "" }),   // v18.0.114
     });
   }
 
@@ -21585,6 +21591,54 @@
     return true;
   }
 
+  // v18.0.114 — REPORTE EN VIVO (02-sep, captura): «Anular cita · Everest NO confirmó la anulación»
+  // dos veces seguidas, sin motivo. pageFetchJson devuelve null ante CUALQUIER fallo de una
+  // escritura (HTTP 4xx/5xx, sesión caducada, tope de red, cuerpo no JSON), así que el aviso no
+  // podía decir qué pasó, y una respuesta 200 con otra forma ({isError:false} o solo «mensaje»)
+  // se anunciaba como «sigue vigente». Ahora la escritura devuelve status y cuerpo, el veredicto
+  // acepta las formas conocidas de Everest y el aviso lleva el motivo real; el reintento
+  // sustituye el aviso anterior en vez de apilarlo.
+  let _anularUltimoMotivo = "";
+  function _anularUltimoMotivoLeer() { return _anularUltimoMotivo; }
+  async function _apiPostConDetalle(url, body, topeMs) {
+    const f = FETCH0 || (typeof window !== "undefined" ? window.fetch : null);
+    if (typeof f !== "function") return { ok: false, status: 0, data: null, texto: "", red: true };
+    const fullUrl = url.indexOf("http") === 0 ? url : (location.origin + (url[0] === "/" ? "" : "/") + url);
+    try {
+      const resp = await _fetchConTope(f, fullUrl, {
+        method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: body,
+      }, topeMs);
+      let texto = "";
+      try { texto = String(await resp.text()); } catch (e) { texto = ""; }
+      let data = null;
+      try { data = texto ? JSON.parse(texto) : null; } catch (e) { data = null; }
+      return { ok: !!(resp && resp.ok), status: (resp && resp.status) || 0, data: data, texto: texto.slice(0, 160), red: false };
+    } catch (e) {
+      return { ok: false, status: 0, data: null, texto: "", red: true, error: String((e && e.message) || e) };
+    }
+  }
+  // Pura. ¿Everest confirmó? Formas vistas: {error:false, mensaje:"Cancelado Correctamente"}
+  // (captura 19-ago); se aceptan también {isError:false} y un «mensaje» que diga «cancelad…».
+  // Un error:true / isError:true manda por encima de cualquier mensaje.
+  function _anulacionConfirmada(data) {
+    if (!data || typeof data !== "object") return false;
+    if (data.error === true || data.isError === true || data.Error === true) return false;
+    if (data.error === false || data.isError === false || data.Error === false) return true;
+    const msg = String(data.mensaje || data.message || data.Mensaje || "");
+    return /cancelad|anulad/i.test(msg) && !/no se pudo|no fue posible|error/i.test(msg);
+  }
+  // Pura. Por qué NO se confirmó, en palabras que el médico pueda actuar.
+  function _anulacionMotivo(r) {
+    if (!r) return "sin respuesta";
+    if (r.red) return "no hubo respuesta de la red (" + (r.error && /abort/i.test(r.error) ? "tope de " + Math.round(PAGE_FETCH_TIMEOUT_MS / 1000) + " s" : "conexión") + "): verifique en la agenda de Everest si quedó anulada antes de reintentar";
+    if (r.status === 401 || r.status === 403) return "la sesión de Everest caducó (HTTP " + r.status + "): vuelva a iniciar sesión y reintente";
+    if (r.status >= 500) return "error del servidor de Everest (HTTP " + r.status + "): reintente en un momento";
+    const msg = r.data && (r.data.mensaje || r.data.message || r.data.Mensaje);
+    if (r.status >= 400) return "Everest rechazó la petición (HTTP " + r.status + (msg ? ": " + String(msg).slice(0, 90) : "") + ")";
+    if (msg) return "Everest respondió «" + String(msg).slice(0, 90) + "» sin confirmar la anulación: verifique en la agenda";
+    if (r.status === 200 && !r.data) return "Everest respondió sin datos legibles (HTTP 200): verifique en la agenda si quedó anulada";
+    return "Everest respondió de una forma que no reconozco (HTTP " + r.status + "): verifique en la agenda";
+  }
   async function _anularCitaAsignadaReal(apt, opciones) {
     const o = opciones || {};
     const docId = (apt && (apt.doc_id || apt.identificacion || apt.documento)) || extractPacienteAbierto();
@@ -21610,25 +21664,22 @@
       + "&Ip=" + encodeURIComponent("")
       + "&UsuarioId=" + encodeURIComponent(med.id)
       + "&UsuarioNombreCompleto=" + encodeURIComponent(med.name || "");
-    let res = null;
-    try {
-      res = await pageFetchJson("/apiviva/APIAcceso/api/Acceso/CancelarCita?" + q, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          citaId: String(citaId), eps: det.eps || "", estado: "CAN",
-          pacienteId: String(pacienteId), usuarioId: med.id,
-          observacion: observacion, usuarioNombreCompleto: med.name || "", ip: "",
-        }),
-      });
-    } catch (e) { res = null; }
-    const okReal = !!(res && res.error === false);
+    const r = await _apiPostConDetalle("/apiviva/APIAcceso/api/Acceso/CancelarCita?" + q, JSON.stringify({
+      citaId: String(citaId), eps: det.eps || "", estado: "CAN",
+      pacienteId: String(pacienteId), usuarioId: med.id,
+      observacion: observacion, usuarioNombreCompleto: med.name || "", ip: "",
+    }));
+    const res = r.data;
+    const okReal = _anulacionConfirmada(res);
     try { uxTrack(okReal ? "cita.anulada.ok" : "cita.anulada.fallo"); } catch (e) {}
+    try { vglLog("AGENDA", okReal ? "CancelarCitaOk" : "CancelarCitaFallo", { status: r.status, red: !!r.red, extracto: sanitizePII(String(r.texto || "")).slice(0, 120) }); } catch (e) {}
     if (!okReal) {
+      _anularUltimoMotivo = _anulacionMotivo(r);
       showToast("ROJO", "Anular cita",
-        "Everest NO confirmó la anulación" + (res && res.mensaje ? " (" + String(res.mensaje).slice(0, 90) + ")" : "") + ". La cita sigue vigente; no se tocó ninguna marca local.", true);
+        "Everest NO confirmó la anulación: " + _anularUltimoMotivo + ". No se tocó ninguna marca local.", true, "anular|" + String(docId));
       return false;
     }
+    _anularUltimoMotivo = "";
     _anularCitaMarcasLocales(docId);
     showToast("VERDE", "Cita anulada",
       "Everest confirmó: «" + String((res && res.mensaje) || "Cancelado Correctamente") + "». " +
@@ -22075,8 +22126,9 @@
                 ruido en la ventana donde el médico está cerrando la cita. Vuelve el día
                 que exista la captura. */""}
           ${ex.reabierto ? `<div class="vgl-postcita-sep"></div>
+          <button class="vgl-agm-btn sec" id="vgl-postcita-agendar-otra" title="Vuelve al módulo Agendar: otra cita (p. ej. otra especialidad) o rehacer esta. El antiduplicado sigue avisando.">📅 Abrir Agendar de nuevo</button>
           <button class="vgl-agm-btn sec" id="vgl-postcita-cancelar">🗑 Cancelar esta cita</button>
-          <div class="vgl-postcita-nota">Anula la cita en Everest. Si ya se le mandó el mensaje al paciente, avísele.</div>` : ""}`}
+          <div class="vgl-postcita-nota" id="vgl-postcita-anular-nota">Anula la cita en Everest. Si ya se le mandó el mensaje al paciente, avísele.</div>` : ""}`}
           <div class="vgl-postcita-labbloque">${lineaLabFallo}${bloqueLab}</div>
         </div>
       `;
@@ -22139,13 +22191,27 @@
         });
       }
       // ---- v17.1.0 (#147): cancelar la cita, desde el mismo panel donde se la está viendo ----
+      // v18.0.114 — REPORTE EN VIVO (02-sep): «no tengo forma de volver al módulo una vez queda
+      // agendada la cita». El dock solo ofrecía este recordatorio; desde aquí se vuelve a Agendar.
+      const agendarOtraBtn = panel.querySelector("#vgl-postcita-agendar-otra");
+      if (agendarOtraBtn && typeof ex.onAgendarOtra === "function") agendarOtraBtn.addEventListener("click", () => {
+        try { uxTrack("cita.recordatorio.agendar_otra"); } catch (e) {}
+        cerrar();
+        try { ex.onAgendarOtra(); } catch (e) {}
+      });
       const cancelarBtn = panel.querySelector("#vgl-postcita-cancelar");
       if (cancelarBtn && typeof ex.onCancelar === "function") cancelarBtn.addEventListener("click", async () => {
         cancelarBtn.disabled = true;
         cancelarBtn.textContent = "Cancelando…";
-        try { await ex.onCancelar(); }
+        let okAnul = false;
+        try { okAnul = await ex.onCancelar(); }
         finally {
-          try { cancelarBtn.disabled = false; cancelarBtn.textContent = "🗑 Cancelar esta cita"; } catch (e) {}
+          try { cancelarBtn.disabled = false; cancelarBtn.textContent = okAnul ? "🗑 Cancelar esta cita" : "🗑 Reintentar la cancelación"; } catch (e) {}
+          // v18.0.114 — el motivo real, en el sitio donde el médico pulsó (no solo en el aviso).
+          try {
+            const nota = panel.querySelector("#vgl-postcita-anular-nota");
+            if (nota && !okAnul) { nota.textContent = "⚠ No se anuló: " + (_anularUltimoMotivoLeer() || "Everest no confirmó") + "."; nota.classList.add("vgl-postcita-warn"); }
+          } catch (e) {}
         }
       });
       // ---- Enviar al correo: RETIRADO en v17.1.0 (#147). El marcado ya no se emite, así
@@ -25086,7 +25152,7 @@
 
         <!-- Banner de Cita Previa Activa / Cancelación -->
         <div id="vgl-agm-undo-banner" class="vgl-agm-undo-banner" style="${citaHechaHoy ? 'display:flex' : 'display:none'}">
-          <span>⚠️ Este paciente ya tiene una cita de control registrada para hoy.</span>
+          <span>⚠️ Este paciente ya tiene una cita de control registrada hoy. Si va a agendar OTRA (p. ej. otra especialidad), siga; si es la misma, anúlela primero.</span>
           <button type="button" id="vgl-agm-btn-anular" class="vgl-btn-undo">🗑️ Cancelar / Anular Cita</button>
         </div>
 

@@ -11622,3 +11622,41 @@ donde el médico pulsó.
 | 349 | la identidad de texto ignora el cuerpo | *suite_42: v18.0.113: notify() sin uid…* («otro texto = otro aviso») | Sí |
 
 Banco completo: **3.036 comprobaciones pasan, 0 fallan.**
+
+## v18.0.114 — dos reportes en vivo del médico (02-sep, con captura): la anulación muda y sin camino de vuelta a Agendar
+
+**1. «Error detectado al intentar cancelar esta cita».** La captura mostraba DOS avisos rojos
+idénticos: «Anular cita · Everest NO confirmó la anulación. La cita sigue vigente; no se tocó
+ninguna marca local», sin motivo. Causa: `pageFetchJson` devuelve `null` ante CUALQUIER fallo
+de una escritura (HTTP 4xx/5xx, sesión caducada, tope de red de 15 s, cuerpo no JSON), así que
+el aviso no podía decir qué pasó; y el veredicto exigía exactamente `error === false`, con lo
+que una respuesta 200 con otra forma (`isError:false`, o solo un «mensaje») se anunciaba como
+«sigue vigente». El segundo aviso era el reintento del médico, apilado encima del primero.
+Ahora la escritura devuelve status y cuerpo (`_apiPostConDetalle`, con el mismo tope de red),
+el veredicto (`_anulacionConfirmada`, pura) acepta las formas conocidas de Everest y un
+`error:true` manda sobre cualquier mensaje, el aviso lleva el motivo real (`_anulacionMotivo`:
+sesión caducada, servidor, rechazo con el mensaje de Everest, 200 sin confirmar, tope de red
+con la indicación de VERIFICAR en la agenda antes de reintentar), el reintento sustituye el
+aviso anterior en vez de apilarlo, el botón pasa a «Reintentar la cancelación» y el motivo se
+escribe también bajo el botón, donde el médico pulsó. La bitácora anota status y extracto
+saneado de cada intento, para poder diagnosticar el siguiente.
+
+**2. «Tampoco tengo forma de volver al módulo una vez queda agendada la cita».** Con cita y
+toma agendadas el dock solo ofrecía «Recordatorio» (o un botón gris e inerte «Agendado» si no
+había radicado guardado). Ahora el recordatorio tiene «📅 Abrir Agendar de nuevo» (otra cita,
+p. ej. otra especialidad, o rehacer esta), el botón gris pasa a «Agendado · abrir» y abre el
+módulo, y el aviso del cuadro de Agendar dice qué hacer si es otra cita o la misma. El
+antiduplicado no cambia: el cuadro avisa de la cita de hoy y la confirmación sigue siendo un
+clic consciente del médico.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 350 | el veredicto vuelve a exigir solo `error === false` | *suite_15: v18.0.114: el veredicto de la anulación acepta las formas conocidas…* | Sí |
+| 351 | `error:true` deja de mandar sobre el mensaje | *suite_15: v18.0.114: el veredicto…* («error:true manda») | Sí |
+| 352 | el motivo del 5xx desaparece | *suite_15: v18.0.114: el veredicto…* («5xx») y *«Cancelar esta cita» dice el motivo real…* | Sí |
+| 353 | el aviso rojo vuelve a apilarse en el reintento (sin clave) | *suite_15: v18.0.114: «Cancelar esta cita» dice el motivo real…* («SUSTITUYE») | Sí |
+| 354 | la nota bajo el botón no dice el motivo | *suite_15: v18.0.114: el recordatorio ofrece «Abrir Agendar de nuevo»…* | Sí |
+| 355 | «Abrir Agendar de nuevo» no hace nada | *suite_15: v18.0.114: el recordatorio ofrece…* («abre el módulo») | Sí |
+| 356 | el dock vuelve a no abrir Agendar con las dos hechas | *suite_15: v18.0.114: con cita y toma agendadas hoy y sin radicado…* | Sí |
+
+Banco completo: **3.040 comprobaciones pasan, 0 fallan.**
