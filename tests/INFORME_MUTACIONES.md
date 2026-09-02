@@ -10897,3 +10897,33 @@ se actualizó a la forma nueva de `mtrHcTachar` y ahora exige, además, que el t
 pase por `_mtrPatronConTildes` — las dos defensas comparten límite Y tolerancia a tildes.
 
 Banco completo: **2.962 comprobaciones pasan, 0 fallan.**
+
+## v18.0.98 — cierre adversarial (02-sep), filas 24 y 23: Agendar creaba DOS citas reales, y una llegada se contaba dos veces
+
+Dos brechas de la auditoría adversarial del cierre del enjambre, ambas reproducidas con el arnés
+contra HEAD antes de tocar nada.
+
+**Fila 24 (alta) — modal de Agendar.** El mismo gesto que el hallazgo #19 cerró en Ordenar
+(v18.0.63) —confirmar, cerrar el cuadro mientras el servidor responde, reabrir, confirmar— creaba
+**dos citas reales** vía `AsignarTurno`: `if (!vivo()) return;` iba ANTES de `markCitaAgendadaHoy`,
+así que con el POST en vuelo la cita quedaba en Everest pero la marca local nunca se escribía; el
+panel seguía ofreciendo «Agendar» y el modal reabría limpio. Medido: 2 `AsignarTurno`. Ahora la
+marca se escribe en cuanto el servidor confirma, se avise o no al cuadro, y además un candado por
+cédula (`_agmAsignandoDocs`) rechaza un segundo confirmar mientras el primero sigue en vuelo.
+
+**Fila 23 (alta) — identidad de la cita.** Las cinco pruebas de v18.0.62 cubrían parpadeos del
+documento SIN cambio de estado. Si el cambio de estado se CONFIRMABA en una lectura sin cédula y la
+cédula reaparecía después, el historial bajo la cédula seguía rancio: `colorAndAlert` devolvía
+`arrival:true` dos veces, dos avisos VERDE y dos «atiempo» en el CSV. `apptKey` aprende ahora el
+alias nombre@hora → cédula@hora en cuanto ve la cédula y lo devuelve para las lecturas sin
+documento del mismo día (`diaNuevo()` lo olvida). Las pruebas de v18.0.62 olvidan el alias a
+propósito (`__apptAliasDoc.clear()`, publicado por el arnés) para seguir ejercitando la capa de
+lectura tolerante, que es el respaldo cuando el alias no existe (reinicio del script).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 237 | la marca vuelve a depender de `vivo()` (`if (ok && vivo())`) (**el defecto**) | *suite_15: v18.0.98 ANTIDUP — cerrar el modal con AsignarTurno en vuelo NO borra la marca* | Sí |
+| 238 | se quita el candado de vuelo (`_agmAsignandoDocs`) | *suite_15: v18.0.98 ANTIDUP — cerrar el modal con AsignarTurno en vuelo NO borra la marca* | Sí |
+| 239 | `apptKey` deja de aprender el alias nombre→cédula (**el defecto**) | *suite_04: v18.0.98: un cambio de estado confirmado en una lectura SIN documento no produce una segunda llegada* | Sí |
+
+Banco completo: **2.964 comprobaciones pasan, 0 fallan.**

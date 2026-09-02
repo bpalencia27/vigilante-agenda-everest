@@ -238,6 +238,10 @@ module.exports = {
       const r1 = c.api.colorAndAlert(conDoc, refDate);
       t.cierto(r1.arrival, "la primera lectura sí es la llegada real");
 
+      // v18.0.98: mientras la pestaña vive, el alias de `apptKey` ya mantiene la clave. Se
+      // olvida a propósito (reinicio del script, día nuevo) para que esta prueba siga
+      // ejercitando el respaldo de v18.0.62 — la escritura bajo todas las identidades.
+      c.api.__apptAliasDoc.clear();
       const r2 = c.api.colorAndAlert(sinDoc, refDate);
       t.falso(r1.key === r2.key, "la clave cambia de verdad al perderse el documento: el escenario que se prueba existe");
       t.falso(r2.arrival, "la MISMA cita leída por la otra vía no puede sonar como una segunda llegada");
@@ -296,6 +300,7 @@ module.exports = {
       // Una sola lectura, con OTRA clave por el parpadeo del documento. Sin el respaldo, la
       // cita parece nueva, `esNueva` sale true y el antirrebote se salta entero: la tarjeta
       // saltaría a VERDE «En Sala» con una única lectura sin confirmar.
+      c.api.__apptAliasDoc.clear(); // v18.0.98: se olvida el alias para que la clave cambie de verdad
       const r2 = c.api.colorAndAlert(enSalaSinDoc, refDate);
       t.igual(r2.estado, "Sin presentarse", "una sola lectura no confirma, aunque llegue con otra clave");
       t.igual(r2.color, "AMBAR", "y color y texto siguen viajando juntos");
@@ -324,9 +329,32 @@ module.exports = {
       // deshacerse el parpadeo el candidato solo se borró bajo la clave con documento, sigue
       // vivo bajo la clave por nombre: esta única lectura lo daría por confirmado de golpe y
       // la tarjeta saltaría a VERDE «En Sala» sin la segunda lectura que exige el antirrebote.
+      c.api.__apptAliasDoc.clear(); // v18.0.98: se olvida el alias para que la clave cambie de verdad
       const r2 = c.api.colorAndAlert(enSalaSinDoc, refDate);
       t.igual(r2.estado, "Sin presentarse", "sigue haciendo falta una segunda lectura seguida");
       t.falso(r2.arrival, "y no hay llegada sin confirmar");
+    });
+
+    // 02-sep — CIERRE DEL ENJAMBRE (auditoría adversarial, fila 23, gravedad alta). Las cinco
+    // pruebas de v18.0.62 cubren parpadeos del documento SIN cambio de estado. Si el cambio
+    // de estado se CONFIRMA en una lectura sin cédula y la cédula reaparece después, el
+    // historial bajo la cédula seguía rancio y la misma llegada se confirmaba dos veces.
+    t.caso("v18.0.98: un cambio de estado confirmado en una lectura SIN documento no produce una segunda llegada cuando el documento reaparece", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true; c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const ref = new Date("2026-08-10T07:58:00").getTime();
+      const A = (estado, doc) => ({ hora_texto: "08:00 AM", estado, nombre: "PACIENTE UNO", index: 1, doc_id: doc });
+      const claves = []; let llegadas = 0;
+      for (const a of [A("Sin presentarse", ""), A("Sin presentarse", "222222"), A("En Sala", "222222"), A("En Sala", ""), A("En Sala", "222222")]) {
+        const r = c.api.colorAndAlert(a, ref); claves.push(r.key); if (r.arrival) llegadas++; c.api.maybeNotify(r);
+      }
+      t.igual(llegadas, 1, "UNA sola llegada real → UN solo arrival:true (antes: 2)");
+      t.igual([...c.api.__state.contadas].length, 1, "y se cuenta UNA sola vez en el CSV de puntualidad (antes: «atiempo» dos veces)");
+      // La primera lectura no tiene cédula y solo puede identificarse por nombre; desde la
+      // segunda, la cita ya se conoce con cédula y el alias devuelve esa identidad SIEMPRE,
+      // incluida la cuarta lectura, que vuelve a llegar sin documento.
+      t.falso(claves[0] === claves[1], "la primera lectura, sin cédula, solo pudo identificarse por nombre");
+      t.cierto(claves.slice(1).every((k) => k === claves[1]), "en cuanto la cédula se conoció, todas las lecturas comparten la misma identidad: " + claves.join(", "));
     });
 
     // =====================================================================

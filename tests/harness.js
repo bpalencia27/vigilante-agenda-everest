@@ -255,6 +255,11 @@ function cargar(opciones) {
     // pestaña ciega— y el banco no podría fijar la regla.
     "\n;try{ globalThis.__VGL__.__reloj = _reloj; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}" +
+    // v18.0.98 — el alias nombre@hora → cédula@hora de `apptKey` mantiene la identidad de
+    // la cita mientras la pestaña vive. Se publica para que las pruebas de v18.0.62 puedan
+    // OLVIDARLO a propósito (como tras un reinicio del script o un día nuevo) y sigan
+    // ejercitando la capa de lectura tolerante, que es el respaldo cuando el alias no existe.
+    "\n;try{ globalThis.__VGL__.__apptAliasDoc = _apptAliasDoc; }catch(e){}" +
     // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
     // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
     // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la

@@ -2709,6 +2709,59 @@ module.exports = {
       t.cierto(modal.querySelector("#vgl-agm-confirm").textContent.includes("Cita Creada Exitosamente"));
     });
 
+    // 02-sep — CIERRE DEL ENJAMBRE (auditoría adversarial, fila 24, gravedad alta): el mismo
+    // defecto que el hallazgo #19 cerró en Ordenar (v18.0.63) seguía abierto en Agendar. Si el
+    // médico cerraba el cuadro con AsignarTurno en vuelo, la cita se creaba en Everest pero la
+    // marca local no se escribía nunca: el modal se reabría limpio y el siguiente clic creaba
+    // una SEGUNDA cita real.
+    await t.casoAsync("v18.0.98 ANTIDUP — cerrar el modal con AsignarTurno en vuelo NO borra la marca: al reabrir, la antidup avisa y no se crea una segunda cita real", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const asignar = [];
+      const cDup = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("AsignarTurno")) { asignar.push(u); await esperar(150); return respuestaJson({ error: false, data: { radicado: 12345 + asignar.length, motivo: "Agendada Correctamente" } }); }
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) { const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1]; return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] }); }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cDup);
+      cDup.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      const DOC = "555111";
+      const abrirYConfirmar = async () => {
+        cDup.api.openAgendamientoModal({ doc_id: DOC, nombre: "MARIA LOPEZ" });
+        await esperar(80);
+        const modal = cDup.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+        const boton = [...modal.querySelector("#vgl-agm-slots").children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+        disparar(boton, "click");
+        disparar(modal.querySelector("#vgl-agm-confirm"), "click");
+        return modal;
+      };
+      const m1 = await abrirYConfirmar();
+      await esperar(40);                                            // el POST ya salió, sigue en vuelo
+      t.igual(asignar.length, 1, "montaje: un AsignarTurno en vuelo");
+      // (a) reabrir y confirmar MIENTRAS el POST sigue en vuelo: el candado por cédula lo frena
+      disparar(m1.querySelector("#vgl-agm-cancel"), "click");
+      const m2 = await abrirYConfirmar();
+      await esperar(20);
+      t.igual(asignar.length, 1, "con la primera cita todavía en vuelo, el segundo confirmar NO dispara otro POST");
+      t.cierto(m2.querySelector("#vgl-agm-confirm").textContent.includes("creándose"), "y el botón dice por qué: " + m2.querySelector("#vgl-agm-confirm").textContent);
+      disparar(m2.querySelector("#vgl-agm-cancel"), "click");
+      await esperar(300);                                           // el servidor ya respondió, con el cuadro cerrado
+      t.cierto(cDup.api.isCitaAgendadaHoy(DOC), "la marca local se escribió aunque el cuadro estaba cerrado: la cita consta");
+      // (b) reabrir con la respuesta ya llegada: la antidup de siempre avisa y exige un segundo clic
+      const m3 = await abrirYConfirmar();
+      await esperar(40);
+      t.igual(asignar.length, 1, "un solo clic tras reabrir NO crea otra cita real (antes: 2 AsignarTurno)");
+      t.cierto(m3.querySelector("#vgl-agm-confirm").textContent.includes("ya se le creó una cita"), "la antidup avisa: " + m3.querySelector("#vgl-agm-confirm").textContent);
+    });
+
     // v12.10.8 — D3-bis conectado al modal real: perfilPaciente()+recomendacionHorario()
     // (ya probadas en tests/suite_24_motor_perfil.js) ahora se calculan con las etiquetas
     // reales del paciente y marcan con "⭐ SUGERIDO" el turno de la franja recomendada —

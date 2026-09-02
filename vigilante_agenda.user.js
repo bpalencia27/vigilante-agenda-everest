@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.97
+// @version      18.0.98
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.97";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.98";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12810,6 +12810,15 @@
   // el script. Medido con el arnés: dos pacientes distintos de las 8:00 daban la misma clave
   // «Paciente Everest@m480», y marcar a uno por inasistencia marcaba al otro.
   const APPT_NOMBRE_GENERICO = "paciente everest";
+  // 02-sep (cierre del enjambre) — LA IDENTIDAD SE CRUZA EN LAS DOS DIRECCIONES. Una lectura
+  // con cédula y nombre enseña que «NOMBRE@hora» y «cédula@hora» son la MISMA cita; a partir
+  // de ahí, una lectura que llegue SIN cédula (el respaldo por DOM a veces no la trae) usa la
+  // clave por cédula como canónica, en vez de abrir una identidad paralela. Sin esto, un
+  // cambio de estado confirmado en una lectura sin cédula se escribía solo bajo el nombre; la
+  // siguiente lectura con cédula leía el historial rancio bajo la cédula y volvía a
+  // «confirmar» la misma llegada: dos avisos VERDE, dos «atiempo» en el CSV de puntualidad.
+  // Se vacía cada día con los demás mapas de citas (diaNuevo).
+  const _apptAliasDoc = new Map();
   function _apptNombreIdentifica(n) {
     const s = stripAccents(String(n || "")).trim().toLowerCase().replace(/\s+/g, " ");
     return !!s && s !== APPT_NOMBRE_GENERICO;
@@ -12825,8 +12834,16 @@
     const min = parseHoraMin(a && a.hora_texto);
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
     const doc = normalizeKey((a && a.doc_id) || "");
-    if (doc) return doc + "@" + hora;
-    if (_apptNombreIdentifica(a && a.nombre)) return String(a.nombre) + "@" + hora;
+    const nombreId = _apptNombreIdentifica(a && a.nombre);
+    if (doc) {
+      if (nombreId) _apptAliasDoc.set(String(a.nombre) + "@" + hora, doc + "@" + hora);
+      return doc + "@" + hora;
+    }
+    if (nombreId) {
+      const alias = _apptAliasDoc.get(String(a.nombre) + "@" + hora);
+      if (alias) return alias;
+      return String(a.nombre) + "@" + hora;
+    }
     // Ni documento ni nombre propio: la posición al menos evita que dos filas distintas
     // colapsen en una. No es una identidad —y por eso _apptPuedeAcusar dice que no— pero
     // sirve para que la contabilidad interna no confunda una cita con otra.
@@ -12928,6 +12945,7 @@
     diaActual = d;
     state.sessionEpoch = Date.now(); // v8.1.0: KR-02 Invalida peticiones en vuelo de ayer
     state.historical.clear(); state.estadoPendiente.clear(); state.notified.clear();
+    try { _apptAliasDoc.clear(); } catch (e) {}   // 02-sep — el alias nombre→cédula es de hoy
     try { localStorage.removeItem(SIEMBRA_KEY); } catch (e) {}   // v14.1.5 — día nuevo, siembra nueva
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
     // v18.0.64 — día nuevo, constancias nuevas: si no se vaciaran, una cita de ayer podría
@@ -24436,6 +24454,11 @@
 
   // Modal interactivo de Agendamiento Exprés y Remisiones RCV en 1-Clic
   // Modal interactivo de Agendamiento Exprés y Remisiones RCV en 1-Clic (v15.0.0 Stepper 3 Pasos)
+  // 02-sep (cierre del enjambre) — candado EN VUELO por cédula: la única memoria que
+  // sobrevive a cerrar y reabrir el modal mientras AsignarTurno sigue en el aire. Sin él,
+  // reabrir y confirmar en esa ventana disparaba un segundo POST antes de que la marca
+  // local existiera. Se vacía en cuanto el servidor responde, pase lo que pase.
+  const _agmAsignandoDocs = new Set();
   function openAgendamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
@@ -26360,6 +26383,11 @@
       const _previoClic = parseInt(confirmBtn.dataset.ultimoClic || "0", 10);
       confirmBtn.dataset.ultimoClic = String(_ahoraClic);
       if (_previoClic && _ahoraClic - _previoClic < 700) return;
+      if (_agmAsignandoDocs.has(String(apt.doc_id))) {
+        confirmBtn.textContent = "⏳ Ya hay una cita creándose para este paciente: espere la respuesta de Everest";
+        try { uxTrack("cita.antidup.en_vuelo"); } catch (e) {}
+        return;
+      }
 
       const dupCita = citaAgendadaFechaHoy(apt.doc_id);
       if (dupCita && confirmBtn.dataset.dupOk !== "1") {
@@ -26437,28 +26465,29 @@
       const programaId = (selProg && selProg.value) || "";
 
       let res;
+      _agmAsignandoDocs.add(String(apt.doc_id));
       try {
         res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, fechaElegida.iso, obs, isPyM, "Consulta", programaId, celularSms);
       } catch (e) {
         res = { error: true, mensaje: e && e.message };
+      } finally {
+        _agmAsignandoDocs.delete(String(apt.doc_id));
       }
-      if (!vivo()) return;
 
       const d = res && res.data;
       const radicadoNum = Number(d && d.radicado);
       const ok = res && res.error === false && (radicadoNum > 0 || /Agendada Correctamente/i.test(String((d && d.motivo) || "")));
 
+      // 02-sep (cierre del enjambre) — LA MARCA SE ESCRIBE EN CUANTO EL SERVIDOR CONFIRMA, ANTES
+      // de preguntar si el modal sigue vivo. Es el mismo hueco que el hallazgo #19 cerró en
+      // Ordenar (v18.0.63) y que aquí quedó al revés: `if (!vivo()) return;` iba ANTES de
+      // markCitaAgendadaHoy, así que si el médico cerraba el cuadro con el POST en vuelo la
+      // cita quedaba creada en Everest pero la marca local («ID y bloqueo de seguridad») no
+      // se escribía nunca — el panel seguía ofreciendo «Agendar», el modal se reabría limpio
+      // y el siguiente clic creaba una SEGUNDA cita real. Medido con el arnés: 2 AsignarTurno.
+      // La cita existe en Everest pase lo que pase con el cuadro: lo local tiene que saberlo.
       if (ok) {
-        // v15.3.0 — Restituido: la version nueva del modal mostraba el panel post-cita pero
-        // dejaba el boton colgado en "Asignando cita...", sin acuse de que ya quedo hecha.
-        confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
         clearAgendamientoPendiente(apt.doc_id);
-        // v17.1.0 (#147) — se guarda TODO lo que hace falta para volver a abrir el
-        // recordatorio más tarde sin agendar nada de nuevo. Reporte del médico del 21-ago:
-        // «ya le asigné la cita y quiero regresar al módulo para imprimirle el
-        // recordatorio, pero ya solamente aparece el de agendar labs». Antes solo se
-        // guardaba el radicado y la hora; el resto vivía en `_cierreCtx`, una variable en
-        // memoria que muere al cerrar el modal.
         markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso, {
           citaId: (d && d.radicado) || null,
           pacienteId: pacienteIdAcceso || null,
@@ -26472,6 +26501,25 @@
           celular: String(celularSms || "").replace(/\D/g, ""),
         });
         if (state.appointmentsAgendadas) state.appointmentsAgendadas[apt.doc_id] = true;
+      }
+      if (!vivo()) {
+        if (ok) {
+          try {
+            showToast("VERDE", "Agendar", "La cita quedó creada en Everest aunque cerró el cuadro (" + (fechaElegida.fmt || fechaElegida.iso) + (horaTxt ? " " + horaTxt : "") + "). Ya consta como agendada: no la vuelva a crear.", false);
+          } catch (e) {}
+        }
+        return;
+      }
+
+      if (ok) {
+        // v15.3.0 — Restituido: la version nueva del modal mostraba el panel post-cita pero
+        // dejaba el boton colgado en "Asignando cita...", sin acuse de que ya quedo hecha.
+        confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
+        // v17.1.0 (#147) — se guarda TODO lo que hace falta para volver a abrir el
+        // recordatorio más tarde sin agendar nada de nuevo (markCitaAgendadaHoy, arriba, ya
+        // escrito antes de mirar si el cuadro sigue vivo). Reporte del médico del 21-ago:
+        // «ya le asigné la cita y quiero regresar al módulo para imprimirle el
+        // recordatorio, pero ya solamente aparece el de agendar labs».
 
         // v15.9.0 — el módulo de cierre (gemelo del de Everest) se arma con el contexto
         // real de esta cita; la sección de la toma se agrega abajo, cuando AppCita confirme.
