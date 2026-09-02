@@ -530,6 +530,22 @@ module.exports = {
       }
     });
 
+    // v18.0.127 — decisión del médico (entrevista del 02-sep): cuatro citas a la vista en
+    // 1366x768. Medido con docs/uiux/render.js sobre el HTML y el CSS reales: 3 tarjetas
+    // completas antes, 4 después (alturas 165/135/123/135 -> 143/116/109/116).
+    t.caso("v18.0.127 - la densidad de 1366x768 aprieta el espaciado, nunca la letra", () => {
+      const i = css.indexOf("@media (max-height:800px){");
+      t.cierto(i >= 0, "existe la variante compacta para pantallas bajas");
+      const bloque = css.slice(i, css.indexOf("}\n      .vgl-card:hover", i));
+      t.cierto(/#vgl-root #vgl-list\{gap:6px;padding:8px 10px 10px\}/.test(bloque), "la lista se aprieta");
+      t.cierto(/#vgl-root \.vgl-card\{padding:9px 12px 8px\}/.test(bloque), "y la tarjeta también");
+      // Lo que NO se toca: la letra es lo que se lee de un vistazo entre paciente y paciente.
+      t.falso(/font-size/.test(bloque), "ni un tamaño de letra dentro de la variante compacta");
+      t.falso(/color:/.test(bloque), "ni un color: esto es espaciado, no otra paleta");
+      // Y solo en pantallas bajas: en 1920x1080 no hace falta apretar nada.
+      t.cierto(/max-height:800px/.test(css.slice(i, i + 40)), "acotada por altura de pantalla");
+    });
+
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
       // 1. Paridad de tokens claro/oscuro
       const bloqueOscuro = css.match(/((?:#[a-z0-9-]+,?\s*)+)\s*\{\s*\/\*[\s\S]*?\*\/\s*--bg:rgba\([^)]+\);/);

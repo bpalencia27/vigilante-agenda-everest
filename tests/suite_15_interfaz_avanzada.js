@@ -3746,6 +3746,28 @@ module.exports = {
         "pero el ámbar de fallo sostenido SÍ sigue latiendo: eso sí es una alerta");
     });
 
+    t.caso("v18.0.127: la pastilla «🩺 Pendientes (N)» del dock, y la firma que la mantiene viva", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // Una sola vara: el número y el contenido salen de la función que alimenta el aviso.
+      t.cierto(/const _pendDock = \(typeof _pendientesUniversales === "function"\) \? _pendientesUniversales\(docId\) : null;/.test(src),
+        "el dock pregunta a la misma función que el aviso de entrada");
+      t.falso(/_nPendientesDock = [^;]*pymPendientesRestantes/.test(src), "y no rehace el recuento por su cuenta");
+      // Solo aparece si hay algo: un control que dice «0» ocupa sitio y no informa.
+      t.cierto(/if \(_nPendientesDock > 0\) \{/.test(src), "sin pendientes no hay pastilla");
+      t.cierto(/_vglDockRotulo\(bPend, "🩺", "Pendientes \(" \+ _nPendientesDock \+ "\)"\)/.test(src),
+        "y cuando la hay, dice cuántos");
+      // La firma del dock incluye el número: sin esto se congela en el conteo del primer tick.
+      t.cierto(/"PN" \+ _nPendientesDock,/.test(src), "el número entra en la firma del dock");
+      // Reabre el mismo cuadro, sin consumir el aviso automático de la jornada.
+      const i = src.indexOf('uxTrack("widget.pendientes.abrir"');
+      const bloque = src.slice(i, i + 500);
+      t.cierto(/avisoUniversal\(_nom, \{ abandono: _p\.abandono, pym: _p\.pym, labs: _p\.labs, adelantar: _p\.adelantar/.test(bloque),
+        "pinta el mismo cuadro con los mismos datos");
+      t.falso(/avisoMarcarVisto/.test(bloque), "y NO marca nada como visto: lo pidió él, no consume el aviso del día");
+    });
+
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"
     // con CUALQUIER agenda de la respuesta (propia o ajena), así que un sábado con agenda de
     // OTRO profesional se seguía ofreciendo como chip normal — y al pulsarlo, cargarHoras()

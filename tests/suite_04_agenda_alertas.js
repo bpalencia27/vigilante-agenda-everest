@@ -1265,6 +1265,50 @@ module.exports = {
       t.falso(m.innerHTML.indexOf("Fuera de metas") >= 0, "y no se disfraza de simple adelanto");
     });
 
+    // =====================================================================
+    // v18.0.127 — decisión del médico en la entrevista del 02-sep: una pastilla «🩺 Pendientes
+    // (N)» en el dock. El cuadro de pendientes salía UNA vez al abrir la historia; si lo
+    // cerraba sin apuntar nada, no había forma de volver a verlo en toda la jornada.
+    // El número y el contenido salen de la MISMA función que alimenta ese cuadro.
+    // =====================================================================
+    await t.casoAsync("v18.0.127: _pendientesUniversales es la única vara — el mismo cálculo que usa el aviso de entrada", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLdlFueraDeMetaVigente("2026-01-01") });   // 222 días: vencido
+      autorizar(c);
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      c.api.mtrCacheResumenGuardar(DOC_LABSV, {
+        programa: "DM2", erc: { estadioAdministrativo: "G2", egfr: 88 },
+        factores: { diabetes: true }, riesgo: { categoria: "alto" },
+      });
+      const key = c.api.normalizeKey(DOC_LABSV);
+      c.api.__state.pym = new Map([[key, ["Tamización de VIH", "Citología"]]]);
+      c.api.__state.pymAbandono = new Set([key]);
+
+      // Antes de que Athenea responda: los labs todavía no cuentan, pero lo síncrono sí.
+      const antes = c.api._pendientesUniversales(DOC_LABSV);
+      t.falso(antes.labsListos, "sin la lectura de Athenea, los laboratorios son «todavía no sé»");
+      t.igual(antes.abandono, true, "el abandono del programa sí se sabe de inmediato");
+      t.igual(antes.pym.length, 2, "y las actividades de prevención también");
+      t.igual(antes.n, 3, "el número que verá el médico es la suma de lo que de verdad se sabe");
+
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const dsp = c.api._pendientesUniversales(DOC_LABSV);
+      t.cierto(dsp.labsListos, "con Athenea resuelta, los laboratorios ya cuentan");
+      t.cierto(dsp.labs.length > 0, "y hay analitos vencidos");
+      t.cierto(dsp.n > antes.n, "el número sube: " + antes.n + " -> " + dsp.n);
+      // El reparto de v18.0.120 viaja intacto: vencido y adelantable siguen separados.
+      t.cierto(dsp.labs.every((f) => f.vencido !== false), "en `labs` solo va lo vencido de verdad");
+      t.cierto(dsp.adelantar.every((f) => f.vencido === false), "y en `adelantar` solo lo que sigue vigente");
+    });
+
+    t.caso("v18.0.127: sin paciente o sin nada pendiente, el número es 0 y no lanza", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._pendientesUniversales("").n, 0, "sin documento, cero");
+      t.igual(c.api._pendientesUniversales(null).n, 0, "y con null tampoco revienta");
+      t.igual(c.api._pendientesUniversales("999888777").n, 0, "un paciente sin nada pendiente: cero");
+    });
+
     t.caso("checkAvisoUniversal: sin paciente abierto -> no lanza y no revisa nada", () => {
       const c = cargar({ silencioso: true });
       c.env.doc.getElementById = () => null; // sin #anamesis: no es historia clínica

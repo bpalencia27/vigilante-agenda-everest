@@ -1,0 +1,193 @@
+<div id="vgl-agendar-modal" role="dialog" aria-modal="true" aria-labelledby="vgl-agm-title">
+      <div class="vgl-agm-card" style="max-width:760px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 Agendar · Programación de cita · Remisión RCV</div>
+            <div class="vgl-agm-patient">PACIENTE SINTETICO 1</div>
+            <div class="vgl-agm-sub">Documento: <b>SYN-1000</b> · Médico: <b></b></div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
+        </div>
+
+        <!-- Stepper Indicator -->
+        <div class="vgl-stepper-bar" role="list" aria-label="Pasos para agendar la cita">
+          <div class="vgl-stepper-step active" id="vgl-step-ind-1" role="listitem" aria-current="step"><span class="vgl-step-num">1</span> Tipo de Cita</div>
+          <div class="vgl-stepper-line"></div>
+          <div class="vgl-stepper-step" id="vgl-step-ind-2" role="listitem"><span class="vgl-step-num">2</span> Fecha y Turno Inteligente</div>
+          <div class="vgl-stepper-line"></div>
+          <div class="vgl-stepper-step" id="vgl-step-ind-3" role="listitem"><span class="vgl-step-num">3</span> Confirmación</div>
+        </div>
+
+        <!-- Banner de Cita Previa Activa / Cancelación -->
+        <div id="vgl-agm-undo-banner" class="vgl-agm-undo-banner" style="display:none">
+          <span>⚠️ Este paciente ya tiene una cita de control registrada hoy. Si va a agendar OTRA (p. ej. otra especialidad), siga; si es la misma, anúlela primero.</span>
+          <button type="button" id="vgl-agm-btn-anular" class="vgl-btn-undo">🗑️ Cancelar / Anular Cita</button>
+        </div>
+
+        <div class="vgl-ux-caption" id="vgl-agm-caption">Agenda la cita directamente en Everest, igual que si usted la asignara a mano — con la opción de dejar también programada la toma de muestras y avisar por SMS. Siga los pasos 1 a 3; nada se confirma hasta que pulse "Confirmar y asignar cita". Para pedir exámenes use Ordenamiento; para ver resultados ya tomados, Laboratorios.</div>
+        <!-- v18.0.117 (UI/UX #2) — FUERA de las vistas de paso. El segundo aviso de vencimiento (el
+             que sale al pulsar Confirmar, en el paso 3) se pintaba aquí dentro del paso 2, oculto:
+             el médico veía el botón pidiendo otro clic y nunca el motivo ni «Pasar a la fecha
+             sugerida». Su CSS es por id, así que no depende del ancestro. -->
+        <div id="vgl-agm-vencaviso" class="vgl-d-none" aria-live="polite"></div>
+
+        <!-- ==================== PASO 1: ¿Qué desea agendar? ==================== -->
+        <div id="vgl-step-view-1" class="vgl-step-view">
+          <label class="vgl-agm-lbl"><span class="vgl-agm-step">1</span>Seleccione el tipo de cita a programar:</label>
+          
+          <div class="vgl-type-cards-grid" id="vgl-agm-que">
+            <button type="button" class="vgl-type-card active" data-que="control_lab">
+              <div class="vgl-tc-ico">📅 + 🧪</div>
+              <div class="vgl-tc-title">Control Médico + Toma de Labs</div>
+              <div class="vgl-tc-desc">Asigna la cita de control en Everest y pre-agenda la toma de muestras 5 días hábiles antes. (Recomendado)</div>
+            </button>
+
+            <button type="button" class="vgl-type-card" data-que="control">
+              <div class="vgl-tc-ico">🩺</div>
+              <div class="vgl-tc-title">SOLO Control Médico</div>
+              <div class="vgl-tc-desc">Asigna únicamente la consulta médica en Everest sin agendar turno de laboratorio.</div>
+            </button>
+
+            <button type="button" class="vgl-type-card" data-que="lab">
+              <div class="vgl-tc-ico">🧪</div>
+              <div class="vgl-tc-title">SOLO Laboratorios</div>
+              <div class="vgl-tc-desc">Agenda exclusivamente el turno de toma de muestras en AppCita sin crear cita médica.</div>
+            </button>
+          </div>
+
+          <div style="margin-top:14px">
+            <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Especialidad o servicio a agendar / remitir:</label>
+            <div class="vgl-agm-presets" id="vgl-esp-presets" style="flex-wrap:wrap;gap:6px">
+              <button type="button" class="vgl-agm-pbtn active" data-esp="12" data-name="Medicina General (Control)">🩺 Med. General (Control)</button>
+              <button type="button" class="vgl-agm-pbtn" data-esp="46" data-name="Psicología">🧠 Psicología</button>
+              <button type="button" class="vgl-agm-pbtn" data-esp="14" data-name="Odontología">🦷 Odontología</button>
+            </div>
+          </div>
+
+          <div class="vgl-agm-foot" style="margin-top:18px">
+            <button type="button" id="vgl-agm-cancel" class="vgl-agm-btn sec">Cancelar</button>
+            <button type="button" id="vgl-step-1-next" class="vgl-agm-btn pri">Siguiente: Elegir Fecha y Turno ➔</button>
+          </div>
+        </div>
+
+        <!-- ==================== PASO 2: Fecha y Turno Inteligente ==================== -->
+        <div id="vgl-step-view-2" class="vgl-step-view" style="display:none">
+          <div id="vgl-agm-pref-chip" class="vgl-agm-pref-chip vgl-d-none"><span class="vgl-agm-pref-txt"></span><button type="button" class="vgl-agm-pbtn vgl-sm" id="vgl-agm-pref-cambiar" title="Volver al paso 1 para elegir otro tipo de cita o especialidad">cambiar</button></div>
+          <div class="vgl-agm-grid">
+            <div class="vgl-agm-cell vgl-agm-c12">
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±7 días hábiles + sábados)</label>
+              <div class="vgl-agm-presets" id="vgl-time-presets">
+                <button type="button" class="vgl-agm-pbtn" data-m="0" data-d="15">15 días</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="1" data-d="0">1 mes</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="2" data-d="0">2 meses</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="3" data-d="0">3 meses</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="4" data-d="0">4 meses</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="5" data-d="0">5 meses</button>
+                <button type="button" class="vgl-agm-pbtn" data-m="6" data-d="0">6 meses</button>
+              </div>
+              <div id="vgl-agm-manual" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                <button type="button" id="vgl-agm-primercupo" class="vgl-agm-pbtn">⚡ Primer cupo disponible</button>
+                <button type="button" id="vgl-agm-manual-btn" class="vgl-agm-pbtn">📅 Elegir fecha en el calendario…</button>
+                <input type="date" id="vgl-agm-manual-fecha" class="vgl-agm-input vgl-d-none" style="max-width:180px;padding:6px 8px">
+                <span id="vgl-agm-manual-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0">Modo manual: usted eligió la fecha. Sin sugerencias del asistente; se muestran los turnos de esa fecha y ±7 días hábiles.</span>
+                <button type="button" id="vgl-agm-manual-volver" class="vgl-agm-pbtn vgl-d-none">↩ Volver a las sugerencias</button>
+                <span id="vgl-agm-pc-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0" aria-live="polite"></span>
+              </div>
+              <div id="vgl-agm-sugerida" class="vgl-agm-sugerida" aria-live="polite"></div>
+              <!-- v16.0.0 — puerta al módulo de riesgo y exámenes, desde el propio agendamiento -->
+              <button type="button" class="vgl-agm-lnk" id="vgl-agm-vertablero" style="margin-top:6px">❤️ Ver riesgo cardiovascular y vigencias de exámenes</button>
+              <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
+              <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px" aria-live="polite">Calculando fecha deseada...</div>
+            </div>
+
+            <!-- Píldora explicativa de Complejidad Clínica -->
+            <div class="vgl-agm-cell vgl-agm-c12 vgl-agm-cell-flat" id="vgl-complexity-box" style="padding:10px 14px">
+              <div id="vgl-complexity-pill" class="vgl-complex-pill">Analizando historia clínica del paciente...</div>
+            </div>
+
+            <div class="vgl-agm-cell vgl-agm-c12">
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">3</span>Horarios disponibles en la agenda del servicio<button type="button" class="vgl-tip-btn" data-vgl-tip="Son los cupos reales de la agenda de Everest a esa fecha. Cuando hay turno clínico recomendado, queda preseleccionado con ⭐; si no hay recomendación, usted elige — nunca se agendará una hora que nadie decidió." aria-label="Más información" aria-haspopup="true" aria-expanded="false">?</button></label>
+              <div id="vgl-agm-slots" class="vgl-agm-slots"><div class="vgl-agm-loading">Consultando horarios disponibles...</div></div>
+            </div>
+          </div>
+
+          <div class="vgl-agm-foot" style="margin-top:18px">
+            <button type="button" id="vgl-step-2-back" class="vgl-agm-btn sec">↩ Atrás</button>
+            <button type="button" id="vgl-step-2-next" class="vgl-agm-btn pri">Siguiente: Confirmación ➔</button>
+          </div>
+        </div>
+
+        <!-- ==================== PASO 3: Confirmación y Envío ==================== -->
+        <div id="vgl-step-view-3" class="vgl-step-view" style="display:none">
+          <div class="vgl-agm-grid">
+            <div class="vgl-agm-cell vgl-agm-c12" id="vgl-summary-box">
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">✓</span>Resumen de la Cita a Asignar:</label>
+              <div id="vgl-summary-content" class="vgl-summary-content"></div>
+            </div>
+
+            <div class="vgl-agm-cell vgl-agm-c12 vgl-agm-cell-flat">
+              <div id="vgl-agm-prog-box" class="vgl-d-none vgl-mb-10">
+                <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:<button type="button" class="vgl-tip-btn" data-vgl-tip="Everest exige elegir uno de los programas ya inscritos del paciente para poder asignar el turno." aria-label="Más información" aria-haspopup="true" aria-expanded="false">?</button></label>
+                <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
+              </div>
+              <label class="vgl-agm-check-lbl">
+                <input type="checkbox" id="vgl-agm-pym-chk" checked>
+                <span>¿Es cita para actividades del programa RCV / Prevención?</span>
+              </label>
+              
+            </div>
+
+            <div id="vgl-agm-sms-box" class="vgl-agm-cell vgl-agm-c6 vgl-agm-cell-sms">
+              <label class="vgl-agm-check-lbl">
+                <input type="checkbox" id="vgl-agm-sms-chk" checked>
+                <span>📱 Enviar SMS de recordatorio al paciente</span>
+              </label>
+              <div class="vgl-agm-fieldrow">
+                <label for="vgl-agm-sms-tel">Celular:</label>
+                <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;flex:1;padding:7px 11px;font-size:13px" placeholder="cargando…">
+                <span id="vgl-agm-sms-nota"></span>
+              </div>
+            </div>
+
+            <!-- v15.4.0 — TARJETA DE PLAN UNIFICADO (rediseño pedido en entrevista): una
+                 tarjeta que narra el plan completo (labs → control) con UN interruptor;
+                 chips y hora quedan tras «Cambiar», solo si se quiere ajustar algo. El
+                 checkbox conserva su id histórico: toda la fontanería de confirmación
+                 sigue intacta. -->
+            <div class="vgl-lab-box vgl-agm-cell vgl-agm-c6 vgl-agm-cell-lab">
+              <label class="vgl-agm-check-lbl" style="align-items:flex-start">
+                <input type="checkbox" id="vgl-agm-lab-chk" disabled>
+                <span><b>🧪 Agendar también la Toma de Muestras</b>
+                  <span id="vgl-agm-plan-linea" class="vgl-agm-plan-linea">— toma <b id="vgl-lab-date-lbl">--/--/----</b><span id="vgl-agm-plan-hora"></span><span id="vgl-agm-plan-ctrl"></span></span>
+                </span>
+              </label>
+              <div id="vgl-agm-lab-sms-nota" class="vgl-agm-lab-sms-nota"></div>
+              <button type="button" id="vgl-agm-plan-cambiar" class="vgl-agm-btn sec vgl-sm" style="align-self:flex-start;margin:2px 0 4px">✎ Cambiar fecha u hora</button>
+              <div id="vgl-agm-plan-det" class="vgl-d-none">
+                <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="margin:2px 0 6px;gap:4px;flex-wrap:wrap"></div>
+                <div id="vgl-lab-disp-nota" class="vgl-agm-sug-nota vgl-agm-sug-aviso vgl-d-none"></div>
+                <div class="vgl-agm-fieldrow" style="margin:0 0 6px">
+                  <button type="button" id="vgl-agm-lab-manual-btn" class="vgl-agm-pbtn vgl-sm">📅 Otra fecha para la toma…</button>
+                  <input type="date" id="vgl-agm-lab-manual-fecha" class="vgl-agm-input vgl-d-none" style="max-width:170px;padding:5px 8px">
+                </div>
+                <div class="vgl-agm-fieldrow">
+                  <label for="vgl-agm-lab-time-sel">Hora del Laboratorio:</label>
+                  <select id="vgl-agm-lab-time-sel" class="vgl-agm-input" style="width:auto;flex:1;padding:7px 9px;font-size:12px">
+                    <option value="">⏳ Consultando disponibilidades en AppCita...</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <textarea id="vgl-agm-obs" class="vgl-agm-input vgl-agm-c12" placeholder="Observaciones de la cita (ej. REMISION RCV CON CONTROL)..." rows="2"></textarea>
+          </div>
+
+          <!-- v18.0.118 (UI/UX #4) — aquí aterrizan los avisos que antes reescribían el botón -->
+          <div id="vgl-agm-confirm-aviso" class="vgl-d-none" role="alert"></div>
+          <div class="vgl-agm-foot" style="margin-top:18px">
+            <button type="button" id="vgl-step-3-back" class="vgl-agm-btn sec">↩ Modificar / Atrás</button>
+            <button type="button" id="vgl-agm-confirm" class="vgl-agm-btn pri" disabled>✓ Confirmar y asignar cita</button>
+          </div>
+        </div>
+      </div>
+    </div>

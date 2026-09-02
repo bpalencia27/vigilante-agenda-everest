@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.126
+// @version      18.0.127
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.126";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.127";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7661,6 +7661,14 @@
     // agendamiento de citas médicas, Panel del paciente, Redactor IA y Control.
     const _autorizado = mtrEsMedicoAutorizado();
 
+    // v18.0.127 — decisión del médico en la entrevista del 02-sep: una pastilla «🩺 Pendientes
+    // (N)» en el dock. El cuadro de pendientes solo salía UNA vez, al abrir la historia; si lo
+    // cerraba sin apuntar nada, no había forma de volver a verlo en toda la jornada. El número
+    // sale de la misma función que alimenta ese cuadro (_pendientesUniversales), no de un
+    // recuento paralelo.
+    const _pendDock = (typeof _pendientesUniversales === "function") ? _pendientesUniversales(docId) : null;
+    const _nPendientesDock = (_pendDock && _pendDock.n) || 0;
+
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
     // provocando reflow + GC cada 5 s en la vista de historia. Ahora, si la firma de estado
@@ -7675,6 +7683,10 @@
       // así que la firma solo necesita saber si sigue bloqueado o no.
       _panelBloqueado ? "PB" : "pb", mtrCacheResumenDesactualizado(docId) ? "DA" : "da", _autorizado ? "AU" : "no",
       mtrIaGenerando() ? "IA" : "ia", _pendientesPanel.length,
+      // v18.0.127 — el número de pendientes entra en la firma: sin esto la pastilla nace con
+      // el conteo del primer tick y se queda ahí toda la consulta, aunque el médico ordene los
+      // exámenes o Athenea termine de responder.
+      "PN" + _nPendientesDock,
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
@@ -7888,6 +7900,29 @@
     _vglDockRotulo(bControl, "📦", VGL_ROTULOS.control);
     bControl.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.control.abrir"); openPaquetesModal(apt); });
     btns.appendChild(bControl);
+    }
+
+    // v18.0.127 — la pastilla «🩺 Pendientes (N)». Solo aparece si de verdad hay algo: un
+    // control que dice «0» ocupa sitio en un dock apretado y no informa de nada. Reabre el
+    // MISMO cuadro del aviso de entrada, con los mismos datos, y no toca el registro de «ya
+    // visto»: es él quien lo pide, así que no consume el aviso automático de la jornada.
+    if (_nPendientesDock > 0) {
+      const bPend = document.createElement("button");
+      bPend.className = "vgl-dock-btn";
+      bPend.setAttribute("data-accion", "pendientes");
+      bPend.setAttribute("aria-label", "Ver los " + _nPendientesDock + " pendientes de este paciente");
+      bPend.title = "🩺 Volver a ver lo que este paciente tiene pendiente: actividades de prevención, abandono del programa y laboratorios.";
+      _vglDockRotulo(bPend, "🩺", "Pendientes (" + _nPendientesDock + ")");
+      bPend.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try { uxTrack("widget.pendientes.abrir", { n: _nPendientesDock }); } catch (e2) {}
+        try {
+          const _p = _pendientesUniversales(docId);
+          const _nom = (apt && (apt.nombre || apt.name)) || "";
+          avisoUniversal(_nom, { abandono: _p.abandono, pym: _p.pym, labs: _p.labs, adelantar: _p.adelantar, prioridadRcv: _p.prioridadRcv });
+        } catch (e3) {}
+      });
+      btns.appendChild(bPend);
     }
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
@@ -14341,63 +14376,94 @@
       // v15.4.0 — Sin tono: el propio modal en pantalla ES el aviso (un canal por función).
     } catch (e) {}
   }
+  // v18.0.127 — QUÉ TIENE PENDIENTE ESTE PACIENTE, en una sola función. Esto vivía dentro de
+  // `checkAvisoUniversal`, mezclado con las compuertas de «ya se avisó hoy» y «espera a que
+  // Athenea responda». La pastilla «🩺 Pendientes» del dock —decisión del médico en la
+  // entrevista del 02-sep— necesita EXACTAMENTE el mismo cálculo, para decir el número y para
+  // reabrir el mismo cuadro: repetirlo aparte sería crear la segunda vara que este proyecto
+  // lleva versiones eliminando. Aquí solo se calcula el QUÉ; el CUÁNDO se queda abajo.
+  //
+  // Las decisiones que viajan intactas desde donde estaban, con sus motivos:
+  //  · v16.2.8 — una lectura incompleta de Athenea NO es «labs listos»: un `[]` por timeout
+  //    hacía que el aviso afirmara que al paciente le faltaban los OCHO exámenes.
+  //  · v16.4.0 — con resumen en caché se juzga con la misma vara que Agendar/Riesgo; sin él,
+  //    tamizaje plano. Nunca se inventa un estadio.
+  //  · v17.x.x — solo los médicos autorizados descuentan el 50 % por fuera de meta, y para los
+  //    no autorizados la sección se silencia si el paciente no está en Ruta Crónicos.
+  //  · v18.0.120 — su respuesta a «¿repetir antes los exámenes fuera de meta?», y el reparto
+  //    entre lo VENCIDO y lo que solo conviene adelantar.
+  function _pendientesUniversales(doc) {
+    const vacio = { key: "", abandono: false, pym: [], labs: [], adelantar: [], prioridadRcv: false, labsListos: false, n: 0 };
+    try {
+      if (!doc) return vacio;
+      const key = normalizeKey(doc); if (!key) return vacio;
+      const abandono = !!(state.pymAbandono && state.pymAbandono.has(key));
+      const pym = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
+      const labsCrudos = (_labsPrefetch.docId === doc) ? _labsPrefetch.labs : null;
+      const labsListos = !!(labsCrudos && !atheneaLecturaIncompleta(labsCrudos));
+      const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
+      const _autorizado = mtrEsMedicoAutorizado();
+      let _repetirFueraMeta;
+      try {
+        const _regRep = _vglConfirmacionVigente(doc, MTR_REPETIR_CLAVE, MTR_REPETIR_VIGENCIA_DIAS);
+        if (_regRep && (_regRep.v === true || _regRep.v === false)) _repetirFueraMeta = _regRep.v;
+      } catch (e) {}
+      const _opts = _resAviso ? {
+        programa: _resAviso.programa || null,
+        estadio: _resAviso.erc && _resAviso.erc.estadioAdministrativo || null,
+        esDM2: !!(_resAviso.factores && _resAviso.factores.diabetes),
+        esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
+        categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
+        egfrCkdEpi: (_resAviso.erc && _resAviso.erc.egfr !== undefined) ? _resAviso.erc.egfr : null,
+        aplicar50: _autorizado,
+        repetirFueraMeta: _repetirFueraMeta,
+      } : undefined;
+      let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _opts) : [];
+      if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
+      const adelantar = faltantes.filter((f) => f && f.vencido === false);
+      faltantes = faltantes.filter((f) => !(f && f.vencido === false));
+      return {
+        key: key, abandono: abandono, pym: pym, labs: faltantes, adelantar: adelantar,
+        prioridadRcv: !_autorizado && faltantes.length > 0,
+        labsListos: labsListos,
+        n: (abandono ? 1 : 0) + pym.length + faltantes.length + adelantar.length,
+      };
+    } catch (e) { return vacio; }
+  }
   function checkAvisoUniversal() {
     try {
       const doc = extractPacienteAbierto(); if (!doc) return;
       const key = normalizeKey(doc); if (!key) return;
       if (document.getElementById("vgl-pym-modal")) return; // ya hay un aviso en pantalla
 
-      const abandono = !!(state.pymAbandono && state.pymAbandono.has(key));
-      const pym = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
+      // v18.0.127 — el qué se calcula en _pendientesUniversales (una sola vara, compartida con
+      // la pastilla «🩺 Pendientes» del dock); aquí queda solo el cuándo: la gracia mientras
+      // Athenea responde, el «ya se avisó hoy» y el aviso parcial.
+      const _pend = _pendientesUniversales(doc);
+      const abandono = _pend.abandono;
+      const pym = _pend.pym;
       // v16.2.8 — `_labsPrefetch.labs` podía ser un arreglo VACÍO por un fallo de Athenea
       // (timeout, sesión vencida, 500). Antes `[]` era truthy y pasaba por "labs listos":
       // `_analitosRcvVencidos([])` devolvía las 8 claves y el aviso afirmaba que al
       // paciente le faltaban TODOS los exámenes RCV — y se marcaba como visto, así que
       // esa lista falsa no se corregía en toda la jornada. Ahora una lectura incompleta
       // se trata como "todavía no sé", que es la rama que sí sabe esperar y reintentar.
-      const labsCrudos = (_labsPrefetch.docId === doc) ? _labsPrefetch.labs : null;
-      const labsListos = !!(labsCrudos && !atheneaLecturaIncompleta(labsCrudos));
-      // v16.4.0 — el aviso de entrada juzga con LA MISMA vara que Agendar/Riesgo cuando
-      // hay resumen en caché (tabla por estadio + 50% por fuera de meta). Sin resumen,
-      // cae al tamizaje plano de siempre — nunca inventa un estadio.
-      const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
-      // v17.x.x — REFACTOR S+ (30-ago): control de acceso por médico en la sección de
-      // laboratorios RCV del aviso. Solo los AUTORIZADOS descuentan el 50 % por fuera de
-      // meta (aplicar50). Los no autorizados juzgan con la vigencia original (tabla por
-      // estadio/programa) SIN esa reducción, y además solo si el paciente está en un
-      // programa de Ruta Crónicos (programa rector presente); si no, la sección se
-      // silencia (máxima restricción: ante la duda, ocultar).
+      const labsListos = _pend.labsListos;
+      // v18.0.127 — la vara de v16.4.0 (tabla por estadio + 50 % con resumen en caché; tamizaje
+      // plano sin él) y el control de acceso de v17.x.x (solo los autorizados descuentan el
+      // 50 %, y la sección se silencia para los demás fuera de Ruta Crónicos) viven ahora en
+      // _pendientesUniversales, con sus comentarios completos. Aquí solo se lee el resultado.
       const _autorizado = mtrEsMedicoAutorizado();
-      let _repetirFueraMetaAviso;
-      try {
-        const _regRep = _vglConfirmacionVigente(doc, MTR_REPETIR_CLAVE, MTR_REPETIR_VIGENCIA_DIAS);
-        if (_regRep && (_regRep.v === true || _regRep.v === false)) _repetirFueraMetaAviso = _regRep.v;
-      } catch (e) {}
-      const _optsAviso = _resAviso ? {
-        programa: _resAviso.programa || null,
-        estadio: _resAviso.erc && _resAviso.erc.estadioAdministrativo || null,
-        esDM2: !!(_resAviso.factores && _resAviso.factores.diabetes),
-        esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
-        categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
-        egfrCkdEpi: (_resAviso.erc && _resAviso.erc.egfr !== undefined) ? _resAviso.erc.egfr : null,   // v18.0.7 — D11 (KDIGO)
-        aplicar50: _autorizado,
-        // v18.0.120 — su respuesta a «¿repetir antes los exámenes fuera de meta?», la misma
-        // que ya consume el motor del panel. Sin esto el aviso de entrada seguía adelantando
-        // exámenes que él acababa de decir que NO quería adelantar: dos varas otra vez.
-        repetirFueraMeta: _repetirFueraMetaAviso,
-      } : undefined;
-      let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
-      if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
+      let faltantes = _pend.labs;
       // v18.0.120 — REPORTE EN VIVO (02-sep). La lista roja se queda SOLO con los que de
       // verdad pasaron su vigencia normativa. Los que siguen vigentes y únicamente conviene
       // adelantar por estar fuera de metas van a su propia sección, que lo dice con esas
       // palabras. Un aviso que llama vencido a lo vigente es un dato inventado.
-      const adelantar = faltantes.filter((f) => f && f.vencido === false);
-      faltantes = faltantes.filter((f) => !(f && f.vencido === false));
+      const adelantar = _pend.adelantar;
       // v17.x.x — REFACTOR S+ (30-ago): para no autorizados, los labs vencidos (ya acotados
       // a pacientes en Ruta Crónicos con vigencia original) se comunican como mensaje de
       // prioridad cardiovascular, no como lista de analitos a pedir.
-      const prioridadRcv = !_autorizado && faltantes.length > 0;
+      const prioridadRcv = _pend.prioridadRcv;
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 
@@ -17319,6 +17385,20 @@
                    box-shadow .26s var(--ease-out),
                    border-color .16s var(--ease-out);
         animation:vglSpringIn .36s var(--spring) both;
+      }
+      /* v18.0.127 — decisión del médico en la entrevista del 02-sep: cuatro citas a la vista en
+         1366x768, la resolución de su consultorio. Solo espaciado: ni un tamaño de letra se
+         toca, porque la letra es lo que se lee de un vistazo entre paciente y paciente. La
+         media consulta se mide con docs/uiux/render.js, que ya traía esta variante
+         prototipada y contaba cuántas tarjetas caben enteras. Se acota a pantallas bajas: en
+         1920x1080 no hace falta apretar nada. */
+      @media (max-height:800px){
+        #vgl-root #vgl-list{gap:6px;padding:8px 10px 10px}
+        #vgl-root .vgl-card{padding:9px 12px 8px}
+        #vgl-root .vgl-card-mid.vgl-card-mid-t1{margin-top:5px}
+        #vgl-root .vgl-card-btm.vgl-card-btm-t1{margin-top:4px}
+        #vgl-root .vgl-pyms{margin-top:5px;gap:4px}
+        #vgl-root .vgl-chip{padding:3px 8px}
       }
       .vgl-card:hover{
         background:linear-gradient(170deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),var(--bg3);

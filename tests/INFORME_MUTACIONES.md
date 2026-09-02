@@ -12162,4 +12162,39 @@ aplicar aquí, y se anota para no volver a buscarlo.
 | 432 | «SOLO Laboratorios» pierde de dónde viene | *suite_15: v18.0.126 (fila 38)…* | Sí |
 | 433 | el punto verde vuelve a latir sin parar | *suite_15: v18.0.126: el punto verde late tres veces…* | Sí |
 
-Banco completo: **3.090 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.090 comprobaciones pasan, 0 fallan.** *(v18.0.126)*
+
+---
+
+## v18.0.127 — decisiones de la entrevista, lote 2: la pastilla «Pendientes» y la densidad
+
+**La pastilla «🩺 Pendientes (N)» en el dock.** El cuadro de pendientes salía **una sola vez**,
+al abrir la historia; si el médico lo cerraba sin apuntar nada, no había forma de volver a verlo
+en toda la jornada. Ahora hay una pastilla que lo reabre, con el mismo contenido.
+
+Lo que hacía falta antes de poder añadirla: el cálculo vivía **dentro** de
+`checkAvisoUniversal`, mezclado con las compuertas de «ya se avisó hoy» y «espera a que Athenea
+responda». Se extrae a `_pendientesUniversales(doc)`: ahí queda el **qué**, y en
+`checkAvisoUniversal` solo el **cuándo**. Repetir el recuento en el dock habría creado la
+segunda vara que este proyecto lleva versiones eliminando — el mismo error que causó el reporte
+del LDL en la v18.0.120.
+
+Dos detalles que no son cosméticos: la pastilla **solo aparece si N > 0** (un control que dice
+«0» ocupa sitio en un dock apretado y no informa de nada), y **no marca nada como visto** — lo
+pidió él, así que no consume el aviso automático del día. El número entra en la firma del dock:
+sin eso se congelaba en el conteo del primer tick y no bajaba al ordenar los exámenes.
+
+**Cuatro citas a la vista en 1366×768.** Medido con `docs/uiux/render.js` sobre el HTML y el CSS
+reales: **3 tarjetas completas antes, 4 después** (alturas 165/135/123/135 → 143/116/109/116).
+Solo espaciado: **ni un tamaño de letra**, porque la letra es lo que se lee de un vistazo entre
+paciente y paciente. Acotado a pantallas bajas — en 1920×1080 no hace falta apretar nada, y ahí
+siguen entrando 5.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 434 | la pastilla se pinta aunque no haya pendientes | *suite_15: v18.0.127: la pastilla «🩺 Pendientes (N)»…* (+ las 3 pruebas del dock, que la contaban) | Sí |
+| 435 | el número sale de la firma del dock y se congela | *suite_15: …y la firma que la mantiene viva* | Sí |
+| 436 | la vara se parte: el dock cuenta distinto que el aviso | *suite_04: v18.0.127: _pendientesUniversales es la única vara…* | Sí |
+| 437 | vuelve el espaciado ancho en 1366×768 | *suite_25: v18.0.127 - la densidad de 1366x768…* | Sí |
+
+Banco completo: **3.094 comprobaciones pasan, 0 fallan.**

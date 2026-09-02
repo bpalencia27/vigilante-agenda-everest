@@ -1,0 +1,48 @@
+<div id="vgl-labs-modal" role="dialog" aria-modal="true" aria-labelledby="vgl-labs-title">
+      <div class="vgl-agm-card" style="max-width:880px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg> Laboratorios</div>
+            <div class="vgl-labs-patient">PACIENTE SINTETICO 1</div>
+            <div class="vgl-agm-sub">Documento: <b>SYN-1000</b> · Últimos 365 días</div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="vgl-ux-caption">Resultados del paciente en los últimos 365 días. Aquí solo se consultan: nada se modifica en la plataforma. Para programar la cita y la toma de muestras use «Agendar»; para pedir exámenes nuevos, «Ordenar».</div>
+
+        <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
+          <span class="vgl-labs-srclbl"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg> <b>Origen:</b> consulta automática al sistema del laboratorio, sin buscarlo a mano<button type="button" class="vgl-tip-btn" data-vgl-tip="Estos resultados se traen solos del sistema del laboratorio, sin que tenga que buscarlos. El botón del pie abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí." aria-label="Más información" aria-haspopup="true" aria-expanded="false">?</button></span>
+          <span class="vgl-labs-srconline" id="vgl-labs-srconline"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> En línea</span>
+          <button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-labs-nuevos" title="Consultar en vivo el sistema del laboratorio por si hay resultados nuevos">🔄 Buscar laboratorios nuevos</button>
+        </div>
+
+        <div class="vgl-agm-sec">
+          <label class="vgl-agm-lbl">Historial de resultados (últimos 365 días):<button type="button" class="vgl-tip-btn" data-vgl-tip="Las filas resaltadas en color son valores fuera del rango normal — igual que en la plataforma, no es un error del asistente. La etiqueta junto a cada resultado dice si vino directo del sistema del laboratorio o quedó registrado a mano." aria-label="Más información" aria-haspopup="true" aria-expanded="false">?</button></label>
+          <!-- v17.25.0 — AUDITORÍA DE LABORATORIOS: _renderEstadioRenalHtml (R1b, v14.1.1)
+               calculaba el recuadro de función renal — TFG, estadio, discordancia entre
+               fórmulas, paciente pediátrico, creatinina fuera de rango — con su propio CSS
+               ya escrito (.vgl-labs-renal-*), probado de punta a punta (suite_29/suite_32),
+               y JAMÁS insertado en ningún sitio: no había ni un contenedor para él en esta
+               plantilla. El catch de más abajo ("recuadro renal no disponible") ya hablaba
+               de un recuadro que nunca llegó a pintarse. -->
+          <!-- v17.26.0 — el bloque de seguridad farmacológica (#vgl-labs-farmaco,
+               extraFarmaco, v17.12.0) SE FUE de aquí: el médico lo probó en vivo el 28-ago
+               contra un paciente real y reportó que su lugar es erróneo — el juicio
+               farmacológico vive en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de
+               resultados de laboratorio. La función renal de arriba se queda: la queja fue
+               puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
+          <div id="vgl-labs-renal" class="vgl-labs-renal-slot" aria-live="polite"><div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> calculando con los resultados que van llegando…</div></div>
+          <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
+            <div class="vgl-agm-loading">⏳ Consultando resultados de laboratorio...</div>
+          </div>
+        </div>
+
+        <div class="vgl-agm-foot">
+          <a href="https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=SYN-1000" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg> Abrir el portal oficial del laboratorio
+          </a>
+          <button class="vgl-agm-btn pri" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
+        </div>
+      </div>
+    </div>
