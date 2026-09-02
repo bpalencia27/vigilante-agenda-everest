@@ -1325,6 +1325,40 @@ module.exports = {
       t.igual(casillaHb.value, "", "el aviso no rellena nada por su cuenta");
     });
 
+    // v18.0.104 — refutador de v18.0.101 (fila 44) y S+ flujo #1: con CUATRO avisos del mismo
+    // clic (VERDE + sin casilla + fuera de rango + obligatoria vacía) showToast colapsa en
+    // «Alerta Múltiple (4) — 3 alertas críticas y 1 rutinarias» sin analito, rango ni casilla,
+    // porque sin apptKey no puede agruparlos por paciente. Con apptKey «labs|cédula» los cuatro
+    // se funden en «4 avisos de este paciente» con los cuatro cuerpos completos.
+    await t.casoAsync("v18.0.104: cuatro avisos de Auto-Labs del mismo clic llegan agrupados por paciente con sus cuerpos, no como «Alerta Múltiple» vacía", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      const bandeja = c.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : null);
+      const clave = "labs|999888777";
+      c.api.showToast("VERDE", "Exámenes", "1 resultado(s) listos: creatinina escrita.", false, clave);
+      c.api.showToast("AMBAR", "Exámenes · sin casilla", "Llegaron resultados de HEMOGLOBINA GLICOSILADA pero esta pantalla no tiene la casilla.", false, clave);
+      c.api.showToast("AMBAR", "Exámenes · fuera de rango", "NO se escribieron: GLICEMIA = 99999 — fuera del rango oficial.", false, clave);
+      c.api.showToast("AMBAR", "Exámenes · casilla obligatoria", "Everest exige HEMOGLOBINA para esta ruta y la casilla sigue vacía.", false, clave);
+      await esperarA(() => (bandeja.children || []).length > 0, 2000);
+      await esperar(20);
+      const vivos = (bandeja.children || []);
+      t.igual(vivos.length, 1, "un solo aviso agrupado");
+      const titulo = String(vivos[0].querySelector(".vgl-toast-title").textContent || "");
+      const cuerpo = String(vivos[0].querySelector(".vgl-toast-b").textContent || "");
+      t.cierto(/4 avisos de este paciente/.test(titulo), "agrupado por paciente, no «Alerta Múltiple»: " + titulo);
+      for (const esperado of ["creatinina escrita", "HEMOGLOBINA GLICOSILADA", "GLICEMIA = 99999", "exige HEMOGLOBINA"]) {
+        t.cierto(cuerpo.indexOf(esperado) >= 0, "el cuerpo conserva «" + esperado + "»");
+      }
+      // Y el cableado: los seis showToast de Auto-Labs (rama principal y de reintento) llevan la clave.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.igual((src.match(/, false, "labs\|" \+ docId\)/g) || []).length, 6, "los seis avisos de Auto-Labs viajan con apptKey «labs|cédula»");
+      // Hermanos con título compartido en el mismo flush (el AZUL se tragaba el AMBAR):
+      t.igual((src.match(/showToast\("AMBAR", "Redactar con IA · sin datos"/g) || []).length, 2, "los dos AMBAR que siguen al AZUL «Leyendo…» del Redactor tienen título propio (el de «no activada» sale antes y solo)");
+      t.cierto(/showToast\("AMBAR", "Modo programador · Ajustes sin guardar"/.test(src), "el AMBAR de Modo programador (fila 33a) tiene título propio");
+    });
+
     // La rama del REINTENTO (tras auto-login) comparte el mismo hallazgo #41, pero —igual
     // que "L6643 / L6714" arriba— montarla de punta a punta exige simular el login real de
     // Athenea con estado. Se fija por código, igual que ese precedente.

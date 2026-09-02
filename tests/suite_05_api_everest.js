@@ -456,6 +456,39 @@ module.exports = {
       t.cierto(señales.every((s) => !!s), "y los tres llevan señal de aborto — ninguno puede volver a colgarse sin tope");
     });
 
+    // v18.0.104 — refutador de v18.0.99 (fila 6): el tope se soltaba al llegar las CABECERAS y
+    // el `await resp.text()` de después quedaba fuera — un cuerpo que no termina colgaba igual
+    // (también en el núcleo, cuyo `finally { clearTimeout }` iba antes de `resp.json()`). Y
+    // quedaban tres fetch más sin tope: el SMS automático tras AsignarTurno, la impresión del
+    // recordatorio (pestaña en blanco) y los tres de SharePoint.
+    await t.casoAsync("v18.0.104: el tope cubre la lectura del CUERPO (pieza y núcleo), y los fetch que faltaban pasan por él", async () => {
+      const c = cargar({ silencioso: true, fetch: () => Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}), text: () => new Promise(() => {}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c.ctx.AbortController = AbortController;
+      // (a) La pieza: cabeceras que llegan y un cuerpo que nunca termina → abortado por el tope.
+      const cabecerasSinCuerpo = (u, init) => Promise.resolve({
+        ok: true, status: 200,
+        text: () => new Promise((_, reject) => { if (init && init.signal) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" }))); }),
+      });
+      const t0 = Date.now();
+      let err = null;
+      try { const r = await c.api._fetchConTope(cabecerasSinCuerpo, "/x", {}, 40); await r.text(); } catch (e) { err = e; }
+      t.cierto(!!err && err.name === "AbortError", "el cuerpo colgado termina abortado — antes el tope ya se había soltado al llegar las cabeceras");
+      t.cierto(Date.now() - t0 < 5000, "y por su propio tope");
+      // (b) El núcleo: json() que nunca termina, con la señal respetada.
+      const cNuc = cargar({ silencioso: true, fetch: (u, init) => Promise.resolve({ ok: true, status: 200, json: () => new Promise((_, reject) => { if (init && init.signal) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" }))); }) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      cNuc.ctx.AbortController = AbortController;
+      const t1 = Date.now();
+      const r = await cNuc.api._pageFetchJsonCore("/x", { method: "POST", body: "{}", __timeoutMs: 40 });
+      t.igual(r, null, "el núcleo TERMINA (en null) aunque el cuerpo no llegue nunca");
+      t.cierto(Date.now() - t1 < 5000, "por su tope (tardó " + (Date.now() - t1) + " ms)");
+      // (c) El cableado de los que faltaban, por fuente (son flujos con window.open y GM que el arnés no monta).
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/_fetchConTope\(FETCH0 \|\| window\.fetch, smsUrl,/.test(src), "el SMS automático tras AsignarTurno lleva tope");
+      t.cierto(/const resp = await _fetchConTope\(f, url, \{ credentials: "same-origin" \}\);/.test(src), "imprimirRecordatorioCita lleva tope: la pestaña en blanco no espera para siempre");
+      t.igual((src.match(/_fetchConTope\(fetch, /g) || []).length, 3, "y los tres fetch de SharePoint (listado, descarga, respaldo)");
+      t.falso(/\bawait fetch\(spListUrl\(\)/.test(src) || /await fetch\(spDownloadUrl/.test(src), "sin fetch a pelo en bootSharepointLite");
+    });
+
     await t.casoAsync("_pageFetchJsonCore: un 401 (sesión caducada) SÍ cuenta como fallo; un 404 no", async () => {
       // Un 401 caía en el mismo `return null` que un 404 y nunca llamaba a
       // `_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y

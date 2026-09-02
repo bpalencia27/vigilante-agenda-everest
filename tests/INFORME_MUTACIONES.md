@@ -11156,3 +11156,62 @@ viajaba entero; el indicativo entra en la forma con o sin «+».
 | 267 | el nombre efectivo ignora el del paquete (**la fuga #1**) | *suite_57: v18.0.103 PHI: el nombre del paquete de Everest sirve de tachadura…* | Sí |
 
 Banco completo: **2.986 comprobaciones pasan, 0 fallan.**
+
+## v18.0.104 — lo que quedó de la segunda ronda: tope hasta el cuerpo, avisos por paciente, carpeta por cédula, deshacer sin cédula
+
+Segunda mitad de lo que trajeron los refutadores del cierre adversarial (02-sep). Ninguna de
+estas era una regresión de PHI (eso fue v18.0.103); son huecos que las pruebas de la primera
+ronda no cubrían porque miraban el mecanismo y no el efecto.
+
+**Fila 6, tope incompleto (refutador v18.0.99).** `_fetchConTope` soltaba el temporizador
+en cuanto llegaban las CABECERAS: un servidor que responde 200 y luego se cuelga sin cerrar el
+cuerpo dejaba `resp.text()`/`resp.json()` esperando para siempre — exactamente el caso que
+el tope quería evitar. Ahora el tope vive hasta que se lea el cuerpo (los cuatro lectores se
+envuelven y sueltan el temporizador al terminar), `_pageFetchJsonCore` hace lo mismo con su
+`json()`, y los tres `fetch` directos que faltaban (SMS automático, impresión del recordatorio y
+los tres de SharePoint) pasan por él.
+
+**Fila 44, avisos huecos (refutador v18.0.101 + S+ flujo).** Cuatro avisos de Auto-Labs del
+mismo clic superaban el umbral de tres y llegaban como «Alerta Múltiple (4)» SIN cuerpos: el
+médico veía que había cuatro cosas y no cuál. Con `apptKey` `"labs|" + docId` en los seis
+`showToast` se agrupan como «N avisos de este paciente» con sus textos; además los títulos de
+tres avisos ámbar dicen ahora cuál función y por qué («Redactar con IA · sin datos», «Modo
+programador · Ajustes sin guardar»).
+
+**Fila 39a, comparadores del LIS (refutador v18.0.101).** `_esUroComponenteAlterado` seguía con
+`parseFloat` sobre el valor crudo: «> 50 X CAMPO» daba NaN y no se marcaba; ahora delega en
+`mtrUroRecuento`, que ya entiende comparadores y rangos (límite superior).
+
+**Fila 21, carpeta por cédula (refutador v18.0.99).** `_vglCarpetaResolverNombre` devolvía el
+PRIMER archivo cuya clave normalizada coincidiera, y como `listar()` devolvía todo, un mutante
+que resolviera al primer archivo de la carpeta leía la historia de OTRA cédula. Ahora
+`_vglCarpetaNombresDeDoc` filtra por `normalizeKey` estricto, ordena canónico-primero, y cuando
+hay escisión (canónico + legado) se lee la FUSIÓN de todos con `mtrHistorialAgregar` en vez de
+uno solo, y al guardar se fusiona sobre esa unión para no perder consultas.
+
+**Fila 15, fuente a medias (refutador v18.0.99).** `_taFuente` prefería la fuente que trajera
+la medición completa, pero con Athenea a medias (130/null) y la casilla de hoy completa
+(120/80) devolvía la mezcla; ahora, si la casilla de hoy está completa, gana entera.
+
+**Fila 20 residuo, deshacer sin cédula (refutador v18.0.99).** Si el lote se guardó sin cédula
+(paquete llegó sin `identificacion`) y al pulsar Deshacer SÍ se lee una cédula en la historia,
+no había forma de confirmar que era el mismo paciente y se deshacía sobre la casilla ajena.
+Ahora: sin cédula en el lote y con cédula en pantalla → aviso ámbar y no se toca nada.
+
+**Fila 8, cruce del paquete sin cédula (refutador v18.0.97).** Verificado, no era defecto:
+la guarda de v18.0.48 sigue en pie cuando el paquete llega sin cédula y el paciente cambia
+entre pedir y recibir — se añade la prueba que lo fija.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 268 | `_fetchConTope` vuelve a soltar el tope en las cabeceras (la pieza) | el runner no termina: **EL EJECUTOR NO LLEGÓ AL FINAL — el banco NO está verde** (el caso *v18.0.104: el tope cubre la lectura del CUERPO…* de suite_05 se queda esperando) | Sí |
+| 269 | `_pageFetchJsonCore` suelta el tope antes de `resp.json()` (el núcleo) | *suite_05: v18.0.104: el tope cubre la lectura del CUERPO (pieza y núcleo), y los fetch que faltaban pasan por él* | Sí |
+| 270 | los seis `showToast` de Auto-Labs sin `apptKey` | *suite_15: v18.0.104: cuatro avisos de Auto-Labs del mismo clic llegan agrupados por paciente con sus cuerpos, no como «Alerta Múltiple» vacía* | Sí |
+| 271 | `_esUroComponenteAlterado` vuelve a `parseFloat` | *suite_51: v18.0.104: los comparadores y rangos del LIS se leen como el motor (límite superior)* | Sí |
+| 272 | `_vglCarpetaNombresDeDoc` sin el filtro de cédula (resuelve al primer archivo) | *suite_68: v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones, y listar() real funciona* | Sí |
+| 273 | la lectura de la carpeta vuelve a un solo archivo (sin fusión) | *suite_68: v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones…* | Sí |
+| 274 | `_taFuente` sin `if (taCompleta) return ta;` | *suite_37: v18.0.104: con Athenea a medias y la casilla de hoy completa, gana la casilla de hoy entera* | Sí |
+| 275 | Deshacer sin la guarda «lote sin cédula + cédula en pantalla» | *suite_31: v17.16.0 — el Deshacer: una sola ranura…* (bloque v18.0.104, «no se puede confirmar el paciente → no se deshace») | Sí |
+| 276 | la guarda de v18.0.48 (cambio de paciente entre pedir y recibir) retirada | *suite_31: v18.0.104 CRUCE — paquete SIN cédula, legible al pedir y cambio de paciente al llegar: NO se archiva* | Sí |
+
+Banco completo: **2.992 comprobaciones pasan, 0 fallan.**

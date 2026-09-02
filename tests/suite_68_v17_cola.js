@@ -992,6 +992,42 @@ module.exports = {
       t.igual(await api.vglCarpetaLeerHistorial("111111", { leer: async (n) => disco[n] || null }), null, "sin listar no hay tolerancia: nombre exacto y no está");
     });
 
+    // v18.0.104 — refutador de v18.0.99 (fila 21): (a) un mutante que resolvía al PRIMER archivo
+    // numérico cruzaba historiales de OTRO paciente con el banco verde; (b) `listar()` real
+    // (entries()) no tenía cobertura; (c) canónico + legado coexistiendo (escisión previa) o dos
+    // legados dejaban controles huérfanos según el orden del listado.
+    await t.casoAsync("v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones, y listar() real funciona", async () => {
+      const fsDe = (disco) => ({ leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) });
+      // (a) Solo hay un archivo de OTRA cédula: no se lee ni se escribe encima.
+      const otro = { "0000222222.json": JSON.stringify({ v: 1, doc: "0000222222", controles: [{ fecha: "2026-03-01" }] }) };
+      t.igual(await api.vglCarpetaLeerHistorial("111111", fsDe(otro)), null, "el historial de otra cédula NO se lee");
+      const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(otro));
+      t.igual(r.archivo, "111111.json", "y se escribe en el canónico propio");
+      t.igual(JSON.parse(otro["0000222222.json"]).controles.length, 1, "el del otro paciente queda intacto");
+      // (c) Escisión previa: canónico + legado → se leen fusionados y el canónico se lleva todo.
+      const esc = { "111111.json": JSON.stringify({ v: 1, doc: "111111", controles: [{ fecha: "2026-08-30" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
+      const h = await api.vglCarpetaLeerHistorial("111111", fsDe(esc));
+      t.igual(h.controles.map((x) => x.fecha).join(","), "2026-03-01,2026-08-30", "los dos controles, ordenados, aunque estén en dos archivos");
+      const r2 = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(esc));
+      t.igual(r2.archivo, "111111.json", "se escribe en el canónico");
+      t.igual(JSON.parse(esc["111111.json"]).controles.length, 3, "y ya lleva los tres controles: el legado dejó de ser huérfano");
+      // Dos legados: fusión determinista, sin depender del orden del listado.
+      const dos = { "00111111.json": JSON.stringify({ v: 1, doc: "00111111", controles: [{ fecha: "2026-05-01" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
+      const h2 = await api.vglCarpetaLeerHistorial("111111", fsDe(dos));
+      t.igual(h2.controles.map((x) => x.fecha).join(","), "2026-03-01,2026-05-01", "dos legados: los dos controles");
+      // (b) La implementación real: listar() recorre entries() del handle.
+      const c = cargar({ silencioso: true });
+      const archivos = { "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }), "otro.txt": "x" };
+      c.api.__setCarpetaHandleParaTest({
+        entries: async function* () { for (const n of Object.keys(archivos)) yield [n, { kind: "file" }]; },
+        getFileHandle: async (n, o) => { if (!(n in archivos) && !(o && o.create)) { const e = new Error("no such file"); e.name = "NotFoundError"; throw e; } return { getFile: async () => ({ text: async () => archivos[n] }), createWritable: async () => ({ write: async (t) => { archivos[n] = t; }, close: async () => {} }) }; },
+      });
+      const io = c.api._vglCarpetaFsReal();
+      t.igual((await io.listar()).join(","), "0000111111.json,otro.txt", "listar() real devuelve los nombres de la carpeta");
+      const hReal = await c.api.vglCarpetaLeerHistorial("111111");
+      t.cierto(!!hReal && hReal.controles.length === 1, "y con la carpeta real el legado con ceros se encuentra");
+    });
+
     t.caso("mtrHistorialAgregar y mtrNombreArchivoPaciente: las piezas sueltas", () => {
       const h1 = api.mtrHistorialAgregar(null, { fecha: "2026-08-01" });
       t.igual(h1.controles.length, 1, "sin historial previo se crea");

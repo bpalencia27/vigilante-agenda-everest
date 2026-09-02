@@ -521,6 +521,22 @@ module.exports = {
       t.igual(c.api.mtrHcLeer("222222"), null, "la historia de 80123456 NO queda archivada bajo 222222 — antes sí (el defecto original, de vuelta)");
       t.igual(c.api.mtrHcLeer("80123456"), null, "y tampoco bajo el suyo a ciegas: no estaba abierto");
     });
+    // v18.0.104 — refutador de v18.0.97 (fila 8): desde que la cédula del paquete decide antes,
+    // ninguna prueba llegaba a la guarda de v18.0.48 (`_pacienteSigueAbierto(idAlPedir)`): un
+    // mutante que la borraba dejaba suite_31 en verde. Aquí el paquete NO trae cédula, la de
+    // pantalla era legible al pedir y el paciente cambia antes de que llegue.
+    await t.casoAsync("v18.0.104 CRUCE — paquete SIN cédula, legible al pedir y cambio de paciente al llegar: NO se archiva (la guarda de v18.0.48 sigue en pie)", async () => {
+      const p = _hcEverestFalso(); delete p.datosUsuario;
+      const cuerpo = JSON.stringify(p);
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domPaciente(c, "111111");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const pr = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");                            // cambió de paciente antes de que llegara
+      await pr; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "no se archiva bajo el que está abierto al llegar");
+      t.igual(c.api.mtrHcLeer("111111"), null, "ni bajo el pedido a ciegas: ya no está abierto");
+    });
     await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir, pero el paquete trae la del paciente abierto: SÍ se archiva (la captura «al abrir» sigue viva)", async () => {
       const cuerpo = JSON.stringify(_hcEverestFalso());
       const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
@@ -1142,6 +1158,17 @@ module.exports = {
       t.igual(cSin.api._vglEjecutarDeshacer(), 1, "sin cédula NO se acumula: el lote se sustituye y Deshacer solo toca el último");
       t.igual(X.value, "TEXTO QUE EL MÉDICO ESCRIBIÓ A MANO EN OTRA HISTORIA", "la casilla del otro paciente, escrita a mano, queda intacta");
       t.igual(Y.value, "", "y la del lote vigente sí vuelve");
+      // v18.0.104 — refutador de v18.0.99 (fila 20, residuo): con el lote SIN cédula no había
+      // forma de comprobar el paciente al deshacer; dentro de los 5 min, ya con otra historia
+      // abierta (cédula legible ahora), se restauraba un nodo que Angular pudo reutilizar.
+      const Z = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: Z, prev: "" }], "Examen normal");
+      Z.value = "Normal";
+      cSin.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);   // hay historia abierta…
+      cSin.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "C.C. 111111", closest: () => null }] : []);   // …y ahora con cédula legible
+      t.igual(cSin.api.extractPacienteAbierto(), "111111", "montaje: la cédula se lee ahora");
+      t.igual(cSin.api._vglEjecutarDeshacer(), 0, "ahora sí se lee una cédula y el lote no la tenía: no se puede confirmar el paciente → no se deshace");
+      t.igual(Z.value, "Normal", "la casilla queda como está");
 
       // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
       const c2 = cargar({ silencioso: true });

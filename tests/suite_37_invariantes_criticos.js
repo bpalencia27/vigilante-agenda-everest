@@ -447,5 +447,17 @@ module.exports = {
       t.igual(res3.factores.paDiastolica, 80);
     });
 
+    // v18.0.104 — refutador de v18.0.99 (fila 15): la regla «gana la fuente que trae la medición
+    // COMPLETA» no la fijaba ninguna prueba (un mutante que tomara ent con una sola cifra dejaba
+    // suite_37 en verde). Aquí: Athenea parcial + casilla de hoy completa → la completa, entera.
+    t.caso("v18.0.104: con Athenea a medias y la casilla de hoy completa, gana la casilla de hoy entera", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.querySelector = (sel) => (/sistolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "120" } : (/diastolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "80" } : null;
+      c.env.doc.getElementById = () => null;
+      const res = c.api.mtrResumenDesdeModalLabs({ entradas: { edad: 60, sexo: "F", peso: 70, creatinina: 0.9, pas: 130, pad: null } }, [], { nombre: "X" }, null);
+      t.igual(res.factores.paSistolica, 120, "no 130: la medición completa de hoy gana entera");
+      t.igual(res.factores.paDiastolica, 80);
+    });
+
   },
 };

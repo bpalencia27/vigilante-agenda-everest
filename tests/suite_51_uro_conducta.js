@@ -109,6 +109,20 @@ module.exports = {
       t.falso(api._esUroComponenteAlterado({ nombre: "DENSIDAD", resultado: "1.015" }), "un número sin regla sigue sin inventarse alteración");
     });
 
+    // v18.0.104 — refutador de v18.0.101 (fila 39a): los COMPARADORES del LIS («> 50 X CAMPO»,
+    // «MAYOR A 100», «>100») seguían pintándose NORMAL: parseFloat daba NaN, y en «5-8 x campo»
+    // tomaba la cota inferior. El bloque numérico lee ahora con mtrUroRecuento (límite superior).
+    t.caso("v18.0.104: los comparadores y rangos del LIS se leen como el motor (límite superior)", () => {
+      for (const r of ["> 50 X CAMPO", "MAYOR A 100", ">100", "> 100 x campo", "5-8 x campo", "10-15 x campo"]) {
+        t.cierto(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: r }), "leucocitos «" + r + "»: alterado");
+      }
+      t.cierto(api._esUroComponenteAlterado({ nombre: "HEMATIES", resultado: "4-6 x campo" }), "hematíes 4-6: el límite superior (6) > 3");
+      t.falso(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: "1-2 x campo" }), "leucocitos 1-2: normal");
+      t.falso(api._esUroComponenteAlterado({ nombre: "HEMATIES", resultado: "0-2 x campo" }), "hematíes 0-2: normal");
+      const r = api._resumenClinicoUro([{ nombre: "LEUCOCITOS", resultado: "> 50 X CAMPO" }, { nombre: "NITRITOS", resultado: "NEGATIVO" }]);
+      t.cierto(!!r && r.esPatologico === true, "y el resumen del parcial ya no dice «Sin hallazgos» con una piuria masiva a la vista");
+    });
+
     t.caso("_clasificarComponentesUro: separa fisicoquímico, sedimento y otros sin perder ninguno", () => {
       const r = api._clasificarComponentesUro([
         { nombre: "COLOR", resultado: "AMARILLO" },

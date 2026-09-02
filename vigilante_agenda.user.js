@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.103
+// @version      18.0.104
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.103";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.104";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1589,7 +1589,11 @@
       // se resaltaban en rojo. ESCASAS/TRAZAS siguen en 0 a propósito (ver mtrUroGrado).
       try { if (mtrUroRecuento(val) === 999) return true; } catch (e) {}
       try { const g = mtrUroGrado(val); if (typeof g === "number" && g >= 1) return true; } catch (e) {}
-      const num = parseFloat(val.replace(",", "."));
+      // v18.0.104 — refutador de v18.0.101 (fila 39a): parseFloat daba NaN con «> 50 X CAMPO» o
+      // «MAYOR A 100» y tomaba la cota inferior de «5-8 x campo»; mtrUroRecuento (el mismo lector
+      // del motor) entiende comparadores y rangos y devuelve el límite superior.
+      const rec = mtrUroRecuento(val);
+      const num = (typeof rec === "number") ? rec : NaN;
       const nom = stripAccents(String(c.nombre || "")).toLowerCase();
       if (!isNaN(num)) {
           if (nom.includes("leucocito") && num > 5) return true;
@@ -7162,7 +7166,7 @@
                   // por este mismo síntoma, y que al clic manual se le quedó sin aplicar.
                   if (_huboEscritura && !(_autoLabsAvisoDoc === docId && (Date.now() - _autoLabsAvisoTs) < 60000)) {
                       _autoLabsAvisoDoc = docId; _autoLabsAvisoTs = Date.now();
-                      showToast("VERDE", "Exámenes", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
+                      showToast("VERDE", "Exámenes", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false, "labs|" + docId);   // v18.0.104: agrupados por paciente
                   }
                   // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
                   // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
@@ -7184,7 +7188,7 @@
                       // hacía su trabajo— y «sin casilla» e «implausibles» se tragaban entre sí.
                       showToast("AMBAR", "Exámenes · sin casilla",
                           "Llegaron resultados de " + _nombresSc.join(", ") + " pero esta pantalla no tiene la casilla donde escribirlos. "
-                          + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false);
+                          + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false, "labs|" + docId);
                       try { uxTrack("labs.autollenado.sincasilla", { n: r.sinCasilla.length }); } catch (e) {}
                   }
                   // v17.6.8 — AUDITORÍA 5 MÓDULOS: el bloqueo por plausibilidad era MUDO
@@ -7196,7 +7200,7 @@
                       const _prim = r.implausibles[0];
                       showToast("AMBAR", "Exámenes · fuera de rango",
                           "NO se escribieron: " + _bloq + (_resto > 0 ? " y " + _resto + " más" : "")
-                          + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false);
+                          + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false, "labs|" + docId);
                       try { uxTrack("labs.autollenado.implausibles", { n: r.implausibles.length }); } catch (e) {}
                   }
                   // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba
@@ -7206,7 +7210,7 @@
                   if (Array.isArray(r.obligatoriasVacias) && r.obligatoriasVacias.length) {
                       const _nombresOv = r.obligatoriasVacias.map((o) => o.nombre);
                       showToast("AMBAR", "Exámenes · casilla obligatoria",
-                          "Everest exige " + _nombresOv.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
+                          "Everest exige " + _nombresOv.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false, "labs|" + docId);
                       try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r.obligatoriasVacias.length }); } catch (e) {}
                   }
               } else if (atheneaSesionViva === false) {
@@ -7251,14 +7255,14 @@
                                   _huboEscritura2 ? "verde" : "ambar", "🧪 Exámenes");
                               _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
                               if (_huboEscritura2) _vglOfrecerDeshacer(btn);
-                              if (_huboEscritura2) showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false);
+                              if (_huboEscritura2) showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false, "labs|" + docId);
                               // v18.0.89 — hallazgo #41 del enjambre: la misma información
                               // que se agregó a la rama principal, para el camino de
                               // reintento tras auto-login (r2 comparte el mismo cálculo).
                               if (Array.isArray(r2.obligatoriasVacias) && r2.obligatoriasVacias.length) {
                                   const _nombresOv2 = r2.obligatoriasVacias.map((o) => o.nombre);
                                   showToast("AMBAR", "Exámenes · casilla obligatoria",   // 02-sep (fila 44): título distinto del VERDE
-                                      "Everest exige " + _nombresOv2.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
+                                      "Everest exige " + _nombresOv2.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false, "labs|" + docId);
                                   try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r2.obligatoriasVacias.length }); } catch (e) {}
                               }
                           } else if (labs2 === null) {
@@ -7948,6 +7952,18 @@
     if (lote.docId && typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(lote.docId)) {
       showToast("AMBAR", "Deshacer", "La historia abierta ya no es la del paciente en que se escribió: no se deshizo nada.", false);
       return 0;
+    }
+    // v18.0.104 — refutador de v18.0.99 (fila 20): con el lote SIN cédula (cabecera ilegible al
+    // escribir) no había forma de comprobar el paciente y se deshacía igual — dentro de los 5
+    // minutos, ya con otra historia abierta, restauraba un nodo que Angular pudo reutilizar. Si
+    // ahora SÍ se lee una cédula, el paciente no se puede confirmar: no se toca nada.
+    if (!lote.docId) {
+      let abierto = "";
+      try { abierto = (typeof extractPacienteAbierto === "function") ? String(extractPacienteAbierto() || "") : ""; } catch (e) { abierto = ""; }
+      if (abierto) {
+        showToast("AMBAR", "Deshacer", "No se pudo confirmar que la historia abierta sea la del paciente en que se escribió: no se deshizo nada.", false);
+        return 0;
+      }
     }
     let n = 0;
     lote.pares.forEach((par) => {
@@ -12523,11 +12539,11 @@
       // sin permisos extra). Solo si no aparece se usa la base piloto de respaldo.
       let nombre = "", buf = null, esFallback = true, mtime = "";
       try {
-        const rl = await fetch(spListUrl(), { credentials: "include", headers: { Accept: "application/json;odata=nometadata" } });
+        const rl = await _fetchConTope(fetch, spListUrl(), { credentials: "include", headers: { Accept: "application/json;odata=nometadata" } });   // v18.0.104 (fila 6)
         if (rl.ok) {
           const sel = pickTodaysFile(spRows(await rl.json()));
           if (sel) {
-            const rd = await fetch(spDownloadUrl(sel.ServerRelativeUrl), { credentials: "include" });
+            const rd = await _fetchConTope(fetch, spDownloadUrl(sel.ServerRelativeUrl), { credentials: "include" }, 60000);
             if (rd.ok) { const b = await rd.arrayBuffer(); if (esLibroValido(b, sel.Name)) { buf = b; nombre = sel.Name; mtime = sel.TimeLastModified || ""; esFallback = false; } }
           }
         }
@@ -12539,7 +12555,7 @@
         let err = "";
         for (const url of spFallbackUrls(fb.id)) {
           try {
-            const r = await fetch(url, { credentials: "include" });
+            const r = await _fetchConTope(fetch, url, { credentials: "include" }, 60000);   // v18.0.104 (fila 6)
             if (!r.ok) throw new Error("HTTP " + r.status);
             const b = await r.arrayBuffer();
             if (!esLibroValido(b, fb.name)) throw new Error("no es un Excel");
@@ -19477,9 +19493,27 @@
     if (typeof AbortController === "undefined" || (init && init.signal)) return f(url, init);
     const abortar = new AbortController();
     const corta = setTimeout(() => { try { abortar.abort(); } catch (e) {} }, ms);
+    const soltar = () => clearTimeout(corta);
+    // v18.0.104 — refutador de v18.0.99 (fila 6): el tope se soltaba al llegar las CABECERAS,
+    // y el `await resp.text()` de después quedaba fuera — un cuerpo que no termina dejaba
+    // «Enviando…» para siempre igual que antes. El tope sigue vivo hasta que el cuerpo se lea
+    // (text/json/blob/arrayBuffer lo sueltan al terminar); si nadie lo lee, vence solo y
+    // aborta una petición ya completa, que no hace nada.
     return Promise.resolve()
       .then(() => f(url, Object.assign({}, init || {}, { signal: abortar.signal })))
-      .finally(() => clearTimeout(corta));
+      .then((resp) => {
+        let envuelto = false;
+        try {
+          for (const m of ["text", "json", "blob", "arrayBuffer"]) {
+            const orig = resp && resp[m];
+            if (typeof orig !== "function") continue;
+            envuelto = true;
+            resp[m] = function () { return Promise.resolve(orig.apply(resp, arguments)).finally(soltar); };
+          }
+        } catch (e) {}
+        if (!envuelto) soltar();
+        return resp;
+      }, (e) => { soltar(); throw e; });
   }
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
@@ -19530,9 +19564,12 @@
             resp = await f(fullUrl, Object.assign({
               headers: { "Content-Type": "application/json", "Accept": "application/json" }
             }, options || {}, _abortar ? { signal: _abortar.signal } : {}));
-          } finally { if (_corta) clearTimeout(_corta); }
+          } catch (eF) { if (_corta) clearTimeout(_corta); throw eF; }
+          // v18.0.104 (fila 6) — el tope cubre también la lectura del CUERPO: antes se soltaba
+          // aquí, al llegar las cabeceras, y `resp.json()` podía esperar para siempre.
           if (resp && resp.ok) {
-            const data = await resp.json();
+            let data = null;
+            try { data = await resp.json(); } finally { if (_corta) clearTimeout(_corta); }
             if (data) { _apiMarcarResultado(true); return data; }
           } else if (resp && resp.status >= 500) {
             isError = true;
@@ -21040,7 +21077,7 @@
           // Mismo criterio de éxito de siempre (2xx: no hay captura real de un fallo de
           // este endpoint para saber si el cuerpo dice algo más), pero ahora si NO lo es,
           // queda dicho en consola — con lo que el servidor contestó de verdad.
-          (FETCH0 || window.fetch)(smsUrl, { credentials: "include", headers: { Accept: "application/json" } })
+          _fetchConTope(FETCH0 || window.fetch, smsUrl, { credentials: "include", headers: { Accept: "application/json" } })   // v18.0.104 (fila 6): con tope
             .then(async (r) => {
               const okHttp = !!(r && r.ok);
               let cuerpo = "";
@@ -21317,7 +21354,7 @@
       try {
         const f = (typeof FETCH0 !== "undefined" && FETCH0) || (typeof window !== "undefined" && window.fetch);
         if (typeof f !== "function") throw new Error("sin fetch disponible");
-        const resp = await f(url, { credentials: "same-origin" });
+        const resp = await _fetchConTope(f, url, { credentials: "same-origin" });   // v18.0.104 (fila 6): la pestaña en blanco no espera para siempre
         if (!resp || !resp.ok) throw new Error("HTTP " + (resp && resp.status));
         const blob = await resp.blob();
         const blobUrl = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "application/pdf" }));
@@ -22820,7 +22857,7 @@
         const sigue = (typeof _pacienteSigueAbierto === "function") ? _pacienteSigueAbierto(apt.doc_id) : true;
         if (!sigue) {
           try { mtrCacheResumenBorrar(); } catch (e2) {}   // no dejar rastro mezclado
-          showToast("AMBAR", "Redactar con IA",
+          showToast("AMBAR", "Redactar con IA · sin datos",
             "Cambió de paciente mientras se leían los datos, así que no se usó nada de lo leído. Vuelva a pulsar ✍ Redactar con la historia que quiere.", false);
           try { uxTrack("fn.redactor.cambio_paciente"); uxTrack("fn.redactor.abandon"); } catch (e2) {}
           return;
@@ -22828,7 +22865,7 @@
       } catch (e) {}
     }
     if (!resumen) {
-      showToast("AMBAR", "Redactar con IA", "No se pudieron leer los datos del paciente ahora (los laboratorios no respondieron). Inténtelo de nuevo en un momento.", false);
+      showToast("AMBAR", "Redactar con IA · sin datos", "No se pudieron leer los datos del paciente ahora (los laboratorios no respondieron). Inténtelo de nuevo en un momento.", false);   // v18.0.104: título propio, el AZUL «Leyendo…» no se lo traga
       try { uxTrack("fn.redactor.sin_datos"); uxTrack("fn.redactor.abandon"); } catch (e) {}
       return;
     }
@@ -29162,15 +29199,40 @@
   // por nombre exacto no lo veía (el Panel no mostraba los controles previos) y la siguiente
   // instantánea creaba «111111.json» al lado. Mismo patrón que _vglClaveDeDoc para la cosecha:
   // se lee y se escribe donde YA está archivado. Un `fs` sin `listar` se comporta como antes.
-  async function _vglCarpetaResolverNombre(io, docId) {
+  // v18.0.104 — refutador de v18.0.99 (fila 21): TODOS los archivos de la misma cédula canónica,
+  // el canónico primero y los legados en orden fijo (no el de `entries()`, que no está
+  // garantizado). Un archivo de OTRA cédula nunca entra: solo casa la clave canónica exacta.
+  async function _vglCarpetaNombresDeDoc(io, docId) {
     const canon = mtrNombreArchivoPaciente(docId);
-    if (!canon || !io || typeof io.listar !== "function") return canon;
+    if (!canon) return [];
+    if (!io || typeof io.listar !== "function") return [canon];
     let nombres = null;
     try { nombres = await io.listar(); } catch (e) { nombres = null; }
-    if (!Array.isArray(nombres) || nombres.indexOf(canon) >= 0) return canon;
+    if (!Array.isArray(nombres)) return [canon];
     const clave = normalizeKey(docId);
-    const legado = nombres.find((n) => /^\d+\.json$/i.test(String(n)) && normalizeKey(String(n).replace(/\.json$/i, "")) === clave);
-    return legado || canon;
+    const legados = nombres
+      .map(String)
+      .filter((n) => n !== canon && /^\d+\.json$/i.test(n) && normalizeKey(n.replace(/\.json$/i, "")) === clave)
+      .sort();
+    return (nombres.indexOf(canon) >= 0 ? [canon] : []).concat(legados).concat(nombres.indexOf(canon) >= 0 || legados.length ? [] : [canon]);
+  }
+  async function _vglCarpetaResolverNombre(io, docId) {
+    const lista = await _vglCarpetaNombresDeDoc(io, docId);
+    return lista.length ? lista[0] : null;
+  }
+  // Lee y FUSIONA todos los archivos de la cédula (escisión canónico + legado, o dos legados):
+  // ningún control queda huérfano. Devuelve null si no hay ninguno legible.
+  async function _vglCarpetaLeerFusionado(io, docId) {
+    const nombres = await _vglCarpetaNombresDeDoc(io, docId);
+    let h = null;
+    for (const n of nombres) {
+      let j = null;
+      try { const txt = await io.leer(n); j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+      if (!j || !Array.isArray(j.controles)) continue;
+      if (!h) { h = j; continue; }
+      for (const ctl of j.controles) { try { h = mtrHistorialAgregar(h, ctl); } catch (e) {} }
+    }
+    return h;
   }
 
   // v17.0.1 — AUDITORÍA DE LA v17: el handle vivía SOLO en memoria, así que después de
@@ -29311,6 +29373,10 @@
     const io = fs || _vglCarpetaFsReal();
     if (!io) return { ok: false, motivo: "No hay carpeta elegida todavía." };
     const nombre = await _vglCarpetaResolverNombre(io, docId);   // 02-sep — donde YA esté archivado
+    // v18.0.104 (fila 21) — si hay más de un archivo de la misma cédula (escisión previa), el
+    // previo es la FUSIÓN de todos: el archivo que se escribe se lleva todos los controles.
+    let _fusionPrevia = null;
+    try { const ns = await _vglCarpetaNombresDeDoc(io, docId); if (ns.length > 1) _fusionPrevia = await _vglCarpetaLeerFusionado(io, docId); } catch (e) { _fusionPrevia = null; }
     // v17.0.1 — AUDITORÍA DE LA v17. Este bloque tenía tres formas de BORRAR el historial
     // de un paciente, que es lo único irreparable que puede hacer esta función:
     //  (a) si el respaldo del archivo ilegible fallaba (disco lleno, permiso), el catch
@@ -29388,7 +29454,7 @@
       previo = null;
     }
 
-    const historial = mtrHistorialAgregar(previo, Object.assign({ doc: String(docId) }, instantanea || {}));
+    const historial = mtrHistorialAgregar(_fusionPrevia || previo, Object.assign({ doc: String(docId) }, instantanea || {}));   // v18.0.104
     try {
       await io.escribir(nombre, JSON.stringify(historial, null, 1));
       return { ok: true, archivo: nombre, controles: historial.controles.length, respaldo: respaldo };
@@ -29431,9 +29497,7 @@
     const io = fs || _vglCarpetaFsReal();
     if (!io) return null;
     try {
-      const txt = await io.leer(await _vglCarpetaResolverNombre(io, docId));   // 02-sep — tolera ceros de relleno
-      const j = txt ? JSON.parse(txt) : null;
-      return (j && Array.isArray(j.controles)) ? j : null;
+      return await _vglCarpetaLeerFusionado(io, docId);   // 02-sep — tolera ceros de relleno; v18.0.104 — fusiona escisiones
     } catch (e) { return null; }
   }
 
@@ -29570,7 +29634,7 @@
     // acto (renderSettings arranca con borrador vacío). Se conserva y se dice por qué.
     try {
       if (state.sheet && state.sheet !== "resumen") {
-        if (typeof _ajustesSucio === "function" && _ajustesSucio()) showToast("AMBAR", "Modo programador", "Ajustes tiene cambios sin guardar: guárdelos o descártelos y la sección técnica aparecerá al repintar.", false);
+        if (typeof _ajustesSucio === "function" && _ajustesSucio()) showToast("AMBAR", "Modo programador · Ajustes sin guardar", "Ajustes tiene cambios sin guardar: guárdelos o descártelos y la sección técnica aparecerá al repintar.", false);   // v18.0.104: título propio
         else renderSettings();
       }
     } catch (e) {}

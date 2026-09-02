@@ -260,6 +260,9 @@ function cargar(opciones) {
     // OLVIDARLO a propósito (como tras un reinicio del script o un día nuevo) y sigan
     // ejercitando la capa de lectura tolerante, que es el respaldo cuando el alias no existe.
     "\n;try{ globalThis.__VGL__.__apptAliasDoc = _apptAliasDoc; }catch(e){}" +
+    // v18.0.104 — la implementación REAL de la carpeta (File System Access) solo se activa con
+    // un handle; se publica un setter para probar `listar()` con un handle simulado.
+    "\n;try{ globalThis.__VGL__.__setCarpetaHandleParaTest = function(h){ _vglCarpetaHandle = h; }; }catch(e){}" +
     // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
     // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
     // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la

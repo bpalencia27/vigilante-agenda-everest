@@ -2068,3 +2068,34 @@ Dos decisiones que quedan explícitas para el médico:
 - **Fila 18.** Ni 20 ni 25 caracteres de ventana son la respuesta; lo que decide es si el «no»
   niega una *conducta* (asistir, tomar, controlarse) o el hecho. Si aparece una frase real que la
   lista de conductas no cubra, se agrega a `MTR_RE_NEGACION_DE_CONDUCTA` con su prueba.
+
+### Segunda ronda (02-sep): refutar el cierre
+
+Sobre lo ya subido (v18.0.97–v18.0.102) corrieron cinco refutadores —uno por versión, dos lentes:
+reproducción + sitios hermanos, regresión + pruebas huecas— y tres auditorías S+ (estado único del
+paciente, robustez/PHI, flujo de consulta; ver `docs/OPORTUNIDADES_SPLUS_20260902.md`). Los
+refutadores de v18.0.98 y v18.0.100 murieron por límite de sesión antes de verificar nada; los de
+v18.0.97, v18.0.99 y v18.0.101 entregaron. Lo que encontraron y cómo quedó:
+
+| Fila | Veredicto del refutador | Cerrado en |
+|---|---|---|
+| 8 | prueba hueca: la guarda de v18.0.48 ya no la ejercitaba ninguna prueba (el fixture siempre trae cédula en el paquete); el camino XHR solo tiene grep | v18.0.104 (prueba con paquete sin cédula y cambio de paciente; mutación #276). El camino XHR sigue solo con grep: el arnés define `send` en la instancia |
+| 9 | **regresión**: «ATORVASTATINA-CALCICA 40 MG» → null (antes 40) → «sin estatina de alta intensidad» en falso | v18.0.103 (#262) |
+| 13a | cerrada; residuos bajos (Na/Ta como apellido; lista ≥3 letras sin prueba; NFD) | — |
+| 13b | **regresión de v18.0.102**: «NA» en celular tachaba «NA 138» (sodio) | v18.0.103 (#261) |
+| 6 | incompleta: el tope se soltaba al llegar las cabeceras (también en el núcleo); SMS automático, impresión del recordatorio y SharePoint sin tope; la prueba aceptaba cualquier señal | v18.0.104 (#268, #269) |
+| 15 | prueba hueca: «gana la medición completa» sin fijar | v18.0.104 (#274) |
+| 18 | **regresión**: «No cumple criterios de diabetes», «No toma medicamentos ni es diabético» leídos como afirmación → discrepancia ALTA sobre un dato negado | v18.0.103 (#263) |
+| 20 | cerrada; residuo: sin cédula en el lote, Deshacer no podía confirmar el paciente | v18.0.104 (#275) |
+| 21 | prueba hueca: un mutante que toma cualquier archivo numérico cruzaba historiales; `listar()` real sin cobertura; escisiones y dobles legados huérfanos | v18.0.104 (#272, #273; lectura fusionada; `__setCarpetaHandleParaTest`) |
+| 39a | incompleta: «> 50 X CAMPO», «MAYOR A 100» seguían NORMAL | v18.0.104 (#271) |
+| 39b | cerrada; residuo de diseño (textos no interpretables; «SI» genérico → lado de alarma) | — |
+| 41 | **regresión**: «573001234567» (indicativo sin «+») viajaba entero a la IA | v18.0.103 (#264) |
+| 43 | cerrada | — |
+| 44 | incompleta: con 4 avisos en un clic, «Alerta Múltiple (4)» sin contenido; AZUL/AMBAR del Redactor y de Modo programador compartían título | v18.0.104 (#270) |
+| 49 | cerrada; residuo: marcas combinantes sin precompuesto | — |
+| 50 | cerrada | — |
+
+Y del auditor de robustez, dos fugas de PHI hacia Gemini que ningún enjambre anterior había visto
+(el nombre sin ancla cuando el paciente no está en la agenda; la hoja de hechos sin censor de
+nombres) quedaron cerradas en v18.0.103 (#265–#267).
