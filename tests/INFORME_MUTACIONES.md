@@ -11660,3 +11660,29 @@ clic consciente del médico.
 | 356 | el dock vuelve a no abrir Agendar con las dos hechas | *suite_15: v18.0.114: con cita y toma agendadas hoy y sin radicado…* | Sí |
 
 Banco completo: **3.040 comprobaciones pasan, 0 fallan.**
+
+## v18.0.115 — decisiones de la entrevista, tercera tanda: «Laboratorios» sirve la precarga fresca (C11) y Agendar recuerda tipo y especialidad (C17)
+
+- **C11 — «Laboratorios» abre al instante con la precarga si tiene menos de 2 min** (decisión del
+  médico: precarga fresca + botón «Buscar nuevos»). Antes ignoraba la precarga y recalculaba
+  todo (3-6 s y red duplicada). La chapa dice «⚡ Leídos hace N s (precarga)» o «✓ Consultado en
+  vivo ahora», y «🔄 Buscar laboratorios nuevos» cierra y reabre consultando en vivo. Una
+  precarga de más de 2 min, o de otra cédula, no se sirve. La regla «el clic consulta en vivo»
+  (v12.3.35) se conserva para el llenado de Exámenes, que escribe en la historia.
+- **C17 — Agendar recuerda el tipo de cita y la especialidad de la última cita creada** y abre
+  en el paso 2 con el chip «Como la última vez: … · cambiar» (decisión del médico). Solo se
+  guarda cuando la cita se creó de verdad (justo antes de la marca del día); «solo
+  laboratorios» no se recuerda (va a otro cuadro). Lo recordado se aplica ANTES de la primera
+  carga de horas, para que esa carga ya salga con la especialidad correcta (una petición, no
+  dos).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 357 | una precarga de cualquier edad se sirve (**C11**) | *suite_15: v18.0.115 (C11): «Laboratorios» sirve la precarga…* («5 min NO se sirve») | Sí |
+| 358 | «Buscar laboratorios nuevos» sirve la precarga en vez de consultar (**C11**) | *suite_15: v18.0.115 (C11)…* («el botón consulta en vivo») | Sí |
+| 359 | se sirve la precarga de otra cédula (**C11**) | *suite_15: v18.0.115 (C11)…* («OTRA cédula») | Sí |
+| 360 | se recuerda «solo laboratorios» (**C17**) | *suite_15: v18.0.115 (C17): Agendar recuerda…* | Sí |
+| 361 | con recuerdo no se salta al paso 2 (**C17**) | *suite_15: v18.0.115 (C17)…* («abre en el paso 2») | Sí |
+| 362 | la especialidad recordada no se aplica a la carga de horas (**C17**) | *suite_15: v18.0.115 (C17)…* («EspecialidadId=46») | Sí |
+
+Banco completo: **3.042 comprobaciones pasan, 0 fallan.**

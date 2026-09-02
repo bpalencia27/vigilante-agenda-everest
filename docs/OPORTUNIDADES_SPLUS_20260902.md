@@ -80,13 +80,13 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | C8 | Ajuste «SMS de recordatorio» apagado: la casilla nace marcada, el SMS de la cita se suprime y el de laboratorio sale igual | 2 | ✅ v18.0.109 (casilla apagada y rotulada; la toma va con Telefono=0) |
 | C9 | Terminología cruzada («Exámenes» nombra tres cosas; captions remiten a nombres que no están en el dock) | 2 | ✅ v18.0.111 (`VGL_ROTULOS` + prueba dock/títulos/leyendas) |
 | C10 | Uroanálisis: nadie pregunta si hay síntomas urinarios; el motor queda en «REQUIERE SÍNTOMAS» | 2 | ✅ v18.0.111 (pregunta en la escalera solo con parcial sugestivo, fuera del embarazo; vigencia 7 días; la respuesta llega al motor) |
-| C11 | El modal «Laboratorios» ignora la precarga y recalcula todo (3-6 s y red duplicada) | 2 | 🗳️ decidido (02-sep): servir la precarga si tiene < 2 min y ofrecer «Buscar laboratorios nuevos» · en curso |
+| C11 | El modal «Laboratorios» ignora la precarga y recalcula todo (3-6 s y red duplicada) | 2 | ✅ v18.0.115 |
 | C12 | Con factores pendientes el botón «Panel» no existe y el ayudante «Faltan antecedentes» queda inalcanzable | 2 | ✅ v18.0.112 |
 | C13 | `alert()`/`confirm()` nativos siguen vivos en Ordenar y Redactor | 3 | ✅ v18.0.109 (doble toque en el ✕ del Redactor; aviso rojo en Ordenar) |
 | C14 | `persist` no hace nada en toasts VERDE/AZUL (la leyenda de colores se cierra sola) | 3 | ✅ v18.0.109 |
 | C15 | Salto de maquetación del recuadro renal en «Laboratorios» | 3 | ✅ v18.0.110 (hueco reservado con «calculando…» desde el primer pintado) |
 | C16 | «SIN TERMINAR» se marca con solo abrir Agendar (la preselección ⭐ llama a `markAgendamientoPendiente`) | 3 | ✅ v18.0.109 (solo el clic en un turno) |
-| C17 | Agendar exige 3-7 clics por cita | 3 | 🗳️ decidido (02-sep): recordar tipo/especialidad y abrir en el paso 2 con un chip «cambiar» · en curso |
+| C17 | Agendar exige 3-7 clics por cita | 3 | ✅ v18.0.115 |
 | C18 | Éxitos anunciados dos veces (panel + toast) | 4 | ✅ v18.0.109 (el toast solo si la pestaña no se mira) |
 | C19 | Red que compite consigo misma al abrir Agendar (sondeo ±7 días con 3 en vuelo + `cargarHoras` duplicado; `BuscarPacienteDetallado` repetido) | 4 | ✅ v18.0.110 (`apiPacienteDetalladoCacheado`: una caché de 60 s para Agendar, Ordenar y demográficos; el sondeo salta el día central y va de dos en dos) |
 | C20 | «Exámenes» siempre dos clics (el chooser no recuerda ni admite teclado) | 4 | ✅ v18.0.112 |
@@ -108,6 +108,6 @@ Cada ⚖️ se le presentó como opciones cerradas. Lo que decidió, y en qué e
 | B12 | **Retirar** el respaldo por equipo `S.medicoId/S.medicoNombre`: solo el login de Everest identifica al médico | ✅ v18.0.111 |
 | C20 | El chooser de «Exámenes» **recuerda la última opción** (resaltada) y admite teclado: Enter la ejecuta, 1/2 eligen | ✅ v18.0.112 |
 | C12 | Con factores pendientes, un botón **atenuado «📝 Faltan antecedentes»** en el dock abre el ayudante de llenado | ✅ v18.0.112 |
-| C11 | «Laboratorios» sirve la **precarga si es fresca (< 2 min)** y ofrece «Buscar laboratorios nuevos» para consultar en vivo | v18.0.113 |
-| C17 | Agendar **recuerda tipo y especialidad** y abre en el paso 2, con un chip «cambiar» para volver al 1 | v18.0.113 |
-| A | Paso 1: un **detector pasivo de desacuerdos** entre módulos (programa, tensión, peso, medicamentos) visible solo en modo programador, antes de tocar la precedencia | v18.0.114 |
+| C11 | «Laboratorios» sirve la **precarga si es fresca (< 2 min)** y ofrece «Buscar laboratorios nuevos» para consultar en vivo | ✅ v18.0.115 |
+| C17 | Agendar **recuerda tipo y especialidad** y abre en el paso 2, con un chip «cambiar» para volver al 1 | ✅ v18.0.115 |
+| A | Paso 1: un **detector pasivo de desacuerdos** entre módulos (programa, tensión, peso, medicamentos) visible solo en modo programador, antes de tocar la precedencia | pendiente (v18.0.116) |

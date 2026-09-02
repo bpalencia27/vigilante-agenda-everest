@@ -273,7 +273,8 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__envejecerCacheMeds = function(msAtras){ _mtrMedsCache.ts = Date.now() - msAtras; }; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.VGL_MODALES_CONSULTA = VGL_MODALES_CONSULTA; globalThis.__VGL__.VGL_MODALES_ESCRITURA = VGL_MODALES_ESCRITURA; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.VGL_ROTULOS = VGL_ROTULOS; }catch(e){}\n";   // v18.0.110 (C21)
+    "\n;try{ globalThis.__VGL__.VGL_ROTULOS = VGL_ROTULOS; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__setLabsPrefetchParaTest = function(docId, labs, ts){ _labsPrefetch = { docId: String(docId), labs: labs, ts: ts }; }; }catch(e){}\n";   // v18.0.110 (C21)
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");

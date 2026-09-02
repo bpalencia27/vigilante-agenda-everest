@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.114
+// @version      18.0.115
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.114";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.115";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4750,6 +4750,11 @@
   // LABS_FETCH_PISO_MS — un cambio real de paciente en Everest siempre toma más que eso.
   let _labsAvisoTs = 0;
   const LABS_PREFETCH_TTL_MS = 10 * 60000;
+  // v18.0.115 (S+ flujo, C11; decisión del médico, 02-sep) — «Laboratorios» sirve la precarga si
+  // tiene menos de 2 min (abre al instante, sin red duplicada) y ofrece «Buscar laboratorios
+  // nuevos» para consultar en vivo. La regla «el clic consulta en vivo» (v12.3.35) se conserva
+  // para el llenado de Exámenes, que escribe en la historia; este cuadro solo consulta.
+  const LABS_PRECARGA_FRESCA_MS = 2 * 60000;
 
   // v17.6.3 — A1 (decisión del médico, 22-ago): la sede del laboratorio (378) estaba
   // escrita a mano en 5 URLs de AppCita. Si otro colega de otra sede instala el script,
@@ -18867,6 +18872,8 @@
 
       /* ---- Pasos numerados como fichas ---- */
       #vgl-agendar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+      #vgl-agendar-modal .vgl-agm-pref-chip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;border:1px dashed var(--edge);border-radius:var(--r-chip);font-size:var(--t-micro)}
+      #vgl-agendar-modal .vgl-agm-pref-txt{color:var(--fg2) !important}
       #vgl-agendar-modal .vgl-agm-step{
         flex:none;display:inline-flex;align-items:center;justify-content:center;
         width:21px;height:21px;border-radius:var(--r-pill);
@@ -22705,7 +22712,9 @@
     }
   }
 
-  async function openLaboratoriosModal(apt) {
+  async function openLaboratoriosModal(apt, opts) {
+    const _lo = opts || {};   // v18.0.115 (C11): { nuevos: true } fuerza la consulta en vivo
+    let _labsDePrecargaSeg = null;   // segundos de antigüedad si se sirvió la precarga
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal (mismo patron que el panel de IA): abrir -> resultado ->
     // completar/abandonar. Solo conteos con nombre fijo; ningun dato de paciente.
@@ -22755,7 +22764,8 @@
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
           <span class="vgl-labs-srclbl">${MTR_ICONO_FLASK} <b>Origen:</b> consulta automática al sistema del laboratorio, sin buscarlo a mano${vglTip("Estos resultados se traen solos del sistema del laboratorio, sin que tenga que buscarlos. El botón del pie abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
-          <span class="vgl-labs-srconline">${MTR_ICONO_CHECK} En línea</span>
+          <span class="vgl-labs-srconline" id="vgl-labs-srconline">${MTR_ICONO_CHECK} En línea</span>
+          <button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-labs-nuevos" title="Consultar en vivo el sistema del laboratorio por si hay resultados nuevos">🔄 Buscar laboratorios nuevos</button>
         </div>
 
         <div class="vgl-agm-sec">
@@ -22805,6 +22815,13 @@
     const cancelBtn = modal.querySelector("#vgl-labs-close");
     if (xBtn) xBtn.addEventListener("click", closeMod);
     if (cancelBtn) cancelBtn.addEventListener("click", closeMod);
+    // v18.0.115 (C11) — «Buscar laboratorios nuevos»: cierra y reabre consultando en vivo.
+    const nuevosBtn = modal.querySelector("#vgl-labs-nuevos");
+    if (nuevosBtn) nuevosBtn.addEventListener("click", () => {
+      try { uxTrack("labs.nuevos.click"); } catch (e) {}
+      closeMod();
+      openLaboratoriosModal(apt, { nuevos: true });
+    });
 
     const bgClick = (e) => { if (e.target === modal) closeMod(); };
     modal.addEventListener("click", bgClick);
@@ -22820,7 +22837,24 @@
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
     // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
     try {
-      const labsArr = await getAtheneaLabsAuto(apt.doc_id);
+      let labsArr;
+      const _pre = _labsPrefetch;
+      const _precargaFresca = !_lo.nuevos && _pre && _pre.docId === String(apt.doc_id) && Array.isArray(_pre.labs)
+        && (Date.now() - _pre.ts) < LABS_PRECARGA_FRESCA_MS;
+      if (_precargaFresca) {
+        labsArr = _pre.labs;
+        _labsDePrecargaSeg = Math.max(0, Math.round((Date.now() - _pre.ts) / 1000));
+        try { uxTrack("labs.precarga.servida"); } catch (e) {}
+      } else {
+        labsArr = await getAtheneaLabsAuto(apt.doc_id);
+        if (Array.isArray(labsArr)) _labsPrefetch = { docId: String(apt.doc_id), labs: labsArr, ts: Date.now() };
+      }
+      try {
+        const srcEl = modal.querySelector("#vgl-labs-srconline");
+        if (srcEl) srcEl.textContent = (_labsDePrecargaSeg != null)
+          ? "⚡ Leídos hace " + _labsDePrecargaSeg + " s (precarga) · «Buscar laboratorios nuevos» consulta en vivo"
+          : "✓ Consultado en vivo ahora";
+      } catch (e) {}
       // v17.7.1 — el contador de solicitudes no leídas viaja como propiedad NO enumerable
       // del array que devuelve Athenea, así que la línea de abajo (que copia analito a
       // analito a OTRO array) lo perdía irremediablemente. Se lee ANTES.
@@ -25102,6 +25136,26 @@
       soltarEnVuelo("lab", docId);
     }
   }
+  // v18.0.115 (S+ flujo, C17; decisión del médico, 02-sep) — Agendar RECUERDA el tipo de cita y la
+  // especialidad de la última cita creada y abre directamente en el paso 2, con un chip «como la
+  // última vez … cambiar» que devuelve al paso 1. Solo se guarda cuando la cita se creó de verdad.
+  const AGM_PREF_KEY = "vgl_agm_pref";
+  const AGM_PREF_TIPOS = ["control_lab", "control"];
+  function _agmPrefLeer() {
+    try {
+      const p = readJSON(AGM_PREF_KEY, null);
+      if (!p || AGM_PREF_TIPOS.indexOf(p.tipo) < 0) return null;
+      const esp = parseInt(p.esp, 10);
+      if (!esp || esp < 1) return null;
+      return { tipo: p.tipo, esp: esp, espName: String(p.espName || "") };
+    } catch (e) { return null; }
+  }
+  function _agmPrefGuardar(tipo, esp, espName) {
+    try {
+      if (AGM_PREF_TIPOS.indexOf(tipo) < 0) return false;
+      return !!writeJSON(AGM_PREF_KEY, { tipo: tipo, esp: parseInt(esp, 10) || 12, espName: String(espName || ""), ts: Date.now() });
+    } catch (e) { return false; }
+  }
   function openAgendamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
@@ -25199,6 +25253,7 @@
 
         <!-- ==================== PASO 2: Fecha y Turno Inteligente ==================== -->
         <div id="vgl-step-view-2" class="vgl-step-view" style="display:none">
+          <div id="vgl-agm-pref-chip" class="vgl-agm-pref-chip vgl-d-none"><span class="vgl-agm-pref-txt"></span><button type="button" class="vgl-agm-pbtn vgl-sm" id="vgl-agm-pref-cambiar" title="Volver al paso 1 para elegir otro tipo de cita o especialidad">cambiar</button></div>
           <div class="vgl-agm-grid">
             <div class="vgl-agm-cell vgl-agm-c12">
               <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±7 días hábiles + sábados)</label>
@@ -27151,6 +27206,7 @@
       // La cita existe en Everest pase lo que pase con el cuadro: lo local tiene que saberlo.
       if (ok) {
         clearAgendamientoPendiente(apt.doc_id);
+        try { _agmPrefGuardar(tipoCitaElegido, selectedEspId, selectedEspName); } catch (e) {}   // v18.0.115 (C17): solo con la cita creada de verdad
         markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso, {
           citaId: (d && d.radicado) || null,
           pacienteId: pacienteIdAcceso || null,
@@ -27282,6 +27338,38 @@
     // v17.58.2 — fase de apertura del modal en el Diario de Lentitud: el montaje síncrono
     // (HTML + queries + listeners + primer render de chips) es lo que paga el INP del clic
     // que abre el modal; _rumTramo mide esa parte y la anota si pasa de 50 ms.
+    // v18.0.115 (C17) — aplicar lo recordado ANTES de la primera carga de horas, para que esa
+    // carga ya salga con la especialidad correcta (una sola petición, no dos).
+    try {
+      const _pref = _agmPrefLeer();
+      const cambiarBtn = modal.querySelector("#vgl-agm-pref-cambiar");
+      if (cambiarBtn) cambiarBtn.addEventListener("click", () => { try { uxTrack("agendar.pref.cambiar"); } catch (e) {} irAPaso(1); });
+      if (_pref) {
+        const tc = modal.querySelector('.vgl-type-card[data-que="' + _pref.tipo + '"]');
+        if (tc) {
+          modal.querySelectorAll(".vgl-type-card").forEach((c) => c.classList.remove("active"));
+          tc.classList.add("active");
+          tipoCitaElegido = _pref.tipo;
+          const labBox = modal.querySelector(".vgl-lab-box");
+          if (labBox) labBox.style.display = tipoCitaElegido === "control_lab" ? "block" : "none";
+        }
+        const eb = modal.querySelector('#vgl-esp-presets .vgl-agm-pbtn[data-esp="' + _pref.esp + '"]');
+        if (eb) {
+          modal.querySelectorAll("#vgl-esp-presets .vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+          eb.classList.add("active");
+          selectedEspId = _pref.esp;
+          selectedEspName = eb.getAttribute("data-name") || _pref.espName || selectedEspName;
+        }
+        const chip = modal.querySelector("#vgl-agm-pref-chip");
+        if (chip) {
+          chip.classList.remove("vgl-d-none");
+          const t = chip.querySelector(".vgl-agm-pref-txt");
+          if (t) t.textContent = "Como la última vez: " + (tipoCitaElegido === "control" ? "solo control médico" : "control + toma de labs") + " · " + selectedEspName + " · ";
+        }
+        irAPaso(2);
+        try { uxTrack("agendar.pref.aplicada"); } catch (e) {}
+      }
+    } catch (e) {}
     _rumTramo("agm.abrir", () => cargarHoras((selectedTimeframe || PLAZO_POR_DEFECTO).m, (selectedTimeframe || PLAZO_POR_DEFECTO).d));
   }
 

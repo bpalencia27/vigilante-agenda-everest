@@ -5331,5 +5331,75 @@ module.exports = {
       t.cierto(c.env.doc.body.children.some((n) => n.id === "vgl-agendar-modal"), "el clic abre el módulo Agendar");
     });
 
+    // =====================================================================
+    // v18.0.115 — decisiones de la entrevista, tercera tanda: C11 (Laboratorios) y C17 (Agendar)
+    // =====================================================================
+    await t.casoAsync("v18.0.115 (C11): «Laboratorios» sirve la precarga si tiene menos de 2 min (sin red) y lo dice; «Buscar laboratorios nuevos» consulta en vivo; una precarga vieja no se sirve", async () => {
+      let athenea = 0;
+      const mk = () => { const c = cargar({ silencioso: true, gmxhr: (o) => { if (/athenea|laboratorio/i.test(String(o.url || ""))) athenea++; if (o.onerror) setTimeout(() => o.onerror("sin portal en la prueba"), 0); return { abort() {} }; } }); enriquecerDom(c); return c; };
+      const c = mk();
+      const labs = [{ nombre: "CREATININA", valor: "1.0", fecha: "2026-08-20" }];
+      c.api.__setLabsPrefetchParaTest("111111", labs, Date.now() - 30000);
+      await c.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
+      let modal = c.env.doc.getElementById("vgl-labs-modal");
+      t.cierto(!!modal, "el modal abrió");
+      t.igual(athenea, 0, "con precarga de 30 s no se consulta el portal (antes: siempre 3-6 s y red duplicada)");
+      t.cierto(/Leídos hace \d+ s \(precarga\)/.test(modal.querySelector("#vgl-labs-srconline").textContent), "y lo dice: " + modal.querySelector("#vgl-labs-srconline").textContent);
+      t.cierto(modal.innerHTML.includes('id="vgl-labs-nuevos"') && modal.innerHTML.includes("Buscar laboratorios nuevos"), "con el botón «Buscar laboratorios nuevos»");
+      const btn = modal.querySelector("#vgl-labs-nuevos");
+      (btn._listeners.click || []).forEach((f) => f({}));
+      await esperar(30);
+      t.cierto(athenea >= 1, "el botón consulta en vivo aunque la precarga sea fresca");
+      const c2 = mk(); athenea = 0;
+      c2.api.__setLabsPrefetchParaTest("111111", labs, Date.now() - 5 * 60000);
+      await c2.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
+      t.cierto(athenea >= 1, "una precarga de 5 min NO se sirve: se consulta en vivo");
+      const c3 = mk(); athenea = 0;
+      c3.api.__setLabsPrefetchParaTest("999999", labs, Date.now() - 1000);
+      await c3.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
+      t.cierto(athenea >= 1, "la precarga de OTRA cédula tampoco se sirve");
+    });
+
+    await t.casoAsync("v18.0.115 (C17): Agendar recuerda tipo y especialidad de la última cita creada y abre en el paso 2 con el chip «como la última vez · cambiar»; sin recuerdo abre en el paso 1", async () => {
+      const urls = [];
+      const mk = () => {
+        const c = cargar({ silencioso: true, fetch: async (url) => {
+          const u = String(url); urls.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) return respuestaJson({ agendas: [] });
+          return respuestaJson({});
+        } });
+        enriquecerDom(c);
+        c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+        return c;
+      };
+      const c = mk();
+      t.igual(c.api._agmPrefLeer(), null, "sin nada guardado no hay recuerdo");
+      c.api.openAgendamientoModal({ doc_id: "424242", nombre: "PACIENTE PRUEBA" });
+      await esperar(40);
+      let modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(modal.querySelector("#vgl-step-view-2").style.display !== "block", "sin recuerdo: no se salta al paso 2 (irAPaso(2) no corre)");
+      t.igual(modal.querySelector("#vgl-agm-pref-chip").querySelector(".vgl-agm-pref-txt").textContent, "", "y el chip queda sin texto (no se aplicó ningún recuerdo)");
+      // se guarda SOLO con la cita creada de verdad: lo hace el camino de confirmación; aquí se simula el registro
+      t.cierto(c.api._agmPrefGuardar("control", 46, "Psicología"), "se guarda el recuerdo");
+      t.falso(c.api._agmPrefGuardar("lab", 46, "x"), "«solo laboratorios» no se recuerda (va a otro cuadro)");
+      urls.length = 0;
+      const c2 = cargar({ silencioso: true, almacen: c.env.almacen, fetch: async (url) => { const u = String(url); urls.push(u); if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } }); if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } }); return respuestaJson({ agendas: [] }); } });
+      enriquecerDom(c2); c2.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c2.api.openAgendamientoModal({ doc_id: "424242", nombre: "PACIENTE PRUEBA" });
+      await esperar(60);
+      modal = c2.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.igual(modal.querySelector("#vgl-step-view-2").style.display, "block", "con recuerdo: abre en el paso 2");
+      const chip = modal.querySelector("#vgl-agm-pref-chip");
+      t.cierto((chip.classList._s ? !chip.classList._s.has("vgl-d-none") : true), "el chip se ve (se le quitó vgl-d-none)");
+      t.cierto(/Como la última vez: solo control médico · Psicología/.test(chip.querySelector(".vgl-agm-pref-txt").textContent), "y dice qué se recordó: " + chip.querySelector(".vgl-agm-pref-txt").textContent);
+      t.cierto(urls.some((u) => u.includes("BuscarCitasDisponibles") && /EspecialidadId=46/.test(u)), "la primera carga de horas ya sale con la especialidad recordada (46): " + (urls.find((u) => u.includes("BuscarCitasDisponibles")) || "sin llamada"));
+      (modal.querySelector("#vgl-agm-pref-cambiar")._listeners.click || []).forEach((f) => f({}));
+      t.igual(modal.querySelector("#vgl-step-view-1").style.display, "block", "«cambiar» vuelve al paso 1");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_agmPrefGuardar\(tipoCitaElegido, selectedEspId, selectedEspName\);[^\n]*\n\s*markCitaAgendadaHoy\(apt\.doc_id, fechaElegida\.iso/.test(src), "el recuerdo se guarda en el camino de la cita creada de verdad, justo antes de la marca del día");
+    });
+
   },
 };
