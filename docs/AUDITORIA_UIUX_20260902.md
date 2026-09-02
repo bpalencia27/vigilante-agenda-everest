@@ -2,7 +2,7 @@
 
 Arquitecto_Vanilla (fase 3) sobre los informes de UX_Clinico y UI_Estetico (fases 1-2). Solo lectura del
 repositorio: ningún archivo de `/home/user/vigilante-agenda-everest` se tocó. Árbol auditado: `@version 18.0.116`
-(HEAD `a2848fc` = v18.0.115 + cambios sin confirmar del «estado único, paso 1»), 45 697 líneas. **Todas las líneas
+(HEAD `5d7804f`, v18.0.116 confirmada; el árbol leído era idéntico), 45 697 líneas. **Todas las líneas
 de este documento son del árbol actual** (los informes de fase 1-2 citaban v18.0.113; el desplazamiento medido es
 +10 en las hojas CSS, +12 entre Agendar y Ordenar, +89 en `render()`; cada cita se releyó en el archivo, no se sumó
 a ciegas). Cero PHI: todos los ejemplos usan `PACIENTE SINTETICO`, documento `555111`, celular `3001112233`.
