@@ -85,6 +85,15 @@ module.exports = {
       t.igual(c.api.scrubPII("Teléfono (310) 987 6543"), "Teléfono [TEL_CENSURADO]");
       t.igual(c.api.scrubPII("Contacto 3022813246"), "Contacto [TEL_CENSURADO]");
       t.igual(c.api.scrubPII("Celular 320 456 7890 registrado"), "Celular [TEL_CENSURADO] registrado");
+      // 02-sep — CIERRE ADVERSARIAL (fila 41): la forma de teléfono no tenía límite de dígito y
+      // casaba DENTRO de un número más largo no relacionado: «930012345678» → «9[TEL_CENSURADO]8»
+      // en la hoja de hechos (mtrHcValorLimpio → scrubPII), el mismo daño del hallazgo #38.
+      t.igual(c.api.scrubPII("Se registra el numero de orden 930012345678 en el sistema."), "Se registra el numero de orden 930012345678 en el sistema.",
+        "un número de 12 dígitos no es un celular ni contiene uno: no se parte");
+      t.igual(c.api.scrubPII("orden 930012345678 y cel 3001234567."), "orden 930012345678 y cel [TEL_CENSURADO].",
+        "y el celular de verdad, al lado, sí se tacha");
+      const hechos = c.api.mtrHechosDesdeHcEverest({ antecedentePatologicos: { hta: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "Se registra el numero de orden 930012345678 en el sistema.", datosUsuario: { nombre: "PRUEBA", primer_Apellido: "SINTETICO", celular: "3001234567" } });
+      t.falso(/TEL_CENSURADO/.test(String(hechos.textos.ultimaEnfermedad)), "de punta a punta (la hoja de hechos) el número de orden llega entero: " + hechos.textos.ultimaEnfermedad);
     });
 
     t.caso("scrubPII: censura correos electrónicos", () => {

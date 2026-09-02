@@ -86,6 +86,29 @@ module.exports = {
       t.cierto(api._esUroComponenteAlterado({ nombre: "Leucocitos", resultado: "campo   cubierto" }), "tolera espacios de más entre las dos palabras");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (filas 39a y 39b): el léxico de v18.0.84 estaba ANCLADO al
+    // texto completo, así que el mismo hallazgo con el sufijo de campo del LIS («INCONTABLES X
+    // CAMPO», «Incontables por campo», «INNUMERABLES/CAMPO», «> 100 INCONTABLES») seguía
+    // pasando como NORMAL — mientras mtrUroRecuento, en el mismo archivo, ya devolvía 999 para
+    // esas cadenas. Y los positivos cualitativos que mtrUroGrado reconoce desde v16.7.0
+    // (PRESENTE, REGULARES, SE OBSERVAN…) tampoco se resaltaban. Un solo catálogo.
+    t.caso("02-sep: el resaltado del uroanálisis usa el MISMO catálogo que el motor (mtrUroGrado/mtrUroRecuento)", () => {
+      for (const r of ["INCONTABLES X CAMPO", "Incontables por campo", "INNUMERABLES/CAMPO", "> 100 INCONTABLES"]) {
+        t.cierto(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: r }), "«" + r + "» es piuria masiva, no NORMAL");
+      }
+      t.cierto(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "PRESENTE" }), "nitritos PRESENTE: positivo (grado 1)");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "PROTEINAS", resultado: "PRESENTES" }), "proteínas PRESENTES");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "BACTERIAS", resultado: "REGULARES" }), "bacterias REGULARES (grado 2)");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "BACTERIAS", resultado: "Regular" }), "y en singular");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "CILINDROS", resultado: "SE OBSERVAN" }), "cilindros SE OBSERVAN");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "LEVADURAS", resultado: "OBSERVADAS" }), "levaduras OBSERVADAS");
+      // Lo que el motor deja en 0 a propósito sigue sin resaltarse: no se inventa patología.
+      t.falso(api._esUroComponenteAlterado({ nombre: "BACTERIAS", resultado: "ESCASAS" }), "escasas: inespecífico, no se resalta");
+      t.falso(api._esUroComponenteAlterado({ nombre: "PROTEINAS", resultado: "TRAZAS" }), "trazas: por debajo de una cruz");
+      t.falso(api._esUroComponenteAlterado({ nombre: "CRISTALES", resultado: "NO SE OBSERVAN" }), "no se observan: normal");
+      t.falso(api._esUroComponenteAlterado({ nombre: "DENSIDAD", resultado: "1.015" }), "un número sin regla sigue sin inventarse alteración");
+    });
+
     t.caso("_clasificarComponentesUro: separa fisicoquímico, sedimento y otros sin perder ninguno", () => {
       const r = api._clasificarComponentesUro([
         { nombre: "COLOR", resultado: "AMARILLO" },

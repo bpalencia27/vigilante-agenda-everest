@@ -2003,3 +2003,68 @@ Verifiqué el hallazgo leyendo el código fuente (líneas 34766-34850 y 34671-34
 ## Descartados por refutación (19)
 
 No se listan en detalle a propósito: un hallazgo que un refutador tumbó con un argumento verificado **no es trabajo pendiente**, y dejarlo en la lista solo haría ruido. Están en el diario del enjambre.
+
+---
+
+## Cierre adversarial (02-sep): los 47 arreglos, auditados de nuevo por un enjambre independiente
+
+Cuando los 47 hallazgos quedaron aplicados (v18.0.95), se lanzó un **segundo enjambre** con una
+sola pregunta: *¿los arreglos son de verdad?* Ocho auditores, uno por lote de 6-7 filas de la tabla
+de «Ya aplicados», cada uno con la orden de (1) verificar que el arreglo está en HEAD, (2) verificar
+que su prueba no es hueca (mutación inversa sobre una copia), (3) buscar el **sitio hermano** con
+el mismo defecto, y (4) buscar **regresiones** introducidas por el propio arreglo. Más un auditor de
+CSS (blindaje incremental sobre HTML real en Chromium) y tres auditores S+ de oportunidades.
+
+Resultado de la fase de auditoría: **27 de las 50 filas se confirmaron sin brecha**; sobre las
+demás se reportaron **23 brechas**. La fase de refutación (3 refutadores por brecha) se detuvo a
+propósito: a concurrencia 2 habría tardado muchas horas, y había una evidencia más fuerte al
+alcance — **reproducir cada brecha con el arnés contra HEAD, con el guion que cada auditor dejó**.
+Las 23 reproducen. Ninguna se descartó.
+
+### Cómo se cerraron
+
+Todos los arreglos se hicieron en un *worktree* aparte (HEAD principal intacto mientras tanto),
+cada uno con la disciplina de siempre: reproducción → arreglo → prueba nueva → **mutación
+verificada en las dos direcciones** (fila en `tests/INFORME_MUTACIONES.md`) → banco completo.
+El auditor de CSS coincidió en el único hallazgo pre-existente (`#vgl-complexity-pill`) que
+v18.0.96 ya había cerrado midiendo sobre HTML real; y señaló dos herramientas desfasadas que
+v18.0.96 también dejó al día.
+
+| Fila | Versión auditada | Brecha | Tipo | Gravedad | Cerrada en | Mutación |
+|---|---|---|---|---|---|---|
+| 8 | v18.0.48 `mtrHcEnganchar` | la guarda de cruce se cortocircuitaba con cédula ILEGIBLE al pedir | arreglo incompleto | media | v18.0.97 | #233 |
+| 9 | v18.0.49 `mtrDosisDeTexto` | combinaciones con «+» y «-» daban la dosis del OTRO principio | arreglo incompleto | media | v18.0.97 | #234 |
+| 13a | v18.0.52 `mtrSanearTextoLibreAI` | apellidos de 2 letras que son palabras funcionales (Ha, Su, Lo…) destrozaban la nota | regresión | media | v18.0.97 | #235 |
+| 13b | v18.0.52 `mtrHcTachar` | el canal del paquete de Everest no toleraba tildes | sitio hermano | media | v18.0.97 | #236 |
+| 24 | v18.0.63 Agendar | confirmar → cerrar en vuelo → reabrir → confirmar = **2 citas reales** | sitio hermano | **alta** | v18.0.98 | #237, #238 |
+| 23 | v18.0.62 `apptKey`/`colorAndAlert` | una misma llegada contada 2 veces (nombre ↔ cédula) | arreglo incompleto | **alta** | v18.0.98 | #239 |
+| 6 | v18.0.47 fetch | 3 `fetch` directos sin tope (correo, enlace, SMS) | sitio hermano | media | v18.0.99 | #240 |
+| 15a | v18.0.54 `mtrResumenDesdeModalLabs` | tensión mezclada de dos mediciones (130/85) | sitio hermano | media | v18.0.99 | #241 |
+| 15b | v18.0.54 prueba | grep del fuente con justificación falsa | prueba hueca | media | v18.0.99 | #242 |
+| 18 | v18.0.57 negadores | «No asiste a controles de diabetes» leído como negación | regresión | media | v18.0.99 | #243 |
+| 20 | v18.0.59 Deshacer | sin cédula, dos pacientes se acumulaban en un lote | regresión | baja | v18.0.99 | #244 |
+| 21 | v18.0.60 carpeta local | «0000111111.json» huérfano; dos archivos por paciente | sitio hermano | media | v18.0.99 | #245 |
+| 22 | v18.0.61 `mtrEvaluarErc` | peso implausible anunciado como «falta algún dato» | sitio hermano | baja | v18.0.100 | #246 |
+| 24b | v18.0.63 prueba | la contención «el médico manda» no ejercitaba `!_tocada` | prueba hueca | media | v18.0.100 | #247 |
+| 27 | v18.0.71 `xlsViejoDeHoy` | sin la guarda fuera de la raíz: aviso falso de .xls antiguo | sitio hermano | baja | v18.0.100 | #248 |
+| 30 | v18.0.74 prueba | la conductual pasaba con el defecto puesto de vuelta | prueba hueca | baja | v18.0.100 | #249 |
+| 33a | v18.0.77 Ajustes | Alt+R / #vgl-rep / dock y Ctrl+Shift+D descartaban el borrador sucio | sitio hermano | media | v18.0.100 | #250, #251 |
+| 33b | v18.0.77 `closeSheet`↔`_ajustesIntentarCerrar` | recursión mutua: sin barra, la pestaña se colgaba | regresión | baja→cuelgue | v18.0.100 | #252 |
+| 34 | v18.0.79 `render` | historial de inasistencias leído 30 veces por pintado | regresión | baja | v18.0.100 | #253 |
+| 39a | v18.0.84 `_esUroComponenteAlterado` | «INCONTABLES X CAMPO», «> 100 INCONTABLES» pasaban como NORMAL | arreglo incompleto | media | v18.0.101 | #254 |
+| 39b | v18.0.84 ídem | PRESENTE / REGULARES / SE OBSERVAN sin resaltar | sitio hermano | baja | v18.0.101 | #254 |
+| 41 | v18.0.86 `scrubPII` | el teléfono partía un número de orden («9[TEL_CENSURADO]8») | arreglo incompleto | media | v18.0.101 | #255 |
+| 43 | v18.0.88 letra vs contraste | cambiar la letra con el contraste ya encendido no movía el panel | arreglo incompleto | baja | v18.0.101 | #256 |
+| 44 | v18.0.89 avisos de Auto-Labs | el VERDE de éxito se tragaba el AMBAR «Everest exige…» | arreglo incompleto | media | v18.0.101 | #257 |
+| 49 | v18.0.94 `highlight` | con acentos descompuestos (NFD) el `<mark>` partía un grafema | arreglo incompleto | baja | v18.0.101 | #258 |
+| 50 | v18.0.95 spec | `MOTOR_RCV_V68_SPEC.md` describía dos reglas que el código ya no tiene | documentación | baja | v18.0.101 | (doc) |
+
+Dos decisiones que quedan explícitas para el médico:
+
+- **Fila 13b / v18.0.25.** El mínimo de 4 letras de `mtrHcTachaduras` (decisión del médico en
+  v18.0.25) **no se tocó**: el canal del paquete tolera tildes ahora, pero un apellido de 2-3
+  letras sigue sin tacharse por ese canal. Alinear ese mínimo con la política de 2 letras del otro
+  canal es una decisión suya, no del script.
+- **Fila 18.** Ni 20 ni 25 caracteres de ventana son la respuesta; lo que decide es si el «no»
+  niega una *conducta* (asistir, tomar, controlarse) o el hecho. Si aparece una frase real que la
+  lista de conductas no cubra, se agrega a `MTR_RE_NEGACION_DE_CONDUCTA` con su prueba.

@@ -1270,6 +1270,61 @@ module.exports = {
       t.igual(casillaHb.value, "", "de solo lectura: el aviso no rellena nada por su cuenta");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 44): la «colisión de deduplicado ajena» que la prueba
+    // de arriba esquiva a propósito era exactamente el caso común. Cuando Auto-Labs SÍ escribe
+    // (CREATININA → count>0), la rama principal encola primero el VERDE de éxito con título
+    // «Exámenes» y showToast deduplica por apptKey|título dentro del mismo flush: el AMBAR de
+    // obligatoriasVacias —el último en orden de código— se descartaba en silencio. El arreglo
+    // #41 solo hablaba cuando NO se escribía nada. Ahora cada aviso AMBAR lleva título propio.
+    const cargarLabsCreatinina = () => cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        const url = String(o.url || "");
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          o.onload({ status: 200, responseText: `CC 999888777
+              <div class="card"><div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+              <div class="card-title no-margin">Numero: 26051503125</div>
+              <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"><input type="hidden" id="hash" name="hash" value="HASHBTN" /><input name="__RequestVerificationToken" type="hidden" value="TOKENBTN" /></form></div>` });
+        } else if (url.includes("consultaDetalleSolicitud")) {
+          o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.2" }]) }) });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
+    await t.casoAsync("02-sep: cuando Auto-Labs SÍ escribe, el aviso «Everest exige …» llega igual — el VERDE de éxito ya no se lo traga (fila 44)", async () => {
+      const cOk = cargarLabsCreatinina();
+      enriquecerDom(cOk);
+      cOk.api.createLabInjectorUI();
+      const btn = cOk.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      const bandeja = cOk.env.doc.createElement("div");
+      // Se anota TODO lo que llega a la bandeja por las dos puertas (prepend = críticos,
+      // appendChild = VERDE/AZUL), aunque el arnés lo retire 1 ms después.
+      const llegados = [];
+      const anotar = (n) => { try { llegados.push("[" + n.querySelector(".vgl-toast-title").textContent + "] " + n.querySelector(".vgl-toast-b").textContent); } catch (e) { llegados.push("(sin cuerpo)"); } };
+      bandeja.prepend = (n) => { anotar(n); bandeja.children.unshift(n); n.parentElement = bandeja; };
+      const app0 = bandeja.appendChild.bind(bandeja);
+      bandeja.appendChild = (n) => { anotar(n); return app0(n); };
+      mockPacienteLabs(cOk, btn, bandeja);
+      cOk.api._guardarTablaOficialVista([{ codigoExamen: "HEMOGLOBINA", swRequerido: true }]);
+      const casillaHb = { value: "", isConnected: true, type: "text" };
+      const casillaCr = { value: "", isConnected: true, type: "number", id: "resultadoCreatinina" };
+      const fechaCr = { value: "", isConnected: true, type: "date", id: "fechaResultCreatinina" };
+      const getByIdMock = cOk.env.doc.getElementById;
+      cOk.env.doc.getElementById = (id) => (id === "resultadoHemoglobina" ? casillaHb : id === "resultadoCreatinina" ? casillaCr : id === "fechaResultCreatinina" ? fechaCr : getByIdMock(id));
+      btn.onclick();
+      elegirOpcionChooser(cOk, "historial");
+      await esperarA(() => llegados.length >= 2, 5000);
+      await esperar(20);
+      t.igual(casillaCr.value, "1.2", "control del caso: Auto-Labs SÍ escribió la creatinina (count>0)");
+      t.cierto(llegados.some((x) => /resultado\(s\) listos/.test(x)), "el VERDE de éxito llegó: " + JSON.stringify(llegados));
+      t.cierto(llegados.some((x) => x.includes("HEMOGLOBINA") && x.includes("exige")),
+        "y el AMBAR «Everest exige HEMOGLOBINA» TAMBIÉN — antes lo tragaba el deduplicado por título: " + JSON.stringify(llegados));
+      t.igual(casillaHb.value, "", "el aviso no rellena nada por su cuenta");
+    });
+
     // La rama del REINTENTO (tras auto-login) comparte el mismo hallazgo #41, pero —igual
     // que "L6643 / L6714" arriba— montarla de punta a punta exige simular el login real de
     // Athenea con estado. Se fija por código, igual que ese precedente.

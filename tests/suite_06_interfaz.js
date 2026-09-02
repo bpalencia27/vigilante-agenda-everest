@@ -49,6 +49,20 @@ module.exports = {
       t.igual(c.api.highlight("ana muñoz"), "ana <mark>muñoz</mark>", "la ñ también normaliza igual en los dos lados");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 49): el índice se calcula sobre stripAccents (NFD) y el
+    // recorte sobre el texto original; con acentos DESCOMPUESTOS (letra + diacrítico
+    // combinante) los índices se desalinean y el <mark> parte un grafema: «José<mark> Pér</mark>ez».
+    t.caso("02-sep: highlight no parte un grafema cuando el nombre trae acentos descompuestos (NFD)", () => {
+      const c = cargar();
+      const nfd = "José Pérez";              // é como e + U+0301
+      c.api.__state.busqueda = "perez";
+      t.igual(c.api.highlight(nfd), "José <mark>Pérez</mark>", "el resaltado cae sobre el apellido entero — antes: «José<mark> Pér</mark>ez»");
+      c.api.__state.busqueda = "jose";
+      t.igual(c.api.highlight(nfd), "<mark>José</mark> Pérez", "y al principio, sin dejar el acento suelto fuera de la marca");
+      c.api.__state.busqueda = "";
+      t.igual(c.api.highlight(null), "", "null sigue dando cadena vacía");
+    });
+
     t.caso("countdown calcula tiempo faltante", () => {
       const c = cargar();
       const diff = 10 * 60000;

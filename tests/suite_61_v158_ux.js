@@ -370,6 +370,39 @@ module.exports = {
       }
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 43): el arreglo de arriba solo miraba S.tamanoLetra en
+    // el instante del clic. En el orden inverso —Alto Contraste YA encendido con letra normal
+    // (inline 1.12) y después «letra muy grande» en Ajustes— aplicarTamanoLetra escribía la hoja
+    // de 1.28 pero el inline 1.12 seguía ganando: el panel en 1.12 y el resto en 1.28, el mismo
+    // síntoma del hallazgo #40 por el otro camino, hasta apagar y volver a encender.
+    t.caso("02-sep: cambiar la letra en Ajustes con Alto Contraste YA encendido actualiza el zoom del panel (fila 43)", () => {
+      const raiz = c.env.doc.createElement("div");
+      raiz.id = "vgl-root";
+      const getByIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-root" ? raiz : getByIdOriginal(id));
+      try {
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+        a._vglAlternarAltoContraste();      // enciende con letra normal
+        t.igual(raiz.style.zoom, "1.12", "punto de partida: contraste encendido con letra normal");
+        a.__S.tamanoLetra = "muygrande";    // el médico elige letra muy grande DESPUÉS
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "1.28", "el panel sigue a la letra nueva — antes se quedaba en 1.12 mientras el resto pasaba a 1.28");
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "1.12", "y vuelve al 1.12 del contraste al volver a letra normal");
+        a._vglAlternarAltoContraste();      // apaga
+        t.igual(raiz.style.zoom, "", "apagado: sin inline, manda la hoja");
+        a.__S.tamanoLetra = "muygrande";
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "", "con el contraste apagado, aplicarTamanoLetra no toca el inline");
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
     // ============ N2 · semáforo de salud ============
 
     t.caso("_saludEstado: sin señales es «nd», con fallo fresco sigue «ok», y solo el fallo sostenido alarma", () => {

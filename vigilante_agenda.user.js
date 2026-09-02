@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.100
+// @version      18.0.101
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.100";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.101";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1580,6 +1580,15 @@
       // usa mtrUroGrado (línea ~42707) para el mismo hallazgo, en la misma forma, para no
       // mantener dos catálogos de «qué es grave» que puedan volver a divergir.
       if (/^(incontables?|innumerables?|campo\s+cubierto)$/.test(val)) return true;
+      // 02-sep (cierre adversarial, fila 39) — UN SOLO catálogo de «qué es positivo»: el de
+      // mtrUroGrado/mtrUroRecuento, que el motor clínico ya usa para el mismo parcial. La
+      // regla anclada de arriba dejaba pasar como NORMAL «INCONTABLES X CAMPO» (el formato
+      // del LIS, línea ~42840), «> 100 INCONTABLES», y los positivos cualitativos que
+      // mtrUroGrado ya reconoce desde v16.7.0: PRESENTE/PRESENTES, REGULAR/REGULARES,
+      // SE OBSERVAN/OBSERVADAS. Sin esto, nitritos «PRESENTE» o bacterias «REGULARES» no
+      // se resaltaban en rojo. ESCASAS/TRAZAS siguen en 0 a propósito (ver mtrUroGrado).
+      try { if (mtrUroRecuento(val) === 999) return true; } catch (e) {}
+      try { const g = mtrUroGrado(val); if (typeof g === "number" && g >= 1) return true; } catch (e) {}
       const num = parseFloat(val.replace(",", "."));
       const nom = stripAccents(String(c.nombre || "")).toLowerCase();
       if (!isNaN(num)) {
@@ -7159,7 +7168,12 @@
                           const w = WHITELIST_13_LABS.find((x) => x.key === k);
                           return (w && w.names && w.names[0]) ? w.names[0] : String(k).replace(/_/g, " ");
                       });
-                      showToast("AMBAR", "Exámenes",
+                      // 02-sep (cierre adversarial, fila 44) — títulos DISTINTOS para los avisos
+                      // AMBAR de este clic: showToast deduplica por apptKey|título dentro del
+                      // mismo flush, así que el VERDE de éxito («Exámenes») se tragaba el AMBAR
+                      // de obligatoriasVacias —el arreglo #41 era mudo justo cuando Auto-Labs
+                      // hacía su trabajo— y «sin casilla» e «implausibles» se tragaban entre sí.
+                      showToast("AMBAR", "Exámenes · sin casilla",
                           "Llegaron resultados de " + _nombresSc.join(", ") + " pero esta pantalla no tiene la casilla donde escribirlos. "
                           + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false);
                       try { uxTrack("labs.autollenado.sincasilla", { n: r.sinCasilla.length }); } catch (e) {}
@@ -7171,7 +7185,7 @@
                       const _bloq = r.implausibles.slice(0, 4).map((o) => o.key + " = " + o.valor).join(", ");
                       const _resto = r.implausibles.length - 4;
                       const _prim = r.implausibles[0];
-                      showToast("AMBAR", "Exámenes",
+                      showToast("AMBAR", "Exámenes · fuera de rango",
                           "NO se escribieron: " + _bloq + (_resto > 0 ? " y " + _resto + " más" : "")
                           + " — fuera del rango oficial de la IPS (" + _prim.min + "–" + _prim.max + (_prim.unidad ? " " + _prim.unidad : "") + "). Revíselos y escríbalos a mano si son correctos.", false);
                       try { uxTrack("labs.autollenado.implausibles", { n: r.implausibles.length }); } catch (e) {}
@@ -7182,7 +7196,7 @@
                   // silencio en vez de avisarle al médico.
                   if (Array.isArray(r.obligatoriasVacias) && r.obligatoriasVacias.length) {
                       const _nombresOv = r.obligatoriasVacias.map((o) => o.nombre);
-                      showToast("AMBAR", "Exámenes",
+                      showToast("AMBAR", "Exámenes · casilla obligatoria",
                           "Everest exige " + _nombresOv.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
                       try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r.obligatoriasVacias.length }); } catch (e) {}
                   }
@@ -7234,7 +7248,7 @@
                               // reintento tras auto-login (r2 comparte el mismo cálculo).
                               if (Array.isArray(r2.obligatoriasVacias) && r2.obligatoriasVacias.length) {
                                   const _nombresOv2 = r2.obligatoriasVacias.map((o) => o.nombre);
-                                  showToast("AMBAR", "Exámenes",
+                                  showToast("AMBAR", "Exámenes · casilla obligatoria",   // 02-sep (fila 44): título distinto del VERDE
                                       "Everest exige " + _nombresOv2.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false);
                                   try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r2.obligatoriasVacias.length }); } catch (e) {}
                               }
@@ -8283,7 +8297,12 @@
     // v17.6.8 — fijos colombianos (601/604/…/800) además de móviles 3xx. La clase
     // NO incluye el 1: las cédulas colombianas suelen empezar por 1 y se tacharían como
     // teléfono (falso positivo). Los fijos reales van por 6xx/8xx.
-    str = str.replace(/(?:\+57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|\b[368]\d{9}\b)/g, "[TEL_CENSURADO]");
+    // 02-sep (cierre adversarial, fila 41) — con límite de dígito a los DOS lados: sin él, la
+    // forma «3xx xxx xxxx» casaba DENTRO de un número más largo no relacionado (un número de
+    // orden «930012345678» salía «9[TEL_CENSURADO]8» en la hoja de hechos, que es justo lo que
+    // el hallazgo #38 describía para mtrHcTachar y que aquí, en el paso siguiente del mismo
+    // pipeline —mtrHcValorLimpio → scrubPII—, seguía pasando).
+    str = str.replace(/(?<!\d)(?:\+57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g, "[TEL_CENSURADO]");
     // Fechas: formato dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa, aaaa-mm-dd y textuales en español.
     // v16.5.0 — `conFechas` las conserva (SOLO fechas): decisión del médico para que la
     // redacción asistida pueda anclar la cronología. Todo lo demás se tacha igual.
@@ -8928,6 +8947,13 @@
         (document.head || document.documentElement || document.body).appendChild(st);
       }
       st.textContent = z ? (VGL_FZ_OBJETIVOS + "{zoom:" + z + "}") : "";
+    } catch (e) {}
+    // 02-sep (cierre adversarial, fila 43) — con Alto Contraste YA encendido, su zoom inline
+    // (que gana a esta hoja) se recalcula con la letra recién elegida: antes el panel se
+    // quedaba en 1.12 mientras el resto del asistente pasaba a 1.28 —el mismo síntoma del
+    // hallazgo #40, por el otro camino— hasta apagar y volver a encender el contraste.
+    try {
+      if (_vglHcActivo) { const raiz = document.getElementById("vgl-root"); if (raiz) raiz.style.zoom = String(_vglHcZoom()); }
     } catch (e) {}
   }
 
@@ -28553,6 +28579,9 @@
   // persiste; al recargar vuelve el tema normal. El zoom inline gana al del tamaño de letra
   // y se libera al apagar (vuelve a mandar el estilo de S.tamanoLetra).
   let _vglHcActivo = false;
+  // 02-sep (fila 43) — el zoom inline del Alto Contraste, en UN solo sitio: lo usan el botón y
+  // aplicarTamanoLetra (cuando la letra cambia con el contraste ya encendido).
+  function _vglHcZoom() { return Math.max(1.12, parseFloat(_fzZoomDe(S && S.tamanoLetra)) || 1); }
   function _vglAlternarAltoContraste() {
     _vglHcActivo = !_vglHcActivo;
     try {
@@ -28565,7 +28594,7 @@
         // superficies del script (VGL_FZ_OBJETIVOS, vía la hoja de S.tamanoLetra) no las
         // toca este botón y se quedan en 1.28: usar el MAYOR de los dos zooms deja todo el
         // asistente de acuerdo, en vez de solo el panel principal retrocediendo.
-        const zAltoContraste = _vglHcActivo ? Math.max(1.12, parseFloat(_fzZoomDe(S.tamanoLetra)) || 1) : null;
+        const zAltoContraste = _vglHcActivo ? _vglHcZoom() : null;
         raiz.style.zoom = zAltoContraste ? String(zAltoContraste) : "";
       }
       for (const id of ["vgl-dock", "vgl-acciones-dock", "vgl-toasts", "vgl-pym-banner"]) {
@@ -30052,7 +30081,13 @@
       default: return true;
     }
   }
-  function highlight(txt) {
+  function highlight(txtCrudo) {
+    // 02-sep (cierre adversarial, fila 49) — en forma COMPUESTA (NFC) antes de medir: el índice
+    // de la coincidencia se calcula sobre stripAccents (NFD + quitar diacríticos) y el recorte
+    // se aplica sobre el texto original; si el nombre llega con acentos descompuestos (letra +
+    // diacrítico combinante), los índices se desalinean y el <mark> parte un grafema
+    // («José<mark> Pér</mark>ez»). En NFC cada letra acentuada mide 1 en los dos lados.
+    const txt = (txtCrudo == null) ? "" : String(txtCrudo).normalize("NFC");
     const q = state.busqueda; const safe = escapeHtml(txt);
     if (!q) return safe;
     // v18.0.94 — hallazgo #46 del enjambre: matchesSearch()/fuzzyMatch() ya son

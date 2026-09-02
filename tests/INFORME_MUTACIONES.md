@@ -11041,3 +11041,50 @@ antes del bucle, igual que v18.0.24 hizo en `refrescarCuentas`.
 | 253 | `render()` vuelve a `_noShowPrevia(a.doc_id)` por tarjeta (**el defecto**) | *suite_04: 02-sep: render() lee el historial … UNA vez por pintado* y *suite_15: 02-sep: render() con 30 tarjetas lee el historial … UNA vez (medido)* | Sí |
 
 Banco completo: **2.976 comprobaciones pasan, 0 fallan.**
+
+## v18.0.101 — cierre adversarial (02-sep), filas 39a/39b, 41, 43, 44, 49 y 50: las últimas seis
+
+Con estas, las **23 brechas** que el enjambre adversarial reportó sobre los 47 arreglos quedan
+cerradas (tabla completa en `docs/ENJAMBRE_FUNCIONES_20260901.md`, sección «Cierre adversarial»).
+
+**Filas 39a/39b (media/baja) — un solo catálogo para el uroanálisis.** El léxico de v18.0.84 estaba
+anclado al texto completo: «INCONTABLES X CAMPO» (el formato del LIS), «> 100 INCONTABLES» o
+«INNUMERABLES/CAMPO» pasaban como NORMAL mientras `mtrUroRecuento`, en el mismo archivo, ya daba
+999; y los positivos cualitativos que `mtrUroGrado` reconoce desde v16.7.0 (PRESENTE, REGULARES,
+SE OBSERVAN, OBSERVADAS) no se resaltaban. `_esUroComponenteAlterado` delega ahora en esas dos
+funciones; ESCASAS/TRAZAS siguen en 0 a propósito.
+
+**Fila 41 (media) — `scrubPII` partía un número.** La forma de teléfono no tenía límite de dígito y
+casaba DENTRO de un número más largo: «930012345678» → «9[TEL_CENSURADO]8» en la hoja de hechos
+(`mtrHcValorLimpio` → `scrubPII`), el daño exacto del hallazgo #38 un paso más adelante del mismo
+pipeline. Ahora lleva `(?<!\d)` y `(?!\d)`; el celular real al lado sigue tachándose.
+
+**Fila 43 (baja) — letra vs Alto Contraste, en el otro orden.** v18.0.88 solo miraba
+`S.tamanoLetra` al pulsar el botón; con el contraste ya encendido y «letra muy grande» elegida
+después, el inline 1.12 seguía ganando a la hoja de 1.28. `aplicarTamanoLetra` recalcula el inline
+(`_vglHcZoom`, un solo sitio) cuando el contraste está activo.
+
+**Fila 44 (media) — el AMBAR tragado por el VERDE.** `showToast` deduplica por apptKey|título
+dentro del mismo flush: cuando Auto-Labs SÍ escribía, el VERDE de éxito («Exámenes») se tragaba el
+AMBAR «Everest exige …» —el arreglo #41 era mudo justo en el caso común— y «sin casilla» e
+«implausibles» se tragaban entre sí. Cada aviso AMBAR de ese clic lleva ahora título propio
+(«Exámenes · sin casilla», «· fuera de rango», «· casilla obligatoria»). Medido con el flujo real
+de Auto-Labs (creatinina escrita + hemoglobina obligatoria vacía): antes 1 aviso, ahora 2.
+
+**Fila 49 (baja) — `highlight` con acentos descompuestos.** El índice se calculaba sobre
+`stripAccents` (NFD) y el recorte sobre el original: con «é» como e + U+0301 el `<mark>` partía un
+grafema («José<mark> Pér</mark>ez»). El texto se normaliza a NFC antes de medir.
+
+**Fila 50 (baja) — `MOTOR_RCV_V68_SPEC.md`.** Dos filas de «Divergencias deliberadas» describían
+reglas que el código ya no tiene (el piso condicional de v17.6.94, retirado por el piso plano de
+v18.0.5; el potenciador «DM sin FR mayores», retirado en v18.0.95). Corregidas y fechadas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 254 | el resaltado del uroanálisis vuelve a su catálogo anclado, sin el del motor (**el defecto**) | *suite_51: 02-sep: el resaltado del uroanálisis usa el MISMO catálogo que el motor* | Sí |
+| 255 | el teléfono vuelve sin límite de dígito (**el defecto**) | *suite_31: scrubPII: censura celulares colombianos…* (bloque 02-sep, fila 41) | Sí |
+| 256 | `aplicarTamanoLetra` deja de recalcular el inline del contraste (**el defecto**) | *suite_61: 02-sep: cambiar la letra en Ajustes con Alto Contraste YA encendido actualiza el zoom del panel* | Sí |
+| 257 | el AMBAR de casilla obligatoria vuelve al título «Exámenes» (**el defecto**) | *suite_15: 02-sep: cuando Auto-Labs SÍ escribe, el aviso «Everest exige …» llega igual* | Sí |
+| 258 | `highlight` sin normalizar a NFC (**el defecto**) | *suite_06: 02-sep: highlight no parte un grafema cuando el nombre trae acentos descompuestos* | Sí |
+
+Banco completo: **2.980 comprobaciones pasan, 0 fallan.**
