@@ -5041,5 +5041,109 @@ module.exports = {
       t.igual(choosers(), 1, "sin nada en vuelo, el clic abre el chooser como siempre");
     });
 
+    // =====================================================================
+    // v18.0.110 — OPORTUNIDADES S+ RESTANTES (C15, C19, C21) — B7 está en suite_10
+    // =====================================================================
+    await t.casoAsync("v18.0.110 (C15): el modal de Laboratorios nace con el hueco del recuadro renal reservado (sin salto de maquetación)", async () => {
+      const c = cargar({ silencioso: true });
+      await c.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
+      const modal = c.env.doc.getElementById("vgl-labs-modal");
+      t.cierto(!!modal, "el modal se abrió");
+      t.cierto(/id="vgl-labs-renal" class="vgl-labs-renal-slot"/.test(modal.innerHTML), "el hueco #vgl-labs-renal existe desde el primer pintado, con su clase de altura mínima");
+      t.cierto(/vgl-labs-renal-vacio">🫘 <b>Función renal:<\/b> calculando/.test(modal.innerHTML), "y dice que está calculando (antes: aparecía de golpe y empujaba la tabla)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/#vgl-labs-modal \.vgl-labs-renal-slot\{min-height:64px\}/.test(src), "la clase reserva la altura en la hoja de estilos");
+    });
+
+    t.caso("v18.0.110 (C21): regla única — los cuadros de consulta cierran con clic fuera, los de escritura nunca; todo id de cuadro que crea el script está en una de las dos listas", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      const d = c.env.doc;
+      const clicFuera = (el) => (el._listeners.click || []).forEach((f) => f({ target: el }));
+      const clicDentro = (el) => (el._listeners.click || []).forEach((f) => f({ target: { id: "hijo" } }));
+      const enBody = (id) => d.body.children.some((n) => n.id === id);
+
+      // chooser (consulta)
+      c.api._vglChooserModal({ titulo: "Exámenes", opciones: [{ etiqueta: "A", valor: "a" }] });
+      const chooser = d.body.children.find((n) => n.id === "vgl-chooser-modal");
+      t.cierto(!!chooser, "el chooser está en pantalla");
+      clicDentro(chooser);
+      t.cierto(enBody("vgl-chooser-modal"), "un clic DENTRO del cuadro no lo cierra");
+      clicFuera(chooser);
+      t.falso(enBody("vgl-chooser-modal"), "un clic FUERA (en el fondo) lo cierra");
+
+      // cartel grande (consulta)
+      c.api.bigAlert("ROJO", "Ingreso fuera de turno", "Detalle de prueba");
+      const cartel = d.body.children.find((n) => n.id === "vgl-modal");
+      t.cierto(!!cartel, "el cartel está en pantalla");
+      clicFuera(cartel);
+      t.falso(enBody("vgl-modal"), "el cartel cierra con clic fuera");
+
+      // pendientes del paciente (consulta)
+      c.api.avisoUniversal("PACIENTE PRUEBA", { pym: ["Tamizaje de prueba"] }, true);
+      const pym = d.body.children.find((n) => n.id === "vgl-pym-modal");
+      t.cierto(!!pym, "el aviso de pendientes está en pantalla");
+      clicFuera(pym);
+      t.falso(enBody("vgl-pym-modal"), "el aviso de pendientes cierra con clic fuera (antes: solo «Entendido»)");
+
+      // escritura: la función se niega y no cuelga ningún listener
+      let cerrados = 0;
+      c.api.VGL_MODALES_ESCRITURA.forEach((id) => {
+        const el = d.createElement("div"); el.id = id;
+        t.falso(c.api._vglCerrarConClicFuera(el, () => { cerrados++; }), id + ": la regla no se aplica a un cuadro de escritura");
+        clicFuera(el);
+      });
+      t.igual(cerrados, 0, "ningún cuadro de escritura cierra con clic fuera");
+      const desconocido = d.createElement("div"); desconocido.id = "vgl-cuadro-inventado";
+      t.falso(c.api._vglCerrarConClicFuera(desconocido, () => {}), "un id fuera de las dos listas tampoco cierra: la lista de consulta es explícita");
+
+      // las dos listas cubren todos los cuadros que el script crea, y no se solapan
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ids = new Set();
+      src.replace(/\.id = "(vgl-[a-z0-9-]+)"/g, (m, id) => { if (/-modal$/.test(id) || id === "vgl-postcita-panel") ids.add(id); return m; });
+      const consulta = c.api.VGL_MODALES_CONSULTA, escritura = c.api.VGL_MODALES_ESCRITURA;
+      const sinRegla = [...ids].filter((id) => consulta.indexOf(id) < 0 && escritura.indexOf(id) < 0);
+      t.cierto(ids.size >= 12, "se encontraron los cuadros del script: " + ids.size);
+      t.igual(sinRegla.join(","), "", "todo cuadro está en una de las dos listas (uno nuevo tiene que decidirse): " + sinRegla.join(","));
+      t.igual(consulta.filter((id) => escritura.indexOf(id) >= 0).join(","), "", "y ninguno está en las dos");
+      ["vgl-agendar-modal", "vgl-ordenar-modal", "vgl-ia-modal", "vgl-llenar-modal"].forEach((id) => t.cierto(escritura.indexOf(id) >= 0, id + " es de escritura"));
+      t.falso(/modal\.addEventListener\("click", \(e\) => \{ if \(e\.target === modal\) cerrar\(\); \}\);/.test(src), "el chooser ya no lleva su manejador propio: pasa por la regla única");
+    });
+
+    await t.casoAsync("v18.0.110 (C19): BuscarPacienteDetallado se pide UNA vez por paciente aunque Agendar, Ordenar y los demográficos lo pidan a la vez; y el sondeo ±7 días no repite el día central", async () => {
+      let n = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          if (String(url).includes("BuscarPacienteDetallado")) { n++; await new Promise((r) => setTimeout(r, 5)); return respuestaJson({ data: { id: 77, edad: 60, sexo: "F", celular: "3001112233" } }); }
+          return respuestaJson({});
+        },
+      });
+      const [a, b] = await Promise.all([c.api.apiPacienteDetalladoCacheado("77"), c.api.apiPacienteDetalladoCacheado("77")]);
+      t.igual(n, 1, "dos peticiones en vuelo a la vez se fusionan en UNA (antes: dos idénticas)");
+      t.cierto(a === b && a.data.edad === 60, "y las dos reciben la misma respuesta");
+      const demo = await c.api.apiAccesoObtenerDemograficos("77");
+      t.igual(n, 1, "los demográficos salen de la misma caché, sin otra petición");
+      t.cierto(demo && demo.edad === 60 && demo.sexo === "F", "con edad y sexo");
+      await c.api.apiPacienteDetalladoCacheado("78");
+      t.igual(n, 2, "otro paciente sí se pide");
+      c.api._demograficosInvalidar();
+      await c.api.apiPacienteDetalladoCacheado("78");
+      t.igual(n, 3, "al cambiar de historia (invalidar) se vuelve a pedir: nunca datos del anterior");
+      // un fallo no se cachea
+      let falla = true, m = 0;
+      const c2 = cargar({ silencioso: true, fetch: async (url) => { if (String(url).includes("BuscarPacienteDetallado")) { m++; if (falla) throw new Error("red caída"); return respuestaJson({ data: { id: 79 } }); } return respuestaJson({}); } });
+      const r0 = await c2.api.apiPacienteDetalladoCacheado("79");
+      t.cierto(!r0 && m >= 1, "con la red caída no hay respuesta (pageFetchJson la traga tras sus reintentos)");
+      falla = false;
+      const mAntes = m;
+      const r = await c2.api.apiPacienteDetalladoCacheado("79");
+      t.cierto(m === mAntes + 1 && r && r.data && r.data.id === 79, "y el siguiente intento vuelve a pedir (el fallo no queda cacheado)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/const candidatos = range\.filter\(\(x\) => !x\.isCenter\)/.test(src) && /mapConLimite\(candidatos, 2,/.test(src), "el sondeo salta el día central (que cargarHoras ya pide) y va de dos en dos");
+      t.igual((src.match(/apiPacienteDetalladoCacheado\(/g) || []).length, 4, "los tres consumidores (Agendar, Ordenar, demográficos) pasan por la caché");
+      t.igual((src.match(/BuscarPacienteDetallado\?idPaciente=/g) || []).length, 1, "y la URL cruda solo vive en ella");
+    });
+
   },
 };

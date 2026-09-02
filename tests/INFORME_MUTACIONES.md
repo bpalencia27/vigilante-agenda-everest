@@ -11481,3 +11481,46 @@ C9, C10, C15, C19, C21, B7) y los ⚖️ que son decisión suya.
 | 319 | el Redactor cierra sin preguntar con borradores sin insertar (**C13**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
 
 Banco completo: **3.020 comprobaciones pasan, 0 fallan.**
+
+## v18.0.110 — oportunidades S+ restantes de bajo riesgo: la bitácora entre pestañas, el hueco renal, la regla única del clic fuera y una sola petición de paciente
+
+Cuarta entrega («aplica también C7, C9, C10, C15, C19, C21 y B7»): los cuatro que no cambian
+hábitos. Los otros tres (C7, C9, C10) y los ⚖️ van en las entregas siguientes con lo que el
+médico decidió en la entrevista del 02-sep (`docs/OPORTUNIDADES_SPLUS_20260902.md`, sección D).
+
+- **B7 — la bitácora no se pisa entre pestañas.** La caché en memoria de v17.1.0 hacía que dos
+  pestañas se sobrescribieran (A escribe A1,A2; B escribe B1,B2; A vuelve con su copia vieja +
+  A3: B1 y B2 desaparecen; reproducido con el guion del auditor). Cada escritura deja una
+  «generación» (`pestaña:n`) en una clave diminuta; antes de usar la caché se compara con la del
+  disco y, si otra pestaña escribió entre medias, se relee y se hereda lo suyo. Reparsear los
+  64 KB sigue ocurriendo solo cuando de verdad hubo otra escritura.
+- **C15 — el recuadro renal ya no empuja la tabla.** «Laboratorios» nace con el hueco
+  `#vgl-labs-renal` reservado (altura mínima, «calculando con los resultados que van
+  llegando…») en vez de aparecer de golpe cuando termina el cálculo.
+- **C21 — regla única del clic fuera (decisión del médico).** Los cuadros de **consulta**
+  (chooser de Exámenes, paquete, Laboratorios, Pendientes del paciente, cartel) cierran con
+  clic en el fondo; los de **escritura** (Agendar, Ordenar, Panel, Redactor, Llenar, Confirmar,
+  post-cita) nunca. Dos listas explícitas y una prueba que exige que todo id de cuadro que crea
+  el script esté en una de las dos: un cuadro nuevo obliga a decidir.
+- **C19 — una sola petición de paciente.** `BuscarPacienteDetallado` se pedía hasta tres veces
+  por consulta (Agendar, Ordenar, demográficos). Ahora los tres pasan por
+  `apiPacienteDetalladoCacheado` (60 s, invalidada al cambiar de historia; un fallo no se
+  cachea). Y el sondeo ±7 días de Agendar salta el día central (que `cargarHoras` ya está
+  pidiendo) y va de dos en dos en vez de tres. Nota honesta del banco: la fusión de dos
+  peticiones EN VUELO ya la hacía `pageFetchJson` (GHOST) por URL; lo que la caché añade es la
+  reutilización entre módulos que llegan uno detrás de otro — el mutante que quitaba solo la
+  fusión en vuelo sobrevivió por eso y se sustituyó por uno que salta la caché desde los
+  demográficos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 320 | la caché de la bitácora se usa sin mirar la generación del disco (**B7**) | *suite_10: v18.0.110 (S+ B7): dos pestañas escribiendo la bitácora no se pisan…* | Sí |
+| 321 | el hueco `#vgl-labs-renal` nace vacío y sin clase de altura (**C15**) | *suite_15: v18.0.110 (C15): el modal de Laboratorios nace con el hueco del recuadro renal reservado…* | Sí |
+| 322 | `_vglCerrarConClicFuera` ignora la lista y engancha en cualquier cuadro (**C21**) | *suite_15: v18.0.110 (C21): regla única…* («ningún cuadro de escritura cierra con clic fuera») | Sí |
+| 323 | cualquier clic (también dentro) cierra el cuadro (**C21**) | *suite_15: v18.0.110 (C21): regla única…* («un clic DENTRO del cuadro no lo cierra») | Sí |
+| 324 | los demográficos vuelven a pedir la URL cruda sin pasar por la caché (**C19**) | *suite_15: v18.0.110 (C19): BuscarPacienteDetallado se pide UNA vez…* («sin otra petición») | Sí |
+| 325 | la caché nunca acierta (TTL 0) (**C19**) | *suite_15: v18.0.110 (C19)…* | Sí |
+| 326 | el sondeo vuelve a pedir el día central (**C19**) | *suite_15: v18.0.110 (C19)…* («salta el día central») | Sí |
+| 327 | `_demograficosInvalidar` no vacía la caché del paciente detallado (**C19**) | *suite_15: v18.0.110 (C19)…* («al cambiar de historia se vuelve a pedir») | Sí |
+
+Banco completo: **3.024 comprobaciones pasan, 0 fallan.**

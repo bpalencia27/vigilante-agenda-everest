@@ -535,5 +535,27 @@ module.exports = {
       t.cierto(/@grant\s+GM_listValues/.test(src) && /@grant\s+GM_deleteValue/.test(src), "y el userscript pide los permisos que la poda necesita");
     });
 
+    t.caso("v18.0.110 (S+ B7): dos pestañas escribiendo la bitácora no se pisan — cada una hereda lo que la otra escribió entre medias", () => {
+      // La caché en memoria (v17.1.0) hacía que la pestaña A, al volver a escribir, pisara
+      // con su copia vieja lo que B había añadido. Ahora una «generación» en disco delata la
+      // escritura ajena y se relee antes de añadir.
+      const almacen = {};
+      const A = cargar({ silencioso: true, almacen });
+      const B = cargar({ silencioso: true, almacen });
+      const leer = () => { try { return JSON.parse(almacen.vgl_flight_recorder_logs || "[]").map((e) => e.act); } catch (e) { return []; } };
+      A.api.vglLog("NAV", "A1", {}); A.api.vglLog("NAV", "A2", {});
+      B.api.vglLog("NAV", "B1", {}); B.api.vglLog("NAV", "B2", {});
+      A.api.vglLog("NAV", "A3", {});
+      t.igual(leer().join(","), "A1,A2,B1,B2,A3", "A vuelve a escribir sin perder B1 y B2 (antes: A1,A2,A3)");
+      B.api.vglLog("ERROR", "B3", { msg: "fallo sintético" });
+      t.igual(leer().join(","), "A1,A2,B1,B2,A3,B3", "y B hereda A3");
+      t.cierto(/^p[a-z0-9]+:\d+$/.test(String(almacen.vgl_flight_recorder_logs_gen || "")), "la generación en disco es «pestaña:n»: " + almacen.vgl_flight_recorder_logs_gen);
+      // sin escritura ajena, la caché sigue mandando (no se reparsea): se demuestra quitando
+      // el disco por debajo — si releyera, la línea nueva saldría sola.
+      almacen.vgl_flight_recorder_logs = "[]";
+      B.api.vglLog("NAV", "B4", {});
+      t.igual(leer().join(","), "A1,A2,B1,B2,A3,B3,B4", "sin cambio de generación, se usa la caché en memoria (el disco vaciado a mano no se relee)");
+    });
+
   },
 };

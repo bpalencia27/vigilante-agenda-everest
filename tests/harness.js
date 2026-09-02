@@ -271,7 +271,8 @@ function cargar(opciones) {
     // variable `_mtrCacheResumen` es alcanzable. (Mismo patrón que __uxVolcarBuffer.)
     "\n;try{ globalThis.__VGL__.__envejecerCacheResumen = function(msAtras){ _mtrCacheResumen.ts = Date.now() - msAtras; }; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__envejecerCacheMeds = function(msAtras){ _mtrMedsCache.ts = Date.now() - msAtras; }; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}\n";
+    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.VGL_MODALES_CONSULTA = VGL_MODALES_CONSULTA; globalThis.__VGL__.VGL_MODALES_ESCRITURA = VGL_MODALES_ESCRITURA; }catch(e){}\n";   // v18.0.110 (C21)
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");

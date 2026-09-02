@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.109
+// @version      18.0.110
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.109";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.110";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1047,6 +1047,18 @@
   // disco. Evita reparsear 64 KB en cada línea. El recorte a la cuota (más abajo) también
   // la actualiza, para que memoria y disco nunca se separen.
   let _frLogs = null;
+  // v18.0.110 (S+ robustez, B7) — LA BITÁCORA NO SE PISA ENTRE PESTAÑAS. La caché en memoria de
+  // v17.1.0 hacía que dos pestañas se sobrescribieran la una a la otra (A escribe A1,A2; B
+  // arranca, lee, escribe B1,B2; A vuelve a escribir su copia vieja + A3: B1 y B2 se pierden).
+  // Cada escritura deja una «generación» (pestaña:n) en una clave diminuta; antes de usar la
+  // caché se compara con la del disco: si otra pestaña escribió entre medias, se relee y se
+  // hereda lo suyo. Leer una clave corta por línea cuesta microsegundos; reparsear los 64 KB
+  // sigue ocurriendo solo cuando de verdad hubo otra escritura.
+  const FLIGHT_RECORDER_GEN_KEY = FLIGHT_RECORDER_KEY + "_gen";
+  const _frPestana = "p" + Math.random().toString(36).slice(2, 8);
+  let _frGenVista = "";
+  let _frN = 0;
+  function _frGenNueva() { _frGenVista = _frPestana + ":" + (++_frN); try { localStorage.setItem(FLIGHT_RECORDER_GEN_KEY, _frGenVista); } catch (e) {} }
   // v12.3.13 — Cuota de almacenamiento llena (QuotaExceededError): se avisa por
   // console.warn UNA sola vez por sesión, no en cada escritura fallida.
   let quotaAvisada = false;
@@ -1078,7 +1090,9 @@
       // El getItem sigue existiendo la PRIMERA vez, para heredar lo que dejó la sesión
       // anterior (o lo que escribió otra pestaña antes de que esta arrancara).
       let logs;
-      if (_frLogs) logs = _frLogs;
+      let genDisco = "";
+      try { genDisco = localStorage.getItem(FLIGHT_RECORDER_GEN_KEY) || ""; } catch (e) { genDisco = ""; }
+      if (_frLogs && genDisco === _frGenVista) logs = _frLogs;   // v18.0.110 (B7): nadie más escribió
       else {
         try {
           const raw = localStorage.getItem(FLIGHT_RECORDER_KEY);
@@ -1092,6 +1106,7 @@
       _frLogs = logs;
       try {
         localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+        _frGenNueva();
       } catch (eq) {
         // Cuota llena (QuotaExceededError / code 22 / lo que sea que lance setItem):
         // el tope circular de 500 ya limita el tamaño, así que aquí solo se recorta
@@ -1099,7 +1114,7 @@
         // se pierde esta entrada pero el flujo jamás se rompe.
         // v17.1.0 — al recortar por cuota, la caché en memoria se recorta IGUAL: si no,
         // memoria y disco divergen y el siguiente volcado revive lo que la cuota rechazó.
-        try { const _rec = logs.slice(-Math.floor(MAX_LOG_ENTRIES * 0.6)); _frLogs = _rec; localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(_rec)); } catch (e2) {}
+        try { const _rec = logs.slice(-Math.floor(MAX_LOG_ENTRIES * 0.6)); _frLogs = _rec; localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(_rec)); _frGenNueva(); } catch (e2) {}
       }
     } catch (e) {}
   }
@@ -6952,7 +6967,7 @@
     const onPick = o.onPick || function () {};
     const cerrar = () => { try { modal.remove(); } catch (e) {} };
     close.addEventListener("click", cerrar);
-    modal.addEventListener("click", (e) => { if (e.target === modal) cerrar(); });
+    _vglCerrarConClicFuera(modal, cerrar);   // v18.0.110 (C21): cuadro de consulta
     // v18.0.91 — hallazgo #43 del enjambre: era el único modal del script que no pasaba
     // por el patrón universal de accesibilidad (Escape cierra, Tab queda atrapado dentro)
     // que ya usan los otros ~9 modales — el médico que se acostumbró a que Escape cierra
@@ -13521,6 +13536,20 @@
   // sumándose encima de ellos en cada alerta (pedido del médico: un aviso, un canal).
 
   // Universal Modal Accessibility Manager (R6.4)
+  // v18.0.110 (S+ flujo, C21) — REGLA ÚNICA (decisión del médico, 02-sep): los cuadros de
+  // CONSULTA cierran con clic fuera; los de ESCRITURA (algo escrito o una petición en vuelo)
+  // nunca. Las dos listas son explícitas para que una prueba compare con todos los ids que el
+  // script crea: un cuadro nuevo tiene que entrar en una de las dos.
+  const VGL_MODALES_CONSULTA = ["vgl-chooser-modal", "vgl-paquete-modal", "vgl-labs-modal", "vgl-pym-modal", "vgl-modal"];
+  const VGL_MODALES_ESCRITURA = ["vgl-agendar-modal", "vgl-ordenar-modal", "vgl-panel-modal", "vgl-ia-modal", "vgl-llenar-modal", "vgl-confirma-modal", "vgl-postcita-panel"];
+  function _vglCerrarConClicFuera(modalEl, cerrar) {
+    try {
+      if (!modalEl || typeof modalEl.addEventListener !== "function") return false;
+      if (VGL_MODALES_CONSULTA.indexOf(String(modalEl.id || "")) < 0) return false;
+      modalEl.addEventListener("click", (e) => { if (e && e.target === modalEl) { try { cerrar(); } catch (e2) {} } });
+      return true;
+    } catch (e) { return false; }
+  }
   function _activarAccesibilidadModal(modalEl, closeCallback) {
     if (!modalEl || typeof modalEl.addEventListener !== "function") return () => {};
     const previoFoco = typeof document !== "undefined" ? document.activeElement : null;
@@ -13955,6 +13984,7 @@
       const ok = ov.querySelector ? ov.querySelector(".vgl-modal-ok") : null;
       const closeMod = () => { ov.remove(); acknowledge(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
     } catch (e) {}
@@ -14070,6 +14100,7 @@
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, pr: prioridadRcv ? 1 : 0 });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
@@ -18486,6 +18517,9 @@
       #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3) !important;font-weight:800;font-size:var(--t-micro)}
       /* v14.1.1 (R1b) — recuadro de función renal. Superficie propia para que se lea como
          un resumen y no como una fila más de la tabla de resultados. */
+      /* v18.0.110 (S+ flujo, C15) — el recuadro renal llega segundos después de la tabla y la
+         empujaba hacia abajo: el hueco reserva su altura desde el primer pintado. */
+      #vgl-labs-modal .vgl-labs-renal-slot{min-height:64px}
       #vgl-labs-modal .vgl-labs-renal{
         background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
         padding:10px 12px;display:flex;flex-direction:column;gap:5px
@@ -20816,8 +20850,29 @@
   // (`captura_agendamiento_oficial_20260810.json`: `"edad": 82, "edadAnos": 82`). Sin ella
   // no hay ninguna de las dos fórmulas renales, así que era el hueco más barato de cerrar
   // de toda la cadena. Se extrae aquí, cacheado por paciente, para no repetir la llamada.
+  // v18.0.110 (S+ flujo, C19) — BuscarPacienteDetallado se pedía hasta tres veces por consulta
+  // (Agendar, Ordenar, demográficos), a veces dos en vuelo a la vez. Una caché corta con fusión
+  // de peticiones en vuelo: la misma respuesta cruda para los tres.
+  let _pacienteDetalladoCache = { id: "", det: null, ts: 0, enVuelo: null };
+  const PACIENTE_DETALLADO_TTL_MS = 60000;
+  function apiPacienteDetalladoCacheado(pacienteId) {
+    const key = String(pacienteId == null ? "" : pacienteId);
+    if (!key) return Promise.resolve(null);
+    const ahora = Date.now();
+    if (_pacienteDetalladoCache.id === key && _pacienteDetalladoCache.det && ahora - _pacienteDetalladoCache.ts < PACIENTE_DETALLADO_TTL_MS) return Promise.resolve(_pacienteDetalladoCache.det);
+    if (_pacienteDetalladoCache.id === key && _pacienteDetalladoCache.enVuelo) return _pacienteDetalladoCache.enVuelo;
+    const p = (async () => {
+      try {
+        const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(key)}`);
+        _pacienteDetalladoCache = (det && det.data) ? { id: key, det: det, ts: Date.now(), enVuelo: null } : { id: "", det: null, ts: 0, enVuelo: null };
+        return det;
+      } catch (e) { _pacienteDetalladoCache = { id: "", det: null, ts: 0, enVuelo: null }; throw e; }
+    })();
+    _pacienteDetalladoCache = { id: key, det: null, ts: 0, enVuelo: p };
+    return p;
+  }
   let _demograficosCache = { pacienteId: "", data: null, ts: 0 };
-  function _demograficosInvalidar() { _demograficosCache = { pacienteId: "", data: null, ts: 0 }; }
+  function _demograficosInvalidar() { _pacienteDetalladoCache = { id: "", det: null, ts: 0, enVuelo: null }; _demograficosCache = { pacienteId: "", data: null, ts: 0 }; }
   async function apiAccesoObtenerDemograficos(pacienteId) {
     if (!pacienteId) return null;
     const key = String(pacienteId);
@@ -20827,7 +20882,7 @@
       return _demograficosCache.data;
     }
     try {
-      const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(key)}`);
+      const det = await apiPacienteDetalladoCacheado(key);   // v18.0.110 (C19): una sola petición para los tres consumidores
       const d = det && det.data;
       if (!d || typeof d !== "object") return null;
       // `edad` es el campo visto en la captura real; `edadAnos` se acepta como sinónimo por
@@ -22494,7 +22549,7 @@
                farmacológico vive en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de
                resultados de laboratorio. La función renal de arriba se queda: la queja fue
                puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
-          <div id="vgl-labs-renal" aria-live="polite"></div>
+          <div id="vgl-labs-renal" class="vgl-labs-renal-slot" aria-live="polite"><div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> calculando con los resultados que van llegando…</div></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando resultados de laboratorio...</div>
           </div>
@@ -25437,7 +25492,7 @@
           }
         };
         try {
-          const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          const det = await apiPacienteDetalladoCacheado(pacienteIdAcceso);   // v18.0.110 (C19)
           if (!vivo()) return;
           // v17.6.13 — si la respuesta no trae datos, el paciente NO es "sin celular":
           // es "no verificado". El flag evita que el rellenado de más abajo pise el
@@ -26084,8 +26139,11 @@
         if (!pacienteIdAcceso) pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
       } catch (e) { return; }
       if (!vivo() || !pacienteIdAcceso || miToken !== _sweepAgendaToken) return;
-      const candidatos = range.slice().sort((x, y) => (y.esSabado ? 1 : 0) - (x.esSabado ? 1 : 0));
-      await mapConLimite(candidatos, 3, async (item) => {
+      // v18.0.110 (S+ flujo, C19) — el día central ya lo está pidiendo cargarHoras() en este mismo
+      // instante: sondearlo aquí era la misma petición dos veces. Y dos en vuelo bastan: el
+      // sondeo compite con la carga de horas que el médico sí está esperando.
+      const candidatos = range.filter((x) => !x.isCenter).sort((x, y) => (y.esSabado ? 1 : 0) - (x.esSabado ? 1 : 0));
+      await mapConLimite(candidatos, 2, async (item) => {
         if (miToken !== _sweepAgendaToken) return;
         let hayAgenda = true;
         try {
@@ -27886,7 +27944,7 @@
     try {
       pid = await apiAccesoBuscarPaciente(apt.doc_id);
       if (pid) {
-        const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pid}`);
+        const det = await apiPacienteDetalladoCacheado(pid);   // v18.0.110 (C19)
         sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
       }
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
