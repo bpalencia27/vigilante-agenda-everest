@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.112
+// @version      18.0.113
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.112";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.113";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14323,6 +14323,27 @@
     return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
   }
   // Anti-duplicado entre pestañas: si otra pestaña de Everest ya lanzó este aviso hace <12s, no repetir.
+  // v18.0.113 — REPORTE EN VIVO (02-sep): «las notificaciones se repiten en varias pestañas de
+  // Chrome, la misma más de una vez». La ventana de 12 s solo cubre pestañas que evalúan la
+  // agenda casi a la vez; dos pestañas con cadencias distintas (o una en otra ventana de
+  // Chrome, que también «tiene foco») volvían a avisar el mismo hecho pasados esos 12 s, y el
+  // canal de la página (toast) y el del sistema no compartían registro. Ahora TODO aviso con
+  // identidad pasa por el registro compartido del día (vgl_vistos): un hecho, un aviso por
+  // navegador y por jornada, salga por la pestaña que salga y por el canal que salga.
+  function _avisoUnaVezPorNavegador(uid) {
+    if (!uid) return true;                       // sin identidad no se puede deduplicar
+    try { if (avisoYaVisto(uid)) return false; } catch (e) {}
+    try { avisoMarcarVisto(uid); } catch (e) {}
+    return true;
+  }
+  // Identidad para los avisos que no traen uid: título + cuerpo (hash corto). Un aviso con el
+  // mismo texto es el mismo aviso; los que cambian de paciente/fecha cambian de texto.
+  function _avisoUidDeTexto(title, body) {
+    const t = String(title || "") + "\u0001" + String(body || "");
+    let h = 5381;
+    for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+    return "txt|" + h.toString(36);
+  }
   function crossTabDup(id) { try { const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0); if (now - prev < 12000) return true; localStorage.setItem(k, String(now)); return false; } catch (e) { return false; } }
   // REGISTRO PERSISTENTE POR IDENTIFICADOR (v7.3.5): cada aviso lleva un id y queda
   // anotado en el navegador. Un aviso ya mostrado NO se repite: ni al recargar la
@@ -14528,13 +14549,20 @@
     // GM_notification es la única vía) y el toast SOLO queda como respaldo si ninguna de
     // las dos pudo. Antes la rama sin permiso disparaba GM_notification Y el toast a la
     // vez: dos canales para el mismo aviso.
+    // v18.0.113 — identidad para todos: un aviso sin uid la toma de su texto, y el canal de
+    // la página también consulta el registro compartido: la misma «Cita asignada» o el
+    // mismo «PyM actualizado» no sale dos veces en el navegador, ni en dos pestañas.
+    const uidReal = uid || _avisoUidDeTexto(title, body);
+    if (!_avisoUnaVezPorNavegador("notify|" + uidReal)) return;
     if (!_pestanaSinAtencion()) { showToast(color, title, body, persist); return; }
-    if (!_notificarSistema(color, title, body, persist, uid)) showToast(color, title, body, persist);
+    if (!_notificarSistema(color, title, body, persist, uidReal)) showToast(color, title, body, persist);
   }
   function _gmNotify(color, title, body, persist, uid) {
     try {
       if (typeof GM_notification !== "function") return false;
       if (crossTabDup("gm|" + (uid || title))) return false;   // varias pestañas: una sola vez
+      if (uid && avisoYaVisto("gm|" + uid)) return false;       // v18.0.113 — y una sola vez en la jornada
+      if (uid) avisoMarcarVisto("gm|" + uid);
       GM_notification({
         title: String(title || ""), text: String(body || ""),
         timeout: persist ? 0 : 20000, silent: true,               // el tono lo pone el propio Vigilante
@@ -14680,6 +14708,7 @@
   }
   function _dispararAvisoAudible(p) {
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
+    if (!_avisoUnaVezPorNavegador("aviso|" + p.uid)) return false;   // v18.0.113 — y solo una vez en la jornada, sea cual sea la pestaña o el canal
     if (p.color === "ROJO") startNag("ROJO");
     else if (p.color === "MORADO") playTone("MORADO");
     // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): "Silenciar 15 min" callaba solo el tono

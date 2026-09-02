@@ -11592,3 +11592,33 @@ Nota del banco: el mutante «una respuesta tardía tras cancelar vuelve a entrar
 | 344 | el botón no va atenuado (**C12**) | *suite_15: v18.0.112 (C12)…* («atenuado») | Sí |
 
 Banco completo: **3.033 comprobaciones pasan, 0 fallan.**
+
+## v18.0.113 — reporte en vivo del médico (02-sep): «las notificaciones se repiten en varias pestañas de Chrome, la misma más de una vez»
+
+Lo que había: `crossTabDup` (ventana de **12 s** entre pestañas, por canal) y `avisoYaVisto`
+(registro del día) que solo consultaba la notificación de Windows y las leyendas VERDE/MORADO.
+Tres agujeros reales, reproducidos con dos arneses que comparten `localStorage`:
+
+1. Dos pestañas con cadencias de sondeo distintas (o en dos ventanas de Chrome, que las dos
+   «tienen foco») evaluaban el mismo hecho con más de 12 s de diferencia y **las dos avisaban**.
+2. `notify()` sin `uid` (Cita asignada, Órdenes generadas, PyM actualizado…) solo tenía la
+   ventana de 12 s por título.
+3. El canal de la página (toast) y el del sistema no compartían registro: el mismo hecho
+   podía salir por Windows en una pestaña y como toast en otra.
+
+Ahora: `_avisoUnaVezPorNavegador(uid)` (registro compartido del día, `vgl_vistos`) lo consulta
+todo aviso con identidad — `_dispararAvisoAudible` (agenda), `notify()` (que a los avisos sin
+`uid` les da identidad por texto: título + cuerpo) y `GM_notification`. **Un hecho, un aviso
+por navegador y por jornada**, salga por la pestaña que salga y por el canal que salga. Los
+toasts de acción propia (p. ej. «Órdenes · ninguna se creó») no cambian: son de la pestaña
+donde el médico pulsó.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 345 | `_dispararAvisoAudible` deja de consultar el registro del día | *suite_42: v18.0.113: dos pestañas que evalúan el mismo hecho…* | Sí |
+| 346 | `notify()` sin uid vuelve a no tener identidad | *suite_42: v18.0.113: notify() sin uid toma identidad del texto…* | Sí |
+| 347 | `notify()` no consulta el registro antes del toast | *suite_42: v18.0.113: notify() sin uid…* («la pestaña visible no pinta el toast») | Sí |
+| 348 | `_gmNotify` ignora el registro del día | *suite_42: v18.0.113: GM_notification…* | Sí |
+| 349 | la identidad de texto ignora el cuerpo | *suite_42: v18.0.113: notify() sin uid…* («otro texto = otro aviso») | Sí |
+
+Banco completo: **3.036 comprobaciones pasan, 0 fallan.**

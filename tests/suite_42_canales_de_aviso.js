@@ -1,3 +1,4 @@
+const esperar42 = (ms) => new Promise((r) => setTimeout(r, ms));   // v18.0.113
 // =====================================================================
 //  SUITE 42 — Los canales de aviso, ejercitados de verdad
 //
@@ -737,6 +738,85 @@ module.exports = {
       t.cierto(!/1122334455/.test(capturadas[0][1]) && /●●●455/.test(capturadas[0][1]), "el cuerpo que ve Windows no lleva la cédula: " + capturadas[0][1]);
       t.cierto(/PACIENTE PRUEBA UNO/.test(capturadas[0][0]), "y el nombre sí, para saber de quién es");
       delete c.ctx.Notification;
+    });
+
+    // =====================================================================
+    // v18.0.113 — REPORTE EN VIVO (02-sep): «las notificaciones se repiten en varias pestañas»
+    // =====================================================================
+    t.caso("v18.0.113: dos pestañas que evalúan el mismo hecho con más de 12 s de diferencia avisan UNA sola vez (registro compartido del día)", () => {
+      const almacen = {};
+      const mk = () => {
+        const c = cargar({ silencioso: true, almacen });
+        conAudio(c);
+        let os = 0;
+        function FakeNotification() { os++; return { close() {}, onclick: null }; }
+        FakeNotification.permission = "granted";
+        c.env.win.Notification = FakeNotification;
+        c.env.win.document.visibilityState = "hidden";
+        c.api.__S.sonido = true;
+        return { c, cuenta: () => os };
+      };
+      const A = mk(), B = mk();
+      const p = { uid: "cita-7|AMBAR", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false };
+      t.cierto(A.c.api._dispararAvisoAudible(p), "la pestaña A avisa");
+      t.igual(A.cuenta(), 1, "y sale por Windows una vez");
+      // la ventana de 12 s de crossTabDup se da por vencida a mano (otra cadencia de sondeo)
+      almacen["vgl_n_full|cita-7|AMBAR"] = String(Date.now() - 60000);
+      t.falso(B.c.api._dispararAvisoAudible(p), "la pestaña B, un minuto después, NO vuelve a avisar el mismo hecho (antes: sí, pasados los 12 s)");
+      t.igual(B.cuenta(), 0, "ninguna notificación repetida");
+      const p2 = { uid: "cita-8|AMBAR", color: "AMBAR", title: "t2", body: "b2", flashText: "f", persist: false };
+      t.cierto(B.c.api._dispararAvisoAudible(p2), "otro hecho sí avisa");
+      t.igual(B.cuenta(), 1, "por Windows");
+    });
+
+    await t.casoAsync("v18.0.113: notify() sin uid toma identidad del texto — el mismo aviso no sale dos veces en el navegador, ni por toast ni por Windows, ni en otra pestaña", async () => {
+      const almacen = {};
+      const mk = (visible) => {
+        const c = cargar({ silencioso: true, almacen });
+        let os = 0;
+        function FakeNotification() { os++; return { close() {}, onclick: null }; }
+        FakeNotification.permission = "granted";
+        c.env.win.Notification = FakeNotification;
+        c.env.win.document.visibilityState = visible ? "visible" : "hidden";
+        c.env.win.document.hasFocus = () => !!visible;
+        return { c, cuenta: () => os };
+      };
+      const A = mk(false), B = mk(false);
+      A.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      t.igual(A.cuenta(), 1, "A: una notificación");
+      almacen["vgl_n_os|" + Object.keys(almacen).filter((k) => k.indexOf("vgl_n_os|") === 0).map((k) => k.slice(9))[0]] = String(Date.now() - 60000);
+      B.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      t.igual(B.cuenta(), 0, "B, un minuto después con el mismo texto: nada (antes: la misma notificación otra vez)");
+      B.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "OTRO PACIENTE PRUEBA · 02/10/2026");
+      t.igual(B.cuenta(), 1, "otro texto = otro aviso");
+      // canal de la página: la pestaña visible tampoco repite lo que ya salió por Windows
+      const C = mk(true);
+      // DOM «enriquecido» mínimo: _renderToast arma el aviso con querySelector sobre el nodo creado
+      const crearBase = C.c.env.doc.createElement;
+      C.c.env.doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, crearBase("div")); return memo.get(sel); }; return e; };
+      const enCola = [];
+      C.c.api.__state.muteUntil = 0;
+      const stOrig = C.c.env.doc.getElementById;
+      C.c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? { prepend: (n) => enCola.push(n), appendChild: (n) => enCola.push(n), children: [] } : stOrig(id));
+      C.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      await esperar42(30);
+      t.igual(enCola.length, 0, "la pestaña visible no pinta el toast de un aviso que ya salió en el navegador");
+      C.c.api.notify("AZUL", "Aviso nuevo de prueba", "solo en esta pestaña");
+      await esperar42(30);
+      t.igual(enCola.length, 1, "y un aviso nuevo sí se pinta (la prueba del toast no es vacía)");
+      t.igual(C.c.api._avisoUidDeTexto("a", "b"), C.c.api._avisoUidDeTexto("a", "b"), "la identidad de texto es estable");
+      t.cierto(C.c.api._avisoUidDeTexto("a", "b") !== C.c.api._avisoUidDeTexto("a", "c"), "y distinta para textos distintos");
+    });
+
+    t.caso("v18.0.113: GM_notification (sin permiso del sitio) también obedece el registro del día", () => {
+      const almacen = {};
+      let gm = 0;
+      const mk = () => { const c = cargar({ silencioso: true, almacen }); c.env.win.GM_notification = () => { gm++; }; return c; };
+      const A = mk(), B = mk();
+      t.cierto(A.api._gmNotify("AMBAR", "t", "b", false, "gm-uid-1"), "A avisa por la extensión");
+      almacen["vgl_n_gm|gm-uid-1"] = String(Date.now() - 60000);
+      t.falso(B.api._gmNotify("AMBAR", "t", "b", false, "gm-uid-1"), "B, un minuto después: no repite");
+      t.igual(gm, 1, "una sola notificación de la extensión");
     });
 
   },
