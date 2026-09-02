@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.115
+// @version      18.0.116
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.115";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.116";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9446,7 +9446,7 @@
   // v11.0.1 — Ya NO se cuelga el estado interno de la ventana real de la página. Exponía
   // en `window.state` el mapa completo de pacientes con PyM pendiente (cédulas y
   // actividades) al alcance de cualquier script cargado por Everest.
-  try { PAGEWIN.vglDebug = { version: VERSION, pymSize: () => state.pym.size, leader: () => state.leader }; } catch (e) {}
+  try { PAGEWIN.vglDebug = { version: VERSION, pymSize: () => state.pym.size, leader: () => state.leader, desacuerdos: () => _ajustesDesacuerdosTexto() }; } catch (e) {}   // v18.0.116: sin PHI (ejes y valores clínicos, nunca identidad)
   // v12.0.0 — RETIRADO todo lo demás que colgaba de la ventana real de la página. Arriba
   // queda solo `vglDebug`, que no contiene ningún dato de paciente. Lo eliminado y por qué:
   //
@@ -30495,6 +30495,7 @@
         <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
         <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
+        <div class="vgl-fld"><label>Desacuerdos entre módulos (paciente abierto)<span class="vgl-hint">Paso 1 del «estado único» (v18.0.116): solo observa y anota qué fuentes no coinciden — tensión, peso, sexo, programas, medicamentos. No cambia ninguna preferencia.</span></label><b id="c-desacuerdos" style="font-size:var(--t-micro)">${escapeHtml(_ajustesDesacuerdosTexto())}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
         <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
         <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
@@ -43202,6 +43203,74 @@
     }
     return null;
   }
+  // =====================================================================
+  //  v18.0.116 — «UN SOLO ESTADO DEL PACIENTE», PASO 1 (decisión del médico, 02-sep): antes de
+  //  tocar ninguna precedencia, un DETECTOR PASIVO de desacuerdos entre módulos. Compara lo que
+  //  cada fuente tiene en la mano en el mismo instante (registro histórico de la API vs casilla
+  //  de hoy; cabecera vs Ruta Crónicos; llave de la caché de medicamentos vs paciente del
+  //  resumen) y solo OBSERVA: cuelga la lista del resumen (`_desacuerdos`), la cuenta en la
+  //  telemetría anónima (qué eje y con qué frecuencia) y la muestra en modo programador. No
+  //  cambia ningún valor ni ningún orden de preferencia: eso es el paso 2, con la tabla delante.
+  // =====================================================================
+  const MTR_DESACUERDO_PESO_KG = 1;
+  function mtrDetectarDesacuerdos(ins) {
+    const i = ins || {};
+    const out = [];
+    const num = (v) => (typeof v === "number" && isFinite(v)) ? v : null;
+    const ta = i.ta || {}, ent = i.ent || {};
+    // Tensión: solo cuando las DOS fuentes tienen la medición completa y difieren.
+    const entPas = num(ent.pas), entPad = num(ent.pad), domPas = num(ta.pas), domPad = num(ta.pad);
+    if (entPas !== null && entPad !== null && domPas !== null && domPad !== null && (entPas !== domPas || entPad !== domPad)) {
+      out.push({ eje: "tension", fuentes: [{ fuente: "registro histórico (API)", valor: entPas + "/" + entPad }, { fuente: "casilla de hoy", valor: domPas + "/" + domPad }] });
+    }
+    const entPeso = num(ent.peso), domPeso = num(i.pesoDom);
+    if (entPeso !== null && domPeso !== null && Math.abs(entPeso - domPeso) >= MTR_DESACUERDO_PESO_KG) {
+      out.push({ eje: "peso", fuentes: [{ fuente: "registro histórico (API)", valor: entPeso + " kg" }, { fuente: "casilla de hoy", valor: domPeso + " kg" }] });
+    }
+    const sx = (v) => (mtrEsSexoFemenino(v) ? "F" : (mtrEsSexoMasculino(v) ? "M" : null));
+    const sEnt = sx(ent.sexo), sCab = sx(i.sexoCabecera);
+    if (sEnt && sCab && sEnt !== sCab) {
+      out.push({ eje: "sexo", fuentes: [{ fuente: "registro histórico (API)", valor: sEnt }, { fuente: "cabecera de la historia", valor: sCab }] });
+    }
+    const cab = i.programasCabecera || {}, cos = i.programasCosecha || {};
+    const pares = [["hta", "hta", "HTA"], ["diabetes", "diabetes", "diabetes"], ["enfermedadRenalDocumentada", "erc", "ERC"]];
+    pares.forEach(([kCab, kCos, rotulo]) => {
+      const a = cab[kCab], b = cos[kCos];
+      if (typeof a === "boolean" && typeof b === "boolean" && a !== b) {
+        out.push({ eje: "programa", fuentes: [{ fuente: "cabecera de la historia", valor: rotulo + ": " + (a ? "sí" : "no") }, { fuente: "Ruta Crónicos", valor: rotulo + ": " + (b ? "sí" : "no") }] });
+      }
+    });
+    const llave = i.medsCacheKey == null ? "" : String(i.medsCacheKey);
+    const pid = i.pacienteIdLabs == null ? "" : String(i.pacienteIdLabs);
+    const doc = i.docId == null ? "" : String(i.docId);
+    if (llave && pid && llave !== pid && doc && llave === doc) {
+      out.push({ eje: "medicamentos", fuentes: [{ fuente: "widget de Conducta (caché)", valor: "llave = cédula" }, { fuente: "resumen (Panel/IA)", valor: "llave = id de paciente " + pid }] });
+    }
+    return out;
+  }
+  const _desacuerdosAnotados = new Set();
+  function mtrAnotarDesacuerdos(docId, lista) {
+    try {
+      if (!Array.isArray(lista) || !lista.length) return false;
+      const k = String(docId || "") + "|" + lista.map((x) => x.eje).sort().join(",");
+      if (_desacuerdosAnotados.has(k)) return false;
+      _desacuerdosAnotados.add(k);
+      lista.forEach((x) => { try { uxTrack("estado.desacuerdo." + x.eje); } catch (e) {} });
+      try { vglLog("ESTADO", "DesacuerdoModulos", { ejes: lista.map((x) => x.eje).join(","), n: lista.length }); } catch (e) {}
+      return true;
+    } catch (e) { return false; }
+  }
+  function _ajustesDesacuerdosTexto() {
+    try {
+      const doc = extractPacienteAbierto();
+      if (!doc) return "sin historia abierta";
+      const r = mtrCacheResumenLeer(doc);
+      if (!r) return "sin resumen calculado todavía";
+      const d = Array.isArray(r._desacuerdos) ? r._desacuerdos : [];
+      if (!d.length) return "ninguno: los módulos coinciden en tensión, peso, sexo, programas y medicamentos";
+      return d.map((x) => x.eje + " — " + x.fuentes.map((f) => f.fuente + ": " + f.valor).join(" vs ")).join(" · ");
+    } catch (e) { return "no se pudo leer"; }
+  }
   function mtrLeerTensionDelDom(doc) {
     // Primero la tensión OBLIGATORIA («T.A:*»), que es la que el médico llena.
     const pas = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS, doc);
@@ -43782,6 +43851,17 @@
         ? mtrSabadoTrabajaEsteMedico(state.activeDoctor && state.activeDoctor.id) : null;
       resumen._uroHallazgos = uroHallazgos || null;
       resumen._uroSintomas = _uroSintomasConfirmados(apt && apt.doc_id);   // v18.0.111 (C10)
+      // v18.0.116 — paso 1 del «estado único»: se observa y se anota, no se decide nada.
+      try {
+        resumen._desacuerdos = mtrDetectarDesacuerdos({
+          ta: ta, ent: ent, pesoDom: pesoDom, sexoCabecera: sexoCabecera,
+          programasCabecera: (_mismoPac && typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(document) : null,
+          programasCosecha: (function () { try { const c = _vglCosechaLeer(apt && apt.doc_id); return c && c.programas; } catch (e) { return null; } })(),
+          medsCacheKey: (typeof _mtrMedsCache !== "undefined" && _mtrMedsCache) ? _mtrMedsCache.pacienteId : null,
+          pacienteIdLabs: pacienteIdLabs, docId: apt && apt.doc_id,
+        });
+        mtrAnotarDesacuerdos(apt && apt.doc_id, resumen._desacuerdos);
+      } catch (e) { resumen._desacuerdos = []; }
       resumen._embarazo = (function () {
         try {
           const reg = _vglConfirmacionVigente(apt && apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS);

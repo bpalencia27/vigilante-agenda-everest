@@ -110,4 +110,4 @@ Cada ⚖️ se le presentó como opciones cerradas. Lo que decidió, y en qué e
 | C12 | Con factores pendientes, un botón **atenuado «📝 Faltan antecedentes»** en el dock abre el ayudante de llenado | ✅ v18.0.112 |
 | C11 | «Laboratorios» sirve la **precarga si es fresca (< 2 min)** y ofrece «Buscar laboratorios nuevos» para consultar en vivo | ✅ v18.0.115 |
 | C17 | Agendar **recuerda tipo y especialidad** y abre en el paso 2, con un chip «cambiar» para volver al 1 | ✅ v18.0.115 |
-| A | Paso 1: un **detector pasivo de desacuerdos** entre módulos (programa, tensión, peso, medicamentos) visible solo en modo programador, antes de tocar la precedencia | pendiente (v18.0.116) |
+| A | Paso 1: un **detector pasivo de desacuerdos** entre módulos (programa, tensión, peso, sexo, medicamentos) visible solo en modo programador, antes de tocar la precedencia | ✅ v18.0.116 (`mtrDetectarDesacuerdos`; telemetría `estado.desacuerdo.<eje>`; paso 2 con la tabla de frecuencias delante) |

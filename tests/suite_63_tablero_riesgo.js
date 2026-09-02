@@ -1166,5 +1166,58 @@ module.exports = {
       t.cierto(repasos.length > vivosAntes || repasos.length >= 1,
         "y queda vigilando la pantalla cada 20 s: sin esto vuelve a ser una foto");
     });
+    // =====================================================================
+    // v18.0.116 — «UN SOLO ESTADO DEL PACIENTE», PASO 1: detector PASIVO de desacuerdos
+    // =====================================================================
+    t.caso("v18.0.116 (A, paso 1): el detector solo señala desacuerdos reales entre fuentes — tensión, peso, sexo, programas y la llave de medicamentos — y nunca inventa uno con datos incompletos", () => {
+      const d = api.mtrDetectarDesacuerdos;
+      t.igual(d(null).length, 0, "sin insumos: nada");
+      t.igual(d({ ta: { pas: 130, pad: 85 }, ent: { pas: 130, pad: 85, peso: 70 }, pesoDom: 70 }).length, 0, "fuentes que coinciden: nada");
+      const ten = d({ ta: { pas: 165, pad: 102 }, ent: { pas: 110, pad: 70 } });
+      t.cierto(ten.length === 1 && ten[0].eje === "tension" && /110\/70/.test(ten[0].fuentes[0].valor) && /165\/102/.test(ten[0].fuentes[1].valor), "tensión: API 110/70 vs casilla 165/102 (el caso A2 del auditor)");
+      t.igual(d({ ta: { pas: 165, pad: 102 }, ent: { pas: 110, pad: 102 } }).length, 1, "también si solo difiere la sistólica");
+      t.igual(d({ ta: { pas: 130, pad: 95 }, ent: { pas: 130, pad: 80 } }).length, 1, "y si solo difiere la diastólica");
+      t.igual(d({ ta: { pas: 165, pad: null }, ent: { pas: 110, pad: 70 } }).length, 0, "con una medición incompleta no se afirma desacuerdo (casilla vacía antes que dato inventado)");
+      t.igual(d({ ent: { peso: 90 }, pesoDom: 70 })[0].eje, "peso", "peso: 90 vs 70");
+      t.igual(d({ ent: { peso: 70.4 }, pesoDom: 70 }).length, 0, "menos de 1 kg no es desacuerdo");
+      t.igual(d({ ent: { sexo: "MASCULINO" }, sexoCabecera: "F" })[0].eje, "sexo", "sexo: API masculino vs cabecera F");
+      t.igual(d({ ent: { sexo: "M" }, sexoCabecera: "MASCULINO" }).length, 0, "el sexo se canonicaliza antes de comparar (A5)");
+      const pr = d({ programasCabecera: { hta: true, diabetes: null, enfermedadRenalDocumentada: false }, programasCosecha: { hta: false, diabetes: true, erc: false } });
+      t.cierto(pr.length === 1 && pr[0].eje === "programa" && /HTA: sí/.test(pr[0].fuentes[0].valor) && /HTA: no/.test(pr[0].fuentes[1].valor), "programa: solo HTA difiere (diabetes null en cabecera no cuenta; ERC coincide)");
+      const md = d({ medsCacheKey: "111222333", pacienteIdLabs: 5150, docId: "111222333" });
+      t.cierto(md.length === 1 && md[0].eje === "medicamentos", "medicamentos: la caché quedó bajo la cédula y el resumen busca por id (A3)");
+      t.igual(d({ medsCacheKey: "5150", pacienteIdLabs: 5150, docId: "111222333" }).length, 0, "misma llave: nada");
+      t.igual(d({ medsCacheKey: "9999", pacienteIdLabs: 5150, docId: "111222333" }).length, 0, "otra llave que no es la cédula: es otro paciente, no un desacuerdo de este");
+      const todos = d({ ta: { pas: 165, pad: 102 }, ent: { pas: 110, pad: 70, peso: 90, sexo: "F" }, pesoDom: 70, sexoCabecera: "M", programasCabecera: { hta: true }, programasCosecha: { hta: false }, medsCacheKey: "1", pacienteIdLabs: 2, docId: "1" });
+      t.igual(todos.map((x) => x.eje).join(","), "tension,peso,sexo,programa,medicamentos", "los cinco ejes a la vez, en orden fijo");
+    });
+
+    await t.casoAsync("v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez por paciente y combinación (telemetría + bitácora), y el modo programador los muestra", async () => {
+      const c = cargar({ silencioso: true });
+      const lista = [{ eje: "tension", fuentes: [{ fuente: "registro histórico (API)", valor: "110/70" }, { fuente: "casilla de hoy", valor: "165/102" }] }];
+      t.cierto(c.api.mtrAnotarDesacuerdos("111222333", lista), "primera vez: se anota");
+      t.falso(c.api.mtrAnotarDesacuerdos("111222333", lista), "la misma combinación no se vuelve a contar");
+      t.cierto(c.api.mtrAnotarDesacuerdos("111222333", lista.concat([{ eje: "peso", fuentes: [] }])), "otra combinación sí");
+      t.falso(c.api.mtrAnotarDesacuerdos("111222333", []), "sin desacuerdos no se anota nada");
+      await new Promise((r) => setTimeout(r, 30));   // el buffer de telemetría se vuelca en un temporizador
+      const ux = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(!!(ux && ux.acciones && ux.acciones["estado.desacuerdo.tension"] === 2 && ux.acciones["estado.desacuerdo.peso"] === 1), "la telemetría cuenta por eje (anónima: solo el nombre del eje)");
+      const logs = JSON.parse(c.env.storage.getItem("vgl_flight_recorder_logs") || "[]");
+      const fila = logs.find((l) => l.act === "DesacuerdoModulos");
+      t.cierto(!!fila && /tension/.test(fila.det.ejes) && !/111222333/.test(JSON.stringify(fila)), "la bitácora anota los ejes, nunca la cédula");
+      // modo programador: texto del paciente abierto
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : null);
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 111222333", closest: () => null }] : []);
+      t.cierto(/sin resumen/.test(c.api._ajustesDesacuerdosTexto()), "sin resumen calculado lo dice");
+      c.api.mtrCacheResumenGuardar("111222333", { factores: {}, _desacuerdos: lista });
+      t.cierto(/tension — registro histórico \(API\): 110\/70 vs casilla de hoy: 165\/102/.test(c.api._ajustesDesacuerdosTexto()), "con desacuerdos, los lista con sus fuentes: " + c.api._ajustesDesacuerdosTexto());
+      c.api.mtrCacheResumenGuardar("111222333", { factores: {}, _desacuerdos: [] });
+      t.cierto(/ninguno/.test(c.api._ajustesDesacuerdosTexto()), "sin desacuerdos: «ninguno»");
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/resumen\._desacuerdos = mtrDetectarDesacuerdos\(\{[\s\S]{0,700}mtrAnotarDesacuerdos\(apt && apt\.doc_id, resumen\._desacuerdos\);/.test(src), "el resumen clínico cuelga la lista y la anota (sobrevive a la caché)");
+      t.cierto(/id="c-desacuerdos"[^\n]*\$\{escapeHtml\(_ajustesDesacuerdosTexto\(\)\)\}/.test(src), "Ajustes (modo programador) la pinta");
+      t.falso(/_desacuerdos[^\n]*(precedencia|=\s*fPrev|Object\.assign\(fPrev)/.test(src), "paso 1: el detector no toca ninguna precedencia");
+    });
+
   },
 };

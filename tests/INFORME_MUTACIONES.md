@@ -11686,3 +11686,30 @@ Banco completo: **3.040 comprobaciones pasan, 0 fallan.**
 | 362 | la especialidad recordada no se aplica a la carga de horas (**C17**) | *suite_15: v18.0.115 (C17)…* («EspecialidadId=46») | Sí |
 
 Banco completo: **3.042 comprobaciones pasan, 0 fallan.**
+
+## v18.0.116 — «Un solo estado del paciente», paso 1 (decisión del médico): un detector pasivo de desacuerdos entre módulos
+
+Antes de tocar ninguna precedencia (A1–A13 del auditor de estado único), el médico decidió
+empezar por medir: `mtrDetectarDesacuerdos` (pura) compara lo que cada fuente tiene en la mano
+en el mismo instante — tensión y peso del registro histórico de la API frente a la casilla de
+hoy, sexo de la API frente a la cabecera, programas de la cabecera frente a Ruta Crónicos, y
+la llave de la caché de medicamentos (cédula, por el widget de Conducta) frente al id de
+paciente que usa el resumen (el caso A3). Solo señala desacuerdos REALES: con una medición
+incompleta no afirma nada (casilla vacía antes que dato inventado), el sexo se canonicaliza
+antes de comparar (A5) y el peso exige ≥ 1 kg de diferencia. El resumen clínico cuelga la
+lista (`_desacuerdos`, sobrevive a la caché), se anota UNA vez por paciente y combinación en
+la telemetría anónima (`estado.desacuerdo.<eje>`) y en la bitácora (ejes, nunca la cédula), y
+el modo programador (Ctrl+Shift+D → Ajustes) la muestra para el paciente abierto. No cambia
+ningún valor ni ningún orden de preferencia: eso es el paso 2, con la tabla de frecuencias
+delante.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 363 | la tensión solo compara la sistólica | *suite_63: v18.0.116 (A, paso 1): el detector solo señala desacuerdos reales…* | Sí |
+| 364 | el peso nunca desacuerda (umbral 100 kg) | *suite_63: v18.0.116 (A, paso 1): el detector…* («peso: 90 vs 70») | Sí |
+| 365 | los programas no se comparan | *suite_63: v18.0.116 (A, paso 1): el detector…* («programa») | Sí |
+| 366 | la llave de medicamentos no se compara | *suite_63: v18.0.116 (A, paso 1): el detector…* («medicamentos») | Sí |
+| 367 | se anota cada vez (no una por combinación) | *suite_63: v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez…* | Sí |
+| 368 | el resumen no anota lo detectado | *suite_63: v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez…* («cuelga la lista y la anota») | Sí |
+
+Banco completo: **3.044 comprobaciones pasan, 0 fallan.**
