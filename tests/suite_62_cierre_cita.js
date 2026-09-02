@@ -729,5 +729,24 @@ module.exports = {
       t.cierto(dias.slice(1).every((d) => d < "2026-09-10"), "todo lo que sigue a la ideal es ANTERIOR a ella");
     });
 
+    t.caso("v18.0.117 (UI/UX #3): el panel post-cita dice el desenlace del SMS de la TOMA, y calla si no lo sabe", () => {
+      const c = cargar({ silencioso: true });
+      const conSms = () => {
+        c.env.doc.body.children.length = 0;
+        c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE SINTETICO", "", { cita: { fechaLegible: "01/10/2026" }, lab: { fechaIso: "2026-09-10", fechaLegible: "10/09/2026", hora: "06:20 AM", sms: "enviado al 3001112233" } });
+        return c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      };
+      const panel = conSms();
+      t.cierto(/SMS de la toma: enviado al 3001112233/.test(panel.innerHTML), "con desenlace, lo dice: " + (panel.innerHTML.match(/SMS de la toma[^<]*/) || [""])[0]);
+      c.env.doc.body.children.length = 0;
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE SINTETICO", "", { cita: { fechaLegible: "01/10/2026" }, lab: { fechaIso: "2026-09-10", fechaLegible: "10/09/2026", hora: "06:20 AM" } });
+      const sinSms = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      t.cierto(/Toma de laboratorio/.test(sinSms.innerHTML), "el bloque de la toma sigue ahí");
+      t.falso(/SMS de la toma/.test(sinSms.innerHTML), "sin dato NO se pinta ninguna línea (casilla vacía antes que dato inventado)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/sms: \(labOk && labOk\.smsEnviado\)\s*\n\s*\? "enviado al "/.test(src), "Agendar rellena el desenlace desde smsEnviado, que la API ya devolvía");
+      t.cierto(/sms: "no se envió: este cuadro no maneja celular"/.test(src), "y el cuadro de la toma sola dice la verdad: no maneja celular");
+    });
+
   },
 };

@@ -772,5 +772,21 @@ module.exports = {
       t.cierto(u.includes("fecha=14%2F08%2F2026"), "la fecha viaja URL-encoded");
       t.cierto(u.includes("pacienteId=40"));
     });
+    // =====================================================================
+    // v18.0.117 (UI/UX #1) — la toma sin hora: motivo honesto, no un horario inventado
+    // =====================================================================
+    await t.casoAsync("v18.0.117 (UI/UX #1): sin hora elegida, apiLaboratorioAgendarAuto no consulta ni agenda, y el motivo dice la verdad (antes: «el horario elegido () ya no está disponible»)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => { o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "07:00", agendaId: 555 }] }) }); });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "");
+      t.falso(ok, "sin hora: no se agenda");
+      t.igual(e.c.api._labMotivoUltimoFallo(), "no se eligió la hora de la toma", "el motivo es el real, no un horario vacío entre paréntesis");
+      t.cierto(hayTexto(e.c, "No se eligió la hora de la toma"), "y se le dice al médico dónde elegirla");
+      const ok2 = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", null);
+      t.falso(ok2, "null también");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(!horaSeleccionada\) \{[\s\S]{0,240}_labUltimoFallo = "no se eligió la hora de la toma";/.test(src), "la guarda vive antes de buscar el turno");
+    });
+
   }
 };

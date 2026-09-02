@@ -5401,5 +5401,73 @@ module.exports = {
       t.cierto(/_agmPrefGuardar\(tipoCitaElegido, selectedEspId, selectedEspName\);[^\n]*\n\s*markCitaAgendadaHoy\(apt\.doc_id, fechaElegida\.iso/.test(src), "el recuerdo se guarda en el camino de la cita creada de verdad, justo antes de la marca del día");
     });
 
+    // =====================================================================
+    // v18.0.117 — AUDITORÍA UI/UX (fragmentos F-1 y F-2 del enjambre del 02-sep)
+    // =====================================================================
+    await t.casoAsync("v18.0.117 (UI/UX #1): con la toma marcada y sin hora, «Confirmar» NO crea la cita: despliega el detalle de la toma y pide la hora", async () => {
+      const urls = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urls.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => {
+          if (String(o.url).includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "06:30:00" }] }) });
+          else if (o.onerror) o.onerror("url no simulada");
+        },
+      });
+      enriquecerDom(c);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      await esperar(60);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const turno = modal.querySelector("#vgl-agm-slots").children[0];
+      disparar(turno, "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      const chkLab = modal.querySelector("#vgl-agm-lab-chk");
+      const selLab = modal.querySelector("#vgl-agm-lab-time-sel");
+      const planDet = modal.querySelector("#vgl-agm-plan-det");
+      chkLab.checked = true; selLab.value = "";            // la casilla marcada (labs-primero) y sin hora
+      planDet.classList.add("vgl-d-none");                 // el detalle, plegado
+      const antes = urls.filter((u) => u.includes("AsignarTurno")).length;
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(40);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, antes, "NO se creó ninguna cita (antes: se creaba y la toma fallaba con un motivo falso)");
+      t.falso(planDet.classList.contains("vgl-d-none"), "el detalle de la toma se despliega para que la hora se vea");
+      t.cierto(/Elija la hora de la toma/.test(confirmar.textContent), "y el botón pide la hora: " + confirmar.textContent);
+      // con la hora elegida, el mismo clic sí procede
+      selLab.value = "06:30:00";
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(60);
+      t.cierto(urls.filter((u) => u.includes("AsignarTurno")).length > antes, "con la hora elegida, Confirmar sigue adelante");
+    });
+
+    t.caso("v18.0.117 (UI/UX #2): el aviso de vencimiento vive FUERA de las vistas de paso, así que se ve al confirmar en el paso 3", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const html = modal.innerHTML;
+      const iAviso = html.indexOf('id="vgl-agm-vencaviso"');
+      const iPaso1 = html.indexOf('id="vgl-step-view-1"');
+      const iPaso2 = html.indexOf('id="vgl-step-view-2"');
+      t.cierto(iAviso > 0 && iPaso1 > 0 && iPaso2 > 0, "los tres nodos existen en la plantilla");
+      t.cierto(iAviso < iPaso1, "el aviso va ANTES del paso 1: fuera de las tres vistas (antes vivía dentro del paso 2, oculto en el 3)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/uxTrack\("cita\.vencimiento\.corregir"\); \} catch \(e\) \{\}\s*\n[^\n]*\n[^\n]*\n\s*try \{ if \(typeof pasoActual !== "undefined" && pasoActual !== 2\) irAPaso\(2\); \}/.test(src), "«Pasar a la fecha sugerida» vuelve al paso 2, donde están los chips de día");
+    });
+
   },
 };

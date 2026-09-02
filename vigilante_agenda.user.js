@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.116
+// @version      18.0.117
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.116";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.117";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -20582,6 +20582,13 @@
       // EN SILENCIO en el primer cupo del día (normalmente las 6:00 a. m.), una hora que
       // nadie eligió y que el médico nunca llegaba a ver.
       let turnoElegido = null;
+      // v18.0.117 (UI/UX #1) — segunda red: sin hora elegida no existe ningún «horario que ya no
+      // está disponible», y ese era el motivo que se le mostraba al médico. Se dice la verdad.
+      if (!horaSeleccionada) {
+        _labUltimoFallo = "no se eligió la hora de la toma";
+        spToast("⚠ No se eligió la hora de la toma de muestras: NO se agendó. Elíjala desde «Agendar labs» en la tarjeta del paciente.", 12000);
+        return false;
+      }
       if (turnos && turnos.length && horaSeleccionada) {
         // v12.3.31 — antes solo probaba t.hora (minúscula): si el turno traía la hora en
         // t.Hora (mayúscula, el nombre confirmado contra el código fuente real del front
@@ -22059,6 +22066,7 @@
       const bloqueLab = !lab ? "" : `
           ${ex.soloLab ? "" : `<div class="vgl-postcita-sep vgl-postcita-labsep"></div>`}
           <div class="vgl-postcita-lab"><b>Toma de laboratorio</b> ${escapeHtml([lab.fechaLegible || lab.fechaIso || "", lab.hora ? "· " + lab.hora : ""].filter(Boolean).join(" "))}</div>
+          ${lab.sms ? `<div class="vgl-postcita-lab">📱 SMS de la toma: ${escapeHtml(String(lab.sms))}</div>` : ""}
           <button class="vgl-agm-btn sec" id="vgl-postcita-labprint">Imprimir recordatorio de la toma</button>`;
       const lineaLabFallo = ex.labFallo ? `<div class="vgl-postcita-warn vgl-postcita-labfallo">⚠ La toma de muestras NO quedó agendada: ${escapeHtml(String(ex.labFallo))}. Agéndela desde «Agendar labs» o directamente en AppCita.</div>` : "";
       // ---- Recordatorio de la toma de laboratorio (no existe en Everest: se arma aquí) ----
@@ -25211,6 +25219,11 @@
         </div>
 
         <div class="vgl-ux-caption" id="vgl-agm-caption">Agenda la cita directamente en Everest, igual que si usted la asignara a mano — con la opción de dejar también programada la toma de muestras y avisar por SMS. Siga los pasos 1 a 3; nada se confirma hasta que pulse "Confirmar y asignar cita". Para pedir exámenes use Ordenamiento; para ver resultados ya tomados, Laboratorios.</div>
+        <!-- v18.0.117 (UI/UX #2) — FUERA de las vistas de paso. El segundo aviso de vencimiento (el
+             que sale al pulsar Confirmar, en el paso 3) se pintaba aquí dentro del paso 2, oculto:
+             el médico veía el botón pidiendo otro clic y nunca el motivo ni «Pasar a la fecha
+             sugerida». Su CSS es por id, así que no depende del ancestro. -->
+        <div id="vgl-agm-vencaviso" class="vgl-d-none" aria-live="polite"></div>
 
         <!-- ==================== PASO 1: ¿Qué desea agendar? ==================== -->
         <div id="vgl-step-view-1" class="vgl-step-view">
@@ -25275,7 +25288,6 @@
                 <span id="vgl-agm-pc-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0" aria-live="polite"></span>
               </div>
               <div id="vgl-agm-sugerida" class="vgl-agm-sugerida" aria-live="polite"></div>
-              <div id="vgl-agm-vencaviso" class="vgl-d-none" aria-live="polite"></div>
               <!-- v16.0.0 — puerta al módulo de riesgo y exámenes, desde el propio agendamiento -->
               <button type="button" class="vgl-agm-lnk" id="vgl-agm-vertablero" style="margin-top:6px">❤️ Ver riesgo cardiovascular y vigencias de exámenes</button>
               <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
@@ -26241,6 +26253,13 @@
         // esa elección manda siempre, por encima del default de labs-primero. Sin
         // elección previa, se comporta como antes: marcado si labs-primero, si no vacío.
         labChk.checked = _labChkEditadoManual ? _labChkValorManual : _chkPorDefecto;
+        // v18.0.117 (UI/UX #1) — si la casilla nace MARCADA (labs-primero) y la hora sigue sin
+        // elegir, esa hora no puede quedarse plegada: se muestra el detalle. Solo mostrar.
+        if (labChk.checked && labTimeSel && !labTimeSel.value
+            && _planDet && _planDet.classList && _planDet.classList.contains("vgl-d-none")) {
+          _planDet.classList.remove("vgl-d-none");
+          if (_planCambiar) _planCambiar.textContent = "▲ Ocultar ajustes";
+        }
         // v18.0.37 — EL `{ once: true }` ERA EL DEFECTO. Con él, el listener se retira
         // después del PRIMER cambio, así que `_labChkValorManual` se queda congelado en lo
         // que el médico hizo esa única vez y deja de seguir la casilla. Secuencia real:
@@ -26858,6 +26877,9 @@
       const fix = caja.querySelector("#vgl-agm-venc-fix");
       if (fix) fix.addEventListener("click", () => {
         try { uxTrack("cita.vencimiento.corregir"); } catch (e) {}
+        // v18.0.117 (UI/UX #2) — desde «3 Confirmación» el arreglo (chips de día y horas) vive en
+        // el paso 2: se vuelve allí, si no el médico ve cambiar la fecha sin ver dónde.
+        try { if (typeof pasoActual !== "undefined" && pasoActual !== 2) irAPaso(2); } catch (e) {}
         _vencAceptado = false;
         modoManualFecha = false;
         _controlElegidoManual = false;
@@ -27128,6 +27150,23 @@
           return;
         }
       }
+      // v18.0.117 (UI/UX #1) — LA TOMA MARCADA SIN HORA NO PASA. El select de la hora vive plegado
+      // tras «✎ Cambiar fecha u hora», así que con la casilla marcada por labs-primero (o a mano) y
+      // sin hora elegida la cita se creaba y la toma fallaba con un motivo falso («el horario de
+      // laboratorio elegido () ya no está disponible»). Se despliega el detalle, se enfoca el select
+      // y se pide la hora: no se inventa ninguna — la elige el médico o desmarca la casilla.
+      {
+        const _chkLab = modal.querySelector("#vgl-agm-lab-chk");
+        const _selLab = modal.querySelector("#vgl-agm-lab-time-sel");
+        if (tipoCitaElegido === "control_lab" && _chkLab && _chkLab.checked && _selLab && !_selLab.value) {
+          if (_planDet && _planDet.classList) _planDet.classList.remove("vgl-d-none");
+          if (_planCambiar) _planCambiar.textContent = "▲ Ocultar ajustes";
+          try { _selLab.focus(); } catch (e) {}
+          confirmBtn.textContent = "Elija la hora de la toma (o desmarque «Agendar también la Toma de Muestras»)";
+          try { uxTrack("cita.toma.sin_hora"); } catch (e) {}
+          return;
+        }
+      }
       confirmBtn.disabled = true;
       confirmBtn.textContent = "⏳ Asignando cita...";
 
@@ -27316,6 +27355,11 @@
                 hora: selectedLabTime ? format12hTime(selectedLabTime) : "",
                 radicado: (labOk && labOk.radicado) || "",
                 sede: S.sedeLabNombre || "",
+                // v18.0.117 (UI/UX #3) — el desenlace del SMS de la TOMA, que la API ya devolvía
+                // (smsEnviado) y nadie leía: el panel lo dice como ya dice el de la cita (C5).
+                sms: (labOk && labOk.smsEnviado)
+                  ? "enviado al " + String(celularSms || "").replace(/\D/g, "")
+                  : (celularSms ? "AppCita no confirmó el envío" : "sin celular: no se envió"),
               };
               mostrarPanelPostCita(_cierreCtx.citaId, _cierreCtx.eps, _cierreCtx.nombre, _cierreCtx.respaldo, _cierreCtx.extra);
             } catch (e) {}
@@ -27702,6 +27746,7 @@
                 fechaIso: selectedLabDateInfo.iso, fechaLegible: selectedLabDateInfo.fmt,
                 hora: format12hTime(selectedLabTime), radicado: (ok && ok.radicado) || "",
                 sede: S.sedeLabNombre || "",
+                sms: "no se envió: este cuadro no maneja celular",   // v18.0.117 (UI/UX #3): honesto
               },
             });
         } catch (e) {}

@@ -11713,3 +11713,40 @@ delante.
 | 368 | el resumen no anota lo detectado | *suite_63: v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez…* («cuelga la lista y la anota») | Sí |
 
 Banco completo: **3.044 comprobaciones pasan, 0 fallan.**
+
+## v18.0.117 — auditoría UI/UX del enjambre (02-sep), primer lote: las tres fricciones de gravedad alta del flujo
+
+El médico pidió aplicar toda la auditoría (`docs/AUDITORIA_UIUX_20260902.md`). Este lote son los tres
+fragmentos de gravedad **alta** del recorrido clínico (F-1, F-2, F-3), cada uno reproducido en el código
+antes de tocarlo.
+
+**F-1 — la toma marcada SIN hora ya no pasa.** El select de la hora vive plegado tras «✎ Cambiar fecha u
+hora», así que con la casilla marcada (por labs-primero o a mano) y sin hora elegida **la cita se creaba** y
+la toma fallaba después con un motivo falso: «el horario de laboratorio elegido () ya no está disponible» —
+paréntesis vacío incluido. Ahora Confirmar despliega el detalle, enfoca el select y pide la hora (no se
+inventa ninguna: la elige el médico o desmarca la casilla); si la casilla nace marcada y la hora está sin
+elegir, el detalle se muestra solo; y `apiLaboratorioAgendarAuto` gana una segunda red que dice la verdad
+(«no se eligió la hora de la toma») en vez de hablar de un horario que nadie eligió.
+
+**F-2 — el aviso de vencimiento se ve donde el médico está.** Al pulsar Confirmar en el paso 3, el segundo
+aviso («esta fecha deja vencer un examen») se pintaba en `#vgl-agm-vencaviso`, que vivía **dentro del paso 2,
+oculto**: el médico veía el botón pidiendo otro clic y nunca el motivo ni el botón «🎯 Pasar a la fecha
+sugerida». El nodo sale de las vistas de paso (su CSS es por id) y «Pasar a la fecha sugerida» vuelve al paso
+2, que es donde están los chips de día.
+
+**F-3 — el post-cita dice el desenlace del SMS de la toma.** `apiLaboratorioAgendarAuto` ya devolvía
+`smsEnviado` y no lo leía nadie: el panel mostraba la toma sin decir si el paciente recibió su hora (C5 solo
+cubrió el SMS de la cita). Ahora lo dice; si no lo sabe, no pinta nada (casilla vacía antes que dato
+inventado), y el cuadro de la toma sola declara que no maneja celular.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 369 | la guarda de la toma sin hora no aplica (**F-1**) | *suite_15: v18.0.117 (UI/UX #1): con la toma marcada y sin hora…* | Sí |
+| 370 | la guarda no despliega el detalle de la hora (**F-1**) | *suite_15: v18.0.117 (UI/UX #1)…* («el detalle de la toma se despliega») | Sí |
+| 371 | la segunda red de la API desaparece (**F-1**) | *suite_13: v18.0.117 (UI/UX #1): sin hora elegida…* | Sí |
+| 372 | el aviso de vencimiento vuelve dentro del paso 2 (**F-2**) | *suite_15: v18.0.117 (UI/UX #2): el aviso de vencimiento vive FUERA…* | Sí |
+| 373 | «Pasar a la fecha sugerida» no vuelve al paso 2 (**F-2**) | *suite_15: v18.0.117 (UI/UX #2)…* | Sí |
+| 374 | el panel no dice el desenlace del SMS de la toma (**F-3**) | *suite_62: v18.0.117 (UI/UX #3): el panel post-cita dice el desenlace…* | Sí |
+| 375 | la línea del SMS se pinta aunque no haya dato (**F-3**) | *suite_62: v18.0.117 (UI/UX #3)…* («sin dato NO se pinta») | Sí |
+
+Banco completo: **3.048 comprobaciones pasan, 0 fallan.**
