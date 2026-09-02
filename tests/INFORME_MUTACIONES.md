@@ -12086,4 +12086,48 @@ transición; y el clic con ratón sigue sin encender el anillo, que es justo lo 
 | 422 | los modales de flujo vuelven a animar | *suite_25: v18.0.124 - …prefers-reduced-motion cubre los modales de flujo* | Sí |
 | 423 | el interruptor claro vuelve a ser invisible | *suite_25: v18.0.124 - …el riel apagado tiene color propio en claro* | Sí |
 
-Banco completo: **3.081 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.081 comprobaciones pasan, 0 fallan.** *(v18.0.124)*
+
+---
+
+## v18.0.125 — auditoría UI/UX: seis promesas que la pantalla hacía y el código no cumplía
+
+Filas 30, 32, 33, 34, 36 y 37 (UX-17, UX-19, UX-20, UX-21, UX-23, UX-24).
+
+**Fila 30 — la chapa del laboratorio decía «✓ En línea» aunque el portal no respondiera.** Nacía
+así y solo se reescribía en el camino de ÉXITO: con el portal caído o la sesión vencida se
+quedaba afirmando «En línea» encima de una tabla vacía. El fallo del sistema presentado como
+hueco del paciente — justo lo que la regla de la casilla vacía existe para impedir.
+
+**Fila 32 — «Copiado al portapapeles» sin haber copiado.** `navigator.clipboard.writeText`
+devuelve una **promesa**, y el anuncio iba antes de esperarla: con el permiso denegado o la
+pestaña sin foco, el rechazo caía **fuera** del `try` (es asíncrono), el médico leía «Copiado»,
+pegaba en Everest y no había nada. Y se contaba como nota adoptada.
+
+**Fila 33 — el nombre técnico del modelo en la línea principal.** «Generando con
+gemini-2.5-flash…» ocupaba el único renglón que tenía que informarle. El dato sigue disponible
+para diagnosticar, en el `title`.
+
+**Fila 34 — el post-cita se cerraba a media frase.** El tope de 5 minutos se disparaba mientras
+el médico **tecleaba el celular del reenvío**. Ahora se cuenta desde la última vez que tocó algo.
+
+**Fila 36 — la búsqueda del primer cupo no se podía parar.** Recorre hasta 30 días hábiles con
+varias consultas por día (~4,7 s cada una, medido en la flota) y la única salida era cerrar el
+cuadro y perder lo elegido. El propio botón es ahora el freno; el token de cancelación ya
+existía, solo no tenía quién lo accionara desde la pantalla.
+
+**Fila 37 — «Aceptar y llenar en Everest» con todo en «No sé».** Todas las filas nacen en «No
+sé» (correcto: el asistente no supone nada), pero pulsar el primario escribía **cero** casillas
+y sacaba un aviso de éxito. Ahora nace apagado, dice qué falta, y cuando se enciende dice
+**cuántas** va a escribir.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 424 | la chapa vuelve a decir «En línea» con el portal caído | *suite_15: v18.0.125 (fila 30)…* | Sí |
+| 425 | se anuncia «Copiado» sin esperar la promesa | *suite_57: v18.0.125 (fila 32)…* | Sí |
+| 426 | vuelve el nombre del modelo a la línea principal | *suite_57: v18.0.125 (fila 33)…* | Sí |
+| 427 | el post-cita vuelve a cerrarse mientras se escribe | *suite_15: v18.0.125 (fila 34)…* | Sí |
+| 428 | el segundo clic relanza en vez de detener | *suite_15: v18.0.125 (fila 36)…* | Sí |
+| 429 | el primario se enciende sin ninguna respuesta | *suite_15: v18.0.125 (fila 37)…* | Sí |
+
+Banco completo: **3.087 comprobaciones pasan, 0 fallan.**

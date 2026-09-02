@@ -3631,6 +3631,72 @@ module.exports = {
         "los dos caminos que mueven la selección (clic del médico y salto automático) la usan");
     });
 
+    // =====================================================================
+    // v18.0.125 (auditoría UI/UX, filas 30, 34, 36 y 37) — cuatro sitios donde la pantalla
+    // prometía algo que el código no cumplía. Los cuatro viven en cierres de modal (no son
+    // unidades aislables), así que se protegen por texto fuente, el criterio ya establecido.
+    // =====================================================================
+    t.caso("v18.0.125 (fila 30): la chapa del laboratorio no dice «En línea» cuando el portal no respondió", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf('const srcEl = modal.querySelector("#vgl-labs-srconline");');
+      t.cierto(i >= 0, "existe la chapa de origen");
+      const bloque = src.slice(i, i + 1200);
+      // Nacía en «✓ En línea» y solo se reescribía en el camino de ÉXITO: con el portal caído
+      // afirmaba «En línea» encima de una tabla vacía — el fallo del sistema presentado como
+      // hueco del paciente.
+      t.cierto(/labsArr === undefined \|\| labsArr === null/.test(bloque), "el fallo de lectura tiene su propia rama");
+      t.cierto(/No se pudo consultar el sistema del laboratorio/.test(bloque), "y lo dice con esas palabras");
+      t.cierto(/classList\.add\("vgl-labs-srcoff"\)/.test(bloque), "con su chapa en ámbar");
+      t.cierto(/classList\.remove\("vgl-labs-srcoff"\)/.test(bloque), "que se retira cuando la lectura sí sale");
+    });
+
+    t.caso("v18.0.125 (fila 34): el panel post-cita no se cierra encima de lo que el médico está escribiendo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/enlazarLabPrint\(panel\);\s*setTimeout\(cerrar, 300000\)/.test(src),
+        "el cierre ya no es un temporizador ciego de 5 minutos");
+      t.cierto(/let _cierrePost = setTimeout\(cerrar, 300000\);/.test(src), "sigue habiendo tope de 5 minutos");
+      t.cierto(/clearTimeout\(_cierrePost\); _cierrePost = setTimeout\(cerrar, 300000\);/.test(src),
+        "pero se reinicia al teclear: el tope se cuenta desde la última vez que tocó algo");
+      t.cierto(/panel\.addEventListener\("input", _reprogramarCierre\)/.test(src), "escucha lo que escribe");
+      t.cierto(/panel\.addEventListener\("focusin", _reprogramarCierre\)/.test(src), "y también que entre en una casilla");
+    });
+
+    t.caso("v18.0.125 (fila 36): la búsqueda del primer cupo se puede detener", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf('if (pcBtn) pcBtn.addEventListener("click", async () => {');
+      t.cierto(i >= 0, "existe el botón «Primer cupo disponible»");
+      const bloque = src.slice(i - 900, i + 900);
+      // Recorre hasta 30 días hábiles con varias consultas por día (~4,7 s cada una, medido en
+      // la flota): sin freno, la única salida era cerrar el cuadro y perder lo elegido.
+      t.cierto(/pcBtn\.setAttribute\("data-buscando", "1"\)/.test(bloque), "el botón recuerda que está buscando");
+      t.cierto(/if \(pcBtn\.getAttribute\("data-buscando"\) === "1"\) \{/.test(bloque),
+        "y el segundo clic, mientras busca, DETIENE en vez de relanzar");
+      t.cierto(/✖ Detener búsqueda/.test(bloque), "y se convierte en el freno mientras dura");
+      t.cierto(/_pcCancelar\(\);/.test(bloque), "que acciona el token de cancelación que ya existía");
+      t.cierto(/Búsqueda detenida/.test(bloque), "y lo dice al detenerse, sin dejar el cuadro mudo");
+    });
+
+    t.caso("v18.0.125 (fila 37): con todo en «No sé», el botón no promete escribir nada", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // Todas las filas nacen en «No sé» (correcto: el asistente no supone nada). Pero el
+      // primario decía «Aceptar y llenar en Everest» desde el primer instante, y pulsarlo
+      // escribía CERO casillas y sacaba un aviso de éxito.
+      t.cierto(/id="vgl-llenar-ok" disabled>Conteste alguna para poder llenarla/.test(src),
+        "nace apagado y dice qué falta para poder usarlo");
+      t.cierto(/_okBtn\.disabled = n === 0;/.test(src), "se enciende solo con al menos una respuesta");
+      t.cierto(/"Aceptar y llenar en Everest \(" \+ n \+ "\)"/.test(src), "y dice CUÁNTAS va a escribir");
+      t.cierto(/respuestas\[k\] === true \|\| respuestas\[k\] === false/.test(src),
+        "un «No sé» no cuenta como respuesta: es exactamente lo que no se toca");
+    });
+
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"
     // con CUALQUIER agenda de la respuesta (propia o ajena), así que un sábado con agenda de
     // OTRO profesional se seguía ofreciendo como chip normal — y al pulsarlo, cargarHoras()

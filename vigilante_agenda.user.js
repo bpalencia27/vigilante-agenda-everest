@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.124
+// @version      18.0.125
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.124";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.125";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18769,6 +18769,12 @@
         border-radius:var(--r-pill);padding:5px 12px
       }
       #vgl-labs-modal .vgl-labs-srconline svg{width:13px;height:13px}
+      /* v18.0.125 (fila 30) — la chapa en ámbar cuando el portal NO respondió. Vive en un modal
+         pegado a document.body, así que su color lleva marca de prioridad (CLAUDE.md). */
+      #vgl-labs-modal .vgl-labs-srconline.vgl-labs-srcoff{
+        color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.12);
+        border-color:rgba(var(--rgb-ambar),.38)
+      }
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
         background:linear-gradient(135deg,rgba(var(--rgb-labs),.30),rgba(var(--rgb-labs),.15));
@@ -22785,7 +22791,17 @@
         }
       });
       enlazarLabPrint(panel);
-      setTimeout(cerrar, 300000); // 5 min: no queda pegado en pantalla toda la jornada si el médico lo ignora
+      // v18.0.125 (auditoría UI/UX, fila 34 · UX-21) — el cierre a los 5 minutos existe para que
+      // el panel no se quede pegado toda la jornada si el médico lo ignora. Pero se disparaba
+      // igual mientras él estaba TECLEANDO el celular del reenvío: el cuadro desaparecía a media
+      // frase y había que empezar de nuevo. El temporizador se reinicia con cada tecla; el tope
+      // sigue siendo el mismo, contado desde la última vez que tocó algo.
+      let _cierrePost = setTimeout(cerrar, 300000);
+      try {
+        const _reprogramarCierre = () => { clearTimeout(_cierrePost); _cierrePost = setTimeout(cerrar, 300000); };
+        panel.addEventListener("input", _reprogramarCierre);
+        panel.addEventListener("focusin", _reprogramarCierre);
+      } catch (e) {}
     } catch (e) {}
   }
 
@@ -23415,9 +23431,22 @@
       }
       try {
         const srcEl = modal.querySelector("#vgl-labs-srconline");
-        if (srcEl) srcEl.textContent = (_labsDePrecargaSeg != null)
-          ? "⚡ Leídos hace " + _labsDePrecargaSeg + " s (precarga) · «Buscar laboratorios nuevos» consulta en vivo"
-          : "✓ Consultado en vivo ahora";
+        // v18.0.125 (auditoría UI/UX, fila 30 · UX-17) — la chapa nacía en «✓ En línea» y solo
+        // se reescribía cuando la lectura SALÍA BIEN. Con el portal caído o la sesión vencida
+        // se quedaba afirmando «En línea» encima de una tabla vacía: el fallo del sistema
+        // presentado como hueco del paciente, que es justo lo que la regla de la casilla vacía
+        // existe para impedir. Ahora los tres desenlaces se dicen por su nombre.
+        if (srcEl) {
+          if (labsArr === undefined || labsArr === null) {
+            srcEl.textContent = "⚠ No se pudo consultar el sistema del laboratorio";
+            if (srcEl.classList) srcEl.classList.add("vgl-labs-srcoff");
+          } else {
+            if (srcEl.classList) srcEl.classList.remove("vgl-labs-srcoff");
+            srcEl.textContent = (_labsDePrecargaSeg != null)
+              ? "⚡ Leídos hace " + _labsDePrecargaSeg + " s (precarga) · «Buscar laboratorios nuevos» consulta en vivo"
+              : "✓ Consultado en vivo ahora";
+          }
+        }
       } catch (e) {}
       // v17.7.1 — el contador de solicitudes no leídas viaja como propiedad NO enumerable
       // del array que devuelve Athenea, así que la línea de abajo (que copia analito a
@@ -24848,11 +24877,27 @@
         + '<div class="vgl-agm-foot" style="margin-top:12px">'
         + '<span class="vgl-agm-dinfo" style="margin:0">Solo se llenan casillas vacías, y queda «↩ Deshacer».</span>'
         + '<button type="button" class="vgl-agm-btn sec" id="vgl-llenar-saltar">Ahora no</button>'
-        + '<button type="button" class="vgl-agm-btn pri" id="vgl-llenar-ok">Aceptar y llenar en Everest</button>'
+        + '<button type="button" class="vgl-agm-btn pri" id="vgl-llenar-ok" disabled>Conteste alguna para poder llenarla</button>'
         + '</div></div>';
       document.body.appendChild(modal);
 
       const respuestas = {};
+      // v18.0.125 (auditoría UI/UX, fila 37 · UX-24) — todas las filas nacen en «No sé», que es
+      // lo correcto (el asistente no supone nada). Pero el primario decía «Aceptar y llenar en
+      // Everest» desde el primer instante, y pulsarlo con todo en «No sé» escribía CERO casillas
+      // y sacaba un aviso de éxito. El botón ahora dice lo que de verdad puede hacer, y solo se
+      // enciende cuando hay al menos una respuesta que escribir.
+      const _okBtn = modal.querySelector("#vgl-llenar-ok");
+      const _refrescarOk = () => {
+        try {
+          const n = Object.keys(respuestas).filter((k) => respuestas[k] === true || respuestas[k] === false).length;
+          if (!_okBtn) return;
+          _okBtn.disabled = n === 0;
+          _okBtn.textContent = n === 0
+            ? "Conteste alguna para poder llenarla"
+            : "Aceptar y llenar en Everest (" + n + ")";
+        } catch (e) {}
+      };
       modal.querySelectorAll(".vgl-llenar-fila").forEach((fila) => {
         const clave = fila.getAttribute("data-clave");
         fila.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => {
@@ -24860,8 +24905,10 @@
           b.classList.add("active");
           const r = b.getAttribute("data-r");
           respuestas[clave] = (r === "si") ? true : (r === "no") ? false : null;
+          _refrescarOk();
         }));
       });
+      _refrescarOk();
 
       const cerrar = () => { try { modal.innerHTML = ""; modal.remove(); } catch (e) {} };
       const x = modal.querySelector("#vgl-llenar-x");
@@ -27155,10 +27202,26 @@
       const pcBtn = modal.querySelector("#vgl-agm-primercupo");
       const pcEst = modal.querySelector("#vgl-agm-pc-est");
       const pcNota = (txt) => { if (pcEst && pcEst.classList) { pcEst.classList.remove("vgl-d-none"); pcEst.textContent = txt; } };
+      // v18.0.125 (auditoría UI/UX, fila 36 · UX-23) — la búsqueda recorre hasta 30 días
+      // hábiles, un día por vuelta y con varias consultas por día: medido en la flota,
+      // BuscarCitasDisponibles promedia ~4,7 s. El médico se quedaba mirando, sin forma de
+      // pararla salvo cerrar el cuadro entero y perder lo que llevaba elegido. El propio botón
+      // se convierte en el freno mientras dura (el token de cancelación ya existía: solo no
+      // tenía quién lo accionara desde la pantalla).
+      const _pcRotuloOriginal = pcBtn ? pcBtn.textContent : "";
       if (pcBtn) pcBtn.addEventListener("click", async () => {
+        if (pcBtn.getAttribute("data-buscando") === "1") {
+          _pcCancelar();
+          pcBtn.removeAttribute("data-buscando");
+          pcBtn.textContent = _pcRotuloOriginal;
+          pcNota("Búsqueda detenida. Elija la fecha con los chips, o vuelva a pulsar para buscar.");
+          try { uxTrack("fn.agendar.primercupo.detener"); } catch (e) {}
+          return;
+        }
         const miTok = ++_pcToken;
         try { uxTrack("fn.agendar.primercupo"); } catch (e) {}
-        pcBtn.disabled = true;
+        pcBtn.setAttribute("data-buscando", "1");
+        pcBtn.textContent = "✖ Detener búsqueda";
         pcNota("🔎 Buscando el primer cupo disponible…");
         try {
           if (!pacienteIdAcceso) pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
@@ -43623,7 +43686,12 @@
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
-        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
+        // v18.0.125 (auditoría UI/UX, fila 33 · UX-20) — la línea principal decía «Generando con
+        // gemini-2.5-flash…»: el nombre interno del modelo no le dice nada al médico en consulta
+        // y ocupa el único renglón que sí tenía que informarle. El dato no se pierde —sirve para
+        // diagnosticar— pero se va al `title`, donde no estorba.
+        btnGen.disabled = true; estado.textContent = "Redactando la nota…"; salida.value = "";
+        try { estado.title = "Modelo: " + mtrModeloGemini(modoGen); } catch (e) {}
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
         // v18.0.112 (C7) — progreso visible y «Cancelar» mientras la IA responde.
@@ -43632,7 +43700,10 @@
         opts.onProgreso = (pg) => {
           try {
             _ultimoModelo = pg.modelo;
-            estado.textContent = "Generando con " + pg.modelo + (pg.de > 1 ? " · intento " + pg.intento + " de " + pg.de : "") + "…";
+            // v18.0.125 (fila 33) — el intento SÍ importa (dice que se está reintentando); el
+            // nombre del modelo, no. Mismo criterio que arriba.
+            estado.textContent = "Redactando la nota" + (pg.de > 1 ? " · intento " + pg.intento + " de " + pg.de : "") + "…";
+            try { estado.title = "Modelo: " + pg.modelo; } catch (e) {}
           } catch (e) {}
         };
         const _textoAntes = _borradores[modoGen] ? _borradores[modoGen].texto : "";
@@ -43720,9 +43791,15 @@
       const _autoAprenderEstilo = (delta) => {
         if (delta === "intacta") { try { mtrEstiloGuardar(salida.value, resumen._nombrePaciente); } catch (e) {} }
       };
-      btnCop.addEventListener("click", () => {
+      // v18.0.125 (auditoría UI/UX, fila 32 · UX-19) — `navigator.clipboard.writeText` devuelve
+      // una PROMESA, y aquí se anunciaba «Copiado al portapapeles» sin esperarla: si el permiso
+      // del portapapeles estaba denegado o la pestaña no tenía foco, el rechazo caía fuera del
+      // try (es asíncrono), el médico leía «Copiado», pegaba en Everest y no había nada. Y de
+      // paso se contaba como nota adoptada. Ahora se espera el desenlace real, y la telemetría
+      // de adopción solo cuenta cuando el texto de verdad salió.
+      btnCop.addEventListener("click", async () => {
         try {
-          navigator.clipboard.writeText(salida.value);
+          await navigator.clipboard.writeText(salida.value);
           estado.textContent = "Copiado al portapapeles.";
           completado = true;
           const delta = mtrCalcularDeltaEdicion(textoGeneradoOriginal, salida.value);

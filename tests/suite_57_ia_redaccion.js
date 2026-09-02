@@ -2782,5 +2782,41 @@ module.exports = {
       t.cierto(/mtrIaGenerando\(\) \? "IA" : "ia"/.test(src), "y la firma del dock lo incluye, para que se repinte");
     });
 
+    // =====================================================================
+    // v18.0.125 (auditoría UI/UX, filas 32 y 33 · UX-19, UX-20) — dos cosas que el Redactor
+    // le decía al médico y no eran para él.
+    // =====================================================================
+    t.caso("v18.0.125 (fila 32): «Copiado al portapapeles» solo se dice cuando la copia DE VERDAD salió", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("btnCop.addEventListener(");
+      t.cierto(i >= 0, "existe el botón «Copiar»");
+      const bloque = src.slice(i, i + 900);
+      // navigator.clipboard.writeText devuelve una PROMESA: sin await, el rechazo (permiso
+      // denegado, pestaña sin foco) cae FUERA del try —es asíncrono— y el médico lee
+      // «Copiado», pega en Everest y no hay nada. Además se contaba como nota adoptada.
+      t.cierto(/await navigator\.clipboard\.writeText\(salida\.value\);/.test(bloque),
+        "se espera el desenlace real de la copia");
+      t.cierto(/addEventListener\("click", async \(\) =>/.test(bloque),
+        "y por eso el manejador es asíncrono");
+      const iEstado = bloque.indexOf('estado.textContent = "Copiado al portapapeles."');
+      const iAwait = bloque.indexOf("await navigator.clipboard.writeText");
+      t.cierto(iAwait >= 0 && iEstado > iAwait, "el anuncio va DESPUÉS de la espera, no antes");
+      const iAdop = bloque.indexOf('uxTrack("ia.adopcion.');
+      t.cierto(iAdop > iAwait, "y la telemetría de adopción tampoco cuenta una copia que no ocurrió");
+    });
+
+    t.caso("v18.0.125 (fila 33): el nombre técnico del modelo sale de la línea que lee el médico", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/estado\.textContent = "Generando con "/.test(src),
+        "la línea principal ya no dice «Generando con gemini-…»: ese nombre no le dice nada en consulta");
+      t.cierto(/estado\.textContent = "Redactando la nota…"/.test(src), "dice lo que está pasando, en su idioma");
+      // El dato no se pierde: sigue sirviendo para diagnosticar, pero donde no estorba.
+      t.igual((src.match(/estado\.title = "Modelo: "/g) || []).length, 2,
+        "el modelo viaja al title, en los dos sitios (primer intento y reintentos)");
+      // El número de intento SÍ importa: dice que se está reintentando.
+      t.cierto(/"Redactando la nota" \+ \(pg\.de > 1 \? " · intento "/.test(src),
+        "el reintento se sigue diciendo");
+    });
+
   },
 };
