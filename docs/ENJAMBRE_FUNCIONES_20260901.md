@@ -2074,8 +2074,9 @@ Dos decisiones que quedan explícitas para el médico:
 Sobre lo ya subido (v18.0.97–v18.0.102) corrieron cinco refutadores —uno por versión, dos lentes:
 reproducción + sitios hermanos, regresión + pruebas huecas— y tres auditorías S+ (estado único del
 paciente, robustez/PHI, flujo de consulta; ver `docs/OPORTUNIDADES_SPLUS_20260902.md`). Los
-refutadores de v18.0.98 y v18.0.100 murieron por límite de sesión antes de verificar nada; los de
-v18.0.97, v18.0.99 y v18.0.101 entregaron. Lo que encontraron y cómo quedó:
+refutadores de v18.0.98 y v18.0.100 murieron por límite de sesión antes de verificar nada y se
+relanzaron después (02-sep, tarde) a petición del médico; los cinco entregaron. Lo que encontraron
+y cómo quedó:
 
 | Fila | Veredicto del refutador | Cerrado en |
 |---|---|---|
@@ -2095,6 +2096,8 @@ v18.0.97, v18.0.99 y v18.0.101 entregaron. Lo que encontraron y cómo quedó:
 | 44 | incompleta: con 4 avisos en un clic, «Alerta Múltiple (4)» sin contenido; AZUL/AMBAR del Redactor y de Modo programador compartían título | v18.0.104 (#270) |
 | 49 | cerrada; residuo: marcas combinantes sin precompuesto | — |
 | 50 | cerrada | — |
+| 24 | incompleta (media): el candado vivía en RAM de UNA pestaña y la marca solo al responder — con dos pestañas de Everest o con una recarga en vuelo, **dos citas reales** (medido); sitio hermano (media): la toma de muestras (`openLabSoloModal` y el tramo de laboratorio del modal combinado) solo tenía `isSubmitting` DEL MODAL — cerrar y reabrir en vuelo = dos tomas reales; Ordenar sin candado (en una pestaña lo salvaba la fusión de peticiones idénticas; en dos, dos lotes); pruebas huecas: la aserción de POSTs la cumplía esa fusión y no el candado (con OTRO turno salían dos citas), y nada fijaba que el candado se soltara al fallar AsignarTurno (mutante: paciente bloqueado el resto de la jornada) | v18.0.105 (marca «en vuelo» en `vgl_proc_today`, compartida entre pestañas, caduca a 60 s, aviso + segundo clic consciente; candado por cédula fuera del modal para la toma y para Ordenar; candado con cédula canónica; el toast del cuadro cerrado dice de quién es la cita y que la toma NO se agendó; #277–#280, #285) |
+| 23 | **regresión** (baja por frecuencia, alta por lo que toca): homónimos a la misma hora — una lectura sin cédula del segundo se resolvía a la cédula del PRIMERO («a tiempo» para quien no llegó, su historial reescrito); alias con el nombre CRUDO (tilde/mayúscula distinta entre API y DOM → volvía el doble conteo); pruebas huecas: ni el alias por HORA ni su olvido en `diaNuevo` estaban fijados | v18.0.105 (clave normalizada; homónimos → entrada ambigua, nadie hereda; #281–#284) |
 
 Y del auditor de robustez, dos fugas de PHI hacia Gemini que ningún enjambre anterior había visto
 (el nombre sin ancla cuando el paciente no está en la agenda; la hoja de hechos sin censor de

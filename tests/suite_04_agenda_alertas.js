@@ -357,6 +357,64 @@ module.exports = {
       t.cierto(claves.slice(1).every((k) => k === claves[1]), "en cuanto la cédula se conoció, todas las lecturas comparten la misma identidad: " + claves.join(", "));
     });
 
+    // v18.0.105 — refutador del cierre de v18.0.98 (fila 23): (1) HOMÓNIMOS a la misma hora — el
+    // alias nombre@hora apuntaba a la ÚLTIMA cédula vista, así que una lectura sin cédula del
+    // segundo paciente se resolvía a la cédula del primero: «a tiempo» para quien no llegó y su
+    // historial reescrito; (2) la clave del alias era el nombre CRUDO — si la lectura por API y
+    // la del DOM difieren en una tilde o una mayúscula, el alias no cruzaba y volvía el doble
+    // conteo; (3) nada fijaba que el alias fuera por HORA ni que se olvidara al cambiar el día.
+    t.caso("v18.0.105: homónimos a la misma hora — una lectura sin cédula del segundo NO se resuelve a la cédula del primero", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true; c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const ref = new Date("2026-08-10T07:58:00").getTime();
+      const A = (estado, doc, i) => ({ hora_texto: "08:00 AM", estado, nombre: "PACIENTE PRUEBA UNO", index: i, doc_id: doc });
+      const claves = [];
+      for (const a of [A("Sin presentarse", "111111", 1), A("Sin presentarse", "222222", 2), A("Sin presentarse", "111111", 1), A("En Sala", "", 2), A("En Sala", "222222", 2)]) {
+        const r = c.api.colorAndAlert(a, ref); claves.push(r.key); c.api.maybeNotify(r);
+      }
+      t.falso(claves[3] === "111111@m480", "la llegada sin cédula del segundo homónimo NO hereda la cédula del primero (antes: 111111@m480): " + claves[3]);
+      t.igual(claves[4], "222222@m480", "y la lectura con cédula del segundo sigue siendo suya");
+      const contadas = [...c.api.__state.contadas];
+      t.falso(contadas.some((k) => k.startsWith("atiempo@111111")), "al primero, que no ha llegado, no se le cuenta ninguna llegada: " + contadas.join(", "));
+    });
+
+    t.caso("v18.0.105: el alias cruza tildes y mayúsculas — «PÉREZ» sin cédula y «PEREZ» con cédula son la misma cita (una sola llegada)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true; c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const ref = new Date("2026-08-10T07:58:00").getTime();
+      const A = (estado, doc, nombre) => ({ hora_texto: "08:00 AM", estado, nombre, index: 1, doc_id: doc });
+      let llegadas = 0;
+      // La sexta lectura repite la de las «En Sala» sin cédula: es la que confirma el cambio de
+      // estado bajo la clave por nombre si el alias no cruzó (el antirrebote exige dos seguidas).
+      for (const a of [A("Sin presentarse", "", "PACIENTE PÉREZ UNO"), A("Sin presentarse", "222222", "Paciente Perez Uno"), A("En Sala", "222222", "Paciente Perez Uno"), A("En Sala", "", "PACIENTE PÉREZ UNO"), A("En Sala", "222222", "Paciente Perez Uno"), A("En Sala", "", "PACIENTE PÉREZ UNO")]) {
+        const r = c.api.colorAndAlert(a, ref); if (r.arrival) llegadas++; c.api.maybeNotify(r);
+      }
+      t.igual(llegadas, 1, "UNA sola llegada aunque el nombre venga con tilde en una lectura y sin ella en la otra (alias con nombre crudo: 2)");
+      t.igual([...c.api.__state.contadas].length, 1, "y un solo «atiempo»: " + [...c.api.__state.contadas].join(", "));
+    });
+
+    t.caso("v18.0.105: el alias es por nombre@HORA (dos citas del mismo paciente no se confunden) y se olvida al cambiar el día", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__state.leader = true; c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const ref = new Date("2026-08-10T07:58:00").getTime();
+      const A = (estado, doc, hora) => ({ hora_texto: hora, estado, nombre: "PACIENTE PRUEBA UNO", index: 1, doc_id: doc });
+      const res = [];
+      for (const [a, ts] of [[A("Sin presentarse", "222222", "08:00 AM"), ref], [A("Sin presentarse", "222222", "10:00 AM"), ref], [A("En Sala", "222222", "08:00 AM"), ref + 60000], [A("En Sala", "222222", "08:00 AM"), ref + 120000], [A("Sin presentarse", "", "10:00 AM"), ref + 130000]]) {
+        const r = c.api.colorAndAlert(a, ts); c.api.maybeNotify(r); res.push(r);
+      }
+      t.igual(res[4].key, "222222@m600", "la lectura de las 10:00 sin cédula es la cita de las 10:00 (alias por nombre sin hora: 222222@m480)");
+      t.falso(res[4].estado === "En Sala", "y no hereda el «En Sala» de la cita de las 08:00: " + res[4].estado);
+      // día nuevo: el alias de ayer no sobrevive
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-10T12:00:00";
+      c.ctx.Date = class extends OriginalDate { constructor(...a) { if (!a.length) super(mockIso); else super(...a); } static now() { return new OriginalDate(mockIso).getTime(); } };
+      c.api.diaNuevo();
+      t.cierto(c.api.__apptAliasDoc.size > 0, "montaje: hay alias del día");
+      mockIso = "2026-08-11T12:00:00";
+      c.api.diaNuevo();
+      t.igual(c.api.__apptAliasDoc.size, 0, "día nuevo: el alias de ayer se olvidó (mutante sin clear en diaNuevo: seguía lleno)");
+    });
+
     // =====================================================================
     // v18.0.64 — EL CSV DE AUDITORÍA DEL MÉDICO SE INUNDABA
     // Reporte con el CSV real del 1-sep adjunto: «49 AVISOS HOY? NO ES MUCHO?». De esos 49

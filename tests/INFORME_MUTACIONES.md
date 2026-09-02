@@ -11215,3 +11215,63 @@ entre pedir y recibir — se añade la prueba que lo fija.
 | 276 | la guarda de v18.0.48 (cambio de paciente entre pedir y recibir) retirada | *suite_31: v18.0.104 CRUCE — paquete SIN cédula, legible al pedir y cambio de paciente al llegar: NO se archiva* | Sí |
 
 Banco completo: **2.992 comprobaciones pasan, 0 fallan.**
+
+## v18.0.105 — el refutador de v18.0.98, relanzado: dos pestañas, la recarga en vuelo, la toma de muestras, Ordenar y los homónimos
+
+Los refutadores de v18.0.98 y v18.0.100 habían muerto por límite de sesión; el médico pidió
+relanzarlos. El de v18.0.98 (filas 24 y 23, las dos de gravedad alta del cierre adversarial)
+trajo esto, todo reproducido con el arnés antes de tocar nada.
+
+**Fila 24, incompleta (media).** El candado en vuelo de v18.0.98 vivía en RAM de UNA pestaña y la
+marca local solo se escribía al llegar la respuesta. Con dos pestañas de Everest abiertas —caso
+real del médico— la segunda no veía nada y creaba una segunda cita real; con una recarga de
+página con el POST en vuelo (Everest recarga al abrir una historia), la pestaña moría sin
+escribir la marca y la recargada agendaba de nuevo. Medido: 2 AsignarTurno en los dos gestos.
+Ahora hay una marca «en vuelo» en `vgl_proc_today` (compartida entre pestañas, caduca con el
+día): se escribe ANTES del POST y se borra al responder, pase lo que pase; si otra pestaña —o la
+misma antes de recargar— la ve fresca (menos de 60 s), no crea nada en silencio: avisa en el
+botón y exige un segundo clic consciente (el médico manda). Pasados 60 s se da por muerta la
+pestaña que la puso y la marca se limpia sola: nadie queda bloqueado.
+
+**Fila 24, sitio hermano (media).** La toma de muestras en AppCita tenía por único candado una
+variable DEL MODAL (`isSubmitting`): cerrar y reabrir con AgendarCita en vuelo daba un modal
+nuevo, sin marca y sin candado — dos tomas reales (medido). Mismo hueco en el tramo de
+laboratorio del modal combinado. Y Ordenar no tenía candado por cédula: en la misma pestaña lo
+salvaba por accidente la fusión de peticiones IDÉNTICAS de `pageFetchJson`; con dos pestañas se
+generaban las órdenes dos veces (medido). Un solo candado por cédula fuera de los modales para
+la toma (`_agmAgendarLabConCandado`) y para Ordenar (`_ordGenerandoDocs`), más la marca «en
+vuelo» compartida en los tres sitios; la llave del candado es la cédula canónica.
+
+**Fila 24, pruebas huecas (baja).** La aserción «no dispara otro POST» de la prueba de v18.0.98
+la cumplía esa fusión de peticiones idénticas, no el candado: con OTRO turno salían dos citas y
+ninguna prueba lo cubría. Y nada fijaba que el candado se SOLTARA cuando AsignarTurno falla:
+un mutante que solo lo soltaba con `ok` dejaba la suite en verde y al paciente bloqueado el
+resto de la jornada. Las dos cosas quedan fijadas.
+
+**Fila 23, regresión (baja por frecuencia, alta por lo que toca).** El alias nombre@hora
+apuntaba a la ÚLTIMA cédula vista, así que con dos homónimos a la misma hora una lectura sin
+cédula del segundo se resolvía a la cédula del PRIMERO: «a tiempo» para quien no llegó, su
+historial reescrito y la bitácora con un cambio de estado suyo. Ahora, si el mismo nombre@hora
+ya apunta a OTRA cédula, la entrada se marca ambigua y nadie hereda nada. Además la clave del
+alias era el nombre CRUDO: si la lectura por API y la del DOM traen el mismo nombre con distinta
+tilde o mayúscula, el alias no cruzaba y volvía el doble conteo que vino a cerrar — la clave es
+el nombre normalizado. Y dos pruebas huecas: ni el alias por HORA ni su olvido en `diaNuevo`
+estaban fijados.
+
+**De paso.** El aviso verde «la cita quedó creada aunque cerró el cuadro» no decía de quién era
+(el médico ya puede estar en otra historia) ni que la toma de muestras pedida NO se agendó (el
+tramo de laboratorio va después de esa salida): ahora dice las dos cosas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 277 | `marcarEnVuelo` no escribe nada (el candado vuelve a ser solo de RAM) | *suite_15: v18.0.105 ANTIDUP — dos pestañas: la segunda ve la cita en vuelo de la primera y NO crea otra en silencio; tras recargar en vuelo, tampoco…* y *…hermano — Ordenar en dos pestañas…* | Sí |
+| 278 | el candado de Agendar no se suelta en el `finally` (**el mutante que la prueba de v18.0.98 no veía**) | *suite_15: v18.0.105 ANTIDUP — el candado se suelta cuando AsignarTurno falla (se puede reintentar) y frena un segundo turno DISTINTO en vuelo* (y la de v18.0.98) | Sí |
+| 279 | la toma de muestras vuelve a no tener candado por cédula (solo `isSubmitting` del modal) | *suite_15: v18.0.105 ANTIDUP hermano — toma de muestras: cerrar y reabrir el modal con AgendarCita en vuelo NO crea una segunda toma real* | Sí |
+| 280 | Ordenar sin la marca «en vuelo» compartida | *suite_15: v18.0.105 ANTIDUP hermano — Ordenar en dos pestañas…* | Sí |
+| 281 | homónimos: el alias vuelve a apuntar a la ÚLTIMA cédula vista (**el defecto**) | *suite_04: v18.0.105: homónimos a la misma hora — una lectura sin cédula del segundo NO se resuelve a la cédula del primero* | Sí |
+| 282 | la clave del alias vuelve al nombre crudo (**el defecto**) | *suite_04: v18.0.105: el alias cruza tildes y mayúsculas…* (la primera versión de la prueba, con cinco lecturas, NO lo cazaba: el antirrebote exige dos lecturas seguidas para confirmar el cambio; con la sexta lectura sí cae) | Sí |
+| 283 | alias por nombre SIN hora (el M23d del refutador) | *suite_04: v18.0.105: el alias es por nombre@HORA (dos citas del mismo paciente no se confunden) y se olvida al cambiar el día* | Sí |
+| 284 | `diaNuevo` deja de vaciar el alias (el M23c del refutador) | *suite_04: v18.0.105: el alias es por nombre@HORA … y se olvida al cambiar el día* | Sí |
+| 285 | la marca «en vuelo» nunca caduca | *suite_15: v18.0.105 ANTIDUP — dos pestañas … una marca de hace más de 60 s no bloquea a nadie* | Sí |
+
+Banco completo: **2.999 comprobaciones pasan, 0 fallan.**

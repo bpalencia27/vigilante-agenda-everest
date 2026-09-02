@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.104
+// @version      18.0.105
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.104";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.105";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8839,6 +8839,57 @@
     const sDoc = String(docId);
     return !!_vglBuscarPorDoc(p.agendPend, sDoc) && !isCitaAgendadaHoy(sDoc);
   }
+  // v18.0.105 — EN VUELO, EN EL ALMACÉN (refutador del cierre de v18.0.98, fila 24). El candado
+  // en RAM (_agmAsignandoDocs) solo conoce SU pestaña: con dos pestañas de Everest abiertas
+  // —caso real del médico— la segunda no veía nada y creaba una segunda cita real; y si la
+  // página se recargaba con el POST en vuelo (Everest recarga al abrir una historia), la
+  // pestaña moría sin escribir la marca y la recargada agendaba de nuevo. Medido con el
+  // arnés: 2 AsignarTurno en los dos gestos. Esta marca vive en vgl_proc_today (compartido
+  // entre pestañas, caduca con el día), se escribe ANTES del POST y se borra al responder,
+  // pase lo que pase. Si otra pestaña —o la misma antes de recargar— la ve fresca (<60 s),
+  // no crea nada en silencio: avisa y exige un segundo clic consciente. El médico manda: el
+  // segundo clic sigue adelante. Pasados 60 s se da por muerta (la pestaña que la puso ya
+  // no responderá) y se limpia sola.
+  const _vglPestanaId = "p" + Math.random().toString(36).slice(2, 10);
+  const _EN_VUELO_MS = 60000;
+  function _enVueloClave(tipo, docId) {
+    const d = normalizeKey(String(docId == null ? "" : docId));
+    return d ? String(tipo || "cita") + ":" + d : "";
+  }
+  function marcarEnVuelo(tipo, docId, det) {
+    const k = _enVueloClave(tipo, docId);
+    if (!k) return;
+    try {
+      const p = getProcessedToday();
+      if (!p.enVuelo) p.enVuelo = {};
+      p.enVuelo[k] = Object.assign({}, det || {}, { ts: Date.now(), pestana: _vglPestanaId });
+      writeJSON(PROC_KEY, p);
+    } catch (e) {}
+  }
+  function soltarEnVuelo(tipo, docId) {
+    const k = _enVueloClave(tipo, docId);
+    if (!k) return;
+    try {
+      const p = getProcessedToday();
+      if (p.enVuelo && p.enVuelo[k]) { delete p.enVuelo[k]; writeJSON(PROC_KEY, p); }
+    } catch (e) {}
+  }
+  // {edadS} si OTRA pestaña (o esta misma antes de recargar) empezó a crear esto hace menos
+  // de 60 s; null si no hay nada, si es de esta pestaña (eso ya lo frena el candado en RAM) o
+  // si la marca caducó (se limpia al verla).
+  function enVueloAjeno(tipo, docId) {
+    const k = _enVueloClave(tipo, docId);
+    if (!k) return null;
+    try {
+      const p = getProcessedToday();
+      const m = p.enVuelo && p.enVuelo[k];
+      if (!m) return null;
+      const edad = Date.now() - Number(m.ts || 0);
+      if (!(edad >= 0 && edad < _EN_VUELO_MS)) { delete p.enVuelo[k]; writeJSON(PROC_KEY, p); return null; }
+      if (m.pestana === _vglPestanaId) return null;
+      return { edadS: Math.round(edad / 1000), tipo: String(tipo || "cita") };
+    } catch (e) { return null; }
+  }
 
   // v14.2.4 — COLA DE CONDUCTA PENDIENTE (a pedido explícito del médico: Conducta pasa a
   // ser la forma OFICIAL de ordenar, no un mejor-esfuerzo). Cuando una orden PyM se crea
@@ -12896,9 +12947,19 @@
   // siguiente lectura con cédula leía el historial rancio bajo la cédula y volvía a
   // «confirmar» la misma llegada: dos avisos VERDE, dos «atiempo» en el CSV de puntualidad.
   // Se vacía cada día con los demás mapas de citas (diaNuevo).
+  // v18.0.105 (refutador del cierre) — dos correcciones al alias: (1) la clave es el nombre
+  // NORMALIZADO (sin tildes, minúsculas, un espacio), porque la lectura por API y la del DOM
+  // pueden traer el mismo nombre con distinta tilde o mayúscula y el alias no cruzaba —
+  // volvía el doble conteo que este alias vino a cerrar; (2) HOMÓNIMOS A LA MISMA HORA: si
+  // el mismo nombre@hora ya apunta a OTRA cédula, la entrada se marca ambigua (null) y nadie
+  // hereda nada — antes una lectura sin cédula del segundo paciente se resolvía a la cédula
+  // del primero: «a tiempo» para quien no llegó y su historial reescrito.
   const _apptAliasDoc = new Map();
+  function _apptNombreClave(n) {
+    return stripAccents(String(n || "")).trim().toLowerCase().replace(/\s+/g, " ");
+  }
   function _apptNombreIdentifica(n) {
-    const s = stripAccents(String(n || "")).trim().toLowerCase().replace(/\s+/g, " ");
+    const s = _apptNombreClave(n);
     return !!s && s !== APPT_NOMBRE_GENERICO;
   }
   // ¿Hay con qué señalar a ALGUIEN? Sin documento y sin nombre propio, la fila de la agenda
@@ -12913,12 +12974,18 @@
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
     const doc = normalizeKey((a && a.doc_id) || "");
     const nombreId = _apptNombreIdentifica(a && a.nombre);
+    const aliasClave = nombreId ? _apptNombreClave(a.nombre) + "@" + hora : "";
     if (doc) {
-      if (nombreId) _apptAliasDoc.set(String(a.nombre) + "@" + hora, doc + "@" + hora);
+      if (nombreId) {
+        const mio = doc + "@" + hora;
+        const previo = _apptAliasDoc.get(aliasClave);
+        if (previo === undefined) _apptAliasDoc.set(aliasClave, mio);
+        else if (previo !== null && previo !== mio) _apptAliasDoc.set(aliasClave, null);   // homónimos: ambiguo
+      }
       return doc + "@" + hora;
     }
     if (nombreId) {
-      const alias = _apptAliasDoc.get(String(a.nombre) + "@" + hora);
+      const alias = _apptAliasDoc.get(aliasClave);
       if (alias) return alias;
       return String(a.nombre) + "@" + hora;
     }
@@ -24573,6 +24640,42 @@
   // reabrir y confirmar en esa ventana disparaba un segundo POST antes de que la marca
   // local existiera. Se vacía en cuanto el servidor responde, pase lo que pase.
   const _agmAsignandoDocs = new Set();
+  // v18.0.105 — la llave del candado es la cédula CANÓNICA (sin ceros de relleno), como todo
+  // el antiduplicados (_vglMismaCedula); antes «0555111» y «555111» eran dos candados.
+  function _agmClaveDoc(d) {
+    const s = String(d == null ? "" : d);
+    return normalizeKey(s) || s;
+  }
+  // v18.0.105 — SITIO HERMANO (refutador de v18.0.98): la toma de muestras en AppCita tenía
+  // por único candado una variable DEL MODAL (`isSubmitting`); cerrar y reabrir con AgendarCita
+  // en vuelo daba un modal nuevo, sin marca y sin candado → dos tomas reales (medido: 2
+  // AgendarCita). Mismo hueco en el tramo de laboratorio del modal combinado. Un solo
+  // candado por cédula, fuera de los modales, más la marca «en vuelo» del almacén. `forzar`
+  // es el segundo clic consciente del médico sobre la marca de OTRA pestaña; el candado en
+  // RAM de esta pestaña no se fuerza nunca.
+  const _agmAgendandoLabDocs = new Set();
+  async function _agmAgendarLabConCandado(docId, fechaIso, hora, celular, forzar) {
+    const k = _agmClaveDoc(docId);
+    let ajeno = null;
+    try { ajeno = enVueloAjeno("lab", docId); } catch (e) { ajeno = null; }
+    if (_agmAgendandoLabDocs.has(k) || (ajeno && forzar !== true)) {
+      try { uxTrack("lab.antidup.en_vuelo"); } catch (e) {}
+      try {
+        showToast("AMBAR", "Toma de muestras · no se agendó",
+          "Ya hay una toma de muestras creándose para este paciente" + (ajeno ? " en otra pestaña o antes de recargar (hace " + ajeno.edadS + " s)" : "") + ": no se pidió otra. Verifique en AppCita antes de volver a agendarla.",
+          false, "labvuelo|" + String(docId));
+      } catch (e) {}
+      return false;
+    }
+    _agmAgendandoLabDocs.add(k);
+    marcarEnVuelo("lab", docId, {});
+    try {
+      return await apiLaboratorioAgendarAuto(docId, fechaIso, hora, celular);
+    } finally {
+      _agmAgendandoLabDocs.delete(k);
+      soltarEnVuelo("lab", docId);
+    }
+  }
   function openAgendamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
@@ -26497,10 +26600,22 @@
       const _previoClic = parseInt(confirmBtn.dataset.ultimoClic || "0", 10);
       confirmBtn.dataset.ultimoClic = String(_ahoraClic);
       if (_previoClic && _ahoraClic - _previoClic < 700) return;
-      if (_agmAsignandoDocs.has(String(apt.doc_id))) {
+      if (_agmAsignandoDocs.has(_agmClaveDoc(apt.doc_id))) {
         confirmBtn.textContent = "⏳ Ya hay una cita creándose para este paciente: espere la respuesta de Everest";
         try { uxTrack("cita.antidup.en_vuelo"); } catch (e) {}
         return;
+      }
+      // v18.0.105 — la marca «en vuelo» de OTRA pestaña (o de esta antes de recargar): aviso y
+      // segundo clic consciente, nunca una segunda cita en silencio. Ver marcarEnVuelo.
+      {
+        let _ajeno = null;
+        try { _ajeno = enVueloAjeno("cita", apt.doc_id); } catch (e) { _ajeno = null; }
+        if (_ajeno && confirmBtn.dataset.vueloOk !== "1") {
+          confirmBtn.dataset.vueloOk = "1";
+          confirmBtn.textContent = "⚠ Hace " + _ajeno.edadS + " s se empezó a crear una cita para este paciente en otra pestaña o antes de recargar — verifique en Everest y pulse otra vez SOLO si no existe";
+          try { uxTrack("cita.antidup.vuelo_ajeno"); } catch (e) {}
+          return;
+        }
       }
 
       const dupCita = citaAgendadaFechaHoy(apt.doc_id);
@@ -26579,13 +26694,16 @@
       const programaId = (selProg && selProg.value) || "";
 
       let res;
-      _agmAsignandoDocs.add(String(apt.doc_id));
+      const _claveVuelo = _agmClaveDoc(apt.doc_id);
+      _agmAsignandoDocs.add(_claveVuelo);
+      marcarEnVuelo("cita", apt.doc_id, { turnoId: String(turnoId || "") });
       try {
         res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, fechaElegida.iso, obs, isPyM, "Consulta", programaId, celularSms);
       } catch (e) {
         res = { error: true, mensaje: e && e.message };
       } finally {
-        _agmAsignandoDocs.delete(String(apt.doc_id));
+        _agmAsignandoDocs.delete(_claveVuelo);
+        soltarEnVuelo("cita", apt.doc_id);
       }
 
       const d = res && res.data;
@@ -26619,7 +26737,10 @@
       if (!vivo()) {
         if (ok) {
           try {
-            showToast("VERDE", "Agendar", "La cita quedó creada en Everest aunque cerró el cuadro (" + (fechaElegida.fmt || fechaElegida.iso) + (horaTxt ? " " + horaTxt : "") + "). Ya consta como agendada: no la vuelva a crear.", false);
+            // v18.0.105 — dice DE QUIÉN es la cita (el médico ya puede estar en otra historia) y,
+            // si había pedido toma de muestras, que esa NO se agendó: el tramo de laboratorio
+            // va después de esta salida y sin cuadro no corre.
+            showToast("VERDE", "Agendar", "La cita de " + (pacienteNombreCompleto || patientName || "el paciente") + " (documento " + apt.doc_id + ") quedó creada en Everest aunque cerró el cuadro (" + (fechaElegida.fmt || fechaElegida.iso) + (horaTxt ? " " + horaTxt : "") + "). Ya consta como agendada: no la vuelva a crear." + (isLabChecked ? " La toma de muestras NO se agendó: reabra el módulo y use «Agendar labs»." : ""), false, "cita|" + apt.doc_id);
           } catch (e) {}
         }
         return;
@@ -26676,7 +26797,7 @@
         if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
           modal.dataset.labDone = "1";
           const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(fechaElegida.iso, 5);
-          const labOk = await apiLaboratorioAgendarAuto(apt.doc_id, labFecha.iso, selectedLabTime, celularSms);
+          const labOk = await _agmAgendarLabConCandado(apt.doc_id, labFecha.iso, selectedLabTime, celularSms, false);
           uxTrack(labOk ? "lab.agendado" : "lab.fallo");
           if (labOk) {
             vglNotificarCompletado("cita_lab", { doc: apt.doc_id, fechaIso: labFecha.iso });
@@ -26986,6 +27107,23 @@
     confirmBtn.addEventListener("click", async () => {
       const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
       if (!selectedLabTime || !selectedLabDateInfo || isSubmitting) return;
+      // v18.0.105 — candado por cédula FUERA del modal (cerrar y reabrir ya no lo esquiva) y
+      // marca «en vuelo» de otra pestaña o de antes de recargar (aviso + segundo clic).
+      if (_agmAgendandoLabDocs.has(_agmClaveDoc(apt.doc_id))) {
+        confirmBtn.textContent = "⏳ Ya hay una toma creándose para este paciente: espere la respuesta de AppCita";
+        try { uxTrack("lab.antidup.en_vuelo"); } catch (e) {}
+        return;
+      }
+      {
+        let _ajeno = null;
+        try { _ajeno = enVueloAjeno("lab", apt.doc_id); } catch (e) { _ajeno = null; }
+        if (_ajeno && confirmBtn.dataset.vueloOk !== "1") {
+          confirmBtn.dataset.vueloOk = "1";
+          confirmBtn.textContent = "⚠ Hace " + _ajeno.edadS + " s se empezó a crear una toma para este paciente en otra pestaña o antes de recargar — verifique en AppCita y pulse otra vez SOLO si no existe";
+          try { uxTrack("lab.antidup.vuelo_ajeno"); } catch (e) {}
+          return;
+        }
+      }
       // v14.2.0 — ANTIDUPLICADOS: si HOY ya se agendó una toma para este paciente desde
       // este equipo, segunda pulsación consciente antes de crear otra (no bloquea).
       if (isLabAgendadaHoy(apt.doc_id) && confirmBtn.dataset.dupOk !== "1") {
@@ -26997,7 +27135,7 @@
       isSubmitting = true;
       confirmBtn.disabled = true;
       confirmBtn.textContent = "⏳ Agendando...";
-      const ok = await apiLaboratorioAgendarAuto(apt.doc_id, selectedLabDateInfo.iso, selectedLabTime);
+      const ok = await _agmAgendarLabConCandado(apt.doc_id, selectedLabDateInfo.iso, selectedLabTime, undefined, confirmBtn.dataset.vueloOk === "1");
       if (ok) {
         // v12.3.29 — mismo patrón que el modal principal (v12.3.14, línea ~6901): la cita
         // YA quedó creada en el servidor, así que el registro de éxito corre siempre; solo
@@ -27503,6 +27641,7 @@
   }
 
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
+  const _ordGenerandoDocs = new Set();   // v18.0.105 — candado por cédula de Ordenar (ver el clic de Generar)
   async function openOrdenamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir actividades -> crear/abandonar.
@@ -27855,6 +27994,29 @@
     confirmBtn.addEventListener("click", async () => {
       const selectedBoxes = Array.from(chks).filter((c) => c.checked);
       if (!selectedBoxes.length) return;
+      // v18.0.105 — SITIO HERMANO (refutador de v18.0.98): Ordenar no tenía candado por cédula;
+      // en la misma pestaña lo salvaba por accidente la fusión de peticiones idénticas de
+      // pageFetchJson, y con dos pestañas se generaban las órdenes DOS veces (medido). Candado
+      // en RAM + marca «en vuelo» compartida; la de otra pestaña avisa y exige segundo clic.
+      const _kOrd = _agmClaveDoc(apt.doc_id);
+      if (_ordGenerandoDocs.has(_kOrd)) {
+        confirmBtn.textContent = "⏳ Ya se están generando órdenes para este paciente: espere la respuesta del sistema";
+        try { uxTrack("ordenes.antidup.en_vuelo"); } catch (e) {}
+        return;
+      }
+      {
+        let _ajeno = null;
+        try { _ajeno = enVueloAjeno("orden", apt.doc_id); } catch (e) { _ajeno = null; }
+        if (_ajeno && confirmBtn.dataset.vueloOk !== "1") {
+          confirmBtn.dataset.vueloOk = "1";
+          confirmBtn.textContent = "⚠ Hace " + _ajeno.edadS + " s se empezaron a generar órdenes para este paciente en otra pestaña o antes de recargar — verifique en Ordenamientos y pulse otra vez SOLO si faltan";
+          try { uxTrack("ordenes.antidup.vuelo_ajeno"); } catch (e) {}
+          return;
+        }
+      }
+      _ordGenerandoDocs.add(_kOrd);
+      marcarEnVuelo("orden", apt.doc_id, {});
+      const _soltarOrd = () => { _ordGenerandoDocs.delete(_kOrd); soltarEnVuelo("orden", apt.doc_id); };
 
       // v15.7.0 — AUTO-IMPRESIÓN (pedido del médico: «como lo hace originalmente Everest»):
       // la pestaña del documento se abre AQUÍ, en el clic mismo — un window.open tras un
@@ -27867,8 +28029,10 @@
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Consultando la información del paciente...";
 
-      const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
+      let pacienteIdOrd = null;
+      try { pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id); } catch (e) { pacienteIdOrd = null; }
       if (!pacienteIdOrd) {
+        _soltarOrd();
         _cerrarPestanaImpresion();
         showToast("AMBAR", "Paciente no encontrado", "No se encontró al paciente en el sistema de órdenes con el documento " + apt.doc_id + ". Verifique el documento en Everest e inténtelo de nuevo.", false);
         if (!vivo()) return;
@@ -27891,6 +28055,7 @@
       // botones con pkg.titulo (el mismo texto de la tarjeta que el médico ya reconoce).
       const _tituloPorAgrupador = new Map();
 
+      try {
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
@@ -27954,6 +28119,9 @@
           fallidasCount++;
           if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); }
         }
+      }
+      } finally {
+        _soltarOrd();   // v18.0.105 — el candado se suelta pase lo que pase con el lote
       }
 
       // [v14.5.0] AUTOMATIZACIÓN EN SEGUNDO PLANO: Impresión Diagnóstica y Conducta

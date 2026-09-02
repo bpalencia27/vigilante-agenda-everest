@@ -2930,6 +2930,184 @@ module.exports = {
       t.cierto(m3.querySelector("#vgl-agm-confirm").textContent.includes("ya se le creó una cita"), "la antidup avisa: " + m3.querySelector("#vgl-agm-confirm").textContent);
     });
 
+    // =====================================================================
+    // v18.0.105 — REFUTADOR DEL CIERRE DE v18.0.98 (fila 24). El candado en RAM solo conocía SU
+    // pestaña: con DOS pestañas de Everest (caso real del médico) la segunda no veía nada y
+    // creaba una segunda cita real; con una RECARGA en vuelo, la pestaña moría sin escribir la
+    // marca y la recargada agendaba de nuevo. Y la prueba de v18.0.98 era hueca a medias: la
+    // aserción «no dispara otro POST» la cumplía la fusión de peticiones IDÉNTICAS de
+    // pageFetchJson, no el candado (con OTRO turno salían dos citas), y nada fijaba que el
+    // candado se SOLTARA cuando AsignarTurno falla (mutante: el paciente quedaba bloqueado
+    // el resto de la jornada). Los mismos huecos en la toma de muestras y en Ordenar.
+    // =====================================================================
+    const _v105 = (() => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const fixture = (almacen, asignar, asignarFn) => {
+        const cc = cargar({
+          silencioso: true, almacen,
+          fetch: async (url) => {
+            const u = String(url);
+            if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+            if (u.includes("AsignarTurno")) { asignar.push(u); return asignarFn(); }
+            if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+            if (u.includes("BuscarCitasDisponibles")) { const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1]; return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] }); }
+            if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+            if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }, { id: 901, horaTexto: "08:20 AM", estado: "ACT" }] });
+            return respuestaJson({});
+          },
+          gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+        });
+        enriquecerDom(cc);
+        cc.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+        return cc;
+      };
+      const DOC = "555111";
+      const abrirYConfirmar = async (cc, hora) => {
+        cc.api.openAgendamientoModal({ doc_id: DOC, nombre: "PACIENTE PRUEBA UNO" });
+        await esperar(80);
+        const modal = cc.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+        const boton = [...modal.querySelector("#vgl-agm-slots").children].find((n) => (n.innerHTML || "").includes(hora || "08:00 AM"));
+        disparar(boton, "click");
+        disparar(modal.querySelector("#vgl-agm-confirm"), "click");
+        return modal;
+      };
+      const txt = (m) => m.querySelector("#vgl-agm-confirm").textContent;
+      const clic = (m) => { m.querySelector("#vgl-agm-confirm").dataset.ultimoClic = "0"; disparar(m.querySelector("#vgl-agm-confirm"), "click"); };
+      const okLento = (asignar) => async () => { await esperar(250); return respuestaJson({ error: false, data: { radicado: 100 + asignar.length, motivo: "Agendada Correctamente" } }); };
+      return { fixture, DOC, abrirYConfirmar, txt, clic, okLento };
+    })();
+
+    await t.casoAsync("v18.0.105 ANTIDUP — dos pestañas: la segunda ve la cita en vuelo de la primera y NO crea otra en silencio; tras recargar en vuelo, tampoco; una marca de hace más de 60 s no bloquea a nadie", async () => {
+      const { fixture, DOC, abrirYConfirmar, txt, clic, okLento } = _v105;
+      // (a) dos pestañas = dos contextos sobre el MISMO almacén
+      const almacen = {}; const asignar = [];
+      const A = fixture(almacen, asignar, okLento(asignar)), B = fixture(almacen, asignar, okLento(asignar));
+      await abrirYConfirmar(A); await esperar(40);
+      t.igual(asignar.length, 1, "montaje: la pestaña A tiene un AsignarTurno en vuelo");
+      const mB = await abrirYConfirmar(B); await esperar(40);
+      t.igual(asignar.length, 1, "la pestaña B, con la cita de A en vuelo, NO dispara otro POST (antes: 2 citas reales)");
+      t.cierto(txt(mB).includes("otra pestaña"), "y el botón de B dice por qué y pide un segundo clic consciente: " + txt(mB));
+      await esperar(400);
+      t.cierto(B.api.isCitaAgendadaHoy(DOC), "cuando A recibe la respuesta, la marca del día ya la ve B");
+      clic(mB); await esperar(40);
+      t.igual(asignar.length, 1, "el segundo clic en B ya lo frena la antidup de siempre, porque la marca existe");
+      t.cierto(txt(mB).includes("ya se le creó una cita"), "con el aviso de siempre: " + txt(mB));
+      // (b) recarga en vuelo: la pestaña muere sin recibir la respuesta; la recargada (contexto
+      //     nuevo, mismo almacén) abre y confirma
+      const almacen2 = {}; const asignar2 = [];
+      const P1 = fixture(almacen2, asignar2, () => new Promise(() => {}));
+      const P2 = fixture(almacen2, asignar2, async () => respuestaJson({ error: false, data: { radicado: 201, motivo: "Agendada Correctamente" } }));
+      await abrirYConfirmar(P1); await esperar(40);
+      const m2 = await abrirYConfirmar(P2); await esperar(40);
+      t.igual(asignar2.length, 1, "la pestaña recargada NO crea otra cita en silencio (antes: 2)");
+      t.cierto(txt(m2).includes("antes de recargar"), "avisa que hace segundos se estaba creando una: " + txt(m2));
+      clic(m2); await esperar(60);
+      t.igual(asignar2.length, 2, "el médico manda: el segundo clic consciente sí crea la cita");
+      // (c) la marca de una pestaña muerta caduca sola a los 60 s
+      const almacen3 = {}; const asignar3 = [];
+      const P3 = fixture(almacen3, asignar3, async () => respuestaJson({ error: false, data: { radicado: 301, motivo: "Agendada Correctamente" } }));
+      almacen3.vgl_proc_today = JSON.stringify({ dia: P3.api.todayStamp(), citas: [], ordenes: [], enVuelo: { ["cita:" + DOC]: { ts: Date.now() - 61000, pestana: "otra-pestana" } } });
+      t.igual(P3.api.enVueloAjeno("cita", DOC), null, "una marca de hace 61 s ya no cuenta");
+      t.falso(!!(JSON.parse(almacen3.vgl_proc_today).enVuelo || {})["cita:" + DOC], "y se limpió al leerla");
+      await abrirYConfirmar(P3); await esperar(60);
+      t.igual(asignar3.length, 1, "el confirmar sale al primer clic: nadie queda bloqueado por una pestaña muerta");
+    });
+
+    await t.casoAsync("v18.0.105 ANTIDUP — el candado se suelta cuando AsignarTurno falla (se puede reintentar) y frena un segundo turno DISTINTO en vuelo", async () => {
+      const { fixture, abrirYConfirmar, txt, clic } = _v105;
+      let modo = "falla"; const asignar = [];
+      const cc = fixture({}, asignar, async () => {
+        if (modo === "falla") throw new Error("red caída");
+        await esperar(250); return respuestaJson({ error: false, data: { radicado: 500 + asignar.length, motivo: "Agendada Correctamente" } });
+      });
+      const m1 = await abrirYConfirmar(cc); await esperar(60);
+      t.igual(asignar.length, 1, "montaje: el primer POST salió y falló");
+      t.falso(cc.api.isCitaAgendadaHoy(_v105.DOC), "montaje: sin cita creada no hay marca del día");
+      // tras el fallo el modal vuelve a pedir el turno (refresca las horas): el médico lo elige
+      // de nuevo y confirma — ese es el reintento real
+      modo = "lento";
+      const botonHora = [...m1.querySelector("#vgl-agm-slots").children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      disparar(botonHora, "click");
+      clic(m1); await esperar(40);
+      t.igual(asignar.length, 2, "tras el fallo el candado quedó libre: el reintento SÍ dispara el POST (mutante «candado pegado si falla»: se quedaba en 1 con «creándose»)");
+      t.falso(txt(m1).includes("creándose"), "y el botón no dice «creándose»: " + txt(m1));
+      // el segundo POST sigue en vuelo: cerrar, reabrir y confirmar OTRO turno — la fusión de
+      // peticiones idénticas no aplica, solo el candado por cédula puede frenarlo
+      disparar(m1.querySelector("#vgl-agm-cancel"), "click");
+      const m2 = await abrirYConfirmar(cc, "08:20 AM"); await esperar(40);
+      t.igual(asignar.length, 2, "con un turno DISTINTO en vuelo tampoco sale otro POST (sin candado: dos citas reales con dos turnos)");
+      t.cierto(txt(m2).includes("creándose"), "y el botón lo dice: " + txt(m2));
+      await esperar(400);
+      t.cierto(cc.api.isCitaAgendadaHoy(_v105.DOC), "al responder el servidor, la cita consta");
+    });
+
+    await t.casoAsync("v18.0.105 ANTIDUP hermano — toma de muestras: cerrar y reabrir el modal con AgendarCita en vuelo NO crea una segunda toma real", async () => {
+      const posts = [];
+      const gmxhr = (o) => {
+        const u = String(o.url || "");
+        if (/ObtenerTurnosPorFecha/.test(u)) { setTimeout(() => o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ Hora: "07:00:00", AgendaId: 5 }, { Hora: "07:20:00", AgendaId: 6 }] }) }), 0); return; }
+        if (/AgendarCita/.test(u)) { posts.push(u); setTimeout(() => o.onload({ status: 200, responseText: JSON.stringify({ error: false, radicado: 9000 + posts.length }) }), 200); return; }
+        if (o.onerror) o.onerror("url no simulada");
+      };
+      const cc = cargar({ silencioso: true, gmxhr });
+      enriquecerDom(cc);
+      cc.api.__S.uxTelemetria = false;
+      const DOC = "424242";
+      cc.api.markCitaAgendadaHoy(DOC, "2026-09-25");
+      const abrir = async () => {
+        await cc.api.openLabSoloModal({ doc_id: DOC, nombre: "PACIENTE PRUEBA UNO" });
+        await esperar(60);
+        const m = cc.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+        const sel = m.querySelector("#vgl-agm-lab-time-sel"); sel.value = "07:00:00"; disparar(sel, "change");
+        disparar(m.querySelector("#vgl-agm-confirm"), "click");
+        return m;
+      };
+      const m1 = await abrir(); await esperar(40);
+      t.igual(posts.length, 1, "montaje: un AgendarCita en vuelo");
+      disparar(m1.querySelector("#vgl-agm-cancel"), "click");
+      const m2 = await abrir(); await esperar(40);
+      t.igual(posts.length, 1, "reabrir y confirmar con la primera en vuelo NO dispara otra (antes: 2 tomas reales en AppCita)");
+      t.cierto(m2.querySelector("#vgl-agm-confirm").textContent.includes("creándose"), "y el botón lo dice: " + m2.querySelector("#vgl-agm-confirm").textContent);
+      await esperar(400);
+      t.cierto(cc.api.isLabAgendadaHoy(DOC), "la marca de la toma se escribió al responder AppCita");
+    });
+
+    await t.casoAsync("v18.0.105 ANTIDUP hermano — Ordenar en dos pestañas: la segunda ve el lote en vuelo de la primera y NO genera las órdenes otra vez", async () => {
+      const almacen = {}; const posts = [];
+      const fix = () => {
+        const cc = cargar({ silencioso: true, almacen,
+          fetch: async (url) => {
+            const u = String(url);
+            if (u.includes("/api/Paciente/BuscarPaciente")) return respuestaJson({ id: 801848 });
+            if (u.includes("ObtenerListadoDiagnostico")) return respuestaJson([{ codigo: "Z108", id: 55, nombre: "TAMIZACION" }]);
+            if (u.includes("ObtenerListadoCupsPorPaciente")) { const cod = /filter=([^&]+)/.exec(u)[1]; return respuestaJson([{ codigo: decodeURIComponent(cod), id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]); }
+            if (u.includes("GuardarOrdenamiento")) { posts.push(u); await esperar(200); return respuestaJson({ error: false, agrupador: "AGP-" + posts.length }); }
+            if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) return respuestaJson([]);
+            return respuestaJson({});
+          }, gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); } });
+        enriquecerDom(cc); cc.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+        const casilla = { checked: true, disabled: false, dataset: {}, getAttribute: (k) => (k === "data-premarcada" ? "1" : "0"), addEventListener: () => {}, closest: () => ({ style: {}, classList: { add() {} } }) };
+        const crear = cc.env.doc.createElement;
+        cc.env.doc.createElement = function (tag) { const e = crear(tag); const qsaBase = e.querySelectorAll; e.querySelectorAll = (sel) => (sel === ".vgl-ord-chk" ? [casilla] : qsaBase(sel)); return e; };
+        return cc;
+      };
+      const T1 = fix(), T2 = fix();
+      const generar = async (cc) => {
+        await cc.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE PRUEBA UNO", sexo: "M", pym: ["Tamización cardiometabólica"] });
+        await esperar(80);
+        const m = cc.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+        disparar(m.querySelector("#vgl-ord-confirm"), "click");
+        return m;
+      };
+      await generar(T1); await esperar(60);
+      t.igual(posts.length, 1, "montaje: la pestaña 1 tiene un GuardarOrdenamiento en vuelo");
+      const m2 = await generar(T2); await esperar(60);
+      t.igual(posts.length, 1, "la pestaña 2 NO genera el lote otra vez (antes: 2 órdenes reales)");
+      t.cierto(m2.querySelector("#vgl-ord-confirm").textContent.includes("otra pestaña"), "y el botón lo dice: " + m2.querySelector("#vgl-ord-confirm").textContent);
+      await esperar(500);
+      t.cierto(T2.api.ordenCreadaHoyParaCie10("21545051", "Z108"), "al responder el servidor, la orden consta para las dos pestañas");
+    });
+
     // v12.10.8 — D3-bis conectado al modal real: perfilPaciente()+recomendacionHorario()
     // (ya probadas en tests/suite_24_motor_perfil.js) ahora se calculan con las etiquetas
     // reales del paciente y marcan con "⭐ SUGERIDO" el turno de la franja recomendada —
