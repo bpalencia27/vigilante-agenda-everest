@@ -387,6 +387,102 @@ module.exports = {
       t.igual(cv.api.__state.sheet, null);
     });
 
+    // v18.0.106 — refutador de v18.0.100 (fila 33b): (a) la prueba de arriba solo quitaba la
+    // barra; un mutante en el que SOLO el `catch` volvía a closeSheet() pasaba en verde y en el
+    // navegador reventaba con «Maximum call stack» cada vez que querySelector lanzara; (b) las
+    // salidas de emergencia cerraban Ajustes y NO abrían la hoja pedida ni vaciaban el borrador.
+    t.caso("v18.0.106: si querySelector LANZA con borrador sucio, salir hacia Resumen termina, abre Resumen y no deja borrador colgado (fila 33b)", () => {
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      cv.api._ajustesPonBorrador("sonido", !cv.api.__S.sonido);
+      const q = hoja.querySelector;
+      hoja.querySelector = (s) => { if (s === "#vgl-set-bar") throw new Error("DOM roto"); return q(s); };
+      let err = null;
+      try { cv.api.toggleSheet("resumen"); } catch (e) { err = e; } finally { hoja.querySelector = q; }
+      t.igual(err, null, "no revienta (mutante «solo el catch vuelve a closeSheet()»: Maximum call stack)");
+      t.igual(cv.api.__state.sheet, "resumen", "y sigue a la hoja pedida (antes: cerraba Ajustes y se quedaba en nada)");
+      t.falso(cv.api._ajustesSucio(), "sin borrador colgado");
+      // (b) la otra salida de emergencia: la barra no existe (querySelector devuelve null)
+      cv.api.toggleSheet("ajustes");
+      cv.api._ajustesPonBorrador("sonido", !cv.api.__S.sonido);
+      hoja.querySelector = (s) => (s === "#vgl-set-bar" ? null : q(s));
+      try { cv.api.toggleSheet("resumen"); } finally { hoja.querySelector = q; }
+      t.igual(cv.api.__state.sheet, "resumen", "sin barra también sigue a la hoja pedida (mutante sin despues() en esa salida: se quedaba en nada)");
+      t.falso(cv.api._ajustesSucio(), "y tampoco deja borrador colgado");
+      cv.api.closeSheet();
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    // v18.0.106 — refutador de v18.0.100 (fila 33a): (a) la prueba de Alt+R solo ejercitaba «Salir
+    // sin guardar»; (b) dentro de la propia hoja, «Guardar»/«Borrar» credenciales de Athenea
+    // repintaban con renderSettings() y vaciaban el borrador en silencio — el mismo patrón que
+    // la fila cerró para Ctrl+Shift+D.
+    t.caso("v18.0.106: «Guardar y salir» guarda, abre la hoja pedida y deja el borrador limpio (fila 33a)", () => {
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      const sonidoAntes = cv.api.__S.sonido;
+      cv.api._ajustesPonBorrador("sonido", !sonidoAntes);
+      cv.api.toggleSheet("resumen");
+      t.igual(cv.api.__state.sheet, "ajustes", "montaje: se pregunta antes de salir");
+      const lsG = hoja.querySelector("#c-salir-guardando")._listeners.click;
+      lsG[lsG.length - 1]({});
+      t.igual(cv.api.__state.sheet, "resumen", "decidido «Guardar y salir», se abre Resumen (mutante sin despues(): se queda en nada)");
+      t.igual(cv.api.__S.sonido, !sonidoAntes, "y el cambio quedó guardado");
+      t.falso(cv.api._ajustesSucio(), "sin borrador colgado");
+      cv.api.__S.sonido = sonidoAntes; cv.api.saveSettings();   // se deja como estaba
+      cv.api.closeSheet();
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    t.caso("v18.0.106: «Guardar credenciales» de Athenea NO borra un borrador sucio de otra casilla, y repinta su propio estado (fila 33a, hermano)", () => {
+      cv.api.__state.sheet = null;
+      cv.api._vglAlternarModoProg();   // el grupo de Athenea solo existe en modo programador
+      try {
+        cv.api.toggleSheet("ajustes");
+        cv.api._ajustesPonBorrador("sonido", !cv.api.__S.sonido);
+        t.cierto(cv.api._ajustesSucio(), "montaje: borrador sucio");
+        hoja.querySelector("#c-athuser").value = "usuario.prueba";
+        hoja.querySelector("#c-athpass").value = "clave.prueba";
+        const ls = hoja.querySelector("#c-athsave")._listeners.click;
+        ls[ls.length - 1]({});
+        t.cierto(cv.api._ajustesSucio(), "el borrador sigue vivo tras guardar las credenciales (antes: renderSettings() lo vaciaba)");
+        t.cierto(/✅/.test(String(hoja.querySelector("#c-athestado").innerHTML)), "y el estado de la credencial se repintó en su sitio: " + hoja.querySelector("#c-athestado").innerHTML);
+        t.cierto(!!cv.api.atheneaCredsGet(), "las credenciales sí quedaron guardadas");
+      } finally {
+        try { cv.api.atheneaCredsClear(); } catch (e) {}
+        cv.api._ajustesDescartar();
+        cv.api._vglAlternarModoProg();
+        cv.api.closeSheet();
+      }
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    // v18.0.106 — residuo del refutador de v18.0.100: con el almacén lleno, «Guardar» dejaba S
+    // mutado en memoria, vgl_cfg sin persistir, la hoja cerrada y el aviso VERDE de «guardados».
+    await t.casoAsync("v18.0.106: si el navegador rechaza la escritura de vgl_cfg, «Guardar» no canta «guardados»: avisa que se perderán al recargar", async () => {
+      // Contexto propio y DOM enriquecido: _renderToast arma el aviso con querySelector y
+      // busca la bandeja con getElementById, que el DOM simulado no resuelve solo.
+      const cq = cargar({ silencioso: true });
+      enriquecerDom(cq);
+      cq.ctx.innerWidth = 1200; cq.ctx.innerHeight = 800;
+      cq.api.buildOverlay();
+      const bandeja = cq.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      const getOrig = cq.env.doc.getElementById;
+      cq.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : getOrig(id));
+      const setOrig = cq.env.storage.setItem;
+      cq.env.storage.setItem = (k, v) => { if (k === "vgl_cfg") throw new Error("QuotaExceededError"); return setOrig.call(cq.env.storage, k, v); };
+      t.igual(cq.api.saveSettings(), false, "saveSettings dice que NO pudo escribir (antes no decía nada)");
+      cq.api._ajustesPonBorrador("sonido", !cq.api.__S.sonido);
+      t.igual(cq.api._ajustesGuardar(), 1, "el cambio se aplicó en esta pestaña");
+      await esperar(30);
+      const textos = bandeja.children.map((x) => {
+        try { return String(x.querySelector(".vgl-toast-title").textContent) + " · " + String(x.querySelector(".vgl-toast-b").textContent); } catch (e) { return String(x.innerHTML || ""); }
+      });
+      t.cierto(textos.some((x) => /no se pudieron guardar/.test(x)), "avisa en ámbar que NO se guardaron: " + JSON.stringify(textos).slice(0, 300));
+      t.falso(textos.some((x) => /quedaron guardados/.test(x)), "y no canta «guardados» (mutante: VERDE siempre)");
+    });
+
     // 02-sep — CIERRE ADVERSARIAL (fila 34): v18.0.79 puso el badge de inasistencias en la
     // plantilla inicial llamando a _noShowPrevia(a.doc_id) POR TARJETA — getItem + JSON.parse
     // del historial entero (que no caduca) en cada pintado completo, el mismo coste que
@@ -400,9 +496,9 @@ module.exports = {
       const hist = {};
       for (let i = 1; i <= 30; i++) hist["9000" + String(i).padStart(3, "0")] = { total: 2, ultima: "2026-08-20" };
       cR.env.storage.setItem("vgl_nosh_hist", JSON.stringify(hist));
-      let lecturas = 0;
+      let lecturas = 0, lecturasProc = 0;
       const getOrig = cR.env.storage.getItem.bind(cR.env.storage);
-      cR.env.storage.getItem = (k) => { if (k === "vgl_nosh_hist") lecturas++; return getOrig(k); };
+      cR.env.storage.getItem = (k) => { if (k === "vgl_nosh_hist") lecturas++; if (k === "vgl_proc_today") lecturasProc++; return getOrig(k); };
       const lista = [];
       for (let i = 1; i <= 30; i++) lista.push({ key: "k" + i, doc_id: "9000" + String(i).padStart(3, "0"), nombre: "P" + i, hora_texto: "07:00", estado: i % 2 ? "En sala" : "Atendido", color: "VERDE", pym: [], elapsed: 0 });
       cR.api.__state.lastSignature = "";
@@ -413,6 +509,9 @@ module.exports = {
       t.igual(lst.children.length, 30, "las 30 tarjetas se pintaron");
       t.igual(lst.children.filter((n) => String(n.innerHTML).includes("vgl-adh")).length, 30, "todas con su badge en la plantilla inicial (v18.0.79 sigue en pie)");
       t.cierto(lecturas <= 1, "y el historial se leyó a lo sumo una vez, no 30 (leído " + lecturas + ")");
+      // v18.0.106 — refutador de v18.0.100 (fila 34, hermano): la línea de al lado,
+      // isAgendamientoPendiente(a.doc_id), leía y parseaba vgl_proc_today una vez por tarjeta.
+      t.cierto(lecturasProc <= 1, "y vgl_proc_today también se leyó a lo sumo una vez, no 30 (leído " + lecturasProc + ")");
     });
 
     t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
@@ -3806,6 +3905,42 @@ module.exports = {
       _inyectarCasilla(cDup, _casillaOrd(true, true, 0));
       await abrir(cDup);
       t.igual(posts.length, 2, "la decisión explícita del médico se respeta y la orden se crea");
+    });
+
+    // v18.0.106 — refutador de v18.0.100 (fila 24b, prueba hueca): la huella `vglTocada` la
+    // escribe SOLO el listener `change` de la casilla, y ninguna prueba lo disparaba — la
+    // contención de arriba la pone a mano. Un mutante que borra esa línea del listener dejaba
+    // la suite en verde y, en el navegador, la guarda se comía la decisión del médico.
+    await t.casoAsync("v18.0.106: el gesto REAL del médico sobre la casilla (su listener change) deja la huella que la guarda respeta", async () => {
+      const posts = [];
+      const cDup = _dupFixture(posts);
+      enriquecerDom(cDup);
+      cDup.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+      const casillaReal = (premarcada) => ({
+        checked: true, disabled: false, dataset: {}, _ls: {},
+        getAttribute: (k) => (k === "data-premarcada" ? (premarcada ? "1" : "0") : "0"),
+        addEventListener(tipo, fn) { (this._ls[tipo] = this._ls[tipo] || []).push(fn); },
+        closest: () => ({ style: {}, classList: { add() {} } }),
+      });
+      const abrirOrd = async () => {
+        await cDup.api.openOrdenamientoModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA UNO", sexo: "M", pym: ["Tamización cardiometabólica"] });
+        await esperar(80);
+        return cDup.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      };
+      const generar = async (m) => { const ls = m.querySelector("#vgl-ord-confirm")._listeners.click; ls[ls.length - 1]({}); await esperar(120); };
+      // 1.ª orden: casilla premarcada, sin gesto del médico
+      const c1 = casillaReal(true); _inyectarCasilla(cDup, c1);
+      await generar(await abrirOrd());
+      t.igual(posts.length, 1, "montaje: la primera orden se creó");
+      t.cierto((c1._ls.change || []).length >= 1, "montaje: el modal colgó su listener change a la casilla");
+      // 2.ª apertura: la casilla vuelve premarcada por el script; el médico la TOCA (su listener)
+      const c2 = casillaReal(true); _inyectarCasilla(cDup, c2);
+      const m2 = await abrirOrd();
+      t.igual(c2.dataset.vglTocada, undefined, "montaje: sin gesto, sin huella");
+      c2._ls.change[c2._ls.change.length - 1]({});
+      t.igual(c2.dataset.vglTocada, "1", "el listener deja la huella del gesto (mutante sin esa línea: undefined)");
+      await generar(m2);
+      t.igual(posts.length, 2, "y la guarda respeta la decisión: segunda orden real");
     });
 
     await t.casoAsync("v18.0.63: la marca de cada orden se escribe EN CUANTO el servidor la confirma, no al final del lote", async () => {

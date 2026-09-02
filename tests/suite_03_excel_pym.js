@@ -271,6 +271,11 @@ module.exports = {
       t.igual(c.api.xlsViejoDeHoy([ajeno]), null, "y el .xls con el MISMO nombre en la subcarpeta tampoco es «el PyM de hoy en formato antiguo»");
       const real = { Name: "Agenda_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_20260901.xls" };
       t.cierto(c.api.xlsViejoDeHoy([ajeno, real]) === real, "el .xls de verdad, suelto en la raíz con la fecha de hoy, sí se detecta");
+      // v18.0.106 — refutador de v18.0.100 (fila 27, prueba hueca): la mitad «en la raíz se
+      // conserva la coincidencia laxa» no la fijaba nadie — un mutante «siempre estricto»
+      // pasaba en verde y dejaba de ver el caso real Agenda_v2_<hoy>.xls.
+      const v2 = { Name: "Agenda_v2_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_v2_20260901.xls" };
+      t.cierto(c.api.xlsViejoDeHoy([v2]) === v2, "en la raíz, «Agenda_v2_<hoy>.xls» sigue siendo el PyM de hoy en formato antiguo (mutante siempre estricto: null)");
     });
 
     // ---------- esLibroValido / esXlsxCifrado ----------

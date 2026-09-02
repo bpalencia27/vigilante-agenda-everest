@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.105
+// @version      18.0.106
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.105";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.106";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8701,7 +8701,7 @@
       }
     }
   } catch (e) {}
-  function saveSettings() { writeJSON(SETTINGS_KEY, S); applySettings(); }
+  function saveSettings() { const ok = writeJSON(SETTINGS_KEY, S); applySettings(); return ok; }
   // --- PREVENCIÓN DE DUPLICADOS EN CITAS Y ÓRDENES (diario, resetea a medianoche) ---
   const PROC_KEY = "vgl_proc_today";
   // NOTA (auditoría v14.2.0): se probó memoizar (1 s) para ahorrar los 3 parseos por tick del
@@ -8719,9 +8719,9 @@
     }
     return data;
   }
-  function isCitaAgendadaHoy(docId) {
+  function isCitaAgendadaHoy(docId, procHoy) {
     if (!docId) return false;
-    const p = getProcessedToday();
+    const p = procHoy || getProcessedToday();
     return _vglListaTieneDoc(p.citas, docId);
   }
   function isOrdenesCreadasHoy(docId) {
@@ -8833,11 +8833,12 @@
     const sDoc = String(docId);
     if (p.agendPend && p.agendPend[sDoc]) { delete p.agendPend[sDoc]; writeJSON(PROC_KEY, p); state.lastSignature = ""; }
   }
-  function isAgendamientoPendiente(docId) {
+  // v18.0.106 (fila 34) — `procHoy`, opcional: el mapa ya leído por quien pinta 30 tarjetas.
+  function isAgendamientoPendiente(docId, procHoy) {
     if (!docId) return false;
-    const p = getProcessedToday();
+    const p = procHoy || getProcessedToday();
     const sDoc = String(docId);
-    return !!_vglBuscarPorDoc(p.agendPend, sDoc) && !isCitaAgendadaHoy(sDoc);
+    return !!_vglBuscarPorDoc(p.agendPend, sDoc) && !isCitaAgendadaHoy(sDoc, p);
   }
   // v18.0.105 — EN VUELO, EN EL ALMACÉN (refutador del cierre de v18.0.98, fila 24). El candado
   // en RAM (_agmAsignandoDocs) solo conoce SU pestaña: con dos pestañas de Everest abiertas
@@ -29759,8 +29760,14 @@
     const n = Object.keys(_ajustesDraft).length;
     Object.assign(S, _ajustesDraft);
     _ajustesDraft = {};
-    saveSettings(); state.lastSignature = ""; repaint();
-    try { showToast("VERDE", "Ajustes", "✓ Sus cambios quedaron guardados y ya están funcionando.", false); } catch (e) {}
+    const okGuardado = saveSettings(); state.lastSignature = ""; repaint();
+    // v18.0.106 (refutador de v18.0.100, residuo) — si el navegador rechazó la escritura (cuota
+    // llena), los cambios funcionan en esta pestaña pero no sobreviven a la recarga: se dice,
+    // en vez de un «guardados» falso.
+    try {
+      if (okGuardado === false) showToast("AMBAR", "Ajustes · no se pudieron guardar", "Los cambios ya están funcionando en esta pestaña, pero el navegador no dejó guardarlos (almacenamiento lleno): al recargar se perderán. Libere espacio o inténtelo de nuevo.", true);
+      else showToast("VERDE", "Ajustes", "✓ Sus cambios quedaron guardados y ya están funcionando.", false);
+    } catch (e) {}
     try { uxTrack("ajustes.guardar", { n: n }); } catch (e) {}
     return n;
   }
@@ -29780,7 +29787,9 @@
     if (!_ajustesSucio()) { closeSheet(); despues(); return; }
     try {
       const bar = el.sheet && el.sheet.querySelector("#vgl-set-bar");
-      if (!bar) { closeSheet(true); return; }
+      // v18.0.106 (fila 33b) — sin barra no hay forma de preguntar: se descarta el borrador (al
+      // reabrir Ajustes se repinta limpio de todas formas), se cierra y se sigue a donde iba.
+      if (!bar) { _ajustesDraft = {}; closeSheet(true); despues(); return; }
       bar.classList.remove("vgl-d-none");
       bar.innerHTML = `<span class="vgl-set-bar-t">¿Guardar los cambios antes de salir?</span>
         <button class="vgl-btn off" id="c-salir-sin">Salir sin guardar</button>
@@ -29788,7 +29797,7 @@
       const g = el.sheet.querySelector("#c-salir-guardando"), sg = el.sheet.querySelector("#c-salir-sin");
       if (g) g.addEventListener("click", () => { _ajustesGuardar(); closeSheet(); despues(); });
       if (sg) sg.addEventListener("click", () => { _ajustesDraft = {}; try { applySettings(); } catch (e) {} closeSheet(); despues(); });
-    } catch (e) { closeSheet(true); }
+    } catch (e) { _ajustesDraft = {}; closeSheet(true); despues(); }
   }
   // ================= v15.6.0 — MODO PROGRAMADOR (Ctrl+Shift+D) =================
   // Todo lo técnico (reportes, pruebas, clave de la IA, diagnóstico) vive aquí y NO es
@@ -29821,6 +29830,22 @@
       }, true);
     } catch (e) {}
   }
+  // v12.5.2 — Estado de la credencial COMPARTIDA de Athenea en este equipo (sin exponer valores).
+  function _ajustesAthEstadoHtml() {
+    return atheneaCredsGet()
+      ? "<b>✅ Credenciales guardadas en este equipo.</b>"
+      : "<b>⚠️ Sin credenciales guardadas: la sesión de Athenea seguirá cayéndose hasta que se guarden aquí, una sola vez.</b>";
+  }
+  // v18.0.106 (refutador de v18.0.100, fila 33a) — «Guardar» y «Borrar» credenciales de Athenea
+  // repintaban la hoja entera con renderSettings(), que vacía el borrador: un cambio sin guardar
+  // en otra casilla se perdía en silencio — el mismo patrón que la fila cerró para Ctrl+Shift+D.
+  // Se repinta solo el estado de la credencial, en su sitio, y el borrador sigue vivo.
+  function _ajustesPintarAthEstado() {
+    try {
+      const n = el.sheet && el.sheet.querySelector("#c-athestado");
+      if (n) n.innerHTML = _ajustesAthEstadoHtml();
+    } catch (e) {}
+  }
   function renderSettings() {
     _ajustesDraft = {};   // borrador fresco en cada pintada
     // v12.0.0 — La sección técnica se abría con una marca (__vgl_dev_mode) que solo escribía
@@ -29838,9 +29863,7 @@
     let repUltErr = ""; try { const e0 = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e0 && e0.detalle) repUltErr = e0.detalle; } catch (e) {}
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
     // v12.5.2 — Estado de la credencial COMPARTIDA de Athenea en este equipo (sin exponer valores).
-    const athEstado = atheneaCredsGet()
-      ? "<b>✅ Credenciales guardadas en este equipo.</b>"
-      : "<b>⚠️ Sin credenciales guardadas: la sesión de Athenea seguirá cayéndose hasta que se guarden aquí, una sola vez.</b>";
+    const athEstado = '<span id="c-athestado">' + _ajustesAthEstadoHtml() + "</span>";
     // v15.6.1 — El grupo de Athenea es configuración DE INSTALACIÓN (una vez por equipo,
     // la hace el programador): solo se pinta en modo programador. Reporte del 20-08.
     const grpAthenea = !isDevMode ? "" : `      <div class="vgl-grp">
@@ -30033,7 +30056,7 @@
       if (pNode) pNode.value = "";   // no dejar la contraseña en el DOM tras guardar
       if (okg) showToast("VERDE", "Athenea", "✓ Credenciales guardadas en este equipo. Sirven para cualquier médico que lo use: el inicio de sesión automático se activa solo cuando la sesión caiga.", false);
       else showToast("ROJO", "Athenea", "No se pudieron guardar las credenciales. Inténtelo de nuevo.", false);
-      renderSettings();
+      _ajustesPintarAthEstado();   // v18.0.106 — no renderSettings(): conserva el borrador
     });
     const athClear = q("#c-athclear");
     if (athClear) athClear.addEventListener("click", () => {
@@ -30046,7 +30069,7 @@
       }
       atheneaCredsClear();
       showToast("VERDE", "Athenea", "✓ Credenciales borradas de este equipo. Afecta a todos los médicos que usen este computador.", false);
-      renderSettings();
+      _ajustesPintarAthEstado();   // v18.0.106 — no renderSettings(): conserva el borrador
     });
     // v12.0.0 — El deslizador de Volumen se pintaba pero NO estaba enlazado a nada: moverlo
     // no cambiaba el volumen ni se guardaba. Al soltarlo suena un tono para confirmarlo.
@@ -30637,6 +30660,11 @@
     let _histNoShow = null;
     try { _histNoShow = S.adherencia ? _noShowLeer() : null; } catch (e) { _histNoShow = null; }
     const fragment = document.createDocumentFragment();
+    // v18.0.106 (refutador de v18.0.100, fila 34) — vgl_proc_today se leía y parseaba una vez
+    // POR TARJETA (isAgendamientoPendiente → getProcessedToday), la misma factura que la fila
+    // cerró para el historial de inasistencias, una línea más abajo. Una lectura por pintado.
+    let _procHoy = null;
+    try { _procHoy = getProcessedToday(); } catch (e) { _procHoy = null; }
     for (const a of vista) {
       const col = COLORS[a.color] || COLORS.AZUL, tint = TINT[a.color] || TINT.AZUL;
       const card = document.createElement("div");
@@ -30668,7 +30696,7 @@
       // paciente y no llegó a crear la cita. Ámbar, no rojo — no compite con la bandera de
       // fraude ni con la de abandono del programa. isAgendamientoPendiente ya se auto-anula
       // cuando la cita queda agendada, y todo caduca al terminar el día.
-      const agendPend = (a.doc_id && isAgendamientoPendiente(a.doc_id))
+      const agendPend = (a.doc_id && isAgendamientoPendiente(a.doc_id, _procHoy))
         ? `<span class="vgl-flag agpend" title="Se eligió un horario para este paciente pero la cita no se confirmó. Abra su historia y use 🗓️ para terminarla.">🗓️ SIN TERMINAR</span>` : ""; // [COPY-UX]
       // [v14.2.0 — backlog §3] Sugerencia, no alarma: perfil sencillo ya confirmado hoy
       // (diabetes/renal/riesgo muy alto/falla/PA no controlada lo habrían descartado). Solo
@@ -38613,7 +38641,9 @@
       // como "no hay nada que vigilar" cuando la verdad es "falta el peso para saberlo".
       // No pasa en HTA/DM2 puros (esas tablas no usan estadio).
       const motivo = (c.programa === "ERC" && !c.estadioAdministrativo && c.pesoFaltaParaEstadio)
-        ? "no se puede armar el plan de exámenes de ERC: falta el peso para calcular el estadio renal (Cockcroft-Gault) — no es que no haya nada pendiente"
+        ? (c.pesoImplausible
+          ? "no se puede armar el plan de exámenes de ERC: el peso registrado es implausible " + String(c.pesoImplausible).replace(/^peso plausible\s*/, "") + " — corríjalo en Everest para calcular el estadio renal (Cockcroft-Gault), no es que no haya nada pendiente"
+          : "no se puede armar el plan de exámenes de ERC: falta el peso para calcular el estadio renal (Cockcroft-Gault) — no es que no haya nada pendiente")
         : "no hay ningún examen que vigilar con este programa y estadio";
       return {
         hoy: hoy, drivers: drivers, pasajeros: pasajeros,
@@ -39312,7 +39342,9 @@
     if (an.paSistolica != null || an.pesoKg != null || an.cinturaCm != null) {
       const ex = [];
       if (an.paSistolica != null) ex.push("PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg");
-      if (an.pesoKg != null) ex.push("peso " + an.pesoKg + " kg");
+      // v18.0.106 (fila 22) — un peso fuera de 20–300 kg viaja marcado: el modelo no debe
+      // razonar sobre un dato implausible como si fuera cierto, y tampoco se inventa otro.
+      if (an.pesoKg != null) ex.push("peso " + an.pesoKg + " kg" + ((an.pesoKg >= 20 && an.pesoKg <= 300) ? "" : " (valor implausible tal como está registrado en Everest: verificar antes de usarlo)"));
       if (an.imc != null) ex.push("IMC " + an.imc);
       if (an.cinturaCm != null) ex.push("circunferencia abdominal " + an.cinturaCm + " cm");
       L.push("Signos vitales: " + ex.join(" · "));
@@ -41429,7 +41461,12 @@
       grupoSabado: c.grupoSabado || null,
       // v17.6.51 (1.6) — ver el comentario en mtrPlanParaclinicos: distingue "sin peso no
       // puedo saber el estadio" de "de verdad no hay nada que vigilar".
-      pesoFaltaParaEstadio: !erc.estadioAdministrativo && Array.isArray(erc.faltan) && erc.faltan.indexOf("peso") >= 0,
+      pesoFaltaParaEstadio: !erc.estadioAdministrativo && Array.isArray(erc.faltan) && erc.faltan.some((f) => /^peso\b/.test(String(f))),
+      // v18.0.106 (refutador de v18.0.100, fila 22) — un peso IMPLAUSIBLE también deja el estadio
+      // sin calcular, y el plan caía en «no hay ningún examen que vigilar con este programa y
+      // estadio» — la misma frase que v17.6.51 llamó mentira. Viaja el detalle («hay 15 kg
+      // registrados, fuera de 20–300») para decir qué corregir.
+      pesoImplausible: (Array.isArray(erc.faltan) && erc.faltan.find((f) => /^peso plausible/.test(String(f)))) || null,
     });
 
     const resumen = { erc: erc, riesgo: riesgo, meta: meta, programa: programa, plan: plan, factores: factores };

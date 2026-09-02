@@ -956,6 +956,27 @@ module.exports = {
       t.igual(bien.faltan.length, 0, "con datos plausibles, `faltan` sigue vacío");
     });
 
+    // v18.0.106 — refutador de v18.0.100 (fila 22, sitios hermanos): `pesoFaltaParaEstadio`
+    // buscaba «peso» exacto, así que con 15 kg registrados el plan de ERC caía en «no hay ningún
+    // examen que vigilar con este programa y estadio» — la frase que v17.6.51 llamó mentira —
+    // mientras con peso ausente sí decía «falta el peso». Y la hoja de hechos para la IA llevaba
+    // «peso 15 kg» sin marca, como si fuera cierto.
+    t.caso("v18.0.106: con un peso implausible el plan de ERC dice que el peso es implausible (no «no hay nada que vigilar») y la hoja de hechos lo marca", () => {
+      const hoy = "2026-09-02";
+      const base = { hoyIso: hoy, edad: 70, sexo: "F", creatinina: 1.0, factores: { enfermedadRenalDocumentada: true, hta: true }, ultimos: {} };
+      const r = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: 15 }));
+      const motivo = String(r.plan && r.plan.motivoFtl);
+      t.cierto(/implausible/.test(motivo) && /15/.test(motivo), "el motivo dice que es implausible y muestra el 15 para corregirlo: " + motivo);
+      t.falso(/no hay ningún examen que vigilar/.test(motivo), "y no la frase que v17.6.51 llamó mentira");
+      const sinPeso = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: null }));
+      t.cierto(/falta el peso/.test(String(sinPeso.plan && sinPeso.plan.motivoFtl)), "sin peso, el motivo de siempre: " + (sinPeso.plan && sinPeso.plan.motivoFtl));
+      const linea = String(api.mtrHojaDeHechosTexto(api.mtrHojaDeHechos(r))).split("\n").find((l) => /^Signos vitales:/.test(l)) || "";
+      t.cierto(/peso 15 kg \(valor implausible/.test(linea), "la hoja de hechos marca el peso implausible: " + linea);
+      const bien = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: 70 }));
+      const lineaBien = String(api.mtrHojaDeHechosTexto(api.mtrHojaDeHechos(bien))).split("\n").find((l) => /^Signos vitales:/.test(l)) || "";
+      t.cierto(/peso 70 kg/.test(lineaBien) && !/implausible/.test(lineaBien), "con 70 kg no hay marca: " + lineaBien);
+    });
+
     t.caso("cuando el estadio clínico es PEOR que el administrativo, las dosis lo siguen a él", () => {
       // Peso alto infla el Cockcroft-Gault: administrativo mejor que el clínico.
       const r = api.mtrEvaluarErc({ edad: 70, sexo: "M", pesoKg: 120, creatinina: 1.9 });

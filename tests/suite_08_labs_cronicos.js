@@ -349,6 +349,38 @@ module.exports = {
       }
     });
 
+    // v18.0.106 — refutador de v18.0.100 (fila 30, prueba hueca): la conductual de arriba miraba
+    // el CANAL (el texto de console.warn), no el EFECTO — el defecto entero con el aviso
+    // conservado pasaba en verde. El efecto observable: dos analitos cuya casilla de fecha
+    // resuelve al MISMO nodo que rechaza; si la casilla rechazada quedara «reclamada», el
+    // segundo analito recibiría «ya la ocupó otro analito».
+    t.caso("v18.0.106: una casilla de fecha rechazada NO queda reclamada — el segundo analito que cae en ella no recibe «ya la ocupó otro analito»", () => {
+      mockDOM = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      const fechaRechaza = { id: "fechaResultColesterolTotal", tagName: "INPUT", dispatchEvent: () => {}, get value() { return ""; }, set value(v) { /* el navegador rechaza */ } };
+      c.env.doc.getElementById = (id) => {
+        if (mockDOM[id]) return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return mockDOM[id].value; }, set value(v) { mockDOM[id].value = v; } };
+        if (id === "fechaResultColesterolTotal" || id === "fechaResultTrigliceridos") return fechaRechaza;
+        return null;
+      };
+      const avisos = [];
+      const warnAntes = c.ctx.console.warn;
+      c.ctx.console.warn = (...a) => { avisos.push(a.map(String).join(" ")); };
+      try {
+        const labs = [
+          { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" },
+          { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: "2026-08-01" },
+        ];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(res.count, 2, "los dos valores se escriben: la fecha es un dato aparte");
+        t.igual(mockDOM.resultadoTrigliceridos.value, "150", "el segundo valor también");
+        t.igual(avisos.filter((w) => /ya la ocup/.test(w)).length, 0, "la casilla rechazada NO quedó reclamada (defecto de v18.0.74 con aviso conservado: 1): " + JSON.stringify(avisos));
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+        c.ctx.console.warn = warnAntes;
+      }
+    });
+
     t.caso("v18.0.74: las tres escrituras de fecha de injectLabsIntoCronicos comprueban el retorno de setNgValue", () => {
       // Las tres rutas (whitelist principal, reintento de uroanálisis, y la de «sin
       // casilla de resultado pero sí de fecha») deben condicionar su efecto (marcar

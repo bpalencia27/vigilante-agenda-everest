@@ -11275,3 +11275,70 @@ tramo de laboratorio va después de esa salida): ahora dice las dos cosas.
 | 285 | la marca «en vuelo» nunca caduca | *suite_15: v18.0.105 ANTIDUP — dos pestañas … una marca de hace más de 60 s no bloquea a nadie* | Sí |
 
 Banco completo: **2.999 comprobaciones pasan, 0 fallan.**
+
+## v18.0.106 — el refutador de v18.0.100, relanzado: sitios hermanos y pruebas huecas de las filas 22, 24b, 27, 30, 33a, 33b y 34
+
+Ninguna de las seis filas resultó mal cerrada en lo que cerraba; lo que trajo el refutador son
+sitios hermanos del mismo defecto y pruebas que pasaban con el defecto puesto de vuelta. Todo
+reproducido con el arnés antes de tocar nada.
+
+**Fila 22, sitios hermanos (media y baja).** `pesoFaltaParaEstadio` buscaba «peso» exacto en
+`faltan`, así que con 15 kg registrados (la entrada dice «peso plausible (hay 15 kg…)») el plan
+de exámenes de ERC caía en «no hay ningún examen que vigilar con este programa y estadio» — la
+misma frase que v17.6.51 llamó mentira — mientras con peso ausente sí decía «falta el peso».
+Ahora el plan dice que el peso registrado es implausible, con el valor y el rango, para
+corregirlo. Y la hoja de hechos para la IA llevaba «peso 15 kg» sin marca, como si fuera
+cierto: viaja marcado como implausible (no se inventa otro, no se calla).
+
+**Fila 24b, prueba hueca (media).** La huella `vglTocada` la escribe SOLO el listener `change`
+de la casilla de Ordenar, y ninguna prueba lo disparaba: la contención la ponía a mano. Un
+mutante que borraba esa línea dejaba la suite en verde y, en el navegador, la guarda se comía
+la decisión del médico. Prueba nueva con el gesto real (su listener).
+
+**Fila 27, prueba hueca (baja).** La mitad «en la raíz se conserva la coincidencia laxa» no la
+fijaba nadie: un mutante «siempre estricto» pasaba y dejaba de ver el caso real
+`Agenda_v2_<hoy>.xls`. Fijada.
+
+**Fila 30, prueba hueca (baja).** La conductual miraba el CANAL (el texto de `console.warn`) y
+no el EFECTO: el defecto entero con el aviso conservado pasaba en verde. Prueba nueva con el
+efecto observable: dos analitos cuya casilla de fecha resuelve al mismo nodo que rechaza; si la
+casilla rechazada quedara reclamada, el segundo recibiría «ya la ocupó otro analito».
+
+**Fila 33a, sitio hermano (baja–media) y prueba hueca.** Dentro de la propia hoja, «Guardar» y
+«Borrar» credenciales de Athenea repintaban con `renderSettings()`, que vacía el borrador: un
+cambio sin guardar en otra casilla se perdía en silencio — el mismo patrón que la fila cerró
+para Ctrl+Shift+D. Ahora solo se repinta el estado de la credencial, en su sitio. Y la prueba
+de Alt+R solo ejercitaba «Salir sin guardar»: «Guardar y salir» sin continuación pasaba en
+verde. Fijado.
+
+**Fila 33b, prueba hueca e incompleta (baja).** La prueba solo quitaba la barra; un mutante en
+el que SOLO el `catch` volvía a `closeSheet()` pasaba en verde y en el navegador reventaba con
+«Maximum call stack» en cuanto `querySelector` lanzara. Y las salidas de emergencia cerraban
+Ajustes sin abrir la hoja pedida ni vaciar el borrador. Ahora descartan el borrador (sin barra
+no hay forma de preguntar), cierran y siguen a donde iba; la prueba hace lanzar a
+`querySelector`.
+
+**Fila 34, sitio hermano (baja).** La línea de al lado, `isAgendamientoPendiente(a.doc_id)`,
+leía y parseaba `vgl_proc_today` una vez por tarjeta (y, si el día aún no existía, lo escribía
+30 veces). Una lectura por pintado, pasada a las dos funciones como mapa opcional.
+
+**Residuo (fuera de las filas).** Con el almacén lleno, «Guardar» dejaba `S` mutado en memoria,
+`vgl_cfg` sin persistir y el aviso VERDE de «guardados». `saveSettings` devuelve si pudo
+escribir y, si no, el aviso es ámbar: los cambios funcionan en esta pestaña pero se pierden al
+recargar.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 286 | `pesoFaltaParaEstadio` vuelve a buscar «peso» exacto (**el hermano**) | *suite_45: v18.0.106: con un peso implausible el plan de ERC dice que el peso es implausible (no «no hay nada que vigilar») y la hoja de hechos lo marca* | Sí |
+| 287 | la hoja de hechos vuelve a llevar «peso 15 kg» sin marca | *suite_45: v18.0.106: con un peso implausible…* | Sí |
+| 288 | «Guardar credenciales» vuelve a `renderSettings()` (**el hermano**) | *suite_15: v18.0.106: «Guardar credenciales» de Athenea NO borra un borrador sucio de otra casilla…* | Sí |
+| 289 | la salida de emergencia `!bar` sin `despues()` | *suite_15: v18.0.106: si querySelector LANZA con borrador sucio…* (parte b, sin barra). La primera versión de la prueba solo hacía LANZAR a `querySelector` y este mutante sobrevivía (216 ok): se añadió la pasada con la barra ausente | Sí |
+| 289b | solo el `catch` vuelve a `closeSheet()` a secas (el mutante del refutador) | *suite_15: v18.0.106: si querySelector LANZA…* («no revienta»: Maximum call stack) | Sí |
+| 290 | «Guardar y salir» sin `despues()` | *suite_15: v18.0.106: «Guardar y salir» guarda, abre la hoja pedida y deja el borrador limpio* | Sí |
+| 291 | `isAgendamientoPendiente(a.doc_id)` sin el mapa ya leído (**el hermano**) | *suite_15: 02-sep: render() con 30 tarjetas lee el historial de inasistencias UNA vez…* (aserción nueva: `vgl_proc_today` leído 30) | Sí |
+| 292 | el listener `change` de la casilla de Ordenar deja de escribir `vglTocada` (el mutante del refutador) | *suite_15: v18.0.106: el gesto REAL del médico sobre la casilla (su listener change) deja la huella que la guarda respeta* | Sí |
+| 293 | `xlsViejoDeHoy` siempre estricto (el mutante del refutador) | *suite_03: 02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz* (aserción nueva: `Agenda_v2_<hoy>.xls` en la raíz) | Sí |
+| 294 | la fecha rechazada vuelve a reclamarse, con el aviso conservado (el mutante del refutador) | *suite_08: v18.0.106: una casilla de fecha rechazada NO queda reclamada…* (y la de grep de v18.0.74) | Sí |
+| 295 | «Guardar» canta VERDE aunque `saveSettings` devuelva false | *suite_15: v18.0.106: si el navegador rechaza la escritura de vgl_cfg, «Guardar» no canta «guardados»…* | Sí |
+
+Banco completo: **3.006 comprobaciones pasan, 0 fallan.**
