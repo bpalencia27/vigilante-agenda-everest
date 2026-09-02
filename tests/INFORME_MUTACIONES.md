@@ -11996,4 +11996,48 @@ habrían pasado igual. Las tres cosas quedan corregidas.
 | 411 | la limpieza de «seleccionado» vuelve al mapa por ISO | *suite_15: v18.0.122: la marca «seleccionado» se limpia sobre la lista COMPLETA…* | Sí |
 | 412 | el día abandonado sigue ofreciéndose como elegible | *suite_15: openAgendamientoModal v14.0.1: …salta solo al día más cercano…* | Sí |
 
-Banco completo: **3.074 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.074 comprobaciones pasan, 0 fallan.** *(v18.0.122)*
+
+---
+
+## v18.0.123 — auditoría UI/UX, lote visual 1: el presupuesto de esquinas y el color medido
+
+Aplica los fragmentos **F-13, F-14, F-15, F-16 y F-22** de `docs/AUDITORIA_UIUX_20260902.md`
+(filas 4, 5, 6, 20, 21, 22, 23, 29 y 48).
+
+**F-13 — presupuesto de esquinas.** El panel vive en la esquina inferior derecha, y ahí se le
+encimaban cuatro cosas: los avisos, el panel post-cita, «Deshacer» y la barra mínima. Solapes
+medidos en Chromium a 1366×768: 384×185, 336×160, 176×38 y 142×30 px. Ahora los flotantes se
+van a la columna libre a la izquierda del panel **mientras el panel ocupa esa esquina**, y la
+recuperan en cuanto se pliega, se minimiza, va al dock o se oculta. Un solo token
+(`--vgl-col-libre`) para los cuatro: con un número por flotante, el día que el panel cambie de
+ancho se moverían tres y se quedaría uno. Verificado con `tools/medir_esquinas_chromium.js`
+(nuevo): **cero solapes** con el panel a la vista, y los cuatro de vuelta en su margen sin él.
+De paso, la fila 48: `--z-toast` estaba declarado **sin un solo consumidor** mientras la regla
+usaba el literal a pelo.
+
+**F-14 — el vidrio, un punto más opaco.** Se calibró «sobre OLED» y en consulta vive sobre un
+Everest **blanco**. A `.94` los siete nodos por debajo de AA bajan a uno.
+
+**F-15 — los acentos claros, un paso más oscuros.** `--c-morado`, `--c-azul` y `--c-verde` del
+tema claro daban 3,4-4,4:1 sobre sus propios tintes en «Generar», «Siguiente», la cuenta
+regresiva y «+1 más». Con los hexadecimales se mueven **sus canales `--rgb-*`**: si uno cambia
+y el otro no, el tinte queda de un color y la letra de otro. Eso ahora lo vigila la **Regla T**.
+
+**F-16 — texto sobre acento: nunca un literal.** `#fff` y `#020617` cocidos encima de un acento
+solo pueden acertar en uno de los dos temas (2,63-2,84:1 en el que fallan). Los cinco sitios
+pasan a `var(--bg-solid)`.
+
+**F-22 — un solo vidrio en el panel.** El desenfoque de la barra lateral iba **anidado dentro
+del del panel**: invisible (98 % opaco) y una pasada de blur extra por cuadro en cada arrastre.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 413 | un `--rgb-*` deja de casar con su `--c-*` | *suite_25: Regla T - cada --rgb-* coincide exactamente con el hexadecimal de su --c-*| Sí |
+| 414 | vuelve el vidrio al 88 % | *suite_25: v18.0.123 - el vidrio a .94…* | Sí |
+| 415 | vuelve el blanco literal sobre el acento | *suite_25: v18.0.123 - …el texto sobre acento por token…* | Sí |
+| 416 | vuelve el desenfoque anidado de la barra lateral | *suite_25: v18.0.123 - …un solo desenfoque en el panel* | Sí |
+| 417 | los flotantes vuelven a la esquina del panel | *suite_15: v18.0.123 (F-13): los cuatro flotantes viven en la columna libre…* | Sí |
+| 418 | el cuerpo deja de decir si el panel ocupa la esquina | *suite_15: v18.0.123 (F-13): el cuerpo declara si el panel ocupa la esquina…* | Sí |
+
+Banco completo: **3.078 comprobaciones pasan, 0 fallan.**

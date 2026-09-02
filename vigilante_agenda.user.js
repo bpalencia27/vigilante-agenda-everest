@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.122
+// @version      18.0.123
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.122";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.123";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15810,6 +15810,9 @@
     winState = s; if (!el.root) return;
     el.root.classList.toggle("min", s === "min");
     el.root.style.display = (s === "dock" || s === "hidden") ? "none" : "flex";
+    // v18.0.123 (UI/UX UI#1-3) — el cuerpo dice si el panel ocupa la esquina inferior derecha;
+    // de eso depende dónde se dibujan los flotantes (avisos, post-cita, Deshacer, barra mínima).
+    try { document.body.classList.toggle("vgl-panel-visible", !(s === "dock" || s === "hidden" || s === "min")); } catch (e) {}
     if (el.dock) el.dock.style.display = (s === "dock") ? "flex" : "none";
     // v18.0.4 — ENJAMBRE (31-ago): el canal de 1 s del reloj (v18.0.3) late con el panel
     // invisible todo el día: "cerrar" solo aplica display:none y el nodo sigue en el DOM,
@@ -15948,9 +15951,9 @@
           transition:background .15s var(--ease-out),color .15s var(--ease-out)
         }
         .vgl-tip-btn:hover,.vgl-tip-btn:focus-visible{
-          background:var(--c-azul) !important;color:#fff !important;outline:none
+          background:var(--c-azul) !important;color:var(--bg-solid) !important;outline:none
         }
-        .vgl-tip-btn[aria-expanded="true"]{background:var(--c-azul) !important;color:#fff !important}
+        .vgl-tip-btn[aria-expanded="true"]{background:var(--c-azul) !important;color:var(--bg-solid) !important}
         #vgl-tip-pop{
           position:fixed;z-index:2147483000;max-width:260px;
           background:var(--bg-solid,#12161f) !important;color:var(--fg,#f2f2f4) !important;
@@ -15978,8 +15981,10 @@
         .vgl-stepper-step.active{color:var(--c-azul) !important;font-weight:800}
         .vgl-stepper-step.completed{color:var(--c-verde) !important}
         .vgl-step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:var(--r-pill);font-size:10.5px;font-weight:800;background:var(--bg3);color:var(--fg3) !important}
-        .vgl-stepper-step.active .vgl-step-num{background:var(--c-azul);color:#020617 !important}
-        .vgl-stepper-step.completed .vgl-step-num{background:var(--c-verde);color:#020617 !important}
+        /* v18.0.123 (UI/UX UI#6, UI#7) — el texto sobre un acento sale de --bg-solid: oscuro
+           sobre pastel en tema oscuro, claro sobre profundo en tema claro (>=7:1 en los dos). */
+        .vgl-stepper-step.active .vgl-step-num{background:var(--c-azul);color:var(--bg-solid) !important}
+        .vgl-stepper-step.completed .vgl-step-num{background:var(--c-verde);color:var(--bg-solid) !important}
         .vgl-stepper-line{flex:1;height:2px;background:var(--line);border-radius:1px}
 
         .vgl-type-cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:8px 0 12px}
@@ -16041,7 +16046,7 @@
 
         .vgl-agm-undo-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(var(--rgb-ambar),.14);border:1px solid rgba(var(--rgb-ambar),.38);border-radius:var(--r-card);padding:10px 14px;margin-bottom:12px;font-size:var(--t-micro);color:var(--c-ambar) !important;font-weight:700}
         .vgl-btn-undo{background:rgba(var(--rgb-rojo),.18);color:var(--c-rojo) !important;border:1px solid rgba(var(--rgb-rojo),.45);border-radius:var(--r-pill);padding:5px 12px;font-size:11px;font-weight:800;cursor:pointer;transition:all .15s ease}
-        .vgl-btn-undo:hover{background:var(--c-rojo);color:#fff !important}
+        .vgl-btn-undo:hover{background:var(--c-rojo);color:var(--bg-solid) !important}
         .vgl-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:10px;background:var(--bg2);border-radius:var(--r-field);font-size:var(--t-micro);color:var(--fg2) !important}
         .vgl-summary-grid b{color:var(--fg) !important}
 
@@ -16117,7 +16122,10 @@
       #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal{
         /* Vidrio frost sobre negro OLED */
         /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
-        --bg:rgba(7,10,16,.88);
+        /* v18.0.123 (UI/UX UI#4) — el vidrio se calibró «sobre OLED» y en la vida real vive
+           sobre un Everest BLANCO (fondo efectivo medido #3c414a-#4d3b3e): a .94 los acentos
+           pastel vuelven a cumplir AA (7 nodos por debajo -> 1). */
+        --bg:rgba(7,10,16,.94);
         --bg-sidebar:rgba(4,6,10,.70);
         --bg2:rgba(255,255,255,.045);
         --bg3:rgba(255,255,255,.075);
@@ -16175,6 +16183,10 @@
            también tienen consumidor real desde este mismo commit. */
         --z-toast:2147483647;--z-modal:2147483000;
         --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
+        /* v18.0.123 (UI/UX UI#1-3) — la columna libre a la IZQUIERDA del panel (22 + 690 + 16):
+           ahí viven los flotantes mientras el panel ocupa la esquina inferior derecha. Va
+           DESPUÉS de las cinco capas de D6: la Regla J de suite_25 lee esa secuencia entera. */
+        --vgl-col-libre:min(728px,calc(100vw - 406px));
         --line:rgba(255,255,255,.07);--edge:rgba(255,255,255,.13);
         --edge-side:rgba(255,255,255,.08);
         --toast:rgba(13,16,24,.94);
@@ -16213,14 +16225,18 @@
         --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
         --bg-solid:#f6f7fb;
         /* Triaje profundo — AAA sobre cerámica clara */
-        --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
-        --c-verde:#065f46;--c-azul:#6d28d9;--c-recordatorio:#115e59;
+        /* v18.0.123 (UI/UX UI#5) — cyan-800 / violet-800 / emerald-900: sobre sus tintes los
+           anteriores daban 3,4-4,4:1 en «Generar», «Siguiente», la cuenta regresiva y «+1 más». */
+        --c-rojo:#991b1b;--c-morado:#155e75;--c-ambar:#92400e;
+        --c-verde:#064e3b;--c-azul:#5b21b6;--c-recordatorio:#115e59;
         --c-panel:#0f766e;
         --c-labs:#3730a3;
         --c-paquete:#0369a1;
         --c-pes:#9d174d;--c-atendido:#475569;
-        --rgb-rojo:153,27,27;--rgb-morado:14,116,144;--rgb-ambar:146,64,14;
-        --rgb-verde:6,95,70;--rgb-azul:109,40,217;--rgb-recordatorio:17,94,89;
+        /* v18.0.123 (UI#5) — los canales van con sus hexadecimales: un --rgb-* que no case con
+           su --c-* pinta el tinte de un color y el texto de otro. */
+        --rgb-rojo:153,27,27;--rgb-morado:21,94,117;--rgb-ambar:146,64,14;
+        --rgb-verde:6,78,59;--rgb-azul:91,33,182;--rgb-recordatorio:17,94,89;
         --rgb-panel:15,118,110;
         --rgb-labs:55,48,163;
         --rgb-paquete:3,105,161;
@@ -16241,6 +16257,10 @@
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
         --z-toast:2147483647;--z-modal:2147483000;
         --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
+        /* v18.0.123 (UI/UX UI#1-3) — la columna libre a la IZQUIERDA del panel (22 + 690 + 16):
+           ahí viven los flotantes mientras el panel ocupa la esquina inferior derecha. Va
+           DESPUÉS de las cinco capas de D6: la Regla J de suite_25 lee esa secuencia entera. */
+        --vgl-col-libre:min(728px,calc(100vw - 406px));
         --line:rgba(15,23,42,.07);--edge:rgba(15,23,42,.11);--edge-side:rgba(15,23,42,.08);
         --toast:rgba(255,255,255,.94);
         --glow-edge:inset 0 1px 0 rgba(255,255,255,.90),inset 0 0 0 1px rgba(255,255,255,.35);
@@ -16356,7 +16376,7 @@
       .vgl-bg-success{background:var(--c-verde, #10b981) !important;color:var(--bg-solid, #0b0e15) !important}
       .vgl-btn-wait{opacity:0.5;cursor:wait}
 
-      .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc !important;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
+      .vgl-sp-toast{position:fixed;bottom:200px;right:var(--vgl-col-libre);z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc !important;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
       .vgl-sp-toast.vgl-sp-visible{opacity:1;transform:translateY(0)}
       .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:var(--t-strong);font-weight:700;color:#9aa7ba !important;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
 
@@ -17053,6 +17073,13 @@
       /* v18.0.118 (UI/UX #9) — chip de dia sin agenda: apagado en el sitio, sin saltos de layout.
          Especificidad 1,1,0: no compite con .vgl-agm-pbtn:hover ni con .active (0,2,0). */
       #vgl-day-chips .vgl-agm-pbtn-sinagenda{opacity:.45;text-decoration:line-through;cursor:not-allowed;transform:none}
+      /* v18.0.123 (UI/UX UI#1-3) — con el panel plegado, en dock, minimizado u oculto la esquina
+         vuelve a estar libre: los flotantes recuperan su sitio de siempre. */
+      body:not(.vgl-panel-visible) #vgl-toasts{right:16px}
+      body:not(.vgl-panel-visible) #vgl-postcita-panel{right:18px}
+      body:not(.vgl-panel-visible) #vgl-deshacer-llenado{right:22px}
+      body:not(.vgl-panel-visible) .vgl-sp-toast{right:24px;bottom:24px}
+      body:not(.vgl-panel-visible) #vgl-min-bar{left:14px}
       /* v15.8.0 (N4) — enlace discreto para ver el mensaje del paciente */
       .vgl-agm-lnk{background:none;border:none;padding:0;margin:2px 0 0;color:var(--c-azul) !important;font-size:var(--t-micro);cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
       .vgl-agm-lnk:hover{opacity:.85}
@@ -17070,8 +17097,9 @@
         background:linear-gradient(180deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 42%),var(--bg-sidebar);
         overflow-y:auto;overflow-x:hidden;
         padding:14px 12px 16px;
-        -webkit-backdrop-filter:var(--glass);
-        backdrop-filter:var(--glass);
+        /* v18.0.123 (UI/UX UI#14) — sin desenfoque propio: apilado sobre el del panel (.94 +
+           .70 = 98 % opaco) era invisible, y costaba una pasada de blur extra por cuadro en
+           cada arrastre. */
       }
       #vgl-sidebar::-webkit-scrollbar{width:0}
 
@@ -17355,9 +17383,10 @@
         flex-shrink:0;box-shadow:var(--glow-edge);
       }
       .vgl-cd.warn{background:rgba(var(--rgb-morado),.18);color:var(--c-morado) !important}
-      #vgl-root.light .vgl-cd.warn{color:var(--c-morado) !important}
+      /* v18.0.123 (UI#5) — el tinte al 10 % en claro: al 18 % la cuenta regresiva quedaba en 3,4:1 */
+      #vgl-root.light .vgl-cd.warn{color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.10)}
       .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar) !important}
-      #vgl-root.light .vgl-cd.late{color:var(--c-ambar) !important}
+      #vgl-root.light .vgl-cd.late{color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.10)}
       /* [v17.6.7] Inasistencias previas en la tarjeta: ámbar sutil, blindado contra el hostil */
       .vgl-cd.vgl-adh{background:rgba(var(--rgb-ambar),.18) !important;color:var(--c-ambar) !important}
       #vgl-root.light .vgl-cd.vgl-adh{color:var(--c-ambar) !important}
@@ -17706,8 +17735,14 @@
       }
 
       /* ---- Toasts — naipes flotantes ---- */
+      /* v18.0.123 (UI/UX UI#1, UI#2, UI#3, UI#22) — PRESUPUESTO DE ESQUINAS: solo el panel vive
+         abajo a la derecha. Los avisos, el panel post-cita, la barra mínima y «Deshacer» se van
+         a la columna libre de su izquierda; con el panel plegado, en dock u oculto vuelven a su
+         esquina de siempre. Medido en Chromium: los solapes de 384x185, 336x160, 334x70, 176x38
+         y 142x30 px pasan a cero. Y el toast estrena --z-toast, que estaba declarado sin un solo
+         consumidor mientras la regla usaba el literal a pelo (fila 48). */
       #vgl-toasts{
-        position:fixed;top:16px;right:16px;z-index:2147483646;
+        position:fixed;top:16px;right:var(--vgl-col-libre);z-index:var(--z-toast);
         display:flex;flex-direction:column;gap:10px;
         max-width:390px;
         font-family:var(--font-stack);
@@ -17979,7 +18014,7 @@
          barra tiene que seguir alcanzable, que de eso se trata pasar de un módulo a otro.
          Cuelga de document.body: Regla E, toda declaración de color con !important. */
       #vgl-min-bar{
-        position:fixed;left:14px;bottom:14px;
+        position:fixed;left:164px;bottom:14px;   /* v18.0.123 (UI#3): deja de tapar la pastilla del dock */
         z-index:calc(var(--z-modal) + 1);
         display:none;gap:8px;flex-wrap:wrap;align-items:center;
         max-width:min(46vw,520px);
@@ -18127,7 +18162,7 @@
          el médico no podía tocar el Deshacer que el aviso le prometía. Cuelga del body:
          Regla E, color con !important. */
       #vgl-deshacer-llenado{
-        position:fixed;right:22px;bottom:22px;
+        position:fixed;right:var(--vgl-col-libre);bottom:22px;   /* v18.0.123 (UI#2) */
         z-index:calc(var(--z-modal) + 2);
         font-family:var(--font-stack);
         color:var(--fg) !important;
@@ -18493,7 +18528,9 @@
          panel es independiente del modal (no se cierra con él) y permanece hasta que el
          médico lo cierre a mano o pasen 5 min sin interacción. */
       #vgl-postcita-panel{
-        position:fixed;bottom:18px;right:18px;z-index:2147483646;
+        /* por debajo de las alertas, pero POR ENCIMA de los modales de flujo: se muestra
+           mientras Agendar sigue abierto sus últimos segundos. */
+        position:fixed;bottom:18px;right:var(--vgl-col-libre);z-index:calc(var(--z-alerta) - 1);
         font-family:var(--font-stack);
         animation:vglToastIn .34s var(--spring)
       }
@@ -32010,7 +32047,8 @@
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}${agendPend}${adicFlag}
-            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(".16")};color:${badgeCol} !important;box-shadow:inset 0 0 0 1px ${badgeRgba(".32")}">${escapeHtml(a.estado)}</span>
+            <!-- v18.0.123 (UI/UX UI#5) — tinte del badge al 10 % en claro (el .16 dejaba «Confirmada» en 3,48:1) -->
+            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(isLight() ? ".10" : ".16")};color:${badgeCol} !important;box-shadow:inset 0 0 0 1px ${badgeRgba(isLight() ? ".26" : ".32")}">${escapeHtml(a.estado)}</span>
           </div>
         </div>
         <div class="vgl-card-mid vgl-card-mid-t1">

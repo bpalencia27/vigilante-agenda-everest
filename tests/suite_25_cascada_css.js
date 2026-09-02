@@ -411,6 +411,67 @@ module.exports = {
         `Cero declaraciones de color sin !important en selectores de panel. Salieron ${arrInfracciones.length}: ${arrInfracciones.slice(0, 5).join(' | ')}`);
     });
 
+    // =====================================================================
+    // v18.0.123 (auditoría UI/UX, F-14/F-15/F-16/F-22) — Regla T: CADA --rgb-* DICE LO
+    // MISMO QUE SU --c-*. Los tintes (`rgba(var(--rgb-x),.10)`) y el texto (`var(--c-x)`)
+    // salen de dos tokens distintos que describen EL MISMO color. Si uno se mueve y el otro
+    // no, el tinte queda de un color y la letra de otro, y el contraste que se midió deja de
+    // ser el que hay. Pasó al bajar los acentos claros un paso: los seis hexadecimales
+    // cambiaron y sus canales tenían que cambiar con ellos.
+    // =====================================================================
+    t.caso("Regla T - cada --rgb-* coincide exactamente con el hexadecimal de su --c-*", () => {
+      const hexARgb = (h) => {
+        const m = /^#([0-9a-f]{6})$/i.exec(h.trim());
+        if (!m) return null;
+        const n = parseInt(m[1], 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(",");
+      };
+      // Se leen por lista: la oscura y la clara declaran los mismos nombres con valores
+      // distintos, así que compararlos en bruto mezclaría los dos temas.
+      const listas = css.split(/\}/).filter((b) => /--c-[a-z]+\s*:/.test(b) && /--rgb-[a-z]+\s*:/.test(b));
+      t.cierto(listas.length >= 2, "se encontraron las dos listas de tokens (oscura y clara): " + listas.length);
+      let comprobados = 0;
+      for (const lista of listas) {
+        const cs = {}, rgbs = {};
+        let m;
+        const reC = /--c-([a-z0-9]+)\s*:\s*(#[0-9a-fA-F]{6})\s*[;}]/g;
+        while ((m = reC.exec(lista)) !== null) cs[m[1]] = m[2];
+        const reR = /--rgb-([a-z0-9]+)\s*:\s*(\d{1,3},\s*\d{1,3},\s*\d{1,3})\s*[;}]/g;
+        while ((m = reR.exec(lista)) !== null) rgbs[m[1]] = m[2].replace(/\s+/g, "");
+        for (const nombre of Object.keys(rgbs)) {
+          if (!cs[nombre]) continue;            // sin hexadecimal que comparar (p. ej. un token derivado)
+          const esperado = hexARgb(cs[nombre]);
+          if (!esperado) continue;
+          comprobados++;
+          t.igual(rgbs[nombre], esperado,
+            "--rgb-" + nombre + " debe ser los canales de " + cs[nombre] + " (--c-" + nombre + ")");
+        }
+      }
+      t.cierto(comprobados >= 16, "se compararon los pares de los dos temas (" + comprobados + ")");
+    });
+
+    // v18.0.123 (F-14, F-16, F-22) — los tres valores que la auditoría midió y movió, fijados
+    // aquí para que nadie los devuelva sin darse cuenta de lo que costaron.
+    t.caso("v18.0.123 - el vidrio a .94, el texto sobre acento por token, y un solo desenfoque en el panel", () => {
+      // F-14: el vidrio se calibró «sobre OLED» y vive sobre un Everest BLANCO.
+      t.cierto(/--bg:rgba\(7,10,16,\.94\);/.test(css), "el vidrio oscuro va al 94 %, no al 88 %");
+      // F-16: el texto que se pinta ENCIMA de un acento sale de --bg-solid, nunca de un
+      // literal — un literal solo puede acertar en uno de los dos temas.
+      t.falso(/background:var\(--c-azul\)[^}]*color:#fff/.test(css), "ningún blanco literal sobre el acento azul");
+      t.falso(/background:var\(--c-rojo\)[^}]*color:#fff/.test(css), "ni sobre el rojo");
+      t.falso(/\.vgl-step-num\{background:var\(--c-[a-z]+\);color:#020617/.test(css), "ni el número del paso en negro literal");
+      t.igual((css.match(/color:var\(--bg-solid\) !important/g) || []).length >= 5, true,
+        "los cinco sitios de texto-sobre-acento usan el token");
+      // F-22: el panel tiene UN vidrio. El de la barra lateral iba apilado dentro del suyo.
+      // OJO: `indexOf("#vgl-sidebar{")` también casa dentro de «#vgl-root.perf #vgl-sidebar{»,
+      // que va antes en la hoja — el corte se llevaba 700 líneas ajenas y el `backdrop-filter`
+      // de cualquiera de ellas. Se ancla al principio de la regla propia.
+      const iSide = css.indexOf("\n      #vgl-sidebar{");
+      t.cierto(iSide >= 0, "se localizó la regla propia de la barra lateral");
+      const sidebar = css.slice(iSide, css.indexOf("#vgl-sidebar::-webkit-scrollbar"));
+      t.falso(/backdrop-filter/.test(sidebar), "la barra lateral ya no pide su propio desenfoque");
+    });
+
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
       // 1. Paridad de tokens claro/oscuro
       const bloqueOscuro = css.match(/((?:#[a-z0-9-]+,?\s*)+)\s*\{\s*\/\*[\s\S]*?\*\/\s*--bg:rgba\([^)]+\);/);

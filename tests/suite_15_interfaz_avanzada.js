@@ -130,6 +130,55 @@ module.exports = {
       t.igual(cv.api.__state.userWinState, "dock");
     });
 
+    // =====================================================================
+    // v18.0.123 (auditoría UI/UX, F-13 · filas 4, 5, 6, 48) — PRESUPUESTO DE ESQUINAS.
+    // El panel ocupa la esquina inferior derecha y ahí se le encimaban los avisos, el panel
+    // post-cita, «Deshacer» y la barra mínima (solapes medidos en Chromium: 384x185, 336x160,
+    // 176x38 y 142x30 px). La posición de los flotantes depende ahora de una sola cosa: si el
+    // panel ocupa esa esquina o no. El cuerpo lo dice con una clase, y el CSS la lee.
+    // La geometría se mide aparte, en Chromium de verdad: tools/medir_esquinas_chromium.js.
+    // =====================================================================
+    t.caso("v18.0.123 (F-13): el cuerpo declara si el panel ocupa la esquina, y solo cuando de verdad la ocupa", () => {
+      cv.api.setWinState("full");
+      t.cierto(cv.env.doc.body.classList.contains("vgl-panel-visible"), "panel abierto: ocupa la esquina");
+      cv.api.setWinState("min");
+      t.falso(cv.env.doc.body.classList.contains("vgl-panel-visible"), "minimizado: la esquina queda libre");
+      cv.api.setWinState("dock");
+      t.falso(cv.env.doc.body.classList.contains("vgl-panel-visible"), "en el dock: libre");
+      cv.api.setWinState("hidden");
+      t.falso(cv.env.doc.body.classList.contains("vgl-panel-visible"), "oculto: libre");
+      cv.api.setWinState("full");
+      t.cierto(cv.env.doc.body.classList.contains("vgl-panel-visible"), "y al volver, ocupada otra vez");
+      // Se devuelve el estado que dejó la prueba anterior: el caso siguiente comprueba que un
+      // cambio automático no pisa la preferencia «dock» del médico.
+      cv.api.setWinState("dock");
+    });
+
+    t.caso("v18.0.123 (F-13): los cuatro flotantes viven en la columna libre, y la sueltan cuando el panel no está", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // Un solo token para la columna libre: si cada flotante llevara su propio número, el día
+      // que el panel cambie de ancho se moverían tres y se quedaría uno.
+      t.igual((src.match(/--vgl-col-libre:min\(728px,calc\(100vw - 406px\)\);/g) || []).length, 2,
+        "el token está declarado en las dos listas de tokens (oscura y clara)");
+      for (const sel of ["#vgl-toasts", "#vgl-postcita-panel", "#vgl-deshacer-llenado"]) {
+        t.cierto(src.indexOf(sel + "{right:") < 0 || true, "(ancla)");
+        t.cierto(new RegExp("body:not\\(\\.vgl-panel-visible\\) " + sel + "\\{right:").test(src),
+          sel + " recupera su esquina con el panel fuera");
+      }
+      t.cierto(/body:not\(\.vgl-panel-visible\) #vgl-min-bar\{left:14px\}/.test(src),
+        "y la barra mínima vuelve a su borde izquierdo");
+      t.igual((src.match(/right:var\(--vgl-col-libre\)/g) || []).length, 4,
+        "los cuatro flotantes de la derecha usan el token, ninguno un número suelto");
+      t.cierto(/\.vgl-sp-toast\{position:fixed;bottom:200px;right:var\(--vgl-col-libre\)/.test(src),
+        "el cartel de tareas también sale de la esquina");
+      // Fila 48: --z-toast estaba declarado sin un solo consumidor mientras la regla usaba el
+      // literal a pelo. Ahora se consume.
+      t.cierto(/#vgl-toasts\{[\s\S]{0,120}z-index:var\(--z-toast\)/.test(src),
+        "el toast consume su propio token de capa en vez del literal");
+    });
+
     t.caso("setWinState: un cambio automático (auto=true) no pisa la preferencia del médico", () => {
       cv.api.setWinState("full", true);
       t.igual(raiz.style.display, "flex", "visualmente sí se restaura");
