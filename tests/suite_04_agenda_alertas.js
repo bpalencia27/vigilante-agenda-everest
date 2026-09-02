@@ -1947,6 +1947,24 @@ module.exports = {
         "el cálculo del badge sigue presente");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 34): el arreglo de v18.0.79 puso el badge en la
+    // plantilla inicial llamando a _noShowPrevia(a.doc_id) por tarjeta — el mismo coste
+    // (getItem + JSON.parse del historial entero, que no caduca) que v18.0.24 sacó de
+    // refrescarCuentas. Misma regla, mismo patrón de comprobación: leer ANTES del bucle.
+    t.caso("02-sep: render() lee el historial de inasistencias UNA vez por pintado, no una por tarjeta (fila 34)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function render(list, source, at)");
+      t.cierto(ini > 0, "se localiza render");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+      const bucle = cuerpo.indexOf("for (const a of vista)");
+      t.cierto(bucle > 0, "y su bucle por tarjeta");
+      t.cierto(cuerpo.slice(0, bucle).includes("_noShowLeer()"), "el historial se lee ANTES del bucle: una vez por pintado");
+      t.falso(cuerpo.slice(bucle).includes("_noShowPrevia("), "y dentro del bucle NO puede llamarse a _noShowPrevia, que vuelve a leer y parsear el historial por cada tarjeta");
+      t.cierto(cuerpo.slice(bucle).includes("_noShowPreviaEn("), "se usa la variante que recibe el mapa ya leído");
+    });
+
     t.caso("REGRESIÓN — render() también pinta el badge de inasistencias en el primer pintado, no solo refrescarCuentas() (hallazgo #31)", () => {
       const fs = require("fs");
       const path = require("path");

@@ -336,6 +336,85 @@ module.exports = {
       t.igual(cv.api.__state.sheet, null, "cierra directo: no hay nada que proteger");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (filas 33a y 33b). (a) Dos salidas de Ajustes NO pasaban por
+    // closeSheet(): toggleSheet("resumen") (Alt+R, el botón #vgl-rep, el doble clic en el dock)
+    // pisaba la hoja y al volver el borrador estaba vacío; _vglAlternarModoProg (Ctrl+Shift+D)
+    // repintaba y lo borraba en el acto. (b) El arreglo de v18.0.77 creó una recursión mutua:
+    // las salidas de emergencia de _ajustesIntentarCerrar llamaban a closeSheet(), que con
+    // borrador sucio devolvía la llamada — sin barra #vgl-set-bar la pestaña se colgaba.
+    t.caso("02-sep: salir de Ajustes hacia Resumen (Alt+R) con borrador sucio pregunta primero y, decidido, abre Resumen (fila 33a)", () => {
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      const sonidoAntes = cv.api.__S.sonido;
+      cv.api._ajustesPonBorrador("sonido", !sonidoAntes);
+      t.cierto(cv.api._ajustesSucio(), "el borrador quedó sucio");
+      cv.api.toggleSheet("resumen");
+      t.igual(cv.api.__state.sheet, "ajustes", "no se va a Resumen en silencio: antes sí, y el cambio se perdía");
+      const bar = hoja.querySelector("#vgl-set-bar");
+      t.cierto(/Guardar los cambios antes de salir/.test(bar.innerHTML), "se pregunta");
+      // El DOM simulado memoriza el nodo por selector y acumula los listeners de las
+      // preguntas anteriores de esta suite (en el navegador real bar.innerHTML crea botones
+      // nuevos): se dispara el ÚLTIMO, que es el de ESTA pregunta.
+      const lsSin = hoja.querySelector("#c-salir-sin")._listeners.click;
+      lsSin[lsSin.length - 1]({});
+      t.igual(cv.api.__state.sheet, "resumen", "decidido, se abre la hoja a la que iba");
+      t.igual(cv.api.__S.sonido, sonidoAntes, "y S.sonido sigue intacto");
+      cv.api.closeSheet();
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    t.caso("02-sep: Ctrl+Shift+D con Ajustes sucios NO borra el borrador (fila 33a)", () => {
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      cv.api._ajustesPonBorrador("sonido", !cv.api.__S.sonido);
+      cv.api._vglAlternarModoProg();
+      t.cierto(cv.api._ajustesSucio(), "el borrador sigue vivo: antes renderSettings() lo vaciaba en el acto");
+      cv.api._vglAlternarModoProg();   // se apaga para no contaminar el resto de la suite
+      cv.api._ajustesDescartar();
+      cv.api.closeSheet();
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    t.caso("02-sep: sin barra #vgl-set-bar, closeSheet() con borrador sucio TERMINA — antes, recursión mutua sin fin (fila 33b)", () => {
+      cv.api.__state.sheet = null;
+      cv.api.toggleSheet("ajustes");
+      cv.api._ajustesPonBorrador("sonido", !cv.api.__S.sonido);
+      const q = hoja.querySelector;
+      hoja.querySelector = (s) => (s === "#vgl-set-bar" ? null : q(s));
+      try { cv.api.closeSheet(); } finally { hoja.querySelector = q; }
+      t.igual(cv.api.__state.sheet, null, "sin forma de preguntar, cierra (la salida de emergencia de siempre) en vez de colgar la pestaña");
+      cv.api.toggleSheet("ajustes"); cv.api.closeSheet();   // deja el borrador limpio para lo que sigue
+      t.igual(cv.api.__state.sheet, null);
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 34): v18.0.79 puso el badge de inasistencias en la
+    // plantilla inicial llamando a _noShowPrevia(a.doc_id) POR TARJETA — getItem + JSON.parse
+    // del historial entero (que no caduca) en cada pintado completo, el mismo coste que
+    // v18.0.24 había sacado de refrescarCuentas. Medido con el DOM enriquecido: 30 lecturas.
+    t.caso("02-sep: render() con 30 tarjetas lee el historial de inasistencias UNA vez, no una por tarjeta (fila 34, medido)", () => {
+      const cR = cargar({ silencioso: true });
+      enriquecerDom(cR);
+      cR.ctx.innerWidth = 1200; cR.ctx.innerHeight = 800;
+      cR.api.buildOverlay();
+      cR.api.__S.adherencia = true;
+      const hist = {};
+      for (let i = 1; i <= 30; i++) hist["9000" + String(i).padStart(3, "0")] = { total: 2, ultima: "2026-08-20" };
+      cR.env.storage.setItem("vgl_nosh_hist", JSON.stringify(hist));
+      let lecturas = 0;
+      const getOrig = cR.env.storage.getItem.bind(cR.env.storage);
+      cR.env.storage.getItem = (k) => { if (k === "vgl_nosh_hist") lecturas++; return getOrig(k); };
+      const lista = [];
+      for (let i = 1; i <= 30; i++) lista.push({ key: "k" + i, doc_id: "9000" + String(i).padStart(3, "0"), nombre: "P" + i, hora_texto: "07:00", estado: i % 2 ? "En sala" : "Atendido", color: "VERDE", pym: [], elapsed: 0 });
+      cR.api.__state.lastSignature = "";
+      cR.api.render(lista, "api", new Date());
+      const raiz = cR.env.doc.body.children.find((n) => n.id === "vgl-root");
+      const el0 = raiz.querySelector("#vgl-list");
+      const lst = (el0.children.length === 1 && el0.children[0]._esFragmento) ? el0.children[0] : el0;
+      t.igual(lst.children.length, 30, "las 30 tarjetas se pintaron");
+      t.igual(lst.children.filter((n) => String(n.innerHTML).includes("vgl-adh")).length, 30, "todas con su badge en la plantilla inicial (v18.0.79 sigue en pie)");
+      t.cierto(lecturas <= 1, "y el historial se leyó a lo sumo una vez, no 30 (leído " + lecturas + ")");
+    });
+
     t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
       cv.api.closeSheet();
       cv.api.toggleSheet("ajustes");
@@ -3449,10 +3528,15 @@ module.exports = {
       await abrir(cDup);
       t.igual(posts.length, 1, "primera orden creada");
 
-      // Segunda vuelta: la casilla la marcó EL MÉDICO (quedó la huella `vglTocada`), no el
-      // script. La guarda no puede comerse una decisión suya: puede haber un motivo real
-      // para repetir el examen, y el script sugiere, no manda.
-      _inyectarCasilla(cDup, _casillaOrd(false, true, 0));
+      // Segunda vuelta: la casilla la PREMARCÓ el script y además la tocó EL MÉDICO (quedó
+      // la huella `vglTocada`: la desmarcó y la volvió a marcar). La guarda no puede comerse
+      // una decisión suya: puede haber un motivo real para repetir el examen, y el script
+      // sugiere, no manda.
+      // 02-sep — CIERRE ADVERSARIAL (fila 24b): esta prueba montaba `_casillaOrd(false, true,
+      // 0)` (premarcada=0), con lo que la guarda se saltaba por el PRIMER operando sin llegar
+      // jamás a `!_tocada` — la mutación M158 (quitar `&& !_tocada`) dejaba la suite en verde.
+      // Con premarcada=1 Y tocada=1 la cláusula es la que decide, y la mutación sí muerde.
+      _inyectarCasilla(cDup, _casillaOrd(true, true, 0));
       await abrir(cDup);
       t.igual(posts.length, 2, "la decisión explícita del médico se respeta y la orden se crea");
     });

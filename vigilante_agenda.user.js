@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.99
+// @version      18.0.100
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.99";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.100";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11967,6 +11967,17 @@
   // descargar y a rechazar el mismo archivo toda la jornada, y a repetir el aviso.
   const _pymRechazados = new Set();
 
+  // 02-sep (cierre adversarial, fila 27) — sacada de pickTodaysFile para que xlsViejoDeHoy,
+  // su gemelo sobre las MISMAS filas, aplique la misma guarda (antes un .xls ajeno en una
+  // subcarpeta con la fecha de hoy empotrada en un consecutivo disparaba el aviso «PyM en
+  // formato antiguo» una vez al día, con el mismo token que la regla 1 acababa de rechazar).
+  function _pymSueltoEnLaRaiz(f) {
+    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
+    const ruta = String((f && f.ServerRelativeUrl) || "");
+    if (!raiz || !ruta) return false;
+    if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
+    return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
+  }
   function pickTodaysFile(files) {
     const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
     if (!xls.length) return null;
@@ -11974,13 +11985,7 @@
     // también sepa si un archivo vive suelto en la raíz. Ver el porqué junto a
     // esNombreDeHoy, unas líneas más abajo — es el mismo blindaje de v18.0.7, aplicado
     // ahora también al MATCH POR NOMBRE, no solo al de "modificado hoy sin fecha".
-    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
-    const sueltoEnLaRaiz = (f) => {
-      const ruta = String(f.ServerRelativeUrl || "");
-      if (!raiz || !ruta) return false;
-      if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
-      return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
-    };
+    const sueltoEnLaRaiz = _pymSueltoEnLaRaiz;
     // 1. Coincidencia EXACTA con el nombre de HOY (ej: Agenda_Dia_CMB_20260808.xlsx)
     // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
     // no lo tumbaron. `esNombreDeHoy` solo aplica la guarda "no cola de otro número"
@@ -12053,7 +12058,8 @@
   // no se puede leer desde el navegador — pero callarlo sería peor: se detecta y se
   // avisa UNA vez al día, para que pidan re-guardarlo como .xlsx.
   function xlsViejoDeHoy(files) {
-    return (files || []).find((f) => /\.xls$/i.test(f.Name || "") && !/^~\$/.test(f.Name || "") && esNombreDeHoy(f.Name)) || null;
+    // 02-sep (fila 27) — misma guarda de borde completo fuera de la raíz que pickTodaysFile.
+    return (files || []).find((f) => /\.xls$/i.test(f.Name || "") && !/^~\$/.test(f.Name || "") && esNombreDeHoy(f.Name, !_pymSueltoEnLaRaiz(f))) || null;
   }
   // encodeURI (no encodeURIComponent): las barras del camino deben quedar como barras.
   function spListUrl(folder) { return spBase() + "/_api/web/GetFolderByServerRelativeUrl('" + encodeURI(folder || CONFIG.SP.folder) + "')/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$orderby=TimeLastModified%20desc&$top=60"; }
@@ -28533,8 +28539,13 @@
   // _ajustesIntentarCerrar() en vez de cerrar directo — así todo call-site queda protegido
   // sin tener que acordarse uno por uno (los que ya pasan por _ajustesIntentarCerrar no se
   // ven afectados: para cuando llegan aquí el borrador ya quedó vacío).
-  function closeSheet() {
-    if (state.sheet === "ajustes" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(); return; }
+  // 02-sep (cierre adversarial, fila 33b) — `forzar === true` (y solo `true`: el botón Cerrar
+  // llega aquí con el evento como primer argumento) cierra SIN preguntar. Lo usan únicamente
+  // las salidas de emergencia de _ajustesIntentarCerrar: antes llamaban a closeSheet() a
+  // secas y, con borrador sucio, closeSheet() les devolvía la llamada — recursión mutua sin
+  // fin que colgaba la pestaña si la barra #vgl-set-bar no se encontraba.
+  function closeSheet(forzar) {
+    if (forzar !== true && state.sheet === "ajustes" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(); return; }
     state.sheet = null; el.root.classList.remove("sheet"); el.sheet.innerHTML = "";
   }
   // [v17.6.5] Alto contraste de 1 clic (botón de la cabecera): fondo sólido + zoom 1.12 en
@@ -28564,7 +28575,15 @@
       if (b) { b.classList.toggle("vgl-hc-on", _vglHcActivo); b.setAttribute("aria-pressed", String(_vglHcActivo)); }
     } catch (e) {}
   }
-  function toggleSheet(kind) { if (state.sheet === kind) { if (kind !== "resumen" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(); return; } closeSheet(); return; } state.sheet = kind; el.root.classList.add("sheet"); if (kind === "resumen") renderResumen(); else renderSettings(); }
+  function toggleSheet(kind) {
+    if (state.sheet === kind) { if (kind !== "resumen" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(); return; } closeSheet(); return; }
+    // 02-sep (cierre adversarial, fila 33a) — salir de Ajustes hacia OTRA hoja (Alt+R, el
+    // botón #vgl-rep, el doble clic en el dock) con borrador sucio pisaba el HTML de la hoja y,
+    // al volver, renderSettings() empezaba con borrador vacío: el cambio se perdía sin
+    // pregunta. Se pregunta primero y, decidido, se abre la hoja pedida.
+    if (state.sheet === "ajustes" && typeof _ajustesSucio === "function" && _ajustesSucio()) { _ajustesIntentarCerrar(() => toggleSheet(kind)); return; }
+    state.sheet = kind; el.root.classList.add("sheet"); if (kind === "resumen") renderResumen(); else renderSettings();
+  }
   function sheetHeader(title, extraHtml) {
     return `<div class="vgl-sh-h"><span class="vgl-sh-t">${escapeHtml(title)}</span><span>${extraHtml || ""}<button class="vgl-btn" data-x="1" style="margin-left:6px">Cerrar</button></span></div>`;
   }
@@ -29479,19 +29498,24 @@
     renderSettings();
   }
   // Cierre de Ajustes respetando cambios sin guardar: una sola pregunta, dos salidas claras.
-  function _ajustesIntentarCerrar() {
-    if (!_ajustesSucio()) { closeSheet(); return; }
+  // 02-sep (fila 33a) — `luego`, opcional: qué hacer después de que el médico decida (abrir la
+  // hoja a la que iba, por ejemplo). Las salidas de emergencia cierran con closeSheet(true):
+  // sin barra no hay forma de preguntar, y volver a closeSheet() a secas era la recursión
+  // mutua de la fila 33b.
+  function _ajustesIntentarCerrar(luego) {
+    const despues = () => { try { if (typeof luego === "function") luego(); } catch (e) {} };
+    if (!_ajustesSucio()) { closeSheet(); despues(); return; }
     try {
       const bar = el.sheet && el.sheet.querySelector("#vgl-set-bar");
-      if (!bar) { closeSheet(); return; }
+      if (!bar) { closeSheet(true); return; }
       bar.classList.remove("vgl-d-none");
       bar.innerHTML = `<span class="vgl-set-bar-t">¿Guardar los cambios antes de salir?</span>
         <button class="vgl-btn off" id="c-salir-sin">Salir sin guardar</button>
         <button class="vgl-btn" id="c-salir-guardando">💾 Guardar y salir</button>`;
       const g = el.sheet.querySelector("#c-salir-guardando"), sg = el.sheet.querySelector("#c-salir-sin");
-      if (g) g.addEventListener("click", () => { _ajustesGuardar(); closeSheet(); });
-      if (sg) sg.addEventListener("click", () => { _ajustesDraft = {}; try { applySettings(); } catch (e) {} closeSheet(); });
-    } catch (e) { closeSheet(); }
+      if (g) g.addEventListener("click", () => { _ajustesGuardar(); closeSheet(); despues(); });
+      if (sg) sg.addEventListener("click", () => { _ajustesDraft = {}; try { applySettings(); } catch (e) {} closeSheet(); despues(); });
+    } catch (e) { closeSheet(true); }
   }
   // ================= v15.6.0 — MODO PROGRAMADOR (Ctrl+Shift+D) =================
   // Todo lo técnico (reportes, pruebas, clave de la IA, diagnóstico) vive aquí y NO es
@@ -29501,7 +29525,14 @@
   function _vglAlternarModoProg() {
     _vglProgOn = !_vglProgOn;
     try { showToast("AZUL", "Modo programador", _vglProgOn ? "Activado en esta pestaña: las opciones técnicas aparecen al final de Ajustes." : "Desactivado.", false); } catch (e) {}
-    try { if (state.sheet && state.sheet !== "resumen") renderSettings(); } catch (e) {}
+    // 02-sep (fila 33a) — con Ajustes abiertos Y sucios, repintar borraba el borrador en el
+    // acto (renderSettings arranca con borrador vacío). Se conserva y se dice por qué.
+    try {
+      if (state.sheet && state.sheet !== "resumen") {
+        if (typeof _ajustesSucio === "function" && _ajustesSucio()) showToast("AMBAR", "Modo programador", "Ajustes tiene cambios sin guardar: guárdelos o descártelos y la sección técnica aparecerá al repintar.", false);
+        else renderSettings();
+      }
+    } catch (e) {}
     try { uxTrack(_vglProgOn ? "prog.on" : "prog.off"); } catch (e) {}
     return _vglProgOn;
   }
@@ -30320,6 +30351,12 @@
     // (leerlo por tarjeta sería castigar cada repintado con JSON.parse repetidos).
     let _preconMapa = null;
     try { _preconMapa = (S.preconsulta && typeof _preconLeerTodo === "function") ? _preconLeerTodo().porDoc : null; } catch (e) { _preconMapa = null; }
+    // 02-sep (cierre adversarial, fila 34) — el historial de inasistencias se lee UNA vez por
+    // pintado, no una por tarjeta: v18.0.79 puso el badge en la plantilla inicial llamando a
+    // _noShowPrevia(a.doc_id) por tarjeta (localStorage.getItem + JSON.parse del mapa entero,
+    // que no caduca nunca) — el mismo coste que v18.0.24 había sacado de refrescarCuentas.
+    let _histNoShow = null;
+    try { _histNoShow = S.adherencia ? _noShowLeer() : null; } catch (e) { _histNoShow = null; }
     const fragment = document.createDocumentFragment();
     for (const a of vista) {
       const col = COLORS[a.color] || COLORS.AZUL, tint = TINT[a.color] || TINT.AZUL;
@@ -30435,7 +30472,7 @@
               // countdown(a) arriba.
               try {
                 if (!S.adherencia) return "";
-                const adhN = _noShowPrevia(a.doc_id);
+                const adhN = _noShowPreviaEn(_histNoShow, a.doc_id);   // 02-sep — mapa ya leído
                 if (!adhN) return "";
                 const info = _adhBadgeInfo(adhN);
                 return `<span class="vgl-cd vgl-adh" title="${info.tit}">${info.txt}</span>`;
@@ -37311,6 +37348,14 @@
         peso === null ? "peso" : null,
         creat === null ? "creatinina sérica" : null,
         (d.sexo === null || d.sexo === undefined || d.sexo === "") ? "sexo" : null,
+        // 02-sep (cierre adversarial, fila 22) — un dato PRESENTE pero implausible no es un
+        // dato ausente. Con un peso de 15 kg registrado, `crcl` salía null con `faltan: []`, y
+        // la ficha viva y el panel renal decían «falta algún dato» / «sin dato»: el dato SÍ
+        // está en Everest, es implausible, y nadie mostraba el 15 para corregirlo — el mismo
+        // patrón que v18.0.61 cerró en la vía legacy. Se dice el valor y el rango.
+        (peso !== null && !(peso >= 20 && peso <= 300)) ? ("peso plausible (hay " + peso + " kg registrados, fuera de 20–300)") : null,
+        (edad !== null && !(edad >= 18 && edad <= 120)) ? ("edad plausible (hay " + edad + " registrada, fuera de 18–120)") : null,
+        (creat !== null && !(creat >= 0.1 && creat <= 20)) ? ("creatinina plausible (hay " + creat + " mg/dL registrada, fuera de 0.1–20)") : null,
       ].filter(Boolean),
     };
   }

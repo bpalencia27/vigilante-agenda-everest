@@ -10983,3 +10983,61 @@ lee y escribe donde YA está archivado (mismo patrón que `_vglClaveDeDoc`). Un 
 | 245 | la carpeta vuelve al nombre exacto, sin tolerancia (**el defecto**) | *suite_68: 02-sep: un historial archivado con ceros de relleno se encuentra…* | Sí |
 
 Banco completo: **2.969 comprobaciones pasan, 0 fallan.**
+
+## v18.0.100 — cierre adversarial (02-sep), filas 22, 24b, 27, 30, 33a/33b y 34
+
+Seis brechas más, reproducidas con el arnés contra HEAD antes de tocar nada.
+
+**Fila 22 (baja) — `mtrEvaluarErc` con un peso implausible.** v18.0.61 cerró «falta el peso» sobre
+un peso de 15 kg en la vía legacy, pero el motor nuevo devolvía `crcl:null, faltan:[]`, y la ficha
+viva y el panel renal decían «falta algún dato» / «sin dato». Ahora `faltan` dice «peso plausible
+(hay 15 kg registrados, fuera de 20–300)» (y lo mismo para edad y creatinina fuera de rango); la
+ficha viva muestra el 15 para corregirlo. `pesoFaltaParaEstadio` sigue mirando «peso» a secas —
+que ahora significa, correctamente, «ausente».
+
+**Fila 24b (media) — prueba hueca.** La prueba de contención de v18.0.63 («si el médico marca él
+mismo la casilla, la orden SÍ se repite») montaba `_casillaOrd(false, true, 0)` (premarcada=0), con
+lo que la guarda `_premarcada && !_tocada` se saltaba por el primer operando sin llegar a
+`!_tocada`: la mutación M158 dejaba suite_15 en verde. Con premarcada=1 Y tocada=1 la cláusula es
+la que decide (HEAD: 2 POST; M158: 1) — ver #247.
+
+**Fila 27 (baja) — `xlsViejoDeHoy`.** El gemelo de `pickTodaysFile` llamaba a `esNombreDeHoy` sin
+la guarda de borde completo fuera de la raíz (v18.0.71): un `.xls` ajeno en una subcarpeta con la
+fecha de hoy empotrada en un consecutivo disparaba «PyM en formato antiguo» una vez al día.
+`_pymSueltoEnLaRaiz` se saca a función propia y la usan los dos.
+
+**Fila 30 (baja) — prueba hueca.** La prueba conductual de v18.0.74 solo miraba el valor y el
+conteo, y pasaba igual con el defecto original puesto de vuelta. Ahora exige el efecto observable
+de la rama del rechazo (el aviso por consola «rechazada por el navegador»), que es excluyente con
+la rama que reclama la casilla.
+
+**Fila 33a (media) — dos salidas de Ajustes sin pregunta.** `toggleSheet("resumen")` (Alt+R, el
+botón #vgl-rep, el doble clic en el dock) pisaba la hoja con borrador sucio y al volver
+`renderSettings()` arrancaba con borrador vacío; `_vglAlternarModoProg` (Ctrl+Shift+D) repintaba y
+lo borraba en el acto. Ahora `toggleSheet` pregunta primero (`_ajustesIntentarCerrar(luego)`, con
+continuación: decidido, se abre la hoja pedida) y el modo programador conserva el borrador y dice
+por qué no repinta.
+
+**Fila 33b (baja → cuelgue) — recursión mutua.** El arreglo de v18.0.77 hizo que `closeSheet()`
+delegue en `_ajustesIntentarCerrar()` con borrador sucio, pero las dos salidas de emergencia de
+esta última (`!bar` y el `catch`) llamaban de vuelta a `closeSheet()`: sin barra #vgl-set-bar la
+pestaña se colgaba (medido: el ejecutor no termina en 120 s). Ahora cierran con `closeSheet(true)`
+— y solo `true`, porque el botón Cerrar llega con el evento como primer argumento.
+
+**Fila 34 (baja) — `render()` releía el historial de inasistencias por tarjeta.** v18.0.79 puso el
+badge en la plantilla inicial llamando a `_noShowPrevia(a.doc_id)` por tarjeta (getItem +
+JSON.parse del mapa entero, que no caduca): medido, 30 lecturas con 30 tarjetas. Se lee UNA vez
+antes del bucle, igual que v18.0.24 hizo en `refrescarCuentas`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 246 | `faltan` vuelve a callar el peso implausible (**el defecto**) | *suite_45: 02-sep: un peso registrado pero implausible no se anuncia como ausente…* | Sí |
+| 247 | M158 de nuevo: la guarda ignora que el médico tocó la casilla (`_premarcada && !_tocada` → `_premarcada`) | *suite_15: v18.0.63 (contención): si el médico marca él mismo la casilla, la orden SÍ se repite* — **antes de la fila 24b esta mutación dejaba la suite en verde** | Sí |
+| 248 | `xlsViejoDeHoy` sin la guarda fuera de la raíz (**el defecto**) | *suite_03: 02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz* | Sí |
+| 249 | la fecha rechazada vuelve a reclamarse sin aviso (el defecto original de v18.0.74) | *suite_08: v18.0.74: injectLabsIntoCronicos no reclama una casilla de fecha que el navegador rechazó* — **antes de la fila 30 esta prueba pasaba igual** (y la de grep) | Sí |
+| 250 | `toggleSheet` vuelve a pisar Ajustes sucios (**el defecto**) | *suite_15: 02-sep: salir de Ajustes hacia Resumen (Alt+R) con borrador sucio pregunta primero…* | Sí |
+| 251 | Ctrl+Shift+D vuelve a repintar con borrador sucio (**el defecto**) | *suite_15: 02-sep: Ctrl+Shift+D con Ajustes sucios NO borra el borrador* (y *renderSettings: la sección técnica…*) | Sí |
+| 252 | las DOS salidas de emergencia vuelven a `closeSheet()` a secas (**el defecto**) | **el ejecutor no termina** (`timeout 90` → 124) — con una sola salida mutada la otra sigue cortando el bucle, por eso se mutan las dos | Sí |
+| 253 | `render()` vuelve a `_noShowPrevia(a.doc_id)` por tarjeta (**el defecto**) | *suite_04: 02-sep: render() lee el historial … UNA vez por pintado* y *suite_15: 02-sep: render() con 30 tarjetas lee el historial … UNA vez (medido)* | Sí |
+
+Banco completo: **2.976 comprobaciones pasan, 0 fallan.**

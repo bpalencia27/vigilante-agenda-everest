@@ -939,6 +939,23 @@ module.exports = {
       t.falso(conF.sexoAusente, "con sexo real, sexoAusente debe ser false");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 22): v18.0.61 cerró «falta el peso» sobre un peso
+    // implausible en la vía legacy (_renderEstadioRenalHtml), pero el motor nuevo devolvía
+    // `crcl:null, faltan:[]` con 15 kg registrados, y la ficha viva decía «para Cockcroft-Gault
+    // falta algún dato»: el dato SÍ está en Everest, es implausible, y nadie mostraba el 15.
+    t.caso("02-sep: un peso registrado pero implausible no se anuncia como ausente en mtrEvaluarErc ni en la ficha viva", () => {
+      const erc = api.mtrEvaluarErc({ edad: 70, pesoKg: 15, creatinina: 1.0, sexo: "F" });
+      t.igual(erc.crcl, null, "sin Cockcroft-Gault: el peso no sirve (control del caso)");
+      t.igual(erc.faltan.length, 1, "pero `faltan` ya no está vacío");
+      t.cierto(/peso/.test(erc.faltan[0]) && /15/.test(erc.faltan[0]) && /20/.test(erc.faltan[0]), "dice que es el peso, el valor registrado y el rango: " + erc.faltan[0]);
+      t.falso(erc.faltan.includes("peso"), "y NO dice «peso» a secas, que significa «ausente» para quien lo lee (pesoFaltaParaEstadio)");
+      const filas = JSON.stringify(api.mtrFichaVivaFilas({ erc, riesgo: {}, meta: {}, programa: "HTA", plan: {}, factores: { edad: 70, sexo: "F" } }));
+      const fila = /Filtrado \(CKD-EPI[^"]*/.exec(filas);
+      t.cierto(!!fila && /15/.test(fila[0]) && !/algún dato/.test(fila[0]), "la ficha viva muestra el 15 para corregirlo, no «falta algún dato»: " + (fila && fila[0]));
+      const bien = api.mtrEvaluarErc({ edad: 70, pesoKg: 70, creatinina: 1.0, sexo: "F" });
+      t.igual(bien.faltan.length, 0, "con datos plausibles, `faltan` sigue vacío");
+    });
+
     t.caso("cuando el estadio clínico es PEOR que el administrativo, las dosis lo siguen a él", () => {
       // Peso alto infla el Cockcroft-Gault: administrativo mejor que el clínico.
       const r = api.mtrEvaluarErc({ edad: 70, sexo: "M", pesoKg: 120, creatinina: 1.9 });

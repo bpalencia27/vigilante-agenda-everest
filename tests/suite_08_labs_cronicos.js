@@ -329,13 +329,23 @@ module.exports = {
         }
         return null;
       };
+      // 02-sep — CIERRE ADVERSARIAL (fila 30): esta prueba solo miraba el VALOR y el conteo, y
+      // pasaba igual con el defecto original puesto de vuelta (la casilla rechazada seguía
+      // «reclamada» en silencio). El arreglo tiene un efecto observable: la rama del rechazo
+      // avisa por consola en vez de reclamar la casilla — y las dos ramas son excluyentes.
+      const avisos = [];
+      const warnAntes = c.ctx.console.warn;
+      c.ctx.console.warn = (...a) => { avisos.push(a.map(String).join(" ")); };
       try {
         const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
         const res = testApi.injectLabsIntoCronicos(labs);
         t.igual(mockDOM["resultadoColesterolTotal"].value, "180", "el valor sí se escribe: es una casilla distinta");
         t.igual(res.count, 1, "y sí cuenta como diligenciado — la fecha es un dato aparte");
+        t.cierto(avisos.some((w) => /rechazada por el navegador/.test(w) && /COLESTEROL/.test(w)),
+          "y la fecha rechazada se avisa en vez de reclamarse en silencio (la otra rama, la que la marca como usada, NO corrió): " + JSON.stringify(avisos));
       } finally {
         c.env.doc.getElementById = getByIdOriginal;
+        c.ctx.console.warn = warnAntes;
       }
     });
 

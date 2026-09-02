@@ -256,6 +256,23 @@ module.exports = {
       t.cierto(c.api.xlsViejoDeHoy(files) !== null);
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 27): pickTodaysFile recibió en v18.0.71 la guarda de
+    // borde completo fuera de la raíz, pero su gemelo xlsViejoDeHoy seguía llamando a
+    // esNombreDeHoy sin el flag sobre las MISMAS filas: un .xls ajeno en una subcarpeta con la
+    // fecha de hoy empotrada en un consecutivo se tomaba por «el PyM de hoy en formato
+    // antiguo» y disparaba el aviso AMBAR una vez al día.
+    t.caso("02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const raiz = c.api.__CONFIG.SP.folder;
+      const ajeno = { Name: "Reporte_45192026_Final.xls", ServerRelativeUrl: raiz + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Reporte_45192026_Final.xls" };
+      t.igual(c.api.pickTodaysFile([Object.assign({}, ajeno, { Name: "Reporte_45192026_Final.xlsx", ServerRelativeUrl: ajeno.ServerRelativeUrl + "x" })]), null, "control: la regla 1 ya lo rechaza para el .xlsx");
+      t.igual(c.api.xlsViejoDeHoy([ajeno]), null, "y el .xls con el MISMO nombre en la subcarpeta tampoco es «el PyM de hoy en formato antiguo»");
+      const real = { Name: "Agenda_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_20260901.xls" };
+      t.cierto(c.api.xlsViejoDeHoy([ajeno, real]) === real, "el .xls de verdad, suelto en la raíz con la fecha de hoy, sí se detecta");
+    });
+
     // ---------- esLibroValido / esXlsxCifrado ----------
     t.caso("esLibroValido verifica cabecera ZIP (PK)", () => {
       // Valid ZIP has PK\x03\x04
