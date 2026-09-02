@@ -61,11 +61,42 @@ for (const r of sinComentarios.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
 }
 
 // ---- Censo 2: clases con texto propio y sin ninguna declaración de color --------------
-const conColor = new Set();
+// 01-sep-2026 (cierre del enjambre) — SEGUNDO PUNTO CIEGO: antes bastaba con que CUALQUIER
+// selector que contuviera la clase declarara color, y `.vgl-complex-pill.warn{color:…}`
+// hacía pasar por «con color» a `.vgl-complex-pill` a secas — que en su estado inicial
+// («Analizando historia clínica…») no tiene ninguna regla de color y Chromium mostraba
+// secuestrada. Ahora se guarda, por cada regla con color, el CONJUNTO de clases del último
+// compuesto del selector (lo que de verdad tiene que llevar el elemento para que la regla
+// le aplique), y un candidato solo se da por cubierto si alguno de esos conjuntos está
+// contenido en sus propias clases.
+const conColorSets = [];
+const conColorIds = new Set();
+const conColorTags = new Set();
 for (const r of sinComentarios.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
   if (!/(^|;)\s*color\s*:/i.test(r[2])) continue;
-  for (const c of r[1].matchAll(/\.([a-zA-Z0-9_-]+)/g)) conColor.add(c[1]);
+  for (const sel of r[1].split(",")) {
+    const partes = sel.trim().split(/[\s>+~]+/);
+    const ultimo = partes[partes.length - 1] || "";
+    // `:where(#x :not([class]))` y compañía son el blindaje de los elementos SIN clase:
+    // no cubren a ningún elemento con clase, así que no cuentan aquí.
+    if (/:not\(\[class\]\)/.test(ultimo)) continue;
+    const cls = [...ultimo.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((c) => c[1]);
+    const id = (ultimo.match(/#([a-zA-Z0-9_-]+)/) || [])[1];
+    const tag = (ultimo.match(/^[a-z][a-z0-9]*/i) || [])[0];
+    if (cls.length) conColorSets.push(cls);
+    else if (id) conColorIds.add(id);
+    else if (tag) conColorTags.add(tag.toLowerCase());
+  }
 }
+// Un candidato está cubierto si alguna regla con color le APLICA de verdad: por sus clases
+// (el último compuesto de la regla ⊆ sus clases), por su id, o por su etiqueta (una regla
+// `… span{color}` cubre a los span de su ámbito; se admite como cobertura sin comprobar el
+// ámbito — es una sobreaproximación deliberada: prefiere callar a dar un rojo falso. La
+// medición exacta, con el HTML real y sus ancestros, la hace auditar_html_real_chromium.js).
+const cubiertaPorColor = (clases, id, tag) =>
+  conColorSets.some((set) => set.every((c) => clases.includes(c)))
+  || (id && conColorIds.has(id))
+  || (tag && conColorTags.has(String(tag).toLowerCase()));
 
 // Contenedor real de cada candidato: se busca hacia atrás el id de modal más cercano al
 // sitio donde la clase se emite. Sin esto, medir una clase de un modal dentro de #vgl-root
@@ -86,29 +117,38 @@ function contenedorDe(pos) {
 }
 
 const candidatos = new Map();
-const re = /<(span|div|b|i|small|label|p|strong|em)\s+class="([^"$]*?)"\s*>([^<>{}]*[^\s<>{}][^<>]*?)</g;
+// 01-sep-2026 (cierre del enjambre) — PUNTO CIEGO: la expresión exigía `class=` pegado a
+// la etiqueta, así que `<div id="vgl-complexity-pill" class="vgl-complex-pill">` (o cualquier
+// elemento con un atributo antes de class) no entraba en el censo. El tool decía «0» mientras
+// Chromium mostraba esa pastilla secuestrada. Ahora se admite cualquier atributo antes y
+// después de class, dentro de la misma etiqueta.
+const re = /<(span|div|b|i|small|label|p|strong|em)\b([^>]*?)\bclass="([^"$]*?)"([^>]*)>([^<>{}]*[^\s<>{}][^<>]*?)</g;
 for (const m of code.matchAll(re)) {
   // Las clases se emiten a veces con una costura de concatenación pegada
   // (class="vgl-prod-fila' + clase(x) + '"): sin limpiarla, el censo inventaba una clase
   // «vgl-prod-fila'» que no existe y el barrido no podía dar cero nunca.
-  const clases = m[2].split(/\s+/).map((c) => c.replace(/['"`+].*$/, "")).filter((c) => /^vgl-[a-zA-Z0-9_-]+$/.test(c));
+  const clases = m[3].split(/\s+/).map((c) => c.replace(/['"`+].*$/, "")).filter((c) => /^vgl-[a-zA-Z0-9_-]+$/.test(c));
   if (!clases.length) continue;
-  const txt = m[3].trim();
-  // Se aceptan tanto el texto literal como los huecos de plantilla (`${x}`) y los de
-  // concatenación (`' + x + '`): los tres significan «aquí va contenido». La primera
-  // versión de este censo descartaba la forma de concatenación por considerarla una
-  // costura, y con eso se le escapó `.vgl-pym-ic` — el círculo del emoji del recuadro
-  // clínico, que el médico ve azul en su captura del 1-sep. Un contenedor de más en la
-  // lista no cuesta nada; uno de menos es justo el defecto que se buscaba.
-  if (!txt) continue;
-  if (clases.some((c) => conColor.has(c))) continue;
+  const id = ((m[2] + " " + m[4]).match(/\bid="([^"$]+)"/) || [])[1] || "";
+  const txt = m[5].trim();
+  // 01-sep-2026 — el texto tiene que ser LITERAL: una costura de concatenación (' + x + ')
+  // o un hueco de plantilla (${x}) no es texto del elemento, es un hijo que llega después
+  // y que trae su propia clase. Contarlos daba diez «secuestrados» de contenedores
+  // (.vgl-bento-card, .vgl-ficha-fila, .vgl-agm-foot…) que en la vida real no tienen ni
+  // una letra propia. Se exige al menos tres letras seguidas fuera de esas costuras.
+  // La costura puede ser `' + x + '`, `' /* comentario */ + x`, `');` o un `${…}`: se corta el
+  // texto en la primera comilla que cierra la cadena de JS (seguida de +, comentario, `)`,
+  // `;` o fin), y en el primer hueco de plantilla.
+  const literal = txt.replace(/\$\{[\s\S]*$/g, "").replace(/['"`]\s*(\+|\/\*|\/\/|\)|;|,|$)[\s\S]*$/g, "");
+  if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}/.test(literal)) continue;
+  if (cubiertaPorColor(clases, id, m[1])) continue;
   const clave = clases.join(" ");
   if (candidatos.has(clave)) continue;
   candidatos.set(clave, {
     tag: m[1],
     clases: clases,
     contenedor: contenedorDe(m.index),
-    ejemplo: txt.replace(/\s+/g, " ").slice(0, 34),
+    ejemplo: literal.replace(/\s+/g, " ").slice(0, 34),
   });
 }
 

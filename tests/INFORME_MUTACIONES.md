@@ -10772,3 +10772,68 @@ Los 47 hallazgos confirmados de `docs/ENJAMBRE_FUNCIONES_20260901.md` quedan tod
 HEAD real, su refutación adversarial de 3 votos, su mutación verificada en las dos direcciones, y
 su fila en este informe. El banco completo pasa de principio a fin: **2.955 comprobaciones
 pasan, 0 fallan.**
+
+## v18.0.96 — el blindaje de color se mide sobre el HTML REAL, y aparecen dos secuestros que el censo sintético no veía
+
+Cierre del enjambre (madrugada del 02-sep). El médico preguntó «¿el diseño está blindado?» y la
+respuesta honesta exigía medirlo, no recordarlo. Las herramientas existentes decían que sí:
+`suite_25` 24/24, `tools/auditar_color_todo_chromium.js` «0 / 0». Un auditor adversarial
+independiente montó en Chromium el HTML REAL del modal de Agendar (13.393 caracteres, tal como lo
+genera `openAgendamientoModal`) y encontró la pastilla `#vgl-complexity-pill.vgl-complex-pill`,
+en su estado inicial («Analizando historia clínica del paciente...»), pintada con el color de
+Everest en oscuro y en claro. Pre-existente desde v17.6.2; ningún commit del enjambre la tocó.
+
+### Por qué el censo decía cero
+
+Tres puntos ciegos, uno detrás de otro, en `tools/auditar_color_todo_chromium.js`:
+
+1. La expresión del censo exigía `class=` pegado a la etiqueta: `<div id="…" class="…">` no
+   entraba. Cerrado: se admite cualquier atributo antes y después de `class`.
+2. Una clase contaba como «con color» si CUALQUIER selector que la contuviera declaraba color —
+   y `.vgl-complex-pill.warn{color:…}` cubría a `.vgl-complex-pill` a secas, que en su estado
+   inicial no tiene ninguna regla. Cerrado: cobertura consciente de compuestos (el último
+   compuesto del selector tiene que estar contenido en las clases del elemento), de id y de
+   etiqueta.
+3. Con (1) y (2) cerrados, el censo pasó a 11 «secuestrados», de los que 9 eran contenedores
+   (`.vgl-bento-card`, `.vgl-ficha-fila`, `.vgl-agm-foot`…) cuyo «texto» era una costura de
+   concatenación `' + x + '`. Cerrado: se exige texto LITERAL (tres letras seguidas fuera de
+   costuras y huecos de plantilla).
+
+Con los tres cerrados el censo marca exactamente la pastilla — y solo la pastilla — antes del
+arreglo, y cero después.
+
+### La medición que sí vale: HTML real, todas las superficies
+
+`tools/auditar_html_real_chromium.js` (nuevo): abre cada superficie EN EL ARNÉS (la misma
+función que la abre en consulta), serializa su HTML real, lo monta con el `<style>` real
+ejecutado, en oscuro y claro, bajo el Everest hostil canónico de CLAUDE.md, y mide TODOS los
+elementos con texto propio. 17 superficies, 324 elementos. La cobertura se imprime siempre:
+Resumen/Ajustes, «toma sola», tablero y Redactor IA no se abren en el arnés y se dice.
+
+Resultado antes del arreglo: 2 elementos reales secuestrados (×2 temas): la pastilla y el ícono
+de las opciones del menú de elección (`#vgl-chooser-modal .vgl-chooser-ico`, sin regla de color;
+hoy es un emoji y no se nota, el día que sea un glifo de texto sí). Después: **0**.
+
+De paso, `tools/verificar_color_chromium.js` daba «9 FALLAN» desde hacía semanas por
+expectativas viejas (una clase retirada en v17.28.0, banderas que pasaron a outline, un badge
+fijado a propósito igual al botón nativo de Everest) y por extraer el CSS por texto (se perdía
+`MTR_RCV_CSS_TODOS_LOS_MODALES`). Corregido en el commit anterior: 47 sondas, TODO SOBREVIVE.
+
+### La reparación
+
+- `.vgl-complex-pill{…;color:var(--fg) !important}` (VGL_UX_CSS): `var(--fg)` es exactamente
+  el color que ya heredaba «limpio» en los dos temas — no cambia ni un píxel, solo lo blinda.
+- `#vgl-chooser-modal .vgl-chooser-ico{…;color:var(--fg) !important}`.
+- `suite_25`, **Regla S** (nueva): todo elemento con clase propia y texto literal tiene una regla
+  de color que le APLICA de verdad (por clase-compuesto, id o etiqueta). El banco ahora atrapa
+  esta familia sin Chromium; la medición exacta con ancestros la hace el tool nuevo.
+- `suite_25`, Regla G: 652 → 653 en el bloque principal (el ícono) y 133 → 134 en las hojas
+  spliceadas (la pastilla), con su motivo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 232 | se quita `color:var(--fg) !important` de `.vgl-complex-pill` (**el defecto original**) | *suite_25: Regla S* (y el censo de Regla G, −1); `auditar_color_todo_chromium.js` → «CENSO 2: 1 · .vgl-complex-pill»; `auditar_html_real_chromium.js` → «SECUESTRADO» en oscuro y claro, «NO blindado» | Sí — suite_25 25/25, censo 0/0, «VEREDICTO: blindado» |
+
+Banco completo: **2.956 comprobaciones pasan, 0 fallan.**

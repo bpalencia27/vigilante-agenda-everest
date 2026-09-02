@@ -673,15 +673,85 @@ module.exports = {
       // De paso, el primer intento sumaba CINCO: el quinto era la palabra escrita dentro de
       // un comentario del propio CSS. Este censo cuenta texto crudo, así que una mención en
       // prosa le inventa una regla — anotado en el comentario de esa hoja para no repetirlo.
-      t.cierto(importantTotal === 652, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 651: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69; salió ${importantTotal})`);
+      // v18.0.96 — 652 -> 653 aquí, y 133 -> 134 en el censo spliceado. Cierre del enjambre
+      // del 1-sep: la primera medición sobre el HTML REAL de cada superficie
+      // (tools/auditar_html_real_chromium.js, 324 elementos con texto propio, oscuro y claro)
+      // encontró dos elementos con clase propia y texto que NO tenían ninguna regla de color
+      // y se pintaban con el color de Everest: el ícono del menú de elección
+      // (#vgl-chooser-modal .vgl-chooser-ico, bloque principal: +1 aquí) y la pastilla de
+      // complejidad en su estado inicial (.vgl-complex-pill, VGL_UX_CSS: +1 abajo). El censo
+      // sintético anterior no los veía por tres puntos ciegos, ya cerrados en
+      // tools/auditar_color_todo_chromium.js y vigilados por la Regla S de más abajo.
+      t.cierto(importantTotal === 653, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
       // la hoja a mitad y dejó 878 líneas de CSS sin aplicar. Un número fijo obliga a que
       // cualquier cambio de blindaje en esas hojas pase por aquí y se explique.
       const importantSpliceados = (css.match(/!important/g) || []).length - importantTotal;
-      t.cierto(importantSpliceados === 133,
-        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 133: 132 + la clase .vgl-prod-cap blindada en la v18.0.64; salió ${importantSpliceados})`);
+      t.cierto(importantSpliceados === 134,
+        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 134: 132 + la clase .vgl-prod-cap blindada en la v18.0.64 + la pastilla .vgl-complex-pill blindada en la v18.0.96; salió ${importantSpliceados})`);
+    });
+
+    // =====================================================================
+    // v18.0.96 — Regla S (cierre del enjambre, 01-sep): TODO ELEMENTO CON CLASE PROPIA Y
+    // TEXTO LITERAL TIENE UNA REGLA DE COLOR QUE LE APLICA DE VERDAD.
+    //
+    // Por qué existe: el barrido sintético de tools/auditar_color_todo_chromium.js decía
+    // «0 secuestros» mientras Chromium, con el HTML REAL del modal de Agendar, mostraba la
+    // pastilla «Analizando historia clínica del paciente...» pintada con el color de
+    // Everest. Tres puntos ciegos seguidos: (1) `<div id="…" class="…">` no entraba en el
+    // censo porque exigía class= pegado a la etiqueta; (2) `.vgl-complex-pill.warn{color}`
+    // hacía pasar por «con color» a `.vgl-complex-pill` a secas, que en su estado inicial
+    // no tiene ninguna regla; (3) contenedores sin una letra propia salían como secuestrados
+    // porque el censo contaba una costura de concatenación como texto.
+    //
+    // Qué exige: para cada elemento que el código emite con clase vgl-* y al menos tres
+    // letras LITERALES propias (no `${x}` ni `' + x + '`), debe existir una regla con
+    // `color` cuyo ÚLTIMO compuesto le aplique: sus clases contienen las del compuesto, o
+    // es su id, o es su etiqueta (`… span{color}` cubre a los span de su ámbito — se admite
+    // sin comprobar el ámbito, sobreaproximación deliberada: la medición exacta con
+    // ancestros la hace tools/auditar_html_real_chromium.js). Las reglas de blindaje de los
+    // elementos SIN clase (`:where(... :not([class]))`) no cuentan: no aplican a estos.
+    // Cualquier excepción va en EXCEPCIONES_S con su motivo, como en las Reglas G y L.
+    // =====================================================================
+    t.caso("Regla S - todo elemento con clase propia y texto literal tiene una regla de color que le APLICA (no solo a un compuesto suyo)", () => {
+      const sets = [], ids = new Set(), tags = new Set();
+      for (const r of cssClean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/(^|;)\s*color\s*:/i.test(r[2])) continue;
+        for (const sel of r[1].split(",")) {
+          const ult = sel.trim().split(/[\s>+~]+/).pop() || "";
+          if (/:not\(\[class\]\)/.test(ult)) continue;
+          const cls = [...ult.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((c) => c[1]);
+          const id = (ult.match(/#([a-zA-Z0-9_-]+)/) || [])[1];
+          const tag = (ult.match(/^[a-z][a-z0-9]*/i) || [])[0];
+          if (cls.length) sets.push(cls);
+          else if (id) ids.add(id);
+          else if (tag) tags.add(tag.toLowerCase());
+        }
+      }
+      const cubierto = (clases, id, tag) =>
+        sets.some((s) => s.every((c) => clases.includes(c))) || (!!id && ids.has(id)) || tags.has(tag);
+      const EXCEPCIONES_S = {
+        // "clase o combinación": "motivo verificado en Chromium con el HTML real"
+      };
+      const re = /<(span|div|b|i|small|label|p|strong|em)\b([^>]*?)\bclass="([^"$]*?)"([^>]*)>([^<>{}]*[^\s<>{}][^<>]*?)</g;
+      const escaneados = [], sinCobertura = [];
+      for (const m of code.matchAll(re)) {
+        const clases = m[3].split(/\s+/).map((c) => c.replace(/['"`+].*$/, "")).filter((c) => /^vgl-[a-zA-Z0-9_-]+$/.test(c));
+        if (!clases.length) continue;
+        const id = ((m[2] + " " + m[4]).match(/\bid="([^"$]+)"/) || [])[1] || "";
+        const literal = m[5].trim().replace(/\$\{[\s\S]*$/, "").replace(/['"`]\s*(\+|\/\*|\/\/|\)|;|,|$)[\s\S]*$/, "");
+        if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}/.test(literal)) continue;
+        const clave = clases.join(" ");
+        escaneados.push(clave);
+        if (EXCEPCIONES_S[clave]) continue;
+        if (cubierto(clases, id, m[1].toLowerCase())) continue;
+        if (!sinCobertura.some((x) => x.clave === clave)) sinCobertura.push({ clave, id, texto: literal.replace(/\s+/g, " ").slice(0, 40) });
+      }
+      t.cierto(escaneados.length >= 30, `la regla tiene que ver muchos elementos para valer algo (vio ${escaneados.length})`);
+      t.cierto(escaneados.includes("vgl-complex-pill"), "la pastilla de complejidad entra en el censo: es el caso que motivó la regla");
+      t.igual(sinCobertura, [], `Clases con texto literal propio y SIN regla de color que les aplique (clase propia con texto en una superficie del script ⇒ color con marca de prioridad, CLAUDE.md): ${sinCobertura.map((x) => "." + x.clave.replace(/ /g, ".") + (x.id ? "#" + x.id : "") + " («" + x.texto + "»)").join(", ")}`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.95
+// @version      18.0.96
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.95";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.96";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15476,7 +15476,14 @@
         .vgl-tc-title{font-size:13.5px;font-weight:800;color:var(--fg) !important;margin-bottom:4px}
         .vgl-tc-desc{font-size:11px;color:var(--fg2) !important;line-height:1.4}
 
-        .vgl-complex-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-chip);font-size:11.5px;font-weight:700;background:rgba(255,255,255,.04);border:1px solid var(--edge);line-height:1.4}
+        /* v18.0.96 — cierre del enjambre (01-sep): la regla base NO declaraba color, así que
+           el texto del estado inicial («Analizando historia clínica del paciente...») heredaba
+           hasta que compEval le ponía .warn/.ok — y bajo el CSS de Everest se pintaba con el
+           color de Everest, en oscuro y en claro (medido en Chromium con el HTML real del
+           modal: tools/auditar_html_real_chromium.js). Clase propia con texto en un modal
+           pegado a body ⇒ color con marca de prioridad (CLAUDE.md). var(--fg) es exactamente el color
+           que ya heredaba «limpio» en los dos temas: no cambia ni un píxel, solo lo blinda. */
+        .vgl-complex-pill{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-chip);font-size:11.5px;font-weight:700;background:rgba(255,255,255,.04);border:1px solid var(--edge);line-height:1.4;color:var(--fg) !important}
         .vgl-complex-pill.warn{background:rgba(var(--rgb-ambar),.12);border-color:rgba(var(--rgb-ambar),.35);color:var(--c-ambar) !important}
         .vgl-complex-pill.ok{background:rgba(var(--rgb-verde),.12);border-color:rgba(var(--rgb-verde),.35);color:var(--c-verde) !important}
 
@@ -18354,7 +18361,11 @@
       #vgl-chooser-modal .vgl-chooser-body{display:flex;flex-direction:column;gap:8px}
       #vgl-chooser-modal .vgl-chooser-opt{display:flex;align-items:center;gap:11px;text-align:left;width:100%;background:var(--bg2);border:1px solid var(--edge);border-radius:var(--r-chip);padding:12px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s,transform .1s}
       #vgl-chooser-modal .vgl-chooser-opt:hover{background:var(--bg3);border-color:var(--fg3);transform:translateY(-1px)}
-      #vgl-chooser-modal .vgl-chooser-ico{flex:none;font-size:var(--t-title)}
+      /* v18.0.96 — cierre del enjambre (01-sep): el ícono no declaraba color y bajo el CSS de
+         Everest se pintaba con el de Everest (medido con el HTML real del chooser en Chromium,
+         tools/auditar_html_real_chromium.js). Hoy es un emoji y no se nota; el día que sea un
+         glifo de texto, sí. Clase propia con texto en un modal pegado a body ⇒ marca de prioridad. */
+      #vgl-chooser-modal .vgl-chooser-ico{flex:none;font-size:var(--t-title);color:var(--fg) !important}
       #vgl-chooser-modal .vgl-chooser-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
       #vgl-chooser-modal .vgl-chooser-t{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-chooser-modal .vgl-chooser-d{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
