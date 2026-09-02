@@ -132,6 +132,43 @@ module.exports = {
       t.cierto(focoRestaurado, "Se restauró el foco al elemento previo");
     });
 
+    // v18.0.107 — S+ flujo (C2): el aviso «Pendientes de este paciente» llega 5-15 s después de
+    // abrir la historia, cuando el médico ya teclea en una casilla de Everest; el cuadro le
+    // robaba el foco y el siguiente Enter pulsaba «Entendido». Si el activo es un campo
+    // editable de FUERA del cuadro, el cuadro se pinta pero no toca el cursor.
+    await t.casoAsync("v18.0.107 (C2): _activarAccesibilidadModal NO roba el foco si el médico está escribiendo en una casilla de Everest; sí lo toma si el activo es un botón o está dentro del cuadro", async () => {
+      const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+      const montar = (activo, dentro) => {
+        const c = cargar({ silencioso: true });
+        c.env.doc.activeElement = activo;
+        let enfocados = 0;
+        const primero = { focus() { enfocados++; }, getAttribute() { return null; } };
+        const mockModal = {
+          attributes: {},
+          setAttribute(k, v) { this.attributes[k] = v; },
+          getAttribute(k) { return this.attributes[k] || null; },
+          addEventListener() {}, removeEventListener() {},
+          querySelectorAll() { return [primero]; },
+          contains(n) { return !!dentro; },
+          focus() {}
+        };
+        const cleanup = c.api._activarAccesibilidadModal(mockModal, () => {});
+        return { cleanup, enfocados: () => enfocados };
+      };
+      const a = montar({ tagName: "TEXTAREA", focus() {} }, false);
+      await espera(15);
+      t.igual(a.enfocados(), 0, "con el cursor en un TEXTAREA de Everest, el cuadro NO se lleva el foco (antes: sí)");
+      a.cleanup();
+      const b = montar({ tagName: "BUTTON", focus() {} }, false);
+      await espera(15);
+      t.igual(b.enfocados(), 1, "con el activo en un botón (el que abrió el cuadro), el foco pasa al cuadro como siempre");
+      b.cleanup();
+      const d = montar({ tagName: "INPUT", focus() {} }, true);
+      await espera(15);
+      t.igual(d.enfocados(), 1, "y si la casilla activa está DENTRO del cuadro, también");
+      d.cleanup();
+    });
+
     t.caso("R6.4: _activarAccesibilidadModal atrapa el foco (Focus Trap) ciclando con Tab y Shift+Tab", () => {
       let focusedElem = null;
       const btnPrimero = { id: "primero", focus() { focusedElem = this; }, getAttribute() { return null; } };

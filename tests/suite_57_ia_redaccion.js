@@ -790,6 +790,35 @@ module.exports = {
       t.cierto(invalido, "la primera edición REAL sobre el paciente nuevo SÍ invalida el resumen en caché — antes no lo hacía");
     });
 
+    // v18.0.107 — S+ flujo (C3): al salir de una casilla de texto libre el resumen en caché se
+    // BORRABA: el botón «Panel del paciente» desaparecía del dock, los widgets de Conducta se
+    // escondían hasta 30 s + red y Agendar volvía a «Analizando…» — por escribir una frase.
+    // Ahora se recalcula en el acto con lo de pantalla, queda marcado «desactualizado» (el
+    // cálculo completo se dispara en segundo plano) y el sello de tiempo no se renueva.
+    t.caso("v18.0.107 (C3): editar una casilla de texto libre deja el resumen en caché DISPONIBLE y marcado «desactualizado», sin renovar su edad; un resumen fresco quita la marca", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : null);
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 111111", closest: () => null }] : []);
+      const R = { factores: { edad: 60, sexo: "F" }, erc: { entradas: {} }, plan: { drivers: [], pasajeros: [] }, programa: "HTA" };
+      c.api.mtrCacheResumenGuardar("111111", R);
+      c.api.__envejecerCacheResumen(60000);   // calculado hace 1 min (dentro de la vigencia de la caché)
+      c.api._vglNotarTextoLibre("111111", "motivo_consulta", "control");        // primera vista: siembra
+      const cambio = c.api._vglNotarTextoLibre("111111", "motivo_consulta", "control de hipertensión");
+      t.cierto(cambio, "montaje: el texto cambió de verdad");
+      t.cierto(!!c.api.mtrCacheResumenLeer("111111"), "el resumen SIGUE en caché (antes: null → el dock quitaba el botón «Panel»)");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("111111"), "y queda marcado «desactualizado» para que el cálculo completo corra en segundo plano");
+      t.igual(c.api.mtrCacheResumenEdadMin("111111"), 1, "sin renovar la edad: «leídos hace 1 min» sigue siendo verdad (renovada: 0)");
+      c.api.mtrCacheResumenGuardar("111111", R);
+      t.falso(c.api.mtrCacheResumenDesactualizado("111111"), "un resumen fresco quita la marca");
+      // si la pantalla ya es de OTRO paciente, no se recalcula sobre ella: se borra, como antes
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 222222", closest: () => null }] : []);
+      c.api._vglNotarTextoLibre("111111", "motivo_consulta", "otra cosa");
+      t.igual(c.api.mtrCacheResumenLeer("111111"), null, "con otra historia delante, la caché se borra en vez de recalcularse sobre datos ajenos");
+      // el disparador en segundo plano trata la marca como «no hay caché»
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(mtrCacheResumenLeer\(docId\) && !mtrCacheResumenDesactualizado\(docId\)\) return;/.test(src), "autoCalcularResumenSiNecesario: un resumen «desactualizado» sí dispara el cálculo completo");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: vacía inserta; ocupada NO pisa y devuelve el texto previo; sin casilla dice la pestaña", () => {
       const c = cargar({ silencioso: true });
       const caja = { value: "", isConnected: true, dispatchEvent: () => {} };

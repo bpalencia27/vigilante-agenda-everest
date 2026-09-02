@@ -5,7 +5,7 @@ cierre adversarial. No repiten nada de `docs/ENJAMBRE_FUNCIONES_20260901.md`. Ca
 trae evidencia (función:línea o reproducción con el arnés, datos sintéticos); los guiones viven en
 el scratchpad de la sesión (`splus_flujo/`, `splus_estado_unico/`, `splus_robustez/`).
 
-**Estado.** Lo marcado ✅ ya se cerró en v18.0.103–v18.0.104. Lo marcado ⚖️ toca una decisión
+**Estado.** Lo marcado ✅ ya se cerró (v18.0.103–v18.0.104 y, a petición del médico, de v18.0.107 en adelante). Lo marcado ⚖️ toca una decisión
 previa del médico y se presenta como opción, no como arreglo.
 
 ---
@@ -71,9 +71,9 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | # | Oportunidad | Prioridad | Estado |
 |---|---|---|---|
 | C1 | Con 4 avisos de Auto-Labs en un clic el médico solo veía «Alerta Múltiple (4)» sin analitos | 1 | ✅ v18.0.104 (agrupados por paciente con sus cuerpos) |
-| C2 | El aviso «Pendientes de este paciente» llega 5-15 s después de abrir la historia y roba el foco mientras el médico escribe (Enter pulsa «Entendido» y no vuelve en la jornada) | 1 | pendiente (no robar foco si el activo es un INPUT/TEXTAREA de Everest) |
-| C3 | Al salir de una casilla de texto libre se borra el resumen: el botón «Panel» desaparece, los widgets de Conducta se esconden hasta 30 s + red, Agendar vuelve a «Analizando…» | 1 | pendiente (marcar «desactualizado» y recalcular con `mtrRecalcularConFactores`) |
-| C4 | Si la cita se crea pero la toma de muestras falla, todo lo visible dice éxito y el fallo sale por el HUD «Centinela PyM» | 1 | pendiente (línea roja fija en el panel post-cita + `showToast` AMBAR «Toma de muestras») |
+| C2 | El aviso «Pendientes de este paciente» llega 5-15 s después de abrir la historia y roba el foco mientras el médico escribe (Enter pulsa «Entendido» y no vuelve en la jornada) | 1 | ✅ v18.0.107 (no roba el foco si el activo es un campo editable de Everest fuera del cuadro) |
+| C3 | Al salir de una casilla de texto libre se borra el resumen: el botón «Panel» desaparece, los widgets de Conducta se esconden hasta 30 s + red, Agendar vuelve a «Analizando…» | 1 | ✅ v18.0.107 (recalculado en el acto con lo de pantalla, marcado «desactualizado», cálculo completo en segundo plano; el dock dice «actualizando…») |
+| C4 | Si la cita se crea pero la toma de muestras falla, todo lo visible dice éxito y el fallo sale por el HUD «Centinela PyM» | 1 | ✅ v18.0.107 (motivo real del fallo en el botón, aviso ámbar fijo y línea roja en el panel post-cita) |
 | C5 | El resultado del SMS automático solo se conoce en la consola | 2 | pendiente |
 | C6 | El panel post-cita se destruye y se recrea cuando AppCita confirma la toma | 2 | pendiente |
 | C7 | Redactor: «Generando con…» fijo hasta 7 modelos × 25 s, sin cancelar ni «Generar todo» | 2 | pendiente |

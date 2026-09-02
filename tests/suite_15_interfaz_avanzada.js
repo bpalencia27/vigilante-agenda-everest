@@ -4230,6 +4230,31 @@ module.exports = {
       t.igual(panel.innerHTML, "", "al cerrar, el panel queda vacío");
     });
 
+    // v18.0.107 — S+ flujo (C4): si la cita se creaba pero la toma de muestras fallaba, todo lo
+    // visible (botón, panel post-cita, aviso verde) decía éxito y el fallo solo salía por el
+    // HUD «Centinela PyM» abajo a la derecha. Ahora el motivo del fallo viaja y se dice en el
+    // panel post-cita, en un aviso ámbar fijo y en el propio botón.
+    await t.casoAsync("v18.0.107 (C4): la toma que NO quedó agendada se dice en el panel post-cita, con el motivo real del fallo de AppCita", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => { if (o.onerror) o.onerror("sin red"); } });
+      enriquecerDom(c);
+      const ok = await c.api.apiLaboratorioAgendarAuto("111111", "2026-10-01", "07:00:00");
+      t.igual(ok, false, "montaje: AppCita no responde → la toma no se agenda");
+      const motivo = c.api._labMotivoUltimoFallo();
+      t.cierto(/disponibilidad de laboratorio/.test(motivo), "el motivo del fallo queda disponible para quien lo pinte: " + motivo);
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { cita: { fechaLegible: "01/10/2026" }, labFallo: motivo });
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      t.cierto(/NO quedó agendada/.test(panel.innerHTML) && panel.innerHTML.includes("disponibilidad de laboratorio"), "el panel post-cita lleva la línea roja con el motivo (antes: nada)");
+      t.cierto(/Cita creada/.test(panel.innerHTML), "y sigue diciendo que la cita sí se creó");
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE PRUEBA", "", { cita: { fechaLegible: "01/10/2026" } });
+      const panel2 = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      t.falso(/NO quedó agendada/.test(panel2.innerHTML), "sin fallo, sin línea roja");
+      // el tramo de laboratorio del modal combinado avisa en ámbar y repinta el panel con el motivo
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const tramo = src.slice(src.indexOf('confirmBtn.textContent = "⏳ Cita creada · agendando la toma de muestras…"'), src.indexOf('setTimeout(() => closeMod(), 2600);'));
+      t.cierto(tramo.length > 0 && /if \(!labOk\) \{/.test(tramo) && /showToast\("AMBAR", "Toma de muestras · NO quedó agendada"/.test(tramo) && /_cierreCtx\.extra\.labFallo = motivoLab/.test(tramo),
+        "el tramo de laboratorio de Agendar: aviso ámbar fijo + motivo al panel post-cita cuando la toma falla");
+    });
+
     // v12.10.2 — Incidente real en consultorio: ".vgl-postcita-title" (color:var(--c-verde))
     // y ".vgl-postcita-sub" (color:var(--fg2)) se veían del azul corporativo de Everest.
     // Causa: #vgl-postcita-panel div{color:inherit} (especificidad id+tipo) le ganaba a esas

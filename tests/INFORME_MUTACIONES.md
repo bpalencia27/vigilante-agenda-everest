@@ -11342,3 +11342,46 @@ recargar.
 | 295 | «Guardar» canta VERDE aunque `saveSettings` devuelva false | *suite_15: v18.0.106: si el navegador rechaza la escritura de vgl_cfg, «Guardar» no canta «guardados»…* | Sí |
 
 Banco completo: **3.006 comprobaciones pasan, 0 fallan.**
+
+## v18.0.107 — oportunidades S+ del flujo de consulta, prioridad 1: el foco, el resumen que se borraba y la toma que fallaba en silencio
+
+El médico pidió aplicar las correcciones que propone `docs/OPORTUNIDADES_SPLUS_20260902.md`
+(los ítems marcados «pendiente»; los ⚖️ siguen siendo decisión suya). Los tres de prioridad 1
+del auditor de flujo comparten un patrón: el asistente sabía lo que pasaba, pero se lo decía
+al médico por el canal equivocado o en el momento equivocado.
+
+**C2 — el aviso que robaba el foco.** «Pendientes de este paciente» llega 5-15 s después de
+abrir la historia, cuando el médico ya teclea en una casilla de Everest; el foco saltaba al
+primer botón del cuadro y el siguiente Enter pulsaba «Entendido» (y ese aviso no vuelve en la
+jornada). `_activarAccesibilidadModal` aplica ahora el mismo criterio que Escape: si el activo
+es un campo editable de FUERA del cuadro, el cuadro se pinta pero no toca el cursor. Los cuadros
+que abre el médico con un clic no cambian: el activo entonces es el botón pulsado.
+
+**C3 — el resumen que se borraba por escribir una frase.** Al salir de una casilla de texto
+libre, `_vglNotarTextoLibre` borraba el resumen en caché: el botón «Panel del paciente»
+desaparecía del dock, los widgets de Conducta se escondían hasta 30 s + red y Agendar volvía a
+«Analizando…». Ahora el resumen se recalcula en el acto con lo que hay en pantalla (la misma
+función pura del Panel al abrir; cero red; conserva laboratorios y medicamentos), se queda en
+la caché marcado «desactualizado», el sello de tiempo no se renueva («leídos hace N min» sigue
+siendo verdad), el cálculo completo se dispara en segundo plano y el botón del dock dice
+«actualizando…» en vez de desaparecer. Con otra historia delante no se recalcula sobre datos
+ajenos: se borra, como antes.
+
+**C4 — la toma que no quedó.** Si la cita se creaba pero la toma de muestras fallaba, el
+botón, el panel post-cita y el aviso verde decían éxito, y el fallo solo salía por el HUD
+«Centinela PyM», abajo a la derecha. Ahora `apiLaboratorioAgendarAuto` deja el motivo del
+último fallo (`_labMotivoUltimoFallo`), el botón dice «Cita creada · agendando la toma…»
+mientras corre y, si falla, «la toma NO quedó agendada»; sale un aviso ámbar fijo con el
+motivo y el panel post-cita lleva una línea roja con él.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 296 | el cuadro vuelve a llevarse el foco aunque el médico esté escribiendo (**el defecto C2**) | *suite_35: v18.0.107 (C2): _activarAccesibilidadModal NO roba el foco si el médico está escribiendo en una casilla de Everest…* | Sí |
+| 297 | `_vglNotarTextoLibre` vuelve a borrar la caché (**el defecto C3**) | *suite_57: v18.0.107 (C3): editar una casilla de texto libre deja el resumen en caché DISPONIBLE y marcado «desactualizado»…* | Sí |
+| 298 | el recálculo renueva el sello de tiempo («leídos hace 0 min» falso) | *suite_57: v18.0.107 (C3)…* («sin renovar la edad») | Sí |
+| 299 | `autoCalcularResumenSiNecesario` ignora la marca (nunca recalcula del todo) | *suite_57: v18.0.107 (C3)…* (aserción de fuente) | Sí |
+| 300 | el panel post-cita sin la línea roja de la toma (**el defecto C4**) | *suite_15: v18.0.107 (C4): la toma que NO quedó agendada se dice en el panel post-cita, con el motivo real del fallo de AppCita* | Sí |
+| 301 | el tramo de laboratorio de Agendar no pasa el motivo al panel | *suite_15: v18.0.107 (C4)…* (aserción de fuente sobre el tramo) | Sí |
+| 302 | `apiLaboratorioAgendarAuto` no deja el motivo del fallo | *suite_15: v18.0.107 (C4)…* («el motivo del fallo queda disponible») | Sí |
+
+Banco completo: **3.009 comprobaciones pasan, 0 fallan.**

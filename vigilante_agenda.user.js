@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.106
+// @version      18.0.107
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.106";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.107";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7394,7 +7394,7 @@
     try {
       if (!apt || !apt.doc_id) return;
       const docId = apt.doc_id;
-      if (mtrCacheResumenLeer(docId)) return;   // ya hay uno fresco: nada que disparar
+      if (mtrCacheResumenLeer(docId) && !mtrCacheResumenDesactualizado(docId)) return;   // ya hay uno fresco: nada que disparar (v18.0.107: uno «desactualizado» sí dispara)
       const ahora = Date.now();
       // v17.0.3 enseñó (ver el comentario junto a autoFetchAtheneaLabsForActivePatient) que
       // el piso NO debe condicionarse a "mismo docId": extractPacienteAbierto() puede leer
@@ -7479,7 +7479,7 @@
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
       // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
       // así que la firma solo necesita saber si sigue bloqueado o no.
-      _panelBloqueado ? "PB" : "pb", _autorizado ? "AU" : "no"].join("|");
+      _panelBloqueado ? "PB" : "pb", mtrCacheResumenDesactualizado(docId) ? "DA" : "da", _autorizado ? "AU" : "no"].join("|");
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -7618,7 +7618,9 @@
     bFicha.setAttribute("data-accion", "ficha");
     bFicha.setAttribute("aria-label", "Abrir el panel del paciente: lo leído, riesgo, función renal, exámenes, tendencias y medicamentos");
     bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
-    _vglDockRotulo(bFicha, "🧾", "Panel del paciente");
+    // v18.0.107 (C3) — mientras el cálculo completo corre en segundo plano, el botón sigue
+    // existiendo y lo dice, en vez de desaparecer.
+    _vglDockRotulo(bFicha, "🧾", "Panel del paciente" + (mtrCacheResumenDesactualizado(docId) ? " · actualizando…" : ""));
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
     }
@@ -13530,6 +13532,18 @@
 
     setTimeout(() => {
       try {
+        // v18.0.107 (S+ flujo, C2) — NO ROBAR EL FOCO A QUIEN ESCRIBE. El aviso «Pendientes de
+        // este paciente» llega 5-15 s después de abrir la historia, cuando el médico ya
+        // teclea en una casilla de Everest: el foco saltaba al primer botón del cuadro y el
+        // siguiente Enter pulsaba «Entendido» (y ese aviso no vuelve en la jornada). Mismo
+        // criterio que Escape: si el activo es un campo editable de FUERA del cuadro, el
+        // cuadro se pinta pero el cursor se queda donde estaba; el médico pasa al cuadro
+        // cuando quiera (clic o Tab). Los cuadros que abre él con un clic no cambian: el
+        // activo entonces es el botón pulsado, no una casilla.
+        const act = (typeof document !== "undefined") ? document.activeElement : null;
+        const editable = !!(act && (act.tagName === "INPUT" || act.tagName === "TEXTAREA" || act.tagName === "SELECT" || act.isContentEditable === true));
+        const dentro = !!(act && typeof modalEl.contains === "function" && modalEl.contains(act));
+        if (editable && !dentro) { try { uxTrack("modal.foco.respetado"); } catch (e2) {} return; }
         const focusables = getFocusableElements();
         if (focusables.length > 0 && typeof focusables[0].focus === "function") focusables[0].focus();
         else if (typeof modalEl.focus === "function") modalEl.focus();
@@ -20275,7 +20289,13 @@
   // v12.3.31 — celular es OPCIONAL: sin él (llamadas existentes que no lo pasan) el
   // comportamiento no cambia, solo se agrega la posibilidad de mandar el SMS de
   // confirmación cuando quien llama SÍ tiene el número a mano.
+  // v18.0.107 (S+ flujo, C4) — el MOTIVO del último fallo de la toma, para que el modal de
+  // Agendar y el panel post-cita lo digan donde el médico mira (antes solo salía por el HUD
+  // «Centinela PyM», abajo a la derecha, mientras todo lo visible decía éxito).
+  let _labUltimoFallo = "";
+  function _labMotivoUltimoFallo() { return _labUltimoFallo; }
   async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, celular) {
+    _labUltimoFallo = "";
     try {
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${fechaIso}`;
       // v16.7.0 — AUDITORÍA #11. Esto usaba gmPostJson, que devuelve null tanto si
@@ -20287,6 +20307,7 @@
       // se dice que no se pudo consultar, que es lo único que se sabe.
       const resAgEx = await gmPostJsonEx(urlTurnos, {});
       if (!resAgEx || !resAgEx.ok) {
+        _labUltimoFallo = "no se pudo consultar la disponibilidad de laboratorio en AppCita (" + (resAgEx && resAgEx.status ? "respuesta " + resAgEx.status : "sin conexión") + ")";
         spToast(`⚠ No se pudo consultar la disponibilidad de laboratorio en AppCita (${resAgEx && resAgEx.status ? "respuesta " + resAgEx.status : "sin conexión"}). NO se agendó la toma de muestras y NO se sabe si quedaban cupos ese día: reintente con el botón 🧪 de la tarjeta del paciente, o agende la toma directamente en AppCita.`, 14000);
         return false;
       }
@@ -20329,6 +20350,7 @@
         const sugerencia = otrasHoras.length
           ? ` Siguen libres ese día: ${muestra}${resto}. Elija otro horario y reintente; si este panel ya se cerró, use el botón 🧪 de la tarjeta del paciente para reintentar solo la toma de muestras.`
           : " Ese día ya no quedan horarios libres de laboratorio en AppCita.";
+        _labUltimoFallo = "el horario de laboratorio elegido (" + format12hTime(horaSeleccionada) + ") ya no está disponible";
         spToast(`⚠ El horario de laboratorio elegido (${format12hTime(horaSeleccionada)}) ya no está disponible.${sugerencia} NO se agendó la toma de muestras.`, 14000);
         return false;
       }
@@ -20368,6 +20390,7 @@
       // v18.0.19, v18.0.26). Aquí la red se escribe.
       if (!agendaId || !horaFinal) {
         try {
+          _labUltimoFallo = "el turno de laboratorio llegó sin identificador de agenda";
           spToast("⚠ El turno de laboratorio llegó sin identificador de agenda: NO se agendó la toma. "
             + "Agéndela directamente en AppCita.", 12000);
         } catch (e) {}
@@ -20399,6 +20422,7 @@
       const body = resBook.data;
       const creada = !!(resBook.ok && body && body.error === false);
       if (!creada) {
+        _labUltimoFallo = "AppCita no confirmó la cita de laboratorio (respuesta " + (resBook.status || "sin conexión") + ")";
         spToast(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
         return false;
       }
@@ -21694,6 +21718,7 @@
           <div class="vgl-postcita-title">${soloLab ? "✅ Toma de muestras agendada" : (ex.reabierto ? "🖨 Recordatorio de la cita" : "✅ Cita creada")}</div>
           <div class="vgl-postcita-sub">${escapeHtml(nombreCompleto || patientNameFallback || "")}${lineaCita ? " · " + escapeHtml(lineaCita) : ""}</div>
           ${soloLab ? "" : avisoEpsFaltante}
+          ${ex.labFallo ? `<div class="vgl-postcita-warn">⚠ La toma de muestras NO quedó agendada: ${escapeHtml(String(ex.labFallo))}. Agéndela desde «Agendar labs» o directamente en AppCita.</div>` : ""}
           ${soloLab ? "" : `<button class="vgl-agm-btn sec" id="vgl-postcita-print">🖨️ Imprimir recordatorio de cita</button>
           ${ex.turnoId ? `<div id="vgl-postcita-smsbox" class="vgl-postcita-smsbox">
             <div class="vgl-postcita-smstit">📱 Reenviar el recordatorio al celular</div>
@@ -24660,6 +24685,7 @@
     let ajeno = null;
     try { ajeno = enVueloAjeno("lab", docId); } catch (e) { ajeno = null; }
     if (_agmAgendandoLabDocs.has(k) || (ajeno && forzar !== true)) {
+      _labUltimoFallo = "ya hay una toma de muestras creándose para este paciente";
       try { uxTrack("lab.antidup.en_vuelo"); } catch (e) {}
       try {
         showToast("AMBAR", "Toma de muestras · no se agendó",
@@ -26798,8 +26824,26 @@
         if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
           modal.dataset.labDone = "1";
           const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(fechaElegida.iso, 5);
+          confirmBtn.textContent = "⏳ Cita creada · agendando la toma de muestras…";   // v18.0.107 (C4)
           const labOk = await _agmAgendarLabConCandado(apt.doc_id, labFecha.iso, selectedLabTime, celularSms, false);
           uxTrack(labOk ? "lab.agendado" : "lab.fallo");
+          if (!labOk) {
+            // v18.0.107 (S+ flujo, C4) — LA TOMA QUE NO QUEDÓ SE DICE DONDE EL MÉDICO MIRA. Antes,
+            // con la cita creada y la toma rechazada, el botón, el panel post-cita y el aviso
+            // verde decían éxito, y el fallo solo salía por el HUD «Centinela PyM» abajo a la
+            // derecha. Ahora: aviso ámbar fijo, línea roja en el panel post-cita y el botón lo dice.
+            const motivoLab = (typeof _labMotivoUltimoFallo === "function" && _labMotivoUltimoFallo()) || "AppCita no confirmó la toma";
+            try {
+              showToast("AMBAR", "Toma de muestras · NO quedó agendada",
+                "La cita de control sí quedó creada. La toma de muestras no: " + motivoLab + ". Agéndela desde «Agendar labs» o directamente en AppCita.",
+                true, "labfallo|" + apt.doc_id);
+            } catch (e) {}
+            try {
+              _cierreCtx.extra.labFallo = motivoLab;
+              mostrarPanelPostCita(_cierreCtx.citaId, _cierreCtx.eps, _cierreCtx.nombre, _cierreCtx.respaldo, _cierreCtx.extra);
+            } catch (e) {}
+            if (vivo()) confirmBtn.textContent = "✅ Cita creada · ⚠ la toma de muestras NO quedó agendada";
+          }
           if (labOk) {
             vglNotificarCompletado("cita_lab", { doc: apt.doc_id, fechaIso: labFecha.iso });
             // v15.9.0 — AppCita no ofrece imprimir nada: el recordatorio de la toma se
@@ -40766,8 +40810,9 @@
       _vglTextoPrevio.set(k, ahora);
       _vglTextoPrevioPodar(_vglTextoPrevio, 200);   // v17.6.12 — sesión larga acotada
       if (antes === undefined || antes === ahora) return false;   // primera vista o sin cambio
-      try { mtrCacheResumenBorrar(); } catch (e) {}
-      try { console.log("[Vigilante] El texto de «" + ((MTR_CASILLAS_CONTEXTO[modo] || {}).etiqueta || modo) + "» cambió: el análisis se rehará con lo nuevo."); } catch (e) {}
+      // v18.0.107 (C3) — antes: mtrCacheResumenBorrar(). Ver mtrCacheResumenRefrescarDesdePantalla.
+      try { mtrCacheResumenRefrescarDesdePantalla(id); } catch (e) { try { mtrCacheResumenBorrar(); } catch (e2) {} }
+      try { console.log("[Vigilante] El texto de «" + ((MTR_CASILLAS_CONTEXTO[modo] || {}).etiqueta || modo) + "» cambió: el resumen se actualizó con lo de pantalla y el análisis completo se rehará en segundo plano."); } catch (e) {}
       return true;
     } catch (e) { return false; }
   }
@@ -44855,6 +44900,42 @@
   }
   // v15.6.0 — invalida la caché del resumen (botón «Recalcular ahora» de la Ficha).
   function mtrCacheResumenBorrar() { _mtrCacheResumen = { docId: "", resumen: null, ts: 0 }; }
+  // v18.0.107 (S+ flujo, C3) — «DESACTUALIZADO» EN VEZ DE BORRADO. Al salir de una casilla de
+  // texto libre se borraba el resumen en caché: el botón «Panel del paciente» desaparecía
+  // del dock, los widgets de Conducta se escondían hasta 30 s + red y Agendar volvía a
+  // «Analizando…» — en plena consulta, por escribir una frase. Ahora el resumen se
+  // recalcula EN EL ACTO con lo que hay en pantalla (la misma función pura del vigilante
+  // de 20 s y del Panel al abrir; cero red; conserva laboratorios y medicamentos), se
+  // queda en la caché con una marca «desactualizado» y el cálculo completo se dispara en
+  // segundo plano (autoCalcularResumenSiNecesario trata la marca como «no hay caché»).
+  // El sello de tiempo NO se renueva: «leídos hace N min» sigue diciendo la verdad.
+  function mtrCacheResumenMarcarDesactualizado(docId) {
+    try {
+      if (!_mtrCacheResumen.resumen || (docId && _mtrCacheResumen.docId !== String(docId))) return false;
+      _mtrCacheResumen.desactualizado = true;
+      return true;
+    } catch (e) { return false; }
+  }
+  function mtrCacheResumenDesactualizado(docId) {
+    return !!(mtrCacheResumenLeer(docId) && _mtrCacheResumen.desactualizado === true);
+  }
+  function mtrCacheResumenRefrescarDesdePantalla(docId, doc) {
+    const id = String(docId || "");
+    const previo = mtrCacheResumenLeer(id);
+    if (!previo) { mtrCacheResumenBorrar(); return false; }   // caché de otro paciente o caducada: como antes
+    try {
+      if (typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(id)) { mtrCacheResumenBorrar(); return false; }
+      const d = doc || (typeof document !== "undefined" ? document : null);
+      let f = null;
+      try { f = (typeof mtrPanelFactoresDePantalla === "function") ? mtrPanelFactoresDePantalla(id, d) : null; } catch (e) { f = null; }
+      const nuevo = f ? mtrPanelResumenAlAbrir(previo, f, todayStamp()) : previo;
+      const ts = _mtrCacheResumen.ts;
+      mtrCacheResumenGuardar(id, nuevo || previo);
+      _mtrCacheResumen.ts = ts;
+      _mtrCacheResumen.desactualizado = true;
+      return true;
+    } catch (e) { mtrCacheResumenMarcarDesactualizado(id); return true; }
+  }
 
 
   // ---------- GAP 2: prioridad de un paquete PyM según la clasificación ----------
