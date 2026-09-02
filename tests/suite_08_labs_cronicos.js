@@ -7,7 +7,7 @@ module.exports = {
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_resumenClinicoUro", "_esUroComponenteAlterado",
     "_ultimaFechaPorAnalito", "_nuevoReemplazaCandidato", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
-    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
+    "_vigenciaDiasParaAnalito", "_vigenciaNormaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
     "mtrAvisoTablaLabsHtml", "atheneaLecturaIncompleta",   // v17.7.1
@@ -1476,6 +1476,85 @@ module.exports = {
       for (const key of ["PTH", "HEMOGLOBINA", "FOSFORO", "ALBUMINA"]) {
         t.falso(faltantes.some((f) => f.key === key), key + " no debe entrar nunca en el aviso de vigencia RCV");
       }
+    });
+
+    // =====================================================================
+    // v18.0.120 — REPORTE EN VIVO DEL MÉDICO (02-sep): «me aparece ese mensaje de un
+    // analito que todavía está vigente, está fuera de metas... el script no debe dar por
+    // hecho que está vencido un examen que aún no cumple sus días de vigencia y que tiene
+    // un resultado fuera de metas».
+    //
+    // Reproducido: LDL de 160 mg/dL (meta < 100 en riesgo alto) tomado hace 100 días, con
+    // 180 de vigencia normativa. La regla del 50 % partía el plazo a 90, y el aviso de
+    // entrada lo listaba bajo «Laboratorios RCV sin resultado vigente» — afirmando que
+    // había vencido un examen al que le quedaban 80 días. VENCIDO y FUERA DE METAS son dos
+    // hechos distintos: el primero es una fecha, el segundo un resultado.
+    // =====================================================================
+    const _OPTS_LDL_FUERA = {
+      programa: "DM2", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62,
+      egfrCkdEpi: 88,   // TFG normal: la guarda KDIGO de D11 no interviene aquí
+      aplicar50: true,
+    };
+    const _LABS_LDL_FUERA = [
+      { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "160", Fecha: "2026-05-03" },  // 100 días
+    ];
+
+    t.caso("v18.0.120 (reporte en vivo): un LDL fuera de metas y DENTRO de su vigencia NO se marca como vencido", () => {
+      const f = testApi._analitosRcvVencidos(_LABS_LDL_FUERA, "2026-08-11", _OPTS_LDL_FUERA);
+      const ldl = f.find((x) => x.key === "COLESTEROL_LDL");
+      t.cierto(!!ldl, "sigue apareciendo: el médico tiene que poder verlo y decidir");
+      t.igual(ldl.vencido, false, "pero NO está vencido — es lo que el médico reportó en vivo");
+      t.igual(ldl.vigenciaNormaDias, 180, "su vigencia normativa son 180 días");
+      t.igual(ldl.vigenciaDias, 90, "el adelanto del 50 % existe y se ve, pero no es un vencimiento");
+      t.igual(ldl.dias, 100, "lleva 100 días");
+      t.igual(ldl.diasRestantes, 80, "le quedan 80 días de vigencia: decir «vencido» era falso");
+      t.igual(ldl.vence, "2026-10-30", "y se puede decir hasta cuándo sigue sirviendo");
+    });
+
+    t.caso("v18.0.120: un LDL que SÍ pasó su vigencia normativa sigue marcándose vencido", () => {
+      // 2026-08-11 - 2026-01-01 = 222 días, por encima de los 180. La corrección no puede
+      // convertirse en una excusa para dejar de avisar lo que de verdad venció.
+      const labs = [{ codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "160", Fecha: "2026-01-01" }];
+      const ldl = testApi._analitosRcvVencidos(labs, "2026-08-11", _OPTS_LDL_FUERA).find((x) => x.key === "COLESTEROL_LDL");
+      t.cierto(!!ldl, "un LDL de 222 días sigue en la lista");
+      t.igual(ldl.vencido, true, "y este sí está vencido de verdad");
+      t.igual(ldl.diasRestantes, null, "un vencido no tiene días restantes que ofrecer");
+    });
+
+    t.caso("v18.0.120: un analito que nunca se tomó cuenta como vencido (no hay vigencia que cumplir)", () => {
+      const f = testApi._analitosRcvVencidos([], "2026-08-11", _OPTS_LDL_FUERA);
+      t.cierto(f.length > 0, "sin ningún resultado, faltan todos");
+      t.cierto(f.every((x) => x.vencido === true), "ninguno puede presumir vigencia: no hay fecha con que defenderse");
+    });
+
+    t.caso("v18.0.120: _vigenciaNormaDiasParaAnalito es la vigencia de la tabla, SIN el adelanto del 50 %", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 90, "con el adelanto: la mitad");
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 180, "sin él: la de la tabla");
+      // Y no es una tabla nueva: apagar `aplicar50` a mano da exactamente lo mismo (D4 —
+      // una sola tabla de vigencias en todo el producto).
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA),
+        testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", Object.assign({}, _OPTS_LDL_FUERA, { aplicar50: false })));
+      // El recorte del RAC≥30 NO es «fuera de metas»: es la vigencia que la norma le da a
+      // un paciente con albuminuria franca, y por eso SÍ vive en la vigencia normativa.
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("RAC", "350", { programa: "DM2", aplicar50: true }), 90,
+        "la albuminuria franca sigue acortando la vigencia NORMATIVA, no es un adelanto opcional");
+    });
+
+    t.caso("v18.0.120: la respuesta del médico («no, en su vigencia normal») manda también en este camino", () => {
+      // v18.0.67: «si la respuesta es no se repiten en su vigencia normal sin adelantar».
+      // El motor del panel ya lo obedecía; el aviso de entrada seguía adelantando por su
+      // cuenta y le contradecía sobre el mismo paciente.
+      const conNo = Object.assign({}, _OPTS_LDL_FUERA, { repetirFueraMeta: false });
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", conNo), 180,
+        "dijo que no: la vigencia se respeta entera");
+      const f = testApi._analitosRcvVencidos(_LABS_LDL_FUERA, "2026-08-11", conNo);
+      t.falso(f.some((x) => x.key === "COLESTEROL_LDL"),
+        "y entonces ni siquiera aparece: no hay nada que sugerirle sobre algo que ya respondió");
+      // Un «sí» explícito, y el silencio (todavía no ha contestado), siguen adelantando:
+      // el script nunca relaja una vigencia por su cuenta.
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", Object.assign({}, _OPTS_LDL_FUERA, { repetirFueraMeta: true })), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 90,
+        "sin respuesta suya se mantiene la conducta conservadora de siempre");
     });
 
     // =====================================================================

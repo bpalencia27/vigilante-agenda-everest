@@ -104,6 +104,15 @@ const WIDGET_CASOS = [
   { html: '<div id="vgl-cw-farmaco" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="19">💊</div></div>', sel: '[data-w="19"]', token: "--fg3", que: "farmaco: badge sin juicio todavía" },
   { html: '<div id="vgl-cw-farmaco"><div class="vgl-mtr-crit"><span class="vgl-mtr-conducta" data-w="20">Ajustar dosis</span></div></div>', sel: '[data-w="20"]', token: "--c-rojo", que: "farmaco: conducta de aviso CRITICAL dentro del widget" },
   { html: '<div id="vgl-cw-farmaco"><div class="vgl-dup-bloque"><div class="vgl-dup-tope" data-w="21">Posible duplicidad</div></div></div>', sel: '[data-w="21"]', token: "--c-ambar", que: "farmaco: tope de duplicidad terapéutica" },
+  // v18.0.120 — la sección nueva del aviso de entrada: «fuera de metas, pero VIGENTE».
+  // #vgl-pym-modal cuelga de document.body, así que no hereda ninguna protección de un
+  // ancestro propio (CLAUDE.md). Su acento viaja por --sec-accent y lo pinta .vgl-pym-sec-t,
+  // que sí lleva la marca de prioridad: selector compuesto, por eso va aquí. Se comprueban
+  // las DOS cajas a la vez — si el ámbar se colara en rojo (o al revés) se estaría contando
+  // la misma mentira del reporte del médico en otro idioma.
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-ambar"><div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-t" data-w="22">Fuera de metas — puede adelantarlos</span></div></div></div>', sel: '[data-w="22"]', token: "--c-ambar", que: "aviso: título de «fuera de metas, vigente»" },
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-ambar"><div class="vgl-pym-sec-b" data-w="23">Estos exámenes NO están vencidos</div></div></div>', sel: '[data-w="23"]', token: "--fg2", que: "aviso: cuerpo de «fuera de metas, vigente»" },
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-rojo"><div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-t" data-w="24">Laboratorios RCV sin resultado vigente</span></div></div></div>', sel: '[data-w="24"]', token: "--c-rojo", que: "aviso: título de vencidos sigue en rojo" },
 ];
 
 (async () => {

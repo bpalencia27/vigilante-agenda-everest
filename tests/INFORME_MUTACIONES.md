@@ -11867,4 +11867,52 @@ pendiente), que el asistente no lo inventa, y que si tiene el resultado lo escri
 | 396 | el detector de identificadores deja pasar cifras largas | *suite_15: v18.0.119: el asistente APRENDE…* («no guarda ningún identificador») | Sí |
 | 397 | `motivoId: 4` se sustituye por el texto del motivo | *suite_15: v18.0.119: el asistente APRENDE…* («conserva… constantes») | Sí |
 
-Banco completo: **3.059 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.059 comprobaciones pasan, 0 fallan.** *(v18.0.119)*
+
+---
+
+## v18.0.120 — «fuera de metas» dejó de significar «vencido»
+
+**Reporte en vivo del médico (02-sep), con captura:** el aviso de entrada le mostró
+«*Laboratorios RCV sin resultado vigente · Colesterol LDL*» sobre un examen que **todavía
+estaba dentro de su vigencia**. Sus palabras: «*el script no debe dar por hecho que está
+vencido un examen que aún no cumple sus días de vigencia y que tiene un resultado fuera de
+metas*». Y tenía razón dos veces: son dos hechos distintos, y el mensaje afirmaba el falso.
+
+**Qué pasaba, medido con el arnés.** Un LDL de 160 mg/dL (meta < 100 en riesgo alto) tomado
+hace 100 días, con 180 de vigencia normativa. La regla del 50 % por fuera de metas —decisión
+suya del 20-ago— partía el plazo a 90, y `_analitosRcvVencidos` comparaba los 100 días contra
+ESE número y lo metía en la lista roja. Al examen le quedaban **80 días**.
+
+Al reproducirlo aparecieron dos varas más, en la misma función y en la misma dirección:
+
+1. **La respuesta del propio médico se ignoraba.** Desde v18.0.67 él contesta, una vez por
+   paciente y por consulta, «¿repetir antes los exámenes fuera de meta?». El motor del panel
+   la obedece; este camino —el aviso de entrada y el antiduplicado de PyM— seguía adelantando
+   por su cuenta. Medido: con «no» respondido, el panel daba 180 y el aviso 90.
+2. **El piso de recontrol de la HbA1c no se aplicaba.** En ERC G4 el motor da 90 días
+   (`MTR_RECONTROL.hba1c.pisoDias`, decisión suya del 26-ago); este camino partía 120 a mano y
+   daba 60. Treinta días de diferencia sobre el mismo paciente.
+
+**Qué se hizo.** `_vigenciaNormaDiasParaAnalito` (la vigencia de la tabla, sin el adelanto)
+decide ahora si algo está vencido; el adelanto solo decide si conviene repetirlo antes.
+`_analitosRcvVencidos` marca cada analito con `vencido` y, si no lo está, con los días que le
+quedan. El aviso pinta dos cajas: la roja de siempre para lo vencido, y una ámbar nueva —
+«Fuera de metas — puede adelantarlos», «Estos exámenes NO están vencidos» — para lo demás. Y
+el acortamiento sale ya de `mtrAcortarPorFueraDeMeta`, la misma función del motor: una regla,
+un número.
+
+Verificado también en Chromium contra el Everest hostil que prescribe CLAUDE.md
+(`tools/verificar_color_chromium.js`, tres casos nuevos): el ámbar del título nuevo, su cuerpo
+y el rojo del título de vencidos sobreviven a `div,span,p,b{color:#111827 !important}`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 398 | todo lo que pasa la vigencia *efectiva* vuelve a declararse vencido | *suite_08: v18.0.120 (reporte en vivo): un LDL fuera de metas y DENTRO de su vigencia…* — y *suite_04: v18.0.120 PUNTA A PUNTA…* | Sí |
+| 399 | se ignora la respuesta del médico («no, en su vigencia normal») | *suite_08: v18.0.120: la respuesta del médico… manda también en este camino* | Sí |
+| 400 | vuelve la mitad a pelo, sin el piso de recontrol del motor | *suite_28: v17.6.96: la regla del 50 % alcanza por fin a la HbA1c* | Sí |
+| 401 | la caja de «fuera de metas» vuelve a ser la roja de vencidos | *suite_04: v18.0.120: un examen VIGENTE pero fuera de metas NO entra en la lista roja…* (y la de convivencia) | Sí |
+| 402 | el aviso deja de repartir las dos listas | *suite_04: v18.0.120 PUNTA A PUNTA (reporte en vivo 02-sep)…* | Sí |
+| 403 | se borra el acento ámbar de la sección nueva | *Chromium (`verificar_color_chromium.js`): «aviso: título de «fuera de metas, vigente»» cae a `rgb(17,24,39)` — el color del adversario* | Sí |
+
+Banco completo: **3.070 comprobaciones pasan, 0 fallan.**

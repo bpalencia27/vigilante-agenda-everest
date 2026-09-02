@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.119
+// @version      18.0.120
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.119";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.120";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4271,6 +4271,16 @@
       // clínico (opts.aplicar50), el resultado por fuera de meta —con el margen del 15%
       // unificado— parte la vigencia a la mitad TAMBIÉN aquí, que es la vara del aviso de
       // entrada y del antiduplicado de Ordenar. Sin contexto, todo sigue igual que antes.
+      // v18.0.120 — REPORTE EN VIVO (02-sep): «me aparece ese mensaje de un analito que
+      // todavía está vigente, está fuera de metas... el script no debe dar por hecho que está
+      // vencido un examen que aún no cumple sus días de vigencia y que tiene un resultado
+      // fuera de metas». Aquí vivía media causa: este acortamiento era el del 20-ago, pero
+      // se aplicaba SIN mirar dos cosas que el motor del panel sí mira desde v18.0.67 y
+      // v17.6.84 — la respuesta del propio médico («¿repetir antes los exámenes fuera de
+      // meta de este paciente?») y el piso de recontrol de la HbA1c. Dos varas para la misma
+      // regla: el panel decía 90 días y este camino 60, sobre el MISMO paciente. La otra
+      // mitad de la causa está en _analitosRcvVencidos, que llamaba «vencido» al resultado
+      // que solo estaba adelantado.
       if (opts && opts.aplicar50 && typeof mtrFueraDeMeta === "function" && MTR_CLAVES_CON_META.indexOf(key) >= 0) {
           const baseParaRegla = (base != null) ? base : RCV_VIGENCIA_DIAS;
           // v18.0.7 — D11 (KDIGO) TAMBIÉN aquí. Esta es la vara del aviso de entrada y del
@@ -4280,7 +4290,18 @@
           // equivocada: el médico no sabría a cuál creerle.
           if (typeof mtrKdigoNoRepiteLipidos === "function" && mtrKdigoNoRepiteLipidos(key, opts)) return baseParaRegla;
           const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
-          return fuera === true ? Math.max(1, Math.floor(baseParaRegla / 2)) : baseParaRegla;
+          if (fuera !== true) return baseParaRegla;
+          // La respuesta del médico manda (v18.0.67). `undefined` —todavía no ha contestado—
+          // sigue adelantando, que es la conducta de siempre y la conservadora; hace falta un
+          // «no» suyo explícito para dejar la vigencia entera. Nunca decide el script solo.
+          if (typeof mtrPuedeAdelantarPorFueraDeMeta === "function"
+              && !mtrPuedeAdelantarPorFueraDeMeta(key, opts, resultValCrudo)) return baseParaRegla;
+          // Y el acortamiento sale de la MISMA función del motor, con su piso de recontrol
+          // (HbA1c 90 d): la mitad a pelo dejaba este camino 30 días por debajo del panel en
+          // un ERC G4 diabético. Una regla, una función.
+          return (typeof mtrAcortarPorFueraDeMeta === "function")
+            ? mtrAcortarPorFueraDeMeta(baseParaRegla, true, key)
+            : Math.max(1, Math.floor(baseParaRegla / 2));
       }
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
@@ -4568,6 +4589,17 @@
   // esa lista la fijo el medico el 11-08-2026 y dice, textualmente, que la HbA1c no entra
   // porque no todo paciente es diabetico. Quien pide la clave extra es quien SABE que este
   // paciente si lo es.
+  // v18.0.120 — LA VIGENCIA NORMATIVA: la de la tabla del programa, SIN el adelanto del
+  // 50 % por fuera de metas. Es la única que puede decidir si un examen está VENCIDO. Se
+  // calcula con la misma función y las mismas opciones, apagando solo `aplicar50`: nunca
+  // con una segunda tabla de vigencias, que es justo lo que el médico prohibió en D4.
+  // El recorte del RAC ≥ 30 mg/g SÍ sigue aplicando aquí, porque ese no es «fuera de metas»
+  // sino la vigencia que la norma le da a un paciente con albuminuria franca.
+  function _vigenciaNormaDiasParaAnalito(key, resultValCrudo, opts) {
+      const o = Object.assign({}, opts || {});
+      o.aplicar50 = false;
+      return _vigenciaDiasParaAnalito(key, resultValCrudo, o);
+  }
   function _analitosRcvVencidos(labsArray, hoyIso, opts) {
       const hoy = _parseFechaHoraLike(hoyIso);
       if (!hoy) return [];
@@ -4585,10 +4617,31 @@
           // vigencia sobre algo que no deberia estar en la lista.
           if (vigenciaDias === MTR_BLOQ) continue;
           const c = candidatos.get(key);
-          if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
+          // Sin resultado o sin fecha no hay vigencia que cumplir: eso sí es un faltante.
+          if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], vencido: true }); continue; }
           const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
           const dias = Math.round((hoyMs - fechaMs) / 86400000);
-          if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
+          if (dias <= vigenciaDias) continue;                 // ni vencido ni adelantable
+          // v18.0.120 — REPORTE EN VIVO (02-sep): VENCIDO y FUERA DE METAS son dos hechos
+          // distintos y esta función los estaba fundiendo en uno. Un LDL de hace 100 días con
+          // 180 de vigencia y el resultado fuera de metas veía su plazo partido a 90 y salía
+          // en la lista roja «Laboratorios RCV sin resultado vigente» — afirmando que había
+          // vencido un examen al que le quedaban 80 días. Ahora se comparan las DOS varas: la
+          // normativa dice si está vencido, y el adelanto solo dice si conviene repetirlo
+          // antes. Quien pinta decide qué decir de cada uno; nadie llama vencido a lo vigente.
+          const vigenciaNorma = _vigenciaNormaDiasParaAnalito(key, c.resultVal, opts);
+          const normaNum = (typeof vigenciaNorma === "number" && isFinite(vigenciaNorma)) ? vigenciaNorma : null;
+          const vencido = (normaNum === null) ? true : (dias > normaNum);
+          faltantes.push({
+              key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias,
+              vencido: vencido,
+              vigenciaDias: vigenciaDias,
+              vigenciaNormaDias: normaNum,
+              // Días que le quedan de vigencia normativa; solo tiene sentido si NO está vencido.
+              diasRestantes: (!vencido && normaNum !== null) ? (normaNum - dias) : null,
+              vence: (normaNum !== null && typeof mtrSumarDias === "function")
+                ? mtrSumarDias(c.resultDate, normaNum) : null,
+          });
       }
       return faltantes;
   }
@@ -14193,12 +14246,15 @@
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
+      // v18.0.120 — los que SIGUEN VIGENTES y solo conviene adelantar por estar fuera de
+      // metas. Llegan aparte de `labs` justamente para que no se les pueda llamar vencidos.
+      const adelantar = datos.adelantar || [];
       // v17.x.x — REFACTOR S+ (30-ago): para médicos NO autorizados, en vez de la lista
       // cruda de analitos vencidos se muestra un mensaje de prioridad cardiovascular. Es
       // la señal que a ese perfil le importa: "este paciente necesita atención de riesgo
       // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
       const prioridadRcv = !!datos.prioridadRcv;
-      if (!abandono && !pym.length && !labs.length) return; // nada que mostrar
+      if (!abandono && !pym.length && !labs.length && !adelantar.length) return; // nada que mostrar
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
@@ -14240,6 +14296,27 @@
           '<div class="vgl-pym-list">' + labs.map(chipLab).join("") + "</div>" +
         '</div>');
       }
+      // v18.0.120 — REPORTE EN VIVO (02-sep): sección propia, con sus propias palabras, para
+      // los exámenes que NO están vencidos. El médico los estaba viendo en la lista roja de
+      // «sin resultado vigente» y esa frase era falsa: siguen dentro de su vigencia. Aquí se
+      // dice el hecho verdadero (el último resultado quedó fuera de metas), se dice cuánta
+      // vigencia les queda, y se deja claro que repetirlos antes es una sugerencia suya del
+      // 20-ago, no un vencimiento. Se calla en el perfil no autorizado (prioridadRcv), que
+      // nunca adelanta nada y no debe recibir el detalle de analitos.
+      if (adelantar.length && !prioridadRcv) {
+        const chipAdel = (f) => {
+          const nom = (f && f.nombre) ? f.nombre : String(f);
+          const resto = (f && typeof f.diasRestantes === "number" && f.diasRestantes >= 0)
+            ? " · vigente " + f.diasRestantes + " día" + (f.diasRestantes === 1 ? "" : "s") + " más"
+            : "";
+          return '<span class="vgl-pym-chip">' + escapeHtml(nom + resto) + "</span>";
+        };
+        secciones.push('<div class="vgl-pym-sec-ambar">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">🎯</span><span class="vgl-pym-sec-t">Fuera de metas — puede adelantarlos</span></div>' +
+          '<div class="vgl-pym-sec-b">Estos exámenes NO están vencidos: siguen dentro de su vigencia. El último resultado quedó fuera de metas, así que puede repetirlos antes de que venzan si lo considera. Usted decide.</div>' +
+          '<div class="vgl-pym-list">' + adelantar.map(chipAdel).join("") + "</div>" +
+        '</div>');
+      }
       ov.innerHTML = '<div class="vgl-pym-card">' +
         '<div class="vgl-pym-head">' +
           '<div class="vgl-pym-ic">' + ico + '</div>' +
@@ -14258,7 +14335,7 @@
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
-      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, pr: prioridadRcv ? 1 : 0 });
+      if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
       // v15.4.0 — Sin tono: el propio modal en pantalla ES el aviso (un canal por función).
@@ -14291,6 +14368,11 @@
       // programa de Ruta Crónicos (programa rector presente); si no, la sección se
       // silencia (máxima restricción: ante la duda, ocultar).
       const _autorizado = mtrEsMedicoAutorizado();
+      let _repetirFueraMetaAviso;
+      try {
+        const _regRep = _vglConfirmacionVigente(doc, MTR_REPETIR_CLAVE, MTR_REPETIR_VIGENCIA_DIAS);
+        if (_regRep && (_regRep.v === true || _regRep.v === false)) _repetirFueraMetaAviso = _regRep.v;
+      } catch (e) {}
       const _optsAviso = _resAviso ? {
         programa: _resAviso.programa || null,
         estadio: _resAviso.erc && _resAviso.erc.estadioAdministrativo || null,
@@ -14299,9 +14381,19 @@
         categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
         egfrCkdEpi: (_resAviso.erc && _resAviso.erc.egfr !== undefined) ? _resAviso.erc.egfr : null,   // v18.0.7 — D11 (KDIGO)
         aplicar50: _autorizado,
+        // v18.0.120 — su respuesta a «¿repetir antes los exámenes fuera de meta?», la misma
+        // que ya consume el motor del panel. Sin esto el aviso de entrada seguía adelantando
+        // exámenes que él acababa de decir que NO quería adelantar: dos varas otra vez.
+        repetirFueraMeta: _repetirFueraMetaAviso,
       } : undefined;
       let faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
       if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
+      // v18.0.120 — REPORTE EN VIVO (02-sep). La lista roja se queda SOLO con los que de
+      // verdad pasaron su vigencia normativa. Los que siguen vigentes y únicamente conviene
+      // adelantar por estar fuera de metas van a su propia sección, que lo dice con esas
+      // palabras. Un aviso que llama vencido a lo vigente es un dato inventado.
+      const adelantar = faltantes.filter((f) => f && f.vencido === false);
+      faltantes = faltantes.filter((f) => !(f && f.vencido === false));
       // v17.x.x — REFACTOR S+ (30-ago): para no autorizados, los labs vencidos (ya acotados
       // a pacientes en Ruta Crónicos con vigencia original) se comunican como mensaje de
       // prioridad cardiovascular, no como lista de analitos a pedir.
@@ -14312,10 +14404,10 @@
       if (avisoYaVisto(uid)) {
         // El aviso principal ya salió. Único pendiente posible: salió SIN labs (Athenea lenta) y
         // ahora llegaron con analitos vencidos -> un aviso de labs, una sola vez.
-        if (labsListos && faltantes.length && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
+        if (labsListos && (faltantes.length || adelantar.length) && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, prioridadRcv: prioridadRcv });
+          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
         }
         return;
       }
@@ -14342,9 +14434,9 @@
       _avisoUnivEspera.delete(key); // labs ya resueltos: ya no hay nada que esperar para esta key
 
       // Labs resueltos: aviso completo si hay algo.
-      if (!abandono && !pym.length && !faltantes.length) return;
+      if (!abandono && !pym.length && !faltantes.length && !adelantar.length) return;
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, prioridadRcv: prioridadRcv });
+      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
       avisoMarcarVisto(uid);
     } catch (e) {}
   }
@@ -16517,7 +16609,7 @@
       .vgl-paq-lista,.vgl-labs-uro,.vgl-agm-sec,.vgl-tab-riesgo,.vgl-tab-tfgs,.vgl-tab-fila,
       .vgl-tab-lista,.vgl-tend-serie,.vgl-llenar-btns,.vgl-prod-fila,.vgl-col,.vgl-bars,
       .vgl-empty-msg,.vgl-card-badges-wrap,.vgl-card-btm,.vgl-acomp-txt,.vgl-acomp-botones,
-      .vgl-dup-bloque,.vgl-mtr-ico,.vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,
+      .vgl-dup-bloque,.vgl-mtr-ico,.vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,.vgl-pym-sec-ambar,
       .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico{color:inherit !important}
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
@@ -17716,12 +17808,17 @@
       .vgl-pym-t{font-size:11.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:3px;letter-spacing:1.3px;text-transform:uppercase}
       .vgl-pym-n{font-size:20px;font-weight:800;color:var(--fg) !important;line-height:1.18;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.28);overflow-wrap:anywhere}
       .vgl-pym-body{padding:16px 24px 6px;display:flex;flex-direction:column;gap:12px}
-      .vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo{
+      .vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,.vgl-pym-sec-ambar{
         border-radius:var(--r-card);padding:12px 14px
       }
       .vgl-pym-sec{border:1px solid var(--edge);background:var(--bg2);--sec-accent:var(--c-recordatorio)}
       .vgl-pym-sec-pes{border:1px solid rgba(var(--rgb-pes),.42);background:rgba(var(--rgb-pes),.08);--sec-accent:var(--c-pes)}
       .vgl-pym-sec-rojo{border:1px solid rgba(var(--rgb-rojo),.36);background:rgba(var(--rgb-rojo),.07);--sec-accent:var(--c-rojo)}
+      /* v18.0.120 — «fuera de metas, pero vigente»: ámbar, NUNCA rojo. El rojo de arriba
+         significa vencido, y confundir los dos colores es volver a contar la misma mentira
+         en otro idioma. Sin color propio: el acento del título viaja por --sec-accent y lo
+         pinta .vgl-pym-sec-t, que ya lleva su marca de prioridad (censo sin cambio). */
+      .vgl-pym-sec-ambar{border:1px solid rgba(var(--rgb-ambar),.36);background:rgba(var(--rgb-ambar),.07);--sec-accent:var(--c-ambar)}
       .vgl-pym-sec-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
       .vgl-pym-sec-ic{font-size:var(--t-strong);line-height:1}
       .vgl-pym-sec-t{font-size:12.5px;font-weight:800;letter-spacing:.2px;color:var(--sec-accent) !important}

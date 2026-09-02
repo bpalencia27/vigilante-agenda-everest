@@ -1121,6 +1121,150 @@ module.exports = {
       t.cierto(m.innerHTML.indexOf("Entendido") >= 0, "solo queda «Entendido» para cerrar");
     });
 
+    // =====================================================================
+    // v18.0.120 — REPORTE EN VIVO DEL MÉDICO (02-sep): «me aparece ese mensaje de un
+    // analito que todavía está vigente, está fuera de metas... son cosas muy diferentes».
+    // La lista roja se llama «Laboratorios RCV sin resultado vigente»: lo que entre ahí
+    // tiene que estar vencido de verdad. Lo que solo conviene adelantar por estar fuera de
+    // metas va a su propia sección, que lo dice con sus propias palabras.
+    // =====================================================================
+    t.caso("v18.0.120: un examen VIGENTE pero fuera de metas NO entra en la lista roja de vencidos", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", {
+        labs: [],
+        adelantar: [{ nombre: "Colesterol LDL", vencido: false, diasRestantes: 80, vence: "2026-10-30" }],
+      }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!m, "el aviso se pinta: el médico igual quiere enterarse");
+      t.falso(m.innerHTML.indexOf("Laboratorios RCV sin resultado vigente") >= 0,
+        "pero NO bajo «sin resultado vigente»: ese examen sigue vigente y decirlo era falso");
+      t.cierto(m.innerHTML.indexOf("Fuera de metas") >= 0, "va en su propia sección, con su propio nombre");
+      t.cierto(m.innerHTML.indexOf("NO están vencidos") >= 0, "y el texto lo dice sin rodeos");
+      t.cierto(m.innerHTML.indexOf("Colesterol LDL") >= 0, "el analito se sigue nombrando");
+      t.cierto(m.innerHTML.indexOf("vigente 80 días más") >= 0, "diciendo cuánta vigencia le queda de verdad");
+      t.cierto(m.innerHTML.indexOf("vgl-pym-sec-ambar") >= 0, "ámbar, nunca la caja roja de vencidos");
+      t.falso(m.innerHTML.indexOf("vgl-pym-sec-rojo") >= 0, "sin ninguna caja roja en pantalla");
+    });
+
+    t.caso("v18.0.120: vencidos y fuera-de-metas conviven en el mismo aviso, cada uno en su caja", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", {
+        labs: [{ nombre: "Creatinina en Suero", vencido: true }],
+        adelantar: [{ nombre: "Colesterol LDL", vencido: false, diasRestantes: 1 }],
+      }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(m.innerHTML.indexOf("Laboratorios RCV sin resultado vigente") >= 0, "la caja roja para el que sí venció");
+      t.cierto(m.innerHTML.indexOf("Creatinina en Suero") >= 0, "con su analito");
+      t.cierto(m.innerHTML.indexOf("Fuera de metas") >= 0, "y la caja ámbar para el que no");
+      t.cierto(m.innerHTML.indexOf("vigente 1 día más") >= 0, "singular bien escrito: «1 día», no «1 días»");
+      const rojo = m.innerHTML.indexOf("vgl-pym-sec-rojo"), ambar = m.innerHTML.indexOf("vgl-pym-sec-ambar");
+      t.cierto(rojo >= 0 && ambar > rojo, "lo vencido va primero: es lo urgente");
+    });
+
+    t.caso("v18.0.120: el perfil NO autorizado no recibe el detalle de los adelantables", () => {
+      // prioridadRcv es el mensaje del perfil no autorizado, que además nunca adelanta nada
+      // (aplicar50 va en false para él). Si llegara una lista, no es suya.
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", {
+        labs: [{ nombre: "Creatinina en Suero", vencido: true }],
+        adelantar: [{ nombre: "Colesterol LDL", vencido: false, diasRestantes: 80 }],
+        prioridadRcv: true,
+      }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(m.innerHTML.indexOf("Priorice riesgo cardiovascular") >= 0, "recibe su mensaje de prioridad");
+      t.falso(m.innerHTML.indexOf("Fuera de metas") >= 0, "y no el detalle de analitos adelantables");
+      t.falso(m.innerHTML.indexOf("Colesterol LDL") >= 0, "ningún nombre de analito para este perfil");
+    });
+
+    t.caso("v18.0.120: solo con adelantables (sin nada más) el aviso igual se pinta", () => {
+      // La guarda de «nada que mostrar» no puede tragarse la sección nueva.
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", { abandono: false, pym: [], labs: [], adelantar: [] }, true);
+      t.falso(!!c.env.doc.getElementById("vgl-pym-modal"), "de verdad sin nada: sin aviso");
+      const c2 = cargar({ silencioso: true });
+      c2.api.avisoUniversal("Paciente Prueba", {
+        abandono: false, pym: [], labs: [],
+        adelantar: [{ nombre: "Colesterol LDL", vencido: false, diasRestantes: 80 }],
+      }, true);
+      t.cierto(!!c2.env.doc.getElementById("vgl-pym-modal"), "con solo adelantables: sí hay aviso");
+    });
+
+    // Punta a punta del reporte en vivo. `mockPacienteAbierto` deja getElementById
+    // devolviendo null (lo necesita checkAvisoUniversal para no creer que ya hay un aviso en
+    // pantalla), así que el modal se busca donde de verdad quedó: colgado del body.
+    const _avisoEnBody = (c) => (c.env.doc.body.children || []).find((n) => n && n.id === "vgl-pym-modal");
+    function planLdlFueraDeMetaVigente(fecha) {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC_LABSV} <form id="5552026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({
+            dataObject: JSON.stringify([
+              { CodigoParametro: "903818", NombreParametro: "COLESTEROL TOTAL", Resultado: "180", Fecha: fecha },
+              { CodigoParametro: "903815", NombreParametro: "COLESTEROL HDL", Resultado: "45", Fecha: fecha },
+              { CodigoParametro: "903868", NombreParametro: "TRIGLICERIDOS", Resultado: "150", Fecha: fecha },
+              { CodigoParametro: "903841", NombreParametro: "GLUCOSA EN SUERO", Resultado: "90", Fecha: fecha },
+              // El del reporte: 160 mg/dL con meta < 100 (riesgo alto). Fuera de metas, y con
+              // 100 de sus 180 días corridos: le quedan 80.
+              { CodigoParametro: "903817", NombreParametro: "COLESTEROL LDL", Resultado: "160", Fecha: fecha },
+              { CodigoParametro: "907106", NombreParametro: "UROANALISIS", Resultado: "NORMAL", Fecha: fecha },
+              { CodigoParametro: "903895", NombreParametro: "CREATININA", Resultado: "0.9", Fecha: fecha },
+              { CodigoParametro: "8779", NombreParametro: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: fecha },
+            ]),
+          }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+
+    await t.casoAsync("v18.0.120 PUNTA A PUNTA (reporte en vivo 02-sep): el aviso de entrada deja de llamar «sin resultado vigente» a un LDL vigente y fuera de metas", async () => {
+      // Es el camino exacto que el médico vio en consulta: abrió la historia y el aviso rojo
+      // le dijo «Laboratorios RCV sin resultado vigente · Colesterol LDL» sobre un examen al
+      // que le quedaban 80 días de vigencia. Si se corta el cable en cualquier punto (la
+      // vigencia normativa, el reparto de las dos listas, la sección nueva), esta prueba lo ve.
+      const c = cargar({ silencioso: true, gmxhr: planLdlFueraDeMetaVigente("2026-05-03") });
+      autorizar(c);
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // El resumen en caché es lo que le da contexto clínico al aviso (y con él, aplicar50).
+      c.api.mtrCacheResumenGuardar(DOC_LABSV, {
+        programa: "DM2", erc: { estadioAdministrativo: "G2", egfr: 88 },
+        factores: { diabetes: true }, riesgo: { categoria: "alto" },
+      });
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      c.api.checkAvisoUniversal();
+      const m = _avisoEnBody(c);
+      t.cierto(!!m, "el aviso salió: el médico igual tiene que enterarse del LDL fuera de metas");
+      t.cierto(m.innerHTML.indexOf("Colesterol LDL") >= 0, "y el analito se nombra");
+      t.falso(m.innerHTML.indexOf("Laboratorios RCV sin resultado vigente") >= 0,
+        "pero NUNCA bajo «sin resultado vigente»: le quedan 80 días — esto es lo que reportó en vivo");
+      t.cierto(m.innerHTML.indexOf("Fuera de metas") >= 0, "va en la sección que dice la verdad");
+      t.cierto(m.innerHTML.indexOf("vigente 80 días más") >= 0, "con la vigencia que de verdad le queda");
+    });
+
+    await t.casoAsync("v18.0.120 PUNTA A PUNTA: el mismo LDL, ya pasada su vigencia normativa, sí sale como vencido", async () => {
+      // La corrección no puede convertirse en una excusa para dejar de avisar lo vencido.
+      const c = cargar({ silencioso: true, gmxhr: planLdlFueraDeMetaVigente("2026-01-01") });   // 222 días
+      autorizar(c);
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      c.api.mtrCacheResumenGuardar(DOC_LABSV, {
+        programa: "DM2", erc: { estadioAdministrativo: "G2", egfr: 88 },
+        factores: { diabetes: true }, riesgo: { categoria: "alto" },
+      });
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      c.api.checkAvisoUniversal();
+      const m = _avisoEnBody(c);
+      t.cierto(!!m && m.innerHTML.indexOf("Laboratorios RCV sin resultado vigente") >= 0,
+        "222 días es un vencimiento de verdad y se dice como tal");
+      t.falso(m.innerHTML.indexOf("Fuera de metas") >= 0, "y no se disfraza de simple adelanto");
+    });
+
     t.caso("checkAvisoUniversal: sin paciente abierto -> no lanza y no revisa nada", () => {
       const c = cargar({ silencioso: true });
       c.env.doc.getElementById = () => null; // sin #anamesis: no es historia clínica

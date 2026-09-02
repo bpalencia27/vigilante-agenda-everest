@@ -627,7 +627,15 @@ module.exports = {
       t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", o), 90, "fuera de meta: la mitad");
       const oErc = _op96(true, "ERC", "G4");
       t.igual(api._vigenciaDiasParaAnalito("HBA1C", "6.5", oErc), 120, "ERC G4 en meta: 120, no 180");
-      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 60, "ERC G4 fuera de meta: 60");
+      // v18.0.120 — antes esta línea esperaba 60 (la mitad a pelo de 120). El motor del panel
+      // no daba 60 sino 90: `mtrAcortarPorFueraDeMeta` respeta el piso de recontrol de la
+      // HbA1c (MTR_RECONTROL.hba1c.pisoDias, decisión del médico del 26-ago: en ERC G4 la
+      // vida del eritrocito ya está acortada y repetirla a los 60 días no es interpretable).
+      // Este camino —el del aviso de entrada y el antiduplicado de PyM— partía la vigencia a
+      // mano y por eso daba 30 días menos que el panel sobre el MISMO paciente. Ahora los dos
+      // llaman a la misma función: una regla, un número.
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 90, "ERC G4 fuera de meta: 90, el piso de recontrol — la MISMA cifra que el motor del panel");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "HBA1C"), 90, "y es literalmente lo que devuelve el motor: ya no hay dos varas");
     });
 
     t.caso("v17.6.96 PUNTA A PUNTA: el paquete RCV deja de declararse cubierto con la HbA1c vencida", () => {
