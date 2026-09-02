@@ -5170,5 +5170,67 @@ module.exports = {
       t.cierto(modal && modal.innerHTML.includes('id="vgl-labs-title">') && modal.innerHTML.includes(R.labs + "</div>"), "el título pintado dice «" + R.labs + "»");
     });
 
+    t.caso("v18.0.112 (C20): el menú de elección recuerda la última opción (va primera, marcada) y admite teclado: Enter y 1/2", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      const d = c.env.doc;
+      const elegidos = [];
+      const abrir = () => c.api._vglChooserModal({ titulo: "Exámenes", recordar: "prueba", opciones: [{ id: "ultima", rotulo: "Última toma" }, { id: "historial", rotulo: "Historial" }], onPick: (id) => elegidos.push(id) });
+      const opciones = (m) => m.children[0].children.find((n) => n.className === "vgl-chooser-body").children;
+      const tecla = (m, key, target) => (m._listeners.keydown || []).forEach((f) => f({ key, target: target || m, preventDefault() {} }));
+      let m = abrir();
+      t.igual(opciones(m).map((b) => b.getAttribute("data-chooser-id")).join(","), "ultima,historial", "primera apertura: orden original, nada marcado");
+      t.falso(opciones(m).some((b) => b.className.includes("vgl-chooser-ult")), "sin recuerdo no hay marca");
+      tecla(m, "2");
+      t.igual(elegidos.join(","), "historial", "la tecla 2 elige la segunda");
+      t.igual(c.env.storage.getItem("vgl_chooser_prueba"), "historial", "y se recuerda");
+      m = abrir();
+      const ops = opciones(m);
+      t.igual(ops.map((b) => b.getAttribute("data-chooser-id")).join(","), "historial,ultima", "segunda apertura: la recordada va primera");
+      t.cierto(ops[0].className.includes("vgl-chooser-ult") && ops[0].children.some((n) => n.className === "vgl-chooser-txt" && n.children[0].textContent.includes("la última vez")), "marcada como «la última vez»");
+      t.igual(ops.map((b) => b.children[0].textContent).join(","), "1,2", "cada opción muestra su tecla");
+      tecla(m, "Enter");
+      t.igual(elegidos.join(","), "historial,historial", "Enter elige la recordada");
+      m = abrir();
+      tecla(m, "Enter", ops[1]);
+      t.igual(elegidos.length, 2, "Enter SOBRE un botón de opción no elige por teclado (el clic nativo ya lo hace: nunca dos veces)");
+      opciones(m).find((b) => b.getAttribute("data-chooser-id") === "ultima")._listeners.click.forEach((f) => f());
+      t.igual(elegidos.join(","), "historial,historial,ultima", "un clic sigue siendo un clic");
+      t.igual(c.env.storage.getItem("vgl_chooser_prueba"), "ultima", "y actualiza el recuerdo");
+      const sinRec = c.api._vglChooserModal({ titulo: "X", opciones: [{ id: "a", rotulo: "A" }], onPick: () => {} });
+      t.igual(c.env.storage.getItem("vgl_chooser_"), null, "sin `recordar` no se guarda nada");
+      t.cierto(!!sinRec, "y el cuadro abre igual");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/titulo: VGL_ROTULOS\.examenes,[\s\S]{0,200}recordar: "examenes",/.test(src), "el menú de «Exámenes» recuerda");
+    });
+
+    await t.casoAsync("v18.0.112 (C12): con antecedentes por documentar, el dock muestra el botón atenuado «📝 Faltan antecedentes» en lugar del Panel, y abre el ayudante", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      mockPacienteDock(c, "555666777");
+      const toasts = [];
+      const bandeja = { prepend: (n) => toasts.push(n), appendChild: (n) => toasts.push(n), children: [], querySelector: () => null, querySelectorAll: () => [] };
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : (id === "vgl-toasts" ? bandeja : null));
+      // hay resumen (la compuerta «aún cargando» no aplica) pero los factores navegables no están documentados
+      c.api.mtrCacheResumenGuardar("555666777", { factores: { sexo: "M", edad: 60 } });
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const btns = dock.children.find((n) => n.className === "vgl-dock-btns");
+      const accs = btns.children.map((b) => b.getAttribute("data-accion"));
+      t.igual(accs.indexOf("ficha"), -1, "el Panel sigue oculto (compuerta de completitud)");
+      const bF = btns.children.find((b) => b.getAttribute("data-accion") === "faltan");
+      t.cierto(!!bF, "pero existe el botón «Faltan antecedentes» (antes: el ayudante era inalcanzable)");
+      t.cierto(bF.className.includes("vgl-dock-btn-atenuado"), "atenuado");
+      t.cierto(/Hipertensión/.test(bF.title) && /Antecedentes/.test(bF.title), "y dice QUÉ falta y dónde: " + bF.title);
+      t.cierto(bF.children.some((n) => n.className === "vgl-dock-lbl" && n.textContent === "Faltan antecedentes"), "con el rótulo del diccionario");
+      bF._listeners.click.forEach((f) => f({ stopPropagation() {} }));
+      await esperar(30);   // el toast se pinta en el flush de la cola
+      const llenar = c.env.doc.body.children.find((n) => n.id === "vgl-llenar-modal");
+      const aviso = toasts.find((n) => n.querySelector && /Faltan antecedentes/.test(n.querySelector(".vgl-toast-title").textContent) && /Hipertensión/.test(n.querySelector(".vgl-toast-b").textContent));
+      t.cierto(!!llenar || !!aviso, "el clic abre el ayudante de llenado o, si esas casillas no se pueden llenar desde aquí, lo dice con la pestaña (toasts: " + toasts.length + ")");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/else if \(_autorizado && _resumenListoParaGate && _factoresParaGate && _pendientesPanel\.length > 0\)/.test(src), "solo con resumen y factores leídos: nunca se inventa un faltante mientras carga");
+    });
+
   },
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.111
+// @version      18.0.112
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.111";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.112";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7008,6 +7008,36 @@
     body.className = "vgl-chooser-body";
     const onPick = o.onPick || function () {};
     const cerrar = () => { try { modal.remove(); } catch (e) {} };
+    // v18.0.112 (S+ flujo, C20; decisión del médico, 02-sep) — el cuadro RECUERDA la última
+    // opción (va primera, marcada) y admite teclado: Enter elige la primera (la recordada),
+    // 1/2/… eligen por número. Un clic sigue siendo un clic.
+    const claveRec = o.recordar ? "vgl_chooser_" + String(o.recordar) : null;
+    let ultimoId = null;
+    try { if (claveRec) ultimoId = localStorage.getItem(claveRec); } catch (e) {}
+    const opcionesOrd = (o.opciones || []).slice();
+    if (ultimoId) {
+      const i = opcionesOrd.findIndex((op) => op && String(op.id) === String(ultimoId));
+      if (i > 0) opcionesOrd.unshift(opcionesOrd.splice(i, 1)[0]);
+      if (i < 0) ultimoId = null;
+    }
+    const elegir = (id) => {
+      try { if (claveRec) localStorage.setItem(claveRec, String(id)); } catch (e) {}
+      cerrar();
+      try { onPick(id); } catch (e) {}
+    };
+    modal.addEventListener("keydown", (e) => {
+      try {
+        if (!e || e.altKey || e.ctrlKey || e.metaKey) return;
+        if (/^[1-9]$/.test(String(e.key))) {
+          const op = opcionesOrd[Number(e.key) - 1];
+          if (op) { if (e.preventDefault) e.preventDefault(); elegir(op.id); }
+        } else if (e.key === "Enter") {
+          const enOpcion = e.target && e.target.getAttribute && e.target.getAttribute("data-chooser-id");
+          if (enOpcion) return;   // Enter sobre un botón: el clic nativo ya elige
+          if (opcionesOrd[0]) { if (e.preventDefault) e.preventDefault(); elegir(opcionesOrd[0].id); }
+        }
+      } catch (e2) {}
+    });
     close.addEventListener("click", cerrar);
     _vglCerrarConClicFuera(modal, cerrar);   // v18.0.110 (C21): cuadro de consulta
     // v18.0.91 — hallazgo #43 del enjambre: era el único modal del script que no pasaba
@@ -7016,11 +7046,16 @@
     // cualquier cuadro del Vigilante lo pulsaba aquí y no pasaba nada.
     if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, cerrar);
 
-    (o.opciones || []).forEach((op) => {
+    opcionesOrd.forEach((op, idx) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "vgl-chooser-opt";
+      b.className = "vgl-chooser-opt" + (ultimoId && String(op.id) === String(ultimoId) ? " vgl-chooser-ult" : "");
       b.setAttribute("data-chooser-id", op.id);
+      const num = document.createElement("span");   // v18.0.112 (C20): la tecla que lo elige
+      num.className = "vgl-chooser-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(idx + 1);
+      b.appendChild(num);
       const ico = document.createElement("span");
       ico.className = "vgl-chooser-ico";
       ico.setAttribute("aria-hidden", "true");
@@ -7029,7 +7064,7 @@
       txt.className = "vgl-chooser-txt";
       const t = document.createElement("span");
       t.className = "vgl-chooser-t";
-      t.textContent = op.rotulo;
+      t.textContent = op.rotulo + (ultimoId && String(op.id) === String(ultimoId) ? " · la última vez" : "");
       txt.appendChild(t);
       if (op.desc) {
         const d = document.createElement("span");
@@ -7038,7 +7073,7 @@
         txt.appendChild(d);
       }
       b.appendChild(ico); b.appendChild(txt);
-      b.addEventListener("click", () => { const id = op.id; cerrar(); try { onPick(id); } catch (e) {} });
+      b.addEventListener("click", () => { elegir(op.id); });
       body.appendChild(b);
     });
 
@@ -7125,7 +7160,8 @@
           }
           _vglChooserModal({
               titulo: VGL_ROTULOS.examenes,
-              descripcion: "¿Qué resultados traigo a la historia?",
+              descripcion: "¿Qué resultados traigo a la historia? (Enter: la de la última vez · 1/2: por número)",
+              recordar: "examenes",   // v18.0.112 (C20)
               opciones: [
                   { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "El último resultado de cada analito, solo si se hizo en los últimos " + MTR_LABS_VENTANA_RECIENTE_DIAS + " días." },
                   { id: "historial", icono: "🗂", rotulo: "Historial por analito", desc: "El último resultado de cada analito, sin importar cuándo se hizo." },
@@ -7435,7 +7471,25 @@
     redactar: "Redactar",
     control: "Próximo control",
     examenes: "Exámenes",
+    faltan: "Faltan antecedentes",
   });
+  // v18.0.112 (C12) — abre el ayudante de llenado con lo que falta; si esas casillas no se
+  // pueden llenar desde aquí, lo dice y a qué pestaña ir. Nunca abre el Panel a medias.
+  function _vglAbrirAyudanteFaltan(apt, pendientes) {
+    const etq = (pendientes || []).map((x) => x && x.etiqueta).filter(Boolean).join("; ");
+    let faltan = [];
+    try { faltan = mtrCamposLlenables(apt && apt.doc_id, document) || []; } catch (e) { faltan = []; }
+    if (faltan.length) {
+      vglModalLlenarCampos(apt, faltan, () => {
+        try { openPanelPacienteModal(apt, { origen: "faltan", saltarLlenado: true }); } catch (e) {}
+      });
+      return true;
+    }
+    try {
+      showToast("AMBAR", VGL_ROTULOS.faltan, "Para abrir el Panel del paciente documente: " + etq + ". Esas casillas no se pueden llenar desde aquí: vaya a la pestaña indicada.", true, "faltan|" + String(apt && apt.doc_id));
+    } catch (e) {}
+    return false;
+  }
   function _vglDockRotulo(btn, icono, etiqueta) {
     const ico = document.createElement("span");
     ico.className = "vgl-dock-ico";
@@ -7556,7 +7610,8 @@
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
       // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
       // así que la firma solo necesita saber si sigue bloqueado o no.
-      _panelBloqueado ? "PB" : "pb", mtrCacheResumenDesactualizado(docId) ? "DA" : "da", _autorizado ? "AU" : "no"].join("|");
+      _panelBloqueado ? "PB" : "pb", mtrCacheResumenDesactualizado(docId) ? "DA" : "da", _autorizado ? "AU" : "no",
+      mtrIaGenerando() ? "IA" : "ia", _pendientesPanel.length].join("|");   // v18.0.112 (C7, C12)
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -7700,6 +7755,19 @@
     _vglDockRotulo(bFicha, "🧾", VGL_ROTULOS.panel + (mtrCacheResumenDesactualizado(docId) ? " · actualizando…" : ""));
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
+    } else if (_autorizado && _resumenListoParaGate && _factoresParaGate && _pendientesPanel.length > 0) {
+      // v18.0.112 (S+ flujo, C12; decisión del médico, 02-sep) — con antecedentes por documentar
+      // el botón «Panel» no existía y el ayudante «Faltan antecedentes» (que los llena con
+      // Deshacer) quedaba inalcanzable. Un botón atenuado dice QUÉ falta y abre el ayudante.
+      const _etq = _pendientesPanel.map((x) => x.etiqueta).join("; ");
+      const bFaltan = document.createElement("button");
+      bFaltan.className = "vgl-dock-btn vgl-dock-btn-atenuado";
+      bFaltan.setAttribute("data-accion", "faltan");
+      bFaltan.setAttribute("aria-label", "Faltan antecedentes por documentar: " + _etq + ". Abrir el ayudante para llenarlos");
+      bFaltan.title = "📝 El Panel del paciente abre cuando estén documentados: " + _etq + ". Clic para llenarlos desde aquí (con Deshacer).";
+      _vglDockRotulo(bFaltan, "📝", VGL_ROTULOS.faltan);
+      bFaltan.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.faltan.abrir"); _vglAbrirAyudanteFaltan(apt, _pendientesPanel); });
+      btns.appendChild(bFaltan);
     }
 
     // v15.6.0 — Redactor de texto libre con IA (Propuesta 3): módulo propio, separado
@@ -7713,7 +7781,7 @@
     bRedactar.setAttribute("data-accion", "redactar");
     bRedactar.setAttribute("aria-label", "Redactar texto libre con inteligencia artificial");
     bRedactar.title = "✍ Prepara borradores para las casillas de texto libre (motivo, enfermedad actual, análisis y plan, recomendaciones) a partir de los datos del paciente. Usted revisa y decide antes de insertar.";
-    _vglDockRotulo(bRedactar, "✍", VGL_ROTULOS.redactar);
+    _vglDockRotulo(bRedactar, "✍", VGL_ROTULOS.redactar + (mtrIaGenerando() ? " · ⏳" : ""));   // v18.0.112 (C7): la IA sigue trabajando aunque el cuadro esté minimizado
     bRedactar.addEventListener("click", (e) => {
       e.stopPropagation();
       uxTrack("widget.redactar.abrir");
@@ -16295,6 +16363,8 @@
       }
       .vgl-dock-btn:hover{background:var(--surface-2)}
       .vgl-dock-btn:disabled{opacity:.35;cursor:not-allowed}
+      .vgl-dock-btn.vgl-dock-btn-atenuado{opacity:.62}
+      .vgl-dock-btn.vgl-dock-btn-atenuado:hover,.vgl-dock-btn.vgl-dock-btn-atenuado:focus-visible{opacity:1}
       /* v17.5.0 — especificidad compuesta a propósito (20, no 10): con el nuevo atajo «Ir a
          pestaña» esta clase empezó a convivir con .vgl-dock-btn en un class="..." LITERAL
          (antes solo pasaba por concatenación, p. ej. en el botón de agendar, invisible para
@@ -18695,6 +18765,9 @@
          tools/auditar_html_real_chromium.js). Hoy es un emoji y no se nota; el día que sea un
          glifo de texto, sí. Clase propia con texto en un modal pegado a body ⇒ marca de prioridad. */
       #vgl-chooser-modal .vgl-chooser-ico{flex:none;font-size:var(--t-title);color:var(--fg) !important}
+      #vgl-chooser-modal .vgl-chooser-num{flex:none;min-width:18px;height:18px;border-radius:5px;border:1px solid var(--edge);font-size:var(--t-micro);font-weight:700;display:inline-flex;align-items:center;justify-content:center;color:var(--fg2) !important}
+      #vgl-chooser-modal .vgl-chooser-opt.vgl-chooser-ult{border-color:var(--c-verde)}
+      #vgl-chooser-modal .vgl-chooser-opt.vgl-chooser-ult .vgl-chooser-num{border-color:var(--c-verde);color:var(--c-verde) !important}
       #vgl-chooser-modal .vgl-chooser-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
       #vgl-chooser-modal .vgl-chooser-t{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-chooser-modal .vgl-chooser-d{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
@@ -40794,9 +40867,17 @@
     return /NOT_FOUND|INVALID_ARGUMENT|no longer available|"code":\s*40[04]/i.test(String(texto || ""));
   }
 
+  // v18.0.112 (S+ flujo, C7) — cuántas generaciones hay en vuelo (el dock pinta ⏳).
+  let _iaGenerandoN = 0;
+  function mtrIaGenerando() { return _iaGenerandoN > 0; }
   function mtrGeminiRedactar(hoja, modo, opts) {
     const o = opts || {};
-    return new Promise((resolve) => {
+    return new Promise((resolveCrudo) => {
+      // v18.0.112 (C7) — contador de vuelo, una sola resolución aunque «Cancelar» y una
+      // respuesta tardía lleguen a la vez.
+      _iaGenerandoN++;
+      let resuelto = false;
+      const resolve = (r) => { if (resuelto) return; resuelto = true; _iaGenerandoN = Math.max(0, _iaGenerandoN - 1); resolveCrudo(r); };
       try {
         const clave = mtrLeerClaveGemini();
         if (!clave) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
@@ -40880,11 +40961,17 @@
           // en Ajustes duplica la cuota (es por clave, no por computador) — recomendado.
           const modelo = (intentos === 0) ? mtrModeloGemini(modo) : mtrModeloGemini();
           const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent";
-          GM_xmlhttpRequest({
+          // v18.0.112 (C7) — el llamador ve por dónde va («intento 3 de 7, con X») en vez de un
+          // «Generando con…» fijo hasta 7 × 25 s; y puede cancelar: el control recibe la
+          // función que aborta la petición en vuelo.
+          try { if (typeof o.onProgreso === "function") o.onProgreso({ modelo: modelo, intento: intentos + 1, de: maxIntentos }); } catch (e) {}
+          if (o.control && o.control.cancelado) { resolve({ ok: false, texto: "", motivo: "cancelado" }); return; }
+          const req = GM_xmlhttpRequest({
             method: "POST", url: url, timeout: 25000,
             headers: { "Content-Type": "application/json", "x-goog-api-key": clave },
             data: cuerpoPara(modelo),
             onload: (res) => {
+              if (o.control && o.control.cancelado) return;   // v18.0.112 (C7)
               const status = res && res.status, cuerpoResp = res && res.responseText;
               try { vglLog("IA", "GeminiRespuesta", { status: status, modelo: modelo, chars: (cuerpoResp || "").length }); } catch (e) {}
               if (_mereceRotar(status, cuerpoResp) && intentos < maxIntentos - 1) {
@@ -40921,7 +41008,7 @@
               else { _tel("ia.fallo"); _tel(mtrEsCuotaAgotada(status, cuerpoResp) ? "ia.fallo.cuota" : (mtrEsModeloSobrecargado(status, cuerpoResp) ? "ia.fallo.saturado" : (mtrEsModeloNoDisponible(status, cuerpoResp) ? "ia.fallo.nodisponible" : "ia.fallo.respuesta"))); }
               resolve(r);
             },
-            onerror: () => { _tel("ia.fallo"); _tel("ia.fallo.red"); resolve({ ok: false, texto: "", motivo: "error de red (¿proxy de la IPS bloquea Gemini?)" }); },
+            onerror: () => { if (o.control && o.control.cancelado) return; _tel("ia.fallo"); _tel("ia.fallo.red"); resolve({ ok: false, texto: "", motivo: "error de red (¿proxy de la IPS bloquea Gemini?)" }); },
             // v17.6.69 — [reportado en consultorio, 26-ago-2026] BUG REAL: la rotación de
             // modelo (mtrRotarModelo/intentar, ver el bloque `_mereceRotar` de `onload` arriba)
             // solo se disparaba para respuestas HTTP con status reconocido (429/503/400/404/
@@ -40935,6 +41022,7 @@
             // 3.5-flash-lite/3.1-flash-lite". Mismo patrón que `onload`: rota y reintenta
             // mientras queden modelos; solo resuelve como fallo cuando ya se agotaron todos.
             ontimeout: () => {
+              if (o.control && o.control.cancelado) return;   // v18.0.112 (C7)
               _tel("ia.fallo"); _tel("ia.fallo.timeout");
               if (intentos < maxIntentos - 1) {
                 _tel("ia.timeout.rota");
@@ -40943,6 +41031,14 @@
               resolve({ ok: false, texto: "", motivo: "tiempo agotado en todos los modelos" });
             },
           });
+          if (o.control) {
+            o.control.cancelar = () => {
+              o.control.cancelado = true;
+              try { if (req && typeof req.abort === "function") req.abort(); } catch (e) {}
+              _tel("ia.cancelado");
+              resolve({ ok: false, texto: "", motivo: "cancelado" });
+            };
+          }
         };
         intentar();
       } catch (e) { resolve({ ok: false, texto: "", motivo: "excepción: " + (e && e.message) }); }
@@ -42261,6 +42357,7 @@
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
         + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">' + MTR_IA_ICONOS.chispa + 'Generar</button>'
+        + '<button id="vgl-ia-cancelar" class="vgl-agm-btn sec vgl-d-none" title="Detener la generación en curso; se conserva lo que había en la casilla">✕ Cancelar</button>'
         + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.tablero + 'Copiar</button>'
         + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>' + MTR_IA_ICONOS.descargar + '<span id="vgl-ia-ins-lbl">Insertar en la historia</span></button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
@@ -42275,6 +42372,7 @@
       const $ = (s) => modal.querySelector(s);
       const salida = $("#vgl-ia-salida"), estado = $("#vgl-ia-estado");
       const btnGen = $("#vgl-ia-generar"), btnCop = $("#vgl-ia-copiar"), btnIns = $("#vgl-ia-insertar");
+      const btnCancelar = $("#vgl-ia-cancelar");   // v18.0.112 (C7)
       // v17.6.11 — CONTADOR DEL BORRADOR (N palabras · N caracteres) y recordatorio del
       // último modelo usado. Se repinta con cada tecla y tras cada generación/cambio de chip.
       let _ultimoModelo = "";
@@ -42599,9 +42697,34 @@
         btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
+        // v18.0.112 (C7) — progreso visible y «Cancelar» mientras la IA responde.
+        const _controlGen = {};
+        opts.control = _controlGen;
+        opts.onProgreso = (pg) => {
+          try {
+            _ultimoModelo = pg.modelo;
+            estado.textContent = "Generando con " + pg.modelo + (pg.de > 1 ? " · intento " + pg.intento + " de " + pg.de : "") + "…";
+          } catch (e) {}
+        };
+        const _textoAntes = _borradores[modoGen] ? _borradores[modoGen].texto : "";
+        if (btnCancelar) {
+          btnCancelar.classList.remove("vgl-d-none");
+          btnCancelar.onclick = () => { try { if (_controlGen.cancelar) _controlGen.cancelar(); } catch (e) {} };
+        }
         const r = await mtrGeminiRedactar(_hoja, modoGen, opts);
+        if (btnCancelar) { btnCancelar.classList.add("vgl-d-none"); btnCancelar.onclick = null; }
         btnGen.disabled = false;
         _congelarChips(false);
+        if (!r.ok && r.motivo === "cancelado") {
+          // Cancelado por el médico: se conserva lo que había (nunca se pisa con los hechos).
+          if (modoGen === modo) {
+            salida.value = _textoAntes || "";
+            estado.textContent = "Generación cancelada. Se conserva lo que había.";
+            habilitarPost(salida.value); _pintarCifras(); _autosizeSalida();
+          }
+          _pintarMeta();
+          return;
+        }
         if (r.ok) {
           let textoFinal = r.texto;
           // v16.5.0 — los marcadores del encabezado se rellenan AQUÍ, en el equipo del

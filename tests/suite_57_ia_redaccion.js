@@ -22,6 +22,7 @@ function hojaDemo(api) {
 }
 
 // Respuesta con la FORMA real de la API de Gemini.
+const esperar57 = (ms) => new Promise((r) => setTimeout(r, ms));   // v18.0.112
 function respGemini(texto) {
   return JSON.stringify({ candidates: [{ content: { parts: [{ text: texto }] }, finishReason: "STOP" }] });
 }
@@ -2734,6 +2735,51 @@ module.exports = {
         "sin uroanálisis se omite el ítem: no se afirma que fue normal ni que no se hizo");
       t.cierto(/NO HAY CRITERIOS DE INFECCIÓN URINARIA/.test(seccion),
         "y con valores alterados pero sin criterios de ITU, se dice eso — nunca «normal», porque no lo fue");
+    });
+
+    // =====================================================================
+    // v18.0.112 (S+ flujo, C7) — progreso visible, «Cancelar» y ⏳ en el dock
+    // =====================================================================
+    await t.casoAsync("v18.0.112 (C7): el conector avisa por dónde va (modelo e intento) en cada rotación", async () => {
+      let n = 0;
+      const c = cargar({ silencioso: true, gmxhr: (opts) => {
+        n++;
+        if (n < 3) setTimeout(() => opts.onload({ status: 429, responseText: '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}' }), 0);
+        else setTimeout(() => opts.onload({ status: 200, responseText: respGemini("nota") }), 0);
+        return { abort() {} };
+      } });
+      c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const progreso = [];
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", { onProgreso: (pg) => progreso.push(pg) });
+      t.cierto(r.ok, "al final responde");
+      t.igual(progreso.length, 3, "un aviso por intento (antes: «Generando con…» fijo hasta 7 × 25 s)");
+      t.igual(progreso.map((x) => x.intento).join(","), "1,2,3", "numerados");
+      t.cierto(progreso.every((x) => x.de === 7 && typeof x.modelo === "string" && x.modelo.length > 0), "con el total y el modelo de cada intento");
+      t.falso(c.api.mtrIaGenerando(), "al terminar, nada en vuelo");
+    });
+
+    await t.casoAsync("v18.0.112 (C7): «Cancelar» aborta la petición en vuelo, resuelve «cancelado» y una respuesta tardía ya no cuenta", async () => {
+      let abortado = 0, guardado = null;
+      const c = cargar({ silencioso: true, gmxhr: (opts) => { guardado = opts; return { abort() { abortado++; } }; } });
+      c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const control = {};
+      const p = c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", { control });
+      await esperar57(5);
+      t.cierto(c.api.mtrIaGenerando(), "mientras responde, hay una generación en vuelo (el dock pinta ⏳)");
+      t.cierto(typeof control.cancelar === "function", "el control recibió la función de cancelar");
+      control.cancelar();
+      const r = await p;
+      t.cierto(!r.ok && r.motivo === "cancelado", "resuelve como cancelado");
+      t.igual(abortado, 1, "y la petición GM se abortó");
+      t.falso(c.api.mtrIaGenerando(), "ya no hay nada en vuelo");
+      t.noLanza(() => guardado.onload({ status: 200, responseText: respGemini("tarde") }), "una respuesta que llega tarde no revienta");
+      t.falso(c.api.mtrIaGenerando(), "ni deja el contador en negativo/positivo");
+      t.noLanza(() => guardado.ontimeout(), "un timeout tardío tampoco");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-ia-cancelar" class="vgl-agm-btn sec vgl-d-none"/.test(src), "el Redactor tiene el botón «Cancelar», oculto hasta que haya algo que cancelar");
+      t.cierto(/if \(!r\.ok && r\.motivo === "cancelado"\) \{[\s\S]{0,400}salida\.value = _textoAntes \|\| "";/.test(src), "al cancelar se conserva lo que había en la casilla (no se pisa con los hechos)");
+      t.cierto(/VGL_ROTULOS\.redactar \+ \(mtrIaGenerando\(\) \? " · ⏳" : ""\)/.test(src), "el dock dice ⏳ mientras la IA trabaja");
+      t.cierto(/mtrIaGenerando\(\) \? "IA" : "ia"/.test(src), "y la firma del dock lo incluye, para que se repinte");
     });
 
   },

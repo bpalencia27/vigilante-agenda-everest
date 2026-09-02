@@ -11557,3 +11557,38 @@ Banco completo: **3.024 comprobaciones pasan, 0 fallan.**
 | 335 | el título del modal dice «Paraclínicos» (**C9**) | *suite_15: v18.0.111 (C9)…* («el título pintado») | Sí |
 
 Banco completo: **3.029 comprobaciones pasan, 0 fallan.**
+
+## v18.0.112 — decisiones de la entrevista, segunda tanda: el Redactor dice por dónde va y se puede cancelar (C7), el menú de Exámenes recuerda y admite teclado (C20) y el botón «Faltan antecedentes» (C12)
+
+- **C7 — progreso visible y «Cancelar».** «Generando con…» se quedaba fijo hasta 7 modelos ×
+  25 s. Ahora el conector avisa en cada rotación («Generando con X · intento 3 de 7…»), el
+  Redactor muestra «✕ Cancelar» mientras responde (aborta la petición GM en vuelo, resuelve
+  «cancelado» y **conserva lo que había en la casilla**, nunca la pisa con los hechos), una
+  respuesta tardía tras cancelar no cuenta ni deja el contador de vuelo torcido, y el dock
+  dice «Redactar · ⏳» mientras la IA trabaja (aunque el cuadro esté minimizado). No se añade
+  «Generar todo»: el Redactor se simplificó a propósito (v17.6.24) y el médico no lo pidió.
+- **C20 — el menú de «Exámenes» recuerda y admite teclado (decisión del médico).** La última
+  opción va primera, marcada «· la última vez»; Enter la elige; 1/2 eligen por número (cada
+  opción muestra su tecla). Enter sobre un botón de opción no elige dos veces. Un clic sigue
+  siendo un clic. Sin `recordar` no se guarda nada.
+- **C12 — «📝 Faltan antecedentes» (decisión del médico).** Con antecedentes por documentar el
+  botón «Panel» no existía y el ayudante que los llena (con Deshacer) era inalcanzable. Un
+  botón atenuado dice QUÉ falta y en qué pestaña, y abre el ayudante; si esas casillas no se
+  pueden llenar desde aquí, lo dice. Solo con resumen y factores leídos: mientras carga no
+  se inventa ningún faltante.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 336 | el conector no avisa el progreso (**C7**) | *suite_57: v18.0.112 (C7): el conector avisa por dónde va…* | Sí |
+| 337 | «Cancelar» no aborta la petición GM (**C7**) | *suite_57: v18.0.112 (C7): «Cancelar» aborta la petición en vuelo…* | Sí |
+| 338 | al cancelar, la casilla se pisa con los hechos en vez de conservar lo que había (**C7**) | *suite_57: v18.0.112 (C7): «Cancelar»…* («se conserva lo que había») | Sí |
+
+Nota del banco: el mutante «una respuesta tardía tras cancelar vuelve a entrar en `onload`» sobrevivió porque `resolve` ya está blindado contra la doble resolución (la guarda de `onload` solo evita trabajo y telemetría de más); se sustituyó por el de arriba.
+| 339 | el contador de vuelo nunca baja (**C7**) | *suite_57: v18.0.112 (C7): el conector avisa…* («al terminar, nada en vuelo») | Sí |
+| 340 | la opción recordada no va primera (**C20**) | *suite_15: v18.0.112 (C20): el menú de elección recuerda…* | Sí |
+| 341 | no se guarda la elección (**C20**) | *suite_15: v18.0.112 (C20)…* («y se recuerda») | Sí |
+| 342 | Enter sobre un botón elige dos veces (**C20**) | *suite_15: v18.0.112 (C20)…* («nunca dos veces») | Sí |
+| 343 | el botón «Faltan antecedentes» no existe (**C12**) | *suite_15: v18.0.112 (C12): con antecedentes por documentar…* | Sí |
+| 344 | el botón no va atenuado (**C12**) | *suite_15: v18.0.112 (C12)…* («atenuado») | Sí |
+
+Banco completo: **3.033 comprobaciones pasan, 0 fallan.**

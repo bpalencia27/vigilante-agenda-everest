@@ -76,12 +76,12 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | C4 | Si la cita se crea pero la toma de muestras falla, todo lo visible dice éxito y el fallo sale por el HUD «Centinela PyM» | 1 | ✅ v18.0.107 (motivo real del fallo en el botón, aviso ámbar fijo y línea roja en el panel post-cita) |
 | C5 | El resultado del SMS automático solo se conoce en la consola | 2 | ✅ v18.0.109 (desenlace por turno, pintado en la nota de SMS del panel post-cita) |
 | C6 | El panel post-cita se destruye y se recrea cuando AppCita confirma la toma | 2 | ✅ v18.0.109 (solo se añade o sustituye el bloque de laboratorio) |
-| C7 | Redactor: «Generando con…» fijo hasta 7 modelos × 25 s, sin cancelar ni «Generar todo» | 2 | pendiente |
+| C7 | Redactor: «Generando con…» fijo hasta 7 modelos × 25 s, sin cancelar ni «Generar todo» | 2 | ✅ v18.0.112 (progreso por intento, «Cancelar» que conserva la casilla, ⏳ en el dock; «Generar todo» no se añade: el Redactor se simplificó a propósito) |
 | C8 | Ajuste «SMS de recordatorio» apagado: la casilla nace marcada, el SMS de la cita se suprime y el de laboratorio sale igual | 2 | ✅ v18.0.109 (casilla apagada y rotulada; la toma va con Telefono=0) |
 | C9 | Terminología cruzada («Exámenes» nombra tres cosas; captions remiten a nombres que no están en el dock) | 2 | ✅ v18.0.111 (`VGL_ROTULOS` + prueba dock/títulos/leyendas) |
 | C10 | Uroanálisis: nadie pregunta si hay síntomas urinarios; el motor queda en «REQUIERE SÍNTOMAS» | 2 | ✅ v18.0.111 (pregunta en la escalera solo con parcial sugestivo, fuera del embarazo; vigencia 7 días; la respuesta llega al motor) |
 | C11 | El modal «Laboratorios» ignora la precarga y recalcula todo (3-6 s y red duplicada) | 2 | 🗳️ decidido (02-sep): servir la precarga si tiene < 2 min y ofrecer «Buscar laboratorios nuevos» · en curso |
-| C12 | Con factores pendientes el botón «Panel» no existe y el ayudante «Faltan antecedentes» queda inalcanzable | 2 | 🗳️ decidido (02-sep): botón atenuado «📝 Faltan antecedentes» que abre el ayudante · en curso |
+| C12 | Con factores pendientes el botón «Panel» no existe y el ayudante «Faltan antecedentes» queda inalcanzable | 2 | ✅ v18.0.112 |
 | C13 | `alert()`/`confirm()` nativos siguen vivos en Ordenar y Redactor | 3 | ✅ v18.0.109 (doble toque en el ✕ del Redactor; aviso rojo en Ordenar) |
 | C14 | `persist` no hace nada en toasts VERDE/AZUL (la leyenda de colores se cierra sola) | 3 | ✅ v18.0.109 |
 | C15 | Salto de maquetación del recuadro renal en «Laboratorios» | 3 | ✅ v18.0.110 (hueco reservado con «calculando…» desde el primer pintado) |
@@ -89,7 +89,7 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | C17 | Agendar exige 3-7 clics por cita | 3 | 🗳️ decidido (02-sep): recordar tipo/especialidad y abrir en el paso 2 con un chip «cambiar» · en curso |
 | C18 | Éxitos anunciados dos veces (panel + toast) | 4 | ✅ v18.0.109 (el toast solo si la pestaña no se mira) |
 | C19 | Red que compite consigo misma al abrir Agendar (sondeo ±7 días con 3 en vuelo + `cargarHoras` duplicado; `BuscarPacienteDetallado` repetido) | 4 | ✅ v18.0.110 (`apiPacienteDetalladoCacheado`: una caché de 60 s para Agendar, Ordenar y demográficos; el sondeo salta el día central y va de dos en dos) |
-| C20 | «Exámenes» siempre dos clics (el chooser no recuerda ni admite teclado) | 4 | 🗳️ decidido (02-sep): recordar la última opción + teclado (Enter/1/2) · en curso |
+| C20 | «Exámenes» siempre dos clics (el chooser no recuerda ni admite teclado) | 4 | ✅ v18.0.112 |
 | C21 | Cerrar con clic fuera solo en algunos modales | 5 | ✅ v18.0.110 (regla única decidida por el médico: los cuadros de CONSULTA cierran con clic fuera, los de ESCRITURA nunca; `VGL_MODALES_CONSULTA`/`VGL_MODALES_ESCRITURA` + prueba que exige que todo cuadro esté en una lista) |
 
 Patrón común de C1–C4, en palabras del auditor: el asistente sí sabe lo que pasó, pero se lo
@@ -106,8 +106,8 @@ Cada ⚖️ se le presentó como opciones cerradas. Lo que decidió, y en qué e
 | C21 | Regla única: los cuadros de **consulta** (chooser de Exámenes, paquete, Laboratorios, Pendientes del paciente, cartel) cierran con clic fuera; los de **escritura** (Agendar, Ordenar, Panel, Redactor, Llenar, Confirmar, post-cita) **nunca** | ✅ v18.0.110 |
 | C10 | Preguntar por síntomas urinarios **solo** cuando el parcial es sugestivo (con bacteriuria sin piuria la respuesta no cambia la conducta); la respuesta vale 7 días para ese paciente | ✅ v18.0.111 |
 | B12 | **Retirar** el respaldo por equipo `S.medicoId/S.medicoNombre`: solo el login de Everest identifica al médico | ✅ v18.0.111 |
-| C20 | El chooser de «Exámenes» **recuerda la última opción** (resaltada) y admite teclado: Enter la ejecuta, 1/2 eligen | v18.0.112 |
-| C12 | Con factores pendientes, un botón **atenuado «📝 Faltan antecedentes»** en el dock abre el ayudante de llenado | v18.0.112 |
+| C20 | El chooser de «Exámenes» **recuerda la última opción** (resaltada) y admite teclado: Enter la ejecuta, 1/2 eligen | ✅ v18.0.112 |
+| C12 | Con factores pendientes, un botón **atenuado «📝 Faltan antecedentes»** en el dock abre el ayudante de llenado | ✅ v18.0.112 |
 | C11 | «Laboratorios» sirve la **precarga si es fresca (< 2 min)** y ofrece «Buscar laboratorios nuevos» para consultar en vivo | v18.0.113 |
 | C17 | Agendar **recuerda tipo y especialidad** y abre en el paso 2, con un chip «cambiar» para volver al 1 | v18.0.113 |
 | A | Paso 1: un **detector pasivo de desacuerdos** entre módulos (programa, tensión, peso, medicamentos) visible solo en modo programador, antes de tocar la precedencia | v18.0.114 |
