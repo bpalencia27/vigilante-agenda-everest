@@ -11810,3 +11810,61 @@ protección** en la superficie nueva, sin bajar ninguna exigencia.
 | 388 | Ordenar vuelve a robar la pantalla con el PDF (**decisión**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
 
 Banco completo: **3.055 comprobaciones pasan, 0 fallan.**
+
+## v18.0.119 — reporte en vivo: «hay que blindar que SÍ se pueda cancelar la cita porque parece un error de cableado»
+
+El médico reportó que «Cancelar esta cita» no consigue anular en Everest. Un refutador adversarial
+revisó el cableado entero (`scratchpad/cancelar/refut_cableado.md`) y su hallazgo principal es
+incómodo y hay que decirlo: **la captura original del endpoint (19-ago) no existe en el
+repositorio ni en su historial**. Lo que hay es una transcripción de memoria, con tres desvíos
+verificables frente a `AsignarTurno`, que es la única escritura de ese API que sí funciona en
+consulta: tipos mezclados en el cuerpo, `Ip` vacío (frente a `127.0.0.1`) y un motivo libre. La
+transición a `_apiPostConDetalle` (v18.0.114) NO cambió la petición en el cable: el fallo es
+anterior. Sin la captura no se puede afirmar cuál es el contrato correcto — así que en vez de
+adivinar uno, el asistente aprende el de verdad y, mientras tanto, prueba las formas plausibles.
+
+**1. La llamada real se aprende.** Cuando el médico cancela una cita **a mano en Everest**, el
+asistente ve pasar esa petición y guarda su FORMA: método, ruta, nombres de parámetros y valores
+constantes. **Nunca guarda identificadores**: los que reconoce por el nombre del parámetro
+(`CitaId`, `PacienteId`, `UsuarioId`, `Observacion`…) se sustituyen por un marcador, y si aparece
+cualquier otro valor con pinta de identificador (cinco dígitos o más), la plantilla se descarta
+entera. Lo que sí se aprende es justo lo que falta: parámetros extra (`TipoCancelacion=2`),
+constantes (`Ip=127.0.0.1`) e ids de catálogo (`motivoId: 4`, que NO se confunde con el texto del
+motivo). La próxima cancelación desde el asistente usa esa plantilla.
+
+**2. Variantes ante un rechazo de forma.** Sin plantilla aprendida: si Everest responde **4xx**
+(rechazó la petición **sin actuar**), se prueba la forma alineada con AsignarTurno (`Ip` real,
+identificadores numéricos) y, si tampoco, todo por query. **Nunca** se reintenta ante 401/403
+(sesión), 5xx (servidor), fallo de red (la cancelación pudo llegar) ni ante un 200 que no
+confirma (ahí Everest decidió sobre la cita, no sobre la forma). La que funciona se recuerda.
+
+**3. El veredicto, en las dos direcciones.** `{error:false, mensaje:"La cita no se puede
+cancelar"}` se daba por **anulada** y se borraban las marcas locales de una cita que sigue viva;
+y un «Cancelado Correctamente» que llegara como cadena o envuelto en `data` se rechazaba. Ahora
+el mensaje manda sobre la bandera, y se aceptan las tres formas. Si Everest dice que **ya estaba
+cancelada**, no es un fallo: se limpian las marcas y se dice qué pasó.
+
+**4. Y si aun así falla**, el aviso lo dice con su motivo y añade la salida real: anúlela en la
+agenda de Everest — y en cuanto lo haga, el asistente aprende esa llamada. El modo programador
+muestra qué plantilla hay aprendida y qué variante funcionó.
+
+**Además, una pregunta del médico en consulta:** «*Exámenes · casilla obligatoria — Everest exige
+HEMOGLOBINA, FÓSFORO EN SUERO, ALBÚMINA EN SUERO para esta ruta y la casilla sigue vacía.
+Revíselo.* NO ENTIENDO QUÉ QUIERE DECIR ESTO». Tenía razón: el aviso decía el hecho y no el
+porqué ni el qué hacer. Ahora dice que Everest no deja guardar esa Ruta Crónicos sin esos
+exámenes, que la casilla quedó vacía porque el laboratorio no trajo el resultado (o llegó
+pendiente), que el asistente no lo inventa, y que si tiene el resultado lo escriba a mano.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 389 | el mensaje deja de mandar sobre `error:false` | *suite_15: v18.0.119: el veredicto de la anulación…* | Sí |
+| 390 | un «Cancelado» en cadena vuelve a rechazarse | *suite_15: v18.0.119: el veredicto…* | Sí |
+| 391 | se reintenta con otra forma ante cualquier fallo | *suite_15: v18.0.119: si Everest RECHAZA la forma (400)…* | Sí |
+| 392 | se prueban todas las formas siempre | *suite_15: v18.0.119: si Everest RECHAZA la forma…* («no se insiste») | Sí |
+| 393 | la forma que funcionó no se recuerda | *suite_15: v18.0.119: si Everest RECHAZA la forma…* | Sí |
+| 394 | «ya estaba cancelada» vuelve a tratarse como fallo | *suite_15: v18.0.119: si Everest RECHAZA la forma…* («hecho consumado») | Sí |
+| 395 | la plantilla guarda un identificador desconocido | *suite_15: v18.0.119: el asistente APRENDE la cancelación real…* | Sí |
+| 396 | el detector de identificadores deja pasar cifras largas | *suite_15: v18.0.119: el asistente APRENDE…* («no guarda ningún identificador») | Sí |
+| 397 | `motivoId: 4` se sustituye por el texto del motivo | *suite_15: v18.0.119: el asistente APRENDE…* («conserva… constantes») | Sí |
+
+Banco completo: **3.059 comprobaciones pasan, 0 fallan.**

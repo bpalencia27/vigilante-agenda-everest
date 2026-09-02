@@ -1364,8 +1364,11 @@ module.exports = {
       const cuerpos = (bandeja.children || []).map((n) => {
         try { return String(n.querySelector(".vgl-toast-b").textContent || ""); } catch (e) { return ""; }
       });
-      t.cierto(cuerpos.some((x) => x.includes("HEMOGLOBINA") && x.includes("exige")),
+      // v18.0.119 — el texto explica ahora por qué está vacía y qué hacer (el médico preguntó qué
+      // quería decir el aviso viejo). Lo que se exige aquí es lo mismo: que se avise y se nombre.
+      t.cierto(cuerpos.some((x) => x.includes("HEMOGLOBINA") && /no deja guardar/.test(x)),
         "Everest exige Hemoglobina, sigue vacía, y ahora SÍ se avisa — antes esta información se calculaba y se tiraba a la basura (" + JSON.stringify(cuerpos) + ")");
+      t.cierto(cuerpos.some((x) => /El asistente no las inventa/.test(x)), "y el aviso dice por qué está vacía y qué hacer");
       t.igual(casillaHb.value, "", "de solo lectura: el aviso no rellena nada por su cuenta");
     });
 
@@ -1419,8 +1422,8 @@ module.exports = {
       await esperar(20);
       t.igual(casillaCr.value, "1.2", "control del caso: Auto-Labs SÍ escribió la creatinina (count>0)");
       t.cierto(llegados.some((x) => /resultado\(s\) listos/.test(x)), "el VERDE de éxito llegó: " + JSON.stringify(llegados));
-      t.cierto(llegados.some((x) => x.includes("HEMOGLOBINA") && x.includes("exige")),
-        "y el AMBAR «Everest exige HEMOGLOBINA» TAMBIÉN — antes lo tragaba el deduplicado por título: " + JSON.stringify(llegados));
+      t.cierto(llegados.some((x) => x.includes("HEMOGLOBINA") && /no deja guardar/.test(x)),
+        "y el AMBAR de la casilla obligatoria TAMBIÉN — antes lo tragaba el deduplicado por título: " + JSON.stringify(llegados));
       t.igual(casillaHb.value, "", "el aviso no rellena nada por su cuenta");
     });
 
@@ -1452,7 +1455,9 @@ module.exports = {
       }
       // Y el cableado: los seis showToast de Auto-Labs (rama principal y de reintento) llevan la clave.
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      t.igual((src.match(/, false, "labs\|" \+ docId\)/g) || []).length, 6, "los seis avisos de Auto-Labs viajan con apptKey «labs|cédula»");
+      // v18.0.119 — dos de los seis (los de «casilla obligatoria») pasaron a dos líneas porque el
+      // texto ahora explica POR QUÉ está vacía y qué hacer; se cuentan las dos formas.
+      t.igual(((src.match(/, false, "labs\|" \+ docId\)/g) || []).length + (src.match(/\n\s*false, "labs\|" \+ docId\)/g) || []).length), 6, "los seis avisos de Auto-Labs viajan con apptKey «labs|cédula»");
       // Hermanos con título compartido en el mismo flush (el AZUL se tragaba el AMBAR):
       t.igual((src.match(/showToast\("AMBAR", "Redactar con IA · sin datos"/g) || []).length, 2, "los dos AMBAR que siguen al AZUL «Leyendo…» del Redactor tienen título propio (el de «no activada» sale antes y solo)");
       t.cierto(/showToast\("AMBAR", "Modo programador · Ajustes sin guardar"/.test(src), "el AMBAR de Modo programador (fila 33a) tiene título propio");
@@ -5607,6 +5612,88 @@ module.exports = {
         "Ordenar abre la pestaña del PDF detrás y devuelve el foco a Everest (decisión del médico, 02-sep)");
       t.cierto(/_bloquearCierre\(true\);/.test(src) && /_ordGenerandoDocs\.has\(_agmClaveDoc\(apt\.doc_id\)\)\) \{ uxTrack\("ordenes\.cerrar\.en_vuelo"\); return; \}/.test(src),
         "y mientras el lote corre, ✕ / Cancelar / Escape esperan (UI/UX #14)");
+    });
+
+    // =====================================================================
+    // v18.0.119 — REPORTE EN VIVO: «hay que blindar que SÍ se pueda cancelar la cita»
+    // =====================================================================
+    t.caso("v18.0.119: el veredicto de la anulación — un mensaje que la NIEGA manda sobre error:false, y un «Cancelado» envuelto o en cadena sí cuenta", () => {
+      const c = cargar({ silencioso: true });
+      const ok = c.api._anulacionConfirmada;
+      t.falso(ok({ error: false, mensaje: "La cita no se puede cancelar" }), "error:false con un mensaje que lo niega NO es una anulación (antes: se daba por anulada y se borraban las marcas de una cita viva)");
+      t.falso(ok({ isError: false, mensaje: "La cita no existe" }), "tampoco «no existe»");
+      t.cierto(ok({ error: false, mensaje: "Cancelado Correctamente" }), "la respuesta capturada sigue valiendo");
+      t.cierto(ok({ data: { error: false, mensaje: "Cancelado Correctamente" } }), "envuelta en data, también");
+      t.cierto(ok("Cancelado Correctamente"), "y como cadena suelta");
+      t.falso(ok("No se pudo cancelar"), "una cadena que lo niega, no");
+      t.cierto(c.api._anulacionYaNoVigente({ mensaje: "La cita ya fue cancelada" }), "«ya fue cancelada» se reconoce como cita que ya no está vigente");
+      t.falso(c.api._anulacionYaNoVigente({ mensaje: "Error de conexión" }), "un error cualquiera no");
+    });
+
+    await t.casoAsync("v18.0.119: si Everest RECHAZA la forma (400), se prueba la variante alineada con AsignarTurno; con 401/500/red NO se reintenta, y la que funciona se recuerda", async () => {
+      const peticiones = [];
+      const mk = (responder) => {
+        const c = cargar({ silencioso: true, fetch: async (url, init) => { peticiones.push({ url: String(url), body: (init && init.body) || "" }); return responder(peticiones.length, String(url), (init && init.body) || ""); } });
+        c.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+        c.api.markCitaAgendadaHoy("111222333", "2026-10-01", { citaId: "7813686", pacienteId: "5150", eps: "EPS", hora: "8:40 AM" });
+        return c;
+      };
+      const resp = (status, cuerpo) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, text: async () => JSON.stringify(cuerpo), json: async () => cuerpo, clone() { return this; } });
+      // (a) la primera forma la rechaza el servidor por forma (400) y la segunda la acepta
+      const cA = mk((n) => (n === 1 ? resp(400, { mensaje: "El campo citaId no es válido" }) : resp(200, { error: false, mensaje: "Cancelado Correctamente" })));
+      t.cierto(await cA.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "con la segunda forma, Everest confirma");
+      t.igual(peticiones.length, 2, "se probaron dos formas (antes: una sola y a callar)");
+      t.cierto(/Ip=127\.0\.0\.1/.test(peticiones[1].url), "la segunda va alineada con AsignarTurno (Ip real)");
+      t.cierto(/"citaId":7813686/.test(peticiones[1].body), "y con los identificadores como números");
+      t.igual(cA.env.storage.getItem("vgl_cancel_variante"), "B", "la forma que funcionó se recuerda para la próxima");
+      t.falso(cA.api.isCitaAgendadaHoy("111222333"), "y las marcas locales se limpian solo tras la confirmación");
+      // (b) sesión caducada: NO se reintenta con otra forma (no es un problema de forma)
+      peticiones.length = 0;
+      const c401 = mk(() => resp(401, {}));
+      t.falso(await c401.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "401: no se anula");
+      t.igual(peticiones.length, 1, "y no se insiste con otras formas");
+      t.cierto(/sesión de Everest caducó/.test(c401.api._anularUltimoMotivoLeer()), "el motivo lo dice");
+      // (c) 200 que no confirma: Everest decidió, tampoco se reintenta
+      peticiones.length = 0;
+      const c200 = mk(() => resp(200, { error: false, mensaje: "La cita no se puede cancelar porque ya fue atendida" }));
+      t.falso(await c200.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "no se da por anulada");
+      t.igual(peticiones.length, 1, "una sola petición: no es un problema de cableado");
+      t.cierto(c200.api.isCitaAgendadaHoy("111222333"), "y la marca local NO se toca");
+      // (d) «ya estaba cancelada»: no es fallo — se limpian las marcas y se dice
+      peticiones.length = 0;
+      const cYa = mk(() => resp(200, { error: true, mensaje: "La cita ya fue cancelada" }));
+      t.cierto(await cYa.api._anularCitaAsignadaReal({ doc_id: "111222333" }), "se resuelve como hecho consumado");
+      t.falso(cYa.api.isCitaAgendadaHoy("111222333"), "y las marcas de esa cita se limpian");
+    });
+
+    t.caso("v18.0.119: el asistente APRENDE la cancelación real de Everest sin guardar ni un identificador, y la usa primero", () => {
+      const c = cargar({ silencioso: true });
+      // la forma real que se ve pasar cuando el médico cancela a mano (valores sintéticos)
+      const pl = c.api._cancelPlantillaDesde("POST", "/apiviva/APIAcceso/api/Acceso/CancelarCita?CitaId=7813686&PacienteId=5150&UsuarioId=707&Ip=127.0.0.1&TipoCancelacion=2&Observacion=Paciente+cancela",
+        JSON.stringify({ citaId: 7813686, pacienteId: 5150, usuarioId: 707, estado: "CAN", ip: "127.0.0.1", motivoId: 4 }));
+      t.cierto(!!pl, "la plantilla se construye");
+      const texto = JSON.stringify(pl);
+      t.falso(/7813686|5150/.test(texto), "NO guarda ningún identificador: van como marcador");
+      t.cierto(/\{citaId\}/.test(texto) && /\{pacienteId\}/.test(texto) && /\{usuarioId\}/.test(texto), "los reconoce por el nombre del parámetro");
+      t.cierto(/TipoCancelacion/.test(texto) && /"motivoId":4/.test(texto) && /127\.0\.0\.1/.test(texto), "y conserva lo que sí hay que aprender: parámetros extra y constantes");
+      // un valor con pinta de identificador que no sabemos nombrar: no se guarda NADA
+      t.igual(c.api._cancelPlantillaDesde("POST", "/x/CancelarCita?CitaId=1&Cosa=99887766", null), null, "un identificador no reconocido descarta la plantilla entera");
+      // y al rellenarla salen los datos de ESTA cancelación
+      const pet = c.api._cancelPeticionDesdePlantilla(pl, { citaId: 42, pacienteId: 7, usuarioId: 707, usuarioNombre: "MEDICO PRUEBA", eps: "EPS", observacion: "Anulada desde el Vigilante" });
+      t.cierto(/CitaId=42/.test(pet.url) && /PacienteId=7/.test(pet.url) && /TipoCancelacion=2/.test(pet.url), "la petición sale con los valores de ahora y los parámetros aprendidos");
+      t.cierto(/"citaId":"42"/.test(pet.cuerpo) && /"motivoId":4/.test(pet.cuerpo), "el cuerpo también");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(_cancelNuestra\) return;/.test(src), "no aprende de sus propias llamadas");
+      t.cierto(/try \{ _cancelEnganchar\(\); \} catch \(e\) \{\}/.test(src), "y la escucha se instala al arrancar");
+    });
+
+    t.caso("v18.0.119 (pregunta del médico en consulta): el aviso de casilla obligatoria explica POR QUÉ está vacía y qué hacer, no solo «revíselo»", () => {
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/para esta ruta y la casilla sigue vacía\. Revíselo\./.test(src), "el texto viejo («la casilla sigue vacía. Revíselo.») no dice ni por qué ni qué hacer");
+      t.cierto(/Everest no deja guardar esta Ruta Crónicos sin/.test(src), "dice qué impide exactamente");
+      t.cierto(/el laboratorio no trajo ese resultado \(o llegó pendiente\)/.test(src), "y por qué está vacía");
+      t.cierto(/El asistente no las inventa/.test(src), "recuerda que no se rellena sola (casilla vacía antes que dato inventado)");
+      t.cierto(/escríbalo a mano en la casilla/.test(src), "y qué puede hacer el médico");
     });
 
   },

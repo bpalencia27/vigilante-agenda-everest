@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.118
+// @version      18.0.119
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.118";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.119";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7317,7 +7317,8 @@
                   if (Array.isArray(r.obligatoriasVacias) && r.obligatoriasVacias.length) {
                       const _nombresOv = r.obligatoriasVacias.map((o) => o.nombre);
                       showToast("AMBAR", "Exámenes · casilla obligatoria",
-                          "Everest exige " + _nombresOv.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false, "labs|" + docId);
+                          "Everest no deja guardar esta Ruta Crónicos sin " + _nombresOv.join(", ") + ": esas casillas quedaron VACÍAS porque el laboratorio no trajo ese resultado (o llegó pendiente). El asistente no las inventa. Si tiene el resultado, escríbalo a mano en la casilla; si no se ha tomado, la ruta no se podrá guardar completa hasta que exista.",
+                          false, "labs|" + docId);
                       try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r.obligatoriasVacias.length }); } catch (e) {}
                   }
               } else if (atheneaSesionViva === false) {
@@ -7369,7 +7370,8 @@
                               if (Array.isArray(r2.obligatoriasVacias) && r2.obligatoriasVacias.length) {
                                   const _nombresOv2 = r2.obligatoriasVacias.map((o) => o.nombre);
                                   showToast("AMBAR", "Exámenes · casilla obligatoria",   // 02-sep (fila 44): título distinto del VERDE
-                                      "Everest exige " + _nombresOv2.join(", ") + " para esta ruta y la casilla sigue vacía. Revíselo.", false, "labs|" + docId);
+                                      "Everest no deja guardar esta Ruta Crónicos sin " + _nombresOv2.join(", ") + ": esas casillas quedaron VACÍAS porque el laboratorio no trajo ese resultado (o llegó pendiente). El asistente no las inventa. Si tiene el resultado, escríbalo a mano en la casilla; si no se ha tomado, la ruta no se podrá guardar completa hasta que exista.",
+                                      false, "labs|" + docId);
                                   try { uxTrack("labs.autollenado.obligatoriasvacias", { n: r2.obligatoriasVacias.length }); } catch (e) {}
                               }
                           } else if (labs2 === null) {
@@ -21648,6 +21650,240 @@
   // sustituye el aviso anterior en vez de apilarlo.
   let _anularUltimoMotivo = "";
   function _anularUltimoMotivoLeer() { return _anularUltimoMotivo; }
+
+  // =====================================================================
+  //  v18.0.119 — QUE LA CANCELACIÓN FUNCIONE, AUNQUE EL CONTRATO NO ESTÉ CAPTURADO
+  //  ------------------------------------------------------------------
+  //  Reporte en vivo del médico (02-sep): «hay que blindar que SÍ se pueda cancelar la cita
+  //  porque parece un error de cableado». Una refutación adversarial confirmó que la captura
+  //  original (19-ago) no existe en el repositorio: lo que hay es una transcripción de memoria,
+  //  con tres desvíos verificables frente a AsignarTurno (la única escritura de este API que sí
+  //  funciona en consulta): tipos mezclados en el cuerpo, `Ip` vacío y un motivo libre.
+  //
+  //  Tres defensas, en este orden:
+  //   1. LA LLAMADA REAL SE APRENDE. Cuando el médico cancela una cita a mano EN EVEREST, el
+  //      asistente ve pasar esa petición y guarda su FORMA (método, ruta, nombres de parámetros
+  //      y valores constantes). Nunca guarda identificadores: los que reconoce por el nombre del
+  //      parámetro se sustituyen por un marcador, y si aparece cualquier otro valor con pinta de
+  //      identificador, la plantilla se descarta entera. Cero PHI, como todo lo que se persiste.
+  //   2. VARIANTES ANTE UN RECHAZO DE FORMA. Sin plantilla aprendida, si Everest responde 4xx
+  //      (rechazó la petición sin actuar) se reintenta con la forma alineada a AsignarTurno y,
+  //      si tampoco, con todo por query. Nunca se reintenta ante 401/403 (sesión), 5xx
+  //      (servidor), fallo de red (la cancelación pudo llegar) ni ante un 200 que no confirma
+  //      (ahí Everest decidió: no es cableado).
+  //   3. LA QUE FUNCIONÓ SE RECUERDA y se usa primero la próxima vez.
+  // =====================================================================
+  const CANCEL_PLANTILLA_KEY = "vgl_cancel_plantilla";
+  const CANCEL_VARIANTE_KEY = "vgl_cancel_variante";
+  let _cancelNuestra = false;              // marca para no aprender de nuestras propias llamadas
+  let _cancelEnganchado = false;
+  let _cancelUltimoDiag = "";              // para el modo programador
+
+  // ¿El valor tiene pinta de identificador (cédula, radicado, id de paciente)? Si un parámetro
+  // que no sabemos nombrar trae algo así, no se guarda NADA: preferimos quedarnos sin plantilla
+  // antes que persistir un identificador de un paciente.
+  function _cancelValorSospechoso(v) {
+    const t = String(v == null ? "" : v);
+    if (!t) return false;
+    if (/\d{5,}/.test(t)) return true;
+    return t.length > 24;
+  }
+  // El papel de cada parámetro, por su nombre. Lo que no se reconoce se guarda como literal
+  // (p. ej. Ip=127.0.0.1, estado=CAN, TipoCancelacion=1), que es justo lo que hay que aprender.
+  function _cancelPapelDeClave(k, v) {
+    const n = String(k || "").toLowerCase();
+    if (/nombre/.test(n) && /usuario|medico|profesional/.test(n)) return "{usuarioNombre}";
+    if (/usuario|medico|profesional/.test(n) && /id/.test(n)) return "{usuarioId}";
+    if (/cita|radicado|turno/.test(n) && !/tipo/.test(n)) return "{citaId}";
+    if (/paciente/.test(n) && /id/.test(n)) return "{pacienteId}";
+    // Ojo: «motivoId: 4» NO es nuestro texto de motivo, es un id del catálogo de Everest. Solo se
+    // sustituye por el texto cuando el valor capturado ES texto; si es un número, se aprende tal cual.
+    if (/observ|motivo|causa/.test(n)) {
+      const esNumero = (typeof v === "number") || (/^\d+$/.test(String(v == null ? "" : v).trim()) && String(v).trim() !== "");
+      return esNumero ? null : "{observacion}";
+    }
+    if (/^eps/.test(n) || /nombreeps/.test(n)) return "{eps}";
+    return null;
+  }
+  // Se parsea a mano y no con `new URL`: en esta página `URL` puede estar sombreado (y en el banco
+  // lo está, por el stub de createObjectURL). Un contrato que solo se aprende «si el entorno
+  // coopera» no sirve de blindaje.
+  function _cancelPartirUrl(url) {
+    const t = String(url == null ? "" : url);
+    const sinHash = t.split("#")[0];
+    const i = sinHash.indexOf("?");
+    const ruta = (i < 0 ? sinHash : sinHash.slice(0, i)).replace(/^https?:\/\/[^/]+/i, "");
+    const qs = i < 0 ? "" : sinHash.slice(i + 1);
+    const pares = [];
+    qs.split("&").forEach((par) => {
+      if (!par) return;
+      const j = par.indexOf("=");
+      const k = j < 0 ? par : par.slice(0, j);
+      const v = j < 0 ? "" : par.slice(j + 1);
+      const dec = (x) => { try { return decodeURIComponent(String(x).replace(/\+/g, " ")); } catch (e) { return String(x); } };
+      pares.push([dec(k), dec(v)]);
+    });
+    return { ruta: ruta || "/", pares: pares };
+  }
+  function _cancelPlantillaDesde(metodo, url, cuerpo) {
+    try {
+      const u = _cancelPartirUrl(url);
+      const query = [];
+      for (const [k, v] of u.pares) {
+        const papel = _cancelPapelDeClave(k, v);
+        if (papel) { query.push([k, papel]); continue; }
+        if (_cancelValorSospechoso(v)) return null;      // un id que no sabemos nombrar: se descarta
+        query.push([k, String(v)]);
+      }
+      let cuerpoPl = null;
+      if (cuerpo && typeof cuerpo === "string" && cuerpo.trim()) {
+        let obj = null;
+        try { obj = JSON.parse(cuerpo); } catch (e) { obj = null; }
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;   // no sabemos rehacerlo
+        cuerpoPl = {};
+        for (const k of Object.keys(obj)) {
+          const v = obj[k];
+          if (v && typeof v === "object") return null;                            // anidado: no se aprende
+          const papel = _cancelPapelDeClave(k, v);
+          if (papel) { cuerpoPl[k] = papel; continue; }
+          if (_cancelValorSospechoso(v)) return null;
+          cuerpoPl[k] = v;
+        }
+      }
+      return { metodo: String(metodo || "POST").toUpperCase(), ruta: u.ruta, query: query, cuerpo: cuerpoPl, ts: Date.now() };
+    } catch (e) { return null; }
+  }
+  function _cancelPlantillaGuardar(pl) {
+    try {
+      if (!pl || !pl.ruta) return false;
+      const ok = writeJSON(CANCEL_PLANTILLA_KEY, pl);
+      if (ok) {
+        _cancelUltimoDiag = "plantilla aprendida de Everest: " + pl.metodo + " " + pl.ruta + " · " + pl.query.length + " parámetros";
+        try { uxTrack("cita.anular.plantilla_aprendida"); } catch (e) {}
+        try { vglLog("AGENDA", "CancelarCitaPlantilla", { ruta: pl.ruta, params: pl.query.length, cuerpo: pl.cuerpo ? Object.keys(pl.cuerpo).length : 0 }); } catch (e) {}
+        try {
+          showToast("AZUL", "Cancelación de citas · aprendida",
+            "Vi cómo cancela Everest y guardé la forma de esa llamada (sin ningún dato de paciente). Si vuelve a fallar «Cancelar esta cita» desde el asistente, ahora usará esa misma llamada.",
+            false, "cancel|plantilla");
+        } catch (e) {}
+      }
+      return ok;
+    } catch (e) { return false; }
+  }
+  function _cancelPlantillaLeer() {
+    try {
+      const pl = readJSON(CANCEL_PLANTILLA_KEY, null);
+      return (pl && pl.ruta && Array.isArray(pl.query)) ? pl : null;
+    } catch (e) { return null; }
+  }
+  function _cancelPlantillaBorrar() { try { localStorage.removeItem(CANCEL_PLANTILLA_KEY); } catch (e) {} }
+  // Rellena una plantilla con los datos de ESTA cancelación.
+  function _cancelPeticionDesdePlantilla(pl, ctx) {
+    const val = (x) => {
+      switch (x) {
+        case "{citaId}": return String(ctx.citaId == null ? "" : ctx.citaId);
+        case "{pacienteId}": return String(ctx.pacienteId == null ? "" : ctx.pacienteId);
+        case "{usuarioId}": return String(ctx.usuarioId == null ? "" : ctx.usuarioId);
+        case "{usuarioNombre}": return String(ctx.usuarioNombre || "");
+        case "{observacion}": return String(ctx.observacion || "");
+        case "{eps}": return String(ctx.eps || "");
+        default: return x;
+      }
+    };
+    const q = pl.query.map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(val(v))).join("&");
+    let cuerpo = null;
+    if (pl.cuerpo) {
+      const o = {};
+      for (const k of Object.keys(pl.cuerpo)) {
+        const v = pl.cuerpo[k];
+        o[k] = (typeof v === "string" && v.charAt(0) === "{") ? val(v) : v;
+      }
+      cuerpo = JSON.stringify(o);
+    }
+    return { url: pl.ruta + (q ? "?" + q : ""), cuerpo: cuerpo == null ? "{}" : cuerpo };
+  }
+  // La escucha: solo mira. Nunca cambia la petición de Everest ni la retrasa.
+  function _cancelEnganchar() {
+    if (_cancelEnganchado) return false;
+    _cancelEnganchado = true;
+    const esCancelacion = (url) => /\/CancelarCita|\/AnularCita|\/CancelarTurno/i.test(String(url || ""));
+    const aprender = (metodo, url, cuerpo) => {
+      try {
+        if (_cancelNuestra) return;                       // la nuestra no enseña nada
+        if (!esCancelacion(url)) return;
+        if (/appcita|laboratorio/i.test(String(url))) return;   // la del laboratorio es otro sistema
+        const pl = _cancelPlantillaDesde(metodo, url, cuerpo);
+        if (!pl) { _cancelUltimoDiag = "vi una cancelación de Everest pero traía un valor no reconocible: no se guardó nada"; return; }
+        const previa = _cancelPlantillaLeer();
+        if (previa && JSON.stringify(previa.query) === JSON.stringify(pl.query) && JSON.stringify(previa.cuerpo) === JSON.stringify(pl.cuerpo)) return;
+        _cancelPlantillaGuardar(pl);
+      } catch (e) {}
+    };
+    try {
+      const XHRopen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (metodo, url) {
+        try { this.__vglCancelUrl = url; this.__vglCancelMetodo = metodo; } catch (e) {}
+        return XHRopen.apply(this, arguments);
+      };
+      const XHRsend2 = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (cuerpo) {
+        try { aprender(this.__vglCancelMetodo, this.__vglCancelUrl, typeof cuerpo === "string" ? cuerpo : null); } catch (e) {}
+        return XHRsend2.apply(this, arguments);
+      };
+      const fetch0 = window.fetch;
+      window.fetch = function (entrada, opciones) {
+        try {
+          const url = (entrada && entrada.url) ? entrada.url : entrada;
+          aprender((opciones && opciones.method) || (entrada && entrada.method) || "GET", url, opciones && typeof opciones.body === "string" ? opciones.body : null);
+        } catch (e) {}
+        return fetch0.apply(this, arguments);
+      };
+    } catch (e) { return false; }
+    return true;
+  }
+  // Las variantes de contrato, en el orden en que se prueban cuando NO hay plantilla aprendida.
+  function _cancelVariantes(ctx) {
+    const obs = String(ctx.observacion || "");
+    const qA = "CitaId=" + encodeURIComponent(ctx.citaId)
+      + "&PacienteId=" + encodeURIComponent(ctx.pacienteId)
+      + "&Observacion=" + encodeURIComponent(obs)
+      + "&Ip=" + encodeURIComponent("")
+      + "&UsuarioId=" + encodeURIComponent(ctx.usuarioId)
+      + "&UsuarioNombreCompleto=" + encodeURIComponent(ctx.usuarioNombre || "");
+    const qB = "CitaId=" + encodeURIComponent(ctx.citaId)
+      + "&PacienteId=" + encodeURIComponent(ctx.pacienteId)
+      + "&Observacion=" + encodeURIComponent(obs)
+      + "&Ip=127.0.0.1"
+      + "&UsuarioId=" + encodeURIComponent(ctx.usuarioId)
+      + "&UsuarioNombreCompleto=" + encodeURIComponent(ctx.usuarioNombre || "");
+    const nCita = Number(ctx.citaId), nPac = Number(ctx.pacienteId), nUsr = Number(ctx.usuarioId);
+    return [
+      // A — el contrato transcrito de la captura del 19-ago (el que hay hoy).
+      { id: "A", url: "/apiviva/APIAcceso/api/Acceso/CancelarCita?" + qA, cuerpo: JSON.stringify({
+        citaId: String(ctx.citaId), eps: ctx.eps || "", estado: "CAN",
+        pacienteId: String(ctx.pacienteId), usuarioId: ctx.usuarioId,
+        observacion: obs, usuarioNombreCompleto: ctx.usuarioNombre || "", ip: "",
+      }) },
+      // B — alineada con AsignarTurno: Ip real y tipos numéricos uniformes (un 400 por tipos es
+      // lo más típico de estos endpoints .NET cuando el modelo espera int y recibe string).
+      { id: "B", url: "/apiviva/APIAcceso/api/Acceso/CancelarCita?" + qB, cuerpo: JSON.stringify({
+        citaId: isFinite(nCita) ? nCita : String(ctx.citaId), eps: ctx.eps || "", estado: "CAN",
+        pacienteId: isFinite(nPac) ? nPac : String(ctx.pacienteId), usuarioId: isFinite(nUsr) ? nUsr : ctx.usuarioId,
+        observacion: obs, usuarioNombreCompleto: ctx.usuarioNombre || "", ip: "127.0.0.1",
+      }) },
+      // C — todo por query y cuerpo vacío, exactamente como AsignarTurno.
+      { id: "C", url: "/apiviva/APIAcceso/api/Acceso/CancelarCita?" + qB + "&Estado=CAN&Eps=" + encodeURIComponent(ctx.eps || ""), cuerpo: "{}" },
+    ];
+  }
+  function _cancelVarianteRecordada() { try { return localStorage.getItem(CANCEL_VARIANTE_KEY) || ""; } catch (e) { return ""; } }
+  function _cancelVarianteRecordar(id) { try { localStorage.setItem(CANCEL_VARIANTE_KEY, String(id || "")); } catch (e) {} }
+  function _cancelDiagnostico() {
+    const pl = _cancelPlantillaLeer();
+    const v = _cancelVarianteRecordada();
+    return (pl ? ("plantilla aprendida: " + pl.metodo + " " + pl.ruta + " (" + pl.query.length + " parámetros)") : "sin plantilla aprendida de Everest")
+      + (v ? " · variante que funcionó: " + v : "")
+      + (_cancelUltimoDiag ? " · " + _cancelUltimoDiag : "");
+  }
   async function _apiPostConDetalle(url, body, topeMs) {
     const f = FETCH0 || (typeof window !== "undefined" ? window.fetch : null);
     if (typeof f !== "function") return { ok: false, status: 0, data: null, texto: "", red: true };
@@ -21668,12 +21904,39 @@
   // Pura. ¿Everest confirmó? Formas vistas: {error:false, mensaje:"Cancelado Correctamente"}
   // (captura 19-ago); se aceptan también {isError:false} y un «mensaje» que diga «cancelad…».
   // Un error:true / isError:true manda por encima de cualquier mensaje.
+  // v18.0.119 — el mensaje MANDA sobre la bandera. Un `{error:false, mensaje:"La cita no se
+  // puede cancelar"}` se daba por anulado y se borraban las marcas locales de una cita que sigue
+  // viva en Everest; y un «Cancelado Correctamente» que llegara como cadena suelta o envuelto en
+  // `data` se rechazaba. Las dos direcciones, con la respuesta capturada como caso de referencia.
+  const _CANCEL_NIEGA = /no se puede|no se pudo|no fue posible|no existe|no encontrad|inv[áa]lid|error/i;
+  const _CANCEL_AFIRMA = /cancelad|anulad/i;
+  function _anulacionMensaje(data) {
+    if (typeof data === "string") return data;
+    if (!data || typeof data !== "object") return "";
+    const d = (data.data && typeof data.data === "object") ? data.data : data;
+    return String(d.mensaje || d.message || d.Mensaje || data.mensaje || data.message || data.Mensaje || "");
+  }
   function _anulacionConfirmada(data) {
+    if (typeof data === "string") return _CANCEL_AFIRMA.test(data) && !_CANCEL_NIEGA.test(data);
     if (!data || typeof data !== "object") return false;
-    if (data.error === true || data.isError === true || data.Error === true) return false;
-    if (data.error === false || data.isError === false || data.Error === false) return true;
-    const msg = String(data.mensaje || data.message || data.Mensaje || "");
-    return /cancelad|anulad/i.test(msg) && !/no se pudo|no fue posible|error/i.test(msg);
+    const d = (data.data && typeof data.data === "object") ? data.data : data;
+    const msg = _anulacionMensaje(data);
+    // Un mensaje que niega la anulación pesa más que cualquier bandera: es lo que el servidor
+    // dice que PASÓ, y la bandera solo dice si la petición se procesó sin excepción.
+    if (msg && _CANCEL_NIEGA.test(msg) && !_CANCEL_AFIRMA.test(msg)) return false;
+    for (const o of [d, data]) {
+      if (o.error === true || o.isError === true || o.Error === true) return false;
+    }
+    for (const o of [d, data]) {
+      if (o.error === false || o.isError === false || o.Error === false) return true;
+    }
+    return !!msg && _CANCEL_AFIRMA.test(msg) && !_CANCEL_NIEGA.test(msg);
+  }
+  // ¿Everest está diciendo que ESA cita ya no está vigente (ya cancelada, o ya no existe)? No es
+  // un fallo de cableado: la cita no está, y las marcas locales sí sobran.
+  function _anulacionYaNoVigente(data) {
+    const msg = _anulacionMensaje(data);
+    return !!msg && /ya (est[áa]|fue|se encuentra)?\s*(cancelad|anulad)|no existe|no se encontr/i.test(msg);
   }
   // Pura. Por qué NO se confirmó, en palabras que el médico pueda actuar.
   function _anulacionMotivo(r) {
@@ -21712,19 +21975,55 @@
       + "&Ip=" + encodeURIComponent("")
       + "&UsuarioId=" + encodeURIComponent(med.id)
       + "&UsuarioNombreCompleto=" + encodeURIComponent(med.name || "");
-    const r = await _apiPostConDetalle("/apiviva/APIAcceso/api/Acceso/CancelarCita?" + q, JSON.stringify({
-      citaId: String(citaId), eps: det.eps || "", estado: "CAN",
-      pacienteId: String(pacienteId), usuarioId: med.id,
-      observacion: observacion, usuarioNombreCompleto: med.name || "", ip: "",
-    }));
-    const res = r.data;
-    const okReal = _anulacionConfirmada(res);
+    // v18.0.119 — el orden: la plantilla aprendida de Everest, luego la variante que ya funcionó,
+    // luego el resto. Solo se pasa a la siguiente si Everest RECHAZÓ la forma (4xx sin actuar).
+    const _ctx = { citaId: citaId, pacienteId: pacienteId, usuarioId: med.id, usuarioNombre: med.name || "", eps: det.eps || "", observacion: observacion };
+    const _plantilla = _cancelPlantillaLeer();
+    const _intentos = [];
+    if (_plantilla) {
+      try { const pet = _cancelPeticionDesdePlantilla(_plantilla, _ctx); _intentos.push({ id: "aprendida", url: pet.url, cuerpo: pet.cuerpo }); } catch (e) {}
+    }
+    {
+      const vs = _cancelVariantes(_ctx);
+      const rec = _cancelVarianteRecordada();
+      const prim = vs.filter((v) => v.id === rec), resto = vs.filter((v) => v.id !== rec);
+      prim.concat(resto).forEach((v) => _intentos.push(v));
+    }
+    let r = null, okReal = false, usada = "";
+    for (let i = 0; i < _intentos.length; i++) {
+      const it = _intentos[i];
+      _cancelNuestra = true;
+      try { r = await _apiPostConDetalle(it.url, it.cuerpo); } finally { _cancelNuestra = false; }
+      usada = it.id;
+      okReal = _anulacionConfirmada(r.data);
+      try { vglLog("AGENDA", okReal ? "CancelarCitaOk" : "CancelarCitaFallo", { variante: it.id, status: r.status, red: !!r.red, extracto: sanitizePII(String(r.texto || "")).slice(0, 120) }); } catch (e) {}
+      if (okReal) break;
+      // Un 4xx es «no entendí la petición», y Everest NO actuó: se puede probar otra forma. Todo
+      // lo demás (200 sin confirmar, 401/403, 5xx, red) es una respuesta sobre la cita, no sobre
+      // la forma: reintentar ahí sería insistirle a Everest con lo mismo, o peor, cancelar dos veces.
+      const _rechazoDeForma = !r.red && r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403;
+      if (!_rechazoDeForma) break;
+      try { uxTrack("cita.anular.variante_rechazada"); } catch (e) {}
+    }
+    const res = r ? r.data : null;
     try { uxTrack(okReal ? "cita.anulada.ok" : "cita.anulada.fallo"); } catch (e) {}
-    try { vglLog("AGENDA", okReal ? "CancelarCitaOk" : "CancelarCitaFallo", { status: r.status, red: !!r.red, extracto: sanitizePII(String(r.texto || "")).slice(0, 120) }); } catch (e) {}
+    if (okReal && usada && usada !== "aprendida") _cancelVarianteRecordar(usada);
     if (!okReal) {
-      _anularUltimoMotivo = _anulacionMotivo(r);
+      // Everest dice que esa cita ya no está vigente (ya cancelada, o no existe): no es un fallo
+      // de cableado y las marcas locales sobran. Se limpian, pero se dice lo que pasó.
+      if (_anulacionYaNoVigente(res)) {
+        _anularUltimoMotivo = "";
+        _anularCitaMarcasLocales(docId);
+        try { uxTrack("cita.anulada.ya_no_vigente"); } catch (e) {}
+        showToast("AMBAR", "La cita ya no estaba vigente",
+          "Everest respondió: «" + String(_anulacionMensaje(res)).slice(0, 90) + "». No había nada que anular; el asistente limpió sus marcas de esta cita.",
+          true, "anular|" + String(docId));
+        return true;
+      }
+      _anularUltimoMotivo = _anulacionMotivo(r) + (_intentos.length > 1 ? " (se probaron " + _intentos.length + " formas de la petición)" : "");
       showToast("ROJO", "Anular cita",
-        "Everest NO confirmó la anulación: " + _anularUltimoMotivo + ". No se tocó ninguna marca local.", true, "anular|" + String(docId));
+        "Everest NO confirmó la anulación: " + _anularUltimoMotivo + ". No se tocó ninguna marca local. Si necesita anularla ya, hágalo en la agenda de Everest: en cuanto lo haga, el asistente aprende esa llamada y la usará la próxima vez.",
+        true, "anular|" + String(docId));
       return false;
     }
     _anularUltimoMotivo = "";
@@ -30662,6 +30961,7 @@
         <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
         <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
+        <div class="vgl-fld"><label>Cancelación de citas<span class="vgl-hint">Qué sabe el asistente de la llamada real con la que Everest cancela una cita (v18.0.119). Se aprende viendo una cancelación hecha a mano; nunca guarda datos de paciente.</span></label><b id="c-cancelplan" style="font-size:var(--t-micro)">${escapeHtml(_cancelDiagnostico())}</b></div>
         <div class="vgl-fld"><label>Desacuerdos entre módulos (paciente abierto)<span class="vgl-hint">Paso 1 del «estado único» (v18.0.116): solo observa y anota qué fuentes no coinciden — tensión, peso, sexo, programas, medicamentos. No cambia ninguna preferencia.</span></label><b id="c-desacuerdos" style="font-size:var(--t-micro)">${escapeHtml(_ajustesDesacuerdosTexto())}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
         <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
@@ -33052,6 +33352,7 @@
     // try/catch porque NADA de esto puede impedir el arranque, y la propia función no
     // modifica ninguna petición: lee el cuerpo y devuelve el control intacto.
     try { mtrHcEnganchar(); } catch (e) {}
+    try { _cancelEnganchar(); } catch (e) {}   // v18.0.119 — aprender cómo cancela Everest
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
     // v17.48.0 — una sola pasada, con la misma bandera de una-sola-vez que usan las
