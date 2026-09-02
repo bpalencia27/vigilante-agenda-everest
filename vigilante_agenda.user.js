@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.131";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.132";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1737,12 +1737,15 @@
 
       const badges = [];
       let cronicosCount = 0;
-      const esDiabetico = factores.diabetes === true || /diabetes|diabet|\bdm\b/i.test(allText);
+      // A11 (S+, 02-sep): la etiqueta de la agenda/API ya no afirma "Diabetes" sobre un
+      // `false` documentado (casilla de hoy marcada "NO" o confirmación del médico): el
+      // tri-estado manda. Sin dato (null/undefined) la etiqueta sigue contando, como antes.
+      const esDiabetico = factores.diabetes === true || ((factores.diabetes !== false) && /diabetes|diabet|\bdm\b/i.test(allText));
       if (esDiabetico) { cronicosCount++; badges.push("Diabetes"); }
       // v16.7.0 (auditoría #14) — `factores.hipertension` no existe (la clave real es
       // `hta`): el conteo de crónicos solo funcionaba cuando el TEXTO de la agenda
       // mencionaba la hipertensión. Con la clave real, el antecedente documentado cuenta.
-      if (factores.hta === true || factores.hipertension === true || /hipertens|hta/i.test(allText)) { cronicosCount++; badges.push("Hipertensión"); }
+      if (factores.hta === true || factores.hipertension === true || ((factores.hta !== false && factores.hipertension !== false) && /hipertens|hta/i.test(allText))) { cronicosCount++; badges.push("Hipertensión"); }
       const egfr = (resumen && resumen.erc && Number(resumen.erc.egfr)) || NaN;
       const ercBaja = Number.isFinite(egfr) && egfr < 60;
       if (ercBaja) { cronicosCount++; badges.push("ERC TFG " + Math.round(egfr)); }
@@ -4345,6 +4348,8 @@
   // reporta BuscarPacienteDetallado (líneas ~9586/10709): primera letra en mayúscula,
   // "F" o "M" — no se inventa otro criterio aquí.
   function _esSexoFemenino(sexo) {
+      // Nota A5: NO delegar aquí en mtrSexoCanonico — la suite M4-SEX-1 fija el contrato
+      // de este motor puro por PRIMERA LETRA ("FEMALE"/"Femenina" → sí; "Mujer" → no).
       return String(sexo == null ? "" : sexo).trim().toUpperCase().charAt(0) === "F";
   }
   // Cockcroft-Gault usa el peso REAL siempre (decisión clínica ya tomada: es el estadio
@@ -4668,6 +4673,45 @@
   // Athenea y guarda el resultado aquí; escribir en la historia clínica es EXCLUSIVO del
   // botón «🧬 Auto-Labs», que gracias a esta pre-carga responde al instante.
   let _labsPrefetch = { docId: "", labs: null, ts: 0 };
+  // A6 (S+, 02-sep): comparación de cédula TOLERANTE a la forma canónica para la
+  // precarga de Athenea — la misma cédula puede llegar rellenada ("0005150076") por una
+  // vía y limpia ("5150076") por otra, y esta caché se comparaba por igualdad de cadena.
+  function _labsPrefetchCoincide(docId) {
+    if (!docId || !_labsPrefetch || !_labsPrefetch.docId) return false;
+    return normalizeKey(_labsPrefetch.docId) === normalizeKey(docId);
+  }
+
+  // A4 (S+, 02-sep) — EL CONSOLIDADO Athenea+Annar+Citi, compartido. El modal de
+  // Laboratorios y mtrCalcularResumenClinico (Panel/IA) ya pagaban la consolidación de
+  // las tres fuentes en `todosLabs`, pero el resultado se quedaba en el closure del
+  // modal: el aviso de entrada y el antiduplicado de Ordenar/PyM seguían juzgando solo
+  // con Athenea (_labsPrefetch) — y una creatinina vigente en Annar/Citi salía "vencida"
+  // en el cartel mientras el Panel la mostraba al día. Aquí queda el mismo consolidado,
+  // con la misma vida que la precarga de Athenea, para que TODOS los módulos juzguen con
+  // la MISMA lista de laboratorios. `_labsConsolidadoGuardar` recibe también los crudos
+  // de Athenea para reponer la marca de lectura incompleta (v18.0.20): sin ella, un
+  // consolidado armado de una Athenea fallida pasaría por "lectura completa".
+  let _labsConsolidado = { docId: "", labs: null, ts: 0 };
+  function _labsConsolidadoGuardar(docId, labs, labsAthenea) {
+    try {
+      if (!docId || !Array.isArray(labs) || !labs.length) return;
+      const incompleto = (labsAthenea && labsAthenea.__vglIncompleto) || 0;
+      if (incompleto > 0 && labs && !labs.__vglIncompleto) {
+        Object.defineProperty(labs, "__vglIncompleto", { value: incompleto, enumerable: false, configurable: true });
+      }
+    } catch (e) {}
+    _labsConsolidado = { docId: String(docId), labs: labs, ts: Date.now() };
+  }
+  // Devuelve el consolidado solo si es de ESTE paciente y sigue fresco; si no, null.
+  function _labsConsolidadoDe(docId) {
+    try {
+      if (!docId || !_labsConsolidado || !_labsConsolidado.docId) return null;
+      if (normalizeKey(_labsConsolidado.docId) !== normalizeKey(docId)) return null;
+      if (!Array.isArray(_labsConsolidado.labs) || !_labsConsolidado.labs.length) return null;
+      if (Date.now() - _labsConsolidado.ts > LABS_PREFETCH_TTL_MS) return null;
+      return _labsConsolidado.labs;
+    } catch (e) { return null; }
+  }
 
   // =====================================================================
   //  v16.6.0 — PRE-CONSULTA N1/N2 (aprobado por el médico: "me suena así
@@ -4748,7 +4792,7 @@
   // La lectura fresca de siempre corre después y la reemplaza.
   function _preconHidratar(docId) {
     try {
-      if (!docId || (_labsPrefetch.docId === docId && _labsPrefetch.labs)) return false;
+      if (!docId || (_labsPrefetchCoincide(docId) && _labsPrefetch.labs)) return false;
       const e = _preconDe(docId);
       if (!e) return false;
       _labsPrefetch = { docId: String(docId), labs: e.labs, ts: e.ts };
@@ -4765,7 +4809,7 @@
     try {
       if (!S.preconsulta || !doc) return null;
       const m = mapaPorDoc || _preconLeerTodo().porDoc;
-      const e = m[String(doc)];
+      const e = _vglBuscarPorDoc(m, doc);   // A6: lectura tolerante a la forma de la cédula (como _preconDe)
       if (e && Array.isArray(e.labs) && Date.now() - (e.ts || 0) < VGL_PRECON_TTL_MS) return "listo";
       return "cola";
     } catch (e) { return null; }
@@ -5608,6 +5652,7 @@
     const c = ctx || {};
     const leidos = c.leidos || {};
     const cabecera = c.cabecera || {};
+    const ruta = c.ruta || {};   // A11 (S+, 02-sep): inscripción administrativa de Ruta Crónicos ("Ingreso a programa")
     const tfgConfirmaErc = mtrTfgConfirmaErc(c.tfgCockcroftGault);
     // v16.3.1 — "No pude leerlo" NO es "no lo tiene". Un medicamento o un laboratorio
     // solo pueden NEGAR algo si esa fuente de verdad se cargó: si los laboratorios no han
@@ -5633,6 +5678,9 @@
       else if (enHistoria === false) niegan.push({ fuente: "Historia clínica", detalle: "marcado como No" });
 
       if (cabecera[h.clave] === true) afirman.push({ fuente: "Cabecera de Everest", detalle: "aparece en las marcaciones" });
+      // A11 — Ruta Crónicos afirma (nunca niega): una inscripción administrativa no
+      // demuestra que el paciente NO tenga la condición.
+      if (ruta[h.clave] === true) afirman.push({ fuente: "Ruta Crónicos", detalle: "inscrito en el programa" });
 
       if (h.medPara) {
         const conMed = meds.filter((m) => m && m.para === h.medPara);
@@ -6080,11 +6128,19 @@
       if (!f || !f._leidos) return vacio;
 
       const cab = (typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(d) : null;
+      // A11 — el voto de Ruta Crónicos (cosecha.programas) entra al cruce; solo afirma.
+      let rutaCtx = {};
+      try {
+        const _cr = (typeof _vglCosechaLeer === "function") ? _vglCosechaLeer(docId) : null;
+        const pr = (_cr && _cr.programas) || null;
+        if (pr) rutaCtx = { hta: pr.hta === true, diabetes: pr.diabetes === true, enfermedadRenal: pr.erc === true };
+      } catch (e) { rutaCtx = {}; }
       const res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(docId) : null;
       const meds = (res && Array.isArray(res.medicamentos)) ? mtrMedicamentosRcv(res.medicamentos) : null;
       const discrepancias = mtrDiscrepanciasDeFuentes({
         leidos: f._leidos,
         cabecera: cab ? { hta: cab.hta, diabetes: cab.diabetes, enfermedadRenal: cab.enfermedadRenalDocumentada } : {},
+        ruta: rutaCtx,
         medicamentosRcv: meds,
         labsPorClave: null,
         textoLibre: (typeof _vglTextoLibreCombinado === "function") ? _vglTextoLibreCombinado(d) : "",
@@ -6957,8 +7013,21 @@
         _cwfRefrescoPendiente = null;
         Promise.resolve()
           .then(function () {
+            // A3 (S+, 02-sep): la caché de medicamentos y el endpoint viven bajo el id
+            // INTERNO de Everest (pacienteIdLabs / _pacienteIdLabs del resumen), no bajo
+            // la cédula (docId). Refrescar con la cédula dejaba _mtrMedsCache bajo la
+            // cédula y la hoja de la IA (que lee por _pacienteIdLabs) redactaba
+            // SIN_MEDICAMENTOS_ACTIVOS mientras el Panel aún listaba fármacos. Sin id
+            // interno no hay refresco: mejor conservar los datos del último cálculo que
+            // envenenar la caché con una llave que nadie vuelve a leer.
+            let pid = null;
+            try {
+              const resumen = mtrCacheResumenLeer(docId);
+              pid = (resumen && resumen._pacienteIdLabs) || null;
+            } catch (e) { pid = null; }
+            if (!pid) return null;
             mtrMedsInvalidar();
-            return mtrRefrescarMedicamentos(docId);
+            return mtrRefrescarMedicamentos(pid);
           })
           .then(function (lista) {
             if (lista === null) return;
@@ -6973,7 +7042,10 @@
                 // hechos queda desincronizada de su propio resumen. Con copia, además,
                 // `vigente !== resumenFoto` vuelve a ser una señal fiable de «esto cambió».
                 const copia = Object.assign({}, resumen, { medicamentos: lista });
-                try { copia.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
+                try {
+                  const pid = (resumen && resumen._pacienteIdLabs) || null;
+                  if (pid) copia.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(pid);   // A3: misma llave interna
+                } catch (e) {}
                 mtrCacheResumenGuardar(docId, copia, { sinRed: true });   // v18.0.131 (hallazgo 6): solo refrescó medicamentos, no laboratorios
               }
             } catch (e) {}
@@ -14312,8 +14384,19 @@
   // y de qué otra historia se haya revisado entretanto. Ver CHANGELOG.
   let _avisoUnivEspera = new Map(); // key -> Date.now() de la primera vez que se le vio sin labs listos
   const _avisoUnivParcial = new Set();
+  // A12 (S+, 02-sep) — re-evaluación al llegar el resumen. El aviso que salió SIN resumen
+  // en caché juzgó con la vara plana (180 días) y quedaba "visto" toda la jornada; cuando el
+  // resumen llegaba (el cálculo automático tarda segundos), la tabla de la norma ya no podía
+  // decir nada. Estas dos marcas dejan la puerta abierta para UN re-aviso corregido:
+  //   · _avisoUnivSinResumen: el aviso de este paciente salió con vara plana (sin resumen);
+  //   · _avisoUnivFirmaLabs: qué claves de labs mostró ese aviso (para no repetir las mismas).
+  const _avisoUnivSinResumen = new Set();
+  const _avisoUnivFirmaLabs = new Map();
   const MTR_AVISO_GRACIA_MS = 5000;
-  function _avisoUnivReset() { _avisoUnivEspera = new Map(); _avisoUnivParcial.clear(); }
+  function _avisoUnivReset() {
+    _avisoUnivEspera = new Map(); _avisoUnivParcial.clear();
+    _avisoUnivSinResumen.clear(); _avisoUnivFirmaLabs.clear();
+  }
 
   function avisoUniversal(nombre, datos, esPrueba) {
     try {
@@ -14431,13 +14514,19 @@
   //  · v18.0.120 — su respuesta a «¿repetir antes los exámenes fuera de meta?», y el reparto
   //    entre lo VENCIDO y lo que solo conviene adelantar.
   function _pendientesUniversales(doc) {
-    const vacio = { key: "", abandono: false, pym: [], labs: [], adelantar: [], prioridadRcv: false, labsListos: false, n: 0 };
+    const vacio = { key: "", abandono: false, pym: [], labs: [], adelantar: [], prioridadRcv: false, labsListos: false, sinResumen: true, n: 0 };
     try {
       if (!doc) return vacio;
       const key = normalizeKey(doc); if (!key) return vacio;
       const abandono = !!(state.pymAbandono && state.pymAbandono.has(key));
       const pym = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
-      const labsCrudos = (_labsPrefetch.docId === doc) ? _labsPrefetch.labs : null;
+      // A4 (S+, 02-sep) — la lista con la que se juzga es el CONSOLIDADO Athenea+Annar+Citi
+      // cuando ya existe fresco (lo dejan el modal de Laboratorios y mtrCalcularResumenClinico);
+      // solo si no hay consolidado se cae a la precarga de Athenea de siempre. Antes este aviso
+      // solo veía Athenea y rotulaba «vencida» una creatinina que Annar/Citi traían vigente — la
+      // contradicción con el Panel, que sí ve el consolidado.
+      const labsCrudos = (typeof _labsConsolidadoDe === "function" && _labsConsolidadoDe(doc))
+        || (_labsPrefetchCoincide(doc) ? _labsPrefetch.labs : null);
       const labsListos = !!(labsCrudos && !atheneaLecturaIncompleta(labsCrudos));
       const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
       const _autorizado = mtrEsMedicoAutorizado();
@@ -14464,6 +14553,9 @@
         key: key, abandono: abandono, pym: pym, labs: faltantes, adelantar: adelantar,
         prioridadRcv: !_autorizado && faltantes.length > 0,
         labsListos: labsListos,
+        // A12 (S+, 02-sep) — sin resumen en caché la vara es la plana (180 días), no la tabla
+        // de la norma; quien muestre el aviso lo anota para re-evaluar cuando el resumen llegue.
+        sinResumen: !_resAviso,
         n: (abandono ? 1 : 0) + pym.length + faltantes.length + adelantar.length,
       };
     } catch (e) { return vacio; }
@@ -14505,11 +14597,27 @@
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 
+      const _sinResumenAviso = !!_pend.sinResumen;   // A12: la vara de esta pasada es la plana si no hay resumen
       if (avisoYaVisto(uid)) {
-        // El aviso principal ya salió. Único pendiente posible: salió SIN labs (Athenea lenta) y
-        // ahora llegaron con analitos vencidos -> un aviso de labs, una sola vez.
-        if (labsListos && (faltantes.length || adelantar.length) && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
+        // El aviso principal ya salió. Dos pendientes posibles, cada uno UNA sola vez
+        // (clave `avisounivlab|key`):
+        //  1) salió SIN labs (Athenea lenta) y ahora llegaron con analitos vencidos;
+        //  2) A12 (S+, 02-sep) — salió SIN resumen (vara plana de 180 días) y el resumen ya
+        //     llegó: la tabla de la norma puede haber destapado analitos que la vara plana
+        //     no listaba (p. ej. la creatinina del programa renal vence a los 90 días, no a
+        //     los 180). Antes la contradicción quedaba fijada el resto de la jornada. Solo
+        //     se re-avisa si la vara de norma trae claves NUEVAS: repetir las mismas que ya
+        //     se mostraron sería un duplicado.
+        const _firmaPrevia = _avisoUnivFirmaLabs.get(key) || "";
+        const _firmaActual = labsListos ? faltantes.map((f) => f.key).sort().join(",") : "";
+        const _clavesNuevas = !!(_firmaActual && _firmaActual !== _firmaPrevia
+          && _firmaActual.split(",").filter(Boolean).some((k) => _firmaPrevia.split(",").indexOf(k) < 0));
+        const _casoParcial = _avisoUnivParcial.has(key);
+        const _casoA12 = !_sinResumenAviso && _avisoUnivSinResumen.has(key) && _clavesNuevas;
+        if (labsListos && (faltantes.length || adelantar.length) && (_casoParcial || _casoA12) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
+          _avisoUnivSinResumen.delete(key);
+          _avisoUnivFirmaLabs.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
           avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
         }
@@ -14526,6 +14634,9 @@
         if (!abandono && !pym.length) return; // nada síncrono todavía; se sigue esperando labs
         _avisoUnivEspera.delete(key);
         _avisoUnivParcial.add(key);
+        // A12 (S+, 02-sep) — si además no había resumen (vara plana), se deja anotado para
+        // que la llegada del resumen pueda destapar labs que la vara plana no veía.
+        if (_sinResumenAviso) _avisoUnivSinResumen.add(key);
         // v17.6.8 — AUDITORÍA 5 MÓDULOS: el orden era marcar-visto ANTES de pintar; si el
         // render del modal fallaba (catch silencioso de avisoUniversal), el aviso quedaba
         // "visto" sin haberse mostrado y no volvía en toda la jornada. Ahora se pinta
@@ -14539,6 +14650,11 @@
 
       // Labs resueltos: aviso completo si hay algo.
       if (!abandono && !pym.length && !faltantes.length && !adelantar.length) return;
+      // A12 (S+, 02-sep) — se anota CÓMO salió este aviso para poder re-evaluarlo cuando
+      // llegue el resumen: si la vara fue la plana (sin resumen) y qué claves listó (la
+      // firma evita repetir las mismas en el re-aviso corregido).
+      if (_sinResumenAviso) _avisoUnivSinResumen.add(key);
+      _avisoUnivFirmaLabs.set(key, faltantes.map((f) => f.key).sort().join(","));
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
       avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
       avisoMarcarVisto(uid);
@@ -20475,7 +20591,7 @@
   // pasa, el modal que el médico abrió NO. Es la única diferencia entre las dos vías.
   async function apiAccesoBuscarPaciente(docId, opts) {
     const uId = state.activeDoctor.id || 0;
-    const cleanDoc = String(docId || "").replace(/\D/g, "");
+    const cleanDoc = normalizeKey(docId);   // A6: una sola entrada por cédula ("0005150076" y "5150076" eran dos claves y dos búsquedas)
     if (!cleanDoc) return null;
 
     const clave = uId + "|" + cleanDoc;
@@ -22376,8 +22492,16 @@
       const k = normalizeKey(docId);
       const p = getProcessedToday();
       let cambio = false;
-      if (p.citas && p.citas.includes(sDoc)) { p.citas = p.citas.filter((x) => x !== sDoc); cambio = true; }
-      if (p.citasDetalle && p.citasDetalle[sDoc]) { delete p.citasDetalle[sDoc]; cambio = true; }
+      // A6: borrado TOLERANTE — el candado pudo escribirse con ceros ("0005150076") y la
+      // anulación llega con la forma limpia ("5150076"); antes solo se borraba la exacta.
+      if (Array.isArray(p.citas) && p.citas.some((x) => _vglMismaCedula(x, sDoc))) {
+        p.citas = p.citas.filter((x) => !_vglMismaCedula(x, sDoc)); cambio = true;
+      }
+      if (p.citasDetalle) {
+        for (const kd of Object.keys(p.citasDetalle)) {
+          if (_vglMismaCedula(kd, sDoc)) { delete p.citasDetalle[kd]; cambio = true; }
+        }
+      }
       // v18.0.41 — LA TOMA DE MUESTRAS NO SE ANULA AQUÍ, ASÍ QUE SU MARCA NO SE BORRA.
       // Esta función limpia lo que dejó de existir tras anular la CITA DE CONTROL. La toma
       // vive en AppCita y el propio script documenta desde la v15.5.0 que no puede anularla
@@ -23638,6 +23762,12 @@
       }
     } catch (e) {}
     if (!vivo()) return;
+    // A4 (S+, 02-sep) — este modal acaba de consolidar Athenea+Annar+Citi en `todosLabs`:
+    // se comparte en _labsConsolidado para que el aviso de entrada y el antiduplicado de
+    // Ordenar/PyM juzguen con la MISMA lista (una creatinina vigente en Annar/Citi no
+    // puede seguir saliendo "vencida" en el cartel). La marca de lectura incompleta de
+    // Athenea viaja con el consolidado (ver _labsConsolidadoGuardar).
+    try { if (todosLabs.length) _labsConsolidadoGuardar(apt && apt.doc_id, todosLabs, _labsAtheneaCrudos); } catch (e) {}
 
     // v14.1.1 (R1b) — FUNCIÓN RENAL Y RESUMEN CLÍNICO EN SEGUNDO PLANO
     // Se conserva en memoria y caché para que el modal de Riesgo + IA y Ordenar dispongan
@@ -23900,6 +24030,7 @@
     const sigueVivo = () => (typeof vivo === "function" ? !!vivo() : true);
     const o = opciones || {};
     const todosLabs = [];
+    let _labsAtheneaParaMarca = null;   // A4 (S+, 02-sep): crudos de Athenea para la marca de incompleto del consolidado
     try {
       // v17.6.2 — DESENGANCHE Panel ↔ pre-consulta. Síntoma real en consulta (22-ago): el
       // Panel abría «sin laboratorios» aunque el robot ya los había precargado — la
@@ -23919,7 +24050,7 @@
       // guardaba en la caché compartida con sello de tiempo fresco, como si fuera una lectura
       // real. `atheneaPrincipalFallo` conserva la distinción hasta el guardado, más abajo.
       let atheneaPrincipalFallo = false;
-      if (!o.fresco && _labsPrefetch.docId === apt.doc_id && Array.isArray(_labsPrefetch.labs) &&
+      if (!o.fresco && _labsPrefetchCoincide(apt.doc_id) && Array.isArray(_labsPrefetch.labs) &&
           (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
         labsArr = _labsPrefetch.labs;
       } else {
@@ -23927,6 +24058,9 @@
         if (labsArr) _labsPrefetch = { docId: apt.doc_id, labs: labsArr, ts: Date.now() };
         else if (o.fresco) atheneaPrincipalFallo = true;
       }
+      // A4 (S+, 02-sep) — se conserva la lectura cruda de Athenea para reponer su marca de
+      // lectura incompleta en el consolidado compartido (_labsConsolidadoGuardar).
+      _labsAtheneaParaMarca = labsArr;
       if (labsArr && labsArr.length) labsArr.forEach((l) => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
     } catch (e) { console.warn("[Vigilante Riesgo] Error consultando Athenea:", e); }
     if (!sigueVivo()) return null;
@@ -23946,6 +24080,12 @@
       }
     } catch (e) {}
     if (!sigueVivo()) return null;
+    // A4 (S+, 02-sep) — mismo consolidado compartido que deja el modal de Laboratorios:
+    // el aviso de entrada y el antiduplicado de Ordenar/PyM ven Athenea+Annar+Citi cuando
+    // este módulo (Panel/Riesgo/IA) ya pagó la consolidación, y juzgan con la misma lista
+    // con la que se calculó el resumen (creatinina vigente en Annar/Citi no puede salir
+    // "vencida" en el cartel). Sin consolidado fresco, esos módulos siguen con Athenea.
+    try { if (todosLabs.length) _labsConsolidadoGuardar(apt.doc_id, todosLabs, _labsAtheneaParaMarca); } catch (e) {}
     let r = null;
     try { r = await calcularEstadioRenal(pacienteIdLabs, todosLabs); } catch (e) { r = null; }
     if (!sigueVivo()) return null;
@@ -25310,9 +25450,19 @@
       // médico usa para decidir si se fía de los números. Sin edad conocida se dice que
       // no se sabe, que es la verdad.
       const edadMin = mtrCacheResumenEdadMin(apt.doc_id);
-      const frescura = (edadMin === null)
-        ? "de esta consulta (no puedo precisar de hace cuánto)"
-        : (edadMin < 1 ? "recién leídos" : "leídos hace " + edadMin + " min");
+      // A13 — el rótulo habla del CÁLCULO, no del dato: la caché se renueva cada 20 s y
+      // «leídos hace N min» afirmaba que los DATOS eran de hace N min. Y cuando el peso que
+      // rige Cockcroft-Gault es de un registro de otra fecha (visita anterior), se dice.
+      const _baseFrescura = (edadMin === null)
+        ? "de esta consulta (no puedo precisar de hace cuánto se calculó)"
+        : (edadMin < 1 ? "recién calculado" : "calculado hace " + edadMin + " min");
+      let frescura = _baseFrescura;
+      try {
+        const _pf = _resumen && _resumen._pesoFecha;
+        if (_pf && String(_pf).slice(0, 10) < todayStamp().slice(0, 10)) {
+          frescura += " · el peso que rige Cockcroft-Gault es del " + mtrFechaLegible(_pf);
+        }
+      } catch (e) {}
       cuerpo.innerHTML = (aviso ? '<div class="vgl-tab-aviso">' + escapeHtml(aviso) + '</div>' : "")
         + dentro
         + '<div class="vgl-agm-foot" style="margin-top:14px">'
@@ -25492,6 +25642,10 @@
           if (_reconciliado) {
             _resumen = _reconciliado;
             try { mtrCacheResumenGuardar(apt.doc_id, _resumen, { sinRed: true }); } catch (e2) {}   // v18.0.131 (hallazgo 6): reconciliación pura, sin red
+            // A8 — la foto de la carpeta también sale de la reconciliación del Panel, no
+            // solo del modal de Laboratorios: el ancla de la próxima Enfermedad Actual se
+            // arma sobre el historial de la carpeta, y quedaba una foto PRE-reconciliación.
+            try { _vglCarpetaEscribirInstantaneaSiAplica(apt.doc_id, _reconciliado, todayStamp()); } catch (e3) {}
           }
         } else {
           // Y se DICE, dentro del propio Panel: callarlo dejaría creer que lo que se ve
@@ -25550,6 +25704,9 @@
         try { const ctx2 = _vglContextoEstado(apt.doc_id, document); _ctxIncompleto = ctx2.ok ? null : ctx2; } catch (e2) {}
         _resumen = nuevo;
         try { mtrCacheResumenGuardar(apt.doc_id, nuevo, { sinRed: true }); } catch (e) {}   // v18.0.131 (hallazgo 6): vigilante de 20 s, sin red
+        // A8 — el Panel recién reconciliado también refresca la instantánea del día en la
+        // carpeta (el helper respeta la regla "al menos tan rica como la del mismo día").
+        try { _vglCarpetaEscribirInstantaneaSiAplica(apt.doc_id, nuevo, todayStamp()); } catch (eC) {}
         try { uxTrack("fn.panel.reclasificado"); } catch (e) {}
         pintar("Se actualizó con lo que acaba de escribir en la historia" + (cambios.length ? " (" + cambios.slice(0, 3).join(", ") + ")" : "") + ".");
       } catch (e) {}
@@ -29314,6 +29471,19 @@
   const _ordGenerandoDocs = new Set();   // v18.0.105 — candado por cédula de Ordenar (ver el clic de Generar)
   async function openOrdenamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
+    // A12 (S+, 02-sep) — si el resumen aún no está en caché, se dispara su cálculo en
+    // paralelo mientras este modal consulta Athenea: el cruce antiduplicado (pymRcvCubierto
+    // PorAthenea) y las prioridades leen la caché, y con resumen juzgan con la tabla de la
+    // norma (estadio + 50 %); sin él caerían a los 180 días planos y desmentirían al Panel,
+    // que sí tiene la vara fina. autoCalcularResumenSiNecesario trae su propio piso de una
+    // vez por paciente (si el dock ya lo disparó, no duplica la consulta). Si el resumen no
+    // alcanza a llegar, el modal conserva el fallback de v16.4.0 (vara plana), no bloquea.
+    try {
+      if (typeof autoCalcularResumenSiNecesario === "function"
+        && !(typeof mtrCacheResumenLeer === "function" && mtrCacheResumenLeer(apt.doc_id))) {
+        autoCalcularResumenSiNecesario(apt);
+      }
+    } catch (e) {}
     // v15.2.0 — Embudo del modal: abrir -> elegir actividades -> crear/abandonar.
     let _fnCompletado = false, _fnSelec = false;
     try { uxTrack("fn.ordenar.open"); } catch (e) {}
@@ -29515,7 +29685,15 @@
         // abrió hace poco), _labsPrefetch ya trae sus laboratorios frescos — no se vuelve a
         // golpear Athenea. Si no, se consulta aquí mismo y se deja en caché para quien
         // pregunte después (el propio aviso al entrar a la historia, entre otros).
-        if (_labsPrefetch.docId === apt.doc_id && _labsPrefetch.labs && (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
+        // A4 (S+, 02-sep) — si ya existe el CONSOLIDADO Athenea+Annar+Citi fresco (lo dejan el
+        // modal de Laboratorios y el Panel/Riesgo), el cruce antiduplicado se hace contra ÉL:
+        // un examen hecho en Annar/Citi se ve como hecho (antes este modal solo miraba Athenea
+        // y volvía a ofrecer exámenes que el paciente ya tenía en otro laboratorio). Sin
+        // consolidado fresco, se cae al comportamiento de siempre (Athenea).
+        const _consolLabs = (typeof _labsConsolidadoDe === "function") ? _labsConsolidadoDe(apt.doc_id) : null;
+        if (_consolLabs) {
+          labsPacienteAthenea = _consolLabs;
+        } else if (_labsPrefetchCoincide(apt.doc_id) && _labsPrefetch.labs && (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
           labsPacienteAthenea = _labsPrefetch.labs;
         } else {
           labsPacienteAthenea = await getAtheneaLabsAuto(apt.doc_id);
@@ -30954,7 +31132,7 @@
       fecha: hoyIso || r._hoyIso || null,
       medico: num(x.medico) || null,
       edad: num((r.factores || {}).edad),
-      sexo: num((r.factores || {}).sexo),
+      sexo: mtrSexoCanonico((r.factores || {}).sexo),   // A5: la carpeta archiva "F"/"M", no el crudo "MASCULINO"
       riesgo: {
         categoria: riesgo.categoria || null,
         paso: num(riesgo.paso),
@@ -34810,7 +34988,21 @@
       if (a && a.clave && a.fecha) ultimos[a.clave] = { fecha: a.fecha, valor: a.valor };
     });
     const num = (a, b) => (a === null || a === undefined || a === "" ? b : a);
+    // A1 (S+, 02-sep) — FUSIÓN TRI-ESTADO. El Object.assign plano dejaba que un `false`
+    // sin respaldo pisara un `true` fuerte: mtrLeerFactoresRcvDelDom aplanaba a false los
+    // radios que no están en pantalla (null ≠ "no lo tiene") y la reconciliación del Panel
+    // borraba el programa rector que el cálculo completo había puesto (HTA de Ruta
+    // Crónicos desaparecía y Agendar/Ordenar leían "sin programa"). Reglas: null/undefined
+    // NO pisan nada; un false solo pisa un true si la PANTALLA DE HOY lo respalda (la
+    // casilla marcada "NO" es la regla de la casa: manda la pantalla y se avisa); el resto
+    // de claves (incluidas las internas _leidos/_pantalla) se copian como antes.
+    const _pant = (fNue && fNue._pantalla) || {};
     const mezcla = Object.assign({}, fPrev, fNue);
+    for (const k of Object.keys(fNue)) {
+      const v = fNue[k];
+      if (v === null || v === undefined) { if (fPrev[k] !== undefined) mezcla[k] = fPrev[k]; }
+      else if (v === false && mezcla[k] === true && _pant[k] !== false) mezcla[k] = fPrev[k];
+    }
     // v17.0.1 — AUDITORÍA DE LA v17: esta función reconstruía el resumen y PERDÍA por el
     // camino `_docId`, `_ultimos`, `_hoyIso` y `_series`, que solo se cuelgan en
     // mtrResumenDesdeModalLabs. Dos consecuencias, y la primera es la peor que puede
@@ -38327,17 +38519,27 @@
   // "grave" en la tendencia y en mtrFueraDeMeta si algún día vuelve a usarse.
   const MTR_META_TRIGLICERIDOS = 400;
 
+  // A5 (S+, 02-sep): SEXO CANÓNICO — una sola regla para el motor renal puro, la hoja
+  // de la IA y la carpeta local. Antes convivían tres: _esSexoFemenino miraba la primera
+  // letra ("MUJER" salía como masculino en Cockcroft-Gault/CKD-EPI), la hoja de hechos
+  // exigía "F"/"M" exactos y anulaba "MASCULINO" (la IA quedaba sin sexo) y la carpeta
+  // archivaba el crudo. Devuelve SIEMPRE "F"/"M" cuando la forma es reconocible y null
+  // solo cuando no hay dato: nunca null por formato.
+  function mtrSexoCanonico(x) {
+    if (x === null || x === undefined) return null;
+    const s = String(x).trim().toUpperCase();
+    if (!s) return null;
+    if (s === "F" || s === "FEMENINO" || s === "MUJER" || s.indexOf("FEM") === 0 || s.indexOf("MUJ") === 0) return "F";
+    if (s === "M" || s === "H" || s === "MASCULINO" || s === "HOMBRE" || s.indexOf("MAS") === 0 || s.indexOf("HOM") === 0) return "M";
+    return null;
+  }
+
   function mtrEsSexoFemenino(sexo) {
-    const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
-    if (!s) return false;
-    return s === "F" || s === "FEMENINO" || s === "MUJER" || s.indexOf("FEM") === 0 || s.indexOf("MUJ") === 0;
+    return mtrSexoCanonico(sexo) === "F";
   }
 
   function mtrEsSexoMasculino(sexo) {
-    if (mtrEsSexoFemenino(sexo)) return false;
-    const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
-    if (!s) return false;
-    return s === "M" || s === "H" || s === "MASCULINO" || s === "HOMBRE" || s.indexOf("MAS") === 0 || s.indexOf("HOM") === 0;
+    return mtrSexoCanonico(sexo) === "M";
   }
 
   // ¿La edad cae fuera del rango donde las PCE están validadas?
@@ -38957,6 +39159,14 @@
     // El archivo se llena solo, sin pedir nada a la red y sin tocar su pantalla.
     const archivados = (typeof _vglFactoresArchivados === "function")
       ? _vglFactoresArchivados(docIdEsperado) : {};
+    // A1 (S+, 02-sep) — los PROGRAMAS de Ruta Crónicos (la inscripción administrativa de
+    // "Ingreso a programa") son una fuente que este lector ignoraba: solo el cálculo
+    // completo (mtrResumenDesdeModalLabs) los aplicaba, así que la reconciliación del
+    // Panel los perdía. Se suman como voto AFIRMATIVO (=== true) cuando la pestaña y el
+    // archivo no dicen nada; nunca como negación — una inscripción no afirma "no lo tiene".
+    let progsRuta = {};
+    try { const _cr = _vglCosechaLeer(docIdEsperado); progsRuta = (_cr && _cr.programas) || {}; } catch (e) { progsRuta = {}; }
+    const MAPA_PROG_RUTA = { hta: "hta", diabetes: "diabetes", enfermedadRenal: "erc" };
     // v16.3.0/16.3.1 — La CABECERA de Everest ("Marcaciones: HTA+DM…") dejó de ser
     // fuente del clasificador (advertencia del médico: "no siempre son verídicas").
     // La lee aparte, por su cuenta, mtrDiscrepanciasDeFuentes vía su llamador — aquí
@@ -39001,6 +39211,11 @@
       if (v === null || v === undefined) {
         const a = archivados[clave];
         if (a === true || a === false) { v = a; }
+        // A1 — Ruta Crónicos como último respaldo: solo afirma, nunca niega.
+        if ((v === null || v === undefined)) {
+          const pRuta = MAPA_PROG_RUTA[clave];
+          if (pRuta && progsRuta[pRuta] === true) v = true;
+        }
         // v16.3.1 — La cabecera YA NO alimenta el clasificador. Advertencia del médico
         // (20-ago): "no siempre confiarse de la cabecera de Everest... no siempre son
         // verídicas". Las marcaciones son inscripciones administrativas a un programa y
@@ -41008,7 +41223,7 @@
     const limpiar = (s) => (typeof scrubPII === "function") ? scrubPII(String(s)) : String(s);
 
     const edad = (typeof f.edad === "number" && f.edad > 0) ? f.edad : null;
-    const sexo = (f.sexo === "F" || f.sexo === "M") ? f.sexo : null;
+    const sexo = mtrSexoCanonico(f.sexo);   // A5: antes exigía "F"/"M" exactos y "MASCULINO" anulaba el dato
 
     const factores = {};
     for (const k of MTR_HECHOS_FACTORES) if (f[k] === true) factores[k] = true;
@@ -42885,11 +43100,11 @@
   let _mtrDatosExtra = { docId: "", datos: null };
   function mtrDatosExtraGuardar(docId, datos) {
     if (!docId) return false;
-    _mtrDatosExtra = { docId: String(docId), datos: datos || {} };
+    _mtrDatosExtra = { docId: normalizeKey(docId), datos: datos || {} };   // A6: llave canónica
     return true;
   }
   function mtrDatosExtraLeer(docId) {
-    if (!docId || _mtrDatosExtra.docId !== String(docId)) return null;
+    if (!docId || _mtrDatosExtra.docId !== normalizeKey(docId)) return null;
     return _mtrDatosExtra.datos;
   }
 
@@ -44936,6 +45151,30 @@
     };
   }
 
+  // A2 (S+, 02-sep) — TENSIÓN Y PESO CON UNA SOLA PRECEDENCIA.
+  // Reporte (fila 23): el modal de Laboratorios prefería el registro histórico de signos
+  // vitales de la API (110/70, 90 kg) y el Panel la casilla de hoy (165/102, 70 kg); la
+  // carpeta y la hoja de la IA heredaban una u otra según qué módulo hubiera pasado
+  // último. Aquí se decide UNA vez, con la regla de la casa: la casilla de hoy manda —es
+  // lo que el médico está viendo y escribiendo AHORA— y el registro de la API (que puede
+  // ser de una visita anterior, con su fecha) queda de respaldo. Las dos cifras de la
+  // tensión viajan juntas o no viajan (v18.0.54): nunca se completa una medición a medias
+  // con la mitad de otra medición. Devuelve { pas, pad, peso }; cada valor puede ser null
+  // (no se inventa). PURA: no lee DOM ni red, recibe las dos fuentes ya leídas.
+  function _mtrResolverAntropometria(dom, api) {
+    const d = (dom && typeof dom === "object") ? dom : {};
+    const a = (api && typeof api === "object") ? api : {};
+    const dCompleta = d.pas != null && d.pad != null;
+    const aCompleta = a.pas != null && a.pad != null;
+    let pas = null, pad = null;
+    if (dCompleta) { pas = d.pas; pad = d.pad; }
+    else if (aCompleta || a.pas != null || a.pad != null) { pas = a.pas; pad = a.pad; }
+    else { pas = d.pas; pad = d.pad; }
+    const peso = (typeof d.peso === "number" && d.peso > 0) ? d.peso
+      : ((typeof a.peso === "number" && a.peso > 0) ? a.peso : null);
+    return { pas: pas, pad: pad, peso: peso };
+  }
+
   function mtrResumenDesdeModalLabs(r, labs, apt, pacienteIdLabs) {
     const ent = (r && r.entradas) || {};
     // v14.2.0 — La TA del DOM como respaldo cuando las entradas renales no la traen:
@@ -45058,15 +45297,17 @@
     let _medsParaMotor = null;
     try { _medsParaMotor = (typeof mtrLeerMedicamentos === "function") ? mtrLeerMedicamentos(pacienteIdLabs) : null; } catch (e) { _medsParaMotor = null; }
 
-    // 02-sep (fila 15) — de dónde sale la tensión, decidido UNA vez para las dos cifras (ver el
-    // comentario en paSistolica/paDiastolica, más abajo).
-    const _taFuente = (function () {
-      const entCompleta = ent.pas != null && ent.pad != null;
-      const taCompleta = ta.pas != null && ta.pad != null;
-      if (entCompleta) return ent;
-      if (taCompleta) return ta;
-      return (ent.pas != null || ent.pad != null) ? ent : ta;
-    })();
+    // A2 (S+, 02-sep) — la precedencia única resuelta en el helper, para que el modal de
+    // Laboratorios y el Panel (vía mtrRecalcularConFactores, que ya ponía la casilla de hoy
+    // primero desde v18.0.54) terminen con la MISMA cifra: casilla de hoy > registro de la
+    // API (histórico, con su fecha). Antes este modal ponía el registro de la API PRIMERO
+    // (110/70, 90 kg) y el Panel la casilla PRIMERO (165/102, 70 kg): la carpeta y la hoja
+    // de la IA heredaban una u otra según qué módulo hubiera pasado último — CrCl y franja
+    // de Agendar cambiaban sin que cambiara ningún dato del paciente.
+    const _ant = _mtrResolverAntropometria(
+      { pas: ta.pas, pad: ta.pad, peso: pesoDom },
+      { pas: ent.pas, pad: ent.pad, peso: ent.peso }
+    );
     const hoyIso = todayStamp();
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
@@ -45075,7 +45316,7 @@
       // llega en un formato que no reconocemos. Mismo patrón que `pesoDom` de al lado.
       edad: ent.edad,
       sexo: ((mtrEsSexoFemenino(ent.sexo) || mtrEsSexoMasculino(ent.sexo)) ? ent.sexo : (sexoCabecera || ent.sexo)),
-      pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
+      pesoKg: _ant.peso, creatinina: ent.creatinina,
       rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
       ldl: val("COLESTEROL_LDL"),
       // v17.6.0 — HALLADO AL CABLEAR EL ÍTEM 3 (meta de HbA1c individual): esta llamada
@@ -45087,14 +45328,12 @@
       // destapa al intentar mostrar la meta individual y encontrar que nunca tuvo con qué
       // compararla. Mismo patrón que ya usan RAC/CT/HDL/LDL dos líneas arriba.
       hba1c: val("HBA1C"),
-      // 02-sep (cierre adversarial, fila 15) — LAS DOS CIFRAS DE LA TENSIÓN VIAJAN JUNTAS O NO
-      // VIAJAN, la misma regla que v18.0.54 fijó en mtrRecalcularConFactores y que aquí seguía
-      // resolviéndose por separado: con Athenea trayendo solo la sistólica (130) y la casilla de
-      // hoy solo la diastólica (85), el resumen firmaba 130/85 — una tensión que no existió.
-      // Gana la fuente que trae la medición COMPLETA (Athenea primero, como siempre); si ninguna
-      // está completa, se toma entera la que tenga algo, sin completarla con la otra.
-      paSistolica: _taFuente.pas != null ? _taFuente.pas : null,
-      paDiastolica: _taFuente.pad != null ? _taFuente.pad : null,
+      // A2 (S+, 02-sep) — las dos cifras las resuelve _mtrResolverAntropometria con la misma
+      // precedencia que el Panel (casilla de hoy completa primero; si no, el registro de la
+      // API entero; nunca se completa una medición con la mitad de la otra — v18.0.54). El
+      // valor resuelto puede tener una sola cifra solo si la fuente elegida la tenía sola.
+      paSistolica: _ant.pas,
+      paDiastolica: _ant.pad,
       factores: factores || {},
       ultimos: ultimos,
       uroHallazgos: uroHallazgos,
@@ -45160,6 +45399,21 @@
         ? mtrLeerFrecuenciasMedicamento(pacienteIdLabs) : new Map();
     } catch (e) { resumen.medicamentosFrecuencia = new Map(); }
     try { resumen._ultimos = ultimos; resumen._hoyIso = hoyIso; resumen._docId = (apt && apt.doc_id) || null; resumen._pacienteIdLabs = pacienteIdLabs || null; resumen._nombrePaciente = _mtrNombreEfectivo(apt && apt.nombre, apt && apt.doc_id); } catch (e) {}   // v18.0.103 — sin nombre en la agenda, el del paquete de Everest (RAM)
+    // A13 (S+, 02-sep) — procedencia del peso que rige Cockcroft-Gault: el resumen llevaba
+    // el valor pero no su fecha, y el rótulo de frescura del Panel («leídos hace N min»)
+    // hablaba del CÁLCULO, no del dato (el registro de signos vitales de la API puede ser
+    // de una visita anterior). Se anota de dónde salió el peso y de qué fecha es.
+    // A2 (S+, 02-sep) — la procedencia se decide con la MISMA precedencia que el valor
+    // (_mtrResolverAntropometria): si mandó la casilla de hoy, se rotula como de hoy aunque
+    // la API también trajera un peso histórico; si mandó la API, se rotula con su fecha.
+    try {
+      const _pesoDeLaCasilla = (typeof pesoDom === "number" && pesoDom > 0) && _ant.peso === pesoDom;
+      const _pesoDeLaApi = (ent && ent.peso != null && ent.peso > 0) && _ant.peso === ent.peso;
+      resumen._pesoOrigen = _pesoDeLaCasilla ? "casilla de Examen físico de hoy"
+        : (_pesoDeLaApi ? "registro de signos vitales (API)" : null);
+      resumen._pesoFecha = _pesoDeLaCasilla ? hoyIso
+        : (_pesoDeLaApi ? (ent.fechaPeso || null) : null);
+    } catch (e) {}
     // v16.8.0 — Las series viajan con el resumen (y con su caché) para la sección
     // TENDENCIAS del Panel del paciente. Seis puntos por analito: lo que cabe en una
     // línea legible y suficiente para ver hacia dónde va el paciente.
@@ -45196,29 +45450,37 @@
     // v17.0.0 — INSTANTÁNEA DEL CONTROL en la carpeta del médico, si la eligió. Se hace
     // aquí porque es el punto donde el asistente acaba de ver TODO del paciente. No
     // bloquea nada: si falla el disco, la consulta sigue igual.
-    try {
-      if (vglCarpetaElegida() && apt && apt.doc_id) {
-        const _inst = mtrInstantaneaDeResumen(resumen, {
-          medico: (state.activeDoctor && state.activeDoctor.id) || null,
-          confirmaciones: _vglConfirmacionesLeer(apt.doc_id),
-        }, hoyIso);
-        // v17.0.1 — AUDITORÍA DE LA v17: el resultado se tiraba a un .catch vacío, así que
-        // el médico nunca se enteraba de que su historial no se estaba guardando (carpeta
-        // sin permiso, disco lleno, archivo corrupto). Ahora un fallo se dice UNA vez al
-        // día — repetirlo en cada control sería ruido, callarlo es peor.
-        vglCarpetaGuardarInstantanea(apt.doc_id, _inst).then((res) => {
-          try {
-            if (res && res.ok) return;
-            const K = "vgl_carpeta_aviso";
-            if (localStorage.getItem(K) === todayStamp()) return;
-            localStorage.setItem(K, todayStamp());
-            showToast("AMBAR", "Carpeta de historias", "No pude guardar la instantánea de este control en su carpeta: "
-              + ((res && res.motivo) || "motivo desconocido") + " Lo demás sigue funcionando.", false);
-          } catch (e) {}
-        }).catch(() => {});
-      }
-    } catch (e) {}
+    // v18.0.131 (A8) — el cuerpo vive en el helper compartido: el Panel también la llama
+    // tras reconciliar, así la foto archivada es la post-reconciliación (antes solo el
+    // modal de Laboratorios escribía, y la Enfermedad Actual se anclaba en una foto vieja).
+    try { _vglCarpetaEscribirInstantaneaSiAplica(apt && apt.doc_id, resumen, hoyIso); } catch (e) {}
     return resumen;
+  }
+
+  // A8 (S+, 02-sep): escribe la instantánea del control en la carpeta local cuando el
+  // médico la eligió. Antes este bloque vivía solo en mtrResumenDesdeModalLabs; ahora lo
+  // llaman también el Panel (al abrir y en su vigilancia de 20 s, tras reconciliar) y el
+  // helper respeta la deduplicación por día (mtrHistorialAgregar / _mtrInstantaneaAlMenosTanRica):
+  // la foto nueva solo reemplaza a la del mismo día si es al menos tan rica. Un fallo de
+  // disco se dice UNA vez al día.
+  function _vglCarpetaEscribirInstantaneaSiAplica(docId, resumen, hoyIso) {
+    try {
+      if (!vglCarpetaElegida() || !docId || !resumen) return;
+      const _inst = mtrInstantaneaDeResumen(resumen, {
+        medico: (state.activeDoctor && state.activeDoctor.id) || null,
+        confirmaciones: _vglConfirmacionesLeer(docId),
+      }, hoyIso);
+      vglCarpetaGuardarInstantanea(docId, _inst).then((res) => {
+        try {
+          if (res && res.ok) return;
+          const K = "vgl_carpeta_aviso";
+          if (localStorage.getItem(K) === todayStamp()) return;
+          localStorage.setItem(K, todayStamp());
+          showToast("AMBAR", "Carpeta de historias", "No pude guardar la instantánea de este control en su carpeta: "
+            + ((res && res.motivo) || "motivo desconocido") + " Lo demás sigue funcionando.", false);
+        } catch (e) {}
+      }).catch(() => {});
+    } catch (e) {}
   }
 
 
@@ -45827,7 +46089,13 @@
         (porSeccion[sec] = porSeccion[sec] || []).push(campo + ": " + (v === true ? "sí" : v === false ? "no" : v));
       }
       for (const sec of Object.keys(porSeccion).sort()) {
-        L.push(sec + " (escrito en la historia de HOY): " + porSeccion[sec].join(" · "));
+        // A7 (S+, 02-sep) — rótulo HONESTO de la cosecha en vivo. Decía «(escrito en la
+        // historia de HOY)», pero esta cosecha se acumula entre pestañas (v17.10.0) y nunca
+        // se borra sola, y Everest pre-llena campos de consultas anteriores: un «EDEMA
+        // GRADO II» escrito hace 5 días llegaba al modelo rotulado como de hoy, junto a un
+        // «SIN EDEMA» de la vía de red. No hay fecha por campo, así que la etiqueta lo dice:
+        // es lo que está escrito en la historia (incluido lo pre-llenado), sin afirmar cuándo.
+        L.push(sec + " (escrito en la historia de Everest, incluye lo pre-llenado — sin fecha por campo): " + porSeccion[sec].join(" · "));
       }
     }
     if (!hechos.secciones) return L.join("\n");
@@ -46820,18 +47088,21 @@
     // el pie del Panel dijera «Datos recién leídos» sobre laboratorios de media hora atrás, y
     // autoCalcularResumenSiNecesario —que trata «desactualizado» como «no hay caché»— nunca
     // veía motivo para disparar el recálculo completo con red real durante toda la consulta.
-    const sinRed = !!(opciones && opciones.sinRed) && _mtrCacheResumen.docId === String(docId) && _mtrCacheResumen.resumen;
+    // La llave del sello es la canónica (A6): escritor y lector deben comparar igual, o un
+    // guardado sinRed no reconocería su propia caché y la marcaría como lectura fresca.
+    const claveCache = normalizeKey(docId);
+    const sinRed = !!(opciones && opciones.sinRed) && _mtrCacheResumen.docId === claveCache && !!_mtrCacheResumen.resumen;
     const tsPrevio = sinRed ? _mtrCacheResumen.ts : 0;
     const desactualizadoPrevio = sinRed && _mtrCacheResumen.desactualizado === true;
     _mtrCacheResumen = {
-      docId: String(docId), resumen: resumen,
+      docId: claveCache, resumen: resumen,
       ts: tsPrevio || (typeof Date !== "undefined" ? Date.now() : 0),
     };
     if (desactualizadoPrevio) _mtrCacheResumen.desactualizado = true;
     return true;
   }
   function mtrCacheResumenLeer(docId) {
-    if (!docId || _mtrCacheResumen.docId !== String(docId) || !_mtrCacheResumen.resumen) return null;
+    if (!docId || _mtrCacheResumen.docId !== normalizeKey(docId) || !_mtrCacheResumen.resumen) return null;
     const ahora = (typeof Date !== "undefined" ? Date.now() : 0);
     if (ahora - _mtrCacheResumen.ts > MTR_CACHE_TTL_MS) return null;
     return _mtrCacheResumen.resumen;
@@ -46891,7 +47162,7 @@
   }
 
   function mtrCacheResumenEdadMin(docId) {
-    if (!docId || _mtrCacheResumen.docId !== String(docId) || !_mtrCacheResumen.resumen) return null;
+    if (!docId || _mtrCacheResumen.docId !== normalizeKey(docId) || !_mtrCacheResumen.resumen) return null;
     const ahora = (typeof Date !== "undefined" ? Date.now() : 0);
     if (ahora - _mtrCacheResumen.ts > MTR_CACHE_TTL_MS) return null;
     return Math.max(0, Math.round((ahora - _mtrCacheResumen.ts) / 60000));
@@ -46909,7 +47180,7 @@
   // El sello de tiempo NO se renueva: «leídos hace N min» sigue diciendo la verdad.
   function mtrCacheResumenMarcarDesactualizado(docId) {
     try {
-      if (!_mtrCacheResumen.resumen || (docId && _mtrCacheResumen.docId !== String(docId))) return false;
+      if (!_mtrCacheResumen.resumen || (docId && _mtrCacheResumen.docId !== normalizeKey(docId))) return false;
       _mtrCacheResumen.desactualizado = true;
       return true;
     } catch (e) { return false; }

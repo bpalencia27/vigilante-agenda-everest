@@ -763,7 +763,10 @@ module.exports = {
       });
       t.cierto(!!hoja.hcEverest, "el bloque viaja en la hoja aunque solo traiga la cosecha en vivo");
       const txt = api.mtrHojaDeHechosTexto(hoja);
-      t.cierto(/escrito en la historia de HOY/.test(txt), "y se marca como lo escrito HOY, no como historia vieja");
+      // A7 (S+, 02-sep): el rótulo ya no afirma «de HOY» — la cosecha se acumula entre
+      // pestañas, no se borra sola y Everest pre-llena campos de consultas anteriores.
+      t.cierto(/escrito en la historia de Everest/.test(txt), "y se marca como lo escrito en la historia de Everest");
+      t.falso(/escrito en la historia de HOY/.test(txt), "pero ya no lo rotula como de HOY: puede venir pre-llenado de antes y no hay fecha por campo");
       t.cierto(/retinopatiaDiabetica: sí/.test(txt), "lo marcado llega al modelo");
       t.cierto(/infartoMiocardio: no/.test(txt), "y lo descartado también");
       t.cierto(/perimetroAbdominal: 98/.test(txt), "con sus números");
