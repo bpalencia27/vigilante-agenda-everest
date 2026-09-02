@@ -472,6 +472,64 @@ module.exports = {
       t.falso(/backdrop-filter/.test(sidebar), "la barra lateral ya no pide su propio desenfoque");
     });
 
+    // =====================================================================
+    // v18.0.124 (auditoría UI/UX, F-17..F-21) — filas 24, 25, 26, 27, 28 y 40.
+    // El foco de teclado, el interruptor claro y el «alto contraste» se miden en Chromium
+    // (tools/medir_foco_chromium.js). Aquí se fija lo que la hoja tiene que seguir diciendo.
+    // =====================================================================
+    t.caso("v18.0.124 - sin opacidad apilada sobre --fg3, tres tamaños nuevos en la escala", () => {
+      // F-17: --fg3 YA es el token muteado; apilarle opacidad dejaba datos clínicos bajo AA.
+      t.falso(/opacity:\.7[25]?;color:var\(--fg3\)/.test(css), "ningún texto en --fg3 lleva opacidad encima");
+      t.falso(/color:var\(--fg3\) !important;opacity:/.test(css), "ni en el otro orden");
+      for (const tk of ["--t-nano:10px", "--t-mini:11px", "--t-small:13px"]) {
+        t.igual((css.match(new RegExp(tk.replace(/[-]/g, "\\-"), "g")) || []).length, 2,
+          tk + " declarado en las dos listas de tokens");
+      }
+      // Y van DESPUÉS de --t-hero: las Reglas H e I leen esa secuencia exacta.
+      t.cierto(/--t-hero:22px;--t-nano:10px;/.test(css), "los tres nuevos van detrás de --t-hero, sin partir la secuencia");
+    });
+
+    t.caso("v18.0.124 - el anillo de foco ya no se apaga con marca de prioridad, y llega a doce sitios más", () => {
+      // F-21: en .vgl-tl vivía un «outline:none» con marca de prioridad que le ganaba a
+      // :focus-visible. Medido con Tab real antes del cambio: «outline: none 0px».
+      const tl = css.slice(css.indexOf("      .vgl-tl{"), css.indexOf(".vgl-tl:hover"));
+      t.falso(/outline:none !important/.test(tl), "el semáforo ya no apaga el anillo con marca de prioridad");
+      t.cierto(/\.vgl-tl:focus:not\(:focus-visible\)\{outline:none\}/.test(css),
+        "solo el clic con ratón lo apaga, que es lo que :focus-visible distingue");
+      for (const cl of ["vgl-dock-btn", "vgl-dock-toggle", "vgl-chooser-opt", "vgl-panel-tab", "vgl-paq-chip",
+                        "vgl-labs-pdf", "vgl-min-abrir", "vgl-min-x", "vgl-type-card", "vgl-labs-uro-btn",
+                        "vgl-agm-lnk", "vgl-acomp-nomas"]) {
+        t.cierto(css.indexOf("." + cl + ":focus-visible") >= 0, "." + cl + " tiene anillo propio");
+      }
+      // F-21 (fila 40): 12 px de separación -> centros a 24 px, la excepción de WCAG 2.5.8.
+      t.cierto(/#vgl-tls\{display:flex !important;align-items:center !important;gap:12px !important/.test(css),
+        "los tres semáforos se separan 12 px");
+    });
+
+    t.caso("v18.0.124 - «Alto contraste» mueve tokens, y prefers-reduced-motion cubre los modales de flujo", () => {
+      // F-19: el botón prometía contraste y solo quitaba el vidrio.
+      t.cierto(/#vgl-root\.vgl-hc:not\(\.light\)[^{]*\{\s*--fg2:#e5ebf3;--fg3:#b8c2d0;/.test(css),
+        "en oscuro sube el texto secundario, los bordes y las líneas");
+      t.cierto(/#vgl-root\.vgl-hc\.light[^{]*\{\s*--fg2:#111827;--fg3:#334155;/.test(css),
+        "y en claro también, que era donde dejaba las seis fallas");
+      // F-18: el interruptor de Ajustes en tema claro (el contraste real se mide en Chromium).
+      t.cierto(/#vgl-root\.light \.vgl-sw i\{background:#7f899b;box-shadow:inset 0 0 0 1px rgba\(15,23,42,\.35\)\}/.test(css),
+        "el riel apagado tiene color propio en claro: antes medía 1,25:1");
+      t.cierto(/background:#fff;box-shadow:0 1px 3px rgba\(0,0,0,\.35\),0 0 0 1px rgba\(15,23,42,\.25\)/.test(css),
+        "y la perilla lleva anillo: sobre el riel claro medía 1,32:1");
+      // F-20: los siete modales de flujo y los cuatro flotantes que faltaban. El corte se acota
+      // a ESE bloque: `slice(indexOf(...))` sin final se lleva media hoja y cualquier id que
+      // aparezca después haría pasar la prueba sin que la regla lo cubra.
+      const iRm = css.indexOf("@media (prefers-reduced-motion:reduce){");
+      const rm = css.slice(iRm, css.indexOf("}\n      }", iRm) + 8);
+      t.cierto(rm.length > 200 && rm.length < 3000, "el corte es el bloque de la regla, no media hoja (" + rm.length + ")");
+      for (const id of ["#vgl-panel-modal", "#vgl-ia-modal", "#vgl-ficha-modal", "#vgl-tablero-modal",
+                        "#vgl-confirma-modal", "#vgl-llenar-modal", "#vgl-riesgo-modal",
+                        "#vgl-min-bar", "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-deshacer-llenado"]) {
+        t.cierto(rm.indexOf(id) >= 0, id + " deja de animar cuando el sistema pide menos movimiento");
+      }
+    });
+
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
       // 1. Paridad de tokens claro/oscuro
       const bloqueOscuro = css.match(/((?:#[a-z0-9-]+,?\s*)+)\s*\{\s*\/\*[\s\S]*?\*\/\s*--bg:rgba\([^)]+\);/);
@@ -745,7 +803,7 @@ module.exports = {
       // complejidad en su estado inicial (.vgl-complex-pill, VGL_UX_CSS: +1 abajo). El censo
       // sintético anterior no los veía por tres puntos ciegos, ya cerrados en
       // tools/auditar_color_todo_chromium.js y vigilados por la Regla S de más abajo.
-      t.cierto(importantTotal === 656, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96 + 2 del número de tecla del menú de elección (C20) en la v18.0.112 + 1 del chip «como la última vez» de Agendar (C17) en la v18.0.115; salió ${importantTotal})`);
+      t.cierto(importantTotal === 655, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96 + 2 del número de tecla del menú de elección (C20) en la v18.0.112 + 1 del chip «como la última vez» de Agendar (C17) en la v18.0.115 - 1 que la v18.0.124 (UI/UX UI#12) QUITA: .vgl-tl dejó de apagar el anillo de foco con la marca de prioridad, que era lo único que impedía ver el foco de teclado en los tres semáforos; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba

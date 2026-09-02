@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.123
+// @version      18.0.124
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.123";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.124";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -16012,7 +16012,7 @@
            adversario, en Productividad y también en Telemetría local, que reusa la clase.
            Es la Regla E de siempre; aquí faltaba por descuido, no por criterio. */
         .vgl-prod .vgl-prod-cap,
-        .vgl-prod-cap{font-size:10px;font-weight:700;opacity:.7;color:var(--fg3) !important}
+        .vgl-prod-cap{font-size:var(--t-nano);font-weight:700;color:var(--fg3) !important}
         .vgl-prod-fila{
           display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
           padding:7px 10px;margin-bottom:5px;
@@ -16065,7 +16065,7 @@
         .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#a78bfa) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
         .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--t-micro);color:var(--fg2,#94a3b8) !important;line-height:1.4}
         .vgl-bento-row b{color:var(--fg,#f8fafc) !important;font-weight:700}
-        .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
+        .vgl-bento-pie{font-size:var(--t-mini);color:var(--fg3) !important}
         .vgl-bento-badge{background:rgba(var(--rgb-azul),.15);color:var(--c-azul) !important;padding:2px 8px;border-radius:var(--r-chip,6px);font-weight:800;font-size:11px}
         /* v17.24.0 — estados del dashboard "de un vistazo" del Panel del paciente: 3
            estados honestos, mismo idioma que #vgl-cw-examenes (nunca colapsar "no sé"
@@ -16171,7 +16171,9 @@
            tarea es "cero cambio visual". Queda como pregunta abierta para el médico, igual
            que ya se anotó en el commit de D1: ¿se baja --t-body a 13px en una fase de
            rediseño real (T4/TL1/TL2), o se acepta 14px como el valor vigente del sistema? */
-        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;
+        /* v18.0.124 (UI/UX UI#8, primer paso de UI#20) — tres tamaños más, DESPUÉS de --t-hero:
+           las Reglas H e I de suite_25 leen esa secuencia exacta. */
+        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;--t-nano:10px;--t-mini:11px;--t-small:13px;
         --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
         /* v14.0.0 (T3) — D6: política de capas, por fin escrita. --z-toast queda intocado
@@ -16252,7 +16254,9 @@
            7.05 sobre blanco puro (AAA), conservando la jerarquía --fg > --fg2 > --fg3.
            El tema oscuro NO se toca: ya medía 6.87, holgado sobre AA. */
         --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#4a5a6e;
-        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;
+        /* v18.0.124 (UI/UX UI#8, primer paso de UI#20) — tres tamaños más, DESPUÉS de --t-hero:
+           las Reglas H e I de suite_25 leen esa secuencia exacta. */
+        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;--t-nano:10px;--t-mini:11px;--t-small:13px;
         --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
         --z-toast:2147483647;--z-modal:2147483000;
@@ -16359,7 +16363,17 @@
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
         #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *,
-        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *,#vgl-cw-ordenar-btn{
+        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *,#vgl-cw-ordenar-btn,
+        /* v18.0.124 (UI/UX UI#11) — faltaban los modales de flujo de la v15.6.0 y cuatro
+           flotantes: seguían animando con el sistema pidiendo lo contrario (medido:
+           vglSpringIn .3s + 14 transiciones en #vgl-panel-modal y #vgl-ia-modal). La regla no
+           se duplica, así que sus dos marcas de prioridad siguen siendo las mismas dos.
+           (Escrito así a propósito: el censo de la Regla G cuenta la palabra literal, también
+           dentro de un comentario — nombrarla aquí sumaría al total y rompería la cuenta.) */
+        #vgl-ia-modal,#vgl-ia-modal *,#vgl-panel-modal,#vgl-panel-modal *,#vgl-ficha-modal,#vgl-ficha-modal *,
+        #vgl-tablero-modal,#vgl-tablero-modal *,#vgl-confirma-modal,#vgl-confirma-modal *,#vgl-llenar-modal,#vgl-llenar-modal *,
+        #vgl-riesgo-modal,#vgl-riesgo-modal *,#vgl-min-bar,#vgl-min-bar *,#vgl-acomp-burbuja,#vgl-acomp-burbuja *,
+        #vgl-tip-pop,#vgl-examen-normalidad,.vgl-ia-inj,#vgl-deshacer-llenado{
           animation:none !important;transition:none !important;
         }
       }
@@ -16650,7 +16664,14 @@
       .vgl-btn-action:focus-visible,.vgl-agm-btn:focus-visible,.vgl-agm-pbtn:focus-visible,
       .vgl-agm-sbtn:focus-visible,.vgl-agm-input:focus-visible,.vgl-agm-close:focus-visible,
       .vgl-sb-btn:focus-visible,.vgl-dock:focus-visible,#vgl-dock:focus-visible,
-      .vgl-pymb-toggle:focus-visible,.vgl-postcita-x:focus-visible{
+      .vgl-pymb-toggle:focus-visible,.vgl-postcita-x:focus-visible,
+      /* v18.0.124 (UI/UX UI#12, UI#13) — el anillo llega por fin a los botones del dock, al menú
+         de elección, a las pestañas del Panel y a los demás que se navegan con Tab y no tenían
+         anillo propio: caían al «auto 1px» del navegador, invisible sobre el vidrio. */
+      .vgl-dock-btn:focus-visible,.vgl-dock-toggle:focus-visible,.vgl-chooser-opt:focus-visible,
+      .vgl-panel-tab:focus-visible,.vgl-paq-chip:focus-visible,.vgl-labs-pdf:focus-visible,
+      .vgl-min-abrir:focus-visible,.vgl-min-x:focus-visible,.vgl-type-card:focus-visible,
+      .vgl-labs-uro-btn:focus-visible,.vgl-agm-lnk:focus-visible,.vgl-acomp-nomas:focus-visible{
         outline:2px solid var(--c-azul);outline-offset:2px;box-shadow:0 0 0 4px rgba(var(--rgb-azul),.25)
       }
       .vgl-sw:focus-within i{outline:2px solid var(--c-azul);outline-offset:2px}
@@ -16667,7 +16688,9 @@
            Mismo bug #2 del CLAUDE.md en su variante "sin regla propia". */
         color:var(--fg) !important;
       }
-      #vgl-tls{display:flex !important;align-items:center !important;gap:8px !important;margin-right:8px !important;flex-shrink:0 !important}
+      /* v18.0.124 (UI#12) — 12 px de separación: centros a 24 px, que es la excepción de
+         separación de WCAG 2.5.8 para objetivos de 12x12. */
+      #vgl-tls{display:flex !important;align-items:center !important;gap:12px !important;margin-right:8px !important;flex-shrink:0 !important}
       .vgl-tl{
         width:12px !important;height:12px !important;
         min-width:12px !important;min-height:12px !important;
@@ -16678,9 +16701,13 @@
         aspect-ratio:1 / 1 !important;
         transition:filter .18s var(--ease-out), transform .18s var(--spring) !important;
         appearance:none !important;-webkit-appearance:none !important;
-        outline:none !important;
         line-height:1 !important;overflow:hidden !important;
       }
+      /* v18.0.124 (UI/UX UI#12) — aquí vivía un «outline:none» CON marca de prioridad, y por
+         eso le ganaba a la regla de :focus-visible de arriba: medido con Tab real, los
+         tres semáforos devolvían «outline: none 0px». Se borra, y solo el clic con ratón apaga
+         el anillo — que es justo lo que :focus-visible ya distingue. Censo: 656 -> 655. */
+      .vgl-tl:focus:not(:focus-visible){outline:none}
       .vgl-tl:hover{filter:brightness(1.2) !important;transform:scale(1.18) !important}
       .vgl-tl.close{background:var(--c-rojo) !important;box-shadow:0 0 8px rgba(var(--rgb-rojo),.55) !important}
       .vgl-tl.min{background:var(--c-ambar) !important;box-shadow:0 0 8px rgba(var(--rgb-ambar),.55) !important}
@@ -16700,7 +16727,7 @@
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       }
       #vgl-title small{
-        opacity:.60;font-weight:500;margin-left:6px;font-size:var(--t-micro) /* Mínimo 12px */
+        opacity:.8;font-weight:500;margin-left:6px;font-size:var(--t-micro)   /* v18.0.124 (UI#8): .60 -> .8 */
       }
       #vgl-dot{
         width:9px;height:9px;border-radius:50%;background:var(--fg3);
@@ -16734,6 +16761,17 @@
         -webkit-backdrop-filter:none !important;backdrop-filter:none !important;
       }
       #vgl-root.vgl-hc::before{display:none !important}
+      /* v18.0.124 (UI/UX UI#10) — el botón prometía «Alto contraste» y solo quitaba el vidrio: en
+         tema claro dejaba las MISMAS seis fallas de contraste que sin él. Ahora mueve los tokens
+         secundarios (texto muteado, bordes, líneas) en los dos temas. Solo tokens: no toca --t-*
+         (Regla H) y la Regla O lee la lista base, no esta. La jerarquía --fg > --fg2 > --fg3 se
+         conserva porque los valores nuevos son MÁS contrastados que los base. */
+      #vgl-root.vgl-hc:not(.light),#vgl-dock.vgl-hc:not(.light),#vgl-acciones-dock.vgl-hc:not(.light),#vgl-toasts.vgl-hc:not(.light){
+        --fg2:#e5ebf3;--fg3:#b8c2d0;--edge:rgba(255,255,255,.34);--line:rgba(255,255,255,.18);--bg2:rgba(255,255,255,.07);--bg3:rgba(255,255,255,.12)
+      }
+      #vgl-root.vgl-hc.light,#vgl-dock.vgl-hc.light,#vgl-acciones-dock.vgl-hc.light,#vgl-toasts.vgl-hc.light{
+        --fg2:#111827;--fg3:#334155;--edge:rgba(15,23,42,.40);--line:rgba(15,23,42,.20)
+      }
       #vgl-salud-globo{
         position:absolute;top:38px;left:10px;right:10px;z-index:8;
         background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(0,0,0,0) 60%),var(--bg-solid);
@@ -16837,7 +16875,10 @@
         color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
       }
       #vgl-cw-farmaco.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
-      #vgl-cw-farmaco.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important;opacity:.85}
+      /* v18.0.124 (UI/UX UI#8) — SEXTO sitio, que la auditoría no había listado y destapó la
+         guarda nueva: --fg3 ya es el token muteado y apilarle opacidad lo baja otra vez. Aquí
+         era .85 (daño leve), pero la regla es la misma y una excepción invita a la siguiente. */
+      #vgl-cw-farmaco.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important}
       #vgl-cw-farmaco.vgl-cw-ok .vgl-cw-badge{color:var(--c-verde) !important}
       #vgl-cw-farmaco .vgl-cw-panel{
         display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
@@ -17399,7 +17440,7 @@
          Mismo estilo base de .vgl-chip (dentro de #vgl-root, hereda su blindaje), solo
          más apagado para no competir visualmente con los 3 chips reales — el detalle
          completo de lo que resume vive en su atributo title, nunca se pierde. */
-      .vgl-chip-mas { opacity:.75; cursor:help; }
+      .vgl-chip-mas { cursor:help; }   /* v18.0.124 (UI#8): «+N más» medía 2,69:1 con la opacidad */
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
       .vgl-card-top.vgl-card-top-t1 { gap:10px; }
       .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
@@ -17582,9 +17623,13 @@
       .vgl-sw i:after{
         content:"";position:absolute;top:2px;left:2px;
         width:22px;height:22px;border-radius:50%;
-        background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);
+        background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35),0 0 0 1px rgba(15,23,42,.25);
         transition:transform .24s var(--spring)
       }
+      /* v18.0.124 (UI/UX UI#9) — en tema claro el riel apagado medía 1,25:1 y la perilla 1,32:1;
+         WCAG 1.4.11 pide 3:1 para un componente de interfaz. Riel #7f899b + anillo en la perilla.
+         Especificidad 1,2,1 sobre la base 0,1,1: sin empate, la Regla A no tiene nada que vigilar. */
+      #vgl-root.light .vgl-sw i{background:#7f899b;box-shadow:inset 0 0 0 1px rgba(15,23,42,.35)}
       .vgl-sw input:checked + i{background:var(--c-verde);box-shadow:0 0 12px rgba(var(--rgb-verde),.30)}
       .vgl-sw input:checked + i:after{transform:translateX(18px)}
 
@@ -18781,7 +18826,10 @@
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
       #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3) !important;font-variant-numeric:tabular-nums;white-space:nowrap}
-      #vgl-labs-modal .vgl-labs-date small{display:block;font-size:10px;color:var(--fg3) !important;opacity:.72;font-variant-numeric:tabular-nums}
+      /* v18.0.124 (UI/UX UI#8) — --fg3 YA es el token «muteado»: apilarle opacidad encima dejaba
+         el año del resultado en 3,30:1 (claro) y el pie del bento en 3,51:1, los dos bajo AA. Se
+         quita la opacidad y el tamaño pasa a la escala. */
+      #vgl-labs-modal .vgl-labs-date small{display:block;font-size:var(--t-nano);color:var(--fg3) !important;font-variant-numeric:tabular-nums}
       #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
         font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg) !important;

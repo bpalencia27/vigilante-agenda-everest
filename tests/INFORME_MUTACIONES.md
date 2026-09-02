@@ -12040,4 +12040,50 @@ del del panel**: invisible (98 % opaco) y una pasada de blur extra por cuadro en
 | 417 | los flotantes vuelven a la esquina del panel | *suite_15: v18.0.123 (F-13): los cuatro flotantes viven en la columna libre…* | Sí |
 | 418 | el cuerpo deja de decir si el panel ocupa la esquina | *suite_15: v18.0.123 (F-13): el cuerpo declara si el panel ocupa la esquina…* | Sí |
 
-Banco completo: **3.078 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.078 comprobaciones pasan, 0 fallan.** *(v18.0.123)*
+
+---
+
+## v18.0.124 — auditoría UI/UX, lote visual 2: lo que solo se ve pulsando Tab
+
+Aplica **F-17, F-18, F-19, F-20 y F-21** (filas 24, 25, 26, 27, 28 y 40). Con esto quedan
+aplicados los **22 fragmentos** de `docs/AUDITORIA_UIUX_20260902.md`.
+
+**F-17 — sin opacidad apilada sobre texto ya muteado.** `--fg3` ES el token muteado; ponerle
+`opacity` encima lo baja otra vez: el año del resultado de laboratorio medía 3,30:1 en claro y
+el pie del bento 3,51:1, los dos bajo AA. Se quita en los cinco sitios que listaba la auditoría
+— y en un **sexto que ella no vio y destapó la guarda nueva** (`#vgl-cw-farmaco.vgl-cw-nd
+.vgl-cw-badge`, `.85`). Tres tamaños entran en la escala (`--t-nano/--t-mini/--t-small`),
+**detrás de `--t-hero`** para no partir la secuencia que leen las Reglas H e I.
+
+**F-18 — el interruptor de Ajustes se ve en tema claro.** Riel apagado 1,25:1 y perilla 1,32:1,
+con WCAG 1.4.11 pidiendo 3:1 para un componente. Medido después: **3,53:1**.
+
+**F-19 — «Alto contraste» que contrasta.** El botón lo prometía y solo quitaba el vidrio: en
+claro dejaba las mismas seis fallas. Ahora mueve los tokens secundarios en los dos temas.
+
+**F-20 — `prefers-reduced-motion` completo.** Faltaban los siete modales de flujo de la v15.6.0
+y cuatro flotantes: seguían animando con el sistema pidiendo lo contrario.
+
+**F-21 — el foco de teclado llega a los semáforos y a doce sitios más.** En `.vgl-tl` vivía un
+`outline:none` **con marca de prioridad** que le ganaba a `:focus-visible`: medido con Tab real,
+los tres semáforos devolvían «outline: none 0px». Se borra — **censo 656 → 655**, el único Δ
+negativo de toda la auditoría — y solo el clic con ratón apaga el anillo. Doce clases que se
+navegan con Tab y caían al «auto 1px» del navegador (invisible sobre el vidrio) reciben anillo
+propio. Y los semáforos se separan 12 px: centros a 24, la excepción de separación de WCAG 2.5.8.
+
+**Verificado en Chromium con Tab de verdad** (`tools/medir_foco_chromium.js`, nuevo). Dos cosas
+que solo aparecen midiendo: `.vgl-type-card` devolvía «solid 0px» porque su `transition:all
+.18s` hace **entrar el anillo animado** —el fotograma cero— y había que dejar asentar la
+transición; y el clic con ratón sigue sin encender el anillo, que es justo lo que
+`:focus-visible` existe para distinguir.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 419 | vuelve la opacidad apilada sobre `--fg3` | *suite_25: v18.0.124 - sin opacidad apilada sobre --fg3…* | Sí |
+| 420 | vuelve el `outline:none` con marca en el semáforo | *suite_25: v18.0.124 - el anillo de foco ya no se apaga…* (y la Regla G: el censo vuelve a 656) | Sí |
+| 421 | «Alto contraste» vuelve a no mover ningún token | *suite_25: v18.0.124 - «Alto contraste» mueve tokens…* | Sí |
+| 422 | los modales de flujo vuelven a animar | *suite_25: v18.0.124 - …prefers-reduced-motion cubre los modales de flujo* | Sí |
+| 423 | el interruptor claro vuelve a ser invisible | *suite_25: v18.0.124 - …el riel apagado tiene color propio en claro* | Sí |
+
+Banco completo: **3.081 comprobaciones pasan, 0 fallan.**
