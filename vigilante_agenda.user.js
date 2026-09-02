@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.120
+// @version      18.0.121
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.120";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.121";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -27199,6 +27199,33 @@
         }
       } catch (e) {}
     }
+    // v18.0.121 — REPORTE EN VIVO DEL MÉDICO (02-sep): «este mensaje es confuso y siempre
+    // aparece, y también aparece otro mensaje abajo por lo que saldría redundante».
+    //
+    // Esta era la mitad de abajo del problema: al tocar un plazo, `_aplicarPlazoElegido`
+    // APILABA un segundo recuadro con `innerHTML +=` sobre el mismo banner, y ese recuadro
+    // repetía la fecha que la cabecera ya daba como «control médico», con otro nombre («la
+    // fecha que evita el vencimiento»). Dos nombres para el mismo dato, uno encima del otro:
+    // se lee como si fueran dos fechas distintas. Su propia regla del 01-sep lo dice —
+    // docs/REGLAS_MEDICO_20260901.md §4: «un hecho por mensaje, sin repetir lo que otro
+    // elemento de la misma pantalla ya dice».
+    //
+    // Ahora es UNA nota, la única del banner cuando él eligió plazo, y no repite la fecha:
+    // ya está arriba. Solo ofrece el camino de vuelta, que es lo único que aquí es nuevo.
+    const _notaSuPlazo = () =>
+      `<div class="vgl-agm-sug-nota">📅 Está viendo los días de <b>su</b> plazo. `
+      + `<button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-agm-ir-sugerida">llévame a la sugerida</button></div>`;
+    // El manejador vive aquí y no en `_aplicarPlazoElegido` porque la fecha ya viaja en
+    // `_sugeridaControl.iso`: no hace falta cerrar sobre `sug` para saber a dónde ir.
+    const _engancharIrSugerida = () => {
+      try {
+        const ir = _bannerSug && _bannerSug.querySelector("#vgl-agm-ir-sugerida");
+        if (ir && typeof ir.addEventListener === "function") ir.addEventListener("click", () => {
+          try { uxTrack("fn.agendar.volver_a_sugerida"); } catch (e) {}
+          try { renderDayChips(0, 0, _sugeridaControl && _sugeridaControl.iso); } catch (e) {}
+        });
+      } catch (e) {}
+    };
     function _pintarBannerSugerida() {
       if (!_bannerSug) return;
       if (_sugeridaControl && _sugeridaControl.labsPrimero) {
@@ -27237,18 +27264,36 @@
         // tiene por qué reconocer. motivoPiso ahora es solo la razón (ver más arriba,
         // ~línea 25915/25927), así que embeba limpio, una sola vez, sin jerga. La rama SIN
         // piso relajado (el `else`) no se tocó — el médico no la reportó como confusa.
+        // v18.0.121 — REPORTE EN VIVO (02-sep), la mitad de arriba del mismo problema. El
+        // párrafo decía «...porque ya hay examen(es) vencido(s)...» JUSTO DEBAJO de la fila
+        // «Ya vencidos: Colesterol LDL», que los nombra uno por uno. El motivo ya estaba a la
+        // vista, con nombre y apellido: repetirlo en prosa era decir lo mismo por segunda vez
+        // en el mismo recuadro. Lo mismo con el caso 2 del piso («el examen X vence el…»),
+        // que la fila «Vencen pronto: X · 8 d» ya dice, y con «es una sugerencia, no una
+        // imposición», que la nota de «su plazo» y los chips de abajo demuestran de hecho.
+        //
+        // `motivoPiso` NO se borra del motor: sigue siendo un dato del plan y sus pruebas lo
+        // fijan. Lo que cambia es dónde se lee — en fichas, que es como el médico pidió verlo
+        // en la v16.2.5 («que se mencione CUÁLES son… para verlos rápidamente»), no en prosa.
+        //
+        // Queda el único hecho que ningún otro elemento de la pantalla dice: de dónde sale la
+        // fecha del control y qué pasa si mueve la toma. Un hecho, una frase.
         const notaLP = _pisoLP
-          ? "Se adelanta la toma al primer cupo disponible porque " + escapeHtml(_labsPrimero.motivoPiso || "hay exámenes vencidos o por vencer") + ". El control queda ~7 días después de la toma, para que el resultado esté listo a tiempo; si mueve la toma, el control se recalcula solo — es una sugerencia, no una imposición."
-          : "La toma queda 14–21 días antes y el control ~7 días después, para que ningún resultado llegue vencido a la consulta. Si mueve la toma, el control se recalcula solo (+7 días, hábil siguiente) — es una sugerencia, no una imposición.";
+          ? "El control va ~7 días después de la toma, para que el resultado llegue a tiempo. Si mueve la toma, el control se recalcula solo."
+          : "La toma queda 14–21 días antes y el control ~7 días después, para que ningún resultado llegue vencido a la consulta. Si mueve la toma, el control se recalcula solo.";
         _bannerSug.innerHTML = `🧪 <b>Labs primero:</b> toma de laboratorios sugerida <b>${escapeHtml(_sugeridaControl.ftl)}</b>`
           + ` → control médico <b>${escapeHtml(_sugeridaControl.iso)}</b>`
           + (venc.length ? `<div class="vgl-lp-fila"><span class="vgl-lp-rot">Ya vencidos:</span>${fichas(venc, "vgl-lp-chip venc")}</div>` : "")
           + (porVTxt.length ? `<div class="vgl-lp-fila"><span class="vgl-lp-rot">Vencen pronto:</span>${fichas(porVTxt, "vgl-lp-chip porvencer")}</div>` : "")
-          + `<div class="vgl-agm-sug-nota">${notaLP}</div>`
+          // v18.0.121 — UNA nota, nunca dos apiladas. Cuando el médico eligió su propio
+          // plazo, lo que necesita saber es eso y cómo volver; el «~7 días después» ya lo
+          // leyó al abrir el cuadro y repetirlo debajo es exactamente lo que reportó.
+          + (_sugeridaControl.viendoSuPlazo ? _notaSuPlazo() : `<div class="vgl-agm-sug-nota">${notaLP}</div>`)
           // v18.0.69 — regla 2 y 4 del médico: si no se confirmó cupo real (o AppCita no
           // respondió), se dice — no se calla ni se inventa disponibilidad.
           + (_labsPrimero && _labsPrimero.avisoDisponibilidad
               ? `<div class="vgl-agm-sug-nota vgl-agm-sug-aviso">${mtrNotaDisponibilidadLab(_labsPrimero.avisoDisponibilidad)}</div>` : "");
+        if (_sugeridaControl.viendoSuPlazo) _engancharIrSugerida();
         _bannerSug.classList.add("vgl-agm-sugerida-on");
         _agmAvisarSiFaltaDocumentar();
         return;
@@ -27258,7 +27303,9 @@
           + (_sugeridaControl.ftl ? ` · toma de laboratorios <b>${escapeHtml(_sugeridaControl.ftl)}</b>` : "")
           + (_sugeridaControl.esSabado ? " · sábado de este médico" : "")
           + (_sugeridaControl.motivo ? ` <span class="vgl-agm-sug-motivo">(${escapeHtml(_sugeridaControl.motivo)})</span>` : "")
-          + `<div class="vgl-agm-sug-nota">Puede cambiarla con los chips de abajo; es una sugerencia, no una imposición.</div>`;
+          + (_sugeridaControl.viendoSuPlazo ? _notaSuPlazo()
+             : `<div class="vgl-agm-sug-nota">Puede cambiarla con los chips de abajo; es una sugerencia, no una imposición.</div>`);
+        if (_sugeridaControl.viendoSuPlazo) _engancharIrSugerida();
         _bannerSug.classList.add("vgl-agm-sugerida-on");
         _agmAvisarSiFaltaDocumentar();
       } else {
@@ -27400,6 +27447,16 @@
         _sugeridaControl = {
           iso: sug.iso, ftl: sug.ftl, motivo: sug.motivo, esSabado: false,
           labsPrimero: !!(_labsPrimero && _labsPrimero.activa),
+          // v18.0.121 — LAS FICHAS SE PERDÍAN AQUÍ. Este objeto se rehacía sin `vencidos` ni
+          // `porVencerDetalle`, así que en cuanto el médico tocaba un plazo el recuadro se
+          // quedaba SIN los nombres de los exámenes —lo que de verdad explica la fecha— y
+          // solo con el párrafo genérico. Es la otra mitad de por qué lo leía como confuso:
+          // desaparecía el motivo concreto y sobrevivía la explicación abstracta.
+          vencidos: (_labsPrimero && _labsPrimero.vencidos) || [],
+          porVencerDetalle: (_labsPrimero && _labsPrimero.porVencerDetalle) || [],
+          // Y el estado «está mirando SU plazo» viaja en el propio objeto, en vez de pegarse
+          // después como un segundo recuadro con `innerHTML +=`.
+          viendoSuPlazo: !!_plazoTocado,
         };
         _pintarBannerSugerida();
         try { uxTrack("fn.agendar.plazo_ajustado"); } catch (e) {}
@@ -27413,19 +27470,11 @@
         // recomendación del sistema se ofrece con un clic — el mismo patrón que ya se
         // usaba para el control ligado a la toma de laboratorio.
         if (_plazoTocado) {
+          // v18.0.121 — aquí vivía el segundo recuadro que el médico reportó como redundante.
+          // Ya no se apila nada: `_pintarBannerSugerida` (llamado tres líneas más arriba, con
+          // `viendoSuPlazo` puesto) pinta esa nota como la ÚNICA del banner, sin repetir la
+          // fecha que la cabecera ya da.
           renderDayChips(m, d);
-          try {
-            if (_bannerSug && sug.iso) {
-              _bannerSug.innerHTML += `<div class="vgl-agm-sug-nota">📅 Se están mostrando los días de <b>su</b> plazo. `
-                + `Si prefiere la fecha que evita el vencimiento (<b>${escapeHtml(sug.iso)}</b>), `
-                + `<button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-agm-ir-sugerida">llévame allá</button></div>`;
-              const ir = _bannerSug.querySelector("#vgl-agm-ir-sugerida");
-              if (ir) ir.addEventListener("click", () => {
-                try { uxTrack("fn.agendar.volver_a_sugerida"); } catch (e) {}
-                renderDayChips(0, 0, sug.iso);
-              });
-            }
-          } catch (e) {}
           return;
         }
         renderDayChips(0, 0, sug.iso);

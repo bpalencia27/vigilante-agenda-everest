@@ -11915,4 +11915,45 @@ y el rojo del título de vencidos sobreviven a `div,span,p,b{color:#111827 !impo
 | 402 | el aviso deja de repartir las dos listas | *suite_04: v18.0.120 PUNTA A PUNTA (reporte en vivo 02-sep)…* | Sí |
 | 403 | se borra el acento ámbar de la sección nueva | *Chromium (`verificar_color_chromium.js`): «aviso: título de «fuera de metas, vigente»» cae a `rgb(17,24,39)` — el color del adversario* | Sí |
 
-Banco completo: **3.070 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.070 comprobaciones pasan, 0 fallan.** *(v18.0.120)*
+
+---
+
+## v18.0.121 — el banner de Agendar decía lo mismo tres veces
+
+**Reporte en vivo del médico (02-sep), con captura:** «*este mensaje es confuso y siempre
+aparece, y también aparece otro mensaje abajo por lo que saldría redundante; yo te pedí que
+blindaras esto y no lo has hecho*». Tenía razón, y su propia regla del 01-sep
+(`docs/REGLAS_MEDICO_20260901.md` §4) ya lo cubría: «*un hecho por mensaje, sin repetir lo que
+otro elemento de la misma pantalla ya dice*».
+
+**Las tres repeticiones, medidas sobre el mismo recuadro:**
+
+1. El párrafo decía «*…porque ya hay examen(es) vencido(s)…*» **justo debajo** de la fila
+   «Ya vencidos: Colesterol LDL», que los nombra uno por uno. El motivo ya estaba a la vista
+   con nombre y apellido — es lo que él mismo pidió en la v16.2.5.
+2. Al tocar un plazo, `_aplicarPlazoElegido` **apilaba** un segundo recuadro con
+   `innerHTML +=` que repetía la MISMA fecha que la cabecera ya daba como «control médico»,
+   bajo otro nombre: «la fecha que evita el vencimiento». Dos nombres para el mismo dato, uno
+   encima del otro: se lee como si fueran dos fechas distintas.
+3. «Es una sugerencia, no una imposición» iba en prosa, cuando los chips de plazo y la propia
+   nota de «está viendo SU plazo» ya lo demuestran de hecho.
+
+**Y un defecto de datos que lo agravaba:** ese mismo camino rehacía `_sugeridaControl` **sin**
+`vencidos` ni `porVencerDetalle`. En cuanto el médico tocaba un plazo, las fichas —el porqué
+concreto— desaparecían y solo sobrevivía el párrafo abstracto. Exactamente lo contrario de lo
+que hace falta.
+
+**Ahora:** una sola nota, nunca dos. La razón la dicen las fichas, que ya no se pierden. La
+nota de «su plazo» no repite la fecha (está en la cabecera) y solo ofrece el camino de vuelta,
+compartido por las dos ramas del banner.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 404 | vuelve el segundo recuadro apilado con `innerHTML +=` | *suite_15: v18.0.121: al tocar un plazo el banner NO apila un segundo recuadro…* | Sí |
+| 405 | se vuelven a perder las fichas al rehacer `_sugeridaControl` | *suite_15: v18.0.121: …ni pierde las fichas* | Sí |
+| 406 | la nota vuelve a repetir el motivo en prosa | *suite_15: notaLP… sin repetir lo que las fichas ya dicen* | Sí |
+| 407 | solo una de las dos ramas del banner usa la nota única | *suite_15: v18.0.121: …las dos ramas usan la MISMA nota* | Sí |
+| 408 | la nota vuelve a repetir la fecha que ya está en la cabecera | *suite_15: v18.0.121: …la nota NO repite la fecha* | Sí |
+
+Banco completo: **3.071 comprobaciones pasan, 0 fallan.**

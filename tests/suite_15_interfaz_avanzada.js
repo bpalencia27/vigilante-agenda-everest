@@ -766,32 +766,91 @@ module.exports = {
     // (no es una unidad aislable) — se protege por texto fuente, mismo criterio ya
     // establecido en el banco (ver suite 57).
     // =====================================================================
-    t.caso("notaLP (banner «Labs primero», piso relajado): sin la frase duplicada 'porque...(adelantada porque' ni jerga interna del motor", () => {
+    t.caso("notaLP (banner «Labs primero», piso relajado): sin jerga interna del motor y sin repetir lo que las fichas ya dicen", () => {
       const fs = require("fs");
       const path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
       const idx = src.indexOf("const _pisoLP = _labsPrimero && _labsPrimero.pisoRelajado;");
       t.cierto(idx >= 0, "el bloque de notaLP debe existir");
-      const bloque = src.slice(idx, idx + 1200);
+      const bloque = src.slice(idx, idx + 2400);
 
-      // motivoPiso (línea ~25915/25927) ya no debe llevar su propio verbo "adelantada":
-      // eso es justo lo que causaba la duplicación al embeberse en notaLP.
+      // motivoPiso ya no debe llevar su propio verbo "adelantada": eso es lo que causaba la
+      // duplicación de v17.6.73. Sigue existiendo en el motor (es un dato del plan), aunque
+      // desde v18.0.121 el banner lo diga con fichas y no en prosa.
       const iMotivo1 = src.indexOf('motivoPiso = "ya hay examen');
-      t.cierto(iMotivo1 >= 0, "caso 1 (vencidos): motivoPiso debe ser solo la razón");
-      t.falso(/motivoPiso = "adelantada/.test(src), "ningún motivoPiso debe seguir empezando con 'adelantada' (esa era la causa de la duplicación)");
+      t.cierto(iMotivo1 >= 0, "caso 1 (vencidos): motivoPiso debe seguir siendo solo la razón");
+      t.falso(/motivoPiso = "adelantada/.test(src), "ningún motivoPiso debe empezar con 'adelantada' (esa era la causa de la duplicación)");
 
-      // notaLP: se extrae SOLO la rama del ternario con piso relajado (hasta el ":" del
-      // else), para no confundir con la rama sin relajar (que no se tocó).
+      // notaLP: se extrae SOLO la rama del ternario con piso relajado (hasta el ":" del else).
       const iNotaLP = bloque.indexOf("const notaLP = _pisoLP");
       t.cierto(iNotaLP >= 0, "debe encontrarse la declaración de notaLP");
       const iElse = bloque.indexOf('"La toma queda 14', iNotaLP);
       const ramaRelajada = bloque.slice(iNotaLP, iElse >= 0 ? iElse : iNotaLP + 700);
       t.falso(/ventana de 14.21 días/.test(ramaRelajada), "ya no debe quedar la jerga 'ventana de 14–21 días'");
       t.falso(/\(adelantada porque/.test(ramaRelajada), "ya no debe quedar la frase duplicada 'porque...(adelantada porque'");
-      t.cierto(/porque " \+ escapeHtml\(_labsPrimero\.motivoPiso/.test(ramaRelajada), "debe seguir embebiendo el motivo real (motivoPiso), no un texto genérico fijo");
-      t.cierto(/se recalcula solo/.test(ramaRelajada), "conserva la aclaración de que es una sugerencia, no una imposición");
-      t.cierto(/Se adelanta la toma al primer cupo disponible porque/.test(ramaRelajada), "arranca con la frase nueva, sin duplicar 'adelanta...porque' más adelante");
+      t.cierto(/se recalcula solo/.test(ramaRelajada), "conserva el único hecho que ningún otro elemento dice: mover la toma recalcula el control");
+
+      // v18.0.121 — REPORTE EN VIVO (02-sep): «este mensaje es confuso y siempre aparece».
+      // La nota decía «porque ya hay examen(es) vencido(s)» justo debajo de la fila
+      // «Ya vencidos: …» que los nombra. El motivo ya estaba a la vista con nombre y
+      // apellido (v16.2.5); repetirlo en prosa lo decía dos veces en el mismo recuadro.
+      t.falso(/motivoPiso/.test(ramaRelajada),
+        "la razón ya NO se repite en prosa: la dicen las fichas «Ya vencidos:» / «Vencen pronto:»");
+      t.falso(/no es una imposición|no una imposición/.test(ramaRelajada),
+        "tampoco se repite «es una sugerencia, no una imposición»: los chips y la nota de «su plazo» lo demuestran");
+      // Y las fichas siguen pintándose: son las que ahora cargan con el porqué.
+      t.cierto(/vgl-lp-rot">Ya vencidos:/.test(src), "la fila «Ya vencidos» sigue en el banner");
+      t.cierto(/vgl-lp-rot">Vencen pronto:/.test(src), "y la fila «Vencen pronto» también");
+    });
+
+    // =====================================================================
+    // v18.0.121 — REPORTE EN VIVO (02-sep): «...y también aparece otro mensaje abajo por lo
+    // que saldría redundante». Al tocar un plazo, `_aplicarPlazoElegido` apilaba un SEGUNDO
+    // recuadro con `innerHTML +=` que repetía la misma fecha que la cabecera ya daba como
+    // «control médico», bajo otro nombre («la fecha que evita el vencimiento»). Además ese
+    // camino rehacía `_sugeridaControl` SIN `vencidos` ni `porVencerDetalle`, así que las
+    // fichas —el porqué concreto— desaparecían y solo sobrevivía el párrafo abstracto.
+    // Mismo criterio de protección por texto fuente: vive en el cierre del modal.
+    // =====================================================================
+    t.caso("v18.0.121: al tocar un plazo el banner NO apila un segundo recuadro ni pierde las fichas", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const iAplicar = src.indexOf("function _aplicarPlazoElegido(m, d) {");
+      t.cierto(iAplicar >= 0, "debe existir _aplicarPlazoElegido");
+      const bloque = src.slice(iAplicar, iAplicar + 2600);
+
+      t.falso(/Se están mostrando los días de/.test(src),
+        "el segundo recuadro apilado ya no existe en ninguna parte del script");
+      t.falso(/_bannerSug\.innerHTML \+=/.test(bloque),
+        "y nada se pega al banner con `innerHTML +=` desde este camino");
+      t.falso(/la fecha que evita el vencimiento/.test(src),
+        "ni se vuelve a nombrar la misma fecha con un segundo nombre");
+
+      // Las fichas se conservan al rehacer _sugeridaControl: sin esto el recuadro se queda
+      // sin los nombres de los exámenes en cuanto el médico toca un plazo.
+      t.cierto(/vencidos: \(_labsPrimero && _labsPrimero\.vencidos\) \|\| \[\]/.test(bloque),
+        "el objeto rehecho conserva `vencidos`");
+      t.cierto(/porVencerDetalle: \(_labsPrimero && _labsPrimero\.porVencerDetalle\) \|\| \[\]/.test(bloque),
+        "y `porVencerDetalle`");
+      t.cierto(/viendoSuPlazo: !!_plazoTocado/.test(bloque),
+        "el estado «está viendo su plazo» viaja en el objeto, no como un recuadro aparte");
+
+      // La nota única: existe, la pintan LAS DOS ramas del banner, y no repite la fecha.
+      t.cierto(/const _notaSuPlazo = \(\) =>/.test(src), "hay una sola función que pinta esa nota");
+      const iNota = src.indexOf("const _notaSuPlazo = () =>");
+      // Solo el cuerpo de la flecha, hasta su `;`: lo que sigue es _engancharIrSugerida,
+      // que sí necesita la fecha para saber a dónde llevar.
+      const cuerpoNota = src.slice(iNota, src.indexOf("</div>`;", iNota) + 8);
+      t.falso(/escapeHtml\(sug\.iso\)|_sugeridaControl\.iso/.test(cuerpoNota),
+        "la nota NO repite la fecha: ya está en la cabecera del banner");
+      t.cierto(/vgl-agm-ir-sugerida/.test(cuerpoNota), "pero conserva el botón de volver a la sugerida");
+      const usos = (src.match(/_sugeridaControl\.viendoSuPlazo \? _notaSuPlazo\(\)/g) || []).length;
+      t.igual(usos, 2, "las dos ramas del banner (labs-primero y 🎯 fecha sugerida) usan la MISMA nota");
+      t.igual((src.match(/if \(_sugeridaControl\.viendoSuPlazo\) _engancharIrSugerida\(\);/g) || []).length, 2,
+        "y las dos enganchan el botón, que sin eso no llevaría a ninguna parte");
     });
 
 
