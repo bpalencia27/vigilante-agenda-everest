@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.98
+// @version      18.0.99
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.98";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.99";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5391,6 +5391,16 @@
   //    AFIRMACIÓN y tiene que seguir siéndolo.
   const MTR_RE_NEGADOR_CERCA = new RegExp(
     "\\b(?:sin antecedente|no refiere|no presenta|no consume|no padece|nunca ha|descarta|no tiene|no fuma|no usa|niega|no es|no fue|no ha|nunca|jamas|sin|no)\\b[^,;.]{0,25}$");
+  // 02-sep (cierre adversarial, fila 18) — un «no» que niega una CONDUCTA no niega la enfermedad.
+  // Al pasar la ventana de 20 a 25 (v18.0.57), «No asiste a controles de diabetes» —donde el
+  // «no» niega ASISTIR— empezó a leerse como negación de la diabetes: discrepancia ALTA que
+  // frena el Panel sobre un dato que el médico acaba de afirmar. Volver a 20 rompería «No ha
+  // sido diagnosticado con diabetes» (23 caracteres), así que la ventana no es la respuesta:
+  // antes de buscar el negador se borra del tramo todo «no/sin/nunca + conducta» (asistir,
+  // acudir, cumplir, adherirse, controlarse, seguir, tomar, aplicarse, tratamiento, manejo,
+  // medicación). «Sin control, diabético descompensado» ya lo protegía la coma; ahora también
+  // sin coma, y «HTA no controlada y diabetes» deja de negar lo que sigue.
+  const MTR_RE_NEGACION_DE_CONDUCTA = /\b(?:no|sin|nunca)\s+(?:es\s+|se\s+|ha\s+|esta\s+)?(?:asist\w*|acud\w*|cumpl\w*|adher\w*|control\w*|seguimiento|sigue|siguio|realiz\w*|toma\w*|tomo|aplic\w*|tratamiento|tratad\w*|manejo|medic\w*)\b/g;
 
   function mtrTextoOpinaSobre(texto, re) {
     try {
@@ -5456,7 +5466,9 @@
         //   · `f.search(re)` y no `re.exec` — `re` puede venir con la marca /g, y exec
         //     guardaría lastIndex entre llamadas; search la ignora y siempre empieza en 0.
         const donde = f.search(re);
-        if (donde > 0 && MTR_RE_NEGADOR_CERCA.test(f.slice(Math.max(0, donde - 45), donde))) {
+        // 02-sep (fila 18) — el tramo se limpia de «no + conducta» antes de buscar el negador.
+        const tramo = f.slice(Math.max(0, donde - 45), donde).replace(MTR_RE_NEGACION_DE_CONDUCTA, " ");
+        if (donde > 0 && MTR_RE_NEGADOR_CERCA.test(tramo)) {
           if (veredicto === null) veredicto = false;
           continue;
         }
@@ -7883,7 +7895,13 @@
     try {
       if (_vglDeshacerDisponible() && _vglLoteDeshacer && _vglLoteDeshacer.pares && _vglLoteDeshacer.pares.length) {
         const anterior = _vglLoteDeshacer.etiqueta || "el llenado anterior";
-        if (String(_vglLoteDeshacer.docId || "") === _docDes && anterior === _etDes) {
+        // 02-sep (cierre adversarial, fila 20) — sin cédula legible en las dos llamadas
+        // («Examen normal»/«Exámenes» pasan extractPacienteAbierto(), que da "" si la cabecera
+        // no se deja leer) dos historias DISTINTAS con el mismo botón se acumulaban en un solo
+        // lote, y «Deshacer» en el segundo paciente restauraba las casillas del primero —
+        // incluida una que el médico ya había escrito a mano. «El mismo paciente» solo se
+        // puede afirmar con cédula: sin ella, el lote se sustituye (con su aviso), como antes.
+        if (_docDes && String(_vglLoteDeshacer.docId || "") === _docDes && anterior === _etDes) {
           const yaEsta = new Set(_vglLoteDeshacer.pares.map((p) => p && p.el).filter(Boolean));
           for (const par of pares) {
             if (!par || !par.el || yaEsta.has(par.el)) continue;
@@ -19404,6 +19422,21 @@
   // `options.__timeoutMs` lo baja para una llamada concreta (lo usa el banco: esperar 15 s
   // reales por prueba no es una prueba, es una espera).
   const PAGE_FETCH_TIMEOUT_MS = 15000;
+  // 02-sep (cierre adversarial, fila 6) — el MISMO tope para los `fetch` directos que NO pasan
+  // por el núcleo (enviar la orden por correo, generar el enlace de impresión, reenviar el
+  // SMS): los tres se esperan con `await` detrás de un botón que se deshabilita hasta que la
+  // promesa vuelva, así que una conexión colgada dejaba al médico con «Enviando...» para
+  // siempre — exactamente el defecto que v18.0.47 cerró en el núcleo y que aquí seguía vivo.
+  // Si el llamador ya trae su propia señal, se respeta; sin AbortController, se llama igual.
+  function _fetchConTope(f, url, init, topeMs) {
+    const ms = (typeof topeMs === "number" && topeMs > 0) ? topeMs : PAGE_FETCH_TIMEOUT_MS;
+    if (typeof AbortController === "undefined" || (init && init.signal)) return f(url, init);
+    const abortar = new AbortController();
+    const corta = setTimeout(() => { try { abortar.abort(); } catch (e) {} }, ms);
+    return Promise.resolve()
+      .then(() => f(url, Object.assign({}, init || {}, { signal: abortar.signal })))
+      .finally(() => clearTimeout(corta));
+  }
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
@@ -21423,7 +21456,7 @@
     try {
       const url = location.origin + "/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=" +
         encodeURIComponent(cel) + "&AgendaTurnoId=" + encodeURIComponent(agendaTurnoId);
-      const r = await (FETCH0 || window.fetch)(url, { credentials: "include", headers: { Accept: "application/json" } });
+      const r = await _fetchConTope(FETCH0 || window.fetch, url, { credentials: "include", headers: { Accept: "application/json" } });
       const okHttp = !!(r && (r.ok || (r.status >= 200 && r.status < 300)));
       let cuerpo = "";
       try { if (r && typeof r.text === "function") cuerpo = await r.text(); } catch (e2) { cuerpo = ""; }
@@ -27293,7 +27326,7 @@
       const f = FETCH0 || window.fetch;
       const url = location.origin + "/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos"
         + "?PacienteId=" + encodeURIComponent(pacienteId) + "&Agrupador=" + encodeURIComponent(agrupador);
-      const resp = await f(url, { headers: { "Accept": "application/json" } });
+      const resp = await _fetchConTope(f, url, { headers: { "Accept": "application/json" } });
       let cuerpo = "";
       try { cuerpo = await resp.text(); } catch (e) {}
       let res = null;
@@ -27340,7 +27373,7 @@
       const f = FETCH0 || window.fetch;
       const url = location.origin + "/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento"
         + "?Grupo=" + encodeURIComponent(agrupador) + "&Correo=" + encodeURIComponent(correo) + "&UsuarioId=" + encodeURIComponent(usuarioId);
-      const resp = await f(url, { headers: { "Accept": "application/json" } });
+      const resp = await _fetchConTope(f, url, { headers: { "Accept": "application/json" } });
       if (!_diagEnvioCorreoLogged) {
         _diagEnvioCorreoLogged = true;
         let cuerpo = "";
@@ -29057,9 +29090,27 @@
     };
   }
 
+  // 02-sep (cierre adversarial, fila 21) — el nombre sale de la cédula CANÓNICA (sin ceros de
+  // relleno), la misma clave que indexa toda la memoria local desde v17.48.0. Antes solo
+  // quitaba letras: «0000111111» y «111111» daban dos archivos para el mismo paciente.
   function mtrNombreArchivoPaciente(docId) {
-    const d = String(docId == null ? "" : docId).replace(/\D/g, "");
+    const d = normalizeKey(docId);
     return d ? d + ".json" : null;
+  }
+  // 02-sep (fila 21) — la carpeta se escribió antes de esa canonicalización, así que puede tener
+  // «0000111111.json». Sin esto, el historial viejo quedaba huérfano en silencio: la lectura
+  // por nombre exacto no lo veía (el Panel no mostraba los controles previos) y la siguiente
+  // instantánea creaba «111111.json» al lado. Mismo patrón que _vglClaveDeDoc para la cosecha:
+  // se lee y se escribe donde YA está archivado. Un `fs` sin `listar` se comporta como antes.
+  async function _vglCarpetaResolverNombre(io, docId) {
+    const canon = mtrNombreArchivoPaciente(docId);
+    if (!canon || !io || typeof io.listar !== "function") return canon;
+    let nombres = null;
+    try { nombres = await io.listar(); } catch (e) { nombres = null; }
+    if (!Array.isArray(nombres) || nombres.indexOf(canon) >= 0) return canon;
+    const clave = normalizeKey(docId);
+    const legado = nombres.find((n) => /^\d+\.json$/i.test(String(n)) && normalizeKey(String(n).replace(/\.json$/i, "")) === clave);
+    return legado || canon;
   }
 
   // v17.0.1 — AUDITORÍA DE LA v17: el handle vivía SOLO en memoria, así que después de
@@ -29196,10 +29247,10 @@
   }
 
   async function _vglCarpetaGuardarAhora(docId, instantanea, fs) {
-    const nombre = mtrNombreArchivoPaciente(docId);
-    if (!nombre) return { ok: false, motivo: "Sin cédula legible no se puede nombrar el archivo." };
+    if (!mtrNombreArchivoPaciente(docId)) return { ok: false, motivo: "Sin cédula legible no se puede nombrar el archivo." };
     const io = fs || _vglCarpetaFsReal();
     if (!io) return { ok: false, motivo: "No hay carpeta elegida todavía." };
+    const nombre = await _vglCarpetaResolverNombre(io, docId);   // 02-sep — donde YA esté archivado
     // v17.0.1 — AUDITORÍA DE LA v17. Este bloque tenía tres formas de BORRAR el historial
     // de un paciente, que es lo único irreparable que puede hacer esta función:
     //  (a) si el respaldo del archivo ilegible fallaba (disco lleno, permiso), el catch
@@ -29302,6 +29353,13 @@
         await w.close();
         return true;
       },
+      // 02-sep (fila 21) — nombres de los archivos de la carpeta, para encontrar un historial
+      // archivado con ceros de relleno antes de la canonicalización (_vglCarpetaResolverNombre).
+      listar: async () => {
+        const nombres = [];
+        for await (const [n, h] of _vglCarpetaHandle.entries()) { if (h && h.kind === "file") nombres.push(n); }
+        return nombres;
+      },
     };
   }
 
@@ -29313,7 +29371,7 @@
     const io = fs || _vglCarpetaFsReal();
     if (!io) return null;
     try {
-      const txt = await io.leer(nombre);
+      const txt = await io.leer(await _vglCarpetaResolverNombre(io, docId));   // 02-sep — tolera ceros de relleno
       const j = txt ? JSON.parse(txt) : null;
       return (j && Array.isArray(j.controles)) ? j : null;
     } catch (e) { return null; }
@@ -42599,6 +42657,15 @@
     let _medsParaMotor = null;
     try { _medsParaMotor = (typeof mtrLeerMedicamentos === "function") ? mtrLeerMedicamentos(pacienteIdLabs) : null; } catch (e) { _medsParaMotor = null; }
 
+    // 02-sep (fila 15) — de dónde sale la tensión, decidido UNA vez para las dos cifras (ver el
+    // comentario en paSistolica/paDiastolica, más abajo).
+    const _taFuente = (function () {
+      const entCompleta = ent.pas != null && ent.pad != null;
+      const taCompleta = ta.pas != null && ta.pad != null;
+      if (entCompleta) return ent;
+      if (taCompleta) return ta;
+      return (ent.pas != null || ent.pad != null) ? ent : ta;
+    })();
     const hoyIso = todayStamp();
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
@@ -42619,8 +42686,14 @@
       // destapa al intentar mostrar la meta individual y encontrar que nunca tuvo con qué
       // compararla. Mismo patrón que ya usan RAC/CT/HDL/LDL dos líneas arriba.
       hba1c: val("HBA1C"),
-      paSistolica: (ent.pas != null ? ent.pas : ta.pas),
-      paDiastolica: (ent.pad != null ? ent.pad : ta.pad),
+      // 02-sep (cierre adversarial, fila 15) — LAS DOS CIFRAS DE LA TENSIÓN VIAJAN JUNTAS O NO
+      // VIAJAN, la misma regla que v18.0.54 fijó en mtrRecalcularConFactores y que aquí seguía
+      // resolviéndose por separado: con Athenea trayendo solo la sistólica (130) y la casilla de
+      // hoy solo la diastólica (85), el resumen firmaba 130/85 — una tensión que no existió.
+      // Gana la fuente que trae la medición COMPLETA (Athenea primero, como siempre); si ninguna
+      // está completa, se toma entera la que tenga algo, sin completarla con la otra.
+      paSistolica: _taFuente.pas != null ? _taFuente.pas : null,
+      paDiastolica: _taFuente.pad != null ? _taFuente.pad : null,
       factores: factores || {},
       ultimos: ultimos,
       uroHallazgos: uroHallazgos, uroSintomas: null,   // los síntomas no están en el lab: el motor pedirá confirmarlos

@@ -413,5 +413,39 @@ module.exports = {
         "y la diastólica con exactamente la misma condición: las dos entran o ninguna");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 15). (a) La prueba de arriba es un grep del fuente y su
+    // justificación («la función es asíncrona y golpea la red») no es cierta:
+    // mtrRecalcularConFactores es síncrona y pura, así que se fija el COMPORTAMIENTO — una
+    // variante que reintroduzca el defecto conservando el prefijo que el grep busca ya no pasa.
+    // (b) El OTRO sitio que fusiona dos mediciones de tensión —mtrResumenDesdeModalLabs, cuyo
+    // resumen alimenta el Panel, Agendar y el Redactor— seguía resolviendo cada cifra por su
+    // cuenta: Athenea con solo la sistólica (130) + la casilla de hoy con solo la diastólica
+    // (85) firmaban 130/85, una tensión que no existió.
+    t.caso("02-sep: mtrRecalcularConFactores — una lectura de hoy a medias NO se completa con la otra medición (comportamiento, no grep)", () => {
+      const c = cargar({ silencioso: true });
+      const r = c.api.mtrRecalcularConFactores({ factores: { paSistolica: 110, paDiastolica: 70 }, erc: { entradas: {} } }, { paSistolica: 136, paDiastolica: null }, "2026-09-01");
+      t.igual(r.factores.paSistolica, 136, "la sistólica de hoy manda");
+      t.igual(r.factores.paDiastolica, null, "y la diastólica de hoy, vacía, se queda vacía: 136/70 no existió");
+      const r2 = c.api.mtrRecalcularConFactores({ factores: { paSistolica: 110, paDiastolica: 70 }, erc: { entradas: {} } }, { paSistolica: null, paDiastolica: null }, "2026-09-01");
+      t.igual(r2.factores.paSistolica, 110, "sin lectura nueva se conserva la anterior entera");
+      t.igual(r2.factores.paDiastolica, 70);
+    });
+
+    t.caso("02-sep: mtrResumenDesdeModalLabs — la tensión de Athenea y la de la casilla de hoy no se mezclan", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.querySelector = (sel) => (/diastolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "85" } : null;
+      c.env.doc.getElementById = () => null;
+      const ent = (pas, pad) => ({ entradas: { edad: 60, sexo: "F", peso: 70, creatinina: 0.9, pas: pas, pad: pad } });
+      const res = c.api.mtrResumenDesdeModalLabs(ent(130, null), [], { nombre: "X" }, null);
+      t.igual(res.factores.paSistolica, 130, "Athenea trajo solo la sistólica");
+      t.igual(res.factores.paDiastolica, null, "y la diastólica de OTRA medición (la casilla de hoy) no la completa: antes 130/85");
+      const res2 = c.api.mtrResumenDesdeModalLabs(ent(null, null), [], { nombre: "X" }, null);
+      t.igual(res2.factores.paSistolica, null, "sin nada en Athenea, la casilla de hoy entra entera aunque esté a medias");
+      t.igual(res2.factores.paDiastolica, 85);
+      const res3 = c.api.mtrResumenDesdeModalLabs(ent(120, 80), [], { nombre: "X" }, null);
+      t.igual(res3.factores.paSistolica, 120, "una medición completa de Athenea gana entera");
+      t.igual(res3.factores.paDiastolica, 80);
+    });
+
   },
 };

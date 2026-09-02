@@ -313,6 +313,27 @@ module.exports = {
       t.igual(f("Padre diabético.", RE_DIAB), null, "y lo de un tercero sigue sin opinar");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 18): al unificar las listas, la ventana pasó de 20 a 25
+    // caracteres y «No asiste a controles de diabetes» (el «no» niega ASISTIR, no la diabetes)
+    // pasó a leerse como negación → discrepancia ALTA que frena el Panel. Ni 20 ni 25 son la
+    // respuesta (con 20, «No ha sido diagnosticado con diabetes» dejaba de ser negación): lo que
+    // decide es si el «no» niega una CONDUCTA (asistir, cumplir, tomar, controlarse, tratarse)
+    // o el hecho clínico.
+    t.caso("02-sep: «no» + conducta (asiste, cumple, toma, se controla, tratamiento) NO niega la enfermedad", () => {
+      const f = api.mtrTextoOpinaSobre;
+      t.igual(f("No asiste a controles de diabetes.", RE_DIAB), true, "lo que se niega es la asistencia (regresión de v18.0.57)");
+      t.igual(f("No toma metformina y es diabético.", RE_DIAB), true, "lo que se niega es la toma");
+      t.igual(f("Sin tratamiento actual diabetes tipo 2.", RE_DIAB), true, "sin tratamiento ≠ sin diabetes");
+      t.igual(f("No es adherente al tratamiento de la diabetes.", RE_DIAB), true, "sin adherencia ≠ sin diabetes");
+      t.igual(f("No se controla la diabetes.", RE_DIAB), true, "no controlarse ≠ no tener");
+      t.igual(f("HTA no controlada y diabetes mellitus tipo 2.", RE_DIAB), true, "«no controlada» tampoco niega lo que sigue");
+      // Y las negaciones de verdad, largas, siguen siéndolo — esto es lo que la ventana de 25 protege.
+      t.igual(f("No ha sido diagnosticado con diabetes.", RE_DIAB), false, "negación larga del hecho");
+      t.igual(f("No refiere antecedentes de diabetes mellitus.", RE_DIAB), false);
+      t.igual(f("No tiene diagnóstico de diabetes.", RE_DIAB), false);
+      t.igual(f("Nunca ha tenido diabetes.", RE_DIAB), false);
+    });
+
     t.caso("v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo', no solo las frases largas", () => {
       t.igual(api.mtrTextoOpinaSobre("Paciente no fuma.", RE_FUMA), false, "'no fuma' debe negar, no afirmar");
       t.igual(api.mtrTextoOpinaSobre("No es hipertenso, tensión normal en consulta.", RE_HTA), false, "'no es hipertenso' debe negar");

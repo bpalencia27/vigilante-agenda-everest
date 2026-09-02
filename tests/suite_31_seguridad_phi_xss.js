@@ -1109,6 +1109,22 @@ module.exports = {
       t.igual(cC.value, "lo que el médico tenía",
         "vuelve al valor ANTERIOR A TODO lo automático, no a un valor que también escribimos nosotros");
 
+      // 02-sep — CIERRE ADVERSARIAL (fila 20): la acumulación de arriba exige el MISMO paciente,
+      // y «el mismo» solo se puede afirmar con cédula. Con la cabecera ilegible (docId "" en las
+      // dos llamadas) dos historias distintas se acumulaban en un lote, y «Deshacer» en el
+      // segundo paciente restauraba la casilla del primero — incluida una que el médico ya
+      // había escrito a mano. Sin cédula, el lote se sustituye (con su aviso), como antes.
+      const cSin = cargar({ silencioso: true });
+      const X = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: X, prev: "" }], "Examen normal");
+      X.value = "TEXTO QUE EL MÉDICO ESCRIBIÓ A MANO EN OTRA HISTORIA";
+      const Y = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: Y, prev: "" }], "Examen normal");
+      Y.value = "Normal";
+      t.igual(cSin.api._vglEjecutarDeshacer(), 1, "sin cédula NO se acumula: el lote se sustituye y Deshacer solo toca el último");
+      t.igual(X.value, "TEXTO QUE EL MÉDICO ESCRIBIÓ A MANO EN OTRA HISTORIA", "la casilla del otro paciente, escrita a mano, queda intacta");
+      t.igual(Y.value, "", "y la del lote vigente sí vuelve");
+
       // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
       const c2 = cargar({ silencioso: true });
       c2.api._vglGuardarDeshacer("222", [], "vacío");

@@ -10927,3 +10927,59 @@ lectura tolerante, que es el respaldo cuando el alias no existe (reinicio del sc
 | 239 | `apptKey` deja de aprender el alias nombre→cédula (**el defecto**) | *suite_04: v18.0.98: un cambio de estado confirmado en una lectura SIN documento no produce una segunda llegada* | Sí |
 
 Banco completo: **2.964 comprobaciones pasan, 0 fallan.**
+
+## v18.0.99 — cierre adversarial (02-sep), filas 6, 15, 18, 20 y 21
+
+Cinco brechas más de la auditoría adversarial, todas reproducidas con el arnés contra HEAD
+antes de tocar nada (los guiones de reproducción de los auditores se corrieron uno por uno).
+
+**Fila 6 (media) — tres `fetch` sin tope.** El tope de v18.0.47 solo cubría `_pageFetchJsonCore`.
+`apiEnviarOrdenPorCorreo`, `apiOrdenamientoGenerarLinks` y `reenviarSmsRecordatorio` llaman a
+`FETCH0 || window.fetch` a pelo y se esperan con `await` detrás de un botón que se deshabilita
+hasta que la promesa vuelva: «Enviando...» para siempre. Medido: las tres «SIGUE COLGADA tras
+1500 ms» con el mismo mock de suite_05. Ahora pasan por `_fetchConTope` (mismo
+`PAGE_FETCH_TIMEOUT_MS`, `AbortController`; si el llamador trae su señal, se respeta).
+
+**Fila 15 (media) — la tensión del resumen del modal de Laboratorios.** `mtrResumenDesdeModalLabs`
+resolvía sistólica y diastólica por separado (Athenea primero, casilla de hoy de respaldo):
+Athenea con solo la sistólica (130) + casilla de hoy con solo la diastólica (85) → 130/85, una
+tensión que no existió — el mismo defecto que v18.0.54 cerró en `mtrRecalcularConFactores`.
+Ahora la fuente se decide UNA vez para las dos cifras: gana la medición completa (Athenea
+primero); si ninguna está completa, entra entera la que tenga algo. Además, la prueba de
+v18.0.54 era un grep del fuente con una justificación falsa («la función es asíncrona y golpea
+la red»: es síncrona y pura); se añadió la prueba de COMPORTAMIENTO, que la variante
+`num(fNue.paDiastolica, fPrev.paDiastolica)` —la que el grep no veía— sí pone en rojo.
+
+**Fila 18 (media) — regresión de v18.0.57.** Al unificar los negadores, la ventana pasó de 20 a
+25 caracteres y «No asiste a controles de diabetes» (el «no» niega ASISTIR) pasó a leerse como
+negación → discrepancia ALTA que frena el Panel sobre un dato que el médico acaba de afirmar.
+Volver a 20 rompe «No ha sido diagnosticado con diabetes» (23 caracteres): la ventana no es la
+respuesta. Antes de buscar el negador se borra del tramo todo «no/sin/nunca + CONDUCTA»
+(asistir, acudir, cumplir, adherirse, controlarse, seguir, tomar, aplicarse, tratamiento,
+manejo, medicación). De paso, «HTA no controlada y diabetes» deja de negar lo que sigue.
+
+**Fila 20 (baja) — «Deshacer» sin cédula.** La acumulación de v18.0.59 comparaba
+`docId === docId` también cuando los dos eran "" (cabecera ilegible): dos historias distintas
+con el mismo botón se acumulaban en un lote y «Deshacer» en el segundo paciente restauraba la
+casilla del primero, incluida una escrita a mano. «El mismo paciente» solo se afirma con
+cédula: sin ella el lote se sustituye (con su aviso), como antes de v18.0.59.
+
+**Fila 21 (media) — la carpeta local con ceros de relleno.** `mtrNombreArchivoPaciente` quitaba
+letras pero no los ceros a la izquierda, y la lectura era por nombre exacto: un historial
+guardado como «0000111111.json» (anterior a la canonicalización de v17.48.0) no se encontraba
+al abrir hoy al mismo paciente con «111111», y la siguiente instantánea creaba «111111.json» al
+lado — dos archivos, el viejo huérfano en silencio. Ahora el nombre es canónico
+(`normalizeKey`), la implementación real publica `listar()`, y `_vglCarpetaResolverNombre`
+lee y escribe donde YA está archivado (mismo patrón que `_vglClaveDeDoc`). Un `fs` sin
+`listar` se comporta exactamente como antes.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 240 | `reenviarSmsRecordatorio` vuelve al `fetch` a pelo (**el defecto**) | *suite_05: 02-sep: _fetchConTope corta un fetch colgado, y los tres fetch directos … pasan por él* | Sí |
+| 241 | el resumen vuelve a resolver sistólica y diastólica por separado (**el defecto**) | *suite_37: 02-sep: mtrResumenDesdeModalLabs — la tensión de Athenea y la de la casilla de hoy no se mezclan* | Sí |
+| 242 | `mtrRecalcularConFactores`: la diastólica vacía de hoy se rellena con la previa (`num(...)`) — la variante que el grep de v18.0.54 no veía | *suite_37: 02-sep: mtrRecalcularConFactores — una lectura de hoy a medias NO se completa…* | Sí |
+| 243 | se deja de limpiar «no + conducta» del tramo (**el defecto**) | *suite_01: 02-sep: «no» + conducta … NO niega la enfermedad* | Sí |
+| 244 | vuelve a acumularse el lote sin cédula (**el defecto**) | *suite_31: v17.16.0 — el Deshacer …* (bloque 02-sep, fila 20) | Sí |
+| 245 | la carpeta vuelve al nombre exacto, sin tolerancia (**el defecto**) | *suite_68: 02-sep: un historial archivado con ceros de relleno se encuentra…* | Sí |
+
+Banco completo: **2.969 comprobaciones pasan, 0 fallan.**

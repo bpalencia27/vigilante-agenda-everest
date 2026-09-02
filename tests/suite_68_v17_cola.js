@@ -969,6 +969,29 @@ module.exports = {
       t.igual(await api.vglCarpetaLeerHistorial("123", fsRoto), null, "y la lectura rota no lanza");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 21): la carpeta se escribió antes de la canonicalización
+    // de v17.48.0 y puede tener «0000111111.json». La lectura por nombre exacto no lo veía (el
+    // Panel no mostraba los controles previos) y la siguiente instantánea creaba «111111.json»
+    // al lado: dos archivos del mismo paciente, el viejo huérfano en silencio.
+    await t.casoAsync("02-sep: un historial archivado con ceros de relleno se encuentra y se sigue escribiendo AHÍ, no en un archivo nuevo", async () => {
+      const disco = { "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01", metas: { ldlActual: 150 } }] }) };
+      const fs = { leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) };
+      const h = await api.vglCarpetaLeerHistorial("111111", fs);
+      t.cierto(!!h && h.controles.length === 1, "la cédula canónica encuentra el archivo viejo con ceros");
+      const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fs);
+      t.cierto(r.ok, "se guarda");
+      t.igual(r.archivo, "0000111111.json", "y la instantánea nueva se escribe en ESE archivo, no en uno nuevo");
+      t.igual(Object.keys(disco).length, 1, "un solo archivo para el paciente");
+      t.igual(JSON.parse(disco["0000111111.json"]).controles.length, 2, "con los dos controles juntos");
+      // Sin archivo viejo, el nombre es el canónico aunque la cédula llegue con ceros.
+      const disco2 = {};
+      const fs2 = { leer: async (n) => disco2[n] || null, escribir: async (n, txt) => { disco2[n] = txt; return true; }, listar: async () => Object.keys(disco2) };
+      const r2 = await api.vglCarpetaGuardarInstantanea("0000222222", { fecha: "2026-09-02" }, fs2);
+      t.igual(r2.archivo, "222222.json", "un paciente nuevo estrena el nombre canónico");
+      // Un fs sin `listar` (el de las pruebas de siempre) se comporta exactamente como antes.
+      t.igual(await api.vglCarpetaLeerHistorial("111111", { leer: async (n) => disco[n] || null }), null, "sin listar no hay tolerancia: nombre exacto y no está");
+    });
+
     t.caso("mtrHistorialAgregar y mtrNombreArchivoPaciente: las piezas sueltas", () => {
       const h1 = api.mtrHistorialAgregar(null, { fecha: "2026-08-01" });
       t.igual(h1.controles.length, 1, "sin historial previo se crea");

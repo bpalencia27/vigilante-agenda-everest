@@ -420,6 +420,42 @@ module.exports = {
       t.cierto(tardo < 5000, "y terminó por su propio tope, no por el del banco (tardó " + tardo + " ms)");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 6): el tope de v18.0.47 solo cubría el núcleo. Tres
+    // `fetch` directos que se esperan con await detrás de un botón que se deshabilita hasta que
+    // la promesa vuelva («Enviar» del modal de órdenes: generar enlace + correo; reenviar SMS)
+    // seguían sin tope: «Enviando...» para siempre. Se comprueba la pieza (_fetchConTope corta
+    // de verdad) y el cableado (los tres pasan por ella: al fetch le llega una señal de aborto).
+    await t.casoAsync("02-sep: _fetchConTope corta un fetch colgado, y los tres fetch directos (correo, enlace, SMS) pasan por él", async () => {
+      const señales = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: (u, init) => new Promise((resolve) => {
+          señales.push((init && init.signal) || null);
+          resolve({ ok: true, status: 200, text: async () => "", clone() { return this; } });
+        }),
+        gmxhr: (o) => o.onerror(new Error("red")),
+      });
+      c.ctx.AbortController = AbortController;
+
+      // (a) La pieza: un fetch que NO resuelve nunca termina por su propio tope.
+      const colgado = (u, init) => new Promise((_, reject) => {
+        if (init && init.signal && init.signal.addEventListener) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" })));
+      });
+      const t0 = Date.now();
+      let err = null;
+      try { await c.api._fetchConTope(colgado, "/x", {}, 40); } catch (e) { err = e; }
+      const tardo = Date.now() - t0;
+      t.cierto(!!err && err.name === "AbortError", "el fetch colgado termina abortado, no espera para siempre");
+      t.cierto(tardo < 5000, "y por su propio tope (tardó " + tardo + " ms)");
+
+      // (b) El cableado: los tres fetch directos le pasan al navegador una señal de aborto.
+      await c.api.apiOrdenamientoGenerarLinks(1, "AGP-1");
+      await c.api.apiEnviarOrdenPorCorreo("AGP-1", "correo@ejemplo.com", 1);
+      await c.api.reenviarSmsRecordatorio("3001234567", 55);
+      t.igual(señales.length, 3, "los tres fetch salieron");
+      t.cierto(señales.every((s) => !!s), "y los tres llevan señal de aborto — ninguno puede volver a colgarse sin tope");
+    });
+
     await t.casoAsync("_pageFetchJsonCore: un 401 (sesión caducada) SÍ cuenta como fallo; un 404 no", async () => {
       // Un 401 caía en el mismo `return null` que un 404 y nunca llamaba a
       // `_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y
