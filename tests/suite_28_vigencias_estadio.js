@@ -634,8 +634,20 @@ module.exports = {
       // Este camino —el del aviso de entrada y el antiduplicado de PyM— partía la vigencia a
       // mano y por eso daba 30 días menos que el panel sobre el MISMO paciente. Ahora los dos
       // llaman a la misma función: una regla, un número.
-      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 90, "ERC G4 fuera de meta: 90, el piso de recontrol — la MISMA cifra que el motor del panel");
-      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "HBA1C"), 90, "y es literalmente lo que devuelve el motor: ya no hay dos varas");
+      // v18.0.130 — DECISIÓN DEL MÉDICO (02-sep): el 50 % no se apila sobre una vigencia que la
+      // norma YA acortó por estadio renal. En ERC G4 la HbA1c baja de 180 a 120 por el estadio,
+      // así que ese es el plazo y no se vuelve a partir: 120, no 90.
+      //
+      // Esto SUSTITUYE su decisión del 26-ago (piso de 90 d para la HbA1c en G4), y él la
+      // sustituyó a sabiendas cuando se le puso el choque delante: prefiere una sola regla para
+      // todos los analitos a una excepción que haya que recordar. El piso de recontrol sigue
+      // existiendo y sigue protegiendo donde el 50 % SÍ se aplica.
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 120,
+        "ERC G4: manda la vigencia que el estadio ya fijó — el 50 % no se apila encima");
+      t.cierto(api.mtrNormaYaAcortadaPorEstadio("HBA1C", { programa: "ERC", estadioAdministrativo: "G4", esDm2: true, edad: 62 }),
+        "y la guarda dice por qué: el estadio ya acortó");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "HBA1C"), 90,
+        "la función de acortar no cambia: sigue respetando su piso donde de verdad se la llama");
     });
 
     t.caso("v17.6.96 PUNTA A PUNTA: el paquete RCV deja de declararse cubierto con la HbA1c vencida", () => {

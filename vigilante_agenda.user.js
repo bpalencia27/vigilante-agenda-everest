@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.129
+// @version      18.0.130
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.129";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.130";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4291,6 +4291,11 @@
           if (typeof mtrKdigoNoRepiteLipidos === "function" && mtrKdigoNoRepiteLipidos(key, opts)) return baseParaRegla;
           const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
           if (fuera !== true) return baseParaRegla;
+          // v18.0.130 — la MISMA guarda del estadio que el motor del panel (decisión del médico
+          // del 02-sep). Sin esto, el aviso de entrada seguiría reclamando a los 30 días una
+          // glicemia que el panel da por vigente 60: dos varas otra vez, que es el defecto que
+          // la v18.0.120 acabó de cerrar en esta misma función.
+          if (typeof mtrNormaYaAcortadaPorEstadio === "function" && mtrNormaYaAcortadaPorEstadio(key, opts)) return baseParaRegla;
           // La respuesta del médico manda (v18.0.67). `undefined` —todavía no ha contestado—
           // sigue adelantando, que es la conducta de siempre y la conservadora; hace falta un
           // «no» suyo explícito para dejar la vigencia entera. Nunca decide el script solo.
@@ -34626,9 +34631,21 @@
       if (!a.vence) return fila(a, "Se ordena en esta toma");
       const cuando = "Vence el " + mtrFechaLegible(a.vence);
       const adelanto = (typeof a.adelantoDias === "number" && a.adelantoDias > 0) ? a.adelantoDias : 0;
+      // v18.0.130 — REPORTE EN VIVO (02-sep), segunda mitad. El texto único de antes —«viene en
+      // el mismo perfil lipídico, no se pide suelto»— decía el MECANISMO (el tubo) y callaba el
+      // hecho clínico, que es lo que el médico necesita para decidir. Son dos casos y ahora se
+      // distinguen: o se repite el perfil entero porque el LDL está fuera de metas —y entonces
+      // los otros tres SIGUEN VIGENTES y hay que decirlo—, o se repite porque el perfil ya
+      // cumple su vigencia.
       if (a.motivoCosecha === "paquete_lipidos") {
+        if (a.paqueteLipidosPor === "meta") {
+          const _dias = (typeof a.diasParaVencer === "number" && a.diasParaVencer > 0) ? " (" + a.diasParaVencer + " d)" : "";
+          return fila(a, "Sigue vigente hasta el " + mtrFechaLegible(a.vence) + _dias
+            + ": se repite porque " + (a.paqueteLipidosQuien || "el colesterol LDL")
+            + " está fuera de metas, y los cuatro van en el mismo tubo");
+        }
         return fila(a, cuando + (adelanto ? " (" + adelanto + " d antes)" : "")
-          + ": viene en el mismo perfil lipídico, no se pide suelto");
+          + ": el perfil lipídico completo cumple su vigencia, no se pide suelto");
       }
       if (a.motivoCosecha === "anr_creatinina" || a.motivoCosecha === "anr_rac") {
         return fila(a, cuando + (adelanto ? " (" + adelanto + " d antes)" : "")
@@ -34915,6 +34932,14 @@
         typeof x.diasParaVencer === "number" && x.diasParaVencer >= 0 && x.diasParaVencer <= 30);
       const vencidos = (plan.vencidos || []).filter(Boolean);
       if (!vencidos.length && !porVencer.length) return null;
+      // v18.0.130 — QUÉ EXÁMENES JUSTIFICAN ADELANTAR LA TOMA (decisión del médico, 02-sep):
+      // «si de verdad hay algún examen de los principales ausente o vencido —colesterol total,
+      // HDL, LDL, triglicéridos, uroanálisis, HbA1c (en diabéticos), RAC, creatinina en suero—;
+      // los demás pueden esperar a la siguiente fecha: PTH, fósforo, albúmina, hemoglobina».
+      // Esos «demás» son exactamente MTR_PASAJEROS, así que la regla ya tenía el nombre puesto:
+      // lo que faltaba era usarlo aquí. Un fósforo vencido dejaba de ser un pasajero y arrastraba
+      // la fecha de toda la toma.
+      const vencidosPrincipales = vencidos.filter((a) => a && MTR_DRIVERS.indexOf(a.clave) >= 0);
       // =====================================================================
       // v17.1.0 (#137) — EL PISO DE 14 DÍAS CEDE CUANDO YA NO PUEDE CUMPLIRSE.
       //
@@ -34941,11 +34966,16 @@
       const labMaxIso = mtrSumarDias(hoyIso, MTR_TECHO_ESTADO_A);
       // El primer día en que de verdad se puede tomar una muestra: mañana, adelantado
       // nunca por debajo de hoy. Es el suelo absoluto del ensanche.
-      const primerHabilIso = mtrAjustarFechaHabil(mtrSumarDias(hoyIso, 1));
+      // v18.0.130 — el suelo del ensanche ya no es «mañana» sino hoy+7 días calendario, ajustado
+      // al día hábil siguiente: ver MTR_PISO_LAB_URGENTE. Lo que se pierde es real y el médico lo
+      // decidió sabiéndolo: un examen que vence dentro de 3 días ya no se alcanza. Lo que se gana
+      // es que la fecha propuesta exista de verdad en la agenda del laboratorio.
+      const primerHabilIso = mtrAjustarFechaHabil(mtrSumarDias(hoyIso, MTR_PISO_LAB_URGENTE));
       let labMinIso = pisoNormalIso, pisoRelajado = false, motivoPiso = "";
-      // Caso 1 — algo YA venció. No hay fecha que lo salve, así que manda la urgencia:
-      // al primer cupo posible. Decisión del médico del 21-ago.
-      if (vencidos.length) {
+      // Caso 1 — algo de los PRINCIPALES ya venció. No hay fecha que lo salve, así que manda la
+      // urgencia: el primer cupo de la ventana urgente. Decisión del médico del 21-ago, acotada
+      // por la del 02-sep (ni antes de 7 días, ni por un pasajero).
+      if (vencidosPrincipales.length) {
         labMinIso = primerHabilIso;
         pisoRelajado = labMinIso < pisoNormalIso;
         // v17.6.73 — [reportado en consultorio, 26-ago-2026: el médico y sus compañeros
@@ -39837,6 +39867,57 @@
   var MTR_KDIGO_TFG_LIPIDOS = 60;
 
   // =====================================================================
+  //  v18.0.130 — DECISIÓN DEL MÉDICO (02-sep): EL 50 % NO SE APILA SOBRE UNA VIGENCIA QUE LA
+  //  NORMA YA ACORTÓ POR ESTADIO RENAL.
+  //  ------------------------------------------------------------------
+  //  Reporte en vivo, con captura: «la glicemia se ordenó el 10/07/2026 y me aparece que ya
+  //  venció el 9 de agosto — esto no es el 50 % de la vigencia del examen». La aritmética era
+  //  consistente y el resultado, discutible: en ERC G4/G5 la norma baja la glicemia de 180 a
+  //  60 días POR EL ESTADIO, y encima la regla del 50 % por fuera de metas la partía a 30. Dos
+  //  acortamientos por dos motivos distintos, multiplicados sobre el mismo examen: el paciente
+  //  acaba viajando cada mes por una glicemia.
+  //
+  //  Su decisión: donde la norma ya acortó por estadio, esa es la vigencia y no se vuelve a
+  //  partir. El 50 % sigue aplicándose donde la vigencia es la base del programa. Su paciente
+  //  pasa de «venció el 9 ago» a «vence el 8 sep».
+  //
+  //  La referencia NO puede ser «el mismo programa sin estadio»: en ERC esa celda no existe
+  //  (mtrVigenciaDiasNorma("ERC", "glicemia", null, …) devuelve null, comprobado), y con esa
+  //  comparación la guarda no se activaba nunca — que es justo el primer intento de este
+  //  arreglo y lo que destapó medir en vez de leer. La referencia es el MISMO programa en su
+  //  estadio MÁS LEVE (G1): ese es el plazo del programa antes de que el riñón lo acorte. Si el
+  //  estadio de este paciente da menos, el estadio ya hizo su trabajo. No se cablea ninguna
+  //  tabla nueva — se le pregunta dos veces a la única que hay (D4: una sola tabla).
+  function mtrNormaYaAcortadaPorEstadio(clave, ctx) {
+    try {
+      const c = ctx || {};
+      const estadio = c.estadioAdministrativo || c.estadio || null;
+      if (!estadio) return false;                      // sin estadio no hay nada que comparar
+      if (typeof mtrVigenciaDiasNorma !== "function") return false;
+      const analito = (typeof MTR_CLAVE_A_ANALITO !== "undefined") ? MTR_CLAVE_A_ANALITO[clave] : null;
+      if (!analito) return false;
+      const esDm2 = !!(c.esDm2 || c.esDM2);
+      const colapsar = (v) => {
+        if (v === null || v === undefined) return null;
+        if (typeof v === "number") return v;
+        if (typeof mtrColapsarVigencia === "function") {
+          const x = mtrColapsarVigencia(v, !!c.funcionRenalInestable);
+          return (typeof x === "number" && isFinite(x)) ? x : null;
+        }
+        return null;
+      };
+      const conEstadio = colapsar(mtrVigenciaDiasNorma(c.programa, analito, estadio, esDm2, c.edad, c.rac));
+      // El plazo del programa SIN acortamiento renal: su estadio más leve, y si esa celda no
+      // existe, el programa sin estadio. Ante la duda —las dos nulas— no se frena nada.
+      const referencia = colapsar(mtrVigenciaDiasNorma(c.programa, analito, "G1", esDm2, c.edad, c.rac));
+      const base = (referencia !== null) ? referencia
+        : colapsar(mtrVigenciaDiasNorma(c.programa, analito, null, esDm2, c.edad, c.rac));
+      if (conEstadio === null || base === null) return false;
+      return conEstadio < base;
+    } catch (e) { return false; }
+  }
+
+  // =====================================================================
   //  v18.0.67 — REGLA DEL MÉDICO (01-sep): EL 50 % POR FUERA DE METAS LO DECIDE ÉL
   //  ------------------------------------------------------------------
   //  «Cuando un paciente se encuentra fuera de metas al momento de calcular los exámenes que
@@ -40014,6 +40095,19 @@
   // con el motivo escrito al lado.
   const MTR_TECHO_ESTADO_A = 21;
 
+  // v18.0.130 — DECISIÓN DEL MÉDICO (reporte en vivo del 02-sep): «me sigue sugiriendo exámenes
+  // de un día para otro y por lo general en esos casos no hay citas de exámenes; el rango en
+  // días calendario para agendar un examen no debe ser menor a 7 días y mayor a 14».
+  //
+  // Es el camino urgente (labs-primero con el piso relajado), que hasta ahora mandaba la toma al
+  // PRIMER DÍA HÁBIL —mañana— cuando algo ya había vencido. Una fecha para la que no hay cupo
+  // no salva ningún examen: solo manda al paciente a una ventanilla cerrada.
+  //
+  // Los dos números encajan con la ventana normal sin solaparla: el camino urgente se mueve en
+  // [hoy+7, hoy+14] y el normal en [hoy+14, hoy+21] — el techo urgente ES el piso normal, así
+  // que no hacen falta dos constantes para el mismo día.
+  const MTR_PISO_LAB_URGENTE = 7;
+
   // Estado de UN analito.
   //  A = sin historial o vencido -> hay que pedirlo
   //  D = vigente
@@ -40052,7 +40146,13 @@
     // suya en la entrevista del 1-sep: con TFG < 60 los lípidos no se adelantan aunque él
     // diga que sí), así que se evalúa después y no puede resucitar lo que KDIGO frenó.
     const medicoFrena = !kdigoFrena && fueraMeta === true && !mtrPuedeAdelantarPorFueraDeMeta(clave, c, valor);
-    const vigencia = (kdigoFrena || medicoFrena) ? vigenciaNorma : mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
+    // v18.0.130 — y el estadio renal frena también: donde la norma YA acortó por estadio, ese
+    // es el plazo y el 50 % no se apila encima (decisión del médico del 02-sep, ver
+    // mtrNormaYaAcortadaPorEstadio). Se evalúa aparte de los otros dos frenos porque es un
+    // hecho distinto —lo dice la tabla, no una guarda clínica ni una respuesta suya— y porque
+    // el analito lo publica para que la pantalla pueda explicarlo.
+    const estadioFrena = !kdigoFrena && !medicoFrena && fueraMeta === true && mtrNormaYaAcortadaPorEstadio(clave, c);
+    const vigencia = (kdigoFrena || medicoFrena || estadioFrena) ? vigenciaNorma : mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
     if (!fecha) {
       // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
       // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
@@ -40117,6 +40217,10 @@
       // hechos distintos y el médico necesita los dos: está fuera de meta (hay que tratar) y
       // aun así no se repite antes (no hay que volver a pincharlo).
       kdigoSinAcortar: kdigoFrena === true,
+      // v18.0.130 — el examen SIGUE fuera de metas (fueraDeMeta lo dice); lo que no pasa es que
+      // ese hecho vuelva a partir un plazo que el estadio renal ya acortó. Viaja aparte para
+      // que la pantalla pueda decir de dónde sale la fecha en vez de dejarla deducir.
+      estadioSinAcortar: estadioFrena === true,
       vigenciaNormaDias: vigenciaNorma,
       motivo: (vencidoBase
         // v17.6.75 — un RAC≥30 vencido, ahora promovido a R, sigue diciendo que está
@@ -40455,13 +40559,47 @@
     // viaje" como si el script hubiera decidido adelantarlos.
     // Y no hace falta acotarla por otro lado: solo dispara si YA va un lípido en esta visita,
     // así que cuando la cosecha genérica se apaga por toma lejana, esta se apaga con ella.
-    if (MTR_GRUPO_LIPIDOS.some(_lipYaVaEnEstaVisita)) {
+    // v18.0.130 — REPORTE EN VIVO DEL MÉDICO (02-sep), con captura: «cuando el LDL se debe
+    // ordenar en la siguiente cita, los demás exámenes del perfil lipídico deben aparecer arriba
+    // también». Tenía razón, y la causa era el ORDEN de las reglas, no la regla.
+    //
+    // Este bloque vivía AQUÍ, a mitad de la cosecha. Pero debajo corre todavía el arrastre por
+    // gracia (1.16), que también puede meter un lípido en la toma. Cuando el que entraba era ese
+    // —un triglicérido arrastrado por gracia—, este bloque ya había corrido con la lista vacía:
+    // no vio ningún lípido en la visita, no arrastró a los otros tres, y el médico los leía en
+    // «LO QUE SIGUE VIGENTE» como si no se le fueran a tomar. En Everest los cuatro van en el
+    // mismo tubo: enseñarlos separados le miente sobre lo que el paquete de verdad agrega.
+    //
+    // Medido con tools/medir_lipidos_y_pisos.js sobre 840 combinaciones de programa, estadio,
+    // fechas y valores: 46 casos rotos antes, 0 después.
+    //
+    // Ahora es un CIERRE: se declara aquí, junto a la regla que explica, y se ejecuta una sola
+    // vez cuando ya no queda ninguna otra regla que pueda meter un lípido.
+    const _cerrarPaqueteLipidos = () => {
+      if (!MTR_GRUPO_LIPIDOS.some(_lipYaVaEnEstaVisita)) return;
+      // v18.0.130 — POR QUÉ se va a repetir el perfil, que es lo segundo que pidió el médico:
+      // «se debe dejar en evidencia que se repiten es por LDL fuera de metas pero siguen
+      // vigentes, o mostrar que se va a ordenar el perfil porque ya va a cumplir su vigencia».
+      // Son dos hechos clínicos distintos y hasta ahora los dos salían con el mismo texto.
+      // La pregunta clínica es «¿alguno de los CUATRO está fuera de metas?», no «¿alguno de los
+      // que ya iban?». El que dispara el paquete suele ser otro —un triglicérido arrastrado por
+      // gracia, por ejemplo— y el que está fuera de metas es el LDL, que precisamente estaba
+      // esperando en `diferidos` a que este cierre lo trajera. Mirar solo a los que ya iban
+      // devolvía «vigencia» en el caso más común, que es justo el que el médico reportó.
+      const _todosLosLipidos = MTR_GRUPO_LIPIDOS.map((k) =>
+        drivers.find((a) => a && a.clave === k)
+      ).filter(Boolean);
+      const _porMeta = _todosLosLipidos.find((a) => a && a.fueraDeMeta === true);
+      const _motivo = _porMeta ? "meta" : "vigencia";
+      const _quien = _porMeta ? (_porMeta.nombre || _porMeta.clave) : "";
       for (let i = diferidos.length - 1; i >= 0; i--) {
         if (MTR_GRUPO_LIPIDOS.indexOf(diferidos[i].clave) < 0) continue;
         cosechar(diferidos[i], "paquete_lipidos");
+        cosechados[cosechados.length - 1].paqueteLipidosPor = _motivo;
+        cosechados[cosechados.length - 1].paqueteLipidosQuien = _quien;
         diferidos.splice(i, 1);
       }
-    }
+    };
 
     // ---- 1.16 — ARRASTRE POR GRACIA: un diferido que casi entró, entra ----
     // ENCARGO DEL MÉDICO (28-ago): reporte en vivo con creatinina (vence a 83 días,
@@ -40508,6 +40646,10 @@
         diferidos.splice(i, 1);
       }
     }
+    // v18.0.130 — EL CIERRE DEL PERFIL LIPÍDICO, aquí y no antes: es la última regla que puede
+    // meter un lípido en la toma, así que cualquier cosecha anterior (vigencia, ANR, gracia) ya
+    // está hecha cuando esto corre. Ver la nota completa donde se declara.
+    _cerrarPaqueteLipidos();
 
     // ---- QUÉ SE ORDENA ----
     // Todo lo que falta o venció + lo cosechado + los pasajeros que no estén

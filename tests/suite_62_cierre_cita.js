@@ -137,7 +137,13 @@ module.exports = {
       t.cierto(a.mtrLabsPrimeroVencimientoInevitable(planGlicemia, lp.pisoNormalIso),
         "inevitable EN EL PISO NORMAL: Glicemia ya venció 11 días antes de esa fecha");
       t.cierto(lp.pisoRelajado, "y por eso el piso cede");
-      t.igual(lp.labMinIso, "2026-08-24", "la toma se adelanta al vencimiento mismo");
+      // v18.0.130 — decisión del médico (reporte en vivo del 02-sep): el piso urgente nunca baja
+      // de 7 días calendario, porque «por lo general en esos casos no hay citas de exámenes».
+      // Antes esto era "2026-08-24" —el vencimiento mismo, a 3 días—; ahora es el día 7. Lo que
+      // se pierde es real y él lo decidió sabiéndolo: una fecha sin cupo no salva ningún examen.
+      t.igual(lp.labMinIso, "2026-08-28", "la toma se adelanta hasta donde la deja el piso de 7 días, no más");
+      const _d = Math.round((new Date(lp.labMinIso + "T00:00:00") - new Date("2026-08-21T00:00:00")) / 86400000);
+      t.cierto(_d >= 7 && _d <= 14, "y cae dentro de la ventana urgente [7,14]: " + _d + " d");
       // La propiedad de monotonía en la que se apoya el arreglo: TODA fecha dentro de la
       // ventana (no solo el techo) sigue mostrando el aviso — nunca "se arregla sola".
       for (const d of ["2026-09-05", "2026-09-08", lp.labMaxIso]) {

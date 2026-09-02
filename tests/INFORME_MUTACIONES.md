@@ -12254,3 +12254,65 @@ de la entrevista**.
 | 442 | la sección «Complete» se declara pero no se inyecta en la tarjeta | *suite_68: v18.0.129: …va dentro de la misma tarjeta* | Sí |
 
 Banco completo: **3.096 comprobaciones pasan, 0 fallan.**
+
+## v18.0.130 — tres reportes en vivo del 02-sep: el tubo de lípidos, el 50 % sobre una vigencia ya corta, y la toma «de un día para otro»
+
+Los tres salieron de la misma captura del médico y ninguno es cosmético: los tres cambian qué
+examen se pide y cuándo se cita al paciente.
+
+**1. Los cuatro lípidos van en el mismo tubo.** La pantalla ordenaba el LDL arriba y dejaba
+colesterol total, HDL y triglicéridos abajo, en «lo que sigue vigente». En Everest esos cuatro
+no se piden sueltos: van juntos. Enseñarlos separados le miente al médico sobre lo que el
+paquete de verdad agrega. El cierre del paquete (`_cerrarPaqueteLipidos`) existía, pero corría
+**antes** de la regla de gracia, así que un lípido que entraba a la toma por gracia ya no
+arrastraba a los otros tres. Se extrae a un cierre nombrado y se llama **después**. Además la
+fila del resumen ahora dice *por qué* se repiten: si alguno está fuera de metas, nombra a ese
+(«se repite porque X está fuera de metas, y los cuatro van en el mismo tubo»); si no, dice que
+el perfil completo cumple su vigencia y no se pide suelto.
+
+Medido, no opinado: `tools/medir_lipidos_y_pisos.js` barre 1.680 combinaciones (3 programas ×
+7 estadios × DM2 × fuera-de-metas × 10 fechas × LDL con y sin resultado) y contaba **46 casos
+rotos** —un lípido arriba, otro en «sigue vigente»—. Después del cambio: **0**.
+
+**2. El 50 % no se aplica donde la norma ya acortó por estadio.** Su glicemia, tomada el
+10/07/2026, aparecía vencida el 9 de agosto: 30 días. La norma para ese contexto son 60, y la
+regla de «fuera de metas parte la vigencia a la mitad» los partió otra vez sobre una vigencia
+que el estadio renal **ya había acortado**. Se parte dos veces lo mismo. `mtrNormaYaAcortadaPorEstadio`
+compara la norma del estadio real contra la del estadio más benigno (G1); si ya viene acortada,
+el 50 % no vuelve a morder. El comparador es contra **G1**, no contra «sin estadio»: en ERC no
+existe celda «sin estadio» (devuelve `null`) y la primera versión de la guarda nunca disparaba
+—se detectó midiendo, no leyendo—. Resultado medido en su caso: **30 d → 60 d**, vence el
+2026-09-08 en vez del 2026-08-09.
+
+Esta decisión la tomó él en la entrevista («el 50 % no se aplica donde la norma ya acortó por
+estadio → 60 d») y **reemplaza a su decisión del 26-ago** sobre la HbA1c en ERC G4, que pasa de
+90 a 120 d. Eso está anotado dentro de la prueba de suite_28, con su fecha, para que nadie la
+«arregle» de vuelta creyendo que es una regresión.
+
+**3. Ningún examen se cita de un día para otro.** El motor adelantaba la toma al primer cupo,
+y en la práctica ahí no hay citas de laboratorio. El médico fijó la ventana: **entre 7 y 14
+días calendario**, y el piso de 7 solo se usa **si de verdad falta o venció uno de los
+principales** —colesterol total, HDL, LDL, triglicéridos, uroanálisis, HbA1c en diabéticos,
+RAC, creatinina en suero—. PTH, fósforo, albúmina y hemoglobina pueden esperar a la fecha
+normal. `MTR_PISO_LAB_URGENTE = 7`, y el caso urgente se filtra ahora por `vencidosPrincipales`,
+no por cualquier vencido.
+
+El costo lo aceptó él explícitamente: una prueba vieja que pedía la toma a 3 días ya no es
+alcanzable, y quedó reescrita para fijar `[7,14]`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 443 | el cierre del paquete de lípidos vuelve a correr antes de la regla de gracia | *suite_24: v18.0.130 (reporte 1): si un lípido entra en la toma, los otros tres entran con él* (2 caen) | Sí |
+| 444 | `estadioFrena` fijo en `false`: el 50 % vuelve a morder sobre la vigencia ya acortada | *suite_28: v18.0.130: el 50 % no parte una vigencia que el estadio ya acortó* | Sí |
+| 445 | la guarda compara contra «sin estadio» en vez de contra G1 (en ERC devuelve `null` y nunca dispara) | *suite_28* (2 caen) | Sí |
+| 446 | el piso urgente vuelve a ser «mañana» en vez de 7 días | *suite_24 #137 / suite_62* (3 caen) | Sí |
+| 447 | el caso urgente se filtra por `vencidos` en vez de `vencidosPrincipales` | *suite_24: el piso de 7 solo lo abre un principal* | Sí |
+| 448 | el motivo del paquete se fija en `"vigencia"`: la fila deja de nombrar al analito fuera de metas | *suite_24: v18.0.130 (reporte 1)…* | Sí |
+| 449 | `_todosLosLipidos` vuelve a mirar solo `faltantes\|vencidos\|cosechados` (el LDL fuera de metas suele estar aún en `diferidos`) | *suite_24: v18.0.130 (reporte 1)…* | Sí |
+
+Tres pruebas previas quedaron **reescritas, no borradas**, porque las reglas nuevas las
+contradicen a propósito: suite_24 #137 (ahora fija `[7,14]`), suite_62 (`labMinIso`
+2026-08-24 → 2026-08-28) y suite_28 (HbA1c ERC G4, 90 → 120 d, con la nota de que esto
+reemplaza la decisión del 26-ago por instrucción del propio médico).
+
+Banco completo: **3.103 comprobaciones pasan, 0 fallan.**
