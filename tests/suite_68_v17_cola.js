@@ -111,9 +111,50 @@ module.exports = {
       // v17.58.0 — la ventana creció de 6000 a 8000: `_vglModalConfirmarDatos` ganó el
       // bloque de las preguntas MEDIA de la escalera de adherencia (que se muestran pero
       // no retienen el flujo) justo antes de `_luego`, y la aserción dejó de alcanzarlo.
-      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 8000);
+      // v18.0.129 — 8000 -> 13000 por lo mismo: la sección «Complete» (las casillas en blanco,
+      // que antes eran un SEGUNDO emergente detrás de este) vive ahora dentro de esta función.
+      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 13000);
       t.cierto(/const _luego = \(\) =>/.test(zona), "hay una salida común para la ✕ y Escape");
       t.cierto(/alContinuar\(\)/.test(zona), "y esa salida continúa el flujo: antes el médico se quedaba sin módulo");
+    });
+
+    // =====================================================================
+    // v18.0.129 — DECISIÓN DEL MÉDICO (entrevista del 02-sep): «un solo cuadro antes del
+    // Panel, con Confirme y Complete». Abrir el Panel encadenaba DOS emergentes seguidos:
+    // el reconciliador (contradicciones entre fuentes) y, al cerrarlo, el de casillas
+    // vacías. Dos cuadros seguidos sobre el mismo paciente y en el mismo instante se leen
+    // como dos interrupciones, no como una conversación.
+    // =====================================================================
+    t.caso("v18.0.129: antes del Panel se pinta UN cuadro, nunca dos seguidos", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 13000);
+
+      // La sección «Complete» vive DENTRO de la tarjeta del reconciliador.
+      t.cierto(/function _vglModalConfirmarDatos\(apt, discrepancias, alContinuar, faltan\)/.test(src),
+        "el cuadro recibe también las casillas por llenar");
+      t.cierto(/id="vgl-conf-llenar"/.test(zona), "y las pinta en su propia sección");
+      // Que la sección EXISTA no basta: tiene que estar inyectada en la tarjeta, justo detrás
+      // de las preguntas. Declararla y no pintarla dejaría al médico sin la mitad del cuadro.
+      t.cierto(/\$\{filas\}\s*\$\{_filasLlenar\}/.test(zona),
+        "y va dentro de la misma tarjeta, detrás de las preguntas");
+      t.cierto(/Y estas casillas están en blanco en la historia/.test(zona), "con su propio título");
+
+      // El llamador ya no deja salir el segundo emergente detrás.
+      const llamador = src.slice(src.indexOf("const _rec = mtrReconciliarAhora"), src.indexOf("const _rec = mtrReconciliarAhora") + 1800);
+      t.cierto(/let _faltanJuntas = \[\];/.test(llamador), "las casillas por llenar se calculan antes");
+      t.cierto(/saltarLlenado: _faltanJuntas\.length > 0/.test(llamador),
+        "y si viajaron dentro del cuadro, el segundo emergente ya no sale");
+
+      // Lo que NO cambia: la mecánica del reconciliador. La sección de llenado es aditiva.
+      t.cierto(/const pendientesBloquean = new Set\(/.test(zona), "siguen existiendo las preguntas que frenan");
+      t.cierto(/const listo = hayAlta \? pendientesBloquean\.size === 0 : pendientes\.size === 0;/.test(zona),
+        "y la condición de continuar es la misma: el llenado no frena nada");
+      // Y nunca se escribe un «No sé»: es exactamente lo que el médico dijo que no se toca.
+      t.cierto(/_resp\[k\] === true \|\| _resp\[k\] === false/.test(zona), "solo cuenta lo que él contestó");
+      t.cierto(/Llenar en Everest \(" \+ n \+ "\)"/.test(zona), "y el botón dice cuántas va a escribir");
+      // Lo escrito cambia la clasificación: la caché se rehace, como al confirmar.
+      t.cierto(/mtrCacheResumenBorrar\(\); \} catch \(e\) \{\}\s*try \{ _vglOfrecerDeshacer/.test(zona),
+        "se invalida la caché y se ofrece Deshacer, igual que en el cuadro que sustituye");
     });
 
     t.caso("REGRESIÓN — los emergentes que piden una decisión no se pueden minimizar", () => {

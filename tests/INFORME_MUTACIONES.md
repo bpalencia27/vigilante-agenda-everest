@@ -12221,4 +12221,36 @@ el ícono por delante. El rótulo pasa a tener su propio nodo.
 | 438 | vuelve la numeración doble dentro del paso 2 | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
 | 439 | el estado vuelve a escribirse sobre el botón y borra el ícono | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
 
-Banco completo: **3.095 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.095 comprobaciones pasan, 0 fallan.** *(v18.0.128)*
+
+---
+
+## v18.0.129 — antes del Panel, un solo cuadro (última decisión de la entrevista)
+
+Abrir el Panel podía encadenar **dos emergentes seguidos**: primero el reconciliador
+(contradicciones entre fuentes) y, al cerrarlo, el de casillas de antecedentes en blanco. Dos
+cuadros seguidos, con botones distintos, sobre el mismo paciente y en el mismo instante, se leen
+como dos interrupciones y no como una conversación. La decisión del médico en la entrevista del
+02-sep: **un solo cuadro, con «Confirme» y «Complete»**.
+
+**Cómo se hizo, y qué NO se tocó.** La sección de llenado entra **dentro** de la tarjeta del
+reconciliador, como bloque aditivo. La mecánica de ese cuadro —severidades, cuáles preguntas
+frenan y cuáles no, el repaso cada 20 s, «Decidir luego» que sí continúa (v17.0.2)— no cambia ni
+una línea: la sección nueva **no frena nada**, escribe solo lo que él contesta, y nunca toca un
+«No sé». Y el llamador deja de dejar salir el segundo emergente detrás.
+
+Es un refactor de una compuerta clínica, así que las pruebas fijan las dos cosas por separado:
+que el cuadro nuevo se pinta entero **dentro de la misma tarjeta** —declarar la sección y no
+inyectarla dejaría al médico sin la mitad del cuadro, y eso pasa la prueba ingenua—, y que la
+condición de continuar sigue siendo exactamente la de antes.
+
+Con esto quedan aplicadas **las 48 filas de la auditoría, sus 22 fragmentos y las 8 decisiones
+de la entrevista**.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 440 | vuelve el segundo emergente detrás del primero | *suite_68: v18.0.129: antes del Panel se pinta UN cuadro…* | Sí |
+| 441 | un «No sé» empieza a contar como respuesta que se escribe | *suite_68: v18.0.129: …solo cuenta lo que él contestó* | Sí |
+| 442 | la sección «Complete» se declara pero no se inyecta en la tarjeta | *suite_68: v18.0.129: …va dentro de la misma tarjeta* | Sí |
+
+Banco completo: **3.096 comprobaciones pasan, 0 fallan.**

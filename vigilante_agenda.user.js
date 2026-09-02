@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.128
+// @version      18.0.129
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.128";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.129";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25092,12 +25092,20 @@
         // para este paciente se filtran aquí (las ALTA siempre se reevalúan).
         const aPreguntar = (Array.isArray(_rec.frenan) ? _rec.frenan : []).filter((d) =>
           !(d && d.severidad !== "alta" && _mtrMediaFuePreguntada(apt.doc_id, d.clave)));
+        // v18.0.129 — las casillas por llenar se calculan AQUÍ para poder meterlas en el mismo
+        // cuadro. Si el reconciliador va a salir, el de llenado ya no sale detrás: viaja dentro.
+        let _faltanJuntas = [];
+        if (!(opts && opts.saltarLlenado)) {
+          try { _faltanJuntas = mtrCamposLlenables(apt.doc_id, document) || []; } catch (e2) { _faltanJuntas = []; }
+        }
         if (aPreguntar.length) {
           // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
           // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
           // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
           // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
-          const mostrado = _vglModalConfirmarDatos(apt, aPreguntar, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen, saltarReconciliar: true }));
+          const mostrado = _vglModalConfirmarDatos(apt, aPreguntar,
+            () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen, saltarReconciliar: true, saltarLlenado: _faltanJuntas.length > 0 }),
+            _faltanJuntas);
           if (mostrado) return;
           try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
         }
@@ -25559,7 +25567,16 @@
   //   · SOLO las discrepancias de severidad alta (las que deciden la tabla de vigencias)
   //   · SOLO lo aún no confirmado — una respuesta vale la jornada Y las siguientes citas
   //   · las de severidad media no abren modal nunca
-  function _vglModalConfirmarDatos(apt, discrepancias, alContinuar) {
+  // v18.0.129 — DECISIÓN DEL MÉDICO (entrevista del 02-sep): «un solo cuadro antes del Panel,
+  // con Confirme y Complete». Abrir el Panel podía encadenar DOS emergentes seguidos: primero
+  // este (contradicciones entre fuentes) y, al cerrarlo, el de casillas vacías. Dos cuadros
+  // seguidos con botones distintos, sobre el mismo paciente y en el mismo instante, se leen
+  // como dos interrupciones y no como una conversación.
+  //
+  // `faltan` es opcional y ADITIVO: la mecánica del reconciliador —severidades, cuáles frenan,
+  // el repaso de 20 s, «Decidir luego»— no cambia ni una línea. La sección de llenado no frena
+  // nada (el médico manda), escribe solo lo que él conteste, y nunca toca un «No sé».
+  function _vglModalConfirmarDatos(apt, discrepancias, alContinuar, faltan) {
     try {
       const previo = document.getElementById("vgl-confirma-modal");
       if (previo) previo.remove();
@@ -25595,6 +25612,26 @@
       // no puede leer. Los botones toman el rótulo de cada pregunta; los factores conservan «Sí/No tiene».
       const _hayContradiccion = (discrepancias || []).some((d) => d && !d.rotuloSi && (d.afirman || []).length > 0 && (d.niegan || []).length > 0);
       const _tituloConf = _hayContradiccion ? "🔎 Las fuentes no coinciden" : "🔎 Antes de calcular, unas preguntas";
+      // v18.0.129 — la segunda mitad del cuadro: las casillas de antecedentes que están EN
+      // BLANCO en la pantalla que el médico tiene delante. Mismo trato que en su cuadro propio
+      // (v18.0.125): todas nacen en «No sé», el botón nace apagado y dice cuántas va a escribir.
+      const _porLlenar = Array.isArray(faltan) ? faltan : [];
+      const _filasLlenar = _porLlenar.length ? `
+          <div class="vgl-conf-item" id="vgl-conf-llenar">
+            <div class="vgl-conf-tit">✍ Y estas casillas están en blanco en la historia</div>
+            <div class="vgl-conf-porque">Son las que deciden la clasificación de riesgo. Si me las contesta, las escribo yo en Everest y usted revisa. Lo que deje en «No sé» no se toca.</div>
+            ${_porLlenar.map((f) => `<div class="vgl-llenar-fila" data-clave="${escapeHtml(f.clave)}">
+              <span class="vgl-llenar-rot">${escapeHtml(f.etiqueta)}</span>
+              <span class="vgl-llenar-btns">
+                <button type="button" class="vgl-agm-pbtn" data-r="si">Sí</button>
+                <button type="button" class="vgl-agm-pbtn" data-r="no">No</button>
+                <button type="button" class="vgl-agm-pbtn active" data-r="ns">No sé</button>
+              </span></div>`).join("")}
+            <div class="vgl-conf-btns">
+              <button type="button" class="vgl-agm-btn pri" id="vgl-conf-llenar-ok" disabled>Conteste alguna para poder llenarla</button>
+              <span class="vgl-conf-hecho" id="vgl-conf-llenar-ok-msg"></span>
+            </div>
+          </div>` : "";
       const filas = discrepancias.map((d) => {
         return `
           <div class="vgl-conf-item" data-clave="${escapeHtml(d.clave)}">
@@ -25621,6 +25658,7 @@
             <button class="vgl-postcita-x" id="vgl-conf-x" title="Decidir luego" aria-label="Cerrar">✕</button>
           </div>
           ${filas}
+          ${_filasLlenar}
           <div class="vgl-conf-porque" style="margin-top:8px">Si la historia clínica quedó distinta a lo que confirme, recuerde actualizarla: la historia es el documento oficial.</div>
         </div>`;
       document.body.appendChild(modal);
@@ -25663,6 +25701,44 @@
           try { if (typeof alContinuar === "function") alContinuar(); } catch (e) {}
         }
       };
+      // v18.0.129 — el cableado de la sección «Complete». No frena el cuadro: si el médico solo
+      // contesta las preguntas de arriba y el cuadro continúa, lo de aquí simplemente no se
+      // escribe — que es exactamente lo que pasaba antes cuando cerraba el segundo emergente.
+      if (_porLlenar.length) {
+        const _resp = {};
+        const _okLl = modal.querySelector("#vgl-conf-llenar-ok");
+        const _refrescarLl = () => {
+          try {
+            const n = Object.keys(_resp).filter((k) => _resp[k] === true || _resp[k] === false).length;
+            if (!_okLl) return;
+            _okLl.disabled = n === 0;
+            _okLl.textContent = n === 0 ? "Conteste alguna para poder llenarla" : "Llenar en Everest (" + n + ")";
+          } catch (e) {}
+        };
+        modal.querySelectorAll(".vgl-llenar-fila").forEach((fila) => {
+          const clave = fila.getAttribute("data-clave");
+          fila.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => {
+            fila.querySelectorAll("[data-r]").forEach((x) => x.classList.remove("active"));
+            b.classList.add("active");
+            const r = b.getAttribute("data-r");
+            _resp[clave] = (r === "si") ? true : (r === "no") ? false : null;
+            _refrescarLl();
+          }));
+        });
+        _refrescarLl();
+        if (_okLl && _okLl.addEventListener) _okLl.addEventListener("click", () => {
+          try {
+            const r = vglLlenarFactoresEnEverest(_resp, apt.doc_id, document);
+            try { uxTrack("fn.confirmar.llenar", { n: r.escritas }); } catch (e) {}
+            const msg = modal.querySelector("#vgl-conf-llenar-ok-msg");
+            if (msg) msg.textContent = r.escritas ? "✓ " + r.escritas + " escrita(s)" : "sin cambios";
+            _okLl.disabled = true;
+            // Lo escrito cambia la clasificación: la caché se rehace, igual que al confirmar.
+            try { mtrCacheResumenBorrar(); } catch (e) {}
+            try { _vglOfrecerDeshacer(_okLl); } catch (e) {}
+          } catch (e) {}
+        });
+      }
       for (const d of discrepancias) {
         const si = modal.querySelector("#vgl-conf-si-" + d.clave);
         const no = modal.querySelector("#vgl-conf-no-" + d.clave);
