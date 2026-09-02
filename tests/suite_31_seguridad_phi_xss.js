@@ -94,6 +94,15 @@ module.exports = {
         "y el celular de verdad, al lado, sí se tacha");
       const hechos = c.api.mtrHechosDesdeHcEverest({ antecedentePatologicos: { hta: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "Se registra el numero de orden 930012345678 en el sistema.", datosUsuario: { nombre: "PRUEBA", primer_Apellido: "SINTETICO", celular: "3001234567" } });
       t.falso(/TEL_CENSURADO/.test(String(hechos.textos.ultimaEnfermedad)), "de punta a punta (la hoja de hechos) el número de orden llega entero: " + hechos.textos.ultimaEnfermedad);
+      // v18.0.103 — refutador de v18.0.101 (fila 41): con el límite de dígito, el indicativo
+      // pegado y sin «+» («573001234567», formato WhatsApp) dejaba el celular ENTERO sin
+      // tachar (antes salía al menos «57[TEL_CENSURADO]»). Cada límite con su propia cadena.
+      t.igual(c.api.scrubPII("whatsapp 573001234567 fin"), "whatsapp [TEL_CENSURADO] fin", "indicativo 57 pegado, sin «+»: se tacha entero");
+      t.igual(c.api.scrubPII("cel 0573001234567 fin"), "cel [TEL_CENSURADO] fin", "con el 0 de marcación también");
+      t.igual(c.api.scrubPII("orden 300123456789 fin"), "orden 300123456789 fin", "un dígito de más al final: no es un celular (límite derecho)");
+      t.igual(c.api.scrubPII("orden 123001234567 fin"), "orden 123001234567 fin", "dígitos ajenos delante: no es un celular (límite izquierdo)");
+      const ws = c.api.mtrHechosDesdeHcEverest({ antecedentePatologicos: { hta: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "Se contacta por whatsapp al 573001234567 para control.", datosUsuario: { nombre: "PRUEBA", primer_Apellido: "SINTETICO", celular: "3001234567" } });
+      t.falso(/3001234567/.test(String(ws.textos.ultimaEnfermedad)), "de punta a punta, el celular en formato WhatsApp no llega a la hoja de hechos: " + ws.textos.ultimaEnfermedad);
     });
 
     t.caso("scrubPII: censura correos electrónicos", () => {

@@ -262,6 +262,23 @@ module.exports = {
     // con «-»; con esos separadores se caía a la lectura vieja y volvía a leer la dosis del
     // OTRO principio — y mtrInerciaEstatina volvía a acusar «sin estatina de alta
     // intensidad» a un paciente en atorvastatina 40.
+    // v18.0.103 — refutador de v18.0.97 (fila 9): admitir «-»/«+» como separador de nombres
+    // convertía un guion que NO es de combinación en «combo sin dosis emparejable» → null en
+    // vez de la lectura de siempre → «sin estatina de alta intensidad» sobre un paciente en
+    // atorvastatina 40. Solo la barra afirma «combinación».
+    t.caso("v18.0.103: un guion o «+» que no es de combinación (sal, laboratorio, forma) no anula la dosis", () => {
+      const d = (txt, p) => api.mtrDosisDeTexto(txt, p);
+      t.igual(d("ATORVASTATINA-CALCICA 40 MG", "atorvastatina"), 40, "sal pegada con guion");
+      t.igual(d("ROSUVASTATINA-CALCICA 20 MG TABLETA", "rosuvastatina"), 20);
+      t.igual(d("ATORVASTATINA-GENFAR 40 MG", "atorvastatina"), 40, "laboratorio pegado con guion");
+      t.igual(d("ATORVASTATINA - TABLETA RECUBIERTA 40 MG", "atorvastatina"), 40, "guion suelto antes de la forma");
+      t.igual(d("ATORVASTATINA+CALCIO 40 MG", "atorvastatina"), 40, "«+» que no es de combinación");
+      t.falso(api.mtrInerciaEstatina(true, ["ATORVASTATINA-CALCICA 40 MG"]).inercia, "y la inercia ya no se declara en falso");
+      // La barra sigue siendo la afirmación de combinación: sin dosis emparejable, null (no se adivina).
+      t.igual(d("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null, "combo por barra con un solo número: sigue sin adivinarse");
+      t.igual(d("Amlodipino + Atorvastatina 5/40 mg", "atorvastatina"), 40, "y el «+» de combinación real sigue emparejando (v18.0.97)");
+    });
+
     t.caso("v18.0.97: las combinaciones con «+» y «-», y las dosis «5 mg + 40 mg» / «5mg/40mg», emparejan por posición igual que con «/»", () => {
       t.igual(api.mtrDosisDeTexto("Amlodipino + Atorvastatina 5/40 mg", "atorvastatina"), 40, "«+» entre nombres — antes 5");
       t.igual(api.mtrDosisDeTexto("AMLODIPINO + ATORVASTATINA 5 MG + 40 MG", "atorvastatina"), 40, "«+» entre nombres y entre dosis con unidad — antes 5");

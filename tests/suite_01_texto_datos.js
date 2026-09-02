@@ -334,6 +334,36 @@ module.exports = {
       t.igual(f("Nunca ha tenido diabetes.", RE_DIAB), false);
     });
 
+    // v18.0.103 — refutador de v18.0.99 (fila 18): la limpieza convertía en AFIRMACIÓN
+    // negaciones reales cuando el «no» que precede a la conducta es el que niega el HECHO
+    // («no cumple criterios de», «no toma … ni es diabético», «sin medicamentos ni diabetes»)
+    // y, con historia negativa, disparaba la discrepancia ALTA que frena el Panel — el espejo
+    // del defecto que quería cerrar. Y la lista no cubría «no tiene/lleva/hay/recibe/hace/usa
+    // + control/tratamiento/dieta/insulina», ni dos auxiliares.
+    t.caso("v18.0.103: «ni» y «criterios» hacen que el «no» niegue el HECHO, y la lista de conductas cubre los auxiliares", () => {
+      const f = api.mtrTextoOpinaSobre;
+      // Negaciones de verdad (v18.0.99 las leía como afirmación):
+      t.igual(f("No cumple criterios de diabetes.", RE_DIAB), false, "«no cumple criterios de» niega el hecho");
+      t.igual(f("No cumple criterios para hipertension.", RE_HTA), false);
+      t.igual(f("No toma medicamentos ni es diabético.", RE_DIAB), false, "el «ni» niega lo que sigue");
+      t.igual(f("No toma ni tiene diabetes.", RE_DIAB), false);
+      t.igual(f("Sin medicamentos ni diabetes.", RE_DIAB), false);
+      t.igual(f("No toma alcohol ni es hipertenso.", RE_HTA), false);
+      // Y las conductas negadas siguen siendo afirmaciones del hecho:
+      t.igual(f("No tiene control de la diabetes.", RE_DIAB), true, "no tiene CONTROL ≠ no tiene diabetes");
+      t.igual(f("No tiene tratamiento para diabetes.", RE_DIAB), true);
+      t.igual(f("No lleva control de su diabetes.", RE_DIAB), true);
+      t.igual(f("No hay control de la diabetes.", RE_DIAB), true);
+      t.igual(f("No recibe tratamiento para diabetes.", RE_DIAB), true);
+      t.igual(f("No hace dieta para la diabetes.", RE_DIAB), true);
+      t.igual(f("No usa insulina por diabetes.", RE_DIAB), true);
+      t.igual(f("Nunca se ha controlado la diabetes.", RE_DIAB), true, "dos auxiliares");
+      t.igual(f("No esta en control de diabetes.", RE_DIAB), true, "auxiliar + preposición");
+      // La discrepancia que frenaba el Panel sobre un dato NEGADO por escrito:
+      const disc = api.mtrDiscrepanciasDeFuentes({ leidos: { diabetes: false }, cabecera: {}, textoLibre: "Glicemia en ayunas 108: no cumple criterios de diabetes." });
+      t.igual((disc || []).filter((d) => d && d.clave === "diabetes").length, 0, "el texto que NIEGA la diabetes no contradice una historia que también la niega");
+    });
+
     t.caso("v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo', no solo las frases largas", () => {
       t.igual(api.mtrTextoOpinaSobre("Paciente no fuma.", RE_FUMA), false, "'no fuma' debe negar, no afirmar");
       t.igual(api.mtrTextoOpinaSobre("No es hipertenso, tensión normal en consulta.", RE_HTA), false, "'no es hipertenso' debe negar");

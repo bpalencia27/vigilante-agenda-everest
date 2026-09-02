@@ -936,11 +936,13 @@ module.exports = {
 
     t.caso("los ejemplos de estilo se guardan desidentificados y se limitan a 3", () => {
       const c = cargar({ silencioso: true });
-      c.api.mtrEstiloGuardar("Paciente acude a control de su programa; correo juan@x.com por error incluido, y evoluciona estable sin novedades.");
+      // v18.0.103 — aprender estilo exige conocer el nombre del paciente (S+ robustez #1):
+      // las llamadas llevan un nombre sintético; sin él, no se guarda nada.
+      c.api.mtrEstiloGuardar("Paciente acude a control de su programa; correo juan@x.com por error incluido, y evoluciona estable sin novedades.", "NOMBRE SINTETICO");
       const arr = c.api.mtrEstiloLeer();
       t.igual(arr.length, 1, "un ejemplo guardado");
       t.cierto(arr[0].indexOf("juan@x.com") < 0, "el correo se censuró al guardar");
-      for (let i = 0; i < 5; i++) c.api.mtrEstiloGuardar("Ejemplo número " + i + " con suficiente texto para enseñar el estilo del médico.");
+      for (let i = 0; i < 5; i++) c.api.mtrEstiloGuardar("Ejemplo número " + i + " con suficiente texto para enseñar el estilo del médico.", "NOMBRE SINTETICO");
       t.igual(c.api.mtrEstiloLeer().length, 3, "nunca más de 3");
     });
 
@@ -1803,7 +1805,7 @@ module.exports = {
     // entraba al prompt de OTROS pacientes.
     t.caso("mtrEstiloGuardar: el ejemplo se guarda ya sin nombres (no basta scrubPII: no toca nombres propios)", () => {
       const c = cargar({ silencioso: true });
-      c.api.mtrEstiloGuardar("PACIENTE Maria Rodriguez asiste a control de hipertension, refiere buena adherencia al tratamiento.");
+      c.api.mtrEstiloGuardar("PACIENTE Maria Rodriguez asiste a control de hipertension, refiere buena adherencia al tratamiento.", "Maria Rodriguez");   // v18.0.103: con nombre conocido
       const guardados = c.api.mtrEstiloLeer();
       t.igual(guardados.length, 1, "quedo guardado");
       t.falso(/Maria|Rodriguez/.test(guardados[0]), "y sin el nombre del paciente dentro");
@@ -1976,7 +1978,7 @@ module.exports = {
     // Vive dentro del cierre de mtrAbrirPanelRedaccion — se protege por texto fuente.
     t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los 4 puntos de envío de texto libre a la IA", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
+      t.cierto(/resumen\._nombrePaciente = _mtrNombreEfectivo\(apt && apt\.nombre, apt && apt\.doc_id\);/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual) — desde v18.0.103, el de la agenda o el del paquete de Everest");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
       // v17.34.0 — "Generar todo" se retiró; queda un solo objeto opts.
       // v17.47.0 — el objeto del que se lee dejó de llamarse `resumen`: el manejador de
@@ -2497,6 +2499,72 @@ module.exports = {
       t.falso(/\bLI\b/.test(txt), "«LI» no viaja: " + txt);
       t.falso(/MUNOZ/.test(txt), "ni «MUNOZ» (tildes, v18.0.97)");
       t.cierto(/CEFALEA OCASIONAL/.test(txt), "y lo clínico sobrevive");
+    });
+
+    // v18.0.103 — refutador de v18.0.97 (fila 13b): la regla de dos letras se aplicaba a TODOS
+    // los campos de datosUsuario. Un relleno como «NA» en celular o «NO TIENE» en correo se
+    // convertía en tachadura y borraba «NA 138» (el sodio) y «TIENE» de la hoja de hechos.
+    t.caso("v18.0.103: los campos de contacto solo aportan tachaduras con FORMA — «NA» en celular no borra el sodio", () => {
+      const tach = api.mtrHcTachaduras({ datosUsuario: { nombre: "NOMBREPRUEBA", celular: "NA", correo: "NO TIENE", telefono: "SD", identificacion: "80123456", primer_Apellido: "NN" } });
+      t.falso(tach.indexOf("NA") >= 0, "«NA» en celular NO es una tachadura");
+      t.falso(tach.indexOf("TIENE") >= 0 || tach.indexOf("NO") >= 0, "ni «NO TIENE» en correo");
+      t.falso(tach.indexOf("SD") >= 0, "ni «SD» en teléfono");
+      t.cierto(tach.indexOf("80123456") >= 0, "la cédula, que sí tiene forma, sí entra");
+      t.cierto(tach.indexOf("NN") >= 0, "y un apellido de dos letras sigue entrando (es un campo de nombre)");
+      const hechos = api.mtrHechosDesdeHcEverest({
+        datosUsuario: { nombre: "NOMBREPRUEBA", primer_Apellido: "SINTETICO", celular: "NA", correo: "NO TIENE" },
+        antecedentePatologicos: { hipertension: true }, examenFisico: { peso: 70 },
+        ultimaEnfermedad: "PACIENTE NOMBREPRUEBA TIENE DOLOR. LABS: NA 138, K 4.1. NO TIENE ALERGIAS.",
+      });
+      const txt = String(hechos.textos.ultimaEnfermedad);
+      t.cierto(/NA 138/.test(txt) && /NO TIENE ALERGIAS/.test(txt), "el sodio y «NO TIENE» sobreviven: " + txt);
+      t.falso(/NOMBREPRUEBA/.test(txt), "y el nombre sí se tacha");
+    });
+
+    // v18.0.103 — S+ ROBUSTEZ #1 y #2 (dos fugas de PHI hacia Gemini que ningún enjambre
+    // anterior cubrió). (1) Sin nombre en la agenda (`apt = { doc_id }`: paciente adicional,
+    // otro médico, o snapshot aún vacío tras la recarga de Everest) `_nombrePaciente` era null
+    // y la única defensa contra nombres en MAYÚSCULAS se apagaba en todos los canales; el
+    // borrador aceptado se archivaba como «estilo» con el nombre y se reinyectaba en otros
+    // pacientes; `.map(mtrSanearTextoLibreAI)` pasaba el índice como nombre; y el marcador
+    // «Paciente Everest» tachaba la palabra PACIENTE y dejaba el nombre real. (2) La hoja de
+    // hechos era el único bloque del prompt sin el censor de nombres.
+    t.caso("v18.0.103 PHI: el nombre del paquete de Everest sirve de tachadura cuando la agenda no trae nombre, y «Paciente Everest» no cuenta como nombre", () => {
+      const c = cargar({ silencioso: true });
+      const payload = { datosUsuario: { nombre: "ZUTANA", primer_Apellido: "PERENCEJO", identificacion: "80123456" }, antecedentePatologicos: { hipertension: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "CONTROL." };
+      c.api.mtrHcGuardar("80123456", payload);
+      t.igual(c.api._mtrNombreEfectivo(null, "80123456"), "ZUTANA PERENCEJO", "sin nombre de agenda, el del paquete (en RAM)");
+      t.igual(c.api._mtrNombreEfectivo("Paciente Everest", "0080123456"), "ZUTANA PERENCEJO", "el marcador genérico no es un nombre; la cédula se compara canónica");
+      t.igual(c.api._mtrNombreEfectivo("ANA GOMEZ", "80123456"), "ANA GOMEZ", "con nombre de agenda, manda la agenda");
+      t.igual(c.api._mtrNombreEfectivo(null, "999"), null, "sin nada, null (y no se inventa)");
+      const hc = c.api.mtrHcLeer("80123456");
+      t.falso(JSON.stringify(hc || {}).indexOf("PERENCEJO") >= 0, "el nombre NO se persiste con la historia: vive solo en memoria");
+      t.falso(JSON.stringify(c.env.almacen || {}).indexOf("PERENCEJO") >= 0, "ni en localStorage");
+      t.cierto(c.api.mtrSanearTextoLibreAI("PACIENTE ZUTANA PERENCEJO REFIERE CEFALEA.", c.api._mtrNombreEfectivo(null, "80123456")).indexOf("PERENCEJO") < 0, "y con ese nombre el texto en MAYÚSCULAS sí se tacha");
+    });
+
+    t.caso("v18.0.103 PHI: la hoja de hechos y los ejemplos de estilo pasan por el censor de nombres; sin nombre no se aprende estilo", () => {
+      const hoja = api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+        ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+        hcEverest: { dom: { "RevisionSistema.Observaciones": "PACIENTE ZUTANO PERENCEJO REFIERE CEFALEA OCASIONAL" }, textos: { ultimaEnfermedad: "PACIENTE ZUTANO PERENCEJO ASINTOMATICO" } },
+      });
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", hoja, {
+        nombrePaciente: "ZUTANO PERENCEJO",
+        estiloEjemplos: ["PACIENTE ZUTANO PERENCEJO ESTABLE, CONTINUA IGUAL MANEJO Y CONTROL EN TRES MESES SIN NOVEDAD."],
+      });
+      const todo = String(p.system || "") + "\n" + String(p.user || "");
+      t.falso(/PERENCEJO/.test(todo), "el apellido no viaja ni en la hoja de hechos (bloque «escrito en la historia de HOY») ni en los ejemplos de estilo");
+      t.cierto(/CEFALEA OCASIONAL/.test(todo), "y el contenido clínico de la hoja sobrevive");
+      const pGen = api.mtrRedaccionPrompt("enfermedad_actual", hoja, { nombrePaciente: "Paciente Everest", estiloEjemplos: ["EJEMPLO SIN NOMBRE, LO BASTANTE LARGO PARA ENSEÑAR ESTILO."] });
+      t.cierto(/PACIENTE/.test(String(pGen.user || "")), "«Paciente Everest» no tacha la palabra PACIENTE del texto clínico");
+      // Aprender estilo exige conocer el nombre: si no, el borrador con el nombre dentro se
+      // archivaría y volvería en los prompts de los pacientes siguientes.
+      const c = cargar({ silencioso: true });
+      const largo = "PACIENTE ZUTANO PERENCEJO ESTABLE, CONTINUA IGUAL MANEJO Y CONTROL EN TRES MESES SIN NOVEDAD.";
+      t.falso(c.api.mtrEstiloGuardar(largo, null), "sin nombre NO se guarda");
+      t.falso(c.api.mtrEstiloGuardar(largo, "Paciente Everest"), "con el marcador genérico tampoco");
+      t.cierto(c.api.mtrEstiloGuardar(largo, "ZUTANO PERENCEJO"), "con nombre sí");
+      t.falso(JSON.stringify(c.api.mtrEstiloLeer()).indexOf("PERENCEJO") >= 0, "y lo guardado no lleva el nombre");
     });
 
     t.caso("v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra", () => {

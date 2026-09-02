@@ -11109,3 +11109,50 @@ suelta se tacha en su nota (el límite de palabra sigue protegiendo ANASARCA, MA
 | 260 | la regla única deja de proteger las palabras funcionales | *suite_57: v18.0.102: mtrHcTachaduras usa la misma regla…* («HA» se tacharía) y *suite_31: v18.0.97 PHI — un apellido que es palabra funcional … NO destroza la nota* — los DOS canales caen a la vez: es la misma regla | Sí |
 
 Banco completo: **2.981 comprobaciones pasan, 0 fallan.**
+
+## v18.0.103 — lo que los refutadores y el auditor S+ de robustez encontraron sobre el cierre (02-sep)
+
+Tras subir v18.0.97–v18.0.102 se lanzó una segunda ronda: cinco refutadores (uno por versión, dos
+lentes: reproducción + sitios hermanos, regresión + pruebas huecas) y tres auditorías S+. Dos
+refutadores (v18.0.98 y v18.0.100) murieron por límite de sesión antes de verificar; los otros
+tres y las tres auditorías S+ entregaron. Esta versión cierra lo que era regresión mía o fuga de
+PHI; lo demás va en v18.0.104.
+
+**Dos fugas de PHI hacia Gemini (S+ robustez, gravedad alta).** (1) Cuando el paciente abierto no
+está en la agenda del día (adicional, urgencia, otro médico) o el snapshot aún está vacío tras la
+recarga que Everest hace al abrir una historia, el dock arma `apt = { doc_id }` sin nombre,
+`resumen._nombrePaciente` quedaba null y la ÚNICA defensa capaz de tachar un nombre en
+MAYÚSCULAS (la de tokens de `mtrSanearTextoLibreAI`) se apagaba en todos los canales; además el
+borrador aceptado se archivaba como «estilo» con el nombre dentro y se reinyectaba en los prompts
+de los pacientes siguientes, `.map(mtrSanearTextoLibreAI)` pasaba el ÍNDICE como nombre, y el
+marcador «Paciente Everest» tachaba la palabra PACIENTE dejando el nombre real. (2) La hoja de
+hechos era el único bloque del prompt sin el censor de nombres: el texto cosechado del DOM de la
+historia salía con el nombre intacto aunque el asistente lo conociera. Ahora: el nombre del
+paquete de Everest (`datosUsuario`) se retiene por cédula **solo en RAM** (`_mtrNombreRam`, nunca
+se persiste), `_mtrNombreEfectivo` decide el nombre que sirve para tachar (agenda si es un nombre
+real, si no el del paquete, si no null), la hoja de hechos y los ejemplos de estilo pasan por el
+censor con ese nombre, y sin nombre no se aprende estilo.
+
+**Cuatro regresiones.** Fila 9 (refutador v18.0.97): admitir «-»/«+» como separador de nombres
+hacía que «ATORVASTATINA-CALCICA 40 MG» devolviera null (antes 40) → «sin estatina de alta
+intensidad» en falso; solo la barra afirma combinación, el resto cae a la lectura de siempre.
+Fila 13b (v18.0.102): la regla de dos letras se aplicaba a celular/correo/identificación —
+«NA» en celular borraba «NA 138» (el sodio) de la hoja; los campos de contacto solo aportan
+tokens con forma (dígitos o «@»). Fila 18 (refutador v18.0.99): la limpieza «no + conducta»
+convertía en afirmación «No cumple criterios de diabetes» y «No toma medicamentos ni es diabético»
+y disparaba la discrepancia ALTA sobre un dato negado por escrito; si el tramo trae «ni» o
+«criterio(s)» no se limpia nada y «ni» es negador; la lista cubre dos auxiliares y un artículo.
+Fila 41 (refutador v18.0.101): con el límite de dígito, «573001234567» (indicativo sin «+»)
+viajaba entero; el indicativo entra en la forma con o sin «+».
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 261 | los campos de contacto vuelven a la regla de nombre (**el defecto de v18.0.102**) | *suite_57: v18.0.103: los campos de contacto solo aportan tachaduras con FORMA* | Sí |
+| 262 | el guion vuelve a anular la dosis (**el defecto de v18.0.97**) | *suite_49: v18.0.103: un guion o «+» que no es de combinación … no anula la dosis* | Sí |
+| 263 | «ni/criterios» dejan de proteger la negación (**el defecto de v18.0.99**) | *suite_01: v18.0.103: «ni» y «criterios» hacen que el «no» niegue el HECHO…* | Sí |
+| 264 | el indicativo 57 vuelve a exigir «+» (**el defecto de v18.0.101**) | *suite_31: scrubPII: censura celulares colombianos…* (bloque v18.0.103) | Sí |
+| 265 | la hoja de hechos vuelve sin censor (**la fuga #2**) | *suite_57: v18.0.103 PHI: la hoja de hechos y los ejemplos de estilo pasan por el censor…* | Sí |
+| 266 | el estilo se aprende sin nombre (**parte de la fuga #1**) | *suite_57: v18.0.103 PHI: la hoja de hechos y los ejemplos…* | Sí |
+| 267 | el nombre efectivo ignora el del paquete (**la fuga #1**) | *suite_57: v18.0.103 PHI: el nombre del paquete de Everest sirve de tachadura…* | Sí |
+
+Banco completo: **2.986 comprobaciones pasan, 0 fallan.**

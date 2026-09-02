@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.102
+// @version      18.0.103
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.102";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.103";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5399,7 +5399,7 @@
   //    la frontera que salva el caso real «sin control, diabético descompensado», que es una
   //    AFIRMACIÓN y tiene que seguir siéndolo.
   const MTR_RE_NEGADOR_CERCA = new RegExp(
-    "\\b(?:sin antecedente|no refiere|no presenta|no consume|no padece|nunca ha|descarta|no tiene|no fuma|no usa|niega|no es|no fue|no ha|nunca|jamas|sin|no)\\b[^,;.]{0,25}$");
+    "\\b(?:sin antecedente|no refiere|no presenta|no consume|no padece|nunca ha|descarta|no tiene|no fuma|no usa|niega|no es|no fue|no ha|nunca|jamas|sin|no|ni)\\b[^,;.]{0,25}$");
   // 02-sep (cierre adversarial, fila 18) — un «no» que niega una CONDUCTA no niega la enfermedad.
   // Al pasar la ventana de 20 a 25 (v18.0.57), «No asiste a controles de diabetes» —donde el
   // «no» niega ASISTIR— empezó a leerse como negación de la diabetes: discrepancia ALTA que
@@ -5409,7 +5409,15 @@
   // acudir, cumplir, adherirse, controlarse, seguir, tomar, aplicarse, tratamiento, manejo,
   // medicación). «Sin control, diabético descompensado» ya lo protegía la coma; ahora también
   // sin coma, y «HTA no controlada y diabetes» deja de negar lo que sigue.
-  const MTR_RE_NEGACION_DE_CONDUCTA = /\b(?:no|sin|nunca)\s+(?:es\s+|se\s+|ha\s+|esta\s+)?(?:asist\w*|acud\w*|cumpl\w*|adher\w*|control\w*|seguimiento|sigue|siguio|realiz\w*|toma\w*|tomo|aplic\w*|tratamiento|tratad\w*|manejo|medic\w*)\b/g;
+  // v18.0.103 — refutador de v18.0.99: la limpieza convertía en AFIRMACIÓN negaciones reales
+  // («No cumple criterios de diabetes», «No toma medicamentos ni es diabético», «Sin
+  // medicamentos ni diabetes») y, con historia negativa, disparaba la discrepancia ALTA que
+  // frena el Panel — el espejo exacto del defecto que quería cerrar. Dos reglas: (1) si el
+  // tramo trae «ni» o «criterio(s)», el «no» es el que niega el HECHO y no se limpia nada
+  // («ni» pasa a ser negador por sí mismo); (2) la lista cubre hasta dos auxiliares y un
+  // artículo («nunca se ha controlado», «no esta en control», «no lleva control de su»).
+  const MTR_RE_NEGACION_DE_CONDUCTA = /\b(?:no|sin|nunca)\s+(?:(?:es|se|ha|esta|tiene|lleva|hay|recibe|hace|usa|sigue)\s+){0,2}(?:(?:en|de|con|el|la|su|sus|un|una)\s+)?(?:asist\w*|acud\w*|cumpl\w*|adher\w*|control\w*|seguimiento|sigue|siguio|realiz\w*|toma\w*|tomo|aplic\w*|tratamiento|tratad\w*|manejo|medic\w*|dieta|insulina|ejercicio)\b/g;
+  const MTR_RE_TRAMO_NIEGA_EL_HECHO = /\bni\b|\bcriterios?\b/;
 
   function mtrTextoOpinaSobre(texto, re) {
     try {
@@ -5476,7 +5484,8 @@
         //     guardaría lastIndex entre llamadas; search la ignora y siempre empieza en 0.
         const donde = f.search(re);
         // 02-sep (fila 18) — el tramo se limpia de «no + conducta» antes de buscar el negador.
-        const tramo = f.slice(Math.max(0, donde - 45), donde).replace(MTR_RE_NEGACION_DE_CONDUCTA, " ");
+        const tramoCrudo = f.slice(Math.max(0, donde - 45), donde);
+        const tramo = MTR_RE_TRAMO_NIEGA_EL_HECHO.test(tramoCrudo) ? tramoCrudo : tramoCrudo.replace(MTR_RE_NEGACION_DE_CONDUCTA, " ");
         if (donde > 0 && MTR_RE_NEGADOR_CERCA.test(tramo)) {
           if (veredicto === null) veredicto = false;
           continue;
@@ -8302,7 +8311,10 @@
     // orden «930012345678» salía «9[TEL_CENSURADO]8» en la hoja de hechos, que es justo lo que
     // el hallazgo #38 describía para mtrHcTachar y que aquí, en el paso siguiente del mismo
     // pipeline —mtrHcValorLimpio → scrubPII—, seguía pasando).
-    str = str.replace(/(?<!\d)(?:\+57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g, "[TEL_CENSURADO]");
+    // v18.0.103 — el indicativo pegado y sin «+» («573001234567», formato WhatsApp; «057…»)
+    // quedaba DENTRO del límite de dígito y el celular entero viajaba a la IA (refutador de
+    // v18.0.101, fila 41): el indicativo entra en la forma, con o sin «+».
+    str = str.replace(/(?<!\d)(?:\+?0?57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g, "[TEL_CENSURADO]");
     // Fechas: formato dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa, aaaa-mm-dd y textuales en español.
     // v16.5.0 — `conFechas` las conserva (SOLO fechas): decisión del médico para que la
     // redacción asistida pueda anclar la cronología. Todo lo demás se tacha igual.
@@ -39228,6 +39240,10 @@
   function mtrEstiloGuardar(texto, nombrePaciente) {
     try {
       if (typeof GM_setValue === "undefined") return false;
+      // v18.0.103 — S+ robustez #1: sin nombre conocido NO se aprende estilo. El borrador
+      // aceptado se guardaba con el nombre dentro y se reinyectaba en los prompts de los
+      // pacientes SIGUIENTES; el saneador por tokens no puede tachar lo que no conoce.
+      if (!_mtrNombreEfectivo(nombrePaciente, null)) return false;
       // v15.2.0 — Se saneaba SOLO con scrubPII, que no toca nombres propios: un ejemplo
       // guardado conservaba "Paciente Maria Rodriguez" en el equipo y, con "mi estilo"
       // activo, ese texto de UN paciente entraba al prompt de OTROS. Ahora pasa por el
@@ -39838,16 +39854,25 @@
   const MTR_PREGUNTA_MAX = 2000;
 
   function mtrRedaccionPrompt(modo, hoja, opts) {
-    const o = opts || {};
-    const hechos = mtrHojaDeHechosTexto(hoja);
+    const o = Object.assign({}, opts || {});
+    // v18.0.103 — S+ robustez #1: el marcador «Paciente Everest» no es un nombre (tacharía la
+    // palabra PACIENTE y dejaría el real); se resuelve una vez y vale para los seis canales.
+    o.nombrePaciente = _mtrNombreEfectivo(o.nombrePaciente, o.docId);
+    // v18.0.103 — S+ robustez #2: la hoja de hechos era el ÚNICO bloque del prompt que no
+    // pasaba por el censor de nombres. El texto cosechado del DOM de la historia («escrito en
+    // la historia de HOY») solo llevaba scrubPII (forma), así que «PACIENTE FULANO REFIERE…»
+    // en Revisión por sistemas salía con el nombre intacto aunque el asistente lo conociera.
+    const hechos = mtrSanearTextoLibreAI(mtrHojaDeHechosTexto(hoja), o.nombrePaciente);
     const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim(), o.nombrePaciente) : "";
     // v17.45.0 — el nombre viaja también aquí. Era el único de los cinco canales del
     // prompt que no lo pasaba (contextoLibre, pregunta, ancla e indicaciones sí).
     const datosExtra = mtrDatosExtraTexto(o.datosExtra, o.nombrePaciente);
     // v17.6.26 — sin checkbox que marcar: el estilo se usa SIEMPRE que haya al menos un
     // ejemplo aprendido (mtrEstiloGuardar sigue siendo automático, ver más abajo).
+    // v18.0.103 — `.map(mtrSanearTextoLibreAI)` pasaba el ÍNDICE como nombre: el ejemplo
+    // guardado jamás volvía a tacharse. Ahora recibe el nombre efectivo.
     const ejemplos = (Array.isArray(o.estiloEjemplos) && o.estiloEjemplos.length)
-      ? "EMULA EL ESTILO de estos ejemplos de redacción del médico (imita su tono y estructura, NO copies su contenido):\n---\n" + o.estiloEjemplos.slice(0, 3).map(mtrSanearTextoLibreAI).join("\n---\n") + "\n---"
+      ? "EMULA EL ESTILO de estos ejemplos de redacción del médico (imita su tono y estructura, NO copies su contenido):\n---\n" + o.estiloEjemplos.slice(0, 3).map((t) => mtrSanearTextoLibreAI(t, o.nombrePaciente)).join("\n---\n") + "\n---"
       : "";
 
     // v17.1.0 (#110) — El respaldo de un modo desconocido pasa a ser MTR_BASE_CASILLA_SYS,
@@ -42847,7 +42872,7 @@
       resumen.medicamentosFrecuencia = (typeof mtrLeerFrecuenciasMedicamento === "function")
         ? mtrLeerFrecuenciasMedicamento(pacienteIdLabs) : new Map();
     } catch (e) { resumen.medicamentosFrecuencia = new Map(); }
-    try { resumen._ultimos = ultimos; resumen._hoyIso = hoyIso; resumen._docId = (apt && apt.doc_id) || null; resumen._pacienteIdLabs = pacienteIdLabs || null; resumen._nombrePaciente = (apt && apt.nombre) || null; } catch (e) {}
+    try { resumen._ultimos = ultimos; resumen._hoyIso = hoyIso; resumen._docId = (apt && apt.doc_id) || null; resumen._pacienteIdLabs = pacienteIdLabs || null; resumen._nombrePaciente = _mtrNombreEfectivo(apt && apt.nombre, apt && apt.doc_id); } catch (e) {}   // v18.0.103 — sin nombre en la agenda, el del paquete de Everest (RAM)
     // v16.8.0 — Las series viajan con el resumen (y con su caché) para la sección
     // TENDENCIAS del Panel del paciente. Seis puntos por analito: lo que cabe en una
     // línea legible y suficiente para ver hacia dónde va el paciente.
@@ -43353,11 +43378,18 @@
       const d = (payload && payload.datosUsuario) || {};
       const campos = ["nombre", "primer_Apellido", "segundo_Apellido", "primerApellido",
                       "segundoApellido", "nombreCompleto", "identificacion", "celular", "telefono", "correo"];
+      // v18.0.103 — la regla de dos letras es para los campos de NOMBRE. Los de contacto e
+      // identificación aportan tokens solo si tienen FORMA (dígitos o «@»): un relleno como
+      // «NA», «NN», «SD» o «NO TIENE» en celular/correo se convertía en tachadura y borraba
+      // «NA 138» (el sodio) y «TIENE» de la hoja de hechos (refutador de v18.0.97, fila 13b).
+      const camposNombre = new Set(["nombre", "primer_Apellido", "segundo_Apellido", "primerApellido", "segundoApellido", "nombreCompleto"]);
       for (const c of campos) {
         const v = d[c];
         if (typeof v !== "string") continue;
+        const esNombre = camposNombre.has(c);
         for (const parte of v.split(/\s+/)) {
           const t = parte.trim();
+          if (!esNombre) { if (/\d{4,}|@/.test(t)) fuera.push(t); continue; }
           // v18.0.25 — MÍNIMO 4 LETRAS, decisión del médico. Con 3 entraban ANA, MAR, LUZ,
           // PAZ… y, aunque el límite de palabra de mtrHcTachar ya impide que rompan
           // ANASARCA o MAREO, siguen siendo palabras que aparecen SOLAS en texto clínico
@@ -43557,12 +43589,42 @@
   let _vglHcEnganchado = false;
 
   // Guarda los hechos de la historia para un paciente. Puro salvo por el almacén.
+  // v18.0.103 — S+ robustez #1: EL NOMBRE DEL PACIENTE, SOLO EN MEMORIA. Cuando el paciente
+  // abierto no está en la agenda del día (adicional, urgencia, otro médico) o el snapshot
+  // aún no existe tras la recarga que Everest hace al abrir una historia, el dock arma
+  // `apt = { doc_id }` sin nombre, `resumen._nombrePaciente` quedaba null y la ÚNICA defensa
+  // capaz de tachar un nombre en MAYÚSCULAS (la de tokens de mtrSanearTextoLibreAI) se
+  // apagaba en todos los canales hacia Gemini. El paquete de Everest sí trae el nombre en
+  // `datosUsuario`: se retiene aquí, por cédula, en RAM — nunca se persiste (regla del
+  // módulo desde v17.9.0: «se leen SOLO para construir las tachaduras y se descartan»).
+  const _mtrNombreRam = new Map();
+  function _mtrNombreDelPaquete(payload) {
+    try {
+      const d = payload && payload.datosUsuario;
+      if (!d || typeof d !== "object") return "";
+      const partes = [];
+      for (const c of ["nombre", "primer_Apellido", "segundo_Apellido", "primerApellido", "segundoApellido", "nombreCompleto"]) {
+        if (typeof d[c] === "string" && d[c].trim()) partes.push(d[c].trim());
+      }
+      return partes.join(" ");
+    } catch (e) { return ""; }
+  }
+  // El nombre que de verdad sirve para tachar: el de la agenda si es un nombre (no el
+  // marcador «Paciente Everest», que tacharía la palabra PACIENTE y dejaría el nombre real);
+  // si no, el que trajo el paquete de Everest de esa cédula; si no hay ninguno, null.
+  function _mtrNombreEfectivo(nombre, docId) {
+    const n = String(nombre == null ? "" : nombre).trim();
+    const generico = !n || stripAccents(n).toLowerCase().replace(/\s+/g, " ") === APPT_NOMBRE_GENERICO;
+    if (!generico) return n;
+    try { return _mtrNombreRam.get(normalizeKey(docId)) || null; } catch (e) { return null; }
+  }
   function mtrHcGuardar(docId, payload) {
     try {
       const hechos = mtrHechosDesdeHcEverest(payload);
       if (!hechos) return null;
       const id = String(docId || "");
       if (!id) return null;
+      try { const nom = _mtrNombreDelPaquete(payload); if (nom) _mtrNombreRam.set(normalizeKey(id), nom); } catch (e) {}   // v18.0.103 — RAM, nunca disco
       _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: Object.assign({}, hechos, { ts: Date.now() }) });
       try { uxTrack("hc.capturado", { campos: hechos._campos }); } catch (e) {}
       return hechos;
@@ -44161,9 +44223,16 @@
       // NO `undefined` (no es un combo). La diferencia es la que impide que el llamador se
       // caiga a la lectura de siempre y termine leyendo la dosis del OTRO principio —
       // «Amlodipino/Atorvastatina 5 mg» tiene un solo número y es ambiguo: no se adivina.
-      if (!mn) return null;
+      // v18.0.103 — pero un guion o un «+» que NO es de combinación («ATORVASTATINA-CALCICA
+      // 40 MG», «ATORVASTATINA-GENFAR 40 MG», «ATORVASTATINA+CALCIO 40 MG») caía aquí y
+      // devolvía null en vez de la lectura de siempre → «sin estatina de alta intensidad»
+      // sobre un paciente en atorvastatina 40 (refutador de v18.0.97, fila 9). Solo la
+      // barra afirma «combinación»; con «-»/«+» y sin bloque de dosis emparejable se cae a
+      // la lectura de siempre, que para un solo número es la correcta.
+      const conBarra = /\//.test(m[0]);
+      if (!mn) return conBarra ? null : undefined;
       const dosis = mn[1].split(/[\/+]/).map((x) => Number(String(x).replace(/mg/g, "").trim().replace(",", ".")));
-      if (dosis.length !== nombres.length) return null;
+      if (dosis.length !== nombres.length) return conBarra ? null : undefined;
       const v = dosis[pos];
       return (typeof v === "number" && isFinite(v)) ? v : null;
     }
