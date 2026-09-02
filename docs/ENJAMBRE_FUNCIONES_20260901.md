@@ -2062,9 +2062,9 @@ v18.0.96 también dejó al día.
 Dos decisiones que quedan explícitas para el médico:
 
 - **Fila 13b / v18.0.25.** El mínimo de 4 letras de `mtrHcTachaduras` (decisión del médico en
-  v18.0.25) **no se tocó**: el canal del paquete tolera tildes ahora, pero un apellido de 2-3
-  letras sigue sin tacharse por ese canal. Alinear ese mínimo con la política de 2 letras del otro
-  canal es una decisión suya, no del script.
+  v18.0.25) no se tocó en v18.0.97: el canal del paquete toleraba tildes, pero un apellido de 2-3
+  letras seguía sin tacharse por ese canal. **Decidido el 02-sep («alinealo»)**: desde v18.0.102 los
+  dos canales usan la misma regla de dos letras, en un solo sitio (`_mtrTokenDeNombreTachable`).
 - **Fila 18.** Ni 20 ni 25 caracteres de ventana son la respuesta; lo que decide es si el «no»
   niega una *conducta* (asistir, tomar, controlarse) o el hecho. Si aparece una frase real que la
   lista de conductas no cubra, se agrega a `MTR_RE_NEGACION_DE_CONDUCTA` con su prueba.

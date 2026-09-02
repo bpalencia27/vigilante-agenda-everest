@@ -11088,3 +11088,24 @@ v18.0.5; el potenciador «DM sin FR mayores», retirado en v18.0.95). Corregidas
 | 258 | `highlight` sin normalizar a NFC (**el defecto**) | *suite_06: 02-sep: highlight no parte un grafema cuando el nombre trae acentos descompuestos* | Sí |
 
 Banco completo: **2.980 comprobaciones pasan, 0 fallan.**
+
+## v18.0.102 — decisión del médico (02-sep): `mtrHcTachaduras` pasa a la regla de dos letras del otro canal
+
+La fila 13b del cierre adversarial dejó explícita una decisión pendiente: el mínimo de 4 letras de
+`mtrHcTachaduras` (v18.0.25) hacía que un apellido de 2-3 letras viajara a Gemini por el canal del
+paquete de Everest (`ultimaEnfermedad` → hoja de hechos → prompt), mientras el otro canal
+(`mtrSanearTextoLibreAI`) ya tachaba desde dos letras (v18.0.52) con protección de partículas y,
+desde v18.0.97, de palabras funcionales. El médico respondió «alinealo».
+
+Un solo sitio decide ahora qué token del nombre se tacha — `_mtrTokenDeNombreTachable`: dos
+letras o más, y ni partícula de apellido (`MTR_PARTICULAS_APELLIDO`) ni palabra funcional
+(`MTR_PALABRAS_FUNCION_ES`). Los dos canales lo usan. El coste que v18.0.52 ya había aceptado para
+el canal de texto aplica ahora a los dos: si el paciente se llama ANA, LUZ o PAZ, esa palabra
+suelta se tacha en su nota (el límite de palabra sigue protegiendo ANASARCA, MAREO, LEONINA…).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 259 | vuelve el mínimo de 4 letras en `mtrHcTachaduras` (**la política vieja**) | *suite_57: v18.0.102: mtrHcTachaduras usa la misma regla de dos letras…* y *… de punta a punta, un apellido de dos letras del paquete de Everest ya no llega a la hoja de hechos* | Sí |
+| 260 | la regla única deja de proteger las palabras funcionales | *suite_57: v18.0.102: mtrHcTachaduras usa la misma regla…* («HA» se tacharía) y *suite_31: v18.0.97 PHI — un apellido que es palabra funcional … NO destroza la nota* — los DOS canales caen a la vez: es la misma regla | Sí |
+
+Banco completo: **2.981 comprobaciones pasan, 0 fallan.**

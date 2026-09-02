@@ -2457,13 +2457,46 @@ module.exports = {
         "ni CRUZADO con CRUZ");
     });
 
-    t.caso("v18.0.25: mtrHcTachaduras exige 4 letras — decisión del médico, con su coste", () => {
+    // v18.0.102 — DECISIÓN NUEVA DEL MÉDICO (02-sep, cierre adversarial, fila 13b): «alinealo».
+    // El mínimo de 4 letras de v18.0.25 dejaba pasar a Gemini, por el canal del paquete de
+    // Everest, apellidos de 2-3 letras que el otro canal (mtrSanearTextoLibreAI, dos letras
+    // desde v18.0.52) sí tachaba. Ahora los dos canales usan la MISMA regla, en un solo sitio
+    // (_mtrTokenDeNombreTachable): dos letras o más, y ni partícula ni palabra funcional.
+    // El coste de v18.0.52 pasa a los dos canales: ANA/PAZ/LUZ como palabra suelta se tachan
+    // cuando el paciente se llama así (el límite de palabra sigue protegiendo ANASARCA, etc.).
+    t.caso("v18.0.102: mtrHcTachaduras usa la misma regla de dos letras que el otro canal — decisión del médico del 02-sep", () => {
       const tach = api.mtrHcTachaduras({
         datosUsuario: { nombre: "ANA", primer_Apellido: "GOMEZ", segundo_Apellido: "PAZ" },
       });
       t.cierto(tach.indexOf("GOMEZ") >= 0, "el apellido de 5 letras entra");
-      t.falso(tach.indexOf("ANA") >= 0, "«ANA» (3) NO entra: el médico eligió proteger el grounding");
-      t.falso(tach.indexOf("PAZ") >= 0, "«PAZ» (3) tampoco");
+      t.cierto(tach.indexOf("ANA") >= 0, "«ANA» (3) ahora SÍ entra: antes viajaba a Gemini por este canal");
+      t.cierto(tach.indexOf("PAZ") >= 0, "«PAZ» (3) también");
+      const dos = api.mtrHcTachaduras({ datosUsuario: { nombre: "KIM", primer_Apellido: "LI", segundo_Apellido: "HA" } });
+      t.cierto(dos.indexOf("LI") >= 0, "un apellido de DOS letras entra — el hueco de la fila 13b");
+      t.falso(dos.indexOf("HA") >= 0, "pero «HA», palabra funcional, no: tacharla destrozaría «NO HA PRESENTADO»");
+      t.falso(api.mtrHcTachaduras({ datosUsuario: { nombre: "ANA DE LA CRUZ" } }).some((x) => x === "DE" || x === "LA"),
+        "y las partículas siguen fuera");
+      // Los dos canales, de verdad la misma regla: lo que uno tacha, el otro también.
+      const nombre = "KIM LI HA DE LA CRUZ";
+      const porTexto = api.mtrSanearTextoLibreAI("PACIENTE KIM LI HA DE LA CRUZ. NO HA PRESENTADO DOLOR.", nombre);
+      // KIM LI se censuran juntos, HA DE LA quedan (funcional + partículas), CRUZ se censura.
+      t.cierto(/PACIENTE \[NOMBRE_CENSURADO\] HA DE LA \[NOMBRE_CENSURADO\]\. NO HA PRESENTADO DOLOR\./.test(porTexto), "canal de texto: " + porTexto);
+      const porPaquete = api.mtrHcTachar("PACIENTE KIM LI HA DE LA CRUZ. NO HA PRESENTADO DOLOR.", api.mtrHcTachaduras({ datosUsuario: { nombreCompleto: nombre } }));
+      t.cierto(/NO HA PRESENTADO DOLOR\./.test(porPaquete) && !/KIM|\bLI\b|CRUZ/.test(porPaquete), "canal del paquete: " + porPaquete);
+    });
+
+    t.caso("v18.0.102: de punta a punta, un apellido de dos letras del paquete de Everest ya no llega a la hoja de hechos", () => {
+      const hechos = api.mtrHechosDesdeHcEverest({
+        datosUsuario: { nombre: "NOMBREPRUEBA", primer_Apellido: "LI", segundo_Apellido: "MUÑOZ", identificacion: "80123456" },
+        antecedentePatologicos: { hipertension: true, diabetes: false },
+        examenFisico: { peso: 70, talla: 165 },
+        habitosGestionRiesgo: { sedentarismo: true },
+        ultimaEnfermedad: "PACIENTE LI MUNOZ REFIERE CEFALEA OCASIONAL.",
+      });
+      const txt = String((hechos && hechos.textos && hechos.textos.ultimaEnfermedad) || "");
+      t.falso(/\bLI\b/.test(txt), "«LI» no viaja: " + txt);
+      t.falso(/MUNOZ/.test(txt), "ni «MUNOZ» (tildes, v18.0.97)");
+      t.cierto(/CEFALEA OCASIONAL/.test(txt), "y lo clínico sobrevive");
     });
 
     t.caso("v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra", () => {

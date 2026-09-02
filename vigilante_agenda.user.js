@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.101
+// @version      18.0.102
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1032,7 +1032,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.101";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.102";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -39629,6 +39629,19 @@
     "con", "por", "sin", "mas", "muy", "hoy", "al", "en", "ni", "o", "u", "a", "que",
     "para", "como", "pero", "este", "esta", "esto", "ese", "esa", "eso", "aun", "fue", "ser",
   ]);
+  // v18.0.102 — LA MISMA REGLA PARA LOS DOS CANALES. Decisión del médico (02-sep): alinear
+  // mtrHcTachaduras (paquete de Everest → hoja de hechos → prompt) con esta política de dos
+  // letras, en vez del mínimo de 4 de v18.0.25 que dejaba pasar apellidos de 2-3 letras por
+  // ese canal. Un solo sitio decide qué token del nombre se tacha: dos letras o más, y ni
+  // partícula de apellido ni palabra funcional. El coste ya aceptado en v18.0.52 para el otro
+  // canal aplica ahora a los dos: un nombre que además es palabra clínica de 3 letras (ANA,
+  // LUZ, PAZ, MAR) se tacha como palabra suelta cuando ese paciente se llama así.
+  function _mtrTokenDeNombreTachable(t) {
+    const s = String(t == null ? "" : t).trim();
+    if (s.length < 2) return false;
+    const n = mtrNormalizarTexto(s);
+    return !MTR_PARTICULAS_APELLIDO.has(n) && !MTR_PALABRAS_FUNCION_ES.has(n);
+  }
   // v18.0.52 — Un patrón que casa la palabra CON o SIN tildes, en las dos direcciones:
   // «Muñoz» tiene que encontrar «MUNOZ», y «Munoz» tiene que encontrar «MUÑOZ». Se
   // normaliza el token a ASCII y cada letra que tenga variantes acentuadas se convierte en
@@ -39682,8 +39695,7 @@
     if (nombrePaciente) {
       try {
         const tokens = String(nombrePaciente).trim().split(/\s+/)
-          .filter((t) => t.length >= 2 && !MTR_PARTICULAS_APELLIDO.has(mtrNormalizarTexto(t))
-                         && !MTR_PALABRAS_FUNCION_ES.has(mtrNormalizarTexto(t)));
+          .filter(_mtrTokenDeNombreTachable);   // v18.0.102 — la misma regla que mtrHcTachaduras
         if (tokens.length) {
           const alt = tokens.map((t) => _mtrPatronConTildes(t)).join("|");
           const reTokens = new RegExp(
@@ -43332,8 +43344,8 @@
   //  se aplican al texto libre, y se descartan sin guardarse en ninguna parte. Es la única
   //  forma de tachar un nombre con garantía: conociéndolo.
   //
-  //  Se exigen 3 caracteres para evitar tachar partículas («DE», «LA») que aparecerían por
-  //  todo el texto clínico.
+  //  Las partículas («DE», «LA») y las palabras funcionales no se tachan: aparecerían por
+  //  todo el texto clínico (regla única en _mtrTokenDeNombreTachable desde v18.0.102).
   // =====================================================================
   function mtrHcTachaduras(payload) {
     const fuera = [];
@@ -43352,7 +43364,12 @@
           // («PAZ» en un apellido compuesto, «LUZ» en «luz pupilar»). Él eligió proteger el
           // grounding: «solo se sanitiza hasta donde sea seguro para mi proyecto y
           // grounding. si va a romper el código entonces no se aplica en ese caso».
-          if (t.length >= 4) fuera.push(t);
+          // v18.0.102 — DECISIÓN NUEVA DEL MÉDICO (02-sep, cierre adversarial, fila 13b):
+          // «alinealo». Este canal pasa a la misma regla de dos letras que
+          // mtrSanearTextoLibreAI (v18.0.52 + v18.0.97), decidida en UN solo sitio
+          // (_mtrTokenDeNombreTachable): un apellido de 2-3 letras ya no viaja a Gemini por
+          // aquí, y las partículas y palabras funcionales siguen protegidas.
+          if (_mtrTokenDeNombreTachable(t)) fuera.push(t);
         }
       }
     } catch (e) {}
