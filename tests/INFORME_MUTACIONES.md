@@ -11385,3 +11385,50 @@ motivo y el panel post-cita lleva una línea roja con él.
 | 302 | `apiLaboratorioAgendarAuto` no deja el motivo del fallo | *suite_15: v18.0.107 (C4)…* («el motivo del fallo queda disponible») | Sí |
 
 Banco completo: **3.009 comprobaciones pasan, 0 fallan.**
+
+## v18.0.108 — oportunidades S+ de robustez (gravedad media): el candado que se perdía en silencio, el espejo que no se podaba, la carpeta sincronizada, el correo «enviado» y el beacon sucio
+
+Segunda entrega de lo que el médico pidió («aplica la corrección que sugieres a las
+oportunidades S+»): los ítems de robustez de gravedad media del auditor (B3–B6) y el B8, de una
+línea. Todos reproducidos con los guiones del auditor (`splus_robustez/`) antes de tocar nada.
+
+**B3 — el candado que se perdía en silencio.** Si el navegador rechazaba la escritura de
+`vgl_proc_today` (cuota llena), `markOrdenesCreadasHoy`/`markCitaAgendadaHoy` seguían como si
+nada: el candado «ya ordenado / ya agendado hoy» no existía, el dock volvía a ofrecer Ordenar
+y Agendar, y nadie avisaba — una orden o una cita duplicada de verdad. Ahora toda escritura de
+esa memoria pasa por `_procGuardar`: si falla, la copia en memoria de la pestaña manda
+(`getProcessedToday` la devuelve), se avisa en rojo una sola vez (otras pestañas no la verán;
+se perderá al recargar) y, cuando el almacén vuelve a aceptar, lo acumulado se escribe entero.
+Y `vgl_proc_today` entra en el espejo GM: si el navegador pierde el almacén a media jornada, el
+arranque la restaura; como caduca con el día, un espejo de ayer no hace nada.
+
+**B4 — el espejo que no se podaba.** El espejo GM de la bitácora diaria (`espejo_vgl_ev_*`,
+con nombre y cédula) crecía para siempre: `purgeEventDays` solo miraba `localStorage`. Ahora
+poda también el espejo con la misma regla de días, con los permisos `GM_listValues` y
+`GM_deleteValue` que el userscript no pedía.
+
+**B5 — la carpeta sincronizada.** Ajustes prometía «Todo se queda en su equipo» para la
+carpeta de `<cédula>.json` sin advertir sobre OneDrive/Drive/Dropbox, y decía que al cerrar
+Chrome había que volver a elegirla (falso desde v17.0.1). El texto dice ahora lo que pasa, y al
+elegir una carpeta cuyo nombre delata un servicio de sincronización se avisa en ámbar (no se
+bloquea: el médico manda, y el navegador solo entrega el nombre, no la ruta).
+
+**B6 — el correo «enviado».** «Enviar órdenes al correo» daba por enviado con solo `resp.ok`:
+un 200 con `error:true` se anunciaba como enviado, el mismo defecto que v17.6.2 corrigió para
+el SMS. Sin captura del cuerpo real del endpoint, la cautela es la de v17.0.3: solo se rechaza
+lo que el cuerpo declara rechazado; un cuerpo vacío o no JSON no cambia el veredicto.
+
+**B8 — el beacon sucio.** `repBeacon` mandaba la fila con sus campos internos (`_intentos`);
+el blindaje de v18.0.66 solo estaba en `repPost`. Una línea.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 303 | `getProcessedToday` ignora la copia en memoria cuando la escritura falló (**el defecto B3**) | *suite_19: v18.0.108 (S+ B3): con el almacén lleno, el candado «ya ordenado/agendado hoy» sigue en pie en esta pestaña, se avisa en rojo y vgl_proc_today va al espejo GM* | Sí |
+| 304 | sin el aviso rojo | *suite_19: v18.0.108 (S+ B3)…* («se avisa en rojo») | Sí |
+| 305 | `vgl_proc_today` fuera del espejo GM | *suite_19: v18.0.108 (S+ B3)…* («está en el espejo GM») | Sí |
+| 306 | `purgeEventDays` sin la poda del espejo (**el defecto B4**) | *suite_10: v18.0.108 (S+ B4): purgeEventDays también poda el espejo GM de la bitácora…* | Sí |
+| 307 | `_vglCarpetaPareceSincronizada` siempre false (**el defecto B5**) | *suite_68: v18.0.108 (S+ B5): una carpeta que parece sincronizada con la nube se acepta pero queda marcada y se avisa…* | Sí |
+| 308 | un 200 con `error:true` vuelve a ser «enviado» (**el defecto B6**) | *suite_20: v18.0.108 (S+ B6): el correo de las órdenes no se da por enviado con un 200 que trae error:true…* | Sí |
+| 309 | `repBeacon` vuelve a mandar la fila cruda (**el defecto B8**) | *suite_23: v18.0.108 (S+ B8): repBeacon manda la fila LIMPIA, sin campos internos (_intentos), como repPost* | Sí |
+
+Banco completo: **3.014 comprobaciones pasan, 0 fallan.**

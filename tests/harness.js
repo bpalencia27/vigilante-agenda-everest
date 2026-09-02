@@ -181,6 +181,8 @@ function crearEntorno(opciones) {
   };
   win.GM_getValue = (k, d) => (k in gm ? gm[k] : d);
   win.GM_setValue = (k, v) => { gm[k] = v; };
+  win.GM_listValues = () => Object.keys(gm);      // v18.0.108 — poda del espejo
+  win.GM_deleteValue = (k) => { delete gm[k]; };
   // v14.1.9 — El stub por defecto NO puede ser un agujero negro.
   //
   // Era `() => {}`. Parece inofensivo, pero `_pageFetchJsonCore` usa GM_xmlhttpRequest como

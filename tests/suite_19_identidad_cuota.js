@@ -473,5 +473,43 @@ module.exports = {
         "pasadas 12 h la caché caduca: entre días, la identidad se vuelve a confirmar con Everest");
     });
 
+
+    // v18.0.108 — S+ robustez (B3): si el navegador rechazaba la escritura de vgl_proc_today (cuota
+    // llena), markOrdenesCreadasHoy/markCitaAgendadaHoy seguían como si nada: el candado «ya
+    // ordenado / ya agendado hoy» no existía, el dock volvía a ofrecer Ordenar/Agendar y nadie
+    // avisaba. Ahora la copia en memoria de la pestaña manda, se avisa en rojo una vez, y la
+    // clave viaja al espejo GM.
+    await t.casoAsync("v18.0.108 (S+ B3): con el almacén lleno, el candado «ya ordenado/agendado hoy» sigue en pie en esta pestaña, se avisa en rojo y vgl_proc_today va al espejo GM", async () => {
+      const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+      const _dom = (c) => { const doc = c.env.doc; const crearBase = doc.createElement; doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { const k = String(sel).replace(/:not\([^)]*\)/g, ""); if (!memo.has(k)) memo.set(k, doc.createElement("div")); return memo.get(k); }; e.querySelectorAll = () => []; return e; }; };
+      const c = cargar({ silencioso: true });
+      _dom(c);
+      const bandeja = c.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      const getOrig = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : getOrig(id));
+      const DOC = "1122334455";
+      const setOrig = c.env.storage.setItem;
+      c.env.storage.setItem = (k, v) => { if (k === "vgl_proc_today") { const e = new Error("QuotaExceededError"); e.name = "QuotaExceededError"; throw e; } return setOrig.call(c.env.storage, k, v); };
+      delete c.env.almacen.vgl_proc_today;
+      c.api.markOrdenesCreadasHoy(DOC, ["AGRUP-SINT-1"], ["Tamizaje sintético"], ["Z000"]);
+      t.cierto(c.api.isOrdenesCreadasHoy(DOC), "con la cuota llena, la orden REAL creada sigue marcada (antes: el candado no existía)");
+      t.cierto(!!c.api.ordenesDetalleHoy(DOC), "con su detalle");
+      t.cierto(c.api._procEscrituraFallida(), "y el script sabe que no pudo escribir");
+      c.api.markCitaAgendadaHoy(DOC, "2026-09-10", { citaId: "CITA-SINT-1", pacienteId: 777 });
+      t.cierto(c.api.isCitaAgendadaHoy(DOC) && !!c.api.citaDetalleHoy(DOC), "la cita también sigue marcada");
+      await esperar(30);
+      const textos = bandeja.children.map((x) => { try { return String(x.querySelector(".vgl-toast-title").textContent) + " · " + String(x.querySelector(".vgl-toast-b").textContent); } catch (e) { return String(x.innerHTML || ""); } });
+      t.cierto(textos.some((x) => /no se pudo guardar/.test(x) && /otras pestañas/.test(x)), "se avisa en rojo, y dice que otras pestañas no lo verán: " + JSON.stringify(textos).slice(0, 200));
+      // el almacén vuelve a aceptar: lo acumulado en memoria se escribe y la bandera se limpia
+      c.env.storage.setItem = setOrig;
+      c.api.markLabAgendadaHoy(DOC);
+      t.falso(c.api._procEscrituraFallida(), "cuando el almacén vuelve, la bandera se limpia");
+      const guardado = JSON.parse(c.env.almacen.vgl_proc_today);
+      t.cierto(guardado.ordenes.includes(DOC) && guardado.citas.includes(DOC) && guardado.labs.includes(DOC), "y lo acumulado en memoria quedó escrito entero");
+      t.cierto("espejo_vgl_proc_today" in c.env.gm, "vgl_proc_today está en el espejo GM (antes no)");
+      c.env.doc.getElementById = getOrig;
+    });
+
   },
 };

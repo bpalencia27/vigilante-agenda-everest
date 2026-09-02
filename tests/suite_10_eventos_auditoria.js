@@ -518,5 +518,22 @@ module.exports = {
       t.igual(filas.filter((x) => x && x.ev === "FRAUDE_EXTEMPORANEO").length, cont.fraude || 0,
         "sin maybeNotify no hay ni fila ni número: lo que no se puede hacer es una cosa sin la otra");
     });
+
+    // v18.0.108 — S+ robustez (B4): el espejo GM de la bitácora (espejo_vgl_ev_*, con nombre y
+    // cédula) no lo podaba nadie: purgeEventDays solo miraba localStorage.
+    t.caso("v18.0.108 (S+ B4): purgeEventDays también poda el espejo GM de la bitácora, que crecía para siempre", () => {
+      const c = cargar({ silencioso: true });
+      const hoy = c.api.todayStamp();
+      c.env.gm["espejo_vgl_ev_" + hoy] = [{ t: "07:05", ev: "INASISTENCIA", doc: "1122334455" }];
+      c.env.almacen["vgl_ev_2026-02-14"] = JSON.stringify([{ t: "08:00", ev: "INASISTENCIA", doc: "9988776655" }]);
+      c.env.gm["espejo_vgl_ev_2026-02-14"] = [{ t: "08:00", ev: "INASISTENCIA", doc: "9988776655" }];
+      c.api.purgeEventDays();
+      t.falso("vgl_ev_2026-02-14" in c.env.almacen, "montaje: el original viejo se poda (ya era así)");
+      t.falso("espejo_vgl_ev_2026-02-14" in c.env.gm, "el espejo GM viejo también (antes: se quedaba para siempre, con nombre y cédula)");
+      t.cierto(("espejo_vgl_ev_" + hoy) in c.env.gm, "el espejo de hoy se conserva");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/@grant\s+GM_listValues/.test(src) && /@grant\s+GM_deleteValue/.test(src), "y el userscript pide los permisos que la poda necesita");
+    });
+
   },
 };

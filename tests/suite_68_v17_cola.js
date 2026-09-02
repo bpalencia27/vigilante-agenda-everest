@@ -1195,5 +1195,24 @@ module.exports = {
       t.cierto(r.bloqueadoDeadman, "el llenado en Everest queda bloqueado");
       t.cierto(/no escribe en la historia/.test(c.api.mtrMensajeLlenado(r)), "con su explicación al médico");
     });
+
+    // v18.0.108 — S+ robustez (B5): Ajustes prometía «Todo se queda en su equipo» sin advertir
+    // sobre carpetas sincronizadas (OneDrive/Drive/Dropbox), y decía que al cerrar Chrome había
+    // que volver a elegirla (falso desde v17.0.1).
+    await t.casoAsync("v18.0.108 (S+ B5): una carpeta que parece sincronizada con la nube se acepta pero queda marcada y se avisa; el texto de Ajustes ya no promete lo que el navegador no cumple", async () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(c.api._vglCarpetaPareceSincronizada("OneDrive - IPS") && c.api._vglCarpetaPareceSincronizada("Google Drive") && c.api._vglCarpetaPareceSincronizada("Dropbox"), "OneDrive / Google Drive / Dropbox se reconocen por el nombre");
+      t.falso(c.api._vglCarpetaPareceSincronizada("Historias") || c.api._vglCarpetaPareceSincronizada("Documentos"), "una carpeta local no");
+      c.env.win.showDirectoryPicker = async () => ({ name: "OneDrive - IPS" });
+      const r = await c.api.vglCarpetaElegir();
+      t.cierto(!!r && r.ok === true && r.sincronizada === true, "la elección se acepta (el médico manda) pero queda marcada: " + JSON.stringify(r));
+      c.env.win.showDirectoryPicker = async () => ({ name: "Historias" });
+      const r2 = await c.api.vglCarpetaElegir();
+      t.cierto(!!r2 && r2.ok === true && r2.sincronizada === false, "una carpeta local, sin marca");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/Evite carpetas sincronizadas/.test(src) && !/si cierra Chrome habrá que volver a elegirla/.test(src), "Ajustes advierte sobre carpetas sincronizadas y ya no dice que hay que volver a elegirla al cerrar Chrome");
+      t.cierto(/showToast\("AMBAR", "Carpeta sincronizada con la nube"/.test(src), "y el aviso ámbar existe en la elección");
+    });
+
   },
 };

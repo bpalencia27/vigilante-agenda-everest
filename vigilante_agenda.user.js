@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.107
+// @version      18.0.108
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -28,6 +28,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_listValues
+// @grant        GM_deleteValue
 // @grant        GM_notification
 // @updateURL    https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
 // @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
@@ -1032,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.107";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.108";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8540,7 +8542,10 @@
   //  El espejo se limita a las claves del RESUMEN (stats/events/ux): las
   //  operativas (siembra, cola de avisos) son del día y no valen la pena.
   // =====================================================================
-  const VGL_ESPEJO_CLAVES = ["vgl_stats", "vgl_ux", "vgl_ux_pend"];
+  // v18.0.108 (S+ robustez, B3) — vgl_proc_today también: es la memoria «ya agendado / ya
+  // ordenado hoy» (el antiduplicados). Si el navegador pierde el almacén a media jornada, el
+  // espejo la devuelve al arrancar; y como caduca con el día, un espejo de ayer no hace nada.
+  const VGL_ESPEJO_CLAVES = ["vgl_stats", "vgl_ux", "vgl_ux_pend", "vgl_proc_today"];
   const _espejoUltima = {};                       // por clave: último volcado
   const _espejoPendiente = {};                    // por clave: temporizador de cola
   function _vglEspejoGuardar(k, v) {
@@ -8711,14 +8716,42 @@
   // otra pestaña no se vería por hasta 1 s) y el ahorro es ínfimo (un JSON.parse de un blob
   // pequeño). La guarda de firma del dock (dock.dataset.sig) ya evita el trabajo caro real —el
   // reflow por reconstrucción— sin tocar la semántica de este almacén.
+  // v18.0.108 (S+ robustez, B3) — EL CANDADO NO SE PIERDE EN SILENCIO. Si el navegador rechaza
+  // la escritura (cuota llena), markCitaAgendadaHoy/markOrdenesCreadasHoy seguían como si nada:
+  // el dock volvía a ofrecer Agendar/Ordenar y el panel post-cita perdía la anulación — una
+  // cita o una orden duplicada de verdad, sin un solo aviso. Ahora toda escritura de
+  // vgl_proc_today pasa por _procGuardar: si falla, la copia en memoria de ESTA pestaña
+  // manda (getProcessedToday la devuelve) y se avisa en rojo, una vez, que otras pestañas
+  // no la verán y que se perderá al recargar.
+  let _procHoyMemoria = null;
+  let _procHoyFallo = false;
+  function _procGuardar(p) {
+    const ok = writeJSON(PROC_KEY, p);
+    _procHoyMemoria = p;
+    if (ok) { _procHoyFallo = false; return true; }
+    const primera = !_procHoyFallo;
+    _procHoyFallo = true;
+    if (primera) {
+      try {
+        showToast("ROJO", "Memoria del día · no se pudo guardar",
+          "El navegador rechazó la escritura (almacenamiento lleno). Las marcas «ya agendado / ya ordenado hoy» siguen en pie en ESTA pestaña, pero otras pestañas no las verán y se perderán al recargar. Libere espacio en el navegador.",
+          true, "proc|fallo");
+      } catch (e) {}
+      try { uxTrack("proc.escritura.fallo"); } catch (e) {}
+    }
+    return false;
+  }
+  function _procEscrituraFallida() { return _procHoyFallo; }
   function getProcessedToday() {
     const today = todayStamp();
+    if (_procHoyFallo && _procHoyMemoria && _procHoyMemoria.dia === today) return _procHoyMemoria;
     const data = readJSON(PROC_KEY, null);
     if (!data || data.dia !== today) {
       const fresh = { dia: today, citas: [], ordenes: [] };
-      writeJSON(PROC_KEY, fresh);
+      _procGuardar(fresh);
       return fresh;
     }
+    _procHoyMemoria = data;
     return data;
   }
   function isCitaAgendadaHoy(docId, procHoy) {
@@ -8783,14 +8816,14 @@
       p.citasDetalle[sDoc] = Object.assign({}, p.citasDetalle[sDoc] || {}, { fechaIso, ts: Date.now() }, extra || {});
       cambio = true;
     }
-    if (cambio) { writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+    if (cambio) { _procGuardar(p); state.lastSignature = ""; repaint(); }
   }
   function markLabAgendadaHoy(docId) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
     if (!p.labs) p.labs = [];
-    if (!p.labs.includes(sDoc)) { p.labs.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+    if (!p.labs.includes(sDoc)) { p.labs.push(sDoc); _procGuardar(p); state.lastSignature = ""; repaint(); }
   }
 
   // v14.2.0 — GATILLO DE COMPLETADO (encargo del médico): cuando una cita o una orden queda
@@ -8827,13 +8860,13 @@
     const p = getProcessedToday();
     const sDoc = String(docId);
     if (!p.agendPend) p.agendPend = {};
-    if (!p.agendPend[sDoc]) { p.agendPend[sDoc] = { ts: Date.now() }; writeJSON(PROC_KEY, p); state.lastSignature = ""; }
+    if (!p.agendPend[sDoc]) { p.agendPend[sDoc] = { ts: Date.now() }; _procGuardar(p); state.lastSignature = ""; }
   }
   function clearAgendamientoPendiente(docId) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    if (p.agendPend && p.agendPend[sDoc]) { delete p.agendPend[sDoc]; writeJSON(PROC_KEY, p); state.lastSignature = ""; }
+    if (p.agendPend && p.agendPend[sDoc]) { delete p.agendPend[sDoc]; _procGuardar(p); state.lastSignature = ""; }
   }
   // v18.0.106 (fila 34) — `procHoy`, opcional: el mapa ya leído por quien pinta 30 tarjetas.
   function isAgendamientoPendiente(docId, procHoy) {
@@ -8866,7 +8899,7 @@
       const p = getProcessedToday();
       if (!p.enVuelo) p.enVuelo = {};
       p.enVuelo[k] = Object.assign({}, det || {}, { ts: Date.now(), pestana: _vglPestanaId });
-      writeJSON(PROC_KEY, p);
+      _procGuardar(p);
     } catch (e) {}
   }
   function soltarEnVuelo(tipo, docId) {
@@ -8874,7 +8907,7 @@
     if (!k) return;
     try {
       const p = getProcessedToday();
-      if (p.enVuelo && p.enVuelo[k]) { delete p.enVuelo[k]; writeJSON(PROC_KEY, p); }
+      if (p.enVuelo && p.enVuelo[k]) { delete p.enVuelo[k]; _procGuardar(p); }
     } catch (e) {}
   }
   // {edadS} si OTRA pestaña (o esta misma antes de recargar) empezó a crear esto hace menos
@@ -8888,7 +8921,7 @@
       const m = p.enVuelo && p.enVuelo[k];
       if (!m) return null;
       const edad = Date.now() - Number(m.ts || 0);
-      if (!(edad >= 0 && edad < _EN_VUELO_MS)) { delete p.enVuelo[k]; writeJSON(PROC_KEY, p); return null; }
+      if (!(edad >= 0 && edad < _EN_VUELO_MS)) { delete p.enVuelo[k]; _procGuardar(p); return null; }
       if (m.pestana === _vglPestanaId) return null;
       return { edadS: Math.round(edad / 1000), tipo: String(tipo || "cita") };
     } catch (e) { return null; }
@@ -8933,7 +8966,7 @@
       det.ts = Date.now();
       p.ordenesDetalle[sDoc] = det;
     }
-    writeJSON(PROC_KEY, p);
+    _procGuardar(p);
     // v14.0.0 — Aquí se invalidaba también la caché del banner de PyM (T7); T7 se retiró
     // en la auditoría 2026-08-18 (código muerto sin llamador, ver CHANGELOG) y esa línea
     // se fue con él. Lo que SÍ sigue vivo es la caché de órdenes vigentes de T6: la orden
@@ -10766,6 +10799,19 @@
       viejas.forEach((k) => localStorage.removeItem(k));
       localStorage.removeItem(EVENTS_KEY);        // formato antiguo (un solo blob gigante)
     } catch (e) {}
+    // v18.0.108 (S+ robustez, B4) — el ESPEJO GM de la bitácora (espejo_vgl_ev_*, con nombre y
+    // cédula) no lo podaba nadie: crecía para siempre en el almacén del script. Misma regla
+    // de días que el original.
+    try {
+      if (typeof GM_listValues === "function" && typeof GM_deleteValue === "function") {
+        const lim2 = new Date(); lim2.setDate(lim2.getDate() - (dias || KEEP_DAYS));
+        for (const k of (GM_listValues() || [])) {
+          if (String(k).indexOf("espejo_vgl_ev_") !== 0) continue;
+          const f = new Date(String(k).slice("espejo_vgl_ev_".length) + "T00:00:00");
+          if (!isFinite(f) || f < lim2) { try { GM_deleteValue(k); } catch (e2) {} }
+        }
+      }
+    } catch (e) {}
   }
   try { window.addEventListener("beforeunload", evFlush); } catch (e) {}
   function csvCell(v) { const s = String(v === undefined || v === null ? "" : v); return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
@@ -10930,7 +10976,7 @@
   function repBeacon(obj) {
     try {
       if (!repOn()) return false;
-      const data = JSON.stringify(obj);
+      const data = JSON.stringify(_repFilaLimpia(obj));   // v18.0.108 (S+ robustez, B8) — sin campos internos (_intentos), como repPost
       if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
         const blob = new Blob([data], { type: "text/plain;charset=utf-8" });
         if (navigator.sendBeacon(repUrl(), blob)) return true;
@@ -21357,7 +21403,7 @@
           if (normalizeKey(a.doc_id || a.identificacion || "") === k) { a.citaAgendadaHoy = false; }
         });
       }
-      if (cambio) writeJSON(PROC_KEY, p);
+      if (cambio) _procGuardar(p);
       state.lastSignature = "";
       try { repaint(); } catch (e) {}
       try { createAccionesDockUI(); } catch (e) {}
@@ -21377,7 +21423,7 @@
       const p = getProcessedToday();
       if (p.ordenes && p.ordenes.includes(sDoc)) {
         p.ordenes = p.ordenes.filter((x) => x !== sDoc);
-        writeJSON(PROC_KEY, p);
+        _procGuardar(p);
       }
       if (typeof GM_deleteValue !== "undefined") {
         GM_deleteValue("vgl_ord_" + k);
@@ -27648,7 +27694,16 @@
         // algo?" sin abrir el contenido. Ver CHANGELOG.
         console.log("[Vigilante] EnviarEmailOrdenamiento — diagnóstico único: status=" + resp.status + " ok=" + resp.ok + " bytesRecibidos=" + cuerpo.length);
       }
-      return !!(resp && resp.ok);
+      // v18.0.108 (S+ robustez, B6) — un 200 con `error:true` se anunciaba como «enviado», el
+      // mismo defecto que v17.6.2 corrigió para el SMS. Sin captura del cuerpo real de este
+      // endpoint, la cautela es la de v17.0.3: solo se rechaza lo que el cuerpo declara
+      // rechazado (error/isError en true); un cuerpo vacío o no JSON no cambia el veredicto.
+      let rechazado = false;
+      try {
+        const b = await resp.clone().json();
+        if (b && (b.error === true || b.isError === true || b.Error === true)) rechazado = true;
+      } catch (e) {}
+      return !!(resp && resp.ok) && !rechazado;
     } catch (e) { console.warn("[Vigilante PyM] no se pudo enviar la orden por correo:", e); return false; }
   }
 
@@ -28533,7 +28588,7 @@
       if (!p.labsConductaDetalle) p.labsConductaDetalle = {};
       p.labsConductaDetalle[sDoc] = { claves: claves, ts: Date.now() };
     }
-    writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint();
+    _procGuardar(p); state.lastSignature = ""; repaint();
   }
 
   // =====================================================================
@@ -29528,6 +29583,9 @@
     try { return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function"; } catch (e) { return false; }
   }
 
+  function _vglCarpetaPareceSincronizada(nombre) {
+    return /onedrive|one ?drive|google ?drive|googledrive|dropbox|icloud|nextcloud|mega(sync)?|box ?sync/i.test(String(nombre || ""));
+  }
   async function vglCarpetaElegir() {
     if (!vglCarpetaDisponible()) return { ok: false, motivo: "El navegador no permite elegir una carpeta (necesita Chrome o Edge de escritorio)." };
     try {
@@ -29536,7 +29594,19 @@
       _vglCarpetaHandle = h;
       try { await _vglCarpetaGuardarHandle(h); } catch (e) {}   // v17.0.1 — sobrevive a la recarga
       try { uxTrack("carpeta.elegida"); } catch (e) {}
-      return { ok: true, nombre: h.name || "carpeta" };
+      // v18.0.108 (S+ robustez, B5) — el navegador solo entrega el NOMBRE de la carpeta, no su
+      // ruta: si ese nombre delata una carpeta sincronizada con la nube, se dice. No se
+      // bloquea (puede ser una carpeta local que se llame así), pero el médico lo sabe.
+      const sincronizada = _vglCarpetaPareceSincronizada(h.name);
+      if (sincronizada) {
+        try {
+          showToast("AMBAR", "Carpeta sincronizada con la nube",
+            "La carpeta «" + String(h.name || "") + "» parece pertenecer a un servicio de sincronización: lo que se guarde ahí (historias con cédula) SÍ sale del equipo por cuenta de ese programa. Si no es lo que quiere, elija una carpeta local, por ejemplo dentro de Documentos.",
+            true, "carpeta|sync");
+        } catch (e) {}
+        try { uxTrack("carpeta.sincronizada"); } catch (e) {}
+      }
+      return { ok: true, nombre: h.name || "carpeta", sincronizada: sincronizada };
     } catch (e) {
       // El usuario cerró el diálogo: no es un error que haya que gritar.
       return { ok: false, motivo: (e && e.name === "AbortError") ? "Elección cancelada." : "No se pudo abrir la carpeta: " + ((e && e.message) || e) };
@@ -29988,7 +30058,7 @@
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO. Decisión suya (20-ago): un .json por cédula
              con el historial completo de lo que el asistente vio en cada control. Vive en SU
              computador; nada de esto viaja por red. -->
-        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. <b>Todo se queda en su equipo</b> — no sale a ninguna red. El navegador le pedirá permiso una vez; si cierra Chrome habrá que volver a elegirla.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
+        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
         <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: se guarda una instantánea por control." : "Sin carpeta elegida: el historial solo vive en este navegador."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
         <!-- v15.8.0 (N4) — texto REAL de los SMS, capturado por el administrador. Vacío = la
              vista previa describe el contenido sin inventar redacción. -->

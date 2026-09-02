@@ -55,12 +55,12 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 |---|---|---|---|
 | B1 | El nombre del paciente viajaba a Gemini cuando el paciente abierto no está en la agenda del día; el borrador aceptado se archivaba como «estilo» con el nombre y se reinyectaba en otros pacientes; `.map(mtrSanearTextoLibreAI)` pasaba el índice como nombre; «Paciente Everest» tachaba la palabra PACIENTE | **alta** | ✅ v18.0.103 |
 | B2 | La hoja de hechos (bloque «escrito en la historia de HOY») llegaba al prompt sin el censor de nombres, incluso conociéndolo | **alta** | ✅ v18.0.103 |
-| B3 | Si la escritura local del candado «ya ordenado/agendado hoy» falla (cuota), el candado se pierde en silencio: el dock vuelve a ofrecer Ordenar/Agendar y el panel post-cita pierde la anulación | media | pendiente (comprobar el retorno de `writeJSON`, copia en memoria, espejo GM de `vgl_proc_today`) |
-| B4 | El espejo GM de la bitácora diaria (nombre+cédula) no se poda jamás | media | pendiente (`@grant GM_listValues/GM_deleteValue`, poda en `purgeEventDays`) |
-| B5 | Ajustes promete «Todo se queda en su equipo» para la carpeta de `<cédula>.json` sin advertir sobre carpetas sincronizadas (OneDrive/Drive) | media | pendiente (texto + heurística de nombre + confirmación) |
-| B6 | «Enviar órdenes al correo» da por enviado con solo `resp.ok` (un 200 con `error:true` se anuncia como enviado) | media | pendiente (sin captura del cuerpo real: leer `error/mensaje` con la cautela de v17.0.3) |
+| B3 | Si la escritura local del candado «ya ordenado/agendado hoy» falla (cuota), el candado se pierde en silencio: el dock vuelve a ofrecer Ordenar/Agendar y el panel post-cita pierde la anulación | media | ✅ v18.0.108 (`_procGuardar`: copia en memoria que manda si la escritura falla, aviso rojo una vez, `vgl_proc_today` en el espejo GM) |
+| B4 | El espejo GM de la bitácora diaria (nombre+cédula) no se poda jamás | media | ✅ v18.0.108 (poda del espejo en `purgeEventDays`, permisos añadidos) |
+| B5 | Ajustes promete «Todo se queda en su equipo» para la carpeta de `<cédula>.json` sin advertir sobre carpetas sincronizadas (OneDrive/Drive) | media | ✅ v18.0.108 (texto corregido + aviso ámbar si el nombre de la carpeta delata un servicio de sincronización; no bloquea) |
+| B6 | «Enviar órdenes al correo» da por enviado con solo `resp.ok` (un 200 con `error:true` se anuncia como enviado) | media | ✅ v18.0.108 (un 200 con `error:true` ya no es «enviado»; cuerpo vacío o no JSON no cambia el veredicto) |
 | B7 | Bitácora (flight recorder) pisada entre pestañas | baja | pendiente |
-| B8 | `repBeacon` manda `_intentos` (el blindaje de v18.0.66 solo en `repPost`) | baja | pendiente (una línea) |
+| B8 | `repBeacon` manda `_intentos` (el blindaje de v18.0.66 solo en `repPost`) | baja | ✅ v18.0.108 |
 | B9 | Las notificaciones del SO llevan nombre + cédula (Centro de actividades de Windows en un PC compartido) | baja | pendiente |
 | B10 | La consola de EnviarSMS imprime 500 caracteres del cuerpo crudo | baja | pendiente |
 | B11 | Doble clic en «Exámenes»: sin deshabilitar ni guarda de vuelo; el segundo pisa el veredicto | baja | pendiente |

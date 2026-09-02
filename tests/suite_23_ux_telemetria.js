@@ -1668,5 +1668,17 @@ module.exports = {
         "el último fallo sobrevive a un éxito posterior: es historia, no estado");
     });
 
+
+    // v18.0.108 — S+ robustez (B8): repBeacon mandaba la fila con sus campos internos (_intentos);
+    // el blindaje de v18.0.66 (_repFilaLimpia) solo estaba en repPost.
+    await t.casoAsync("v18.0.108 (S+ B8): repBeacon manda la fila LIMPIA, sin campos internos (_intentos), como repPost", async () => {
+      let cuerpo = null;
+      const c = cargar({ silencioso: true, fetch: async (u, o) => { cuerpo = o && o.body; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "ok", clone() { return this; } }; } });
+      t.cierto(c.api.repOn(), "montaje: el reporte está activo");
+      const fila = { token: "x", equipo: "eq-sint", ver: "18.0.108", evento: "ux", ts: "2026-09-02T10:00:00Z", dia: "2026-09-02", lote: "l1", _intentos: 2 };
+      t.cierto(c.api.repBeacon(fila), "el beacon sale");
+      t.cierto(!!cuerpo && !String(cuerpo).includes("_intentos") && String(cuerpo).includes("eq-sint"), "y el cuerpo no lleva _intentos (antes sí): " + String(cuerpo));
+    });
+
   }
 };

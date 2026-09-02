@@ -106,5 +106,18 @@ module.exports = {
       t.igual(det.agrupadores, ["1226083463"], "el detalle previo se conserva intacto");
       t.cierto(c.api.isOrdenesCreadasHoy("123456789"));
     });
+
+    // v18.0.108 — S+ robustez (B6): «Enviar órdenes al correo» daba por enviado con solo resp.ok;
+    // un 200 con error:true se anunciaba como enviado (el mismo defecto que v17.6.2 corrigió
+    // para el SMS). Sin captura del cuerpo real, la cautela es la de v17.0.3: solo se rechaza lo
+    // que el cuerpo declara rechazado.
+    await t.casoAsync("v18.0.108 (S+ B6): el correo de las órdenes no se da por enviado con un 200 que trae error:true; un cuerpo vacío o no JSON no cambia el veredicto", async () => {
+      const mk = (body, ok) => cargar({ silencioso: true, fetch: async () => ({ ok: ok !== false, status: ok === false ? 500 : 200, headers: { get: () => null }, json: async () => { if (body === null) throw new Error("no JSON"); return body; }, text: async () => (body === null ? "ok" : JSON.stringify(body)), clone() { return this; } }) });
+      t.igual(await mk({ error: true, mensaje: "rechazado" }).api.apiEnviarOrdenPorCorreo("AGP-1", "correo@prueba.co", 1), false, "200 con error:true → NO enviado (antes: enviado)");
+      t.igual(await mk({ error: false }).api.apiEnviarOrdenPorCorreo("AGP-1", "correo@prueba.co", 1), true, "200 con error:false → enviado");
+      t.igual(await mk(null).api.apiEnviarOrdenPorCorreo("AGP-1", "correo@prueba.co", 1), true, "200 sin JSON → enviado (solo se rechaza lo declarado)");
+      t.igual(await mk({}, false).api.apiEnviarOrdenPorCorreo("AGP-1", "correo@prueba.co", 1), false, "500 → no enviado");
+    });
+
   },
 };
