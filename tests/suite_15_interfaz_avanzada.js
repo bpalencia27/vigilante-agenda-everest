@@ -1519,7 +1519,13 @@ module.exports = {
       // (su contenido vive en el Panel). El Panel del paciente («ficha») se OCULTA hasta
       // cumplir los requisitos (con este mock no hay resumen cacheado → queda bloqueado e
       // invisible), y los atajos «Ir a…» se retiraron por completo.
-      t.igual(accs, ["agendar", "ordenar", "labs", "redactar", "control"]);
+      // v18.0.118 (UI/UX #5) — sin resumen en caché, donde antes no había NADA ahora está el
+      // botón «Panel del paciente · leyendo…», deshabilitado: un control que aparece de golpe
+      // desorienta tanto como uno que desaparece.
+      t.igual(accs, ["agendar", "ordenar", "labs", "ficha-leyendo", "redactar", "control"]);
+      const bLeyendo = btns.children.find((b) => b.getAttribute("data-accion") === "ficha-leyendo");
+      t.cierto(bLeyendo.disabled === true && bLeyendo.getAttribute("aria-disabled") === "true", "está deshabilitado: ningún clic hace nada");
+      t.cierto(bLeyendo.children.some((n) => n.className === "vgl-dock-lbl" && n.textContent === "Panel del paciente · leyendo…"), "y dice que está leyendo");
       t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
 
       // Segunda llamada: no duplica el contenedor del dock.
@@ -1684,7 +1690,7 @@ module.exports = {
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
       // v17.x.x — sin agendar/ordenar, y sin el Panel (oculto hasta cumplir requisitos) ni
       // los atajos «Ir a…» (retirados). Labs, Redactar y control se conservan.
-      t.igual(accs, ["labs", "redactar", "control"]);
+      t.igual(accs, ["labs", "ficha-leyendo", "redactar", "control"]);   // v18.0.118 (UI/UX #5)
     });
 
     t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {
@@ -2595,7 +2601,7 @@ module.exports = {
     // inspección de fuente, mismo patrón que ya usa este archivo para _afinarLabsPrimeroConCupos.
     t.caso("REGRESIÓN — el afinado de cargarHoras respeta labs-primero y la elección manual, y busca hacia atrás sin pasar del ideal (hallazgo pendiente REGLAS_MEDICO #2)", () => {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      const zonaCargarHoras = src.slice(src.indexOf("async function cargarHoras("), src.indexOf("async function cargarHoras(") + 2000);
+      const zonaCargarHoras = src.slice(src.indexOf("async function cargarHoras("), src.indexOf("async function cargarHoras(") + 2600);   // v18.0.118: el bloque creció con el recuadro de decisión
       t.cierto(/if \(!_labsPrimero && !_labFechaTomaElegidaManual\) \{/.test(zonaCargarHoras),
         "no se afina en modo labs-primero (ese modo ya se afina con _afinarLabsPrimeroConCupos) ni si el médico ya eligió a mano");
       const zonaAfinar = src.slice(src.indexOf("async function _afinarTomaControlPrimeroConCupos("), src.indexOf("async function _afinarTomaControlPrimeroConCupos(") + 1500);
@@ -3031,7 +3037,10 @@ module.exports = {
       const m3 = await abrirYConfirmar();
       await esperar(40);
       t.igual(asignar.length, 1, "un solo clic tras reabrir NO crea otra cita real (antes: 2 AsignarTurno)");
-      t.cierto(m3.querySelector("#vgl-agm-confirm").textContent.includes("ya se le creó una cita"), "la antidup avisa: " + m3.querySelector("#vgl-agm-confirm").textContent);
+      // v18.0.118 (UI/UX #4) — el aviso ya no reescribe el botón: vive en el recuadro de decisión
+      // con dos salidas («Sí, crear igual» / «Revisar»). La protección es la misma: no se creó nada.
+      t.cierto(m3.querySelector("#vgl-agm-confirm-aviso").innerHTML.includes("ya se le creó una cita"), "la antidup avisa en el recuadro: " + m3.querySelector("#vgl-agm-confirm-aviso").innerHTML.slice(0, 120));
+      t.falso(m3.querySelector("#vgl-agm-confirm-aviso").classList.contains("vgl-d-none"), "y el recuadro se ve");
     });
 
     // =====================================================================
@@ -3076,13 +3085,24 @@ module.exports = {
         return modal;
       };
       const txt = (m) => m.querySelector("#vgl-agm-confirm").textContent;
+      // v18.0.118 (UI/UX #4) — el aviso ya no reescribe el botón: vive en el recuadro de decisión.
+      const aviso = (m) => String((m.querySelector("#vgl-agm-confirm-aviso") || {}).innerHTML || "");
+      // y «seguir» es pulsar «Sí, crear igual» dentro de ese recuadro (no un segundo clic a ciegas).
       const clic = (m) => { m.querySelector("#vgl-agm-confirm").dataset.ultimoClic = "0"; disparar(m.querySelector("#vgl-agm-confirm"), "click"); };
+      // v18.0.118 (UI/UX #4) — «seguir a pesar del aviso» ya no es un segundo clic a ciegas en el
+      // botón: es pulsar «Sí, crear igual» DENTRO del recuadro de decisión (memo propio del nodo).
+      const seguirIgual = (m) => {
+        const caja = m.querySelector("#vgl-agm-confirm-aviso");
+        const si = caja && caja.querySelector ? caja.querySelector("#vgl-agm-ca-si") : null;
+        if (si && si._listeners && si._listeners.click) si._listeners.click.forEach((f) => f({}));
+        return !!(si && si._listeners && si._listeners.click);
+      };
       const okLento = (asignar) => async () => { await esperar(250); return respuestaJson({ error: false, data: { radicado: 100 + asignar.length, motivo: "Agendada Correctamente" } }); };
-      return { fixture, DOC, abrirYConfirmar, txt, clic, okLento };
+      return { fixture, DOC, abrirYConfirmar, txt, clic, aviso, seguirIgual, okLento };
     })();
 
     await t.casoAsync("v18.0.105 ANTIDUP — dos pestañas: la segunda ve la cita en vuelo de la primera y NO crea otra en silencio; tras recargar en vuelo, tampoco; una marca de hace más de 60 s no bloquea a nadie", async () => {
-      const { fixture, DOC, abrirYConfirmar, txt, clic, okLento } = _v105;
+      const { fixture, DOC, abrirYConfirmar, txt, clic, aviso, seguirIgual, okLento } = _v105;
       // (a) dos pestañas = dos contextos sobre el MISMO almacén
       const almacen = {}; const asignar = [];
       const A = fixture(almacen, asignar, okLento(asignar)), B = fixture(almacen, asignar, okLento(asignar));
@@ -3090,12 +3110,13 @@ module.exports = {
       t.igual(asignar.length, 1, "montaje: la pestaña A tiene un AsignarTurno en vuelo");
       const mB = await abrirYConfirmar(B); await esperar(40);
       t.igual(asignar.length, 1, "la pestaña B, con la cita de A en vuelo, NO dispara otro POST (antes: 2 citas reales)");
-      t.cierto(txt(mB).includes("otra pestaña"), "y el botón de B dice por qué y pide un segundo clic consciente: " + txt(mB));
+      t.cierto(aviso(mB).includes("otra pestaña"), "y B lo dice en el recuadro de decisión, con «Sí, crear igual» y «Revisar» (v18.0.118, UI/UX #4)");
       await esperar(400);
       t.cierto(B.api.isCitaAgendadaHoy(DOC), "cuando A recibe la respuesta, la marca del día ya la ve B");
-      clic(mB); await esperar(40);
-      t.igual(asignar.length, 1, "el segundo clic en B ya lo frena la antidup de siempre, porque la marca existe");
-      t.cierto(txt(mB).includes("ya se le creó una cita"), "con el aviso de siempre: " + txt(mB));
+      t.cierto(seguirIgual(mB), "«Sí, crear igual» existe en el recuadro");
+      await esperar(40);
+      t.igual(asignar.length, 1, "seguir a pesar del aviso de vuelo ajeno lo frena ahora la antidup de siempre, porque la marca existe");
+      t.cierto(aviso(mB).includes("ya se le creó una cita"), "con el aviso de siempre, ahora en el recuadro");
       // (b) recarga en vuelo: la pestaña muere sin recibir la respuesta; la recargada (contexto
       //     nuevo, mismo almacén) abre y confirma
       const almacen2 = {}; const asignar2 = [];
@@ -3104,9 +3125,10 @@ module.exports = {
       await abrirYConfirmar(P1); await esperar(40);
       const m2 = await abrirYConfirmar(P2); await esperar(40);
       t.igual(asignar2.length, 1, "la pestaña recargada NO crea otra cita en silencio (antes: 2)");
-      t.cierto(txt(m2).includes("antes de recargar"), "avisa que hace segundos se estaba creando una: " + txt(m2));
-      clic(m2); await esperar(60);
-      t.igual(asignar2.length, 2, "el médico manda: el segundo clic consciente sí crea la cita");
+      t.cierto(_v105.aviso(m2).includes("antes de recargar"), "avisa que hace segundos se estaba creando una, en el recuadro de decisión");
+      t.cierto(_v105.seguirIgual(m2), "«Sí, crear igual» existe en el recuadro");
+      await esperar(60);
+      t.igual(asignar2.length, 2, "el médico manda: pulsar «Sí, crear igual» sí crea la cita");
       // (c) la marca de una pestaña muerta caduca sola a los 60 s
       const almacen3 = {}; const asignar3 = [];
       const P3 = fixture(almacen3, asignar3, async () => respuestaJson({ error: false, data: { radicado: 301, motivo: "Agendada Correctamente" } }));
@@ -3366,7 +3388,12 @@ module.exports = {
       // El sondeo hace una petición POR DÍA con concurrencia acotada (3 a la vez): con la
       // ventana de ±7 hábiles + sábados alcanza sobrando con una espera generosa.
       await esperar(500);
-      t.falso([...chipsEl.children].some((b) => b.className.includes("vgl-agm-pbtn-sabado")), "los sábados sin agenda real ya no están: el sondeo los retiró");
+      // v18.0.118 (UI/UX #9) — el sondeo ya no los BORRA (los vecinos se corrían bajo el cursor y
+      // el clic caía en otro día): los apaga en el sitio, tachados y con su motivo.
+      const sabados = [...chipsEl.children].filter((b) => b.className.includes("vgl-agm-pbtn-sabado"));
+      t.cierto(sabados.length > 0, "los sábados siguen en su sitio (ya no desaparecen)");
+      t.cierto(sabados.every((b) => b.disabled === true && b.classList.contains("vgl-agm-pbtn-sinagenda")), "pero quedaron deshabilitados y tachados: sin agenda real ese día");
+      t.cierto(sabados.every((b) => /Sin agenda del servicio/.test(String(b.title || ""))), "y dicen por qué");
       // Los días HÁBILES normales, que sí tenían agenda en el mock, se conservan todos.
       t.cierto(chipsEl.children.length >= 15, "los días hábiles con agenda real siguen ahí");
     });
@@ -3442,7 +3469,10 @@ module.exports = {
       await esperar(500);
       const activo = [...chipsEl.children].find((b) => b.classList.contains("active"));
       t.cierto(!!activo, "el chip activo (día centro) sigue en el DOM tras el sondeo, aunque estaba confirmado vacío");
-      t.cierto(chipsEl.children.length < 18, "los días NO activos que sí estaban confirmados vacíos sí se retiraron");
+      // v18.0.118 (UI/UX #9) — se apagan en vez de retirarse; el activo nunca se toca.
+      const apagados = [...chipsEl.children].filter((b) => b.disabled === true && b.classList.contains("vgl-agm-pbtn-sinagenda"));
+      t.cierto(apagados.length > 0, "los días NO activos confirmados vacíos quedaron apagados");
+      t.falso(activo.disabled === true, "y el chip activo sigue vivo");
     });
 
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"
@@ -3478,8 +3508,10 @@ module.exports = {
       const modal = cSweep.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const chipsEl = modal.querySelector("#vgl-day-chips");
       await esperar(1200);
-      const quedaSabado = [...chipsEl.children].some((b) => b.className.includes("vgl-agm-pbtn-sabado"));
-      t.falso(quedaSabado, "el chip del sábado con agenda solo ajena se retiró — la misma regla de 'propia' que bloquea el día central también aplica al sondeo en segundo plano");
+      // v18.0.118 (UI/UX #9) — ya no se retira: se apaga en el sitio. La regla de «propia» es la misma.
+      const sabAjena = [...chipsEl.children].filter((b) => b.className.includes("vgl-agm-pbtn-sabado"));
+      t.cierto(sabAjena.length > 0 && sabAjena.every((b) => b.disabled === true && b.classList.contains("vgl-agm-pbtn-sinagenda")),
+        "el sábado con agenda solo AJENA queda apagado, igual que si estuviera vacío — la misma regla de 'propia' que bloquea el día central también aplica al sondeo en segundo plano");
     });
 
     // ================= openLabSoloModal =================
@@ -4523,16 +4555,17 @@ module.exports = {
       const btn2 = [...slots.children].find((b) => (b.innerHTML || "").includes("10:00 AM"));
       disparar(btn1, "click");
       disparar(confirmBtn, "click");
-      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "1er confirmar muestra el aviso antidup");
-      t.igual(confirmBtn.dataset.dupOk, "1", "y lo marca en el dataset");
+      const cajaAviso = modal.querySelector("#vgl-agm-confirm-aviso");
+      t.cierto(cajaAviso.innerHTML.includes("ya se le creó una cita"), "1er confirmar muestra el aviso antidup en el recuadro de decisión (v18.0.118, UI/UX #4)");
+      t.igual(confirmBtn.dataset.dupOk, "", "y NO da por consentido nada: el flag solo lo pone «Sí, crear igual»");
       disparar(btn2, "click");
-      t.igual(confirmBtn.dataset.dupOk, "", "cambiar de turno reinicia la marca");
+      t.igual(cajaAviso.innerHTML, "", "cambiar de turno retira el aviso viejo (ya no aplica a esta fecha)");
       t.cierto(confirmBtn.textContent.includes("10:00 AM"), "el botón nombra la hora recién elegida");
       // El anti-doble-clic (v17.6.8) ignora un segundo clic en <700 ms del anterior: se
       // espera el tiempo real entre los dos confirmar, como en la consulta.
       await esperar(750);
       disparar(confirmBtn, "click");
-      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "el 2º confirmar vuelve a exigir la doble confirmación");
+      t.cierto(cajaAviso.innerHTML.includes("ya se le creó una cita"), "el 2º confirmar vuelve a exigir la decisión explícita");
       t.falso(urlsVistas.some((u) => u.includes("AsignarTurno")), "no se creó ninguna cita por el clic a ciegas");
     });
 
@@ -5467,6 +5500,113 @@ module.exports = {
       t.cierto(iAviso < iPaso1, "el aviso va ANTES del paso 1: fuera de las tres vistas (antes vivía dentro del paso 2, oculto en el 3)");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/uxTrack\("cita\.vencimiento\.corregir"\); \} catch \(e\) \{\}\s*\n[^\n]*\n[^\n]*\n\s*try \{ if \(typeof pasoActual !== "undefined" && pasoActual !== 2\) irAPaso\(2\); \}/.test(src), "«Pasar a la fecha sugerida» vuelve al paso 2, donde están los chips de día");
+    });
+
+    // =====================================================================
+    // v18.0.118 — AUDITORÍA UI/UX, lote 2 (F-4, F-5, F-6, F-9, F-10) + decisión de Ordenar
+    // =====================================================================
+    await t.casoAsync("v18.0.118 (UI/UX #4): con cita de hoy, Confirmar pinta el recuadro de decisión y NO crea nada; «Sí, crear igual» crea; «Revisar» deja el flag limpio", async () => {
+      const urls = [];
+      const mk = () => {
+        const c = cargar({
+          silencioso: true,
+          fetch: async (url) => {
+            const u = String(url); urls.push(u);
+            if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+            if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+            if (u.includes("BuscarCitasDisponibles")) {
+              const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+              return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+            }
+            if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+            if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+            if (u.includes("AsignarTurno")) return respuestaJson({ error: false, data: { radicado: 4242, motivo: "Agendada Correctamente" } });
+            return respuestaJson({});
+          },
+          gmxhr: (o) => { if (o.onerror) o.onerror("sin AppCita en la prueba"); },
+        });
+        enriquecerDom(c);
+        c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+        return c;
+      };
+      const c = mk();
+      c.api.markCitaAgendadaHoy("555111", "2026-10-01");     // ya hay una cita de hoy
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      await esperar(60);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      const caja = modal.querySelector("#vgl-agm-confirm-aviso");
+      const rotuloAntes = confirmar.textContent;
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(30);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 0, "no se creó ninguna cita");
+      t.cierto(/ya se le creó una cita/.test(caja.innerHTML), "el aviso vive en el recuadro, con su motivo");
+      t.cierto(/Sí, crear igual/.test(caja.innerHTML) && /Revisar/.test(caja.innerHTML), "y con dos salidas explícitas");
+      t.igual(confirmar.textContent, rotuloAntes, "el botón CONSERVA su rótulo (antes lo reescribían tres avisos encadenados)");
+      t.igual(confirmar.dataset.dupOk, "", "y no se da por consentido nada todavía");
+      // «Revisar» cierra el recuadro y deja el flag limpio: el próximo intento vuelve a preguntar
+      const no = caja.querySelector("#vgl-agm-ca-no");
+      (no._listeners.click || []).forEach((f) => f({}));
+      t.igual(caja.innerHTML, "", "«Revisar» retira el recuadro");
+      t.igual(confirmar.dataset.dupOk, "", "sin consentir nada");
+      // «Sí, crear igual» sí crea
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(30);
+      const si = caja.querySelector("#vgl-agm-ca-si");
+      (si._listeners.click || []).forEach((f) => f({}));
+      await esperar(60);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "«Sí, crear igual» sigue adelante: el médico manda");
+    });
+
+    t.caso("v18.0.118 (UI/UX #5): sin resumen calculado, el dock muestra «Panel del paciente · leyendo…» deshabilitado en vez de un hueco", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      mockPacienteDock(c, "555666777");
+      c.api.createAccionesDockUI();
+      let dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      let btns = dock.children.find((n) => n.className === "vgl-dock-btns");
+      const bLey = btns.children.find((b) => b.getAttribute("data-accion") === "ficha-leyendo");
+      t.cierto(!!bLey && bLey.disabled === true, "existe y está deshabilitado");
+      t.cierto(/Leyendo laboratorios/.test(String(bLey.title || "")), "y dice qué está haciendo");
+      t.igual(btns.children.filter((b) => b.getAttribute("data-accion") === "ficha").length, 0, "el botón real todavía no");
+      // con el resumen ya calculado, el botón real sustituye al de «leyendo»
+      c.api.mtrCacheResumenGuardar("555666777", { factores: { hta: true, diabetes: true, tabaquismo: false, sexo: "M", edad: 60 } });
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "anamesis" ? { id: "anamesis" } : null));
+      c.api.createAccionesDockUI();
+      dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      btns = dock.children.find((n) => n.className === "vgl-dock-btns");
+      t.igual(btns.children.filter((b) => b.getAttribute("data-accion") === "ficha-leyendo").length, 0, "«leyendo» desaparece en cuanto hay resumen: el dock se repinta");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_resumenListoParaGate \? "RS" : "rs"\]\.join\("\|"\)/.test(src),
+        "y ese estado entra en la firma del dock: sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
+    });
+
+    await t.casoAsync("v18.0.118 (UI/UX #6): sin resumen, «Próximo control» dice que está leyendo y «Reintentar ahora» lo resuelve en el sitio", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      await c.api.openPaquetesModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-paquete-modal");
+      const body = modal.querySelector("#vgl-paquete-body");
+      t.cierto(/Todavía estoy leyendo/.test(body.innerHTML), "dice lo que de verdad pasa (antes: «abra la historia», que es donde ya está)");
+      t.falso(/Abra la historia un momento/.test(body.innerHTML), "y ya no manda a hacer lo que el médico acaba de hacer");
+      const re = body.querySelector("#vgl-paquete-reintentar");
+      t.cierto(!!re, "con «Reintentar ahora»");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/await mtrCalcularResumenClinico\(apt, \(\) => !cerrado\);/.test(src), "el reintento calcula el resumen con la guarda de cerrado");
+      t.cierto(/if \(ordenarBtn\) ordenarBtn\.style\.display = "";\s*\n\s*repintar\(\);/.test(src), "y al conseguirlo repinta y devuelve «Ordenar pendientes»");
+    });
+
+    t.caso("v18.0.118 (UI/UX #10 + decisión de Ordenar): el «Siguiente» del paso 2 explica por qué está apagado; Ordenar abre el PDF detrás sin robar la pantalla", () => {
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.igual((src.match(/step2Next\.textContent = "Elija un horario para continuar"/g) || []).length, 1, "sin turno elegido, el botón del paso 2 lo dice");
+      t.igual((src.match(/step2Next\.textContent = "Siguiente: Confirmación ➔"/g) || []).length, 2, "y recupera su rótulo en los dos sitios que habilitan (clic en turno y preselección ⭐)");
+      t.cierto(/pestanaImpresion\.blur === "function"\) pestanaImpresion\.blur\(\)/.test(src) && /if \(typeof window\.focus === "function"\) window\.focus\(\)/.test(src),
+        "Ordenar abre la pestaña del PDF detrás y devuelve el foco a Everest (decisión del médico, 02-sep)");
+      t.cierto(/_bloquearCierre\(true\);/.test(src) && /_ordGenerandoDocs\.has\(_agmClaveDoc\(apt\.doc_id\)\)\) \{ uxTrack\("ordenes\.cerrar\.en_vuelo"\); return; \}/.test(src),
+        "y mientras el lote corre, ✕ / Cancelar / Escape esperan (UI/UX #14)");
     });
 
   },

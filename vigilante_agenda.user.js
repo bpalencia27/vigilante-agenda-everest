@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.117
+// @version      18.0.118
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.117";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.118";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5789,6 +5789,7 @@
       clave: MTR_REPETIR_CLAVE,
       severidad: "media",
       etiqueta: "¿Repetir antes los exámenes fuera de meta de este paciente?",
+      rotuloSi: "Sí, repetirlos antes", rotuloNo: "No, en su vigencia normal",   // v18.0.118 (UI/UX #11)
       porQue: "si responde que sí se piden al 50 % de su vigencia; si responde que no, en su vigencia normal, sin adelantar",
       afirman: [{ fuente: "Fuera de meta", detalle: lista.join(", ") }],
       niegan: niegan,
@@ -5945,6 +5946,7 @@
       clave: cfg.claveAdecuado,
       severidad: "media",
       etiqueta: cfg.preguntaAdecuado,
+      rotuloSi: "Sí, es adecuado", rotuloNo: "No, hay que ajustarlo",   // v18.0.118 (UI/UX #11)
       porQue: "el tratamiento existe, pero si la dosis se quedó corta o la intensidad es insuficiente, "
         + "ajustarlo antes de repetir el examen evita un viaje que no cambia nada",
       afirman: [],
@@ -5958,6 +5960,7 @@
       clave: cfg.claveAdherencia,
       severidad: "media",
       etiqueta: cfg.preguntaAdherencia,
+      rotuloSi: "Sí lo toma", rotuloNo: "No lo toma",   // v18.0.118 (UI/UX #11)
       porQue: "si el paciente no está tomando el medicamento, el examen repetido no va a mejorar: "
         + "la causa no es el fármaco, es la toma",
       afirman: [],
@@ -7616,7 +7619,11 @@
       // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
       // así que la firma solo necesita saber si sigue bloqueado o no.
       _panelBloqueado ? "PB" : "pb", mtrCacheResumenDesactualizado(docId) ? "DA" : "da", _autorizado ? "AU" : "no",
-      mtrIaGenerando() ? "IA" : "ia", _pendientesPanel.length].join("|");   // v18.0.112 (C7, C12)
+      mtrIaGenerando() ? "IA" : "ia", _pendientesPanel.length,
+      // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
+      // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
+      // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
+      _resumenListoParaGate ? "RS" : "rs"].join("|");   // v18.0.112 (C7, C12)
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -7778,6 +7785,20 @@
       _vglDockRotulo(bFaltan, "📝", VGL_ROTULOS.faltan);
       bFaltan.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.faltan.abrir"); _vglAbrirAyudanteFaltan(apt, _pendientesPanel); });
       btns.appendChild(bFaltan);
+    } else if (_autorizado && !_resumenListoParaGate) {
+      // v18.0.118 (UI/UX #5) — mientras el resumen automático corre (3-6 s, más si Athenea va lenta)
+      // el sexto botón «aparecía de golpe»: un control que aparece solo desorienta tanto como uno que
+      // desaparece (C3). Existe, atenuado y deshabilitado, y dice que está leyendo. Ningún clic hace
+      // nada; la firma del dock ya incluye PB/pb, así que se repinta solo cuando el resumen llega.
+      const bLeyendo = document.createElement("button");
+      bLeyendo.className = "vgl-dock-btn vgl-dock-btn-atenuado";
+      bLeyendo.setAttribute("data-accion", "ficha-leyendo");
+      bLeyendo.disabled = true;
+      bLeyendo.setAttribute("aria-disabled", "true");
+      bLeyendo.setAttribute("aria-label", "Panel del paciente: leyendo la historia, disponible en unos segundos");
+      bLeyendo.title = "🧾 Leyendo laboratorios, medicamentos e historia (unos segundos). Se activa solo al terminar.";
+      _vglDockRotulo(bLeyendo, "🧾", VGL_ROTULOS.panel + " · leyendo…");
+      btns.appendChild(bLeyendo);
     }
 
     // v15.6.0 — Redactor de texto libre con IA (Propuesta 3): módulo propio, separado
@@ -14538,9 +14559,13 @@
           const criticos = agrupados.filter(t => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR").length;
           // v17.11.0 — mismo defecto que en _agruparToasts, y aquí afecta a MÁS avisos a la
           // vez: «Alerta Múltiple» salía en ÁMBAR fijo aunque dentro hubiera un ROJO.
+          // v18.0.118 (UI/UX #8) — el cuerpo dice DE QUÉ son los avisos (mismo formato «• título»
+          // que _agruparToasts), no solo cuántos: con «3 críticas y 1 rutinarias» a secas el médico
+          // no sabía de qué se trataba ni de quién, y son los avisos que se apilan en el peor momento.
           _renderToast(mtrColorMasGrave(agrupados.map((t) => t && t.color)),
             `Alerta Múltiple (${agrupados.length})`,
-            `${criticos} alertas críticas y ${agrupados.length - criticos} rutinarias recibidas.`, true);
+            `${criticos} críticas · ${agrupados.length - criticos} rutinarias — `
+              + agrupados.map((t) => "• " + String((t && t.title) || "")).join("  |  "), true);
         } else {
           agrupados.forEach(t => _renderToast(t.color, t.title, t.body, t.persist, t.apptKey));
         }
@@ -16922,13 +16947,18 @@
       .vgl-tab-fechas{font-size:var(--t-micro);color:var(--fg2) !important;margin-top:8px}
       .vgl-tab-aviso{font-size:var(--t-micro);color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.10);border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-chip);padding:8px 10px;margin-bottom:10px}
       /* v15.9.0 — aviso de fecha que deja vencer un examen (informa, no bloquea) */
-      #vgl-agm-vencaviso{
+      /* v18.0.118 (UI/UX #4) — el recuadro de decision de Confirmar comparte el dibujo del aviso de
+         vencimiento: las mismas tres reglas con un selector mas, cero declaraciones de color nuevas */
+      #vgl-agm-vencaviso,#vgl-agm-confirm-aviso{
         margin-top:8px;padding:10px 12px;border-radius:var(--r-card);
         background:rgba(var(--rgb-ambar),.10);border:1px solid rgba(var(--rgb-ambar),.45);
         font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5
       }
-      #vgl-agm-vencaviso b{color:var(--c-ambar) !important}
-      #vgl-agm-vencaviso .vgl-agm-pbtn{margin:8px 6px 0 0}
+      #vgl-agm-vencaviso b,#vgl-agm-confirm-aviso b{color:var(--c-ambar) !important}
+      #vgl-agm-vencaviso .vgl-agm-pbtn,#vgl-agm-confirm-aviso .vgl-agm-pbtn{margin:8px 6px 0 0}
+      /* v18.0.118 (UI/UX #9) — chip de dia sin agenda: apagado en el sitio, sin saltos de layout.
+         Especificidad 1,1,0: no compite con .vgl-agm-pbtn:hover ni con .active (0,2,0). */
+      #vgl-day-chips .vgl-agm-pbtn-sinagenda{opacity:.45;text-decoration:line-through;cursor:not-allowed;transform:none}
       /* v15.8.0 (N4) — enlace discreto para ver el mensaje del paciente */
       .vgl-agm-lnk{background:none;border:none;padding:0;margin:2px 0 0;color:var(--c-azul) !important;font-size:var(--t-micro);cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
       .vgl-agm-lnk:hover{opacity:.85}
@@ -20559,8 +20589,12 @@
   // «Centinela PyM», abajo a la derecha, mientras todo lo visible decía éxito).
   let _labUltimoFallo = "";
   function _labMotivoUltimoFallo() { return _labUltimoFallo; }
-  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, celular) {
+  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, celular, opts) {
     _labUltimoFallo = "";
+    // v18.0.118 (UI/UX #7) — con {silencioso:true} el HUD «🛡️ Centinela PyM» (abajo a la derecha) no
+    // se dispara: el llamador (Agendar) ya dice el fallo por toast ámbar, panel post-cita y botón
+    // (C4). Cuatro canales para un hecho eran ruido. El motivo (_labUltimoFallo) se guarda igual.
+    const _hud = (msg, ms) => { if (!(opts && opts.silencioso)) { try { spToast(msg, ms); } catch (e) {} } };
     try {
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${fechaIso}`;
       // v16.7.0 — AUDITORÍA #11. Esto usaba gmPostJson, que devuelve null tanto si
@@ -20573,7 +20607,7 @@
       const resAgEx = await gmPostJsonEx(urlTurnos, {});
       if (!resAgEx || !resAgEx.ok) {
         _labUltimoFallo = "no se pudo consultar la disponibilidad de laboratorio en AppCita (" + (resAgEx && resAgEx.status ? "respuesta " + resAgEx.status : "sin conexión") + ")";
-        spToast(`⚠ No se pudo consultar la disponibilidad de laboratorio en AppCita (${resAgEx && resAgEx.status ? "respuesta " + resAgEx.status : "sin conexión"}). NO se agendó la toma de muestras y NO se sabe si quedaban cupos ese día: reintente con el botón 🧪 de la tarjeta del paciente, o agende la toma directamente en AppCita.`, 14000);
+        _hud(`⚠ No se pudo consultar la disponibilidad de laboratorio en AppCita (${resAgEx && resAgEx.status ? "respuesta " + resAgEx.status : "sin conexión"}). NO se agendó la toma de muestras y NO se sabe si quedaban cupos ese día: reintente con el botón 🧪 de la tarjeta del paciente, o agende la toma directamente en AppCita.`, 14000);
         return false;
       }
       const turnos = extractAgendasList(resAgEx.data);
@@ -20586,7 +20620,7 @@
       // está disponible», y ese era el motivo que se le mostraba al médico. Se dice la verdad.
       if (!horaSeleccionada) {
         _labUltimoFallo = "no se eligió la hora de la toma";
-        spToast("⚠ No se eligió la hora de la toma de muestras: NO se agendó. Elíjala desde «Agendar labs» en la tarjeta del paciente.", 12000);
+        _hud("⚠ No se eligió la hora de la toma de muestras: NO se agendó. Elíjala desde «Agendar labs» en la tarjeta del paciente.", 12000);
         return false;
       }
       if (turnos && turnos.length && horaSeleccionada) {
@@ -20623,7 +20657,7 @@
           ? ` Siguen libres ese día: ${muestra}${resto}. Elija otro horario y reintente; si este panel ya se cerró, use el botón 🧪 de la tarjeta del paciente para reintentar solo la toma de muestras.`
           : " Ese día ya no quedan horarios libres de laboratorio en AppCita.";
         _labUltimoFallo = "el horario de laboratorio elegido (" + format12hTime(horaSeleccionada) + ") ya no está disponible";
-        spToast(`⚠ El horario de laboratorio elegido (${format12hTime(horaSeleccionada)}) ya no está disponible.${sugerencia} NO se agendó la toma de muestras.`, 14000);
+        _hud(`⚠ El horario de laboratorio elegido (${format12hTime(horaSeleccionada)}) ya no está disponible.${sugerencia} NO se agendó la toma de muestras.`, 14000);
         return false;
       }
       // v11.0.1 — Sin valores fabricados: el "07:00:00" y sobre todo el agendaId
@@ -20663,7 +20697,7 @@
       if (!agendaId || !horaFinal) {
         try {
           _labUltimoFallo = "el turno de laboratorio llegó sin identificador de agenda";
-          spToast("⚠ El turno de laboratorio llegó sin identificador de agenda: NO se agendó la toma. "
+          _hud("⚠ El turno de laboratorio llegó sin identificador de agenda: NO se agendó la toma. "
             + "Agéndela directamente en AppCita.", 12000);
         } catch (e) {}
         return false;
@@ -20697,7 +20731,7 @@
       const creada = !!(resBook.ok && body && body.error === false);
       if (!creada) {
         _labUltimoFallo = "AppCita no confirmó la cita de laboratorio (respuesta " + (resBook.status || "sin conexión") + ")";
-        spToast(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
+        _hud(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
         return false;
       }
       const radicado = body.radicado;
@@ -22706,8 +22740,26 @@
     try {
       try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
       if (!resumen) {
-        if (body) body.innerHTML = '<div class="vgl-agm-err">No se pudo leer el resumen del paciente. Abra la historia un momento (ahí se carga solo) y vuelva a abrir este módulo.</div>';
+        // v18.0.118 (UI/UX #6) — el botón 📦 solo existe con la historia abierta: pedirle al médico
+        // «abra la historia» era pedirle lo que ya hizo. Lo que pasa es que el cálculo automático aún
+        // no terminó: se dice eso, y se ofrece reintentar aquí mismo (calcula y repinta en el sitio).
+        if (body) body.innerHTML = '<div class="vgl-agm-err">⏳ Todavía estoy leyendo los exámenes y medicamentos de este paciente (unos segundos). '
+          + '<button type="button" class="vgl-agm-pbtn vgl-sm" id="vgl-paquete-reintentar">Reintentar ahora</button></div>';
         if (ordenarBtn) ordenarBtn.style.display = "none";
+        const _re = (body && body.querySelector) ? body.querySelector("#vgl-paquete-reintentar") : null;
+        if (_re && _re.addEventListener) _re.addEventListener("click", async () => {
+          _re.disabled = true; _re.textContent = "⏳ Leyendo…";
+          try { uxTrack("fn.paquete.reintentar"); } catch (e) {}
+          try { await mtrCalcularResumenClinico(apt, () => !cerrado); } catch (e) {}
+          if (cerrado) return;
+          try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
+          if (!resumen) { _re.disabled = false; _re.textContent = "Reintentar ahora"; return; }
+          try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
+          if (ordenarBtn) ordenarBtn.style.display = "";
+          repintar();
+          _fnCompletado = true;
+          try { uxTrack("fn.paquete.complete"); } catch (e) {}
+        });
         return;
       }
       try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
@@ -24891,6 +24943,12 @@
         ? "⚠ Usted ya respondió esto antes, y la historia de hoy dice lo contrario — mandan las casillas de la historia."
         : "");
 
+      // v18.0.118 (UI/UX #11) — «Las fuentes no coinciden» solo cuando de verdad hay fuentes a favor
+      // Y en contra de un dato del paciente. Con solo preguntas de la escalera (repetir antes,
+      // adecuación, adherencia) ese título era falso: no hay contradicción, hay algo que el script
+      // no puede leer. Los botones toman el rótulo de cada pregunta; los factores conservan «Sí/No tiene».
+      const _hayContradiccion = (discrepancias || []).some((d) => d && !d.rotuloSi && (d.afirman || []).length > 0 && (d.niegan || []).length > 0);
+      const _tituloConf = _hayContradiccion ? "🔎 Las fuentes no coinciden" : "🔎 Antes de calcular, unas preguntas";
       const filas = discrepancias.map((d) => {
         return `
           <div class="vgl-conf-item" data-clave="${escapeHtml(d.clave)}">
@@ -24900,8 +24958,8 @@
             <div class="vgl-conf-fuentes" id="vgl-conf-ne-${escapeHtml(d.clave)}">${escapeHtml(_textoEnContra(d))}</div>
             <div class="vgl-conf-porque" id="vgl-conf-pq-${escapeHtml(d.clave)}">${escapeHtml(_textoPorque(d))}</div>
             <div class="vgl-conf-btns">
-              <button class="vgl-agm-btn pri" id="vgl-conf-si-${escapeHtml(d.clave)}">Sí tiene</button>
-              <button class="vgl-agm-btn sec" id="vgl-conf-no-${escapeHtml(d.clave)}">No tiene</button>
+              <button class="vgl-agm-btn pri" id="vgl-conf-si-${escapeHtml(d.clave)}">${escapeHtml(d.rotuloSi || "Sí tiene")}</button>
+              <button class="vgl-agm-btn sec" id="vgl-conf-no-${escapeHtml(d.clave)}">${escapeHtml(d.rotuloNo || "No tiene")}</button>
               <span class="vgl-conf-hecho" id="vgl-conf-ok-${escapeHtml(d.clave)}"></span>
             </div>
           </div>`;
@@ -24911,7 +24969,7 @@
         <div class="vgl-agm-card" style="max-width:560px">
           <div class="vgl-agm-head">
             <div style="min-width:0">
-              <div class="vgl-agm-title">🔎 Las fuentes no coinciden</div>
+              <div class="vgl-agm-title">${_tituloConf}</div>
               <div class="vgl-agm-sub">Antes de calcular nada con estos datos, confírmelos una sola vez. Su respuesta queda guardada para las próximas citas de este paciente.</div>
             </div>
             <button class="vgl-postcita-x" id="vgl-conf-x" title="Decidir luego" aria-label="Cerrar">✕</button>
@@ -25121,7 +25179,7 @@
   // es el segundo clic consciente del médico sobre la marca de OTRA pestaña; el candado en
   // RAM de esta pestaña no se fuerza nunca.
   const _agmAgendandoLabDocs = new Set();
-  async function _agmAgendarLabConCandado(docId, fechaIso, hora, celular, forzar) {
+  async function _agmAgendarLabConCandado(docId, fechaIso, hora, celular, forzar, opts) {   // v18.0.118 (UI/UX #7): opts viaja al HUD
     const k = _agmClaveDoc(docId);
     let ajeno = null;
     try { ajeno = enVueloAjeno("lab", docId); } catch (e) { ajeno = null; }
@@ -25138,7 +25196,7 @@
     _agmAgendandoLabDocs.add(k);
     marcarEnVuelo("lab", docId, {});
     try {
-      return await apiLaboratorioAgendarAuto(docId, fechaIso, hora, celular);
+      return await apiLaboratorioAgendarAuto(docId, fechaIso, hora, celular, opts);
     } finally {
       _agmAgendandoLabDocs.delete(k);
       soltarEnVuelo("lab", docId);
@@ -25376,6 +25434,8 @@
             <textarea id="vgl-agm-obs" class="vgl-agm-input vgl-agm-c12" placeholder="Observaciones de la cita (ej. REMISION RCV CON CONTROL)..." rows="2"></textarea>
           </div>
 
+          <!-- v18.0.118 (UI/UX #4) — aquí aterrizan los avisos que antes reescribían el botón -->
+          <div id="vgl-agm-confirm-aviso" class="vgl-d-none" role="alert"></div>
           <div class="vgl-agm-foot" style="margin-top:18px">
             <button type="button" id="vgl-step-3-back" class="vgl-agm-btn sec">↩ Modificar / Atrás</button>
             <button type="button" id="vgl-agm-confirm" class="vgl-agm-btn pri" disabled>✓ Confirmar y asignar cita</button>
@@ -25726,6 +25786,7 @@
       // datos NUEVOS. Cada cambio de fecha/turno vuelve a exigir la doble confirmación.
       confirmBtn.dataset.dupOk = "";
       confirmBtn.dataset.vencOk = "";
+      _agmOcultarAvisoConfirmar();   // v18.0.118 (UI/UX #4): un aviso de otra fecha ya no aplica
       if (step2Next) step2Next.disabled = true;
       dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span class="vgl-agm-fecha-lbl">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
@@ -26173,11 +26234,12 @@
           // vencimiento/antidup visto pertenecía a la hora anterior, no a esta.
           confirmBtn.dataset.dupOk = "";
           confirmBtn.dataset.vencOk = "";
+          _agmOcultarAvisoConfirmar();   // v18.0.118 (UI/UX #4)
           selectedTurnoObj = t;
           selectedTurnoCtx = { agendaId, fecha: selectedDateInfo.fmt, horaTxt };
           confirmBtn.disabled = false;
           confirmBtn.textContent = `✓ Sí, Crear Cita en ${selectedEspName} (${horaTxt})`;
-          if (step2Next) step2Next.disabled = false;
+          if (step2Next) { step2Next.disabled = false; step2Next.textContent = "Siguiente: Confirmación ➔"; step2Next.title = ""; }   // v18.0.118 (UI/UX #10)
           markAgendamientoPendiente(apt.doc_id);
         });
         _turnosNodos.push(btn);
@@ -26192,7 +26254,7 @@
         selectedTurnoCtx = { agendaId: _preseleccion.agendaId, fecha: selectedDateInfo.fmt, horaTxt: _preseleccion.horaTxt };
         confirmBtn.disabled = false;
         confirmBtn.textContent = `✓ Sí, Crear Cita en ${selectedEspName} (${_preseleccion.horaTxt})`;
-        if (step2Next) step2Next.disabled = false;
+        if (step2Next) { step2Next.disabled = false; step2Next.textContent = "Siguiente: Confirmación ➔"; step2Next.title = ""; }   // v18.0.118 (UI/UX #10)
         // v18.0.109 (S+ flujo, C16) — la PRESELECCIÓN ⭐ no es una decisión del médico: abrir el
         // cuadro para mirar no deja «🗓️ SIN TERMINAR» en la tarjeta (contrato de markAgendamientoPendiente).
         // La marca la pone solo el clic en un turno (arriba).
@@ -26202,7 +26264,9 @@
         // dejar un "Sí, Crear Cita" muerto: la hora se elige, nunca viene puesta.
         confirmBtn.disabled = true;
         confirmBtn.textContent = "Elija un horario para continuar";
-        if (step2Next) step2Next.disabled = true;
+        // v18.0.118 (UI/UX #10) — la explicación vivía SOLO en el botón del paso 3, que desde el
+        // paso 2 está oculto: el médico veía «Siguiente» apagado y sin motivo. Aquí se dice.
+        if (step2Next) { step2Next.disabled = true; step2Next.textContent = "Elija un horario para continuar"; step2Next.title = "Elija una hora en la lista de arriba"; }
       }
     }
 
@@ -26454,7 +26518,14 @@
         if (!vivo() || miToken !== _sweepAgendaToken) return;
         if (!hayAgenda) {
           const btn = botonesPorIso.get(item.iso);
-          if (btn && !btn.classList.contains("active")) btn.remove();
+          // v18.0.118 (UI/UX #9) — sin agenda ese día el chip NO desaparece bajo el cursor (los
+          // vecinos se corrían y el clic caía en otro día): se apaga, tachado, y dice por qué.
+          if (btn && !btn.classList.contains("active")) {
+            btn.disabled = true;
+            if (btn.classList) btn.classList.add("vgl-agm-pbtn-sinagenda");
+            btn.title = "Sin agenda del servicio ese día";
+            if (btn.setAttribute) btn.setAttribute("aria-disabled", "true");
+          }
         }
       }, () => miToken !== _sweepAgendaToken);
     }
@@ -26829,6 +26900,29 @@
       }
       return "";
     }
+    // v18.0.118 (UI/UX #4) — LOS AVISOS DE CONFIRMACIÓN SE LEEN, NO SE ADIVINAN. El botón de
+    // confirmar era el canal de tres avisos encadenados («vuelo ajeno», «ya hay cita hoy»,
+    // «llegaría vencido»), de ~100 caracteres cada uno y cada uno exigiendo otro clic: el médico
+    // podía pulsar cuatro veces sin ver un solo cuadro de decisión. Misma doble confirmación
+    // consciente, ahora en un recuadro con dos salidas explícitas; el botón conserva su rótulo.
+    function _agmOcultarAvisoConfirmar() {
+      try {
+        const caja = modal.querySelector("#vgl-agm-confirm-aviso");
+        if (caja) { if (caja.classList) caja.classList.add("vgl-d-none"); caja.innerHTML = ""; }
+      } catch (e) {}
+    }
+    function _agmAvisoConfirmar(texto, onSeguir, onRevisar) {
+      const caja = modal.querySelector("#vgl-agm-confirm-aviso");
+      if (!caja) { confirmBtn.textContent = "⚠ " + texto + " — pulse otra vez para continuar"; return; }
+      caja.innerHTML = '<b>⚠ Antes de crear la cita.</b> ' + escapeHtml(texto) + '<div>'
+        + '<button type="button" class="vgl-agm-pbtn" id="vgl-agm-ca-si">Sí, crear igual</button>'
+        + '<button type="button" class="vgl-agm-pbtn" id="vgl-agm-ca-no">Revisar</button></div>';
+      if (caja.classList) caja.classList.remove("vgl-d-none");
+      const ocultar = () => { if (caja.classList) caja.classList.add("vgl-d-none"); caja.innerHTML = ""; };
+      const si = caja.querySelector("#vgl-agm-ca-si"), no = caja.querySelector("#vgl-agm-ca-no");
+      if (si && si.addEventListener) si.addEventListener("click", () => { ocultar(); try { onSeguir(); } catch (e) {} });
+      if (no && no.addEventListener) no.addEventListener("click", () => { ocultar(); try { if (onRevisar) onRevisar(); } catch (e) {} });
+    }
     function _avisoVencimientoActual() {
       try {
         const ctx = _leerPlanActual();
@@ -27097,7 +27191,15 @@
       })();
     }
 
-    confirmBtn.addEventListener("click", async () => {
+    // v18.0.118 (UI/UX #4) — «Sí, crear igual» marca el flag y vuelve a disparar el clic; la guarda
+    // de 700 ms se salta a propósito (el gesto anterior fue el del recuadro, no un doble clic).
+    const _agmReclic = (flag) => {
+      try { confirmBtn.dataset[flag] = "1"; confirmBtn.dataset.ultimoClic = "0"; } catch (e) {}
+      try { _confirmarCita(); } catch (e) {}   // la función, no un click() sintético: el gesto ya ocurrió
+    };
+    // v18.0.118 (UI/UX #4) — el cuerpo del confirmar pasa a función con nombre: «Sí, crear igual» la
+    // llama directamente en vez de simular un clic (que depende de la semántica del DOM).
+    const _confirmarCita = async () => {
       if (!selectedTurnoObj || !selectedDateInfo || !pacienteIdAcceso) return;
 
       // v17.6.8 — AUDITORÍA 5 MÓDULOS: un DOBLE CLIC FÍSICO (100-300 ms) pasaba de largo
@@ -27119,8 +27221,8 @@
         let _ajeno = null;
         try { _ajeno = enVueloAjeno("cita", apt.doc_id); } catch (e) { _ajeno = null; }
         if (_ajeno && confirmBtn.dataset.vueloOk !== "1") {
-          confirmBtn.dataset.vueloOk = "1";
-          confirmBtn.textContent = "⚠ Hace " + _ajeno.edadS + " s se empezó a crear una cita para este paciente en otra pestaña o antes de recargar — verifique en Everest y pulse otra vez SOLO si no existe";
+          _agmAvisoConfirmar("Hace " + _ajeno.edadS + " s se empezó a crear una cita para este paciente en otra pestaña o antes de recargar. Verifique en Everest y siga SOLO si no existe.",
+            () => _agmReclic("vueloOk"), () => { confirmBtn.dataset.vueloOk = ""; });
           try { uxTrack("cita.antidup.vuelo_ajeno"); } catch (e) {}
           return;
         }
@@ -27128,10 +27230,10 @@
 
       const dupCita = citaAgendadaFechaHoy(apt.doc_id);
       if (dupCita && confirmBtn.dataset.dupOk !== "1") {
-        confirmBtn.dataset.dupOk = "1";
         const pf = String(dupCita).split("-");
         const dupFmt = pf.length === 3 ? pf[2] + "/" + pf[1] + "/" + pf[0] : String(dupCita);
-        confirmBtn.textContent = "⚠ Hoy ya se le creó una cita (" + dupFmt + ") — pulse otra vez SOLO si quiere crear OTRA";
+        _agmAvisoConfirmar("Hoy ya se le creó una cita (" + dupFmt + "). Siga SOLO si quiere crear OTRA (por ejemplo, de otra especialidad).",
+          () => _agmReclic("dupOk"), () => { confirmBtn.dataset.dupOk = ""; });
         uxTrack("cita.antidup.aviso");
         return;
       }
@@ -27143,9 +27245,9 @@
         let avConf = null;
         try { avConf = _avisoVencimientoActual(); } catch (e) { avConf = null; }
         if (avConf && confirmBtn.dataset.vencOk !== "1") {
-          confirmBtn.dataset.vencOk = "1";
-          confirmBtn.textContent = "⚠ Con esta fecha, " + avConf.analito + " llegaría vencido — pulse otra vez para continuar igual";
-          try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}
+          try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}   // con UI/UX #2 el 🎯 ya se ve aquí
+          _agmAvisoConfirmar("Con esta fecha, " + avConf.analito + " llegaría vencido. Arriba tiene «🎯 Pasar a la fecha sugerida».",
+            () => _agmReclic("vencOk"), () => { confirmBtn.dataset.vencOk = ""; irAPaso(2); });
           try { uxTrack("cita.vencimiento.aviso_confirmar"); } catch (e) {}
           return;
         }
@@ -27326,7 +27428,7 @@
           modal.dataset.labDone = "1";
           const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(fechaElegida.iso, 5);
           confirmBtn.textContent = "⏳ Cita creada · agendando la toma de muestras…";   // v18.0.107 (C4)
-          const labOk = await _agmAgendarLabConCandado(apt.doc_id, labFecha.iso, selectedLabTime, celularSms, false);
+          const labOk = await _agmAgendarLabConCandado(apt.doc_id, labFecha.iso, selectedLabTime, celularSms, false, { silencioso: true });   // v18.0.118 (UI/UX #7): el modal ya lo dice por tres canales
           uxTrack(labOk ? "lab.agendado" : "lab.fallo");
           if (!labOk) {
             // v18.0.107 (S+ flujo, C4) — LA TOMA QUE NO QUEDÓ SE DICE DONDE EL MÉDICO MIRA. Antes,
@@ -27377,7 +27479,8 @@
         showToast("ROJO", "La cita NO quedó creada", "Everest no la confirmó (" + errMsg + "). No se dio por creada nada. Los horarios se actualizaron: verifique y elija de nuevo.", true);
         if (vivo()) { selectedTurnoObj = null; selectedTurnoCtx = null; try { cargarHoras(); } catch (e) {} }
       }
-    });
+    };
+    confirmBtn.addEventListener("click", _confirmarCita);
 
     // v17.58.2 — fase de apertura del modal en el Diario de Lentitud: el montaje síncrono
     // (HTML + queries + listeners + primer render de chips) es lo que paga el INP del clic
@@ -28257,6 +28360,10 @@
     const vivo = () => !cerrado && modal.isConnected !== false;
     let xBtn, cancelBtn;
     const closeMod = () => {
+      // v18.0.118 (UI/UX #14) — con el lote en vuelo («Generando… 1 de 2») cerrar perdía los botones
+      // de imprimir y el correo de las órdenes YA creadas (las marcas sí se guardan, v18.0.63).
+      // Mientras el candado tenga esta cédula, ✕, «Cancelar» y Escape esperan (2,5-4 s por orden).
+      try { if (_ordGenerandoDocs.has(_agmClaveDoc(apt.doc_id))) { uxTrack("ordenes.cerrar.en_vuelo"); return; } } catch (e) {}
       cerrado = true;
       try { if (!_fnCompletado) uxTrack("fn.ordenar.abandon"); } catch (e) {}
       xBtn?.removeEventListener("click", closeMod);
@@ -28609,14 +28716,29 @@
       }
       _ordGenerandoDocs.add(_kOrd);
       marcarEnVuelo("orden", apt.doc_id, {});
-      const _soltarOrd = () => { _ordGenerandoDocs.delete(_kOrd); soltarEnVuelo("orden", apt.doc_id); };
+      // v18.0.118 (UI/UX #14) — los dos cierres se apagan A LA VISTA mientras dure el lote y se
+      // reactivan en el mismo sitio donde se suelta el candado (éxito, fallo o paciente no hallado).
+      const _bloquearCierre = (on) => { [xBtn, cancelBtn].forEach((b) => { if (!b) return; b.disabled = !!on; b.title = on ? "Espere: se están generando las órdenes" : ""; }); };
+      const _soltarOrd = () => { _ordGenerandoDocs.delete(_kOrd); soltarEnVuelo("orden", apt.doc_id); _bloquearCierre(false); };
+      _bloquearCierre(true);
 
       // v15.7.0 — AUTO-IMPRESIÓN (pedido del médico: «como lo hace originalmente Everest»):
       // la pestaña del documento se abre AQUÍ, en el clic mismo — un window.open tras un
       // await ya no cuenta como gesto del usuario y el navegador lo bloquearía. Se navega
       // a la orden real solo cuando el servidor la confirma; si algo falla, se cierra.
+      // v18.0.118 (decisión del médico, 02-sep) — la pestaña del documento se sigue abriendo AQUÍ,
+      // en el clic (un window.open tras un await lo bloquearía el navegador), pero YA NO SE SALTA a
+      // ella: el progreso («Generando… 1 de 2»), el bloque verde y los botones de imprimir viven en
+      // esta pantalla y quedaban detrás. Se abre detrás y el foco se queda en Everest; el PDF se ve
+      // cuando el médico pulse «Imprimir orden de…». (v15.7.0 la abría con foco «como Everest».)
       let pestanaImpresion = null;
-      try { if (typeof window !== "undefined" && typeof window.open === "function") pestanaImpresion = window.open("", "_blank"); } catch (e) { pestanaImpresion = null; }
+      try {
+        if (typeof window !== "undefined" && typeof window.open === "function") {
+          pestanaImpresion = window.open("", "_blank");
+          try { if (pestanaImpresion && typeof pestanaImpresion.blur === "function") pestanaImpresion.blur(); } catch (e) {}
+          try { if (typeof window.focus === "function") window.focus(); } catch (e) {}
+        }
+      } catch (e) { pestanaImpresion = null; }
       const _cerrarPestanaImpresion = () => { try { if (pestanaImpresion && !pestanaImpresion.closed) pestanaImpresion.close(); } catch (e) {} pestanaImpresion = null; };
 
       confirmBtn.disabled = true;

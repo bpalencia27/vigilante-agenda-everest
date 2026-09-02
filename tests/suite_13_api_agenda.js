@@ -788,5 +788,22 @@ module.exports = {
       t.cierto(/if \(!horaSeleccionada\) \{[\s\S]{0,240}_labUltimoFallo = "no se eligió la hora de la toma";/.test(src), "la guarda vive antes de buscar el turno");
     });
 
+    await t.casoAsync("v18.0.118 (UI/UX #7): con {silencioso:true} el fallo de la toma NO abre el HUD «Centinela» (el modal ya lo dice por tres canales); sin la opción, sí", async () => {
+      const sinTurnos = (o) => { o.onload({ status: 200, responseText: JSON.stringify({ turnos: [] }) }); };
+      const e1 = entornoApi(); e1.setGm(sinTurnos);
+      const ok1 = await e1.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "", { silencioso: true });
+      t.falso(ok1, "no se agenda");
+      t.falso(hayTexto(e1.c, "NO se agendó"), "y el HUD no sale: el llamador ya avisa por toast, panel y botón");
+      t.cierto(!!e1.c.api._labMotivoUltimoFallo(), "pero el motivo se guarda igual, para el panel post-cita: " + e1.c.api._labMotivoUltimoFallo());
+      const e2 = entornoApi(); e2.setGm(sinTurnos);
+      const ok2 = await e2.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "");
+      t.falso(ok2, "sin la opción tampoco se agenda");
+      t.cierto(hayTexto(e2.c, "NO se agendó"), "y ahí el HUD sí sale (la toma sola es el único canal de ese cuadro)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_agmAgendarLabConCandado\(apt\.doc_id, labFecha\.iso, selectedLabTime, celularSms, false, \{ silencioso: true \}\)/.test(src), "Agendar es quien pide silencio");
+      const zona = src.slice(src.indexOf("async function apiLaboratorioAgendarAuto("), src.indexOf("async function apiLaboratorioAgendarAuto(") + 9000);
+      t.igual((zona.match(/\n\s*spToast\(/g) || []).length, 0, "dentro de la función ya no queda ningún spToast directo: todos pasan por _hud");
+    });
+
   }
 };

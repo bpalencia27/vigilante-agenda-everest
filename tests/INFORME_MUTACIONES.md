@@ -11750,3 +11750,63 @@ inventado), y el cuadro de la toma sola declara que no maneja celular.
 | 375 | la línea del SMS se pinta aunque no haya dato (**F-3**) | *suite_62: v18.0.117 (UI/UX #3)…* («sin dato NO se pinta») | Sí |
 
 Banco completo: **3.048 comprobaciones pasan, 0 fallan.**
+
+## v18.0.118 — auditoría UI/UX, lote 2: el recuadro de decisión de Agendar, el dock que no deja huecos, Próximo control que dice la verdad, los chips que no se mueven y el HUD que calla
+
+Segundo lote de `docs/AUDITORIA_UIUX_20260902.md` (fragmentos F-4 a F-12), más la primera de las
+decisiones que el médico tomó en la entrevista de esa auditoría.
+
+- **F-4 — un recuadro de decisión en vez de tres reescrituras del botón.** El botón de confirmar
+  era el canal de tres avisos encadenados (vuelo ajeno, cita de hoy, examen que llegaría vencido),
+  de ~100 caracteres cada uno y cada uno exigiendo otro clic: el médico podía pulsar cuatro veces
+  sin ver un solo cuadro de decisión. Ahora el aviso vive en `#vgl-agm-confirm-aviso` con dos
+  salidas explícitas («Sí, crear igual» / «Revisar»), el botón conserva su rótulo, y **el
+  consentimiento solo se marca al pulsar «Sí, crear igual»** (antes bastaba con volver a pulsar
+  el botón, que es justo lo que hace quien no leyó). Cambiar de turno o de fecha retira el aviso
+  viejo. El cuerpo del confirmar pasa a función con nombre para no depender de un clic sintético.
+- **F-5 — el dock no deja un hueco mientras lee.** Con el resumen aún calculándose (3-6 s, más si
+  Athenea va lenta) el sexto botón aparecía de golpe. Ahora existe, atenuado y deshabilitado:
+  «Panel del paciente · leyendo…». **Su propia prueba destapó un defecto real**: el estado «hay
+  resumen» no estaba en la firma del dock, así que el botón se habría quedado puesto cuando el
+  resumen llegara con los factores aún incompletos.
+- **F-6 — «Próximo control» deja de pedir lo que el médico ya hizo.** Sin resumen decía «abra la
+  historia un momento», estando el botón solo disponible dentro de la historia. Ahora dice que
+  está leyendo y ofrece «Reintentar ahora», que calcula y repinta en el sitio.
+- **F-7 — un hecho, un canal.** Una toma fallida disparaba cuatro avisos a la vez; desde Agendar
+  el HUD «🛡️ Centinela PyM» calla (`{silencioso:true}`), porque el modal ya lo dice por toast,
+  panel post-cita y botón. En el cuadro de la toma sola el HUD sigue, que allí es el único canal.
+- **F-8 — «Alerta Múltiple» dice de qué son los avisos**, no solo cuántos.
+- **F-9 — los chips de día sin agenda se apagan, no desaparecen.** El sondeo los borraba y los
+  vecinos se corrían bajo el cursor: el clic caía en otro día. Ahora quedan tachados y dicen por qué.
+- **F-10 — el «Siguiente» del paso 2 explica por qué está apagado** («Elija un horario para
+  continuar»), y recupera su rótulo al elegir turno. La explicación vivía en el botón del paso 3,
+  que desde el paso 2 está oculto.
+- **F-11 — cada pregunta con sus rótulos.** «Sí tiene / No tiene» se le ponía también a «¿Está
+  tomando su medicamento?». Ahora cada pregunta trae los suyos («Sí lo toma / No lo toma»), y el
+  título deja de decir «Las fuentes no coinciden» cuando no hay ninguna contradicción.
+- **F-12 — cerrar Ordenar espera a que termine el lote.** Cerrar a mitad perdía los botones de
+  imprimir y el correo de las órdenes ya creadas; ✕, «Cancelar» y Escape esperan, a la vista.
+- **Decisión del médico (02-sep): Ordenar ya no salta a la pestaña del PDF.** Se abre detrás y el
+  foco se queda en Everest, donde están el progreso, el bloque verde y «Imprimir orden de…».
+
+Seis pruebas anteriores fijaban las superficies viejas (el rótulo del botón como canal del aviso,
+los chips que desaparecían, el hueco del dock): se reescribieron para verificar **la misma
+protección** en la superficie nueva, sin bajar ninguna exigencia.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 376 | el flag de consentimiento se marca al mostrar el aviso (**F-4**) | *suite_15: v18.0.118 (UI/UX #4): con cita de hoy, Confirmar pinta el recuadro…* | Sí |
+| 377 | «Revisar» deja el consentimiento puesto (**F-4**) | *suite_15: v18.0.118 (UI/UX #4)…* («sin consentir nada») | Sí |
+| 378 | el dock no muestra nada mientras lee (**F-5**) | *suite_15: v18.0.118 (UI/UX #5): sin resumen calculado…* | Sí |
+| 379 | el estado del resumen sale de la firma del dock (**F-5**) | *suite_15: v18.0.118 (UI/UX #5)…* («ese estado entra en la firma») | Sí |
+| 380 | «Próximo control» vuelve a mandar a abrir la historia (**F-6**) | *suite_15: v18.0.118 (UI/UX #6): sin resumen…* | Sí |
+| 381 | el HUD suena aunque se pida silencio (**F-7**) | *suite_13: v18.0.118 (UI/UX #7): con {silencioso:true}…* | Sí |
+| 382 | «Alerta Múltiple» vuelve a decir solo el conteo (**F-8**) | *suite_42: v18.0.118 (UI/UX #8): «Alerta Múltiple» dice DE QUÉ…* | Sí |
+| 383 | los chips sin agenda vuelven a desaparecer (**F-9**) | *suite_15: openAgendamientoModal v14: un sábado sin turnos reales…* | Sí |
+| 384 | el «Siguiente» del paso 2 no explica nada (**F-10**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+| 385 | los rótulos de la escalera vuelven a «Sí tiene» (**F-11**) | *suite_63: v18.0.118 (UI/UX #11): cada pregunta de la escalera…* | Sí |
+| 386 | el título habla de fuentes sin contradicción (**F-11**) | *suite_63: v18.0.118 (UI/UX #11)…* | Sí |
+| 387 | cerrar Ordenar a mitad del lote (**F-12**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+| 388 | Ordenar vuelve a robar la pantalla con el PDF (**decisión**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+
+Banco completo: **3.055 comprobaciones pasan, 0 fallan.**

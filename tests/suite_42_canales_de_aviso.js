@@ -819,5 +819,29 @@ module.exports = {
       t.igual(gm, 1, "una sola notificación de la extensión");
     });
 
+    await t.casoAsync("v18.0.118 (UI/UX #8): «Alerta Múltiple» dice DE QUÉ son los avisos, no solo cuántos", async () => {
+      const c = cargar({ silencioso: true });
+      const pintados = [];
+      const bandeja = c.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); pintados.push(n); };
+      bandeja.appendChild = (n) => { bandeja.children.push(n); pintados.push(n); };
+      const crearBase = c.env.doc.createElement;
+      c.env.doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, crearBase("div")); return memo.get(sel); }; return e; };
+      const g = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : g(id));
+      c.api.showToast("ROJO", "07:30 · Confirmación extemporánea", "cuerpo 1", false, "p1");
+      c.api.showToast("AMBAR", "08:00 · Inasistencia", "cuerpo 2", false, "p2");
+      c.api.showToast("MORADO", "08:30 · Última llamada", "cuerpo 3", false, "p3");
+      c.api.showToast("AZUL", "Órdenes generadas", "cuerpo 4", false, "p4");
+      await esperar42(600);
+      t.igual(pintados.length, 1, "los cuatro se agrupan en un solo aviso");
+      const cuerpo = pintados[0].querySelector(".vgl-toast-b").textContent;
+      t.cierto(/3 críticas · 1 rutinarias/.test(cuerpo), "dice cuántas de cada tipo");
+      ["Confirmación extemporánea", "Inasistencia", "Última llamada", "Órdenes generadas"].forEach((tit) => {
+        t.cierto(cuerpo.includes(tit), "y nombra «" + tit + "» (antes: solo el conteo, sin saber de qué ni de quién)");
+      });
+      c.env.doc.getElementById = g;
+    });
+
   },
 };

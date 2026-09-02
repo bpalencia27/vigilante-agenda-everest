@@ -1219,5 +1219,22 @@ module.exports = {
       t.falso(/_desacuerdos[^\n]*(precedencia|=\s*fPrev|Object\.assign\(fPrev)/.test(src), "paso 1: el detector no toca ninguna precedencia");
     });
 
+    t.caso("v18.0.118 (UI/UX #11): cada pregunta de la escalera lleva sus propios rótulos y el título no habla de fuentes cuando no hay contradicción", () => {
+      const noLeidos = { medsRcv: null, medsNoLeidos: true, inerciaLdl: null };
+      const pAdh = api.mtrPreguntaAdherenciaEje("hba1c", noLeidos);
+      t.igual(pAdh.rotuloSi, "Sí lo toma", "adherencia: «Sí lo toma»");
+      t.igual(pAdh.rotuloNo, "No lo toma", "y «No lo toma» (antes: «Sí tiene / No tiene», que no responde a esa pregunta)");
+      const pAde = api.mtrPreguntaAdecuacionEje("ldl", noLeidos);
+      t.igual(pAde.rotuloSi, "Sí, es adecuado", "adecuación: rótulo propio");
+      const pRep = api.mtrPreguntaFueraMeta({ repetir: [{ clave: "COLESTEROL_LDL", nombre: "LDL" }], noRepetir: [] });
+      t.igual(pRep.rotuloSi, "Sí, repetirlos antes", "repetir antes: rótulo propio");
+      const pFactor = api.mtrPreguntaEmbarazo();
+      t.igual(pFactor.rotuloSi, undefined, "las preguntas de dato del paciente NO traen rótulo: conservan «Sí tiene / No tiene»");
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/\$\{escapeHtml\(d\.rotuloSi \|\| "Sí tiene"\)\}/.test(src) && /\$\{escapeHtml\(d\.rotuloNo \|\| "No tiene"\)\}/.test(src), "el modal usa el rótulo de la pregunta, con el de siempre como respaldo");
+      t.cierto(/const _hayContradiccion = \(discrepancias \|\| \[\]\)\.some\(\(d\) => d && !d\.rotuloSi && \(d\.afirman \|\| \[\]\)\.length > 0 && \(d\.niegan \|\| \[\]\)\.length > 0\);/.test(src), "y «Las fuentes no coinciden» solo cuando de verdad hay fuentes a favor y en contra");
+      t.cierto(/_tituloConf = _hayContradiccion \? "🔎 Las fuentes no coinciden" : "🔎 Antes de calcular, unas preguntas"/.test(src), "si no, el título dice la verdad");
+    });
+
   },
 };
