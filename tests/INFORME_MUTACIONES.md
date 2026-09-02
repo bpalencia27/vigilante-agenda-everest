@@ -11524,3 +11524,36 @@ médico decidió en la entrevista del 02-sep (`docs/OPORTUNIDADES_SPLUS_20260902
 | 327 | `_demograficosInvalidar` no vacía la caché del paciente detallado (**C19**) | *suite_15: v18.0.110 (C19)…* («al cambiar de historia se vuelve a pedir») | Sí |
 
 Banco completo: **3.024 comprobaciones pasan, 0 fallan.**
+
+## v18.0.111 — lo decidido en la entrevista, primera tanda: la pregunta de síntomas urinarios (C10), un diccionario de rótulos (C9) y solo el login de Everest identifica al médico (B12)
+
+- **C10 — «¿Tiene síntomas urinarios?»** Nadie lo preguntaba y el motor se quedaba en «REQUIERE
+  SÍNTOMAS» consulta tras consulta. Decisión del médico (02-sep): se pregunta **solo con parcial
+  sugestivo** (la respuesta es lo único que separa PROBABLE ITU de BACTERIURIA ASINTOMÁTICA;
+  con bacteriuria sin piuria no cambia nada) y la respuesta vale **7 días**. En embarazo no se
+  pregunta (la bacteriuria se trata siempre). Entra por la escalera del reconciliador con el
+  mismo formato que la de embarazo, y `mtrResumenClinico` recibe la respuesta vigente en
+  `uroSintomas` (antes: `null` fijo, también en el insumo que sobrevive a la reclasificación).
+- **C9 — un diccionario de rótulos (`VGL_ROTULOS`).** El botón del dock, el título del cuadro
+  que abre y las leyendas que remiten a él dicen la MISMA palabra: «Laboratorios», «Agendar»,
+  «Ordenar», «Panel del paciente», «Redactar», «Próximo control», «Exámenes». La leyenda de
+  Laboratorios remitía a «Programación de cita», que no está en ningún botón. Una prueba
+  compara dock, títulos y leyendas contra la tabla.
+- **B12 — solo el login de Everest identifica al médico.** `S.medicoId`/`S.medicoNombre` eran
+  un respaldo «manual» sin casilla en Ajustes que 8 llamadas usaban como identidad (y un
+  aviso mandaba a buscar esa casilla inexistente). Decisión del médico: retirarlo. Un id
+  manual guardado de una versión vieja ya no firma citas ni órdenes; el aviso manda a abrir
+  la agenda del día para que Everest lo identifique.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 328 | se pregunta también con bacteriuria sin piuria (**C10**) | *suite_48: v18.0.111 (C10): se pregunta por síntomas urinarios SOLO con parcial sugestivo…* | Sí |
+| 329 | se pregunta en embarazo (**C10**) | *suite_48: v18.0.111 (C10): se pregunta… SOLO con parcial sugestivo…* | Sí |
+| 330 | `mtrResumenClinico` vuelve a recibir `uroSintomas: null` (**C10**) | *suite_48: v18.0.111 (C10): la pregunta entra por el reconciliador…* | Sí |
+| 331 | `_uroSintomasConfirmados` devuelve true también para «no» (**C10**) | *suite_48: v18.0.111 (C10): la respuesta llega al motor…* | Sí |
+| 332 | la pregunta no se empuja a la escalera (**C10**) | *suite_48: v18.0.111 (C10): la pregunta entra por el reconciliador…* | Sí |
+| 333 | `apiAccesoAsignarTurno` vuelve a caer a `S.medicoId` (**B12**) | *suite_05: v18.0.111 (S+ B12): solo el login de Everest identifica al médico…* | Sí |
+| 334 | el dock dice «Laboratorio» fuera del diccionario (**C9**) | *suite_15: v18.0.111 (C9): un diccionario de rótulos…* | Sí |
+| 335 | el título del modal dice «Paraclínicos» (**C9**) | *suite_15: v18.0.111 (C9)…* («el título pintado») | Sí |
+
+Banco completo: **3.029 comprobaciones pasan, 0 fallan.**

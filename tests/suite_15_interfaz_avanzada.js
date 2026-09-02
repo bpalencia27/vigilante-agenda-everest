@@ -2462,7 +2462,7 @@ module.exports = {
       await esperar(50);
       const modal = cAg.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       t.cierto(!!modal, "el modal de agendamiento quedó en el body");
-      t.cierto(modal.innerHTML.includes("Programación de Cita · Remisión RCV"));
+      t.cierto(modal.innerHTML.includes("Agendar · Programación de cita · Remisión RCV"), "el título lleva el rótulo del dock (v18.0.111, C9)");
       t.cierto(modal.innerHTML.includes("CARLOS RUIZ"));
       const fechaEsperada = cAg.api.calcBusinessTargetDate(1, 0).fmt;
       t.cierto(modal.querySelector("#vgl-agm-date-info").innerHTML.includes(fechaEsperada), "la fecha objetivo (1 mes) se calculó");
@@ -5143,6 +5143,31 @@ module.exports = {
       t.cierto(/const candidatos = range\.filter\(\(x\) => !x\.isCenter\)/.test(src) && /mapConLimite\(candidatos, 2,/.test(src), "el sondeo salta el día central (que cargarHoras ya pide) y va de dos en dos");
       t.igual((src.match(/apiPacienteDetalladoCacheado\(/g) || []).length, 4, "los tres consumidores (Agendar, Ordenar, demográficos) pasan por la caché");
       t.igual((src.match(/BuscarPacienteDetallado\?idPaciente=/g) || []).length, 1, "y la URL cruda solo vive en ella");
+    });
+
+    await t.casoAsync("v18.0.111 (C9): un diccionario de rótulos — el botón del dock, el título del cuadro que abre y las leyendas dicen la misma palabra", async () => {
+      const c = cargar({ silencioso: true });
+      const R = c.api.VGL_ROTULOS;
+      t.cierto(!!R && Object.isFrozen(R), "el diccionario existe y está congelado");
+      const vals = Object.values(R);
+      t.igual(new Set(vals).size, vals.length, "sin dos rótulos iguales");
+      t.cierto(vals.every((v) => typeof v === "string" && v.trim().length > 2), "todos con texto");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      ["labs", "agendar", "ordenar", "panel", "redactar", "control"].forEach((k) => {
+        t.cierto(new RegExp("_vglDockRotulo\\(b[A-Za-z]+, \"[^\"]+\", VGL_ROTULOS\\." + k).test(src), "dock · " + k + " usa VGL_ROTULOS." + k);
+      });
+      t.cierto(/id="vgl-labs-title">\$\{MTR_ICONO_FLASK\} \$\{VGL_ROTULOS\.labs\}/.test(src), "título de Laboratorios");
+      t.cierto(/id="vgl-agm-title">📅 \$\{VGL_ROTULOS\.agendar\}/.test(src), "título de Agendar");
+      t.igual((src.match(/id="vgl-ord-title">\$\{VGL_ROTULOS\.ordenar\}/g) || []).length, 2, "los dos títulos de Ordenar");
+      t.cierto(/id="vgl-paquete-title">\$\{ICO\.pkg\} \$\{VGL_ROTULOS\.control\}/.test(src), "título de Próximo control");
+      t.cierto(/MTR_ICONO_ACTIVITY \+ VGL_ROTULOS\.panel \+ '<\/div>'/.test(src), "título del Panel");
+      t.cierto(/MTR_IA_ICONOS\.pluma \+ VGL_ROTULOS\.redactar \+ ' · Redacción asistida/.test(src), "título del Redactor");
+      t.cierto(/titulo: VGL_ROTULOS\.examenes,/.test(src), "el chooser de Exámenes");
+      t.cierto(/use «\$\{VGL_ROTULOS\.agendar\}»; para pedir exámenes nuevos, «\$\{VGL_ROTULOS\.ordenar\}»/.test(src), "la leyenda de Laboratorios remite a «Agendar» y «Ordenar», no a nombres que no están en el dock");
+      t.falso(/use Programación de cita;/.test(src), "el nombre viejo a secas ya no se usa como referencia");
+      await c.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
+      const modal = c.env.doc.getElementById("vgl-labs-modal");
+      t.cierto(modal && modal.innerHTML.includes('id="vgl-labs-title">') && modal.innerHTML.includes(R.labs + "</div>"), "el título pintado dice «" + R.labs + "»");
     });
 
   },

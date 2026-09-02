@@ -64,7 +64,7 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | B9 | Las notificaciones del SO llevan nombre + cédula (Centro de actividades de Windows en un PC compartido) | baja | ✅ v18.0.109 (cédula enmascarada en lo que sale al sistema) |
 | B10 | La consola de EnviarSMS imprime 500 caracteres del cuerpo crudo | baja | ✅ v18.0.109 (extracto saneado de 120) |
 | B11 | Doble clic en «Exámenes»: sin deshabilitar ni guarda de vuelo; el segundo pisa el veredicto | baja | ✅ v18.0.109 (guarda de vuelo en el botón) |
-| B12 | Respaldo de identidad por equipo `S.medicoId/S.medicoNombre` en 7 llamadas, sin campo en Ajustes pese al mensaje que manda a buscarlo | baja | 🗳️ decidido (02-sep): retirarlo — solo el login de Everest identifica al médico · en curso |
+| B12 | Respaldo de identidad por equipo `S.medicoId/S.medicoNombre` en 7 llamadas, sin campo en Ajustes pese al mensaje que manda a buscarlo | baja | ✅ v18.0.111 (retirado; el aviso manda a abrir la agenda del día) |
 
 ## C. El flujo real de la consulta (prioridad del auditor: 1 = máxima)
 
@@ -78,8 +78,8 @@ tri-estado, prueba de fechas, prueba de identidad de red, y mutación por cada p
 | C6 | El panel post-cita se destruye y se recrea cuando AppCita confirma la toma | 2 | ✅ v18.0.109 (solo se añade o sustituye el bloque de laboratorio) |
 | C7 | Redactor: «Generando con…» fijo hasta 7 modelos × 25 s, sin cancelar ni «Generar todo» | 2 | pendiente |
 | C8 | Ajuste «SMS de recordatorio» apagado: la casilla nace marcada, el SMS de la cita se suprime y el de laboratorio sale igual | 2 | ✅ v18.0.109 (casilla apagada y rotulada; la toma va con Telefono=0) |
-| C9 | Terminología cruzada («Exámenes» nombra tres cosas; captions remiten a nombres que no están en el dock) | 2 | pendiente (diccionario único + prueba) |
-| C10 | Uroanálisis: nadie pregunta si hay síntomas urinarios; el motor queda en «REQUIERE SÍNTOMAS» | 2 | 🗳️ decidido (02-sep): preguntar solo con parcial sugestivo o bacteriuria, respuesta vigente 7 días · en curso |
+| C9 | Terminología cruzada («Exámenes» nombra tres cosas; captions remiten a nombres que no están en el dock) | 2 | ✅ v18.0.111 (`VGL_ROTULOS` + prueba dock/títulos/leyendas) |
+| C10 | Uroanálisis: nadie pregunta si hay síntomas urinarios; el motor queda en «REQUIERE SÍNTOMAS» | 2 | ✅ v18.0.111 (pregunta en la escalera solo con parcial sugestivo, fuera del embarazo; vigencia 7 días; la respuesta llega al motor) |
 | C11 | El modal «Laboratorios» ignora la precarga y recalcula todo (3-6 s y red duplicada) | 2 | 🗳️ decidido (02-sep): servir la precarga si tiene < 2 min y ofrecer «Buscar laboratorios nuevos» · en curso |
 | C12 | Con factores pendientes el botón «Panel» no existe y el ayudante «Faltan antecedentes» queda inalcanzable | 2 | 🗳️ decidido (02-sep): botón atenuado «📝 Faltan antecedentes» que abre el ayudante · en curso |
 | C13 | `alert()`/`confirm()` nativos siguen vivos en Ordenar y Redactor | 3 | ✅ v18.0.109 (doble toque en el ✕ del Redactor; aviso rojo en Ordenar) |
@@ -104,8 +104,8 @@ Cada ⚖️ se le presentó como opciones cerradas. Lo que decidió, y en qué e
 | Ítem | Decisión | Entrega |
 |---|---|---|
 | C21 | Regla única: los cuadros de **consulta** (chooser de Exámenes, paquete, Laboratorios, Pendientes del paciente, cartel) cierran con clic fuera; los de **escritura** (Agendar, Ordenar, Panel, Redactor, Llenar, Confirmar, post-cita) **nunca** | ✅ v18.0.110 |
-| C10 | Preguntar por síntomas urinarios **solo** cuando el parcial es sugestivo o hay bacteriuria; la respuesta vale 7 días para ese paciente | v18.0.111 |
-| B12 | **Retirar** el respaldo por equipo `S.medicoId/S.medicoNombre`: solo el login de Everest identifica al médico | v18.0.111 |
+| C10 | Preguntar por síntomas urinarios **solo** cuando el parcial es sugestivo (con bacteriuria sin piuria la respuesta no cambia la conducta); la respuesta vale 7 días para ese paciente | ✅ v18.0.111 |
+| B12 | **Retirar** el respaldo por equipo `S.medicoId/S.medicoNombre`: solo el login de Everest identifica al médico | ✅ v18.0.111 |
 | C20 | El chooser de «Exámenes» **recuerda la última opción** (resaltada) y admite teclado: Enter la ejecuta, 1/2 eligen | v18.0.112 |
 | C12 | Con factores pendientes, un botón **atenuado «📝 Faltan antecedentes»** en el dock abre el ayudante de llenado | v18.0.112 |
 | C11 | «Laboratorios» sirve la **precarga si es fresca (< 2 min)** y ofrece «Buscar laboratorios nuevos» para consultar en vivo | v18.0.113 |

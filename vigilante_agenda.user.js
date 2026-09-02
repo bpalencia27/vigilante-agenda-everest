@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.110
+// @version      18.0.111
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.110";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.111";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5625,6 +5625,38 @@
   const MTR_EMBARAZO_EDAD_MIN = 12;
   const MTR_EMBARAZO_EDAD_MAX = 55;
   const MTR_EMBARAZO_VIGENCIA_DIAS = 30;
+  // v18.0.111 (S+ flujo, C10) — «¿Tiene síntomas urinarios?». Decisión del médico (02-sep):
+  // se pregunta SOLO con parcial sugestivo (la respuesta es lo único que separa PROBABLE ITU
+  // de BACTERIURIA ASINTOMÁTICA; sin parcial sugestivo la respuesta no cambia nada) y vale
+  // 7 días para ese paciente. En embarazo no se pregunta: la bacteriuria se trata siempre.
+  const MTR_URO_SINTOMAS_CLAVE = "uroSintomas";
+  const MTR_URO_SINTOMAS_VIGENCIA_DIAS = 7;
+  function mtrDebePreguntarUroSintomas(uro, yaConfirmado) {
+    const u = uro || {};
+    if (yaConfirmado) return false;
+    if (u.embarazo === true) return false;
+    return u.sugestivo === true;
+  }
+  function mtrPreguntaUroSintomas(uro) {
+    const u = uro || {};
+    const lista = (typeof MTR_URO_SINTOMAS !== "undefined" && Array.isArray(MTR_URO_SINTOMAS)) ? MTR_URO_SINTOMAS.join(", ") : "disuria, polaquiuria, urgencia, dolor suprapúbico, fiebre, dolor lumbar";
+    return {
+      clave: MTR_URO_SINTOMAS_CLAVE,
+      severidad: "alta",
+      etiqueta: "¿Tiene síntomas urinarios (" + lista + ")?",
+      porQue: "el parcial de orina es sugestivo de infección: CON síntomas toca urocultivo con antibiograma; "
+        + "SIN síntomas es bacteriuria asintomática y no se trata (tratarla es un error frecuente)",
+      afirman: [{ fuente: "Parcial de orina", detalle: (Array.isArray(u.criterios) && u.criterios.length) ? u.criterios.join("; ") : "hallazgos sugestivos de infección urinaria" }],
+      niegan: [{ fuente: "Historia clínica", detalle: "los síntomas no vienen en el laboratorio: solo el paciente los puede decir" }],
+      vigenciaDias: MTR_URO_SINTOMAS_VIGENCIA_DIAS,
+    };
+  }
+  function _uroSintomasConfirmados(docId) {
+    try {
+      const reg = _vglConfirmacionVigente(docId, MTR_URO_SINTOMAS_CLAVE, MTR_URO_SINTOMAS_VIGENCIA_DIAS);
+      return reg ? reg.v === true : null;
+    } catch (e) { return null; }
+  }
 
   function mtrEmbarazoEdadFertil(edad) {
     const e = mtrFloat(edad);
@@ -6017,6 +6049,16 @@
         if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
           res, _vglConfirmacionVigente(docId, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
         ))) frenan.push(mtrPreguntaEmbarazo());
+      } catch (e) {}
+
+      // v18.0.111 (S+ flujo, C10) — síntomas urinarios: solo con parcial sugestivo y sin
+      // respuesta vigente (7 días). Antes nadie preguntaba y el motor se quedaba en
+      // «REQUIERE SÍNTOMAS» consulta tras consulta.
+      try {
+        if (mtrDebePreguntarUroSintomas(res && res.uroanalisis,
+              _vglConfirmacionVigente(docId, MTR_URO_SINTOMAS_CLAVE, MTR_URO_SINTOMAS_VIGENCIA_DIAS))) {
+          frenan.push(mtrPreguntaUroSintomas(res.uroanalisis));
+        }
       } catch (e) {}
 
       // v18.0.67 — «¿repetir antes los exámenes fuera de meta de este paciente?». UNA por
@@ -7082,7 +7124,7 @@
               return;
           }
           _vglChooserModal({
-              titulo: "Exámenes",
+              titulo: VGL_ROTULOS.examenes,
               descripcion: "¿Qué resultados traigo a la historia?",
               opciones: [
                   { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "El último resultado de cada analito, solo si se hizo en los últimos " + MTR_LABS_VENTANA_RECIENTE_DIAS + " días." },
@@ -7380,8 +7422,20 @@
   // distinguible únicamente por el title nativo, que solo aparece tras dejar el mouse
   // quieto encima. Ahora cada botón lleva, además del ícono, una etiqueta SIEMPRE VISIBLE
   // con el mismo verbo/nombre que el título del modal al que abre (p. ej. "Laboratorios"
-  // aquí y "🧪 Exámenes de Laboratorio" allá) para que el ojo empareje botón y destino
+  // aquí y "🧪 Laboratorios" allá) para que el ojo empareje botón y destino
   // sin depender de la memoria ni del hover.
+  // v18.0.111 (S+ flujo, C9) — UN diccionario de rótulos: el botón del dock, el título del
+  // cuadro que abre y las leyendas que remiten a él dicen la MISMA palabra. Una prueba
+  // (suite_15) compara dock, títulos y leyendas contra esta tabla.
+  const VGL_ROTULOS = Object.freeze({
+    labs: "Laboratorios",
+    agendar: "Agendar",
+    ordenar: "Ordenar",
+    panel: "Panel del paciente",
+    redactar: "Redactar",
+    control: "Próximo control",
+    examenes: "Exámenes",
+  });
   function _vglDockRotulo(btn, icono, etiqueta) {
     const ico = document.createElement("span");
     ico.className = "vgl-dock-ico";
@@ -7569,7 +7623,7 @@
       } else {
         bAg.setAttribute("aria-label", "Agendar cita de control");
         bAg.title = "\uD83D\uDCC5 Agendar cita de control";
-        _vglDockRotulo(bAg, "\uD83D\uDCC5", "Agendar");
+        _vglDockRotulo(bAg, "\uD83D\uDCC5", VGL_ROTULOS.agendar);
       }
       bAg.addEventListener("click", (e) => {
         e.stopPropagation(); if (bAg.disabled) return;
@@ -7608,7 +7662,7 @@
       } else {
         bOrd.setAttribute("aria-label", "Generar órdenes de prevención / PyM");
         bOrd.title = "📋 Generar órdenes de prevención / PyM";
-        _vglDockRotulo(bOrd, "📋", "Ordenar");
+        _vglDockRotulo(bOrd, "📋", VGL_ROTULOS.ordenar);
       }
       bOrd.addEventListener("click", (e) => { e.stopPropagation(); if (bOrd.disabled) return; uxTrack("widget.ordenar.abrir"); openOrdenamientoModal(apt); });
       btns.appendChild(bOrd);
@@ -7619,7 +7673,7 @@
     bLabs.setAttribute("data-accion", "labs");
     bLabs.setAttribute("aria-label", "Ver paracl\u00ednicos / laboratorios");
     bLabs.title = "\uD83E\uDDEA Ver paracl\u00ednicos / laboratorios";
-    _vglDockRotulo(bLabs, "\uD83E\uDDEA", "Laboratorios");
+    _vglDockRotulo(bLabs, "\uD83E\uDDEA", VGL_ROTULOS.labs);
     bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.labs.abrir"); openLaboratoriosModal(apt); });
     btns.appendChild(bLabs);
 
@@ -7643,7 +7697,7 @@
     bFicha.title = "🧾 Panel del paciente — todo en un sitio: lo que el asistente leyó y de dónde, el riesgo cardiovascular con su porqué, la función renal, qué ordenar en la próxima toma, cómo viene evolucionando y sus medicamentos.";
     // v18.0.107 (C3) — mientras el cálculo completo corre en segundo plano, el botón sigue
     // existiendo y lo dice, en vez de desaparecer.
-    _vglDockRotulo(bFicha, "🧾", "Panel del paciente" + (mtrCacheResumenDesactualizado(docId) ? " · actualizando…" : ""));
+    _vglDockRotulo(bFicha, "🧾", VGL_ROTULOS.panel + (mtrCacheResumenDesactualizado(docId) ? " · actualizando…" : ""));
     bFicha.addEventListener("click", (e) => { e.stopPropagation(); if (bFicha.disabled) return; uxTrack("widget.panel.abrir"); openPanelPacienteModal(apt, { origen: "ficha" }); });
     btns.appendChild(bFicha);
     }
@@ -7659,7 +7713,7 @@
     bRedactar.setAttribute("data-accion", "redactar");
     bRedactar.setAttribute("aria-label", "Redactar texto libre con inteligencia artificial");
     bRedactar.title = "✍ Prepara borradores para las casillas de texto libre (motivo, enfermedad actual, análisis y plan, recomendaciones) a partir de los datos del paciente. Usted revisa y decide antes de insertar.";
-    _vglDockRotulo(bRedactar, "✍", "Redactar");
+    _vglDockRotulo(bRedactar, "✍", VGL_ROTULOS.redactar);
     bRedactar.addEventListener("click", (e) => {
       e.stopPropagation();
       uxTrack("widget.redactar.abrir");
@@ -7677,7 +7731,7 @@
     bControl.setAttribute("data-accion", "control");
     bControl.setAttribute("aria-label", "Ordenamiento de exámenes del próximo control");
     bControl.title = "📦 Revisar el paquete del programa del paciente y qué toca pedir en el próximo control.";
-    _vglDockRotulo(bControl, "📦", "Próximo control");
+    _vglDockRotulo(bControl, "📦", VGL_ROTULOS.control);
     bControl.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.control.abrir"); openPaquetesModal(apt); });
     btns.appendChild(bControl);
     }
@@ -8508,8 +8562,10 @@
                               // manda datos clínicos DESIDENTIFICADOS a un tercero; lo activa
                               // el médico y configura su clave. El motor está probado; la UI
                               // se estrena en sesión real.
-    medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
-    medicoId: 0,              // opcional: ID manual del médico
+    // v18.0.111 (S+ robustez, B12) — se retiran `medicoNombre`/`medicoId`: eran un respaldo
+    // «manual» sin casilla en Ajustes que 7 llamadas usaban como identidad del médico. Decisión
+    // del médico (02-sep): solo el login de Everest (GetUsuarioPerfil / la agenda del día)
+    // identifica a quien firma citas y órdenes.
   };
   function safeReadJSON(k, def) {
     try {
@@ -19948,7 +20004,7 @@
   // v17.15.0 — `opts.especulativo` viaja hasta pageFetchJson: el preparador por hover lo
   // pasa, el modal que el médico abrió NO. Es la única diferencia entre las dos vías.
   async function apiAccesoBuscarPaciente(docId, opts) {
-    const uId = state.activeDoctor.id || S.medicoId || 0;
+    const uId = state.activeDoctor.id || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
 
@@ -19993,7 +20049,7 @@
   // red falló o el servidor no contestó nada útil), mientras que un objeto real —aunque
   // describa una lista vacía— es una respuesta legítima del servidor y sí se puede confiar.
   async function apiAccesoBuscarCitasDisponibles(pacienteId, fechaIso, especialidadId, propagarError) {
-    const uId = state.activeDoctor.id || S.medicoId || 0;
+    const uId = state.activeDoctor.id || 0;
     const espId = especialidadId || 12;
     const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
     const path2 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=0&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
@@ -20568,7 +20624,7 @@
   // Interfaz API: Finalizar Ticket Digiturno al terminar atención
   async function apiDigiturnoFinalizarTicket(citaId) {
     if (!citaId) return;
-    const uId = state.activeDoctor.id || S.medicoId || 0;
+    const uId = state.activeDoctor.id || 0;
     const b64Cita = btoa(String(citaId));
     const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=${uId}&EverestId=${encodeURIComponent(b64Cita)}`;
     try { await pageFetchJson(path); } catch (e) {}
@@ -21230,7 +21286,7 @@
   // no por sub-cadena — conserva el match de "BPALENCIA"/"EESTRADA" como token propio
   // (así aparecen en Everest cuando el nombre trae la inicial pegada al apellido).
   function esMedicoRCVActivo() {
-    const docName = stripAccents(String((state.activeDoctor && state.activeDoctor.name) || S.medicoNombre || "").toUpperCase());
+    const docName = stripAccents(String((state.activeDoctor && state.activeDoctor.name) || "").toUpperCase());
     const tokens = docName.split(/[^A-Z0-9]+/).filter(Boolean);
     return RCV_DOCTORS.some((p) => tokens.includes(p));
   }
@@ -21270,7 +21326,7 @@
 
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
     if (state.killed) return { error: true, mensaje: "Pausa de seguridad remota activa (Kill-Switch activo): el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios." };
-    const uId = state.activeDoctor.id || S.medicoId || 0;
+    const uId = state.activeDoctor.id || 0;
     // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
     // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
     // otro profesional. Ahora se aborta de forma visible y el médico puede fijar su
@@ -22380,7 +22436,7 @@
       <div class="vgl-agm-card" style="max-width:720px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-paquete-kicker" id="vgl-paquete-title">${ICO.pkg} Ordenamiento de exámenes · Próximo control</div>
+            <div class="vgl-agm-title vgl-paquete-kicker" id="vgl-paquete-title">${ICO.pkg} ${VGL_ROTULOS.control} · Ordenamiento de exámenes</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
@@ -22520,14 +22576,14 @@
       <div class="vgl-agm-card" style="max-width:880px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">${MTR_ICONO_FLASK} Laboratorios</div>
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">${MTR_ICONO_FLASK} ${VGL_ROTULOS.labs}</div>
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Últimos 365 días</div>
           </div>
           <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
         </div>
 
-        <div class="vgl-ux-caption">Resultados del paciente en los últimos 365 días. Aquí solo se consultan: nada se modifica en la plataforma. Para programar la toma de muestras use Programación de cita; para pedir exámenes nuevos, Ordenar.</div>
+        <div class="vgl-ux-caption">Resultados del paciente en los últimos 365 días. Aquí solo se consultan: nada se modifica en la plataforma. Para programar la cita y la toma de muestras use «${VGL_ROTULOS.agendar}»; para pedir exámenes nuevos, «${VGL_ROTULOS.ordenar}».</div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
           <span class="vgl-labs-srclbl">${MTR_ICONO_FLASK} <b>Origen:</b> consulta automática al sistema del laboratorio, sin buscarlo a mano${vglTip("Estos resultados se traen solos del sistema del laboratorio, sin que tenga que buscarlos. El botón del pie abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
@@ -24186,7 +24242,7 @@
     };
     modal.innerHTML = '<div class="vgl-agm-card" style="max-width:900px">'
       + '<div class="vgl-agm-head"><div style="min-width:0">'
-      + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_ICONO_ACTIVITY + 'Panel del paciente</div>'
+      + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_ICONO_ACTIVITY + VGL_ROTULOS.panel + '</div>'
       + '<div class="vgl-agm-patient">' + escapeHtml(apt.nombre || apt.name || "Paciente") + '</div>'
       + '<div class="vgl-agm-sub">Todo lo del paciente en un solo sitio: lo que leí y de dónde, el riesgo y la función renal, qué ordenar, cómo viene evolucionando y sus medicamentos.</div>'
       + '</div><button class="vgl-agm-close" id="vgl-panel-x" aria-label="Cerrar">✕</button></div>'
@@ -24891,7 +24947,7 @@
     document.querySelectorAll("#vgl-ordenar-modal").forEach(e => e.remove());
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
+    const doctorName = state.activeDoctor.name || "";
     const esRCV = esMedicoRCVActivo();
     const citaHechaHoy = isCitaAgendadaHoy(apt.doc_id);
 
@@ -24910,7 +24966,7 @@
       <div class="vgl-agm-card" style="max-width:760px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 Programación de Cita · Remisión RCV</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 ${VGL_ROTULOS.agendar} · Programación de cita · Remisión RCV</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -25466,8 +25522,8 @@
       if (token !== _cargarHorasToken) return;
 
       if (!pacienteIdAcceso) {
-        if (!(state.activeDoctor.id || S.medicoId)) {
-          slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ El panel aún no identifica su usuario de Everest, y sin él la búsqueda de pacientes no funciona. Abra <b>Ajustes</b> y escriba <b>su identificador de médico</b>, o use una vez la agenda oficial de Everest para que se detecte solo.</div>`;
+        if (!state.activeDoctor.id) {   // v18.0.111 (B12): solo el login de Everest
+          slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ El panel aún no identifica su usuario de Everest, y sin él la búsqueda de pacientes no funciona. Abra un momento la <b>agenda del día de Everest</b> para que el asistente lo reconozca y vuelva a intentar.</div>`;
         } else {
           slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ No se encontró el paciente en el sistema de agenda con el documento ${escapeHtml(apt.doc_id)}.</div>`;
         }
@@ -27680,7 +27736,7 @@
       showToast("ROJO", "Asistente en pausa por seguridad", "El asistente está en pausa de seguridad para proteger la historia clínica. No se realizó ningún cambio.", true);
       return null;
     }
-    const uId = state.activeDoctor.id || S.medicoId || 0;
+    const uId = state.activeDoctor.id || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
     // órdenes clínicas a nombre de otro profesional.
     if (!uId) { showToast("ROJO", "Órdenes no generadas", "No se pudo identificar al médico en la sesión. Abra la agenda del día por un momento para que el asistente lo reconozca y vuelva a intentar.", true); return null; }
@@ -27888,7 +27944,7 @@
     if (existing) existing.remove();
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
+    const doctorName = state.activeDoctor.name || "";
     const modal = document.createElement("div");
     modal.id = "vgl-ordenar-modal";
     modal.setAttribute("role", "dialog");
@@ -27912,7 +27968,7 @@
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">${VGL_ROTULOS.ordenar} · Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -28116,7 +28172,7 @@
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">Órdenes de Prevención</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">${VGL_ROTULOS.ordenar} · Órdenes de Prevención</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -42183,7 +42239,7 @@
       modal.innerHTML =
         '<div class="vgl-agm-card" style="max-width:760px">'
         + '<div class="vgl-agm-head"><div style="min-width:0">'
-        + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_IA_ICONOS.pluma + 'Redacción asistida (IA)</div>'
+        + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_IA_ICONOS.pluma + VGL_ROTULOS.redactar + ' · Redacción asistida (IA)</div>'
         + '<div class="vgl-agm-sub">Borrador desde los datos de la historia. Usted lo revisa, edita y firma.</div>'
         + '</div><button class="vgl-agm-close" id="vgl-ia-x" aria-label="Cerrar">✕</button></div>'
         + (hayClave ? '' : '<div class="vgl-ord-vigwarn" style="margin:8px 0">Falta la clave de Gemini. Configúrela en Ajustes → Redacción IA para generar. Mientras tanto se muestran los hechos para copiar a mano.</div>')
@@ -43342,7 +43398,10 @@
       paDiastolica: _taFuente.pad != null ? _taFuente.pad : null,
       factores: factores || {},
       ultimos: ultimos,
-      uroHallazgos: uroHallazgos, uroSintomas: null,   // los síntomas no están en el lab: el motor pedirá confirmarlos
+      uroHallazgos: uroHallazgos,
+      // v18.0.111 (C10) — los síntomas no están en el lab: los dice el médico en el
+      // reconciliador y valen 7 días. Sin respuesta vigente, null: el motor pide confirmarlos.
+      uroSintomas: _uroSintomasConfirmados(apt && apt.doc_id),
       // v16.9.0 — El embarazo confirmado por el reconciliador (vigencia 30 días) llega
       // por fin al motor: hasta aquí `c.embarazo` era siempre undefined y la regla «en
       // embarazo la bacteriuria se trata siempre» era inalcanzable.
@@ -43416,7 +43475,7 @@
       resumen._grupoSabado = (typeof mtrSabadoTrabajaEsteMedico === "function")
         ? mtrSabadoTrabajaEsteMedico(state.activeDoctor && state.activeDoctor.id) : null;
       resumen._uroHallazgos = uroHallazgos || null;
-      resumen._uroSintomas = null;
+      resumen._uroSintomas = _uroSintomasConfirmados(apt && apt.doc_id);   // v18.0.111 (C10)
       resumen._embarazo = (function () {
         try {
           const reg = _vglConfirmacionVigente(apt && apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS);

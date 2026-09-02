@@ -721,5 +721,21 @@ module.exports = {
       t.igual(c.api._saludEstado(null, ahora), "nd", "un módulo desconocido no crea entradas fantasma");
     });
 
+    await t.casoAsync("v18.0.111 (S+ B12): solo el login de Everest identifica al médico — un `medicoId` manual en Ajustes ya no firma citas ni órdenes", async () => {
+      let fetchCount = 0;
+      const c = cargar({ silencioso: true, fetch: async () => { fetchCount++; return respuesta({ id: "ok" }); } });
+      c.api.__state.activeDoctor = { id: 0, name: "" };
+      c.api.__S.medicoId = 999;                 // un ajuste viejo que quedó guardado
+      const res = await c.api.apiAccesoAsignarTurno("turno", "pac123", "2026-08-10", "obs");
+      t.cierto(res && res.error && /NO se creó la cita/.test(res.mensaje), "sin login detectado la cita NO se crea, aunque haya un id manual guardado");
+      t.igual(fetchCount, 0, "y no sale ninguna petición");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const codigo = src.replace(/\/\/[^\n]*/g, "");
+      t.falso(/S\.medicoId\b/.test(codigo), "ninguna llamada usa S.medicoId como respaldo de identidad");
+      t.falso(/S\.medicoNombre\b/.test(codigo), "ni S.medicoNombre");
+      t.falso(/escriba <b>su identificador de médico<\/b>/.test(src), "y el aviso ya no manda a buscar en Ajustes una casilla que nunca existió");
+      t.cierto(/agenda del día de Everest<\/b> para que el asistente lo reconozca/.test(src), "sino a abrir la agenda del día para que se detecte solo");
+    });
+
   }
 };
