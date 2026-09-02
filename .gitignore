@@ -27,3 +27,6 @@ venv/
 node_modules/
 respaldos/
 docs/propuesta_bento/index.html
+
+# 02-sep — también el ENLACE SIMBÓLICO (node_modules/ solo cubre el directorio real)
+node_modules
