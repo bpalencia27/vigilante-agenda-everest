@@ -1,0 +1,41 @@
+15988|#vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar
+15991|        --bg:rgba(7,10,16,.88);
+15996|        --bg-solid:#090c12;
+16047|        --z-toast:2147483647;--z-modal:2147483000;
+16080|      #vgl-root.light,#vgl-lab-injector.light
+16087|        --c-rojo:#991b1b;--c-morado:#0e7490;--c-ambar:#92400e;
+16139|        position:fixed;bottom:22px;right:22px;
+16206|      @media (prefers-reduced-motion:reduce){
+16230|      .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647
+16316|        position:fixed;bottom:10px;right:10px;z-index:2147483646;
+16333|        position:fixed;top:200px;left:8px;
+16500|      .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
+16521|      #vgl-tls{display:flex !important;align-items:center !important;gap:8px !important
+16532|        outline:none !important;
+16553|      #vgl-title small{
+16567|      #vgl-dot.bg{animation:vglPulse 2.4s ease-out infinite}
+16583|      #vgl-root.vgl-hc,#vgl-dock.vgl-hc,#vgl-acciones-dock.vgl-hc
+16939|        -webkit-backdrop-filter:var(--glass);
+17039|      .vgl-sb-btn.primary{
+17081|      #vgl-list{
+17224|      #vgl-root.light .vgl-cd.warn{color:var(--c-morado) !important}
+17239|      .vgl-chip-mas { opacity:.75; cursor:help; }
+17308|        background:rgba(255,255,255,.05);color:var(--fg2) !important;
+17414|      .vgl-sw i{
+17549|        position:fixed;bottom:16px;left:12px;z-index:var(--z-panel);
+17576|        position:fixed;top:16px;right:16px;z-index:2147483646;
+17787|      #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
+17843|        position:fixed;left:14px;bottom:14px;
+17991|        position:fixed;right:22px;bottom:22px;
+18357|        position:fixed;bottom:18px;right:18px;z-index:2147483646;
+18608|      #vgl-labs-modal .vgl-labs-date small{
+18921|      #vgl-agendar-modal .vgl-agm-foot{
+19074|      #vgl-ordenar-modal .vgl-agm-foot{
+19361|            <button class="vgl-sb-btn" id="vgl-bell"
+15852|        .vgl-stepper-step.active .vgl-step-num{background:var(--c-azul);color:#020617 !important}
+15822|          background:var(--c-azul) !important;color:#fff !important;outline:none
+15915|        .vgl-btn-undo:hover{background:var(--c-rojo);color:#fff !important}
+15934|        .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
+15881|        .vgl-prod-cap{font-size:10px;font-weight:700;opacity:.7;color:var(--fg3) !important}
+31266|            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(".16")}
+9166|      const t = document.getElementById("vgl-toasts"); if (t) t.classList.toggle("light", isLight());
