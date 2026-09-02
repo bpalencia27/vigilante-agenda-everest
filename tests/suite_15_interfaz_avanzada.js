@@ -3697,6 +3697,55 @@ module.exports = {
         "un «No sé» no cuenta como respuesta: es exactamente lo que no se toca");
     });
 
+    // =====================================================================
+    // v18.0.126 — DECISIONES DE LA ENTREVISTA DEL MÉDICO (02-sep), lote 1. Las tres viven en
+    // cierres de modal o en la hoja: se protegen por texto fuente, el criterio establecido.
+    // =====================================================================
+    t.caso("v18.0.126 (fila 35): con varios programas el médico elige; con uno solo no se le pregunta", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("if (progs.length && box && sel) {");
+      t.cierto(i >= 0, "existe el selector de programa");
+      const bloque = src.slice(i, i + 1400);
+      // Preseleccionaba EL PRIMERO de la lista sin avisar: la cita se cargaba a un programa que
+      // él nunca eligió, y ese programa decide de qué contrato sale.
+      t.cierto(/const _varios = progs\.length > 1;/.test(bloque), "distingue «uno» de «varios»");
+      t.cierto(/— elija el programa —/.test(bloque), "con varios, arranca sin elegir");
+      t.cierto(/\(!_varios && i === 0\) \? " selected" : ""/.test(bloque),
+        "con uno solo se preselecciona: ahí no hay ambigüedad que preguntar");
+      // Y no se asigna nada sin su elección: Everest exige el programa para dar el turno.
+      t.cierto(/Elija el programa al que se carga la cita/.test(src), "el botón lo pide en vez de inventarlo");
+      t.cierto(/uxTrack\("cita\.programa\.sin_elegir"\)/.test(src), "y queda medido cuántas veces pasa");
+    });
+
+    t.caso("v18.0.126 (fila 38): «SOLO Laboratorios» abierto desde Agendar tiene camino de vuelta", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/openLabSoloModal\(apt, \{ libre: true, desdeAgendar: true \}\)/.test(src),
+        "el paso 1 de Agendar le dice de dónde viene");
+      t.cierto(/const desdeAgendar = !!\(opts && opts\.desdeAgendar\);/.test(src), "y el cuadro lo recibe");
+      t.cierto(/\$\{desdeAgendar \? "↩ Atrás" : "Cancelar"\}/.test(src),
+        "el secundario cambia de rótulo según de dónde venga");
+      t.cierto(/openAgendamientoModal\(apt\); \} catch \(e\) \{\}\s*\}\s*\}\);/.test(src),
+        "y reabre Agendar en vez de dejarlo en Everest");
+      // La ✕ sigue siendo la salida de verdad: no reabre nada.
+      t.cierto(/xBtn\.addEventListener\("click", closeMod\);/.test(src), "la ✕ cierra y punto");
+    });
+
+    t.caso("v18.0.126: el punto verde late tres veces y se queda quieto; el ámbar de alerta no", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/#vgl-dot\.bg\{animation:vglPulse 2\.4s ease-out 3\}/.test(src),
+        "tres latidos: el punto solo dice «estoy mirando la agenda», no es una alerta");
+      t.falso(/#vgl-dot\.bg\{animation:vglPulse 2\.4s ease-out infinite\}/.test(src),
+        "ya no late toda la consulta en el borde del campo visual");
+      t.cierto(/#vgl-dot\.salud-warn\{[^}]*animation:vglPulse 2\.4s ease-out infinite\}/.test(src),
+        "pero el ámbar de fallo sostenido SÍ sigue latiendo: eso sí es una alerta");
+    });
+
     // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"
     // con CUALQUIER agenda de la respuesta (propia o ajena), así que un sábado con agenda de
     // OTRO profesional se seguía ofreciendo como chip normal — y al pulsarlo, cargarHoras()

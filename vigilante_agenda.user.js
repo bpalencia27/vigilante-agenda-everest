@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.125
+// @version      18.0.126
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.125";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.126";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -16740,7 +16740,13 @@
         0%,100%{box-shadow:0 0 10px rgba(var(--rgb-verde),.9),0 0 0 0 rgba(var(--rgb-verde),.45)}
         50%{box-shadow:0 0 10px rgba(var(--rgb-verde),.9),0 0 0 7px rgba(var(--rgb-verde),0)}
       }
-      #vgl-dot.bg{animation:vglPulse 2.4s ease-out infinite}
+      /* v18.0.126 — decidido por el médico en la entrevista del 02-sep: «tres latidos y luego
+         quieto». El punto verde solo dice «estoy mirando la agenda en segundo plano», y latía
+         sin parar en el borde del campo visual durante toda la consulta. Late al cambiar de
+         estado —que es cuando hay algo que notar— y después se queda quieto. El ámbar de fallo
+         sostenido (.salud-warn, más abajo) SÍ sigue latiendo: eso es una alerta, no un latido
+         de fondo. */
+      #vgl-dot.bg{animation:vglPulse 2.4s ease-out 3}
       /* v15.8.0 (N2) — semáforo de salud: el ámbar de fallo sostenido manda sobre el color
          de origen, y el punto se vuelve tocable (abre el globito con los 4 renglones). */
       #vgl-dot{cursor:pointer}
@@ -26159,7 +26165,12 @@
       step1Next.addEventListener("click", () => {
         if (tipoCitaElegido === "lab") {
           closeMod();
-          openLabSoloModal(apt, { libre: true });
+          // v18.0.126 (auditoría UI/UX, fila 38 · UX-25; decidido por el médico el 02-sep:
+          // «↩ Atrás» que reabra Agendar en el paso 1). El cuadro de SOLO Laboratorios no tiene
+          // stepper, y su «Cancelar» cerraba y dejaba al médico en Everest: si se había
+          // equivocado de tipo de cita, tenía que volver a abrir Agendar desde el dock y repetir
+          // el paso 1. Se le dice de dónde viene para que pueda deshacer el camino.
+          openLabSoloModal(apt, { libre: true, desdeAgendar: true });
         } else {
           irAPaso(2);
         }
@@ -26496,7 +26507,14 @@
           const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
           const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
           if (progs.length && box && sel) {
-            sel.innerHTML = progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${i === 0 ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
+            // v18.0.126 (auditoría UI/UX, fila 35 · UX-22; decidido por el médico en la
+            // entrevista del 02-sep: «— elija el programa —» cuando hay varios). Con más de un
+            // programa inscrito se preseleccionaba EL PRIMERO de la lista, sin avisar: la cita
+            // se cargaba a un programa que él nunca eligió y que decide de qué contrato sale.
+            // Con uno solo no hay nada que preguntar y se deja como estaba.
+            const _varios = progs.length > 1;
+            sel.innerHTML = (_varios ? '<option value="" selected>— elija el programa —</option>' : "")
+              + progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${(!_varios && i === 0) ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
             box.style.display = "block";
           }
 
@@ -27895,6 +27913,21 @@
       // sin hora elegida la cita se creaba y la toma fallaba con un motivo falso («el horario de
       // laboratorio elegido () ya no está disponible»). Se despliega el detalle, se enfoca el select
       // y se pide la hora: no se inventa ninguna — la elige el médico o desmarca la casilla.
+      // v18.0.126 (fila 35) — segunda mitad de la decisión: si hay varios programas y todavía
+      // no eligió, no se asigna nada. Everest exige el programa para dar el turno, y mandar uno
+      // supuesto es exactamente lo que la regla del dato inventado prohíbe. Mismo patrón que la
+      // guarda de la toma sin hora (v18.0.117): se enfoca, se pide, y no se inventa.
+      {
+        const _boxProg = modal.querySelector("#vgl-agm-prog-box");
+        const _selProg = modal.querySelector("#vgl-agm-prog-sel");
+        const _visible = _boxProg && (_boxProg.style ? _boxProg.style.display === "block" : false);
+        if (_visible && _selProg && !_selProg.value) {
+          try { _selProg.focus(); } catch (e) {}
+          confirmBtn.textContent = "Elija el programa al que se carga la cita";
+          try { uxTrack("cita.programa.sin_elegir"); } catch (e) {}
+          return;
+        }
+      }
       {
         const _chkLab = modal.querySelector("#vgl-agm-lab-chk");
         const _selLab = modal.querySelector("#vgl-agm-lab-time-sel");
@@ -28174,6 +28207,8 @@
     // exige la fecha de la cita: el día sugerido sale de la fecha de toma que el sistema
     // ya calculó para este paciente (caché clínica) o, en su defecto, el próximo día hábil.
     const libre = !!(opts && opts.libre);
+    // v18.0.126 (fila 38) — ¿vino del paso 1 de Agendar? Entonces hay a dónde volver.
+    const desdeAgendar = !!(opts && opts.desdeAgendar);
     const citaFechaIso = citaAgendadaFechaHoy(apt.doc_id);
     if (!citaFechaIso && !libre) {
       // Caso de transición: la cita se marcó "agendada hoy" antes de que esta versión
@@ -28247,7 +28282,9 @@
         </div>
 
         <div class="vgl-agm-foot">
-          <button id="vgl-agm-cancel" class="vgl-agm-btn sec">Cancelar</button>
+          <!-- v18.0.126 (fila 38) — abierto desde Agendar, el secundario es el camino de vuelta,
+               no una salida al vacío. Abierto desde el dock, sigue siendo «Cancelar». -->
+          <button id="vgl-agm-cancel" class="vgl-agm-btn sec">${desdeAgendar ? "↩ Atrás" : "Cancelar"}</button>
           <button id="vgl-agm-confirm" class="vgl-agm-btn pri" disabled>Seleccione un horario</button>
         </div>
       </div>
@@ -28270,7 +28307,15 @@
       modal.remove();
     };
     xBtn.addEventListener("click", closeMod);
-    cancelBtn.addEventListener("click", closeMod);
+    // v18.0.126 (fila 38) — la ✕ siempre cierra (es la salida); el secundario, cuando vino de
+    // Agendar, REABRE Agendar en el paso 1 en vez de dejarlo en Everest.
+    cancelBtn.addEventListener("click", () => {
+      closeMod();
+      if (desdeAgendar) {
+        try { uxTrack("fn.labsolo.volver_a_agendar"); } catch (e) {}
+        try { openAgendamientoModal(apt); } catch (e) {}
+      }
+    });
     _activarAccesibilidadModal(modal, closeMod);
 
     let selectedLabDateInfo = null;

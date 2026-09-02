@@ -12130,4 +12130,36 @@ y sacaba un aviso de éxito. Ahora nace apagado, dice qué falta, y cuando se en
 | 428 | el segundo clic relanza en vez de detener | *suite_15: v18.0.125 (fila 36)…* | Sí |
 | 429 | el primario se enciende sin ninguna respuesta | *suite_15: v18.0.125 (fila 37)…* | Sí |
 
-Banco completo: **3.087 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.087 comprobaciones pasan, 0 fallan.** *(v18.0.125)*
+
+---
+
+## v18.0.126 — decisiones de la entrevista del médico (02-sep), lote 1
+
+**El programa que decide de qué contrato sale la cita ya no se preselecciona solo** (fila 35 ·
+UX-22). Con más de un programa inscrito se elegía **el primero de la lista**, sin avisar. Ahora
+arranca en «— elija el programa —», y Confirmar no asigna nada hasta que él elija: mandar un
+programa supuesto es exactamente lo que la regla del dato inventado prohíbe. Con un solo
+programa no hay ambigüedad que preguntar y se deja como estaba.
+
+**«SOLO Laboratorios» abierto desde Agendar tiene camino de vuelta** (fila 38 · UX-25). Ese
+cuadro no tiene stepper, y su «Cancelar» cerraba y dejaba al médico en Everest: equivocarse de
+tipo de cita costaba volver a abrir Agendar desde el dock y repetir el paso 1. Ahora el
+secundario dice «↩ Atrás» y reabre Agendar. La ✕ sigue siendo la salida de verdad.
+
+**El punto verde late tres veces y se queda quieto.** Solo dice «estoy mirando la agenda en
+segundo plano», y latía sin parar en el borde del campo visual toda la consulta. El ámbar de
+fallo sostenido **sí** sigue latiendo: eso es una alerta, no un latido de fondo.
+
+**Los tamaños de la tabla de laboratorios ya estaban unificados** por F-17 (v18.0.124): las
+cuatro columnas usan `--t-micro`, `--t-nano`, `--t-body` y `--t-strong`. No había nada que
+aplicar aquí, y se anota para no volver a buscarlo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 430 | vuelve la preselección del primer programa | *suite_15: v18.0.126 (fila 35)…* | Sí |
+| 431 | Confirmar deja de pedir el programa y lo supone | *suite_15: v18.0.126 (fila 35)…* | Sí |
+| 432 | «SOLO Laboratorios» pierde de dónde viene | *suite_15: v18.0.126 (fila 38)…* | Sí |
+| 433 | el punto verde vuelve a latir sin parar | *suite_15: v18.0.126: el punto verde late tres veces…* | Sí |
+
+Banco completo: **3.090 comprobaciones pasan, 0 fallan.**
