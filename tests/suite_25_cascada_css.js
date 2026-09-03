@@ -891,6 +891,25 @@ module.exports = {
       t.igual(sinCobertura, [], `Clases con texto literal propio y SIN regla de color que les aplique (clase propia con texto en una superficie del script ⇒ color con marca de prioridad, CLAUDE.md): ${sinCobertura.map((x) => "." + x.clave.replace(/ /g, ".") + (x.id ? "#" + x.id : "") + " («" + x.texto + "»)").join(", ")}`);
     });
 
+    // =====================================================================
+    // v18.0.135 — Regla S-bis: el punto ciego de la Regla S con .vgl-sb-txt.
+    //
+    // La Regla S da por cubierto a cualquier elemento cuya ETIQUETA tenga una regla de
+    // color en alguna parte de la hoja (sobreaproximación deliberada, documentada arriba).
+    // «Alertas» y «Silenciar» (.vgl-sb-txt, spans de la campana y del mudo, v18.0.128
+    // UI-21) son span: cualquier `… span{color}` de la hoja los daba por cubiertos y el
+    // barrido pasó en verde mientras el médico los veía AZULES por el CSS de Everest
+    // (captura del 3-sep). Esta regla es estática a propósito: exige la clase DENTRO de la
+    // lista de herencia de la hoja principal — la misma declaración que vigila el censo de
+    // arriba — porque una regla nueva con su propia marca de prioridad sería otra cuenta
+    // que explicarle al censo, y aquí lo que corresponde es heredar del botón.
+    // =====================================================================
+    t.caso("Regla S-bis - el rótulo de la campana (.vgl-sb-txt) viaja en la lista de herencia de color", () => {
+      const m = css.match(/\.vgl-tc-ico[\s\S]{0,140}?\{[^}]*\}/);
+      t.cierto(!!m && /\.vgl-sb-txt/.test(m[0]) && /color:\s*inherit/.test(m[0]),
+        "«Alertas»/«Silenciar» son spans con clase propia y texto literal: el blindaje tipográfico no los cubre y sin regla propia el CSS de Everest se queda con su color (reporte real con captura, 3-sep). Deben viajar en la lista de herencia junto a .vgl-tc-ico. Regla encontrada: " + (m ? m[0].replace(/\s+/g, " ").slice(0, 130) : "NINGUNA — la lista no existe o .vgl-tc-ico perdió su color"));
+    });
+
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
     // Redactor IA) pinta con <div style="..."> SIN clase propia dentro de #vgl-ia-modal. El
     // blindaje tipográfico (:where(...:not([class]))) solo cubría span/b/small/label/p, no

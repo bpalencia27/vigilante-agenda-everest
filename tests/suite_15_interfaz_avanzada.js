@@ -4147,6 +4147,39 @@ module.exports = {
     });
 
     // =====================================================================
+    // v18.0.135 — REGLA DEL MÉDICO (03-sep-2026): «se puede volver a reordenar en todas
+    // las actividades de PyM, a menos que ya se lo haya hecho y se haya detectado en los
+    // resultados de Athenea». Una orden vigente en Everest SIN resultado en el laboratorio
+    // ya no bloquea la casilla: se vuelve a ordenar, premarcada. Es exactamente el caso
+    // reportado (VIH con orden viva que el modal volvía a ofrecer en bloqueado/sin marca).
+    // =====================================================================
+    await t.casoAsync("openOrdenamientoModal v18.0.135: orden vigente SIN resultado → premarcada, no bloqueada", async () => {
+      const cReord = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
+            // La orden del VIH (CUPS 906249), creada hace 30 días y sin resultado en Athenea.
+            return respuestaJson([{ cup: { codigo: "906249" }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) }]);
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cReord);
+      const ultimoOrdR = () => cReord.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      await cReord.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["VIH"] });
+      const modal = ultimoOrdR();
+      t.cierto(!!modal, "el modal se abre");
+      t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "la casilla del VIH vuelve PREMARCADA: la orden vigente ya no desmarca");
+      t.falso(/data-idx="0"[^>]*disabled/.test(modal.innerHTML), "ni queda bloqueada: el médico puede desmarcarla si no la quiere");
+      t.cierto(modal.innerHTML.includes("sin resultado en el laboratorio"), "y el aviso explica la regla nueva con esas palabras");
+      t.falso(modal.innerHTML.includes("comuníquese con el servicio de órdenes"), "el texto viejo que mandaba a llamar a órdenes se retiró");
+    });
+
+    // =====================================================================
     // v12.6.6 — El correo de la orden va con UsuarioId = id del PACIENTE. Confirmado en la
     // grabación real del consultorio: en la MISMA corrida, Everest pide
     // GenerarLinksImpresionOrdenamientos?PacienteId=801848 y acto seguido

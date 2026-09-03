@@ -302,11 +302,21 @@ module.exports = {
       // toma un mes (del 30-sep al 29-ago). Comprobado midiendo el mismo caso con y sin el
       // margen. Lo que este caso protege es que no se cite DESPUÉS de que algo vigente se
       // eche a perder; los ya vencidos son justo lo que la cita viene a resolver.
-      const yaVencidos = new Set((plan.vencidos || []).map((a) => a.nombre));
-      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl && !yaVencidos.has(a.nombre));
+      // v18.0.135 — con la regla de la entrevista del 02-sep existe un TERCER destino
+      // además de «vigente» y «vencido»: la falla terapéutica (subestado "recontrol_falla").
+      // Aquí la HbA1c de 7,1 (meta 7,0) parte SU vigencia y la de la glucosa a la mitad:
+      // ambas vencen el 30-jul, ANTES de la toma, pero su norma sigue viva hasta el 28-oct,
+      // así que NO viajan en `vencidos`. Adelantar la cita no las protege —su ventana del
+      // 50 % ya se gastó— y el plan hace con ellas lo correcto: las mete en `ordenar`
+      // (comprobado en la suite_49). Este caso sigue protegiendo lo de siempre, que nada
+      // VIGENTE se eche a perder antes de la toma, y ahora exige también que TODO lo que
+      // había que repetir YA —vencido o en falla terapéutica— viaje en la orden.
+      const yaResueltos = new Set((plan.vencidos || []).map((a) => a.nombre)
+        .concat(plan.drivers.filter((a) => a.subestado === "recontrol_falla").map((a) => a.nombre)));
+      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl && !yaResueltos.has(a.nombre));
       t.igual(antes.map((a) => a.nombre + "@" + a.vence), [], "hay exámenes VIGENTES que vencen ANTES de la toma");
-      t.cierto((plan.ordenar || []).some((a) => yaVencidos.has(a.nombre)) || yaVencidos.size === 0,
-        "y todo lo que ya estaba vencido va en la orden: si no, el médico cita y nadie lo pide");
+      t.cierto([...yaResueltos].every((n) => (plan.ordenar || []).some((a) => a.nombre === n)),
+        "y todo lo que había que repetir YA (vencido o falla terapéutica) va en la orden: si no, el médico cita y nadie lo pide");
     });
 
     t.caso("si el vencimiento cae en domingo, la toma se ADELANTA al sábado", () => {

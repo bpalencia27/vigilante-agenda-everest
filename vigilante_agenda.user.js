@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.134
+// @version      18.0.135
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.134";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.135";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4623,9 +4623,22 @@
       const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });
       const extra = (opts && Array.isArray(opts.clavesExtra)) ? opts.clavesExtra : [];
       const claves = RCV_VIGENCIA_KEYS.concat(extra.filter((k) => RCV_VIGENCIA_KEYS.indexOf(k) < 0));
+      // v18.0.135 — regla glucosa/HbA1c (entrevista 02-sep): la glucosa SOLO se repite al
+      // 50 % si la HbA1c está fuera de metas, y mtrFueraDeMeta lee ese valor del ctx.
+      // Quienes llaman aquí (aviso de entrada y antiduplicado PyM) no lo traen, pero los
+      // labs del propio paciente sí pueden tener la HbA1c: se copia UNA vez, aquí, y las
+      // dos lecturas de vigencia (la del 50 % y la normativa) la reciben ambas — sin esto
+      // la glucosa volvería a partirse sola por su valor y el aviso volvería a mentir.
+      const _optsVig = Object.assign({}, opts || {});
+      if (_optsVig.valorHba1c === null || _optsVig.valorHba1c === undefined) {
+          const hba1cCand = candidatos.get("HBA1C");
+          const hba1cVal = (hba1cCand && hba1cCand.resultVal !== null && hba1cCand.resultVal !== undefined)
+              ? hba1cCand.resultVal : null;
+          if (hba1cVal !== null) _optsVig.valorHba1c = hba1cVal;
+      }
       const faltantes = [];
       for (const key of claves) {
-          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, opts);
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, _optsVig);
           // v17.6.96 — BLOQ: la norma PROHIBE pedir este analito a este paciente (bloqueo
           // KDIGO, o HbA1c en quien no consta diabetes). No es "vencido": es que no se pide.
           // Reportarlo como faltante seria pedir un examen que la norma niega, y tratarlo
@@ -4645,7 +4658,7 @@
           // vencido un examen al que le quedaban 80 días. Ahora se comparan las DOS varas: la
           // normativa dice si está vencido, y el adelanto solo dice si conviene repetirlo
           // antes. Quien pinta decide qué decir de cada uno; nadie llama vencido a lo vigente.
-          const vigenciaNorma = _vigenciaNormaDiasParaAnalito(key, c.resultVal, opts);
+          const vigenciaNorma = _vigenciaNormaDiasParaAnalito(key, c.resultVal, _optsVig);
           const normaNum = (typeof vigenciaNorma === "number" && isFinite(vigenciaNorma)) ? vigenciaNorma : null;
           const vencido = (normaNum === null) ? true : (dias > normaNum);
           faltantes.push({
@@ -14738,7 +14751,7 @@
       if (!doc) return vacio;
       const key = normalizeKey(doc); if (!key) return vacio;
       const abandono = !!(state.pymAbandono && state.pymAbandono.has(key));
-      const pym = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
+      const pymBase = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
       // A4 (S+, 02-sep) — la lista con la que se juzga es el CONSOLIDADO Athenea+Annar+Citi
       // cuando ya existe fresco (lo dejan el modal de Laboratorios y mtrCalcularResumenClinico);
       // solo si no hay consolidado se cae a la precarga de Athenea de siempre. Antes este aviso
@@ -14747,6 +14760,38 @@
       const labsCrudos = (typeof _labsConsolidadoDe === "function" && _labsConsolidadoDe(doc))
         || (_labsPrefetchCoincide(doc) ? _labsPrefetch.labs : null);
       const labsListos = !!(labsCrudos && !atheneaLecturaIncompleta(labsCrudos));
+      // v18.0.135 — SINCRONIZACIÓN DEL AVISO CON LOS RESULTADOS (reporte del médico,
+      // 03-sep): el aviso de entrada y la pastilla «🩺 Pendientes» del dock ofrecían
+      // actividades que el modal de Laboratorios ya mostraba HECHAS (SOMF del 14/08 con
+      // código propio del laboratorio, VIH vía Annar/Citi). `pymPendientesRestantes` solo
+      // resta lo ordenado HOY desde el panel; nunca miró resultados. Aquí se descuenta lo
+      // «ya hecho y detectado en los resultados» con la MISMA vara del modal de Ordenar
+      // (regla del médico del 03-sep): la orden vigente en Everest SIN resultado NO se
+      // descuenta — esa actividad se vuelve a ordenar, sigue siendo pendiente. Y solo se
+      // filtra con lectura COMPLETA de laboratorios: si Athenea no respondió o la lectura
+      // quedó incompleta, se muestra todo (D4: ante la duda, el aviso se muestra).
+      let pym = pymBase;
+      if (labsListos && pym.length) {
+        try {
+          const cubiertas = new Set();
+          const _hoyAviso = todayStamp();
+          const _pares = pymPaquetesDelPaciente(pym);
+          for (const _par of (_pares && _pares.pymPorPaquete) || []) {
+            const _pkg = _par[0], _etiquetas = _par[1];
+            if (!_pkg || _pkg.cie10 === "I10X") continue;              // RCV se juzga en `labs`, no aquí
+            if (PYM_MANDA_SHAREPOINT.indexOf(_pkg.cie10) >= 0) continue; // la lista de la sede manda (Z123)
+            let _bloq = false;
+            if (_pkg.vigenciaDias) {
+              _bloq = pymPaqueteCubiertoPorAthenea(_pkg, labsCrudos, _hoyAviso) === true;
+            } else {
+              const _h = pymPaqueteHechoEnAthenea(_pkg, labsCrudos, _hoyAviso);
+              _bloq = !!(_h && _h.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS);
+            }
+            if (_bloq) _etiquetas.forEach((e) => cubiertas.add(e));
+          }
+          if (cubiertas.size) pym = pym.filter((l) => !cubiertas.has(l));
+        } catch (e) { pym = pymBase; }
+      }
       const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
       const _autorizado = mtrEsMedicoAutorizado();
       let _repetirFueraMeta;
@@ -15100,6 +15145,16 @@
     return out;
   }
   function showToast(color, title, body, persist, apptKey) {
+    // v18.0.135 (Avisos #4) — el toast es un canal DE LA PÁGINA, y la página del Vigilante
+    // es el módulo clínico HCHealth: fuera de él no se dibuja NADA. Era la fuga reportada
+    // por el médico («la misma notificación azul cian que está arriba me aparece la
+    // anaranjada en otras pestañas o ventanas de Everest»): cualquier pestaña ajena
+    // VISIBLE podía pintar el toast encima de una pantalla que no es la clínica. El TONO y
+    // la notificación del sistema NO pasan por aquí y siguen saliendo esté donde esté el
+    // médico (invariante v14.1.5). Este gate central cubre de una sola vez a todos los
+    // llamadores: notify(), los respaldos internos de osNotify, el deadman del asistente
+    // y los avisos de arranque.
+    if (!_enModuloHCHealth()) return;
     // v17.6.9 — regla 1: dedup del mismo aviso en el mismo flush.
     const clave = (apptKey || "") + "|" + String(title || "");
     if (toastQueue.some((t) => ((t.apptKey || "") + "|" + String(t.title || "")) === clave)) return;
@@ -15143,7 +15198,11 @@
     // mismo «PyM actualizado» no sale dos veces en el navegador, ni en dos pestañas.
     const uidReal = uid || _avisoUidDeTexto(title, body);
     if (!_avisoUnaVezPorNavegador("notify|" + uidReal)) return;
-    if (!_pestanaSinAtencion()) { showToast(color, title, body, persist); return; }
+    // v18.0.135 (Avisos #4) — misma política del gate de showToast: con la pestaña visible
+    // PERO fuera de HCHealth, el canal ya no es el toast de la página (pintaría sobre una
+    // pantalla ajena — la fuga reportada) sino la notificación del sistema. Dentro de
+    // HCHealth y visible todo sigue igual: un aviso = un canal, el de la página (v15.4.0).
+    if (!_pestanaSinAtencion() && _enModuloHCHealth()) { showToast(color, title, body, persist); return; }
     if (!_notificarSistema(color, title, body, persist, uidReal)) showToast(color, title, body, persist);
   }
   function _gmNotify(color, title, body, persist, uid) {
@@ -15308,16 +15367,24 @@
     // que el cartel pendiente se siga encolando para cuando el médico entre a la
     // historia, aunque el silencio ya haya vencido para entonces.
     if (muted()) return true;
-    if (_pestanaSinAtencion()) {
+    // v18.0.135 (Avisos #4) — LA FUGA REPORTADA: una pestaña ajena VISIBLE (Acceso, otra
+    // ventana de Everest) entraba por la rama «pestaña visible» de abajo y pintaba el
+    // toast sobre una pantalla que no es la clínica («la notificación azul cian/anaranjada
+    // me aparece en otras pestañas de Everest»). El canal DENTRO DE LA PÁGINA solo existe
+    // en HCHealth; fuera de él el aviso sale por el SISTEMA aunque la pestaña esté visible,
+    // y el respaldo in-page (si el sistema no puede) queda reservado a HCHealth. Lo que NO
+    // cambió: el TONO ya sonó arriba, antes de cualquier mirada al módulo (invariante
+    // v14.1.5 — el aviso suena esté donde esté el médico), y el parpadeo del título sigue
+    // siendo la señal de lo crítico en cualquier pestaña del navegador.
+    if (_pestanaSinAtencion() || !_enModuloHCHealth()) {
       if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
-        showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
+        if (_enModuloHCHealth()) showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
         if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
       }
     } else if (!p.sinToastPorCartel) {
-      // Pestaña visible: el canal es el de la página. Si quien llama va a pintar el cartel
-      // para este mismo aviso (lo dice con p.sinToastPorCartel), el toast no se duplica
-      // encima. La decisión de módulo vive en el llamador: este disparador NO mira el
-      // módulo (invariante v14.1.5 — el aviso suena esté donde esté el médico).
+      // Pestaña visible EN HCHealth: el canal es el de la página. Si quien llama va a
+      // pintar el cartel para este mismo aviso (lo dice con p.sinToastPorCartel), el
+      // toast no se duplica encima.
       showToast(p.color, p.title, p.body, p.persist, p.apptKey);
     }
     return true;
@@ -15549,6 +15616,34 @@
   // único que cambia es que no toca la casilla.
   const PYM_MANDA_SHAREPOINT = ["Z123"];
 
+  // v18.0.135 — la fecha del resultado MÁS RECIENTE cuyo nombre case con alguna palabra
+  // clave del paquete, como PALABRA COMPLETA (no subcadena: «colon» dentro de
+  // «colonoscopia» no es la SOMF hecha). Es el respaldo por nombre de
+  // pymPaqueteHechoEnAthenea para paquetes de UN solo CUPS: el resultado puede llegar con
+  // el código PROPIO del laboratorio —o por el consolidado Annar/Citi— y el CUPS oficial
+  // del paquete no aparecer nunca, con lo que el examen caía en «no hecho» y el modal
+  // volvía a ordenar un VIH que el paciente ya tenía. Regla del médico (03-sep-2026): no
+  // hace falta que coincida el CUPS; el nombre igual o similar basta para dar el examen
+  // por detectado.
+  function _pymMejorFechaPorNombre(palabras, labs, fechaUtilDe) {
+    try {
+      if (!Array.isArray(palabras) || !palabras.length || !Array.isArray(labs)) return null;
+      const res = palabras.map((k) => {
+        const esc = String(k).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        try { return new RegExp("(?:^|[^a-z0-9])" + esc + "(?:[^a-z0-9]|$)"); } catch (e) { return null; }
+      }).filter(Boolean);
+      let mejor = null;
+      for (const lab of labs) {
+        if (!lab || typeof lab !== "object") continue;
+        const name = stripAccents(String(lab.NombreParametro || lab.nombre || lab.examen || "")).toLowerCase();
+        if (!name || !res.some((re) => re.test(name))) continue;
+        const iso = fechaUtilDe(lab);
+        if (iso && (!mejor || iso > mejor)) mejor = iso;
+      }
+      return mejor;
+    } catch (e) { return null; }
+  }
+
   function pymPaqueteHechoEnAthenea(pkg, labs, hoyIso) {
     try {
       if (!pkg || !Array.isArray(labs) || !labs.length) return null;
@@ -15605,7 +15700,27 @@
           const prev = porCups.get(code);
           if (!prev || iso > prev) porCups.set(code, iso);
         }
-        if (porCups.size < codigos.size) return null;          // falta al menos un componente: no se afirma nada
+        // v18.0.135 — FALLBACK POR NOMBRE, SOLO para paquetes de UN componente (VIH, PSA,
+        // SOMF, mamografía). Hallazgo del médico (03-sep-2026): el resultado llega con el
+        // código PROPIO del laboratorio —o por el consolidado Annar/Citi— en lugar del CUPS
+        // oficial, y con el «falta al menos un componente» de antes el examen quedaba como
+        // «no hecho» y se volvía a ordenar. Regla del médico: NO es necesario que coincida
+        // el CUPS; el nombre igual o similar basta. Acotado a UN CUPS: en los multi-CUPS
+        // (Z108, Z103, Z124) un nombre suelto no puede cubrir el paquete entero (v18.0.38)
+        // y «hemoglobina» seguiría cazando «hemoglobina glicosilada», borde de palabra o no.
+        if (codigos.size === 1) {
+          const porNombre = _pymMejorFechaPorNombre(palabras, labs, _fechaUtilDe);
+          const fechaCups = porCups.size ? porCups.values().next().value : null;
+          // La bandera dice si el NOMBRE aportó algo que el CUPS no tenía (código propio
+          // del laboratorio, o una repetición externa más reciente) — no basta con que el
+          // nombre de la fila del CUPS también case, porque ahí quien manda es el CUPS.
+          const ganoNombre = !!(porNombre && (!fechaCups || porNombre > fechaCups));
+          const mejor = ganoNombre ? porNombre : fechaCups;
+          if (!mejor) return null;                              // ni por CUPS ni por nombre: no se afirma nada
+          const msMejor = new Date(mejor + "T00:00:00").getTime();
+          return { iso: mejor, dias: Math.round((hoyMs - msMejor) / 86400000), componentes: 1, porNombre: ganoNombre };
+        }
+        if (porCups.size < codigos.size) return null;          // multi-CUPS: falta al menos un componente, no se afirma nada
         let masAntiguo = null;
         porCups.forEach((iso) => { if (!masAntiguo || iso < masAntiguo) masAntiguo = iso; });
         const msAnt = new Date(masAntiguo + "T00:00:00").getTime();
@@ -17110,7 +17225,17 @@
       .vgl-tab-lista,.vgl-tend-serie,.vgl-llenar-btns,.vgl-prod-fila,.vgl-col,.vgl-bars,
       .vgl-empty-msg,.vgl-card-badges-wrap,.vgl-card-btm,.vgl-acomp-txt,.vgl-acomp-botones,
       .vgl-dup-bloque,.vgl-mtr-ico,.vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,.vgl-pym-sec-ambar,
-      .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico{color:inherit !important}
+      .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico,
+      .vgl-sb-txt{color:inherit !important}
+      /* v18.0.135 — .vgl-sb-txt, el rótulo «Alertas»/«Silenciar» de la campana y del mudo
+         (v18.0.128, UI-21), es un span CON clase propia: el blindaje tipográfico
+         (:not([class])) no lo cubre y no tenía ninguna regla de color, así que heredaba del
+         botón y cualquier regla del CSS de Everest que apuntara al span se quedaba con él —
+         el médico lo reportó con captura (3-sep) viendo esos dos rótulos en azul dentro del
+         panel. Viaja en ESTA lista a propósito: es la declaración de herencia que ya resiste
+         a las reglas del host y de la que cuelgan sus vecinas. La Regla S de suite_25 no lo
+         cazó porque su sobreaproximación de etiqueta (span desnudo con color en la hoja) lo
+         daba por cubierto; la prueba estática Regla S-bis vigila esta línea exacta. */
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
          especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
@@ -23598,6 +23723,9 @@
     if (x.subestado === "vencido" || x.vencidoBase) return "vencido";
     if (x.subestado === "sin_historial") return "sin_historial";
     if (x.subestado === "sin_fecha") return "sin_fecha";
+    // v18.0.135 — falla terapéutica: el plazo del 50 % venció, la norma no. Estado propio
+    // para que la tarjeta no lo pinte rojo de "vencido" ni verde de "al día": se pide ya.
+    if (x.subestado === "recontrol_falla") return "recontrol_falla";
     if (x.vence) return "vence";
     return "al_dia";
   }
@@ -23623,6 +23751,9 @@
       sin_historial: { rotulo: "Sin tomas", clase: "vgl-paq-sinhist" },
       sin_fecha: { rotulo: "Sin fecha", clase: "vgl-paq-sinfecha" },
       al_dia: { rotulo: "Al día", clase: "vgl-paq-aldia" },
+      // v18.0.135 — falla terapéutica: ámbar (la clase de "vence"), rótulo propio. No es
+      // rojo porque la norma sigue vigente; no es verde porque se repite YA.
+      recontrol_falla: { rotulo: "Repetir", clase: "vgl-paq-vence" },
     };
 
     const filaOrden = ordenar.map((a) => {
@@ -30039,11 +30170,15 @@
               // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
               const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
               const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
-              // v17.26.0 — REFACTOR APROBADO: cuando ya hay una orden vigente, un resultado
-              // vigente en el laboratorio o un resultado reciente, la actividad queda
-              // BLOQUEADA (checkbox deshabilitado) con su aviso visible. La lista de la
-              // sede (mandaPym) sigue mandando: no se bloquea.
-              const bloqueada = !mandaPym && (yaVigente || yaHechoAthenea || hechoYReciente);
+              // v17.26.0/v18.0.135 — REGLA DEL MÉDICO (03-sep-2026): «se puede volver a
+              // reordenar en TODAS las actividades de PyM, a menos que ya se lo haya hecho
+              // y se haya detectado en los resultados de Athenea». La ORDEN VIGENTE EN
+              // EVEREST sale de la lista de bloqueos: una orden sin resultado en el
+              // laboratorio no cubre nada — se vuelve a ordenar y la casilla queda
+              // premarcada (la fórmula «marcar» de abajo ya lo hace sola). Siguen
+              // bloqueando un resultado vigente en Athenea y el resultado reciente sin
+              // vigencia confirmada. La lista de la sede (mandaPym) sigue mandando.
+              const bloqueada = !mandaPym && (yaHechoAthenea || hechoYReciente);
               // v18.0.63 — la marca LOCAL, sin red: este mismo script ya creó hoy la orden de
               // este paquete. No se BLOQUEA la casilla (el médico manda: puede haber un motivo
               // real para repetirla), pero no se premarca y se dice con todas las letras.
@@ -30060,7 +30195,7 @@
                     <div class="vgl-ord-title">${escapeHtml(pymTituloClinico(pkg))} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">Según la lista de prevención de la sede: <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaOrdenadaHoy ? `<div class="vgl-ord-vigwarn">Esta orden <b>ya se generó hoy</b> desde aquí para este paciente. No la dejamos marcada para no duplicarla; si de verdad debe repetirse, márquela usted.</div>` : ""}
-                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Ya existe una orden vigente en Everest para esta actividad. Si considera que debe repetirse, comuníquese con el servicio de órdenes.</div>` : ""}
+                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Hay una orden vigente en Everest para esta actividad pero <b>sin resultado en el laboratorio</b>: se vuelve a ordenar, por eso la casilla queda marcada.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">Este examen ya se realizó y el resultado está vigente en el sistema de laboratorio. No es necesario repetirlo.</div>` : ""}
                     ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">${mandaPym ? "Se realizó hace poco, pero la lista de prevención de la sede la tiene pendiente; por eso la dejamos marcada." : (hechoYReciente ? `Se realizó hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}; por ser tan reciente no la marcamos. Si considera que debe repetirse, selecciónela manualmente.` : "El último resultado es de hace más de 2 años; la dejamos marcada para que pueda solicitarla de nuevo.")}</div>` : ""}
                     <div class="vgl-ord-cups">
@@ -35234,6 +35369,15 @@
       if (a.subestado === "sin_fecha") {
         return fila(a, "Hay un resultado (" + (a.valor != null ? a.valor : "sin valor legible")
           + ") pero sin fecha: no se puede saber si sigue vigente");
+      }
+      // v18.0.135 — falla terapéutica NO es vencimiento (entrevista del 02-sep): el 50 %
+      // venció pero la norma sigue dando vida. Se pide YA, con el texto que distingue las
+      // dos fechas — así el médico deja de leer "vencido" en un examen que la norma
+      // considera vigente (el reporte original era exactamente eso: glucosa de mayo
+      // marcada "vencida" con 180 d aún corriendo).
+      if (a.subestado === "recontrol_falla") {
+        return fila(a, "Falla terapéutica: se repite ya (el 50 % venció el " + mtrFechaLegible(a.vence)
+          + "); por norma sigue vigente hasta el " + mtrFechaLegible(a.venceNorma));
       }
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
       // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
@@ -40464,16 +40608,20 @@
       return v > meta * margen;
     }
 
-    // v17.28.0 — encargo del médico (28-ago): "glicemia >130" entra a la regla del 50%.
-    // Mismo criterio que HbA1c: solo tiene sentido contra una meta glicémica en un
-    // diabético — un hipertenso sin diabetes no tiene "glicemia fuera de meta". Reusa
-    // mtrMetaGlicemiaGeneral() (130 mg/dL), la misma meta que ya usa el eje de falla
-    // terapéutica desde v17.6.84 — un solo número, no dos que puedan divergir.
+    // v18.0.135 — entrevista del 02-sep, verbatim: «la glucosa no se repite por sí sola,
+    // se repite si la HbA1c está fuera de metas». El valor de la glicemia NO participa
+    // en el juicio: una glucosa de 300 con HbA1c en meta NO adelanta la toma, y una
+    // glucosa de 112 con HbA1c de 9.5 SÍ la adelanta — porque el que manda es el control
+    // crónico, no lo que comió esa mañana. Sin HbA1c conocida no se juzga: la glucosa
+    // conserva su vigencia normativa completa. La meta contra la que se mide es la MISMA
+    // de la rama HBA1C (c.metaHba1c o mtrMetaHba1cGeneral), no la meta glicémica.
     if (clave === "GLUCOSA") {
       if (!c.esDm2) return null;
-      const meta = (typeof mtrMetaGlicemiaGeneral === "function") ? mtrMetaGlicemiaGeneral() : null;
+      const hba1c = (c.valorHba1c !== null && c.valorHba1c !== undefined) ? mtrFloat(c.valorHba1c) : null;
+      if (hba1c === null) return null;
+      const meta = (c.metaHba1c !== null && c.metaHba1c !== undefined) ? mtrFloat(c.metaHba1c) : mtrMetaHba1cGeneral();
       if (meta === null) return null;
-      return v > meta * margen;
+      return hba1c > meta * margen;
     }
     return null;
   }
@@ -40636,10 +40784,12 @@
   // Para el LDL el piso equivalente (28 d) nunca se alcanza con estas vigencias, así que
   // esta guarda no le cambia nada.
   // Solo las claves que de verdad pueden acortarse: son las de MTR_CLAVES_CON_META. La
-  // glicemia NO está ahí (mtrFueraDeMeta devuelve null para GLUCOSA), así que no se lista
-  // aquí un piso que nunca se aplicaría — sería código que insinúa un comportamiento que no
-  // existe. Si algún día la glicemia entra en MTR_CLAVES_CON_META, su piso se añade aquí.
-  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl" };
+  // glicemia está ahí desde v17.28.0 y desde v18.0.135 sí se acorta (con la HbA1c fuera de
+  // metas, ver mtrFueraDeMeta): su piso es el de la fila "glicemia" de MTR_RECONTROL
+  // (14 d), el mismo de su fecha de recontrol por falla terapéutica — un solo número, el
+  // mismo que fija la cita. El comentario que había aquí decía que no estaba listada
+  // «porque no se acorta»; eso dejó de ser cierto hace versiones.
+  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl", GLUCOSA: "glicemia" };
   function mtrAcortarPorFueraDeMeta(vigencia, fuera, clave) {
     if (fuera !== true) return vigencia;
     if (typeof vigencia !== "number" || !isFinite(vigencia)) return vigencia;
@@ -40838,10 +40988,27 @@
     const diasParaVencer = (hoy && vence)
       ? Math.round((mtrFechaDesdeIso(vence).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
       : null;
+    // v18.0.135 — entrevista del 02-sep, verbatim: «una cosa es estar en falla terapéutica
+    // y por eso se repite al 50 % de su vigencia y otra muy diferente estar vencida».
+    // VENCIDO solo al agotar la vigencia NORMATIVA. Si lo que se agotó fue el plazo del
+    // 50 % pero la norma todavía le da vida, el examen se pide (estado A: entra en la
+    // lista de ordenar) con el subestado "recontrol_falla": es falla terapéutica que
+    // amerita repetir YA, no un examen vencido. Solo puede ocurrir cuando el 50 % se
+    // aplicó de verdad (kdigoFrena/medicoFrena/estadioFrena dejan vigencia === norma y
+    // entonces las dos fechas coinciden, sin zona intermedia).
+    const venceNorma = mtrSumarDias(fecha, vigenciaNorma);
+    const diasParaVencerNorma = (hoy && venceNorma)
+      ? Math.round((mtrFechaDesdeIso(venceNorma).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
+      : null;
 
     let estado = "D";
     let subestado = "vigente";
-    if (diasParaVencer !== null && diasParaVencer < 0) { estado = "A"; subestado = "vencido"; }
+    if (diasParaVencer !== null && diasParaVencer < 0) {
+      estado = "A";
+      subestado = (diasParaVencerNorma !== null && diasParaVencerNorma >= 0)
+        ? "recontrol_falla"
+        : "vencido";
+    }
     const racNum = mtrFloat(c.rac);
     // v17.6.75 — auditoría 25-ago (1.17): antes el guard `estado !== "A"` bloqueaba la
     // promoción a Estado R cuando el RAC YA estaba vencido — se quedaba como "A" normal,
@@ -40853,7 +41020,11 @@
     // de un Estado A normal (piso 14/techo 21, en la lista de vencidos, excluido del
     // cálculo de "próximo vencimiento futuro") — nunca se relaja CERO VENCIDOS solo por
     // reetiquetarlo a R.
-    const vencidoBase = estado === "A";
+    // v18.0.135 — "estado A" ya no equivale a vencido: con recontrol_falla el examen se
+    // pide por falla terapéutica pero NO está vencido. vencidoBase queda atado al
+    // subestado "vencido" (norma agotada) para que `mtrPlanParaclinicos` siga dando al
+    // vencido real su urgencia de piso 14/techo 21 sin arrastrar al de falla.
+    const vencidoBase = estado === "A" && subestado === "vencido";
     if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
       estado = "R"; subestado = "albuminuria";
     }
@@ -40861,6 +41032,10 @@
       clave: clave, nombre: nombre, estado: estado, subestado: subestado,
       vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
       diasParaVencer: diasParaVencer,
+      // v18.0.135 — la fecha y los días que faltan según la NORMA (sin el recorte del
+      // 50 %). Solo difieren de vence/diasParaVencer cuando el acortamiento aplicó.
+      venceNorma: venceNorma,
+      diasParaVencerNorma: diasParaVencerNorma,
       // v17.6.75 — ver el comentario grande arriba: verdad de terreno de "ya estaba
       // vencido", independiente de la relabeling a R por albuminuria.
       vencidoBase: vencidoBase,
@@ -40892,14 +41067,31 @@
         // El sufijo es de la promoción a R, así que se ata a ella y no a estar vencido.
         ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha
             + (estado === "R" && subestado === "albuminuria" ? " · albuminuria: vigilancia estrecha" : ""))
-        : ("vigente hasta el " + vence))
+        : (subestado === "recontrol_falla"
+          // v18.0.135 — ni vencido ni "vigente hasta": la ventana del 50 % se agotó pero la
+          // norma sigue dando vida. Se DICE la diferencia, con las dos fechas, para que
+          // nadie lea "vencido" donde solo hay falla terapéutica — y para que el médico
+          // sepa hasta cuándo estaba cubierto de haber estado en meta.
+          ? ("falla terapéutica: la repetición al 50 % (" + vigencia + " d) venció el " + vence
+              + " — según la norma (" + vigenciaNorma + " d) sigue vigente hasta el " + venceNorma)
+          : ("vigente hasta el " + vence)))
         + (kdigoFrena === true
             // v18.0.7 — se DICE por qué no se adelanta. La entrevista lo dejó por escrito:
             // "un examen que no se pide sin explicación es indistinguible de un olvido del
             // script". Aquí el examen está fuera de meta y aun así no se repite antes, que es
             // exactamente el caso en que callarse parecería un fallo.
             ? " · fuera de meta, pero KDIGO: con TFG < 60 por CKD-EPI 2021 el perfil lipídico no se repite antes (se respetan los " + vigenciaNorma + " d)"
-            : (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : "")),
+            : ((fueraMeta === true && (subestado !== "recontrol_falla" || clave === "GLUCOSA"))
+              // v18.0.135 — dos ajustes: (1) en recontrol_falla el motivo principal YA dice
+              // "se repite al 50 %", así que el sufijo sobra — salvo en la glucosa, donde
+              // sí aporta el motor del adelanto; (2) en la glucosa el que está fuera de
+              // meta es la HBA1C, no la glicemia: decir solo "fuera de meta" haría leer
+              // que el valor de glucosa disparó el adelanto, y ya no funciona así.
+              ? " · " + (clave === "GLUCOSA"
+                  ? "HbA1c fuera de meta: la glucosa se repite a la mitad"
+                  : "fuera de meta: se repite a la mitad")
+                + " (" + vigencia + " d en vez de " + vigenciaNorma + ")"
+              : "")),
     };
   }
 
@@ -40919,10 +41111,20 @@
   // un día la pondría DESPUÉS del vencimiento, que es exactamente el fallo que
   // el Copiloto todavía tiene abierto en `ajustar_fecha_habil`.
   function mtrPlanParaclinicos(ctx) {
-    const c = ctx || {};
+    let c = ctx || {};
     const hoy = mtrFechaIso(c.hoyIso);
     if (!hoy) return null;
     const ultimos = c.ultimos || {};
+    // v18.0.135 — la glucosa ya no se juzga sola: se juzga contra la HbA1c (entrevista del
+    // 02-sep). Si quien llama no trae valorHba1c explícito pero los resultados del paciente
+    // SÍ tienen una HbA1c, se copia al ctx para que mtrEstadoAnalito->mtrFueraDeMeta la vea.
+    // Así TODOS los llamadores (panel, widget, resumen IA) heredan la regla sin repetir el
+    // cableado, y una HbA1c en los labs del propio paciente nunca pasa inadvertida.
+    if (c.valorHba1c === null || c.valorHba1c === undefined) {
+      const hba1cUlt = ultimos.HBA1C;
+      const hba1cVal = (hba1cUlt && hba1cUlt.valor !== null && hba1cUlt.valor !== undefined) ? mtrFloat(hba1cUlt.valor) : null;
+      if (hba1cVal !== null) c = Object.assign({}, c, { valorHba1c: hba1cVal });
+    }
 
     const evaluar = (claves) => claves
       .map((k) => mtrEstadoAnalito(k, ultimos[k], c))
@@ -41309,9 +41511,15 @@
     // ---- QUÉ SE ORDENA ----
     // Todo lo que falta o venció + lo cosechado + los pasajeros que no estén
     // bloqueados (se enganchan a la FTL sin fijarla y sin piso de 14 días).
+    // v18.0.135 — y también los de recontrol_falla: la ventana del 50 % venció (hay que
+    // repetir YA, entrevista del 02-sep) pero la NORMA sigue vigente — NO van en
+    // `vencidos` (ese es el recuadro rojo de "Ya vencidos") sino aquí, en la orden. El
+    // estado "A" ya los arrastra al piso/techo 14-21 vía hayEstadoA; esta línea solo
+    // asegura que aparezcan en la lista de lo que se pide.
     const ordenar = []
       .concat(faltantes.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
       .concat(vencidos.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
+      .concat(todos.filter((a) => a.estado === "A" && a.subestado === "recontrol_falla"))
       .concat(cosechados)
       .concat(pasajeros.filter((a) => a.estado === "A"));
     // Sin repetidos, conservando el orden.
@@ -41650,6 +41858,11 @@
       // el médico escribió de verdad, no la lectura parcial de la pestaña que estuviera
       // abierta. Ver mtrHechosDesdeHcEverest: llega ya desidentificado.
       hcEverest: (o.hcEverest && (o.hcEverest.secciones || o.hcEverest.dom)) ? o.hcEverest : null,
+      // v18.0.135 — el HOY con el que se separó lo físico digitado hoy de lo cosechado en
+      // consultas anteriores. Sin esta clave, mtrHojaDeHechosTexto le pasaría undefined a
+      // mtrHcTextoParaHoja y TODO el bloque caería al balde legado: la separación existiría
+      // pero nunca se ejecutaría donde importa (el prompt que lee la IA).
+      hoyIso: o.hoyIso || (typeof todayStamp === "function" ? todayStamp() : null),
       // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
       // toda esa información sirve de grounding para redactar una excelente nota clínica».
       // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
@@ -41800,7 +42013,9 @@
     // después de lo calculado por el motor para que, si algo hay que recortar por longitud,
     // se recorte esto y no las cifras que el modelo tiene prohibido inventar.
     if (h.hcEverest) {
-      const bloque = mtrHcTextoParaHoja(h.hcEverest);
+      // v18.0.135 — FRENTE 5: se pasa el HOY de la hoja para que la cosecha física se
+      // separe por fecha (digitado HOY vs cosechado antes) y no vuelva a mezclarse.
+      const bloque = mtrHcTextoParaHoja(h.hcEverest, h.hoyIso);
       if (bloque) L.push("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---\n" + bloque);
     }
     if (h.foco) L.push("Foco de la consulta: " + h.foco);
@@ -42001,6 +42216,11 @@
     "",
     "# CÓMO SE LEE LA HISTORIA DE EVEREST",
     "- Un campo en 'no' o 'false' ES UN HECHO: significa que el médico lo evaluó y lo descartó expresamente (p. ej. 'infarto de miocardio: no' = descartado). Un campo AUSENTE significa que no se preguntó. Son cosas distintas y jamás se tratan igual: de un campo ausente no se afirma ni que está ni que no está.",
+    // v18.0.135 — FRENTE 5 (03-sep): la cosecha en vivo ahora separa por FECHA el examen
+    // físico y los signos vitales. Los dos rótulos citados abajo son LITERALES de
+    // mtrHcTextoParaHoja; si alguno se renombra allá, se renombra aquí (la coincidencia
+    // exacta es el contrato, no un detalle de estilo).
+    "- El examen físico y los signos vitales de la cosecha en vivo llegan separados por fecha: lo rotulado «digitado HOY en la pantalla de Everest» es lo que el médico acaba de escribir en ESTA consulta y es el ÚNICO válido para el examen físico y los signos vitales de la nota de hoy; lo rotulado «cosechado en una consulta ANTERIOR» es de un control previo y NO se usa como examen físico ni signos vitales actuales (solo puede mencionarse como hallazgo previo si es pertinente). Si un campo físico llega sin fecha («sin fecha por campo»), no afirmes que fue medido hoy.",
     "- De los antecedentes negativos escribe SOLO los pertinentes al motivo de consulta y al cuadro de hoy. El resto se calla: esto es semiología, no un inventario de la base de datos.",
     "- Los identificadores de campo del sistema (sedentarismo, antecedentePatologicos, revisionSistema y similares) NUNCA se escriben: se traducen a lenguaje clínico.",
     "",
@@ -46421,28 +46641,61 @@
   }
 
   // Aplana lo anterior a texto etiquetado para la hoja de hechos. Solo lo que consta.
-  function mtrHcTextoParaHoja(hechos) {
+  // v18.0.135 — FRENTE 5: segundo parámetro `hoyIso` (retrocompatible; si falta se usa
+  // todayStamp). Con él, el examen físico y los signos vitales de la cosecha en vivo se
+  // separan en tres baldes por FECHA, porque esa era exactamente la vía por la que cifras
+  // de un control anterior llegaban al modelo rotuladas como de hoy.
+  function mtrHcTextoParaHoja(hechos, hoyIso) {
     if (!hechos) return "";
     const L = [];
     // v17.10.0 — lo cosechado EN VIVO de la pantalla, que es lo que el médico está
     // escribiendo ahora mismo. Va PRIMERO: es más fresco que lo capturado en el último
     // guardado, y cuando los dos hablan del mismo campo manda esto.
     if (hechos.dom && Object.keys(hechos.dom).length) {
-      const porSeccion = {};
+      const hoy = hoyIso || (typeof todayStamp === "function" ? todayStamp() : "");
+      // v18.0.135 — FRENTE 5 (03-sep). Las rutas se guardan con su caso ORIGINAL
+      // (p. ej. `signosVitales.peso`), así que el emparejamiento es case-insensitive.
+      // Solo el examen físico y los signos vitales llevan fecha propia (domFechas, del
+      // Edit 1): son lo que la IA redacta «de HOY» y donde una cifra vieja es un error
+      // clínico. El resto de secciones sigue con el rótulo A7 honesto.
+      const esFisico = (r) => /^(examenfisico|signosvitales)\./i.test(String(r));
+      const porSeccion = {};      // rótulo A7: resto de secciones + físico legado sin fecha
+      const seccionesHoy = {};    // digitado HOY en la pantalla de Everest
+      const seccionesAntes = {};  // cosechado en una consulta ANTERIOR
       for (const ruta of Object.keys(hechos.dom)) {
         const i = ruta.lastIndexOf(".");
         const sec = i > 0 ? ruta.slice(0, i) : "(sin sección)";
         const campo = i > 0 ? ruta.slice(i + 1) : ruta;
         const v = hechos.dom[ruta];
-        (porSeccion[sec] = porSeccion[sec] || []).push(campo + ": " + (v === true ? "sí" : v === false ? "no" : v));
+        const linea = campo + ": " + (v === true ? "sí" : v === false ? "no" : v);
+        const fecha = hechos.domFechas ? hechos.domFechas[ruta] : null;
+        if (esFisico(ruta) && fecha && hoy && String(fecha) === String(hoy)) {
+          (seccionesHoy[sec] = seccionesHoy[sec] || []).push(linea);
+          continue;
+        }
+        if (esFisico(ruta) && fecha && hoy && String(fecha) !== String(hoy)) {
+          (seccionesAntes[sec] = seccionesAntes[sec] || []).push(linea + " (cosechado " + fecha + ")");
+          continue;
+        }
+        (porSeccion[sec] = porSeccion[sec] || []).push(linea);
+      }
+      // Orden: HOY primero (es lo que manda), luego lo de consultas anteriores, y al final
+      // el resto con el rótulo A7 — igual criterio de «lo más fresco primero» de v17.10.0.
+      for (const sec of Object.keys(seccionesHoy).sort()) {
+        L.push(sec + " (digitado HOY en la pantalla de Everest — examen físico y signos vitales de ESTA consulta): " + seccionesHoy[sec].join(" · "));
+      }
+      for (const sec of Object.keys(seccionesAntes).sort()) {
+        L.push(sec + " (cosechado en una consulta ANTERIOR — NO usar como examen físico ni signos vitales de hoy): " + seccionesAntes[sec].join(" · "));
       }
       for (const sec of Object.keys(porSeccion).sort()) {
         // A7 (S+, 02-sep) — rótulo HONESTO de la cosecha en vivo. Decía «(escrito en la
         // historia de HOY)», pero esta cosecha se acumula entre pestañas (v17.10.0) y nunca
         // se borra sola, y Everest pre-llena campos de consultas anteriores: un «EDEMA
         // GRADO II» escrito hace 5 días llegaba al modelo rotulado como de hoy, junto a un
-        // «SIN EDEMA» de la vía de red. No hay fecha por campo, así que la etiqueta lo dice:
-        // es lo que está escrito en la historia (incluido lo pre-llenado), sin afirmar cuándo.
+        // «SIN EDEMA» de la vía de red. Desde v18.0.135 el examen físico y los signos
+        // vitales llevan fecha propia y se separan arriba; este rótulo queda para el resto
+        // (y para el físico cosechado ANTES de esta versión, que no trae fecha): es lo que
+        // está escrito en la historia (incluido lo pre-llenado), sin afirmar cuándo.
         L.push(sec + " (escrito en la historia de Everest, incluye lo pre-llenado — sin fecha por campo): " + porSeccion[sec].join(" · "));
       }
     }
@@ -46785,11 +47038,24 @@
       if (!id) return null;
       const ahora = mtrCosecharHcDelDom(doc);
       const nuevas = Object.keys(ahora).length;
-      const previo = (mtrHcLeer(id) || {}).dom || {};
+      const previoBloque = mtrHcLeer(id) || {};
+      const previo = previoBloque.dom || {};
       if (!nuevas && !Object.keys(previo).length) return null;
       const fusion = Object.assign({}, previo, ahora);
+      // v18.0.135 — FRENTE 5 (blindaje del examen físico, 03-sep): la cosecha acumulada no
+      // llevaba FECHA por campo y el rótulo A7 lo confesaba («sin fecha por campo»).
+      // Everest pre-llena PA/peso/IMC de consultas anteriores, la cosecha los atrapaba
+      // igual y la IA redactó el examen físico de HOY con cifras de la semana pasada
+      // (reportado dos veces: #8387512 y #34965201). Ahora cada ruta vista EN ESTA
+      // pantalla toma la fecha de hoy y las no vistas conservan la de la cosecha
+      // anterior: la fusión de VALORES no cambia, pero la hoja ya puede separar
+      // «digitado HOY» de «cosechado antes» sin adivinar. Viaja pegado a `dom` en el
+      // mismo bloque porque mtrHcLeer lo devuelve entero.
+      const hoy = todayStamp();
+      const fusionFechas = Object.assign({}, previoBloque.domFechas || {});
+      for (const ruta of Object.keys(ahora)) fusionFechas[ruta] = hoy;
       const c = _vglCosechaLeer(id) || {};
-      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, ts: Date.now() });
+      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, domFechas: fusionFechas, ts: Date.now() });
       _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: bloque });
       return { campos: Object.keys(fusion).length, nuevos: nuevas };
     } catch (e) { return null; }

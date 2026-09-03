@@ -30,8 +30,8 @@ const FORCE = false;           // ← true = todos auto-reload incluso si están
 // el equipo; con la huella de otra versión el script NO se apaga (este tablero
 // va atrasado, nadie manipuló nada). Actualizar AMBAS constantes en cada
 // release que toque el userscript.
-const EXPECTED_SHA256 = "23927be37b2d30ef8de5ad81e5c686184a42293b0319a9bfe9ebbb3da2f5abee";
-const EXPECTED_SHA_VERSION = "18.0.134";
+const EXPECTED_SHA256 = "56f825a6ef9ba656883f83c41497eac601f3be11e52acde21706d1e5c5c787ca";
+const EXPECTED_SHA_VERSION = "18.0.135";
 
 // Configuración de Kill-Switch remoto de emergencia (R5.3)
 const KILL_SWITCH = {

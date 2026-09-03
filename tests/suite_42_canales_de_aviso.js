@@ -503,6 +503,115 @@ module.exports = {
         "el cuerpo del cartel llegó sin escapar al DOM de Everest");
     });
 
+    // =====================================================================
+    // v18.0.135 (Avisos #4) — BLINDAJE DEL CANAL «DENTRO DE LA PÁGINA».
+    // Reporte del médico: «la misma notificación azul cian que está arriba me aparece la
+    // anaranjada en otras pestañas o ventanas de Everest, yo mandé a blindar esto en
+    // versiones anteriores». El blindaje anterior (v12.5.14, cola de pendientes) solo
+    // cubría la ruta de maybeNotify; el toast seguía siendo pintable desde CUALQUIER
+    // pestaña visible de Everest. La regla se fija ahora en el ORIGEN: el toast (y todo
+    // respaldo dentro de la página) solo existe en HCHealth; fuera de él el canal es la
+    // notificación del sistema, que no dibuja nada en la página ajena. El tono y la
+    // notificación del sistema NO se tocan (invariante v14.1.5, suite_04).
+    // =====================================================================
+    await t.casoAsync("v18.0.135: showToast fuera de HCHealth no pinta NADA en la página ajena", async () => {
+      const c = cargar({ silencioso: true });
+      const wrap = montarBandejaToasts(c);
+      c.env.win.location.pathname = "/viva/OtraPantalla/";   // pantalla de Everest ajena al módulo clínico
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => true;
+      c.api.__state.muteUntil = 0;
+      c.api.showToast("AZUL", "Cian de prueba", "cuerpo", false, "ajena-gate-1");
+      await esperar42(30);
+      t.igual(wrap.children.length, 0, "ni el toast encolado pintó en la pantalla ajena (antes: el cian/ámbar de la misma cita aparecía ahí)");
+    });
+
+    await t.casoAsync("v18.0.135: pestaña ajena VISIBLE → el canal es la notificación del sistema; la página queda limpia", async () => {
+      const c = cargar({ silencioso: true });
+      const wrap = montarBandejaToasts(c);
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.win.location.pathname = "/viva/OtraPantalla/";
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => true;   // visible Y enfocada: antes esta era justo la rama que pintaba el toast
+      c.api.__state.muteUntil = 0;
+      t.cierto(c.api._dispararAvisoAudible({ uid: "vis-ajena-" + Math.random(), color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false }),
+        "el aviso se dispara");
+      t.igual(os, 1, "salió por el sistema operativo: el médico se entera igual (invariante v14.1.5)");
+      await esperar42(30);
+      t.igual(wrap.children.length, 0, "y la pantalla ajena no se pintó (la fuga reportada, cerrada)");
+    });
+
+    await t.casoAsync("v18.0.135: pestaña ajena sin NINGÚN canal de sistema → tampoco se pinta; lo crítico conserva el parpadeo", async () => {
+      const c = cargar({ silencioso: true });
+      const wrap = montarBandejaToasts(c);
+      c.env.win.Notification = undefined;
+      c.env.win.GM_notification = undefined;
+      c.env.win.location.pathname = "/viva/OtraPantalla/";
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => true;
+      c.api.__state.muteUntil = 0;
+      c.api.__S.parpadeo = true;   // startFlash respeta este interruptor: encendido como en el consultorio
+      let intervalos = 0;
+      const setIntervalOriginal = c.env.win.setInterval;
+      c.env.win.setInterval = (f, ms) => { intervalos++; return setIntervalOriginal(f, ms); };
+      c.api._dispararAvisoAudible({ uid: "ajena-sin-canal-" + Math.random(), color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false });
+      await esperar42(30);
+      // Lo que se afirma es la FUGA (el toast pintado en pantalla ajena), no "cero nodos":
+      // startFlash crea un <link> de favicon en el <head> — el parpadeo de la pestaña es
+      // señal legítima de lo crítico y va justo en la línea de abajo.
+      t.igual(wrap.children.length, 0,
+        "sin canal de sistema, el respaldo in-page ya NO cae en la pantalla ajena (antes: el toast se pintaba ahí igual)");
+      t.cierto(intervalos >= 1, "lo crítico conserva su única señal en esa pestaña: el parpadeo del título");
+      c.env.win.setInterval = setIntervalOriginal;
+      c.api.stopFlash();
+    });
+
+    await t.casoAsync("v18.0.135: notify() con pestaña ajena visible → sistema operativo, no toast en pantalla ajena", async () => {
+      const c = cargar({ silencioso: true });
+      const wrap = montarBandejaToasts(c);
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.win.location.pathname = "/viva/OtraPantalla/";
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => true;
+      c.api.__state.muteUntil = 0;
+      c.api.notify("AZUL", "Cierre de consulta ajena", "cuerpo de prueba 135", false, "notify-ajena-" + Math.random());
+      await esperar42(30);
+      t.igual(os, 1, "el aviso salió por el sistema operativo");
+      t.igual(wrap.children.length, 0, "y la pantalla ajena sigue limpia");
+      // y dentro de HCHealth, con la pestaña visible, todo sigue igual (v15.4.0 intacto)
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth";
+      // (persist: true — el arnés capa los temporizadores a 1 ms, así el autodescarte de
+      // 9 s borraría el cartel antes de poder verlo pintado; persistente queda estable)
+      c.api.notify("AZUL", "Cierre de consulta", "cuerpo de prueba 135b", true, "notify-hc-" + Math.random());
+      await esperar42(30);
+      t.igual(os, 1, "en HCHealth visible no se suma Windows: un aviso = un canal, el de la página");
+      t.igual(wrap.children.length, 1, "y ahí sí se pintó el toast, como siempre");
+    });
+
+    await t.casoAsync("v18.0.135: dentro de HCHealth, visible, el toast de la página sigue siendo el canal (nada se pierde)", async () => {
+      const c = cargar({ silencioso: true });
+      const wrap = montarBandejaToasts(c);
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      // el pathname por defecto del arnés ya es /viva/EverHealth/HCHealth
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => true;
+      c.api.__state.muteUntil = 0;
+      // (persist: true, mismo motivo de arriba: el toast debe seguir pintado al mirarlo)
+      c.api._dispararAvisoAudible({ uid: "hc-vis-" + Math.random(), color: "AZUL", title: "t", body: "b", flashText: "f", persist: true });
+      await esperar42(30);
+      t.igual(os, 0, "no sale Windows: el médico ya está mirando esta pantalla (v15.4.0 intacto)");
+      t.igual(wrap.children.length, 1, "el toast de la página se pintó como siempre");
+    });
+
     // v17.0.3 — REPORTE DE CAMPO: "el morado se queda ahí hasta que lo cierro a mano y el
     // ámbar desaparece solo — debería ser al revés". Dos arreglos verificados aquí.
     t.caso("v17.0.3: AMBAR ya es tan crítico como ROJO/MORADO — no se agenda para autodescartarse", () => {

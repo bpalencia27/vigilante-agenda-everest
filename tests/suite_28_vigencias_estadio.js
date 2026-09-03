@@ -512,6 +512,70 @@ module.exports = {
       t.igual(h.iso, "2026-08-21", "el más reciente manda, venga en el orden que venga");
     });
 
+    // =================================================================================
+    //  v18.0.135 — EL VIH YA HECHO SE VUELVE A OFRECER (reporte del médico, 03-sep)
+    //  El resultado llegaba con el código propio del laboratorio en lugar del CUPS
+    //  906249 del paquete, y como la detección por CUPS ignora el nombre, Z113 caía en
+    //  «no hecho» a las primeras. Regla del médico: no hace falta el mismo CUPS — el
+    //  nombre igual o similar basta. Fallback por nombre para paquetes de UN solo CUPS
+    //  y solo cuando el CUPS no aportó nada (o el nombre trae algo más reciente).
+    // =================================================================================
+    t.caso("v18.0.135: VIH con el código del laboratorio, reconocido por NOMBRE", () => {
+      const vih = _pkg("Z113");
+      t.cierto(!!vih && vih.cups.length === 1, "Z113 declara un solo CUPS (" + ((vih && vih.cups) || []).map((c) => c.codigo).join(",") + ")");
+      const labPropio = _lab("LAB-77", "ANTICUERPOS ANTI VIH 1 Y 2", "2026-08-20", "NO REACTIVO");
+      const hecho = api.pymPaqueteHechoEnAthenea(vih, labPropio, _HOY99);
+      t.cierto(!!hecho, "el código propio del laboratorio ya no esconde el examen");
+      t.igual(hecho.iso, "2026-08-20", "con la fecha del resultado");
+      t.cierto(hecho.porNombre === true, "y dice por qué vía lo reconoció");
+      t.cierto(api.pymPaqueteCubiertoPorAthenea(vih, labPropio, _HOY99),
+        "dentro del año de vigencia: cubierto, no se vuelve a ofrecer");
+      t.falso(api.pymPaqueteCubiertoPorAthenea(vih, _lab("LAB-77", "ANTICUERPOS ANTI VIH 1 Y 2", "2025-06-01", "NO REACTIVO"), _HOY99),
+        "más de un año: se ofrece de nuevo, con razón");
+    });
+
+    t.caso("v18.0.135: el fallback respeta PENDIENTE, la basura y el nombre más reciente", () => {
+      const vih = _pkg("Z113");
+      t.igual(api.pymPaqueteHechoEnAthenea(vih, _lab("LAB-77", "ANTICUERPOS VIH 1 Y 2", "2026-08-20", "PENDIENTE"), _HOY99), null,
+        "una muestra sin procesar sigue sin contar como hecha, venga por CUPS o por nombre");
+      t.noLanza(() => api.pymPaqueteHechoEnAthenea(vih, [{ nombre: 5, Resultado: "x" }, null, "basura"], _HOY99), "ni con basura en el nombre");
+      // CUPS viejo (2 años) + resultado externo reciente con otro código: gana el más reciente.
+      const mixto = _lab("906249", "VIRUS DE INMUNODEFICIENCIA HUMANA 1 Y 2 ANTICUERPOS", "2025-01-15", "NO REACTIVO")
+        .concat(_lab("LAB-77", "ANTICUERPOS ANTI VIH 1 Y 2", "2026-08-20", "NO REACTIVO"));
+      const hMixto = api.pymPaqueteHechoEnAthenea(vih, mixto, _HOY99);
+      t.cierto(!!hMixto && hMixto.iso === "2026-08-20", "el resultado externo reciente completa al CUPS viejo");
+      t.cierto(!!hMixto && hMixto.porNombre === true, "quedando claro que lo detectó el nombre");
+      // Al revés: el CUPS oficial más reciente que el externo — manda el CUPS.
+      const mixto2 = _lab("906249", "VIRUS DE INMUNODEFICIENCIA HUMANA 1 Y 2 ANTICUERPOS", "2026-08-25", "NO REACTIVO")
+        .concat(_lab("LAB-77", "ANTICUERPOS ANTI VIH 1 Y 2", "2026-03-01", "NO REACTIVO"));
+      const hMixto2 = api.pymPaqueteHechoEnAthenea(vih, mixto2, _HOY99);
+      t.cierto(!!hMixto2 && hMixto2.iso === "2026-08-25" && hMixto2.porNombre === false,
+        "y si el CUPS oficial es el más reciente, es él quien manda");
+    });
+
+    t.caso("v18.0.135: el fallback es SOLO para paquetes de UN CUPS", () => {
+      const z103 = _pkg("Z103");
+      t.cierto(!!z103 && z103.cups.length === 2, "Z103 declara dos CUPS");
+      t.igual(api.pymPaqueteHechoEnAthenea(z103, _lab("LAB-01", "HEMOGLOBINA", "2026-08-25", "14"), _HOY99), null,
+        "multi-CUPS sin cobertura completa: sigue sin afirmarse, aunque el nombre case");
+      const z124 = _pkg("Z124");
+      t.cierto(!!z124 && z124.cups.length === 3, "Z124 declara tres CUPS");
+      t.igual(api.pymPaqueteHechoEnAthenea(z124, _lab("LAB-02", "CITOLOGIA CERVICAL", "2026-08-25", "NIL"), _HOY99), null,
+        "lo mismo para la citología de cuello: la v18.0.38 no se reabre");
+      const psa = _pkg("Z125");
+      const hPsa = api.pymPaqueteHechoEnAthenea(psa, _lab("LAB-03", "ANTIGENO ESPECIFICO DE PROSTATA", "2026-08-21", "0.63"), _HOY99);
+      t.cierto(!!hPsa && hPsa.iso === "2026-08-21", "y el PSA con código propio también se reconoce por su nombre");
+    });
+
+    t.caso("v18.0.135: la clave casa como PALABRA, no como subcadena", () => {
+      const z121 = _pkg("Z121");
+      t.cierto(!!z121, "el paquete SOMF existe");
+      t.igual(api.pymPaqueteHechoEnAthenea(z121, _lab("LAB-04", "COLONOSCOPIA COMPLETA", "2026-08-20", "NORMAL"), _HOY99), null,
+        "«colon» dentro de «colonoscopia» NO es la SOMF hecha");
+      const somf = api.pymPaqueteHechoEnAthenea(z121, _lab("LAB-05", "SANGRE OCULTA EN MATERIA FECAL", "2026-08-20", "NEGATIVA"), _HOY99);
+      t.cierto(!!somf && somf.iso === "2026-08-20", "pero la SOMF de verdad sí se reconoce por su nombre");
+    });
+
     t.caso("v17.6.99 CABLEADO — el modal cruza TODOS los paquetes y respeta el tope para desmarcar", () => {
       // Los tres puntos viven dentro de openOrdenamientoModal, que el banco no puede
       // ejecutar con Athenea simulada. Se protegen por texto fuente, igual que las reglas

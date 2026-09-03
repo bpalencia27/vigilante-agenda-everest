@@ -1081,16 +1081,27 @@ module.exports = {
       t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
         "y por encima de la individual también se marca: laxa no es ilimitada");
 
-      // v17.28.0 — GLICEMIA ENTRA (encargo del médico, 28-ago): meta 130, mismo margen del
-      // 15% que el resto ("una sola vara") → corte en 149,5. Solo en diabéticos, igual que
-      // HbA1c — un hipertenso sin diabetes no tiene "glicemia fuera de meta".
+      // v17.28.0 — GLICEMIA ENTRA (encargo del médico, 28-ago). v17.54.0 (D9) retiró el
+      // margen del 15 %. v18.0.135 — entrevista del 02-sep, verbatim: «la glucosa no se
+      // repite por sí sola, se repite si la HbA1c está fuera de metas». La CIFRA glucémica
+      // ya no participa en el juicio: sin HbA1c conocida no se opina (la glucosa conserva
+      // su vigencia normativa completa), y con HbA1c el que manda es ella. Solo en
+      // diabéticos, igual que HbA1c — un hipertenso sin diabetes no tiene "glicemia fuera
+      // de meta".
       t.igual(api.mtrFueraDeMeta("GLUCOSA", 200, { esDm2: false }), null,
         "en un hipertenso sin diabetes la glicemia NO se mide contra 130");
-      // v17.54.0 (D9): el corte era 149,5 con el margen; ahora es la meta misma, 130.
-      t.falso(api.mtrFueraDeMeta("GLUCOSA", 130, { esDm2: true }), "justo en la meta sigue siendo meta cumplida");
-      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 131, { esDm2: true }), "131 abre la franja 131-149,5 que antes se callaba");
-      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true }), "y 149, que estaba justo debajo del viejo corte");
-      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 150, { esDm2: true }), "150 con más razón");
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 131, { esDm2: true }), null,
+        "sin HbA1c conocida la glucosa no se juzga sola (v18.0.135, regla del 02-sep)");
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 300, { esDm2: true }), null,
+        "ni siquiera una glucosa de 300: el que manda es el control crónico, no lo que comió esa mañana");
+      t.falso(api.mtrFueraDeMeta("GLUCOSA", 130, { esDm2: true, valorHba1c: 6.5 }),
+        "HbA1c en meta: el eje glucémico está en orden, la cifra glucémica es indiferente");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 131, { esDm2: true, valorHba1c: 9.5 }),
+        "HbA1c fuera de meta: la glucosa se repite (con HbA1c de 9,5 da igual que sea 131)");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 112, { esDm2: true, valorHba1c: 9.5 }),
+        "una glucosa de 112 con HbA1c de 9,5 TAMBIÉN se repite: no se repite «por sí sola»");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true, valorHba1c: 8.1 }),
+        "y con meta individual de 8 y HbA1c 8,1, igual: la meta del médico manda");
 
       // Sin resultado, y con claves que no tienen meta, no se opina.
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", null, muyAlto), null, "sin cifra no se juzga");

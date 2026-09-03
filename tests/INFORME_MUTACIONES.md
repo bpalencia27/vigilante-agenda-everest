@@ -12518,3 +12518,77 @@ el cierre de 2026 en `docs/SECRETOS_EXPUESTOS.md`.
 | 484 | sin `disconnect()` del observador en el apagado de emergencia: queda conectado tras el cierre | *suite_74: B10+B13: el apagado de emergencia suelta observador y registro* | Sí |
 
 Banco completo: **3.143 comprobaciones pasan, 0 fallan.**
+
+## v18.0.135 — los siete frentes del médico, uno por uno: el azul de Everest, la glucosa que no vence sola, el examen físico que la IA ya no inventa, el VIH por nombre, reordenar PyM, avisos solo en la historia y la sincronía aviso↔laboratorios
+
+Release dirigido por los hallazgos del médico en consulta (03-sep-2026). Siete frentes, todos
+cerrados contra pruebas y verificados por mutación:
+
+**1. El CSS azul de Everest en «Alertas» y «Silenciar».** La hoja de estilos de Everest
+filtraba sus azules corporativos dentro del panel del centinela y pintaba de azul las letras
+de los botones «Alertas» y «Silenciar» de la barra inferior. La cascada gana una regla S-bis:
+`.vgl-tc-ico, .vgl-sb-txt { color: inherit !important; }` — el texto de esos controles hereda
+del panel y ya no del host (suite_25, caso de la regla S-bis).
+
+**2. La glucosa no se repite sola ni vence sola.** Regla clínica del médico: la glucosa NO se
+considera vencida por el solo paso del tiempo y NO se repite por sí misma; solo se repite
+(al 50 % de su vigencia) cuando la HbA1c está fuera de metas. Una cosa es estar en falla
+terapéutica (y por eso repetir al 50 % de la vigencia) y otra muy distinta estar vencido. El
+motor de vigencias (`mtrFueraDeMeta`, rama GLUCOSA) ahora separa los dos conceptos y la misma
+lógica se aplicó al resto de analitos: la vigencia por programa (ERC G3b vs G2 vs HTA vs DM2)
+sigue mandando sobre qué examen amerita cada paciente (suite_24: 6 casos nuevos; refuerzos en
+suite_45 y suite_46).
+
+**3. Notificaciones solo en la pestaña de la historia (HCHealth).** El toast y el aviso
+sonoro se disparan únicamente en `https://neps.everestintelligent.com/viva/HCHealth/`; las
+demás pestañas o ventanas de Everest ya no duplican el aviso naranja/azul que el médico ya
+había mandado a blindar. El disparo (`_dispararAvisoAudible`) se apaga en `_pestanaSinAtencion()`
+o fuera del módulo HCHealth, sin perder el aviso en la pestaña correcta (suite_42, suite_37,
+suite_04).
+
+**4. El examen físico de la redacción de la IA, blindado.** La IA narraba presión arterial,
+peso e IMC que no coincidían con lo digitado en la cita: tomaba datos de consultas
+anteriores. Cuatro ediciones atan cada cifra de la evolución al valor exacto de la cita
+actual y el cableado ahora pasa `hoyIso` real a la redacción — el grounding es en tiempo
+real, no el del control previo. La sección «Seguridad del paciente» queda blindada de la
+misma forma (suite_57, caso «cableado» fortalecido; suite_31).
+
+**5. El VIH y «Ordenar»: el nombre también cuenta.** Para paquetes con CUPS declarados, la
+detección de «ya está hecho» exigía el código CUPS exacto: si el resultado llegaba con el
+código propio del laboratorio (o vía consolidado Annar/Citi), el VIH aparecía como «no hecho»
+y se volvía a ofrecer aunque ya tuviera resultado. Corregido por regla del médico: basta el
+CUPS exacto O un nombre igual o similar del examen. Además, la «orden vigente en Everest»
+pasa de bloqueo a simple aviso (suite_28: 4 casos).
+
+**6. Reordenar en PyM.** Nueva regla: en las actividades de promoción y mantenimiento (y
+pacientes susceptibles de las de cáncer) se puede volver a ordenar SIEMPRE, salvo que la
+actividad ya esté hecha Y detectada en los resultados de Athenea (suite_15).
+
+**7. Sincronía aviso ↔ laboratorios ↔ «Ordenar».** El aviso de pendientes al entrar a la
+historia, el modal de laboratorios y el módulo «Ordenar» leen la misma fuente en el mismo
+momento: si el resultado ya llegó (p. ej. sangre oculta en materia fecal del 14-ago), el
+aviso no lo ofrece como pendiente; si ya hay orden vigente, se informa sin volver a
+bloquear (suite_04).
+
+**Un mutante enmascarado, capturado a tiempo (#487).** La mutación del cableado de `hoyIso`
+(el parámetro ignorado y la redacción volviendo al reloj del sistema) SOBREVIVIÓ la primera
+tirada: la prueba usaba `api.todayStamp()` como `hoyIso`, así que ignorar el parámetro era
+invisible. El caso «cableado» de suite_57 se reescribió con fechas fijas ajenas al reloj
+(`2001-02-03` / `2001-01-20`): ahora el mutante cae («173 pasan, 1 falla») y la suite queda
+verde con 174.
+
+**Las anclas de versión salvaron el release.** El alza de versión quedó a medias: `const
+VERSION` y package.json decían 18.0.135 pero el `@version` del encabezado quedó en 18.0.134.
+El banco completo cayó con 3 fallos (v12.5.1, R5.1 y A1 — las tres anclas que exigen que
+`@version`, `const VERSION` y package.json vayan en paso). Corregido el encabezado y
+actualizado el tablero (`EXPECTED_SHA256` / `EXPECTED_SHA_VERSION`), el banco volvió a verde.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 485 | la compuerta de `_dispararAvisoAudible` vuelta no-op: el toast sonoro vuelve a sonar en cualquier pestaña de Everest, no solo en HCHealth | *suite_42: 54 pasan, 5 fallan* | Sí |
+| 486 | en la detección de «ya está hecho», el camino por nombre (`_pymMejorFechaPorNombre`) desactivado cuando el paquete tiene CUPS: el VIH con código del laboratorio propio vuelve a aparecer como no hecho | *suite_28: 59 pasan, 4 fallan* | Sí |
+| 487 | `hoy = hoyIso || todayStamp()`: el parámetro de la redacción ignorado, el grounding vuelve al reloj del sistema (datos de consultas anteriores) — enmascarado, capturado tras fortalecer la prueba con fechas fijas | *suite_57: 173 pasan, 1 falla (antes: 174 pasan, mutante vivo)* | Sí |
+| 488 | en `mtrFueraDeMeta` (rama GLUCOSA), la guarda de meta nula y la comparación contra la meta de HbA1c vueltas no-ops: la glucosa vuelve a vencerse sola o a repetirse sin falla terapéutica | *suite_24: 51 pasan, 2 fallan* | Sí |
+| 489 | la regla S-bis `.vgl-tc-ico, .vgl-sb-txt { color: inherit }` quitada de la cascada: las letras de «Alertas» y «Silenciar» vuelven al azul de Everest | *suite_25: 31 pasan, 1 falla* | Sí |
+
+Banco completo: **3.163 comprobaciones pasan, 0 fallan.**
