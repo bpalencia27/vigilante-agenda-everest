@@ -18,6 +18,11 @@ const CSV_PILOTO = "CEDULA,TAMIZACION_VIH,ABANDONADOS_PES\n5150076,Susceptible,N
 function bufCSV() { return new TextEncoder().encode(CSV_PILOTO).buffer; }
 
 // Paquete v3 como el que deja pilotoGuardar en el almacén de Tampermonkey.
+// v18.0.134 — la fecha del paquete ya no puede ir quemada en 2020: desde el
+// arreglo A2 de la auditoría (2026-09-03) la caché piloto se purga cuando la
+// fecha de la cola es de hace más de 30 días, así que el fixture debe llevar
+// una fecha fresca calculada al vuelo (ayer en UTC: siempre dentro de la
+// ventana de 30 días sin importar la zona horaria del banco).
 function paqueteV3(extraMeta) {
   return JSON.stringify(Object.assign({
     v: 3,
@@ -25,7 +30,7 @@ function paqueteV3(extraMeta) {
     p: "5150076:0.1|300123:0",
     t: "5150076,300123,777",
     ab: "777",
-    date: "2020-05-05",
+    date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
     name: "BASE PILOTO.xlsx",
     mtime: "2026-08-01T10:00:00Z",
     fp: "BASE PILOTO.xlsx|2026-08-01T10:00:00Z",

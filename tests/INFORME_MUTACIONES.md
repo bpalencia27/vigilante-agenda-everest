@@ -12463,3 +12463,58 @@ alguien quita el fix completo.
 | 466 | quitados `selectedLabDateInfo = null;` y su `renderLabDayChips(v);` del manejador de la fecha manual | *suite_15: REGRESIÓN — el afinado de cargarHoras respeta labs-primero… «y el calendario manual de la toma también»* | Sí |
 
 Banco completo: **3.125 comprobaciones pasan, 0 fallan.**
+
+## v18.0.134 — la auditoría de rendimiento y seguridad aplicada de una vez: los 3 P, mutación a mutación
+
+El plan completo de la auditoría del 03-sep-2026 (`docs/AUDITORIA_RENDIMIENTO_SEGURIDAD_20260903.md`,
+commit `b085e24`) entró entero en este release: P1 (A1–A3, prioridad absoluta), P2 (M1–M8,
+memoria) y P3 (parches baratos B1–B13), con B4 y B5 documentados sin cambio de código (ver
+abajo). La nueva `suite_74_auditoria_p123` fija los arreglos con 18 casos: la fuente única de
+versión con la compuerta de integridad despierta (A1 — el tablero ahora SÍ publica la huella
+esperada), la purga del caché piloto vencido o de formato viejo (A2), la cosecha que solo corre
+cuando el DOM se movió y la firma barata que disuelve la doble serialización (A3/M2), el canal
+postMessage que solo acepta forma de estado (M1), el sondeo que respira según visibilidad y
+ventana crítica (M3), los topes que podan historial de inasistencias, bitácora y mapa de
+identidades al registrar (M4, M5/B1/B12, B9), el TTL de los ejemplos de estilo (B3), las URLs
+de blob que se revocan (B6/B7), las marcas de aviso que caducan (B8), el lote de deshacer con
+tope y liberación (M7), la sesión del día que se limpia de verdad (M8) y el apagado de
+emergencia que suelta observador y registro (B10/B13).
+
+**Dos mutantes enmascarados, rediseñados a mitad de camino.** Las mutaciones originales de M4
+y B9 desactivaban la poda por vencimiento… y SOBREVIVÍAN: las semillas de las pruebas traían
+más entradas que el tope, así que el recorte por tope eliminaba a los mismos elementos y la
+prueba no distinguía cuál de los dos mecanismos había trabajado. Se rediseñaron contra el tope
+(`sobraM4 = 0`, `sobranB9 = 0`), que la prueba sí separa del vencimiento. Toda mutación se
+aplicó con un script de escritura atómica sobre un respaldo verificado, y el userscript quedó
+restaurado y verde tras cada lote.
+
+**B4 y B5 quedan documentados, no parcheados.** B4 (el portapapeles retiene la nota tras
+copiar): sobrescribir el portapapeles del médico después de una copia explícita puede destruir
+lo que él acaba de copiar a propósito; el riesgo se acepta y queda anotado en la auditoría. B5
+(el `doGet` del Apps Script es público): es el diseño propio del VersionCheck — ya catalogado
+como SEC-03 «endpoint público seguro» — y su única puerta sigue siendo el token `vgl-2026`
+(M6/SEC-05), verificado idéntico en ambos extremos y con la decisión de rotación fechada para
+el cierre de 2026 en `docs/SECRETOS_EXPUESTOS.md`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 467 | en `_vglIntegridadFalla`, vuelta no-op la compuerta que ignora la huella de OTRA versión: un tablero atrasado apagaría el script en plena consulta | *suite_74: A1: cabecera, constante VERSION y arnés coinciden* | Sí |
+| 468 | en `pilotoDesdeCache`, la purga del paquete no-v3 o vencido vuelta no-op: el almacén retiene el bulto para siempre | *suite_74: A2: la base piloto vencida o vieja se purga del almacén* | Sí |
+| 469 | la compuerta de suciedad siempre-sucia: la cosecha corre aunque el DOM no se movió | *suite_74: A3.1: la cosecha solo corre cuando el DOM se movió* | Sí |
+| 470 | la firma del registro ciega al contenido: dos contenidos distintos firman igual | *suite_74: A3.2: la firma ignora sellos de tiempo, no contenido* | Sí |
+| 471 | `_vglChanMsgValido` acepta `t` como cadena: por el canal entra lo que no tiene forma de estado | *suite_74: M1: solo entra por el canal lo que tiene forma de estado* | Sí |
+| 472 | el sondeo con pestaña oculta sin cadencia lenta: 5 s en vez de 15 s | *suite_74: M3: pestaña oculta sondea lento y visible recupera cadencia* | Sí |
+| 473 | `_hayCitaCritica` nunca crítica: la ventana de 90 s antes de vencer la gracia no acelera nada | *suite_74: M3: la ventana crítica son 90 s antes de vencer la gracia* | Sí |
+| 474 | en el registro de inasistencias, `sobraM4 = 0` y la poda de vencidos no-op: el historial crece sin tope de 500 | *suite_74: M4: el historial de inasistencias se poda al registrar* | Sí |
+| 475 | la bitácora sin censura (`safeDetails[k] = val`): ids de turno y teléfonos dentro de textos quedan en claro | *suite_74: M5/B1/B12: la bitácora censura identificadores, no contenido* | Sí |
+| 476 | `vgl_estilo_ejemplos` sin TTL: los ejemplos de estilo nunca caducan a los 180 días | *suite_74: B3: los ejemplos de estilo caducan a los 180 días* | Sí |
+| 477 | el `setTimeout` que revoca la URL del blob de la bitácora, no-op: la URL vive para siempre | *suite_74: B6a: la URL del blob de la bitácora se libera* | Sí |
+| 478 | ídem para la URL del blob del diagnóstico | *suite_74: B6b: la URL del blob del diagnóstico se libera* | Sí |
+| 479 | la revocación de la URL del guion del worker, no-op: una fuga por cada carga de página | *suite_74: B7: la URL del guion del worker se revoca al crearlo* | Sí |
+| 480 | `if (false)` en la limpieza de marcas `vgl_n_*`: el aviso de hace 25 horas sigue en el almacén | *suite_74: B8: las marcas de aviso de más de 24 horas se limpian* | Sí |
+| 481 | en el mapa de identidades, `sobranB9 = 0`: sin tope de 20 logins, el mapa crece sin control | *suite_74: B9: el mapa de identidades se poda al guardar* | Sí |
+| 482 | sin el `while` que recorta al acumular el lote: 450 pares en vez del tope de 400 | *suite_74: M7: el lote de deshacer tiene tope y se libera al expirar* | Sí |
+| 483 | los `.clear()` de la sesión del día, borrados: las fechas de laboratorio sobreviven al cierre | *suite_74: M8: la sesión del día se limpia por completo* | Sí |
+| 484 | sin `disconnect()` del observador en el apagado de emergencia: queda conectado tras el cierre | *suite_74: B10+B13: el apagado de emergencia suelta observador y registro* | Sí |
+
+Banco completo: **3.143 comprobaciones pasan, 0 fallan.**

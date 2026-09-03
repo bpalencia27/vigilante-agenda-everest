@@ -23,6 +23,16 @@
 const MIN_VERSION = "18.0.32";  // ← Versión mínima requerida (01-sep: hemoglobina del hemograma, parcial de orina, Auto-Labs honesto, blindaje CSS y fuga de PHI)
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
 
+// Ancla de integridad (hallazgo A1 de la auditoría del 03-sep, v18.0.134):
+// huella SHA-256 del userscript oficial. El script la compara contra la de SU
+// PROPIO código fuente (verificarIntegridadArranque) y solo cuenta como
+// manipulación cuando EXPECTED_SHA_VERSION es exactamente la versión que corre
+// el equipo; con la huella de otra versión el script NO se apaga (este tablero
+// va atrasado, nadie manipuló nada). Actualizar AMBAS constantes en cada
+// release que toque el userscript.
+const EXPECTED_SHA256 = "23927be37b2d30ef8de5ad81e5c686184a42293b0319a9bfe9ebbb3da2f5abee";
+const EXPECTED_SHA_VERSION = "18.0.134";
+
 // Configuración de Kill-Switch remoto de emergencia (R5.3)
 const KILL_SWITCH = {
   active: false,               // true = activa apagado de emergencia inmediato
@@ -49,6 +59,8 @@ function doGet(e) {
       forceReload: FORCE,
       killSwitch: KILL_SWITCH,
       canary: CANARY,
+      expectedSha256: EXPECTED_SHA256,
+      expectedShaVersion: EXPECTED_SHA_VERSION,
       timestamp: new Date().toISOString()
     })
   ).setMimeType(ContentService.MimeType.JSON);

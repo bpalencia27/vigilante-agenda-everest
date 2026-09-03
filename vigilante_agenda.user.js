@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.133
+// @version      18.0.134
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.133";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.134";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1135,11 +1135,13 @@
       };
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      const urlB6a = URL.createObjectURL(blob);   // v18.0.134 (auditoría 2026-09-03, B6) — la URL del blob se libera tras la descarga
+      a.href = urlB6a;
       a.download = `BITACORA_VIGILANTE_REAL_${todayStamp()}_${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(urlB6a); } catch (eR) {} }, 60000);
       showToast("VERDE", "Bitácora", "✓ Bitácora descargada. Envíela al programador para revisar con datos reales.", false);
     } catch (e) { showToast("AMBAR", "Bitácora", "No se pudo descargar la bitácora en este momento. Inténtelo de nuevo.", false); }
   }
@@ -1161,7 +1163,7 @@
 
   // Observador de Navegación y Secciones Everest
   let lastObservedUrl = "";
-  setInterval(() => {
+  const _navLogTimer = setInterval(() => {
     if (location.href !== lastObservedUrl) {
       const oldUrl = lastObservedUrl;
       lastObservedUrl = location.href;
@@ -1170,6 +1172,8 @@
   // v15.5.0 (auditoría de rendimiento): 1 s → 5 s. El registro de navegación no necesita
   // granularidad de segundo; a 1 s eran 3.600 despertares/hora del hilo principal solo
   // para comparar una cadena. Con 5 s el dato es el mismo y sobran 2.880 despertares.
+  // v18.0.134 (auditoría 2026-09-03, B13) — el identificador queda guardado: el apagado
+  // de emergencia lo detiene y el script muerto no vuelve a despertar cada 5 segundos.
   }, 5000);
  // fuente única de la versión (título + diagnóstico)
 
@@ -2594,7 +2598,9 @@
       // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
       const idPaciente = _atheneaIdPaciente(r2.responseText);
       const token2 = _atheneaToken(r2.responseText);
-      if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente=" + JSON.stringify(idPaciente) + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
+      // v18.0.134 (auditoría 2026-09-03, B2) — JSON.stringify(idPaciente) volcaba el id tal
+      // cual en consola; basta decir si llegó o no. Mismo mensaje, sin identificador.
+      if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente: " + (idPaciente ? "presente" : "no") + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
 
       const mp2 = _atheneaMultipart({ IdPaciente: idPaciente, __RequestVerificationToken: token2 });
       const r3 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/DatosPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp2.boundary}` }, data: mp2.body });
@@ -4982,8 +4988,125 @@
   // lo que el médico tiene delante.
   const VGL_COSECHA_MAX_PACIENTES = 80;
   const VGL_COSECHA_MAX_DIAS = 120;
+  // v18.0.134 — MEMO DE LECTURA (hallazgo A3.3 de la auditoría 2026-09-03): cada llamada
+  // a _vglCosechaTodo pagaba getItem + JSON.parse del almacén COMPLETO (hasta 80
+  // pacientes) y hay varios lectores por vuelta del reloj. Ahora se compara la cadena
+  // cruda: si el disco no cambió, se devuelve el objeto ya parseado. Sin TTL a
+  // propósito — la invalidación es por CONTENIDO, así una escritura de otra pestaña
+  // (o de una prueba que toque `vgl_cosecha` directo) se ve en cuanto el texto difiera.
+  let _vglCosechaCacheRaw = null;
+  let _vglCosechaCacheTodo = null;
   function _vglCosechaTodo() {
-    try { return JSON.parse(localStorage.getItem(VGL_COSECHA_KEY) || "{}"); } catch (e) { return {}; }
+    try {
+      const raw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
+      if (raw === _vglCosechaCacheRaw && _vglCosechaCacheTodo) return _vglCosechaCacheTodo;
+      _vglCosechaCacheTodo = JSON.parse(raw);
+      _vglCosechaCacheRaw = raw;
+      return _vglCosechaCacheTodo;
+    } catch (e) { _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null; return {}; }
+  }
+  // v18.0.134 — FIRMA POR REGISTRO (hallazgo A3.2 de la auditoría 2026-09-03): la guarda
+  // de escritura firmaba el almacén ENTERO (80 pacientes serializados dos veces por
+  // guarda) cuando sin poda solo puede diferir el registro del paciente que se acaba de
+  // cosechar. La misma ceguera de sellos de siempre — la v18.0.18 descubrió que tachar
+  // TODA clave `ts` descartaba respuestas del médico (una confirmación de embarazo
+  // caducada respondida LO MISMO no se escribía nunca y la pregunta bloqueante revivía
+  // cada día), así que aquí se ciegan SOLO los dos sellos que de verdad son ruido de
+  // reloj y por su sitio, no por su nombre: el del registro del paciente (`ts`) y el de
+  // `hcEverest` (que se renueva en cada cosecha de pantalla aunque no cambie nada).
+  // `confirmaciones[*].ts` y `factores[*].ts` quedan DENTRO de la firma: son contenido.
+  // Función pura y de módulo para que el banco de pruebas la fije directamente.
+  function _vglFirmaReg(reg) {
+    if (!reg || typeof reg !== "object") return JSON.stringify(reg == null ? "" : reg);
+    const copia = {};
+    for (const kk of Object.keys(reg)) {
+      if (kk === "ts") continue;                     // sello del registro: ruido
+      if (kk === "hcEverest" && reg[kk] && typeof reg[kk] === "object") {
+        const hc = {};
+        for (const hk of Object.keys(reg[kk])) if (hk !== "ts") hc[hk] = reg[kk][hk];
+        copia[kk] = hc;
+        continue;
+      }
+      copia[kk] = reg[kk];                           // confirmaciones y factores, íntegros
+    }
+    return JSON.stringify(copia);
+  }
+
+  // =====================================================================
+  //  v18.0.134 — COMPUERTA DE COSECHA: SOLO CUANDO EL DOM SE MOVIO (A3.1)
+  //  La cosecha (`_vglCosecharDePantalla`) barre el DOM de la historia y
+  //  reescribe el almacén; corría en CADA vuelta del reloj (2-5 s) aunque
+  //  la pantalla no hubiera cambiado en nada. Ahora un MutationObserver y
+  //  tres listeners en captura marcan la página como "sucia", y la cosecha
+  //  solo corre cuando hay suciedad nueva — o de fuerza bruta cada 30 s
+  //  (VGL_DOM_COSECHA_FORZADA_MS) como red de seguridad contra un observer
+  //  que no reporte nada en un entorno raro.
+  //  Lo que el propio Vigilante inyecta (nodos con id "vgl-*") NO cuenta
+  //  como suciedad: no dispara cosechas de sí mismo.
+  //  El latch `_vglDomObsActivo` queda en falso hasta la PRIMERA mutación
+  //  real reportada; mientras tanto la compuerta responde siempre "sucia".
+  //  Así, en entornos donde el observer nunca dispara (el arnés de pruebas,
+  //  navegadores que lo estrangulen), el comportamiento es exactamente el
+  //  de siempre: cosechar en cada tick. Nunca se bloquea por defecto.
+  // =====================================================================
+  const VGL_DOM_COSECHA_FORZADA_MS = 30000;
+  let _vglDomSucio = true;          // nace sucia: la primera cosecha de la sesión siempre corre
+  let _vglDomObsActivo = false;     // latch: el observador ya reportó su primera mutación real
+  let _vglDomObsInstalado = false;
+  let _vglDomUltimaCosechaMs = 0;
+
+  function _vglNodoEsDelVigilante(n) {
+    try {
+      let nodo = n;
+      if (!nodo) return false;
+      if (nodo.nodeType === 3) nodo = nodo.parentElement;   // nodo de texto: se mira al padre
+      while (nodo) {
+        const id = nodo.id;
+        if (typeof id === "string" && id.indexOf("vgl-") === 0) return true;
+        nodo = nodo.parentElement;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function _vglDomMarcarSucio() { _vglDomObsActivo = true; _vglDomSucio = true; }
+  function _vglInstalarVigilanciaDom() {
+    if (_vglDomObsInstalado) return;
+    if (typeof document === "undefined" || !document.body) return;
+    if (typeof MutationObserver !== "function" || typeof document.addEventListener !== "function") return;
+    try {
+      const obs = new MutationObserver((muts) => {
+        for (const m of muts || []) {
+          if (m.type === "characterData") {
+            if (!_vglNodoEsDelVigilante(m.target)) { _vglDomMarcarSucio(); return; }
+            continue;
+          }
+          for (const n of (m.addedNodes || [])) {
+            if (!_vglNodoEsDelVigilante(n)) { _vglDomMarcarSucio(); return; }
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      const alTocar = (ev) => {
+        try { if (!ev || !ev.target || !_vglNodoEsDelVigilante(ev.target)) _vglDomMarcarSucio(); } catch (e) {}
+      };
+      document.addEventListener("input", alTocar, true);
+      document.addEventListener("change", alTocar, true);
+      document.addEventListener("click", alTocar, true);
+      _vglDomObsInstalado = true;
+    } catch (e) { _vglDomObsInstalado = false; }
+  }
+  function _vglDomEstaSucia() {
+    try {
+      _vglInstalarVigilanciaDom();
+      if (!_vglDomObsActivo) { _vglDomUltimaCosechaMs = Date.now(); return true; }   // observador mudo: no bloquear nunca
+      const ahora = Date.now();
+      if (_vglDomSucio || ahora - _vglDomUltimaCosechaMs >= VGL_DOM_COSECHA_FORZADA_MS) {
+        _vglDomSucio = false;
+        _vglDomUltimaCosechaMs = ahora;
+        return true;
+      }
+      return false;
+    } catch (e) { return true; }
   }
   // v17.48.0 — LECTURA TOLERANTE A LOS CEROS A LA IZQUIERDA.
   // Desde esta versión toda cédula se canonicaliza en la fuente (_vglDocCanon), así que
@@ -5111,15 +5234,19 @@
       const todo = Object.assign({}, previoTodo);
       todo[id] = fusion;
       // Poda: por edad y por cantidad, sacrificando siempre lo más viejo.
+      // v18.0.134 — `podaCambio` avisa si esta pasada BORRÓ algo: en ese caso hay que
+      // persistir sí o sí (la firma por registro solo mira al paciente recién cosechado
+      // y no notaría la poda de los demás).
+      let podaCambio = false;
       try {
         const limite = Date.now() - VGL_COSECHA_MAX_DIAS * 86400000;
         const claves = Object.keys(todo).filter((k) => {
-          if ((todo[k] && todo[k].ts || 0) < limite) { delete todo[k]; return false; }
+          if ((todo[k] && todo[k].ts || 0) < limite) { delete todo[k]; podaCambio = true; return false; }
           return true;
         });
         if (claves.length > VGL_COSECHA_MAX_PACIENTES) {
           claves.sort((a, b) => (todo[a].ts || 0) - (todo[b].ts || 0));
-          for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) delete todo[k];
+          for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) { delete todo[k]; podaCambio = true; }
         }
       } catch (e2) {}
       // v18.0.4 — GUARDA DE ESCRITURA: si tras fusionar y podar el contenido es idéntico
@@ -5147,27 +5274,16 @@
       // cada cosecha de pantalla aunque no cambie nada). `confirmaciones[*].ts` y
       // `factores[*].ts` quedan dentro de la firma — el segundo ya no genera ruido porque
       // la v18.0.4 conserva el sello anterior cuando el valor no cambia.
-      const _firma = (o) => {
-        const fuera = {};
-        for (const k of Object.keys(o || {})) {
-          const reg = o[k];
-          if (!reg || typeof reg !== "object") { fuera[k] = reg; continue; }
-          const copia = {};
-          for (const kk of Object.keys(reg)) {
-            if (kk === "ts") continue;                     // sello del registro: ruido
-            if (kk === "hcEverest" && reg[kk] && typeof reg[kk] === "object") {
-              const hc = {};
-              for (const hk of Object.keys(reg[kk])) if (hk !== "ts") hc[hk] = reg[kk][hk];
-              copia[kk] = hc;
-              continue;
-            }
-            copia[kk] = reg[kk];                           // confirmaciones y factores, íntegros
-          }
-          fuera[k] = copia;
-        }
-        return JSON.stringify(fuera);
-      };
-      if (_firma(todo) === _firma(previoTodo)) return fusion;
+      // v18.0.134 — GUARDA DE ESCRITURA, AHORA POR REGISTRO (A3.2 de la auditoría
+      // 2026-09-03): antes se firmaba el almacén ENTERO (`_firma(todo) ===
+      // _firma(previoTodo)`), dos serializaciones de hasta 80 pacientes por guarda —
+      // en cada tick con pantalla quieta. Sin poda, `todo` solo puede diferir de
+      // `previoTodo` en la clave de ESTE paciente (`todo = {…previoTodo, [id]: fusion}`),
+      // así que comparar el registro basta: `_vglFirmaReg(fusion) === _vglFirmaReg(previo)`.
+      // La ceguera de sellos es la MISMA de siempre (ver `_vglFirmaReg` arriba y el
+      // hallazgo v18.0.18 que la fijó): solo se tachan `ts` del registro y `hcEverest.ts`.
+      // Y si la poda borró algo (`podaCambio`), se persiste aunque el registro no cambie.
+      if (!podaCambio && _vglFirmaReg(fusion) === _vglFirmaReg(previo)) return fusion;
       // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
       // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
       // null, así que un QuotaExceededError se tragaba ENTERO y en silencio. Con el
@@ -5182,7 +5298,12 @@
       // VGL_ESPEJO_CLAVES, así que sale por su propia guarda sin hacer nada.
       // Si aun tras purgar no cabe, se DICE: perder la memoria del paciente sin avisar es
       // peor que interrumpir un momento al médico.
-      if (!safeWriteJSON(VGL_COSECHA_KEY, todo)) {
+      const escrito = safeWriteJSON(VGL_COSECHA_KEY, todo);
+      // v18.0.134 — el memo de lectura de _vglCosechaTodo queda viejo con esta escritura:
+      // se invalida SIEMPRE tras el intento (aunque safeWriteJSON haya purgado por cuota,
+      // el texto del disco ya no es el que el memo recuerda).
+      _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
+      if (!escrito) {
         try {
           showToast("AMBAR", "No se pudo guardar la memoria del paciente",
             "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Avísele al programador.", true);
@@ -8248,6 +8369,11 @@
   // v16.1.0 — cuánto tiempo se ve el botón «↩ Deshacer» (el lote por dentro sigue
   // disponible 5 minutos; esto es solo lo que el botón permanece a la vista).
   const VGL_DESHACER_VISIBLE_MS = 20000;
+  // v18.0.134 (auditoría 2026-09-03, M7) — tope del lote de deshacer: cada par retiene una
+  // referencia al nodo DOM y al valor previo de la casilla; sin tope, un botón muy activo
+  // acumulaba pares durante los 5 minutos de vida del lote. 400 cubre con holgura el llenado
+  // automático más grande visto (los 12 resultados de Auto-Labs).
+  const VGL_DESHACER_MAX_PARES = 400;
   let _vglLoteDeshacer = null;   // { docId, pares:[{el, prev}], ts, etiqueta }
   function _vglGuardarDeshacer(docId, pares, etiqueta) {
     // v18.0.131 (barrido por recorridos, hallazgo 9) — devuelve boolean: false si no había
@@ -8303,17 +8429,31 @@
             _vglLoteDeshacer.pares.push(par);
             yaEsta.add(par.el);
           }
+          while (_vglLoteDeshacer.pares.length > VGL_DESHACER_MAX_PARES) _vglLoteDeshacer.pares.shift();   // v18.0.134 (M7) — tope al acumular
           _vglLoteDeshacer.ts = Date.now();
           return true;
         }
         showToast("AZUL", "Deshacer", "Ya no se puede deshacer «" + anterior + "»: el botón pasa a lo que se acaba de escribir.", false);
       }
     } catch (e) {}
-    _vglLoteDeshacer = { docId: _docDes, pares, ts: Date.now(), etiqueta: _etDes };
+    _vglLoteDeshacer = { docId: _docDes, pares: pares.slice(-VGL_DESHACER_MAX_PARES), ts: Date.now(), etiqueta: _etDes };   // v18.0.134 (M7) — tope al crear
     return true;
   }
   function _vglDeshacerDisponible() {
-    return !!(_vglLoteDeshacer && (Date.now() - _vglLoteDeshacer.ts) < 5 * 60 * 1000);
+    // v18.0.134 (auditoría 2026-09-03, M7) — al expirar se LIBERA el lote (nodos DOM y
+    // valores previos retenidos) en vez de dejarlo colgado hasta el próximo guardado.
+    if (!_vglLoteDeshacer) return false;
+    if ((Date.now() - _vglLoteDeshacer.ts) >= 5 * 60 * 1000) { _vglLoteDeshacer = null; return false; }
+    return true;
+  }
+  // v18.0.134 (auditoría, M7) — inspección del lote sin exponerlo: cuántos pares retiene,
+  // si sigue disponible y su sello de tiempo. La usan el tablero de diagnóstico y el arnés.
+  function _vglDeshacerLoteInfo() {
+    return {
+      pares: (_vglLoteDeshacer && _vglLoteDeshacer.pares) ? _vglLoteDeshacer.pares.length : 0,
+      disponible: _vglDeshacerDisponible(),
+      ts: _vglLoteDeshacer ? _vglLoteDeshacer.ts : 0
+    };
   }
   function _vglEjecutarDeshacer() {
     const lote = _vglLoteDeshacer;
@@ -8671,6 +8811,21 @@
   // fechas reales al proveedor de IA. Nombres, cédulas, teléfonos, correos y direcciones
   // se siguen tachando SIEMPRE — la opción no los toca. El pie del modal se actualizó
   // para decir la verdad nueva.
+  // v18.0.134 (auditoría 2026-09-03, B12) — las expresiones del saneador suben a constantes
+  // de módulo: scrubPII se llama por cada valor que sale del equipo (bitácora, prompts de IA,
+  // exportaciones) y recompilar 8 literales en CADA llamada era trabajo repetido que el motor
+  // no podía cachear entre llamadas. Con String.replace las /g son seguras de reutilizar
+  // (replace reinicia lastIndex). La forma Barrio/Vereda además se ACOTA a máximo 5 palabras:
+  // el cuantificador anidado abierto «(palabra\s+)+» sobre un texto largo sin casar podía
+  // degenerar en retroceso cuadrático (ReDoS de facto sobre el hilo de la interfaz).
+  const _SCRUB_RX_CORREO = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const _SCRUB_RX_DIR = /(?:Av(?:enida)?\s+El\s+Dorado(?:\s*#\s*[\d-]+)?|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)\s+\d+\s*(?:#|No\.?|Número)\s*[\d-]+|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)\s+#\s*[\d-]+|\b(?:Mz|Manzana)\s+\d+\s+Casa\s+\d+|\b(?:Barrio|Vereda)\s+[\wáéíóúÁÉÍÓÚñÑ.-]+(?:\s+[\wáéíóúÁÉÍÓÚñÑ.-]+){0,4}\s+[\d-]+)/gi;
+  const _SCRUB_RX_TEL = /(?<!\d)(?:\+?0?57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g;
+  const _SCRUB_RX_FECHA_NUM = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/g;
+  const _SCRUB_RX_FECHA_TXT = /\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:del?\s+)?\d{2,4})?\b/gi;
+  const _SCRUB_RX_GRUPO_NUM = /\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g;
+  const _SCRUB_RX_DOC_PREFIJO = /(?<=\b(?:CC|TI|CE|PPT|Doc|Documento|Cédula|Cedula|Identificación|Identificacion)\s+)\d{5,11}\b/gi;
+  const _SCRUB_RX_DOC_PLANO = /(?<=\b|_)\d{6,11}(?=\b|_)/g;
   function scrubPII(input, opciones) {
     if (input == null || typeof input === "boolean") return input;
     if (typeof input === "number") {
@@ -8686,8 +8841,8 @@
       return res;
     }
     let str = String(input);
-    str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[CORREO_CENSURADO]");
-    str = str.replace(/(?:Av(?:enida)?\s+El\s+Dorado(?:\s*#\s*[\d-]+)?|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)\s+\d+\s*(?:#|No\.?|Número)\s*[\d-]+|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)\s+#\s*[\d-]+|\b(?:Mz|Manzana)\s+\d+\s+Casa\s+\d+|\b(?:Barrio|Vereda)\s+(?:[\wáéíóúÁÉÍÓÚñÑ.-]+\s+)+[\d-]+)/gi, "[DIR_CENSURADA]");
+    str = str.replace(_SCRUB_RX_CORREO, "[CORREO_CENSURADO]");
+    str = str.replace(_SCRUB_RX_DIR, "[DIR_CENSURADA]");
     // v17.6.8 — fijos colombianos (601/604/…/800) además de móviles 3xx. La clase
     // NO incluye el 1: las cédulas colombianas suelen empezar por 1 y se tacharían como
     // teléfono (falso positivo). Los fijos reales van por 6xx/8xx.
@@ -8699,20 +8854,20 @@
     // v18.0.103 — el indicativo pegado y sin «+» («573001234567», formato WhatsApp; «057…»)
     // quedaba DENTRO del límite de dígito y el celular entero viajaba a la IA (refutador de
     // v18.0.101, fila 41): el indicativo entra en la forma, con o sin «+».
-    str = str.replace(/(?<!\d)(?:\+?0?57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g, "[TEL_CENSURADO]");
+    str = str.replace(_SCRUB_RX_TEL, "[TEL_CENSURADO]");
     // Fechas: formato dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa, aaaa-mm-dd y textuales en español.
     // v16.5.0 — `conFechas` las conserva (SOLO fechas): decisión del médico para que la
     // redacción asistida pueda anclar la cronología. Todo lo demás se tacha igual.
     if (!(opciones && opciones.conFechas)) {
-      str = str.replace(/\b(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/g, "[FECHA_CENSURADA]");
-      str = str.replace(/\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:del?\s+)?\d{2,4})?\b/gi, "[FECHA_CENSURADA]");
+      str = str.replace(_SCRUB_RX_FECHA_NUM, "[FECHA_CENSURADA]");
+      str = str.replace(_SCRUB_RX_FECHA_TXT, "[FECHA_CENSURADA]");
     }
     // Grupos numéricos con puntos, guiones o espacios (cédula/documento)
-    str = str.replace(/\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g, "[CENSURADO]");
+    str = str.replace(_SCRUB_RX_GRUPO_NUM, "[CENSURADO]");
     // Documentos con prefijo explícito (5 a 11 dígitos)
-    str = str.replace(/(?<=\b(?:CC|TI|CE|PPT|Doc|Documento|Cédula|Cedula|Identificación|Identificacion)\s+)\d{5,11}\b/gi, "[CENSURADO]");
+    str = str.replace(_SCRUB_RX_DOC_PREFIJO, "[CENSURADO]");
     // Documentos planos generales (6 a 11 dígitos)
-    str = str.replace(/(?<=\b|_)\d{6,11}(?=\b|_)/g, "[CENSURADO]");
+    str = str.replace(_SCRUB_RX_DOC_PLANO, "[CENSURADO]");
     return str;
   }
   function sanitizePII(input) {
@@ -9707,7 +9862,9 @@
     try {
       if (typeof Worker === "undefined" || typeof Blob === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") { _reloj.motivo = "sin Worker en este entorno"; return false; }
       const codigo = "var t={};self.onmessage=function(e){var d=e.data||{};if(d.op==='start'){if(t[d.id])clearInterval(t[d.id]);t[d.id]=setInterval(function(){self.postMessage({id:d.id});},d.ms);}else if(d.op==='stop'){if(t[d.id]){clearInterval(t[d.id]);delete t[d.id];}}};";
-      const w = new Worker(URL.createObjectURL(new Blob([codigo], { type: "application/javascript" })));
+      const urlB7 = URL.createObjectURL(new Blob([codigo], { type: "application/javascript" }));   // v18.0.134 (auditoría 2026-09-03, B7) — el worker ya tomó el guion al construirse
+      const w = new Worker(urlB7);
+      try { URL.revokeObjectURL(urlB7); } catch (eRev) {}
       w.onmessage = (e) => {
         _reloj.ultimoLatidoWorker = Date.now();
         const id = e && e.data && e.data.id;
@@ -9740,7 +9897,17 @@
   }
   try {
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") { _reloj.visibleDesde = Date.now(); _reloj.ultimoLatidoWorker = Date.now(); }
+      if (document.visibilityState === "visible") {
+        _reloj.visibleDesde = Date.now(); _reloj.ultimoLatidoWorker = Date.now();
+        // v18.0.134 (M3) — al VOLVER a ser visible se recupera YA la cadencia plena:
+        // el sondeo de pestaña oculta (≥15 s) queda atrás sin esperar a que venza la
+        // próxima vuelta del reloj lento. `_tickMsActual = 0` fuerza que
+        // _ajustarSondeo re-programe dentro del propio tick, y el tick inmediato lee
+        // la agenda ahora que el médico vuelve a mirar. En try/catch directo porque
+        // este handler se registra ANTES de la declaración `let _tickMsActual` y
+        // `typeof` no protege de un TDZ; si algo aún no existe, aquí no se rompe nada.
+        try { _tickMsActual = 0; if (typeof tick === "function") tick(); } catch (e2) {}
+      }
     });
   } catch (e) {}
   try { setInterval(_relojVigilarWorker, 30000); } catch (e) {}
@@ -9805,7 +9972,20 @@
   const TABID = String(Math.random()).slice(2) + Date.now();
 
   let chan = null;
-  try { chan = new BroadcastChannel("vgl"); chan.onmessage = (e) => { if (e.data && e.data.t) state.shared = e.data; }; } catch (e) {}
+  // v18.0.134 (M1 de la auditoría 2026-09-03) — VALIDACIÓN DE LOS MENSAJES DEL CANAL
+  // ENTRE PESTAÑAS: antes CUALQUIER objeto con `.t` se aceptaba como estado
+  // compartido (`state.shared = e.data`). El canal es same-origin, así que un atacante
+  // capaz de inyectar en él ya puede leer localStorage directamente (un nonce no
+  // añadiría nada real; documentado en docs/SECRETOS_EXPUESTOS.md), pero no hay razón
+  // para tragarse basura: se exige `t` numérico finito y `list` arreglo acotado, que
+  // es exactamente la forma que `share()` envía. Función pura para el banco.
+  const VGL_CHAN_LIST_MAX = 500;
+  function _vglChanMsgValido(data) {
+    return !!(data && typeof data === "object"
+      && typeof data.t === "number" && isFinite(data.t)
+      && Array.isArray(data.list) && data.list.length <= VGL_CHAN_LIST_MAX);
+  }
+  try { chan = new BroadcastChannel("vgl"); chan.onmessage = (e) => { if (_vglChanMsgValido(e.data)) state.shared = e.data; }; } catch (e) {}
 
   // v12.3.36 — DESCUBIERTO EN CONSULTORIO (panel clavado en "Última lectura...
   // vuelve a Citas del día" + cero avisos de confirmación durante toda la jornada):
@@ -12387,6 +12567,14 @@
   // — lo usa pickTodaysFile para comparar TimeLastModified (UTC) contra "hoy" con la
   // misma vara, en vez de comparar el string UTC crudo contra la fecha local.
   function todayStamp(d) { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  // v18.0.134 — Fecha de hace N días, en el MISMO formato de todayStamp (YYYY-MM-DD con
+  // relleno de ceros): sirve para comparar sellos de fecha por orden lexicográfico
+  // directo. La usan la purga de la base piloto (A2, 30 días) y la poda del historial
+  // de inasistencias (M4, 180 días). Dinámica siempre: nada de fechas quemadas.
+  function _vglFechaHace(dias) {
+    const d = new Date(Date.now() - (dias || 0) * 86400000);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
   function spBase() { return "https://" + CONFIG.SP.host + CONFIG.SP.web; }
   // v7.7: encuentra el archivo del PyM de HOY en la carpeta de SharePoint, por su
   // nombre — sin adivinar formatos raros: prueba las variantes de fecha más comunes
@@ -12720,9 +12908,26 @@
   async function pilotoDesdeCache() {
     try {
       if (typeof GM_getValue === "undefined") return false;
-      const raw = GM_getValue(PILOTO_KEY, ""); if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return false;
+      // v18.0.134 — PURGA DE LA BASE PILOTO (hallazgo A2 de la auditoría 2026-09-03):
+      // este caché (hasta 12 MB) se conservaba para siempre — solo se descartaba en
+      // silencio al fallar el desempaquetado o cambiar el id, y el paquete viejo seguía
+      // ocupando el almacén de Tampermonkey indefinidamente. Ahora se BORRA cuando: no
+      // es un paquete v3, la fecha de la cola es de hace más de 30 días, el
+      // desempaquetado falla, o el id ya no es el configurado en Ajustes. NO se purga
+      // cada día a propósito: la piloto es el respaldo para cuando la base del día aún
+      // no llega, así que vive en el almacén varias jornadas (ventana de 30 días, el
+      // mismo espíritu de la memoria clínica de vgl_cosecha con sus 120).
+      const purgar = () => { try { GM_setValue(PILOTO_KEY, ""); } catch (e2) {} };
+      const raw = GM_getValue(PILOTO_KEY, "");
+      if (!raw) return false;
+      if (raw.lastIndexOf('{"v":3', 0) !== 0) { purgar(); return false; }
+      // La fecha viaja al FINAL del paquete (mismo truco que loadPymFromCache): mirar la
+      // cola evita desempaquetar varios MB solo para descubrir que es de hace un mes.
+      const rapida = /"date":"(\d{4}-\d{2}-\d{2})"/.exec(raw.slice(-800));
+      if (rapida && rapida[1] < _vglFechaHace(30)) { purgar(); return false; }
       const u = await unpackPym(raw, makeYielder(15));
-      if (!u || (u.meta.id || "") !== pilotoId()) return false;   // cambió el enlace configurado en Ajustes
+      if (!u) { purgar(); return false; }               // paquete roto: nada que conservar
+      if ((u.meta.id || "") !== pilotoId()) { purgar(); return false; }   // cambió el enlace configurado en Ajustes
       if (state.pymFile) return true;
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymFallback = true;
@@ -13499,6 +13704,18 @@
   // Reinicio al cambiar de día: sin esto, una pestaña dejada abierta toda la noche seguía
   // con la lista de "sospechosos" de ayer y marcaba fraude a quien volviera hoy.
   let diaActual = "";
+  // v18.0.134 (auditoría 2026-09-03, M8) — los mapas "de sesión" que solo se vaciaban al
+  // recargar la página ahora también se limpian al cambiar de día: las fechas de laboratorio
+  // vistas por casilla, los avisos de contexto ya emitidos y los "Entendido" de acompañamiento
+  // son hechos del DÍA, no del turno multivial. Sin esto, una pestaña abierta semanas retiene
+  // claves de casillas y avisos de días anteriores (crece sin techo y, peor, un aviso único
+  // emitido el lunes callaba su gemelo del martes). try/catch directo por cada uno: typeof no
+  // protege de la zona muerta (TDZ) si el día cambiara antes de ejecutar la declaración.
+  function _vglLimpiarSesionDia() {
+    try { _diagLabFechaPorCasilla.clear(); } catch (e) {}
+    try { _vglContextoAvisado.clear(); } catch (e) {}
+    try { _acompEntendidoEnMs.clear(); } catch (e) {}
+  }
   function diaNuevo() {
     const d = todayStamp();
     if (!diaActual) { diaActual = d; state.sessionEpoch = Date.now(); return; }
@@ -13526,6 +13743,7 @@
     try { if (typeof _avisoCasillaYaEscrita !== "undefined" && _avisoCasillaYaEscrita && typeof _avisoCasillaYaEscrita.clear === "function") _avisoCasillaYaEscrita.clear(); } catch (e) {}
     try { if (typeof _diagUroNombresVistos !== "undefined" && _diagUroNombresVistos && typeof _diagUroNombresVistos.clear === "function") _diagUroNombresVistos.clear(); } catch (e) {}
     try { if (typeof _mtrMedsCache !== "undefined" && _mtrMedsCache) _mtrMedsCache = { pacienteId: null, lista: null, ts: 0 }; } catch (e) {}
+    try { _vglLimpiarSesionDia(); } catch (e) {}   // v18.0.134 (M8) — mapas de sesión, día nuevo
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
     setSummary("Nuevo día: se reinició el seguimiento.");
@@ -14311,6 +14529,7 @@
         if (hayBajas && _vglMinimizados.size) vglMinPintarBarra();
       });
       obs.observe(document.body, { childList: true });
+      vglMinInstalar._obs = obs;   // v18.0.134 (auditoría 2026-09-03, B10) — el apagado de emergencia lo desconecta
     } catch (e) {}
     return true;
   }
@@ -14610,8 +14829,11 @@
         //     se mostraron sería un duplicado.
         const _firmaPrevia = _avisoUnivFirmaLabs.get(key) || "";
         const _firmaActual = labsListos ? faltantes.map((f) => f.key).sort().join(",") : "";
+        // v18.0.134 (auditoría 2026-09-03, B11) — la firma previa se parte UNA vez a un Set:
+        // antes cada clave candidata volvía a partir la cadena con split(",").indexOf(k).
+        const _previasSet = new Set(_firmaPrevia.split(",").filter(Boolean));
         const _clavesNuevas = !!(_firmaActual && _firmaActual !== _firmaPrevia
-          && _firmaActual.split(",").filter(Boolean).some((k) => _firmaPrevia.split(",").indexOf(k) < 0));
+          && _firmaActual.split(",").filter(Boolean).some((k) => !_previasSet.has(k)));
         const _casoParcial = _avisoUnivParcial.has(key);
         const _casoA12 = !_sinResumenAviso && _avisoUnivSinResumen.has(key) && _clavesNuevas;
         if (labsListos && (faltantes.length || adelantar.length) && (_casoParcial || _casoA12) && !avisoYaVisto("avisounivlab|" + key)) {
@@ -14689,7 +14911,25 @@
     for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
     return "txt|" + h.toString(36);
   }
-  function crossTabDup(id) { try { const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0); if (now - prev < 12000) return true; localStorage.setItem(k, String(now)); return false; } catch (e) { return false; } }
+  // v18.0.134 (auditoría 2026-09-03, B8) — además de leer, al ESCRIBIR se limpian las claves
+  // vgl_n_* con más de 24 horas: cada aviso del último día dejaba una marca que solo se
+  // llevaba la limpieza de medianoche de la OTRA pestaña; si esta era la única abierta, las
+  // marcas viejas se quedaban para siempre en localStorage.
+  function crossTabDup(id) {
+    try {
+      const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0);
+      if (now - prev < 12000) return true;
+      localStorage.setItem(k, String(now));
+      try {
+        const corteB8 = now - 24 * 60 * 60 * 1000;
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const kkB8 = localStorage.key(i);
+          if (kkB8 && kkB8.indexOf("vgl_n_") === 0 && +(localStorage.getItem(kkB8) || 0) < corteB8) localStorage.removeItem(kkB8);
+        }
+      } catch (eLimp) {}
+      return false;
+    } catch (e) { return false; }
+  }
   // REGISTRO PERSISTENTE POR IDENTIFICADOR (v7.3.5): cada aviso lleva un id y queda
   // anotado en el navegador. Un aviso ya mostrado NO se repite: ni al recargar la
   // página, ni al cambiar de pestaña, ni al reabrir Everest. Se limpia solo cada día.
@@ -20088,6 +20328,22 @@
       const mapa = GM_getValue(MTR_IDENTIDAD_MEDICO_KEY, null);
       const nuevo = mapa && typeof mapa === "object" ? mapa : {};
       nuevo[String(login).toLowerCase()] = { id: id, name: name, ts: Date.now() };
+      // v18.0.134 (auditoría 2026-09-03, B9) — al guardar se retiran los vencidos y, si aún
+      // quedan más de 20 logins, los más viejos: el mapa de identidades crecía sin techo (un
+      // login por cuenta que alguna vez pasó por este navegador, para siempre).
+      try {
+        const ahoraB9 = Date.now();
+        for (const lgB9 of Object.keys(nuevo)) {
+          if (ahoraB9 - ((nuevo[lgB9] && nuevo[lgB9].ts) || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) delete nuevo[lgB9];
+        }
+        const sobranB9 = Object.keys(nuevo).length - 20;
+        if (sobranB9 > 0) {
+          Object.keys(nuevo)
+            .sort((a, b) => ((nuevo[a] && nuevo[a].ts) || 0) - ((nuevo[b] && nuevo[b].ts) || 0))
+            .slice(0, sobranB9)
+            .forEach((lgB9) => { delete nuevo[lgB9]; });
+        }
+      } catch (ePoda) {}
       GM_setValue(MTR_IDENTIDAD_MEDICO_KEY, nuevo);
     } catch (e) {}
   }
@@ -28438,7 +28694,9 @@
       const obsInput = modal.querySelector("#vgl-agm-obs").value || "";
       const obs = selectedEspId === 12 ? obsInput : `REMISION A ${selectedEspName.toUpperCase()}. ${obsInput}`.trim();
 
-      console.log("[Vigilante Agendamiento] Asignando turno RCV:", { turnoId, pacienteIdAcceso, fechaIso: fechaElegida.iso, isPyM, selectedEspId });
+      // v18.0.134 (auditoría 2026-09-03, M5) — antes console.log directo: el detalle con
+      // identificadores no pasaba por el saneador de vglLog ni quedaba en la bitácora.
+      vglLog("RCV", "AsignandoTurno", { turnoId, pacienteIdAcceso, fechaIso: fechaElegida.iso, isPyM, selectedEspId });
       const celularSms = (modal.querySelector("#vgl-agm-sms-chk") && modal.querySelector("#vgl-agm-sms-chk").checked)
         ? (modal.querySelector("#vgl-agm-sms-tel") && modal.querySelector("#vgl-agm-sms-tel").value) : "";
       const isLabChecked = !!(tipoCitaElegido === "control_lab" && modal.querySelector("#vgl-agm-lab-chk") && modal.querySelector("#vgl-agm-lab-chk").checked);
@@ -29964,7 +30222,7 @@
         if (vivo()) confirmBtn.textContent = `Generando ${pymTituloCorto(pkg)}... (${creadasCount + fallidasCount + 1} de ${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
-        if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
+        if (!dxId) { vglLog("ORDEN", "DxNoResuelto", { cie10: pkg.cie10 }); fallidasCount++; continue; }   // v18.0.134 (B1) — antes console.warn, no quedaba en la bitácora
 
         const cupsObjs = [];
         const cupsFaltantes = [];
@@ -29973,8 +30231,8 @@
           if (cObj) cupsObjs.push(cObj); else cupsFaltantes.push(cInfo.codigo);
         }
 
-        if (!cupsObjs.length) { console.warn("[Vigilante PyM] No CUPS para", pkg.cie10); fallidasCount++; continue; }
-        if (cupsFaltantes.length) console.warn("[Vigilante PyM] " + pkg.cie10 + ": no se resolvieron los CUPS " + cupsFaltantes.join(", "));
+        if (!cupsObjs.length) { vglLog("ORDEN", "CupsNoResueltos", { cie10: pkg.cie10 }); fallidasCount++; continue; }   // v18.0.134 (B1)
+        if (cupsFaltantes.length) vglLog("ORDEN", "CupsParciales", { cie10: pkg.cie10, cups: cupsFaltantes.join(",") });   // v18.0.134 (B1)
 
         vglLog("ORDEN", "GuardarOrdenRequested", { pacienteIdOrd, dxId, countCups: cupsObjs.length });
         const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
@@ -32453,6 +32711,12 @@
   // Se alimenta SOLO cuando el Vigilante observa "sin presentarse" con tolerancia vencida
   // (el mismo evento que entra a fraudWatch): dato real, no inventado. El mismo día no duplica.
   const NO_SHOW_KEY = "vgl_nosh_hist";
+  // v18.0.134 (auditoría 2026-09-03, M4) — este historial no caducaba nunca: crecía sin techo
+  // con los meses (una entrada por paciente que alguna vez no se presentó, para siempre).
+  // Ahora se poda en cada registro: entradas cuya última inasistencia sea anterior a 180 días
+  // y, si aún quedan más de 500, las más viejas por "ultima". "ultima" es YYYY-MM-DD, así que
+  // comparar strings es comparar fechas.
+  const NO_SHOW_TTL_DIAS = 180, NO_SHOW_MAX_ENTRADAS = 500;
   function _noShowLeer() { try { return JSON.parse(localStorage.getItem(NO_SHOW_KEY) || "{}"); } catch (e) { return {}; } }
   function _noShowGuardar(h) { try { localStorage.setItem(NO_SHOW_KEY, JSON.stringify(h)); } catch (e) {} }
   // v17.53.0 — TOLERANTE A LOS CEROS DE RELLENO, igual que vgl_cosecha y vgl_proc_today
@@ -32474,6 +32738,23 @@
     e.total = (e.total || 0) + 1;
     e.ultima = todayStamp();
     h[k] = e;
+    // v18.0.134 (M4) — PODA EN LA MISMA ESCRITURA: fuera las entradas cuya última
+    // inasistencia es anterior a 180 días y, si aún quedan más de 500, las más viejas
+    // por "ultima". Así el mapa deja de crecer sin techo y la poda va amortizada en el
+    // registro, sin temporizador nuevo. La entrada recién escrita siempre sobrevive:
+    // su "ultima" es HOY.
+    try {
+      const corteM4 = _vglFechaHace(NO_SHOW_TTL_DIAS);
+      for (const kkM4 of Object.keys(h)) {
+        if (kkM4 !== k && h[kkM4] && h[kkM4].ultima && h[kkM4].ultima < corteM4) delete h[kkM4];
+      }
+      const sobraM4 = Object.keys(h).length - NO_SHOW_MAX_ENTRADAS;
+      if (sobraM4 > 0) {
+        const porViejasM4 = Object.keys(h)
+          .sort((aM4, bM4) => String((h[aM4] && h[aM4].ultima) || "").localeCompare(String((h[bM4] && h[bM4].ultima) || "")));
+        for (const kkM4 of porViejasM4.slice(0, sobraM4)) delete h[kkM4];
+      }
+    } catch (ePodaM4) {}
     _noShowGuardar(h);
     return e.total;
   }
@@ -32803,6 +33084,22 @@
       return { status: "error", error: e.message };
     }
   }
+  // v18.0.134 (hallazgo A1 de la auditoría 2026-09-03) — PREDICADO PURO de la
+  // verificación de integridad. La verificación anterior estaba DORMIDA: el script
+  // pedía `data.expectedSha256` pero el tablero (VersionCheck.gs) nunca lo enviaba,
+  // así que un script modificado pasaba igual. Ahora el tablero publica la huella
+  // esperada JUNTO con la versión a la que corresponde (`expectedShaVersion`), y aquí
+  // solo cuenta como FALLO cuando esa versión es exactamente la que corre (VERSION):
+  // una huella de otra versión significa que el tablero va atrasado, no que este
+  // script fue manipulado, y apagar el asistente en plena consulta por eso sería un
+  // falso positivo peor que el riesgo. Función pura para que el banco la fije.
+  function _vglIntegridadFalla(data, integ) {
+    try {
+      if (!data || !data.expectedSha256) return false;
+      if (String(data.expectedShaVersion || "") !== String(VERSION)) return false;
+      return !!(integ && integ.status === "ok" && integ.sha256 && integ.sha256 !== data.expectedSha256);
+    } catch (e) { return false; }
+  }
 
   // Saludo AZUL: UNA sola vez al día en todo el navegador (antes salía en cada pestaña/recarga).
   // v7.3.3: si el Vigilante arranca TARDE (turno ya empezado), NO se dispara ningún aviso
@@ -32908,7 +33205,13 @@
   }
   function _ajustarSondeo(processed) {
     try {
-      const deseado = _hayCitaCritica(processed, new Date()) ? 2000 : CONFIG.POLL_MS;
+      let deseado = _hayCitaCritica(processed, new Date()) ? 2000 : CONFIG.POLL_MS;
+      // v18.0.134 (M3, auditoría 2026-09-03) — con la pestaña OCULTA la cosecha no corre
+      // a cadencia plena: nunca más rápido que cada 15 s (antes despertaba trabajo pesado
+      // —cosecha y serializaciones— cada 5 s sin nadie mirando). Los avisos no pierden
+      // nada: el reloj del worker mantiene el latido y al volver a visible el handler de
+      // visibilitychange recupera YA la cadencia plena (ver ese handler más arriba).
+      if (_pestanaOculta() && deseado < 15000) deseado = 15000;
       if (deseado === _tickMsActual) return;
       _tickMsActual = deseado;
       _relojCada("tick", deseado, tick);
@@ -33062,7 +33365,9 @@
         try {
           const dockEl2 = document.getElementById("vgl-acciones-dock");
           const docId2 = dockEl2 && dockEl2.dataset ? dockEl2.dataset.vglDoc : "";
-          try { _vglCosecharDePantalla(docId2); } catch (e2) {}
+          // v18.0.134 (A3.1) — misma compuerta que en la vía principal: sin movimiento del
+          // DOM no hay nada nuevo que cosechar en las subpantallas tampoco.
+          try { if (_vglDomEstaSucia()) _vglCosecharDePantalla(docId2); } catch (e2) {}
           try { _vglVigilarTextoLibre(docId2); } catch (e2) {}
         } catch (e) {}
       }
@@ -33383,7 +33688,8 @@
       "Llamada aprendida: " + (API.url ? "SÍ" : "todavía no"),
       "Lecturas correctas: " + API.ok + " · fallos seguidos: " + API.fallos + " · última respuesta: " + (API.ms || 0) + " ms",
       "Campos detectados: " + (API.campos ? JSON.stringify(API.campos) : "ninguno aún"));
-    const blob = new Blob([out.join("\n")], { type: "text/plain" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "diagnostico_vigilante_SANITIZADO.txt"; document.body.appendChild(a); a.click(); a.remove();
+    const blob = new Blob([out.join("\n")], { type: "text/plain" }); const a = document.createElement("a"); const urlB6b = URL.createObjectURL(blob); a.href = urlB6b; a.download = "diagnostico_vigilante_SANITIZADO.txt"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(urlB6b); } catch (eR) {} }, 60000);   // v18.0.134 (B6) — liberar la URL del blob tras la descarga
     setSummary("Diagnóstico descargado (solo en este computador, sin datos de pacientes). Revise la carpeta Descargas.");
   }
 
@@ -33595,6 +33901,11 @@
     state.killed = true;
     state.killReason = reason || "Apagado remoto de emergencia";
     try { _relojDetenerTodo(); } catch (e) {}   // v14.2.12 — el reloj de segundo plano también se apaga
+    // v18.0.134 (auditoría 2026-09-03, B10+B13) — el apagado de emergencia también suelta el
+    // observador de ventanas minimizadas y detiene el registro de navegación: el script
+    // "muerto" no debe seguir despertando el hilo ni observando el DOM.
+    try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
+    try { clearInterval(_navLogTimer); } catch (e) {}
     if (typeof GM_setValue !== "undefined") {
       GM_setValue("vgl_kill_active", true);
       GM_setValue("vgl_kill_reason", state.killReason);
@@ -33857,10 +34168,14 @@
             }
 
             // 2b. Evaluación de integridad criptográfica SHA-256 si el servidor la exige
+            // v18.0.134 (A1) — el tablero ahora SÍ envía `expectedSha256` con su
+            // `expectedShaVersion`; la coincidencia se exige solo para la versión que
+            // corre aquí (predicado `_vglIntegridadFalla`). El aviso al médico es en
+            // español y dice qué hacer, igual que el resto de apagados del asistente.
             if (data.expectedSha256 && typeof verificarIntegridadArranque === "function") {
               verificarIntegridadArranque().then((integ) => {
-                if (integ && integ.status === "ok" && integ.sha256 && integ.sha256 !== data.expectedSha256) {
-                  emergencyTeardown("Fallo de integridad criptográfica en userscript (SHA-256 mismatch)");
+                if (_vglIntegridadFalla(data, integ)) {
+                  emergencyTeardown("Se detectó una modificación no autorizada del script (la huella criptográfica no coincide con la publicada). El asistente se apaga por seguridad; avísele al programador.");
                 }
               }).catch(() => {});
             }
@@ -41577,6 +41892,7 @@
   // reescritura no enseña nada bueno. Y mtrRedaccionPrompt usa los ejemplos guardados
   // SIEMPRE que haya al menos uno, sin necesidad de marcar ninguna casilla.
   const MTR_ESTILO_KEY = "vgl_estilo_ejemplos";
+  const MTR_ESTILO_TTL_MS = 180 * 24 * 60 * 60 * 1000;   // v18.0.134 (auditoría 2026-09-03, B3) — caducidad de los ejemplos de estilo
   function mtrEstiloGuardar(texto, nombrePaciente) {
     try {
       if (typeof GM_setValue === "undefined") return false;
@@ -41594,13 +41910,31 @@
         : ((typeof scrubPII === "function") ? String(scrubPII(crudo)) : crudo)).trim().slice(0, 1200);
       if (limpio.length < 30) return false; // demasiado corto para enseñar estilo
       let arr = []; try { arr = JSON.parse(GM_getValue(MTR_ESTILO_KEY, "[]")) || []; } catch (e) { arr = []; }
-      arr.unshift(limpio);
-      GM_setValue(MTR_ESTILO_KEY, JSON.stringify(arr.slice(0, 3)));
+      // v18.0.134 (auditoría 2026-09-03, B3) — el formato interno pasa a {t, x} (sello de
+      // tiempo + texto): cada ejemplo caduca a los 180 días en vez de vivir para siempre en
+      // el disco. Los registros viejos (strings pelados) migran con t = ahora, así no se
+      // pierde lo aprendido recientemente. mtrEstiloLeer sigue devolviendo strings.
+      const ahoraB3 = Date.now();
+      const envsB3 = [{ t: ahoraB3, x: limpio }].concat(arr.map((it) =>
+        (it && typeof it === "object" && typeof it.x === "string") ? it : { t: ahoraB3, x: String(it || "") }));
+      const vivosB3 = envsB3.filter((ev) => ev.x && ev.x.length >= 30 && (ahoraB3 - (ev.t || 0)) < MTR_ESTILO_TTL_MS).slice(0, 3);
+      GM_setValue(MTR_ESTILO_KEY, JSON.stringify(vivosB3));
       return true;
     } catch (e) { return false; }
   }
   function mtrEstiloLeer() {
-    try { if (typeof GM_getValue === "undefined") return []; return JSON.parse(GM_getValue(MTR_ESTILO_KEY, "[]")) || []; } catch (e) { return []; }
+    // v18.0.134 (B3) — devuelve SOLO los textos vivos (TTL 180 días) como array de strings,
+    // migrando el formato viejo (strings pelados, t = ahora) para no romper a los lectores.
+    try {
+      if (typeof GM_getValue === "undefined") return [];
+      const crudoB3 = JSON.parse(GM_getValue(MTR_ESTILO_KEY, "[]")) || [];
+      if (!Array.isArray(crudoB3)) return [];
+      const ahoraB3 = Date.now();
+      return crudoB3
+        .map((it) => (it && typeof it === "object" && typeof it.x === "string") ? { t: it.t || ahoraB3, x: it.x } : { t: ahoraB3, x: String(it || "") })
+        .filter((ev) => ev.x && (ahoraB3 - (ev.t || 0)) < MTR_ESTILO_TTL_MS)
+        .map((ev) => ev.x);
+    } catch (e) { return []; }
   }
 
   // ---------- PROMPTS ----------
