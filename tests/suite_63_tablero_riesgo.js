@@ -1166,6 +1166,41 @@ module.exports = {
       t.cierto(repasos.length > vivosAntes || repasos.length >= 1,
         "y queda vigilando la pantalla cada 20 s: sin esto vuelve a ser una foto");
     });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 7) — REPORTE DEL BARRIDO: el repaso de 20 s
+    // trataba «no pude leer la pantalla» (mtrLeerFactoresRcvDelDom sin nada que leer, o la
+    // caché de 3 min caducada) igual que «se resolvió»: `rec.frenan` llegaba vacío por FALTA
+    // de datos, no porque la contradicción se aclarara, y el cuadro se cerraba solo con un
+    // toast VERDE «La historia ya lo aclara». En este arnés, con querySelectorAll -> [], es
+    // exactamente el escenario de «no pude leer»: mtrLeerFactoresRcvDelDom nunca puede armar
+    // `f._leidos`, así que rec.leidos sale null en cada vuelta del repaso.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 7): el repaso de 20 s no cierra el cuadro solo porque no pudo leer la pantalla", () => {
+      const cM = cargar({ silencioso: true });
+      const d = cM.env.doc;
+      const base = d.createElement;
+      d.createElement = function (tag) {
+        const e = base(tag);
+        const memo = new Map();
+        e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, d.createElement("div")); return memo.get(sel); };
+        e.querySelectorAll = () => [];
+        return e;
+      };
+      const mostrado = cM.api._vglModalConfirmarDatos({ doc_id: "424242" }, [{
+        clave: "hta", etiqueta: "Hipertensión arterial", porQue: "cambia las vigencias",
+        afirman: [{ fuente: "Cabecera de Everest", detalle: "aparece en las marcaciones" }],
+        niegan: [{ fuente: "Historia clínica", detalle: "marcado como No" }],
+        severidad: "alta",
+      }], null);
+      t.cierto(mostrado, "el cuadro se pinta");
+      t.cierto(!!d.getElementById("vgl-confirma-modal"), "control: el cuadro está en pantalla");
+      const repaso = [...cM.env.intervalos.values()].find((x) => x.vivo && x.ms === 20000);
+      t.cierto(!!repaso, "el repaso quedó armado");
+      repaso.f();   // una vuelta del repaso, sin poder leer nada de la pantalla
+      t.cierto(!!d.getElementById("vgl-confirma-modal"),
+        "el cuadro SIGUE abierto: «no pude leer» no es «se resolvió» — antes se cerraba solo aquí, afirmando en VERDE que la historia ya lo aclaraba");
+    });
     // =====================================================================
     // v18.0.116 — «UN SOLO ESTADO DEL PACIENTE», PASO 1: detector PASIVO de desacuerdos
     // =====================================================================

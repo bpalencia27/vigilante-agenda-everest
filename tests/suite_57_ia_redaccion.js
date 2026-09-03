@@ -854,6 +854,25 @@ module.exports = {
       t.igual(caja.value, "", "cero escritura: la casilla queda intacta (bug real: se insertaba igual)");
     });
 
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 8) — REPORTE DEL BARRIDO: Insertar dos
+    // casillas seguidas del Redactor IA («Enfermedad actual» → auto-avanza → «Análisis y
+    // plan») y pulsar «↩ Deshacer» en la última revertía TAMBIÉN la primera. Las dos
+    // inserciones se guardaban bajo la MISMA etiqueta «Redactor IA» y el mismo docId —
+    // condición exacta de acumulación de lotes de v18.0.59 — así que el auto-avance (que
+    // existe precisamente para encadenar casillas DISTINTAS) las acumulaba en un solo lote.
+    // Verificado en Chromium real además de con el arnés.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 8): cada inserción del Redactor IA se guarda con SU PROPIA etiqueta de casilla, no «Redactor IA» a secas", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const llamadas = [...src.matchAll(/_vglGuardarDeshacer\(resumen\._docId, \[[^\]]*\], ([^;]*?)\);/g)].map((m) => m[1]);
+      t.cierto(llamadas.length === 2, "las dos rutas de Insertar del Redactor IA guardan deshacer (normal y reemplazo): " + llamadas.length);
+      llamadas.forEach((et) => t.cierto(et === '"Redactor IA · " + (info.etiqueta || modo)',
+        "la etiqueta incluye la casilla, no el literal fijo «Redactor IA»: " + et));
+      t.falso(/_vglGuardarDeshacer\(resumen\._docId, \[[^\]]*\], "Redactor IA"\)/.test(src),
+        "no queda ningún rastro de la etiqueta fija «Redactor IA» sin la casilla");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: si la historia abierta es de OTRO paciente, se niega sin tocar nada", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
@@ -874,6 +893,31 @@ module.exports = {
       const c2 = cargar({ silencioso: true });
       c2.env.doc.querySelector = () => null;
       t.igual(c2.api.mtrRedactorModoSugerido(), "enfermedad_actual", "sin casillas a la vista: la de siempre");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 6) — REPORTE DEL BARRIDO: con el Panel
+    // abierto ≥3 min (uso normal en consulta), tres rutas de guardado que NO leen laboratorios
+    // (el vigilante de 20 s, la reconciliación al abrir, el refresco de medicamentos tras
+    // prescribir) renovaban el sello de tiempo igual que una lectura real, así que el pie
+    // decía «Datos recién leídos» sobre laboratorios de media hora atrás, y el TTL de 3 min
+    // nunca se cumplía de verdad durante toda la consulta.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 6): mtrCacheResumenGuardar(...,{sinRed:true}) no renueva el sello de tiempo ni borra «desactualizado»", () => {
+      const c = cargar({ silencioso: true });
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA" });
+      c.api.__envejecerCacheResumen(60000);   // 1 min: sigue vigente (TTL 3 min)
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 1, "control: 1 minuto de antigüedad");
+      c.api.mtrCacheResumenMarcarDesactualizado("222");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("222"), "control: queda marcado «desactualizado»");
+      // Un repintado puro (sin red): la edad NO se renueva y la marca sobrevive.
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA", medicamentos: ["X"] }, { sinRed: true });
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 1, "{sinRed:true}: la edad NO se renueva a 0");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("222"), "{sinRed:true}: sigue marcado «desactualizado»");
+      // Un guardado NORMAL (con red real) sí renueva todo, exactamente como antes.
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA" });
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 0, "un guardado real SÍ renueva la edad a 0");
+      t.falso(c.api.mtrCacheResumenDesactualizado("222"), "y quita la marca «desactualizado»");
     });
 
     t.caso("caché del resumen: edad en minutos y borrado explícito (para el «Recalcular ahora» de la Ficha)", () => {
@@ -2790,7 +2834,10 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       const i = src.indexOf("btnCop.addEventListener(");
       t.cierto(i >= 0, "existe el botón «Copiar»");
-      const bloque = src.slice(i, i + 900);
+      // v18.0.131 (barrido por recorridos, hallazgo 2): la ventana crece para incluir la
+      // guarda de paciente nueva (si cambió de historia, no se copia a ciegas) que ahora
+      // antecede al try/await.
+      const bloque = src.slice(i, i + 1300);
       // navigator.clipboard.writeText devuelve una PROMESA: sin await, el rechazo (permiso
       // denegado, pestaña sin foco) cae FUERA del try —es asíncrono— y el médico lee
       // «Copiado», pega en Everest y no hay nada. Además se contaba como nota adoptada.
@@ -2803,6 +2850,25 @@ module.exports = {
       t.cierto(iAwait >= 0 && iEstado > iAwait, "el anuncio va DESPUÉS de la espera, no antes");
       const iAdop = bloque.indexOf('uxTrack("ia.adopcion.');
       t.cierto(iAdop > iAwait, "y la telemetría de adopción tampoco cuenta una copia que no ocurrió");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 2) — mismo defecto que Generar (probado
+    // con clic real en suite_59): si el médico cambia de paciente con el Redactor abierto,
+    // «Copiar» ponía en el portapapeles lo que hubiera en `salida` sin comprobar de quién
+    // era esa historia — y quien pega, pega en la del paciente equivocado.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 2): Copiar también se niega si el paciente en pantalla ya cambió, ANTES de tocar el portapapeles", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("btnCop.addEventListener(");
+      t.cierto(i >= 0, "existe el botón «Copiar»");
+      const bloque = src.slice(i, i + 1300);
+      const iGuarda = bloque.indexOf("_pacienteSigueAbierto(resumen._docId)");
+      const iAwait = bloque.indexOf("await navigator.clipboard.writeText");
+      t.cierto(iGuarda >= 0 && iAwait > 0 && iGuarda < iAwait,
+        "la guarda de paciente corre ANTES de escribir en el portapapeles");
+      const iReturn = bloque.indexOf("return", iGuarda);
+      t.cierto(iReturn > iGuarda && iReturn < iAwait, "y si no coincide, sale sin llegar al clipboard");
     });
 
     t.caso("v18.0.125 (fila 33): el nombre técnico del modelo sale de la línea que lee el médico", () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.130
+// @version      18.0.131
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.130";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.131";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6974,7 +6974,7 @@
                 // `vigente !== resumenFoto` vuelve a ser una señal fiable de «esto cambió».
                 const copia = Object.assign({}, resumen, { medicamentos: lista });
                 try { copia.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
-                mtrCacheResumenGuardar(docId, copia);
+                mtrCacheResumenGuardar(docId, copia, { sinRed: true });   // v18.0.131 (hallazgo 6): solo refrescó medicamentos, no laboratorios
               }
             } catch (e) {}
           })
@@ -7249,6 +7249,17 @@
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
               let labs = await getAtheneaLabsAuto(docId);
+              // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
+              // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
+              // el robot no repita esta misma consulta 30 s después.
+              // v18.0.131 (barrido por recorridos, hallazgo 5) — se cachea la lectura ÍNTEGRA,
+              // ANTES del recorte de «Última toma completa» que viene abajo. La caché
+              // (_labsPrefetch) la comparte todo el script durante 10 min (Panel, Agendar,
+              // Redactor IA): si se cachea ya recortada a 90 días, un analito vigente tomado
+              // hace 120 días desaparece del resto del script, no solo de esta escritura — y
+              // la ventana de 90 días es una decisión de QUÉ SE ESCRIBE en la historia con
+              // esta opción concreta, no de qué sabe el script del paciente.
+              if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               // v18.0.64 — opción «Última toma completa»: se recorta la VENTANA a los
               // últimos 90 días y la elección del último por analito la sigue haciendo
               // injectLabsIntoCronicos, igual que en la opción de abajo.
@@ -7257,10 +7268,6 @@
                   labs = _mtrLabsRecientes(labs);
                   if (labs.length !== _antes) uxTrack("labs.autollenado.solo_recientes", { antes: _antes, despues: labs.length });
               }
-              // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
-              // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
-              // el robot no repita esta misma consulta 30 s después.
-              if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
                   const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r = injectLabsIntoCronicos(labs, docId, await _contextoOficialParaLabs(docId));
@@ -7317,14 +7324,19 @@
                               ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
                               : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                       _huboEscritura ? "verde" : "ambar", "🧪 Exámenes");
-                  _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
+                  const _seGuardoLote = _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
                   // v18.0.30 — el «↩ Deshacer» solo si ESTE llenado escribió algo. Con
                   // count 0 no se guarda lote nuevo (_vglGuardarDeshacer sale en seco si no
                   // hay pares), así que el botón que aparecía al lado de «no toqué nada»
                   // deshacía el lote ANTERIOR — el examen físico que el médico ya había
                   // aceptado, por ejemplo. La guarda de _vglEjecutarDeshacer solo mira que
                   // sea el mismo paciente, no que sea el mismo lote, y no lo impedía.
-                  if (_huboEscritura) _vglOfrecerDeshacer(btn);
+                  // v18.0.131 (barrido por recorridos, hallazgo 9) — `_huboEscritura` (r.count>0)
+                  // no bastaba: puede ser true con `pares` vacío cuando lo único escrito fue
+                  // uroanálisis (casillas por `placeholder`, fuera de este diff por `id`). Se
+                  // exige además que _vglGuardarDeshacer haya guardado/acumulado de verdad —
+                  // si no, el botón seguiría apuntando al lote anterior.
+                  if (_huboEscritura && _seGuardoLote) _vglOfrecerDeshacer(btn);
                   // v17.1.0 (#136) — y aunque SÍ haya escrito, el aviso no se repite para el
                   // mismo paciente dentro del mismo minuto: es el mismo remedio que la
                   // v17.0.3 ya aplicó al robot de pre-carga (_labsAvisoDoc/_labsAvisoTs)
@@ -7419,8 +7431,11 @@
                                           ? "✋ Todo ya estaba escrito: no toqué nada (" + r2.respetadas + " respetadas)"
                                           : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                                   _huboEscritura2 ? "verde" : "ambar", "🧪 Exámenes");
-                              _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
-                              if (_huboEscritura2) _vglOfrecerDeshacer(btn);
+                              // v18.0.131 (barrido por recorridos, hallazgo 9) — mismo criterio
+                              // que la rama principal: solo se ofrece Deshacer si de verdad se
+                              // guardó/acumuló un lote para ESTE llenado.
+                              const _seGuardoLote2 = _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Exámenes");
+                              if (_huboEscritura2 && _seGuardoLote2) _vglOfrecerDeshacer(btn);
                               if (_huboEscritura2) showToast("VERDE", "Exámenes", "Sesión del laboratorio iniciada. " + labs2.length + " analito(s): " + r2.count + " casilla(s) diligenciadas.", false, "labs|" + docId);
                               // v18.0.89 — hallazgo #41 del enjambre: la misma información
                               // que se agregó a la rama principal, para el camino de
@@ -8163,7 +8178,15 @@
   const VGL_DESHACER_VISIBLE_MS = 20000;
   let _vglLoteDeshacer = null;   // { docId, pares:[{el, prev}], ts, etiqueta }
   function _vglGuardarDeshacer(docId, pares, etiqueta) {
-    if (!Array.isArray(pares) || !pares.length) return;
+    // v18.0.131 (barrido por recorridos, hallazgo 9) — devuelve boolean: false si no había
+    // NADA que guardar (pares vacío) — antes salía en seco sin decirlo, y un llamador que
+    // ofreciera «↩ Deshacer» sin mirar el resultado (por ejemplo porque otra señal, como el
+    // contador de casillas escritas, decía que SÍ hubo escritura) dejaba el botón apuntando
+    // al lote ANTERIOR, que seguía siendo el vivo. Pasa exactamente esto cuando el llenado
+    // solo tocó casillas que este diff no rastrea por `id` (las de uroanálisis, que se
+    // escriben por `placeholder`, línea ~3471): `pares` sale vacío aunque sí se escribió algo
+    // de verdad en la historia.
+    if (!Array.isArray(pares) || !pares.length) return false;
     // v17.0.1 — AUDITORÍA DE LA v17: es una sola ranura global. Si había un lote vivo (el
     // de Auto-Labs, por ejemplo, con 12 resultados escritos hace diez segundos), guardar
     // el nuevo lo DESTRUÍA sin decir nada: el médico perdía la posibilidad de deshacer lo
@@ -8209,12 +8232,13 @@
             yaEsta.add(par.el);
           }
           _vglLoteDeshacer.ts = Date.now();
-          return;
+          return true;
         }
         showToast("AZUL", "Deshacer", "Ya no se puede deshacer «" + anterior + "»: el botón pasa a lo que se acaba de escribir.", false);
       }
     } catch (e) {}
     _vglLoteDeshacer = { docId: _docDes, pares, ts: Date.now(), etiqueta: _etDes };
+    return true;
   }
   function _vglDeshacerDisponible() {
     return !!(_vglLoteDeshacer && (Date.now() - _vglLoteDeshacer.ts) < 5 * 60 * 1000);
@@ -13527,6 +13551,15 @@
     // por la fusión de siempre.
     if (state.leader && (st.includes("en sala") || st.includes("atendido")) && state.contadas.has("inasistencia@" + key)) {
       state.contadas.delete("inasistencia@" + key);
+      // v18.0.131 (barrido por recorridos, hallazgo 3) — antes, borrar la marca de
+      // "inasistencia@" no dejaba NINGUNA huella de que ya se rectificó: si la cita volvía a
+      // oscilar (Everest tiene un parpadeo documentado, v17.6.21, que puede sostenerse ~90 s sin
+      // ningún hueco de lectura largo), la siguiente lectura "en sala"/"atendido" volvía a pasar
+      // este mismo `if` limpio y rectificaba dos veces la misma inasistencia — o, peor, una
+      // oscilación de vuelta a "sin presentarse" la volvía a CONTAR porque bumpStatCita ya no
+      // veía ningún candado. Un hecho rectificado es un hecho cerrado hoy: se sella con una
+      // marca propia en vez de borrarse sin dejar rastro.
+      state.contadas.add("rectificada@" + key);
       if (rectificarStat("inasistencia")) {
         logEvent({ t: new Date().toLocaleTimeString(), ev: "RECTIFICACION_INASISTENCIA", hora: a.hora_texto,
           doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
@@ -15005,6 +15038,9 @@
   function bumpStatCita(kind, key) {
     if (!kind) return false;
     if (!key) { bumpStat(kind); return true; }      // sin identidad no se puede deduplicar: se cuenta
+    // v18.0.131 (barrido por recorridos, hallazgo 3) — una inasistencia ya rectificada hoy es un
+    // hecho cerrado: si la cita vuelve a oscilar hacia "sin presentarse", no se vuelve a contar.
+    if (kind === "inasistencia" && key && state.contadas.has("rectificada@" + key)) return false;
     const marca = kind + "@" + key;
     if (state.contadas.has(marca)) return false;
     state.contadas.add(marca);
@@ -21904,7 +21940,15 @@
       reabierto: true,
       // v17.1.0 (#147) — cancelar viaja con el panel: es donde el médico ya está mirando
       // la cita que quiere deshacer, no en otro menú.
-      onCancelar: () => _cancelarCitaConPregunta(apt || { doc_id: docId }),
+      // v18.0.131 (barrido por recorridos, hallazgo 12) — `det` ya tiene citaId/pacienteId
+      // AQUÍ, en el momento en que se abre el recordatorio. Antes «Cancelar» no los pasaba y
+      // _anularCitaAsignadaReal los volvía a buscar por su cuenta llamando a
+      // getProcessedToday() EN EL CLIC — que si el panel se quedó abierto y cruzó la
+      // medianoche entre medias, ya había reiniciado el día y perdido `citasDetalle` entero.
+      // El resultado: «Cancelar» no llamaba a Everest y el aviso mentía sobre por qué
+      // («versión anterior del asistente»). Pasando los datos que este cierre YA tiene, la
+      // cancelación no depende de que el reloj no se haya movido de en medio.
+      onCancelar: () => _cancelarCitaConPregunta(apt || { doc_id: docId }, { citaId: det.citaId, pacienteId: det.pacienteId }),
       onAgendarOtra: () => openAgendamientoModal(apt || { doc_id: docId, nombre: det.nombre || "" }),   // v18.0.114
     });
   }
@@ -21912,14 +21956,17 @@
   // Cancela el control y, si además hay toma de muestras agendada hoy, PREGUNTA qué hacer
   // con ella en vez de decidir por el médico: a veces la toma sirve igual para el control
   // nuevo, y a veces no. Decisión suya del 21-ago.
-  async function _cancelarCitaConPregunta(apt) {
+  async function _cancelarCitaConPregunta(apt, opciones) {
     const docId = (apt && apt.doc_id) || extractPacienteAbierto();
     // v18.0.41 — la foto se toma ANTES de anular. Aunque la marca de la toma ya no se borra
     // (ver _anularCitaMarcasLocales), decidir un aviso leyendo un estado que la operación de
     // al lado acaba de tocar es la forma de que el aviso vuelva a desaparecer en silencio la
     // próxima vez que alguien cambie esa limpieza. Se lee antes y se decide con eso.
     const labSeguiaAgendado = isLabAgendadaHoy(docId);
-    const ok = await _anularCitaAsignadaReal(apt);
+    // v18.0.131 (barrido por recorridos, hallazgo 12) — `opciones` (citaId/pacienteId, cuando
+    // el llamador ya los tiene) viaja tal cual a _anularCitaAsignadaReal, que los prefiere
+    // sobre lo que getProcessedToday() diga en el instante del clic.
+    const ok = await _anularCitaAsignadaReal(apt, opciones);
     if (!ok) return false;
     try { document.querySelectorAll("#vgl-postcita-panel").forEach((e) => e.remove()); } catch (e) {}
     if (labSeguiaAgendado) {
@@ -23315,6 +23362,15 @@
       try { e.stopPropagation(); } catch (e2) {}
       if (!apt || !apt.doc_id) return;
       if (_cwoEnCurso) return;
+      // v18.0.131 (barrido por recorridos, hallazgo 10) — mismo candado de idempotencia que
+      // su gemelo de Conducta (isOrdenLabsConductaHoy, línea ~6784). Sin esto, el modal se
+      // repintaba con la MISMA lista «pendiente» tras el primer clic (repintar() usa el `d`
+      // de la apertura, nunca se recalcula) y el botón se reactivaba: un segundo clic sobre
+      // esa misma lista duplicaba órdenes de laboratorio REALES en la tabla de Conducta.
+      if (isOrdenLabsConductaHoy(apt.doc_id)) {
+        showToast("AZUL", "Ordenar pendientes", "Ya se agregó hoy lo pendiente de este paciente. Revise la tabla de Conducta antes de agregar de nuevo.", false);
+        return;
+      }
       const docId = apt.doc_id;
       try {
         const items = mtrItemsOrdenarConducta(d ? d.ordenar : []);
@@ -23856,12 +23912,20 @@
       // de la meta de HbA1c) salta el caché a propósito: el clic del médico SIEMPRE
       // consulta en vivo (regla v12.3.35, que aplicaba al Auto-Labs, aquí también).
       let labsArr = null;
+      // v18.0.131 (barrido por recorridos, hallazgo 4) — `getAtheneaLabsAuto` devuelve `null`
+      // cuando el portal NO RESPONDIÓ (distinto de `[]`, que es «respondió y no tiene nada»).
+      // Con `{fresco:true}` (el clic de «🔄 Buscar laboratorios nuevos») esa diferencia se
+      // perdía: un `null` se trataba igual que un `[]` y el resumen vacío resultante se
+      // guardaba en la caché compartida con sello de tiempo fresco, como si fuera una lectura
+      // real. `atheneaPrincipalFallo` conserva la distinción hasta el guardado, más abajo.
+      let atheneaPrincipalFallo = false;
       if (!o.fresco && _labsPrefetch.docId === apt.doc_id && Array.isArray(_labsPrefetch.labs) &&
           (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
         labsArr = _labsPrefetch.labs;
       } else {
         labsArr = await getAtheneaLabsAuto(apt.doc_id);
         if (labsArr) _labsPrefetch = { docId: apt.doc_id, labs: labsArr, ts: Date.now() };
+        else if (o.fresco) atheneaPrincipalFallo = true;
       }
       if (labsArr && labsArr.length) labsArr.forEach((l) => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
     } catch (e) { console.warn("[Vigilante Riesgo] Error consultando Athenea:", e); }
@@ -23888,7 +23952,15 @@
     try { if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") await mtrRefrescarMedicamentos(pacienteIdLabs); } catch (e) {}
     if (!sigueVivo()) return null;
     const resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
-    try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+    // v18.0.131 (barrido por recorridos, hallazgo 4) — si el médico pidió una lectura fresca
+    // (o.fresco) y el portal principal no respondió, NO se guarda: la caché compartida
+    // (que alimenta Agendar, Ordenar, Conducta y el Redactor IA) conserva la última lectura
+    // BUENA con su antigüedad real, en vez de un resumen vacío sellado como «recién leído».
+    if (o.fresco && atheneaPrincipalFallo) {
+      resumen._lecturaAtheneaFallo = true;
+    } else {
+      try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+    }
     return resumen;
   }
 
@@ -25279,12 +25351,22 @@
         bl.disabled = true;
         const antes = bl.textContent;
         bl.textContent = "Buscando…";
-        try { mtrCacheResumenBorrar(); } catch (e) {}
-        try { _resumen = await mtrCalcularResumenClinico(apt, vivo, { fresco: true }); } catch (e) {}
+        // v18.0.131 (barrido por recorridos, hallazgo 4) — ya NO se borra la caché antes de
+        // preguntar: `{fresco:true}` ya obliga a mtrCalcularResumenClinico a saltar la
+        // pre-carga y consultar en vivo, así que el borrado previo solo servía para dejar al
+        // paciente sin resumen si Athenea tardaba o fallaba. Si la lectura falla, la caché
+        // buena anterior sigue intacta (mtrCalcularResumenClinico ya no la sobrescribe).
+        let _nuevo = null;
+        try { _nuevo = await mtrCalcularResumenClinico(apt, vivo, { fresco: true }); } catch (e) {}
         if (!vivo()) return;
-        _firma = _tableroFirmaDom(apt.doc_id);
-        try { uxTrack("fn.panel.labs"); } catch (e) {}
-        pintar("Laboratorios consultados de nuevo.");
+        if (_nuevo && _nuevo._lecturaAtheneaFallo) {
+          pintar("No se pudo leer el portal de laboratorios (Athenea). Se conservan los últimos datos buenos que hay.");
+        } else {
+          if (_nuevo) _resumen = _nuevo;
+          _firma = _tableroFirmaDom(apt.doc_id);
+          try { uxTrack("fn.panel.labs"); } catch (e) {}
+          pintar("Laboratorios consultados de nuevo.");
+        }
       });
       const bc = cuerpo.querySelector("#vgl-panel-cerrar");
       if (bc) bc.addEventListener("click", closeMod);
@@ -25409,7 +25491,7 @@
           const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
           if (_reconciliado) {
             _resumen = _reconciliado;
-            try { mtrCacheResumenGuardar(apt.doc_id, _resumen); } catch (e2) {}
+            try { mtrCacheResumenGuardar(apt.doc_id, _resumen, { sinRed: true }); } catch (e2) {}   // v18.0.131 (hallazgo 6): reconciliación pura, sin red
           }
         } else {
           // Y se DICE, dentro del propio Panel: callarlo dejaría creer que lo que se ve
@@ -25467,7 +25549,7 @@
         // reevalúa aquí para que la categoría aparezca sin cerrar el panel.
         try { const ctx2 = _vglContextoEstado(apt.doc_id, document); _ctxIncompleto = ctx2.ok ? null : ctx2; } catch (e2) {}
         _resumen = nuevo;
-        try { mtrCacheResumenGuardar(apt.doc_id, nuevo); } catch (e) {}
+        try { mtrCacheResumenGuardar(apt.doc_id, nuevo, { sinRed: true }); } catch (e) {}   // v18.0.131 (hallazgo 6): vigilante de 20 s, sin red
         try { uxTrack("fn.panel.reclasificado"); } catch (e) {}
         pintar("Se actualizó con lo que acaba de escribir en la historia" + (cambios.length ? " (" + cambios.slice(0, 3).join(", ") + ")" : "") + ".");
       } catch (e) {}
@@ -25789,6 +25871,17 @@
             const rec = mtrReconciliarAhora(apt.doc_id, document);
             const vivas = rec.frenan.filter((d) => pendientes.has(d.clave));
             if (!vivas.length) {
+              // v18.0.131 (barrido por recorridos, hallazgo 7) — «sin contradicciones vivas»
+              // solo cuenta si de verdad se pudo LEER la pantalla y la caché seguía vigente.
+              // Sin esta guarda, si el médico se había ido a otro módulo un momento
+              // (mtrLeerFactoresRcvDelDom no puede leer -> rec.leidos queda null) o la caché
+              // de 3 min caducó justo en este repaso, `rec.frenan` llegaba vacío por FALTA de
+              // datos, no porque la contradicción se resolviera — y el cuadro se cerraba solo
+              // afirmando en VERDE «la historia ya lo aclara» sin haber aclarado nada. «No
+              // pude mirarlo» no es «se resolvió»: sin lectura fresca, el repaso no actúa y
+              // el cuadro se queda abierto para la próxima vuelta.
+              if (!rec.leidos) return;
+              if (!mtrCacheResumenLeer(apt.doc_id)) return;
               // La historia ya lo aclara sola: no se le pregunta lo que él acaba de
               // escribir. Se sigue por la misma puerta que si hubiera respondido.
               try { mtrCacheResumenBorrar(); } catch (e) {}
@@ -27307,6 +27400,17 @@
         eb.classList.add("active");
         selectedEspId = parseInt(eb.getAttribute("data-esp") || "12", 10);
         selectedEspName = eb.getAttribute("data-name") || "Especialidad";
+        // v18.0.131 (barrido por recorridos, hallazgo 11) — el veredicto de «sin agenda ese
+        // día» (disabled + clase + title) queda escrito en el DOM del chip de la especialidad
+        // ANTERIOR; solo renderDayChips() lo limpia (recrea los botones desde cero), y esta
+        // ruta nunca lo llamaba — cargarHoras() solo carga los horarios del día ya elegido,
+        // no repinta los chips de día. Se repinta con la especialidad nueva (mismo centro, si
+        // ya había uno elegido) para que el sondeo corra de cero contra el servicio correcto
+        // y no se quede a medias entre el veredicto viejo y el nuevo.
+        try {
+          if (selectedDateInfo && selectedDateInfo.iso) renderDayChips(0, 0, selectedDateInfo.iso);
+          else if (selectedTimeframe) renderDayChips(selectedTimeframe.m, selectedTimeframe.d);
+        } catch (e) {}
         // v17.58.2 — fase del clic de especialidad en el Diario de Lentitud (INP).
         _rumTramo("agm.clickEsp", () => cargarHoras());
       });
@@ -28168,6 +28272,13 @@
         ? (modal.querySelector("#vgl-agm-sms-tel") && modal.querySelector("#vgl-agm-sms-tel").value) : "";
       const isLabChecked = !!(tipoCitaElegido === "control_lab" && modal.querySelector("#vgl-agm-lab-chk") && modal.querySelector("#vgl-agm-lab-chk").checked);
       const selectedLabTime = (modal.querySelector("#vgl-agm-lab-time-sel") && modal.querySelector("#vgl-agm-lab-time-sel").value) || "";
+      // v18.0.131 (barrido por recorridos, hallazgo 1) — congelada AQUÍ, junto a las otras dos
+      // decisiones de la toma, y no donde se usaba antes (más abajo, después del `await`
+      // apiAccesoAsignarTurno). `selectedLabDateInfo` es una variable de closure que un clic en
+      // otro chip de día, o el propio sondeo de fondo (`_afinarTomaControlPrimeroConCupos`),
+      // puede reasignar MIENTRAS ese await está en vuelo — el médico ya vio y confirmó una
+      // fecha, pero la que de verdad se pedía era la que hubiera en esa variable al volver.
+      const labFechaElegida = selectedLabDateInfo;
       const selProg = modal.querySelector("#vgl-agm-prog-sel");
       const programaId = (selProg && selProg.value) || "";
 
@@ -28277,7 +28388,7 @@
 
         if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
           modal.dataset.labDone = "1";
-          const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(fechaElegida.iso, 5);
+          const labFecha = labFechaElegida || calcBusinessDaysBefore(fechaElegida.iso, 5);
           confirmBtn.textContent = "⏳ Cita creada · agendando la toma de muestras…";   // v18.0.107 (C4)
           const labOk = await _agmAgendarLabConCandado(apt.doc_id, labFecha.iso, selectedLabTime, celularSms, false, { silencioso: true });   // v18.0.118 (UI/UX #7): el modal ya lo dice por tres canales
           uxTrack(labOk ? "lab.agendado" : "lab.fallo");
@@ -44005,6 +44116,17 @@
       })();
 
       btnGen.addEventListener("click", async () => {
+        // v18.0.131 (barrido por recorridos, hallazgo 2) — GUARDA DE PACIENTE. Sin esto, Generar
+        // leía el documento VIVO (libreAhora/mtrTextoDeOtrasCasillas, más abajo) sin comprobar si
+        // el paciente en pantalla seguía siendo el dueño del cuadro (resumen._docId, fijado al
+        // abrir): si el médico cambiaba de historia con el Redactor todavía abierto, los síntomas,
+        // el examen físico y el nombre del OTRO paciente viajaban a Gemini mezclados con las
+        // cifras del paciente dueño del cuadro. Mismo criterio que mtrInsertarEnCasillaModo ya
+        // aplica para Insertar (línea ~42758): aquí faltaba en el origen, no en el destino.
+        if (resumen && resumen._docId && typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(resumen._docId)) {
+          estado.textContent = "Este cuadro es de otro paciente y la historia en pantalla ya cambió. Ciérrelo y ábralo de nuevo desde el paciente que tiene abierto.";
+          return;
+        }
         const modoGen = modo;   // v17.6.11 — el borrador va a SU casilla aunque el chip cambie a mitad de llamada
         _congelarChips(true);
         {
@@ -44162,6 +44284,13 @@
       // paso se contaba como nota adoptada. Ahora se espera el desenlace real, y la telemetría
       // de adopción solo cuenta cuando el texto de verdad salió.
       btnCop.addEventListener("click", async () => {
+        // v18.0.131 (barrido por recorridos, hallazgo 2) — misma guarda que Generar: si el
+        // paciente en pantalla ya cambió, lo que hay en `salida` es de otro — no se copia a ciegas
+        // para que termine pegado en la historia equivocada.
+        if (resumen && resumen._docId && typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(resumen._docId)) {
+          estado.textContent = "Este cuadro es de otro paciente y la historia en pantalla ya cambió. Ciérrelo y ábralo de nuevo desde el paciente que tiene abierto.";
+          return;
+        }
         try {
           await navigator.clipboard.writeText(salida.value);
           estado.textContent = "Copiado al portapapeles.";
@@ -44273,7 +44402,14 @@
           // v17.6.11 — UNDO también en la inserción en casilla VACÍA: se guarda el previo
           // ("") y se ofrece Deshacer para volver a dejarla vacía si el médico cambia de idea.
           _registrarInsercion();
-          try { if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: res.el, prev: res.previo || "" }], "Redactor IA"); } catch (e) {}
+          // v18.0.131 (barrido por recorridos, hallazgo 8) — el lote se etiqueta POR CASILLA
+          // ("Redactor IA · Análisis y plan"), no por módulo ("Redactor IA" a secas). Con la
+          // misma etiqueta para las tres casillas, el auto-avance (que existe precisamente
+          // para encadenar casillas DISTINTAS tras cada Insertar) las acumulaba en el mismo
+          // lote de _vglOfrecerDeshacer/_vglEjecutarDeshacer (misma condición que v18.0.59):
+          // un solo «↩ Deshacer» sobre la última casilla insertada revertía TAMBIÉN las
+          // anteriores, incluidas las que el médico ya había aceptado.
+          try { if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: res.el, prev: res.previo || "" }], "Redactor IA · " + (info.etiqueta || modo)); } catch (e) {}
           estado.innerHTML = "";
           const okTxt = document.createElement("span");
           okTxt.textContent = "✓ Insertado en " + (info.etiqueta || "la casilla") + " (" + (info.pestania || "") + "). Revise y guarde la historia usted. ";
@@ -44316,7 +44452,9 @@
               return;
             }
             try {
-              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: rr.el, prev: rr.previo }], "Redactor IA");
+              // v18.0.131 (barrido por recorridos, hallazgo 8) — misma etiqueta por casilla que
+              // la inserción normal (ver más arriba): "Redactor IA · <casilla>".
+              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: rr.el, prev: rr.previo }], "Redactor IA · " + (info.etiqueta || modo));
               _registrarInsercion();
               estado.innerHTML = "";
               const okTxt = document.createElement("span");
@@ -46673,9 +46811,23 @@
   // bastante más seguido sin disparar una llamada de red en cada clic.
   const MTR_CACHE_TTL_MS = 3 * 60000;
 
-  function mtrCacheResumenGuardar(docId, resumen) {
+  function mtrCacheResumenGuardar(docId, resumen, opciones) {
     if (!docId || !resumen) return false;
-    _mtrCacheResumen = { docId: String(docId), resumen: resumen, ts: (typeof Date !== "undefined" ? Date.now() : 0) };
+    // v18.0.131 (barrido por recorridos, hallazgo 6) — {sinRed:true}: un guardado que NO viene
+    // de una lectura de red real (el vigilante de 20 s del Panel, la reconciliación al abrir,
+    // el refresco de medicamentos tras prescribir) no debe renovar el sello de tiempo ni borrar
+    // la marca «desactualizado». Sin esto, cualquiera de esos tres repintados puros hacía que
+    // el pie del Panel dijera «Datos recién leídos» sobre laboratorios de media hora atrás, y
+    // autoCalcularResumenSiNecesario —que trata «desactualizado» como «no hay caché»— nunca
+    // veía motivo para disparar el recálculo completo con red real durante toda la consulta.
+    const sinRed = !!(opciones && opciones.sinRed) && _mtrCacheResumen.docId === String(docId) && _mtrCacheResumen.resumen;
+    const tsPrevio = sinRed ? _mtrCacheResumen.ts : 0;
+    const desactualizadoPrevio = sinRed && _mtrCacheResumen.desactualizado === true;
+    _mtrCacheResumen = {
+      docId: String(docId), resumen: resumen,
+      ts: tsPrevio || (typeof Date !== "undefined" ? Date.now() : 0),
+    };
+    if (desactualizadoPrevio) _mtrCacheResumen.desactualizado = true;
     return true;
   }
   function mtrCacheResumenLeer(docId) {

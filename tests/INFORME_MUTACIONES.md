@@ -12316,3 +12316,110 @@ contradicen a propósito: suite_24 #137 (ahora fija `[7,14]`), suite_62 (`labMin
 reemplaza la decisión del 26-ago por instrucción del propio médico).
 
 Banco completo: **3.103 comprobaciones pasan, 0 fallan.**
+
+## v18.0.131 — el barrido por recorridos: 12 defectos que solo aparecen en la costura entre dos momentos
+
+El médico pidió (02-sep) un barrido distinto: «haz un barrido haciendo RECORRIDOS ahora en
+vez de mirar pantallas». Un workflow de 49 agentes enumeró 30 secuencias reales de consulta,
+recorrió las 14 de mayor riesgo reproduciendo con el arnés (y en un caso, en Chromium real), y
+sometió cada hallazgo a dos refutadores independientes con la carga de la prueba invertida
+(«tu trabajo no es confirmarlo: es tumbarlo»). La primera corrida se cortó a mitad de la
+refutación por un apagón de acceso a nivel de organización — 8 de 14 hallazgos quedaron sin
+ver un refutador, contados como «tumbados» por la lógica del script cuando en realidad tenían
+**cero votos**, no un refutador que los tumbara. Se detectó leyendo el journal crudo del
+workflow, se reanudó (los 6 ya refutados y los 30 recorridos quedaron en caché, no se
+repitieron), y esta vez los 28 veredictos de refutación completaron: **12 confirmados, 2
+tumbados con razón** (uno porque el reloj de fondo del dock sí repone la caché antes de que
+un médico real complete un recorrido de 3 min; otro porque es una decisión ya tomada por el
+propio médico el 01-sep, documentada en el código).
+
+Los 12 comparten una firma: ninguno está en la lógica de negocio de una sola función. Todos
+viven en la costura entre dos momentos — un `await` en vuelo mientras el modal sigue
+interactivo, una caché con TTL que una pantalla lee como «verdad reciente» mientras otra la
+reescribe sin volver a consultar la fuente real, una guarda que existe en un botón gemelo pero
+no se replicó en el que el médico realmente usa, un candado que una acción borra sin dejar
+marca de «esto ya se resolvió», un panel que sobrevive a un cambio de paciente porque nada lo
+invalida al navegar.
+
+**1 · La toma de muestras se agendaba en una fecha que el médico nunca confirmó.** En
+`_confirmarCita` (modo «control + laboratorios»), `isLabChecked`/`selectedLabTime` se
+congelaban antes del `await apiAccesoAsignarTurno`, pero la FECHA de la toma se leía después,
+en vivo, de `selectedLabDateInfo` — una variable de closure que un clic en otro chip de día, o
+el propio sondeo de fondo, pueden reasignar mientras ese await está en vuelo. `labFechaElegida`
+se congela junto a las otras dos decisiones.
+
+**2 · El Redactor IA sobrevivía al cambio de paciente.** «Generar» y «Copiar» no tenían la
+guarda que sí tiene «Insertar» desde hace versiones (`_pacienteSigueAbierto`): si el médico
+cambiaba de historia con el cuadro abierto, los síntomas, el examen físico y el nombre del
+OTRO paciente viajaban a Gemini mezclados con las cifras del paciente dueño del cuadro, o se
+copiaban al portapapeles para pegarse en la historia equivocada.
+
+**3 · La rectificación retroactiva no dejaba huella de haberse rectificado.** Borraba
+`inasistencia@<clave>` sin sellar nada: si la cita volvía a oscilar (el parpadeo API↔DOM
+documentado en v17.6.21 puede sostenerse ~90 s sin ningún hueco de lectura largo), la misma
+inasistencia se contaba dos veces. Ahora sella `rectificada@<clave>`, y `bumpStatCita` la
+respeta.
+
+**4 · «Buscar laboratorios nuevos» borraba la caché ANTES de preguntar.** Si Athenea no
+respondía, `getAtheneaLabsAuto` devuelve `null` («no pude leer», distinto de `[]` «no tiene»),
+pero esa distinción se perdía y un resumen vacío se guardaba con sello fresco — el pie mentía
+«recién leídos» y la caché envenenada alimentaba Agendar/Ordenar/Conducta/IA 3 minutos.
+
+**5 · «Última toma completa» cacheaba la lista YA recortada a 90 días.** `_labsPrefetch` (la
+caché compartida, 10 min de TTL) perdía analitos vigentes tomados hace más de 90 días para
+TODO el script, no solo para lo que se escribe con esa opción concreta. Se cachea la lectura
+íntegra, antes del recorte.
+
+**6 · El Panel abierto rejuvenecía la caché sin tocar la red.** Tres rutas de guardado puras
+(vigilante de 20 s, reconciliación al abrir, refresco de medicamentos tras prescribir)
+renovaban el sello de tiempo igual que una lectura real: el TTL de 3 min nunca se cumplía
+durante toda la consulta. `mtrCacheResumenGuardar(...,{sinRed:true})` conserva el sello
+anterior y la marca «desactualizado».
+
+**7 · El repaso de 20 s trataba «no pude leer» como «se resolvió».** Si el médico se distraía
+un momento (u otra fuente caducaba), `rec.frenan` llegaba vacío por falta de datos, no porque
+la contradicción se aclarara — y el cuadro se cerraba solo, en VERDE, afirmando que la
+historia ya lo aclaraba.
+
+**8 · Insertar dos casillas seguidas: «↩ Deshacer» revertía las dos.** Las tres inserciones del
+Redactor IA se guardaban bajo la MISMA etiqueta «Redactor IA»: el auto-avance (que existe para
+encadenar casillas DISTINTAS) cumplía la condición de acumulación de v18.0.59. Ahora cada una
+lleva «Redactor IA · <casilla>».
+
+**9 · «Última toma completa» solo-uroanálisis: Deshacer revertía el lote ANTERIOR.** El diff
+que arma el lote solo mira `input[id^="resultado"]`; las casillas de uroanálisis se escriben
+por `placeholder`. `_vglGuardarDeshacer` ahora devuelve `false` cuando no hay nada que guardar,
+y el botón solo se ofrece si el guardado devolvió `true` — no solo si `r.count>0`.
+
+**10 · «Ordenar pendientes» del paquete no era idempotente.** Su gemelo de Conducta ya tenía
+el candado `isOrdenLabsConductaHoy`; aquí faltaba, y un segundo clic duplicaba órdenes reales.
+
+**11 · Cambiar de especialidad dejaba los chips de día tachados con el veredicto anterior.**
+`cargarHoras()` solo carga los horarios del día ya elegido; solo `renderDayChips()` limpia el
+DOM de los chips, y el manejador del chip de especialidad nunca lo llamaba.
+
+**12 · «Cancelar esta cita» cruzando medianoche no llamaba a Everest.** `_anularCitaAsignadaReal`
+buscaba citaId/pacienteId en `getProcessedToday()` en el instante del clic, y esa función
+reinicia `citasDetalle` entero al cambiar el día. `abrirRecordatorioCita` ya tenía esos datos
+en su propio `det` al abrir el recordatorio; ahora los pasa como `opciones`, que la función
+prefiere sobre lo que diga el almacén en ese momento.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 450 | la toma vuelve a leer `selectedLabDateInfo` en vivo tras el await | *suite_15: hallazgo 1 — labFechaElegida congelada* | Sí |
+| 451 | Generar pierde la guarda de paciente | *suite_59: hallazgo 2 — Generar se niega* | Sí |
+| 452 | Copiar pierde la guarda de paciente | *suite_57: hallazgo 2 — Copiar se niega* | Sí |
+| 453 | la rectificación deja de sellar `rectificada@` | *suite_04: hallazgo 3 — sella rectificada* | Sí |
+| 454 | `bumpStatCita` deja de respetar el sello `rectificada@` | *suite_04: hallazgo 3 — no recuenta* | Sí |
+| 455 | vuelve el borrado previo al await + se guarda una lectura fallida como fresca | *suite_15: hallazgo 4* | Sí |
+| 456 | `_labsPrefetch` vuelve a cachear la lista YA recortada a 90 días | *suite_15: hallazgo 5* | Sí |
+| 457 | `{sinRed:true}` deja de tener efecto en `mtrCacheResumenGuardar` | *suite_57: hallazgo 6* | Sí |
+| 458 | el repaso de 20 s vuelve a cerrar el cuadro sin comprobar `rec.leidos`/la caché | *suite_63: hallazgo 7* | Sí |
+| 459 | las dos inserciones del Redactor IA vuelven a compartir la etiqueta «Redactor IA» | *suite_57: hallazgo 8* | Sí |
+| 460 | «↩ Deshacer» de Exámenes vuelve a ofrecerse solo por `_huboEscritura`, sin `_seGuardoLote` | *suite_15: v18.0.30 (L6643/L6714), fortalecida* | Sí |
+| 461 | «Ordenar pendientes» del paquete pierde el candado `isOrdenLabsConductaHoy` | *suite_15: hallazgo 10* | Sí |
+| 462 | cambiar de especialidad deja de repintar los chips de día | *suite_15: hallazgo 11* (destapó además un bug propio: el `indexOf` de la prueba encontraba «renderDayChips» dentro de su propio comentario explicativo — se corrigió filtrando comentarios, como ya hace suite_09) | Sí |
+| 463 | `abrirRecordatorioCita` deja de pasar `det.citaId`/`det.pacienteId` a `onCancelar` | *suite_62: hallazgo 12 — la fila de verificación de la fuente* | Sí |
+| 464 | `_anularCitaAsignadaReal` deja de preferir `opciones.citaId`/`opciones.pacienteId` sobre `det` | *suite_62: hallazgo 12 — cruce de medianoche* | Sí |
+
+Banco completo: **3.116 comprobaciones pasan, 0 fallan.**

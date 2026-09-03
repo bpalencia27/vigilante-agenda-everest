@@ -574,6 +574,53 @@ module.exports = {
       t.falso(r, "devuelve false: sin radicado no hay anulación que confirmar");
     });
 
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 12) — REPORTE DEL BARRIDO: si el panel
+    // post-cita se quedaba abierto (reabierto con «🖨 Recordatorio») y cruzaba la medianoche,
+    // «Cancelar esta cita» no llamaba a Everest y el aviso mentía sobre por qué («versión
+    // anterior del asistente»). Causa: _anularCitaAsignadaReal buscaba citaId/pacienteId en
+    // getProcessedToday() EN EL INSTANTE DEL CLIC, y esa función reinicia `citasDetalle`
+    // entero en cuanto cambia el día. abrirRecordatorioCita YA tenía esos datos en su propio
+    // `det` al abrir el recordatorio; ahora los pasa explícitos como `opciones`, que
+    // _anularCitaAsignadaReal prefiere sobre lo que diga el almacén en ese momento.
+    // =====================================================================
+    await t.casoAsync("v18.0.131 (hallazgo 12): citaId/pacienteId explícitos permiten cancelar aunque getProcessedToday() ya no los tenga (cruce de medianoche)", async () => {
+      let cuerpoEnviado = "";
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url, opts) => {
+          if (!/CancelarCita/.test(String(url))) return { ok: true, status: 200, headers: { get: () => null }, text: async () => "{}", json: async () => ({}), clone() { return this; } };
+          cuerpoEnviado = String((opts && opts.body) || "");
+          return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ isError: false, mensaje: "Cancelado Correctamente" }), json: async () => ({ isError: false }), clone() { return this; } };
+        },
+      });
+      c.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+      // getProcessedToday() no conoce esta cita — el mismo estado que deja un cruce de
+      // medianoche entre abrir el recordatorio y pulsar «Cancelar».
+      t.igual(c.api.citaAgendadaFechaHoy("999"), null, "control: sin marca local para este documento");
+      const ok = await c.api._anularCitaAsignadaReal({ doc_id: "999" }, { citaId: "7813686", pacienteId: "5150" });
+      t.cierto(ok, "SÍ se anula: los datos que trajo el llamador bastan, sin depender de getProcessedToday()");
+      t.cierto(/7813686/.test(cuerpoEnviado), "el radicado que viajó a Everest es el que se pasó explícitamente: " + cuerpoEnviado);
+      // Y _cancelarCitaConPregunta (la que llama el botón) reenvía esos `opciones` tal cual.
+      const c2 = cargar({
+        silencioso: true,
+        fetch: async (url, opts) => {
+          if (!/CancelarCita/.test(String(url))) return { ok: true, status: 200, headers: { get: () => null }, text: async () => "{}", json: async () => ({}), clone() { return this; } };
+          cuerpoEnviado = String((opts && opts.body) || "");
+          return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ isError: false, mensaje: "Cancelado Correctamente" }), json: async () => ({ isError: false }), clone() { return this; } };
+        },
+      });
+      c2.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+      const ok2 = await c2.api._cancelarCitaConPregunta({ doc_id: "999" }, { citaId: "8000000", pacienteId: "6000" });
+      t.cierto(ok2, "_cancelarCitaConPregunta también anula con los `opciones` que le pasen");
+      t.cierto(/8000000/.test(cuerpoEnviado), "y los reenvía tal cual a _anularCitaAsignadaReal");
+      // Y el punto de origen (abrirRecordatorioCita) de verdad los pasa, en vez de dejar que
+      // se busquen otra vez en getProcessedToday() al momento del clic.
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/onCancelar: \(\) => _cancelarCitaConPregunta\(apt \|\| \{ doc_id: docId \}, \{ citaId: det\.citaId, pacienteId: det\.pacienteId \}\)/.test(src),
+        "abrirRecordatorioCita pasa det.citaId/det.pacienteId (capturados AL ABRIR el recordatorio) como opciones");
+    });
+
     // v17.6.3 — BUG 3 (reporte del médico): la lista «toma quedó» del banner de
     // agendamiento salía DUPLICADA o EN DESORDEN. Cada clic en un chip de día de toma
     // hacía `innerHTML +=` sin quitar la nota anterior: el segundo clic apilaba otra

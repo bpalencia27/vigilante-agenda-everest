@@ -791,6 +791,38 @@ module.exports = {
       t.igual(atiempoHoy(c), 2, "dos citas a tiempo, ni una más");
     });
 
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 3) — la rectificación retroactiva (v18.0.8)
+    // borraba la marca «inasistencia@<clave>» sin dejar NINGUNA huella de que ya se
+    // rectificó. Si la misma cita volvía a oscilar (parpadeo API↔DOM documentado en v17.6.21,
+    // hasta ~90 s sin ningún hueco de lectura largo), bumpStatCita volvía a encontrar el
+    // candado limpio y contaba la MISMA inasistencia dos veces.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 3): bumpStatCita no vuelve a contar una inasistencia ya sellada como «rectificada»", () => {
+      const c = cargar();
+      t.cierto(c.api.bumpStatCita("inasistencia", "1@r"), "cuenta la primera vez");
+      // Así queda el candado tras una rectificación real (ver el siguiente caso).
+      c.api.__state.contadas.delete("inasistencia@1@r");
+      c.api.__state.contadas.add("rectificada@1@r");
+      t.falso(c.api.bumpStatCita("inasistencia", "1@r"), "no se vuelve a contar: ya se rectificó hoy, aunque la marca de conteo esté libre");
+      t.cierto(c.api.bumpStatCita("atiempo", "1@r"), "pero otro color de la MISMA cita sigue contando: son hechos distintos");
+    });
+
+    t.caso("v18.0.131 (hallazgo 3): la rectificación retroactiva SELLA «rectificada@», no solo borra «inasistencia@»", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const cita = (estado) => ({ hora_texto: "08:00 AM", estado, nombre: "P", index: 1, doc_id: "5150076" });
+      const r = c.api.colorAndAlert(cita("Sin presentarse"), new Date("2026-08-10T08:10:00").getTime());
+      c.api.__state.notified.set(r.key, "siembra");
+      c.api.maybeNotify(r);
+      t.cierto(c.api.__state.contadas.has("inasistencia@" + r.key), "control: contada");
+      c.api.colorAndAlert(cita("Atendido"), new Date("2026-08-10T09:30:00").getTime());
+      t.falso(c.api.__state.contadas.has("inasistencia@" + r.key), "la marca de conteo se quita, como antes");
+      t.cierto(c.api.__state.contadas.has("rectificada@" + r.key),
+        "y AHORA queda sellada como rectificada, para que no se cuente otra vez si la cita vuelve a oscilar");
+    });
+
     t.caso("#146: sin identidad de cita se cuenta igual — perder el dato sería peor que duplicarlo", () => {
       const c = cargar();
       c.api.maybeNotify({ hora_texto: "08:00 AM", doc_id: "", nombre: "", key: "", estado: "Sin presentarse", color: "AZUL", arrival: false, elapsed: 1, reason: "" });

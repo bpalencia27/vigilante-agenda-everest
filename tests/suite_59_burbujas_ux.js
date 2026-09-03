@@ -207,6 +207,14 @@ module.exports = {
         gmxhr: (opts) => { setTimeout(() => opts.onload({ status: 200, responseText: respGemini("Paciente en control, evoluciona satisfactoriamente.") }), 0); },
       });
       enriquecerDom(c);
+      // v18.0.131 (barrido por recorridos, hallazgo 2) — Generar ahora exige que el paciente
+      // en pantalla siga siendo el dueño del cuadro (_pacienteSigueAbierto, vía
+      // extractPacienteAbierto). Mismo mock que ya usa suite_57 para las pruebas de éxito de
+      // mtrInsertarEnCasillaModo: sin esto, extractPacienteAbierto() no puede leer ninguna
+      // cédula del DOM falso y la guarda nueva (correctamente) se negaría a generar.
+      const _getByIdOrig = c.env.doc.getElementById.bind(c.env.doc);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : _getByIdOrig(id));
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 12345678", closest: () => null }] : []);
       c.api.mtrGuardarClaveGemini("X");
       c.api.mtrAbrirPanelRedaccion(resumenDemo());
       const modal = c.env.doc.getElementById("vgl-ia-modal");
@@ -219,6 +227,38 @@ module.exports = {
 
       t.cierto(/satisfactoriamente/.test(salida.value), "el borrador que devolvió Gemini quedó en la salida");
       t.cierto(/Borrador listo/.test(estado.textContent), "y el estado avisa que el borrador está listo para revisar");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 2) — REPORTE DEL BARRIDO: el Redactor IA
+    // abierto sobrevive al cambio de paciente; «Generar» leía el documento VIVO (ya el de
+    // OTRO paciente) sin comprobar si el paciente en pantalla seguía siendo el dueño del
+    // cuadro. Reproducido pulsando el botón real: el cuadro es de 12345678 (resumenDemo),
+    // pero en pantalla hay otra historia (999999) cuando se pulsa Generar.
+    // =====================================================================
+    await t.casoAsync("v18.0.131 (hallazgo 2): Generar se niega si el paciente en pantalla ya no es el dueño del cuadro, sin tocar la red", async () => {
+      let redLlamada = false;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => { redLlamada = true; setTimeout(() => opts.onload({ status: 200, responseText: respGemini("NO DEBERÍA LLEGAR") }), 0); },
+      });
+      enriquecerDom(c);
+      const _getByIdOrig = c.env.doc.getElementById.bind(c.env.doc);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : _getByIdOrig(id));
+      // El cuadro se abre con el paciente 12345678 en pantalla (mismo dueño: resumenDemo()._docId).
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 12345678", closest: () => null }] : []);
+      c.api.mtrGuardarClaveGemini("X");
+      c.api.mtrAbrirPanelRedaccion(resumenDemo());
+      const modal = c.env.doc.getElementById("vgl-ia-modal");
+      const btnGen = modal.querySelector("#vgl-ia-generar");
+      const estado = modal.querySelector("#vgl-ia-estado");
+
+      // Sin cerrar el cuadro, el médico abre la historia de OTRO paciente.
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999999", closest: () => null }] : []);
+
+      await t.noLanza(async () => { await btnGen._listeners.click[0](); }, "el clic no debe lanzar");
+      t.falso(redLlamada, "no se llamó a Gemini: se frenó antes de tocar la red");
+      t.cierto(/otro paciente/.test(estado.textContent), "el estado dice que el cuadro es de otro paciente: " + estado.textContent);
     });
   },
 };

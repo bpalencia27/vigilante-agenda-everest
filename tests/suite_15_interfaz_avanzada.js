@@ -1404,10 +1404,15 @@ module.exports = {
       const codigo = cuerpo.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
 
       // (a) NINGÚN ofrecimiento de deshacer sin comprobar antes que ESTE llenado escribió.
+      // v18.0.131 (barrido por recorridos, hallazgo 9) — ya no basta con `_huboEscritura`
+      // (r.count>0): eso puede ser true con `pares` vacío cuando lo único escrito fue
+      // uroanálisis (casillas por `placeholder`, fuera del diff por `id`). Se exige además
+      // `_seGuardoLote` (lo que devuelve _vglGuardarDeshacer) — si no, el botón seguiría
+      // apuntando al lote ANTERIOR (p. ej. «Examen normal», ya aceptado por el médico).
       const llamadas = codigo.split("\n").filter((l) => l.includes("_vglOfrecerDeshacer("));
       t.igual(llamadas.length, 2, "las dos ramas de Auto-Labs ofrecen deshacer (principal y reintento)");
-      llamadas.forEach((l) => t.cierto(/if \(_huboEscritura2?\) _vglOfrecerDeshacer\(/.test(l.trim()),
-        "guardado por la escritura de ESTE lote, no por la del anterior: " + l.trim()));
+      llamadas.forEach((l) => t.cierto(/if \(_huboEscritura2? && _seGuardoLote2?\) _vglOfrecerDeshacer\(/.test(l.trim()),
+        "guardado por la escritura de ESTE lote (huboEscritura Y seGuardoLote), no por la del anterior: " + l.trim()));
 
       // (b) El reintento distingue «no pude leer» (null) de «no tiene» ([]), igual que la
       //     rama principal desde la v17.6.58.
@@ -1417,6 +1422,51 @@ module.exports = {
       // (c) Y el reintento ya no canta verde con cero casillas.
       t.falso(/_vglFeedbackBoton\(btn, "✓ " \+ r2\.count[^\n]*"verde"/.test(codigo),
         "el verde del reintento depende de r2.count, no es incondicional");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 5) — REPORTE DEL BARRIDO: «Última toma
+    // completa» recortaba `labs` a los últimos 90 días y DESPUÉS cacheaba esa misma lista YA
+    // recortada en `_labsPrefetch` — la caché compartida (Panel, Agendar, Redactor IA, 10 min
+    // de TTL) perdía analitos vigentes tomados hace más de 90 días, no solo lo que se escribe
+    // en la historia con esta opción concreta.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 5): _labsPrefetch se llena con la lectura ÍNTEGRA, ANTES del recorte de 90 días de «Última toma completa»", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const i = src.indexOf("async function _ejecutarLlenadoExamenes");
+      t.cierto(i > 0, "se localiza el flujo de Auto-Labs");
+      const cuerpo = src.slice(i, src.indexOf("\n      document.body.appendChild(btn);", i));
+      const iCache = cuerpo.indexOf("_labsPrefetch = { docId, labs, ts: Date.now() };");
+      const iRecorte = cuerpo.indexOf('if (modo === "ultima" && labs && labs.length > 0)');
+      t.cierto(iCache >= 0 && iRecorte >= 0, "se localizan el guardado de la caché y el recorte de 90 días");
+      t.cierto(iCache < iRecorte,
+        "la caché se llena ANTES de que «labs» se reasigne recortado — si el orden se invierte, la caché compartida pierde analitos vigentes por 10 minutos");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 4) — REPORTE DEL BARRIDO: «🔄 Buscar
+    // laboratorios nuevos» del Panel borraba el resumen bueno ANTES de preguntar nada; si
+    // Athenea no respondía, `getAtheneaLabsAuto` devuelve `null` («no pude leer», distinto de
+    // `[]` «no tiene»), pero esa distinción se perdía y el resumen VACÍO se guardaba en la
+    // caché compartida con sello de tiempo fresco — el pie mentía «Datos recién leídos» y la
+    // caché envenenada alimentaba Agendar, Ordenar, Conducta y el Redactor IA durante 3 min.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 4): «Buscar laboratorios nuevos» ya no borra la caché antes de preguntar, y no guarda una lectura fallida como si fuera fresca", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const iBtn = src.indexOf('const bl = cuerpo.querySelector("#vgl-panel-labs");');
+      t.cierto(iBtn > 0, "se localiza el botón del Panel");
+      const bloqueBtn = src.slice(iBtn, iBtn + 1400);
+      t.falso(/mtrCacheResumenBorrar\(\);\s*\n\s*try \{ _resumen = await mtrCalcularResumenClinico/.test(bloqueBtn),
+        "no queda el borrado previo al await (antes: dejaba al paciente sin resumen si Athenea tardaba)");
+      t.cierto(/_lecturaAtheneaFallo/.test(bloqueBtn),
+        "y ahora el botón distingue una lectura que falló de una lectura que sí trajo datos (aunque vacíos)");
+      const iFn = src.indexOf("async function mtrCalcularResumenClinico");
+      t.cierto(iFn > 0, "se localiza mtrCalcularResumenClinico");
+      const cuerpoFn = src.slice(iFn, src.indexOf("\n  }", src.indexOf("return resumen;", iFn)));
+      t.cierto(/atheneaPrincipalFallo = true/.test(cuerpoFn),
+        "marca cuándo Athenea NO respondió — distinto de «no tiene laboratorios»");
+      t.cierto(/if \(o\.fresco && atheneaPrincipalFallo\) \{/.test(cuerpoFn),
+        "y si la lectura pedida EN VIVO falló, NO se sobrescribe la caché compartida con un resumen vacío");
     });
 
     // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba en cada
@@ -5762,6 +5812,54 @@ module.exports = {
     });
 
     // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 1) — REPORTE DEL BARRIDO: en modo «control +
+    // laboratorios», `isLabChecked`/`selectedLabTime` se congelaban ANTES del `await
+    // apiAccesoAsignarTurno`, pero la FECHA de la toma se leía DESPUÉS, en vivo, de
+    // `selectedLabDateInfo` — una variable de closure que un clic en otro chip de día, o el
+    // propio sondeo de fondo, pueden reasignar MIENTRAS ese await está en vuelo. La toma podía
+    // pedirse para una fecha que el médico nunca confirmó, sin ningún clic de por medio.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 1): la fecha de la toma se congela ANTES del await de AsignarTurno, no se lee en vivo después", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const i = src.indexOf("const _confirmarCita = async () => {");
+      t.cierto(i > 0, "se localiza _confirmarCita");
+      const iAwait = src.indexOf("await apiAccesoAsignarTurno(", i);
+      t.cierto(iAwait > i, "se localiza el await de AsignarTurno");
+      const iCongela = src.indexOf("const labFechaElegida = selectedLabDateInfo;", i);
+      t.cierto(iCongela > i && iCongela < iAwait, "labFechaElegida se congela ANTES del await, junto a isLabChecked/selectedLabTime");
+      const iUso = src.indexOf("const labFecha = labFechaElegida || calcBusinessDaysBefore(", iAwait);
+      t.cierto(iUso > iAwait, "y la toma se pide con el valor CONGELADO, no con selectedLabDateInfo en vivo");
+      t.falso(/const labFecha = selectedLabDateInfo \|\| calcBusinessDaysBefore/.test(src.slice(iAwait, iUso + 200)),
+        "no queda ningún rastro de leer la variable mutable después del await");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 11) — REPORTE DEL BARRIDO: al cambiar de
+    // especialidad en Agendar, los chips de día conservaban el veredicto («sin agenda ese
+    // día»: disabled + clase + title) de la especialidad ANTERIOR. cargarHoras() solo carga
+    // los horarios del día ya elegido; solo renderDayChips() limpia el DOM de los chips, y el
+    // manejador del chip de especialidad nunca lo llamaba.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 11): cambiar de especialidad repinta los chips de día (renderDayChips), no solo cargarHoras()", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const i = src.indexOf('modal.querySelectorAll("#vgl-esp-presets .vgl-agm-pbtn").forEach((eb) => {');
+      t.cierto(i > 0, "se localiza el manejador de los chips de especialidad");
+      const cierre = src.indexOf("\n    });\n", i);
+      // Se descartan las líneas de comentario antes de buscar «renderDayChips(»: el propio
+      // comentario que explica este arreglo la nombra en prosa, y un `indexOf` ingenuo la
+      // encontraría ahí aunque la llamada real hubiera desaparecido del código.
+      const bloque = src.slice(i, cierre > i ? cierre : i + 900)
+        .split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+      t.cierto(/selectedEspId = parseInt\(/.test(bloque), "control: fija la especialidad nueva");
+      t.cierto(/renderDayChips\(/.test(bloque),
+        "y AHORA repinta los chips de día con la especialidad nueva — antes solo llamaba a cargarHoras(), que no toca los chips");
+      const iRender = bloque.indexOf("renderDayChips(");
+      const iCargar = bloque.indexOf("cargarHoras()");
+      t.cierto(iRender >= 0 && iCargar >= 0 && iRender < iCargar,
+        "el repintado corre ANTES de cargarHoras(), para que el sondeo nuevo arranque con los chips ya limpios");
+    });
+
+    // =====================================================================
     // v18.0.117 — AUDITORÍA UI/UX (fragmentos F-1 y F-2 del enjambre del 02-sep)
     // =====================================================================
     await t.casoAsync("v18.0.117 (UI/UX #1): con la toma marcada y sin hora, «Confirmar» NO crea la cita: despliega el detalle de la toma y pide la hora", async () => {
@@ -5950,6 +6048,26 @@ module.exports = {
       t.falso(ok("No se pudo cancelar"), "una cadena que lo niega, no");
       t.cierto(c.api._anulacionYaNoVigente({ mensaje: "La cita ya fue cancelada" }), "«ya fue cancelada» se reconoce como cita que ya no está vigente");
       t.falso(c.api._anulacionYaNoVigente({ mensaje: "Error de conexión" }), "un error cualquiera no");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 10) — REPORTE DEL BARRIDO: «📋 Ordenar
+    // pendientes» del panel 📦 Control no es idempotente. El modal se repinta con la MISMA
+    // lista tras el primer clic (repintar() usa el `d` de la apertura, nunca se recalcula) y
+    // el botón se reactiva: un segundo clic sobre esa misma lista duplicaba órdenes de
+    // laboratorio REALES en la tabla de Conducta. Su gemelo de Conducta ya tenía este candado
+    // (isOrdenLabsConductaHoy) — aquí faltaba.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 10): «Ordenar pendientes» del paquete respeta el mismo candado de idempotencia que su gemelo de Conducta", () => {
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iBtn = src.indexOf('if (ordenarBtn) ordenarBtn.addEventListener("click"');
+      t.cierto(iBtn > 0, "se localiza el manejador de «Ordenar pendientes» del paquete");
+      const iCurso = src.indexOf("if (_cwoEnCurso) return;", iBtn);
+      t.cierto(iCurso > iBtn, "candado de reentrada (ya existía)");
+      const iGuarda = src.indexOf("isOrdenLabsConductaHoy(apt.doc_id)", iBtn);
+      t.cierto(iGuarda > iCurso, "y AHORA, antes de ordenar, comprueba si ya se agregó hoy — mismo candado que el widget de Conducta (línea ~6784)");
+      const iDocId = src.indexOf("const docId = apt.doc_id;", iBtn);
+      t.cierto(iGuarda < iDocId, "la comprobación corre ANTES de tocar la red, no después de un intento fallido");
     });
 
     await t.casoAsync("v18.0.119: si Everest RECHAZA la forma (400), se prueba la variante alineada con AsignarTurno; con 401/500/red NO se reintenta, y la que funciona se recuerda", async () => {

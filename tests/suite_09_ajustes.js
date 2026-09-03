@@ -211,7 +211,11 @@ module.exports = {
       // silencio la próxima vez que alguien cambie esa limpieza.
       const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
         .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
-      t.cierto(/const labSeguiaAgendado = isLabAgendadaHoy\(docId\);\s*\n\s*const ok = await _anularCitaAsignadaReal\(apt\);/.test(codigo),
+      // v18.0.131 (barrido por recorridos, hallazgo 12) — la llamada ahora recibe también
+      // `opciones` (citaId/pacienteId capturados por el llamador, cuando los tiene) para no
+      // depender de getProcessedToday() en el instante del clic — pero el ORDEN que esta
+      // prueba protege (la foto de labSeguiaAgendado va antes) no cambió.
+      t.cierto(/const labSeguiaAgendado = isLabAgendadaHoy\(docId\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*const ok = await _anularCitaAsignadaReal\(apt, opciones\);/.test(codigo),
         "la lectura va ANTES de la anulación, en ese orden");
       t.cierto(/if \(labSeguiaAgendado\) \{/.test(codigo),
         "y el aviso se decide con esa foto, no releyendo el almacén después");
