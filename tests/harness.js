@@ -32,6 +32,10 @@ function crearDom() {
       children: [], attributes: {}, _listeners: {},
       innerHTML: "", textContent: "", value: "", id: "", className: "", href: "", download: "", type: "text", name: "", checked: false, disabled: false,
       appendChild(c) { c._parent = this; this.children.push(c); return c; },
+      // v17.58.2 — `append(...nodos)` (nativo en navegadores modernos): los renders en
+      // lote del modal de agendamiento lo usan para hacer UNA sola actualización de árbol
+      // en vez de un appendChild por nodo (rendimiento INP). El DOM falso lo imita.
+      append(...ns) { ns.forEach((n) => { n._parent = this; this.children.push(n); }); return undefined; },
       insertBefore(c) { c._parent = this; this.children.unshift(c); return c; },
       removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); c._parent = null; return c; },
       remove() { if (this._parent) this._parent.removeChild(this); },
@@ -79,9 +83,11 @@ function crearEntorno(opciones) {
     almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
   }
   // v14.2.0 — La migración de ESTRENO (vgl_v1420_estreno) enciende, una sola vez en el
-  // despliegue real, motorPortado/iaRedaccion/uxTelemetria/reporte. El banco verifica los
-  // valores DE FÁBRICA (todos apagados) y el comportamiento con cada bandera controlada a
-  // mano, así que aquí se marca como YA aplicada: el arnés no debe re-encender banderas.
+  // despliegue real, motorPortado/iaRedaccion (y, hasta v17.58.2, uxTelemetria/reporte —
+  // desde esa versión la telemetría nace encendida por política del dueño y se fuerza en
+  // S, así que la migración ya no la gobierna). El banco verifica los valores de fábrica
+  // y el comportamiento con cada bandera controlada a mano, así que aquí se marca como YA
+  // aplicada: el arnés no debe re-encender banderas.
   if (!("vgl_v1420_estreno" in almacen)) almacen["vgl_v1420_estreno"] = "1";
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),
@@ -175,6 +181,8 @@ function crearEntorno(opciones) {
   };
   win.GM_getValue = (k, d) => (k in gm ? gm[k] : d);
   win.GM_setValue = (k, v) => { gm[k] = v; };
+  win.GM_listValues = () => Object.keys(gm);      // v18.0.108 — poda del espejo
+  win.GM_deleteValue = (k) => { delete gm[k]; };
   // v14.1.9 — El stub por defecto NO puede ser un agujero negro.
   //
   // Era `() => {}`. Parece inofensivo, pero `_pageFetchJsonCore` usa GM_xmlhttpRequest como
@@ -243,14 +251,34 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
+    // v18.0.8 — `_reloj` se publica para las pruebas del liderazgo. Desde v18.0.8 una
+    // pestaña sin canal "tick" NO puede ser líder (quien no evalúa no manda): sin acceso a
+    // esta estructura no habría forma de simular las dos caras —pestaña arrancada y
+    // pestaña ciega— y el banco no podría fijar la regla.
+    "\n;try{ globalThis.__VGL__.__reloj = _reloj; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}" +
+    // v18.0.98 — el alias nombre@hora → cédula@hora de `apptKey` mantiene la identidad de
+    // la cita mientras la pestaña vive. Se publica para que las pruebas de v18.0.62 puedan
+    // OLVIDARLO a propósito (como tras un reinicio del script o un día nuevo) y sigan
+    // ejercitando la capa de lectura tolerante, que es el respaldo cuando el alias no existe.
+    "\n;try{ globalThis.__VGL__.__apptAliasDoc = _apptAliasDoc; }catch(e){}" +
+    // v18.0.104 — la implementación REAL de la carpeta (File System Access) solo se activa con
+    // un handle; se publica un setter para probar `listar()` con un handle simulado.
+    "\n;try{ globalThis.__VGL__.__setCarpetaHandleParaTest = function(h){ _vglCarpetaHandle = h; }; }catch(e){}" +
     // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
     // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
     // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la
     // variable `_mtrCacheResumen` es alcanzable. (Mismo patrón que __uxVolcarBuffer.)
     "\n;try{ globalThis.__VGL__.__envejecerCacheResumen = function(msAtras){ _mtrCacheResumen.ts = Date.now() - msAtras; }; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__envejecerCacheMeds = function(msAtras){ _mtrMedsCache.ts = Date.now() - msAtras; }; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}\n";
+    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.VGL_MODALES_CONSULTA = VGL_MODALES_CONSULTA; globalThis.__VGL__.VGL_MODALES_ESCRITURA = VGL_MODALES_ESCRITURA; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.VGL_ROTULOS = VGL_ROTULOS; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__setLabsPrefetchParaTest = function(docId, labs, ts){ _labsPrefetch = { docId: String(docId), labs: labs, ts: ts }; }; }catch(e){}" +
+    // v18.0.134 (M8) — `_vglLimpiarSesionDia` vacía tres estructuras de sesión que solo
+    // son alcanzables dentro del IIFE (dos Set y un Map declarados con let). Sin este
+    // accessor el banco no puede llenarlas para demostrar que la limpieza funciona.
+    "\n;try{ globalThis.__VGL__.__sesionDiaParaTest = function(){ return { fechasLab: _diagLabFechaPorCasilla, contextoAvisado: _vglContextoAvisado, acompEntendido: _acompEntendidoEnMs }; }; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8)
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");
@@ -262,6 +290,15 @@ function cargar(opciones) {
   vm.runInContext(src, ctx, { filename: "vigilante_agenda.user.js", timeout: 20000 });
 
   const api = ctx.__VGL__ || {};
+  // v18.0.8 — POR DEFECTO, UNA PESTAÑA ARRANCADA. En el navegador, boot() construye el
+  // panel y applySettings() -> restartPolling() registra el canal "tick", que es el reloj
+  // que de verdad evalúa la agenda. El arnés impide a propósito que boot() corra (ver la
+  // cabecera de este fichero), así que sin esto TODA pestaña de prueba parecería una
+  // pestaña ciega y, desde v18.0.8, no podría liderar — rompiendo decenas de pruebas de
+  // liderazgo que nada tienen que ver con eso. Se registra el canal SIN temporizador (se
+  // escribe el mapa directamente, no se llama a _relojCada) para no dejar intervalos vivos
+  // que mantengan node despierto. Las pruebas de la guarda lo BORRAN a propósito.
+  try { if (api.__reloj && api.__reloj.canales && !api.__reloj.canales.has("tick")) api.__reloj.canales.set("tick", function () {}); } catch (e) {}
   return { api, env: ent, ctx, totalDeclaradas: nombres.length, expuestas: Object.keys(api).filter(k => !k.startsWith("__")).length };
 }
 

@@ -68,6 +68,30 @@ module.exports = {
       t.igual(api.findDocIdx(["A", "B", "C"]), -1);
     });
 
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta.
+    //
+    //  findDocIdx no quitaba tildes. Los encabezados llegan en mayúsculas y recortados,
+    //  pero NO sin acentos, así que un archivo cuya columna se llame «CÉDULA» —la
+    //  ortografía correcta en español, la que cualquiera escribiría— fallaba por las DOS
+    //  vías: no coincide exacto con "CEDULA", y `includes("CEDULA")` tampoco, por la É.
+    //  Entonces makeIndexer lanza «No se encontró la columna con la identificación del
+    //  paciente» y el módulo de Actividades Preventivas queda apagado LA JORNADA ENTERA.
+    //  Por una tilde.
+    // =================================================================
+    t.caso("findDocIdx: una tilde en el encabezado no puede apagar el módulo de PyM", () => {
+      t.igual(api.findDocIdx(["NOMBRE", "CÉDULA", "TAMIZACION VIH"]), 1,
+        "«CÉDULA», que es como se escribe bien, tiene que encontrarse");
+      t.igual(api.findDocIdx(["NOMBRE", "IDENTIFICACIÓN"]), 1, "«IDENTIFICACIÓN» también");
+      t.igual(api.findDocIdx(["NOMBRE", "N° DOCUMENTO"]), 1, "y un «N° DOCUMENTO» con símbolo");
+      // Sin tildes sigue funcionando exactamente igual (la otra dirección).
+      t.igual(api.findDocIdx(["NOMBRE", "CEDULA"]), 1, "sin tilde, como siempre");
+      // Y de paso queda robusto a un encabezado que llegue sin pasar por toUpperCase:
+      // de los tres llamadores, uno vive dentro del Web Worker.
+      t.igual(api.findDocIdx(["nombre", "cédula"]), 1, "en minúsculas también");
+      t.igual(api.findDocIdx(["NOMBRE", "EDAD"]), -1, "y lo que no es documento sigue sin serlo");
+    });
+
     // Esta prueba vivió rota y en silencio (se llamaba sin await y `pruebas()` cerraba
     // antes de que resolviera). Tenía tres defectos que solo se vieron al ejecutarla:
     //  1) stubeaba `api.zipRead`, que NO intercepta nada: parseSharedStringsStream llama a

@@ -169,13 +169,44 @@ module.exports = {
     });
 
     // =================================================================
-    //  parseCSV — separador ingenuo, a propósito
+    //  parseCSV — v18.0.45: EL «SEPARADOR INGENUO A PROPÓSITO» BORRABA PACIENTES
+    //
+    //  Hallazgo del enjambre de funciones (01-sep), gravedad alta, reproducido con el
+    //  arnés. Esta prueba decía «NO interpreta comillas» como si fuera una decisión, y
+    //  clavaba el resultado roto (`a,"b,c"` -> `["a", '"b', 'c"']`) para que nadie lo
+    //  cambiara. Pero el efecto real no era cosmético: un apellido escrito `"Pérez, Juan"`
+    //  —lo que produce Excel al exportar cualquier campo con coma— corría todas las
+    //  columnas siguientes un puesto, la del documento devolvía el texto equivocado, y el
+    //  paciente NO entraba ni en `map` ni en `todos`. Y como tampoco estaba en `todos`, el
+    //  panel le decía al médico que ese paciente «NO aparece en la lista de prevención de
+    //  hoy»: un fallo del lector presentado como un hecho sobre el paciente.
+    //
+    //  Un comentario que llama «a propósito» a un defecto es peor que el defecto: convierte
+    //  la prueba en su guardaespaldas. Ahora se lee CSV de verdad.
+    //  (Todos los identificadores de esta prueba son sintéticos.)
     // =================================================================
-    t.caso("parseCSV: separa líneas y columnas, quita \\r y filtra líneas vacías; NO interpreta comillas", () => {
+    t.caso("parseCSV: separa líneas y columnas, quita \\r y filtra líneas vacías", () => {
       t.igual(api.parseCSV("DOC,ACT\r\n123,Susceptible\n\n   \n456,\n"),
         [["DOC", "ACT"], ["123", "Susceptible"], ["456", ""]]);
-      // Comportamiento documentado: el split es por coma cruda, sin manejo de comillas
-      t.igual(api.parseCSV('a,"b,c"'), [["a", '"b', 'c"']]);
+    });
+
+    t.caso("parseCSV: una coma DENTRO de comillas ya no parte la fila ni borra al paciente", () => {
+      t.igual(api.parseCSV('a,"b,c"'), [["a", "b,c"]],
+        "el campo entrecomillado llega entero y sin las comillas");
+      // El caso que motivó el hallazgo, de punta a punta.
+      const filas = api.parseCSV('NOMBRE,DOCUMENTO,ACT\n"Apellido, Nombre",111111,Susceptible\nOtro Paciente,222222,Susceptible');
+      t.igual(filas.length, 3, "las tres filas siguen siendo tres");
+      t.igual(filas[1].length, 3, "y la del apellido con coma tiene TRES columnas, no cuatro");
+      t.igual(filas[1][1], "111111", "así que la columna del documento sigue siendo la del documento");
+    });
+
+    t.caso("parseCSV: comillas escapadas, saltos de línea dentro del campo y comillas sueltas", () => {
+      t.igual(api.parseCSV('"con ""comillas"" dentro",X'), [['con "comillas" dentro', "X"]],
+        "las comillas duplicadas son una comilla literal, como en Excel");
+      t.igual(api.parseCSV('"salto\nde linea",X'), [["salto\nde linea", "X"]],
+        "un salto de línea dentro de un campo entrecomillado no parte la fila (el split por \\n de antes no podía)");
+      t.igual(api.parseCSV('normal,3" pulgadas,fin'), [["normal", '3" pulgadas', "fin"]],
+        "una comilla suelta a media celda se conserva literal: solo abre campo si está al principio");
     });
 
     // =================================================================

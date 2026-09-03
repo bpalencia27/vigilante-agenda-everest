@@ -132,7 +132,7 @@ module.exports = {
   nombre: "Invariantes críticos (mutación olvidada)",
   cubre: [],
 
-  async pruebas(t) {
+  async pruebas(t, api, env, cargar) {
     const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
     t.caso("el userscript se pudo leer y tiene el tamaño que debe — si no, este guard queda ciego", () => {
@@ -200,5 +200,264 @@ module.exports = {
         "todo invariante lleva escrito QUÉ PASA EN CONSULTA si se invierte; sin eso, el que " +
         "lo encuentre roto no puede decidir si el cambio era legítimo");
     });
+
+    // =====================================================================
+    // v18.0.29 — UNA ZONA MUERTA TEMPORAL DEJABA EL AUTO-LOGIN ROTO, Y LA CONSOLA MENTÍA
+    //
+    // `ATH_CRED_KEY` y `atheneaLoginBloqueado` se declaraban 1.340 líneas por DEBAJO del
+    // bloque de Athenea, y ese bloque hace `return` al terminar: en la web de Athenea el
+    // hilo sale del ámbito ANTES de evaluarlas, así que quedaban en su zona muerta temporal
+    // PARA SIEMPRE en esa página. `atheneaCredsSet`/`atheneaCredsGet` sí existen —son
+    // declaraciones de tipo function, izadas— pero al tocar `ATH_CRED_KEY` lanzaban
+    // ReferenceError, que sus propios try/catch se tragaban devolviendo false/null.
+    //
+    // Resultado: en la pantalla de inicio de sesión, guardar las credenciales fallaba
+    // SIEMPRE, y la consola imprimía igual «Credenciales capturadas y guardadas para
+    // auto-login permanente». Un fallo del sistema presentado como un hecho — el mismo
+    // patrón del Framingham (v18.0.27) y del aviso de ceguera (v18.0.17).
+    //
+    // Esto es una regresión de ORDEN DE DECLARACIÓN, y por eso se vigila sobre el fuente:
+    // el arnés carga el script con hostname de Everest, no de Athenea, así que ese camino
+    // —el único donde el defecto se manifiesta— no se recorre nunca en el banco. Una prueba
+    // de conducta aquí daría verde con el defecto puesto.
+    // =====================================================================
+    t.caso("v18.0.29: ATH_CRED_KEY se declara ANTES del bloque de Athenea (o queda en zona muerta)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const decl = src.indexOf('const ATH_CRED_KEY');
+      const bloque = src.indexOf('location.hostname.includes("atheneasoluciones.com")');
+      t.cierto(decl > 0, "sigue existiendo la clave de credenciales");
+      t.cierto(bloque > 0, "y el bloque de Athenea");
+      t.cierto(decl < bloque,
+        "la declaración tiene que ir ANTES: el bloque de Athenea hace return, y lo declarado después queda en zona muerta temporal en esa página — atheneaCredsSet lanzaría ReferenceError y su try/catch lo devolvería como un simple false");
+
+      const declB = src.indexOf('let atheneaLoginBloqueado');
+      t.cierto(declB > 0 && declB < bloque,
+        "lo mismo con atheneaLoginBloqueado, que atheneaCredsSet toca en la misma línea");
+    });
+
+    t.caso("v18.0.29: el mensaje de «credenciales guardadas» depende del resultado, no se imprime siempre", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const soloCodigo = (txt) => txt.split("\n")
+        .filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+
+      const i = src.indexOf("Credenciales capturadas y guardadas");
+      t.cierto(i > 0, "sigue existiendo el mensaje");
+      const alrededor = soloCodigo(src.slice(Math.max(0, i - 700), i));
+      t.cierto(/atheneaCredsSet\([^)]*\)/.test(alrededor),
+        "el guardado ocurre justo antes del mensaje");
+      t.cierto(/if\s*\(/.test(alrededor.slice(alrededor.lastIndexOf("atheneaCredsSet"))),
+        "y el mensaje va dentro de un if sobre el resultado: anunciar un guardado que falló es peor que no anunciar nada");
+    });
+
+    // =================================================================================
+    //  v18.0.34 — REGLA ESTRUCTURAL: NADIE ESCRIBE DENTRO DE LA CACHÉ DEL RESUMEN
+    //
+    //  `mtrCacheResumenLeer` devuelve `_mtrCacheResumen.resumen`, que es la REFERENCIA
+    //  VIVA, no una copia. Escribir una propiedad sobre lo que devuelve no es «actualizar
+    //  una variable»: es reescribir la memoria clínica del paciente para todo el que la
+    //  lea después — el Panel, el widget de Fármacos y, sobre todo, el Redactor IA, que es
+    //  quien acaba firmando una nota con ese contenido.
+    //
+    //  Es un defecto de FAMILIA, no un caso suelto: la v18.0.33 cerró el del Panel y esta
+    //  versión el del agendamiento, y al escribir esta regla apareció un tercero (el
+    //  refresco de medicamentos del widget de Fármacos) que nadie había reportado. Por eso
+    //  se vigila la forma, no los sitios: el cuarto no lo va a encontrar una revisión.
+    //
+    //  Escribir sobre una COPIA local (`Object.assign({}, resumen, {...})`) y volver a
+    //  guardarla con `mtrCacheResumenGuardar` sí es correcto, y esta regla lo permite: la
+    //  copia no es una variable leída de la caché.
+    // =================================================================================
+    t.caso("v18.0.34 (regla de familia): nadie escribe dentro del objeto que devuelve mtrCacheResumenLeer", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const lineas = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8").split("\n");
+      // Fuera los comentarios: un comentario que cite `resumen.factores = …` no puede
+      // hacer pasar ni fallar esta regla (lección de las pruebas huecas de la jornada).
+      const codigo = lineas.map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? "" : l.replace(/\/\/.*$/, "")));
+      const declara = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)\s*\?\s*)?mtrCacheResumenLeer\s*\(/;
+
+      let sitios = 0;
+      const escrituras = [];
+      for (let i = 0; i < codigo.length; i++) {
+        const m = declara.exec(codigo[i]);
+        if (!m) continue;
+        sitios++;
+        const esc = m[1].replace(/[$]/g, "\\$");
+        const asigna = new RegExp("(?:^|[^\\w.])" + esc + "\\.[\\w$]+\\s*=(?!=)");
+        // La ventana cubre el bloque donde vive esa variable; una escritura sobre el objeto
+        // vivo siempre está cerca de su lectura (si estuviera lejos, sería aún peor).
+        for (let j = i; j < Math.min(i + 40, codigo.length); j++) {
+          if (asigna.test(codigo[j])) escrituras.push("línea " + (j + 1) + ": " + codigo[j].trim().slice(0, 120));
+        }
+      }
+
+      t.cierto(sitios >= 10, "la regla encuentra los sitios que leen la caché (censo: " + sitios + ")");
+      t.igual(escrituras.length, 0,
+        "ninguna escritura dentro del objeto vivo de la caché — para actualizarlo se hace COPIA y se vuelve a guardar. Sitios: " + escrituras.join(" | "));
+    });
+
+    t.caso("v18.0.34: y la premisa de esa regla es real — mtrCacheResumenLeer devuelve la referencia VIVA", () => {
+      // Sin esto, la regla de arriba sería una manía de estilo. Con esto queda claro por qué
+      // es una regla: lo que devuelve NO es una copia, y escribirle encima reescribe la
+      // memoria clínica del paciente para todos los que la lean después.
+      const c = cargar({ silencioso: true });
+      const a = c.api;
+      const r = a.mtrResumenClinico({ hoyIso: "2026-09-01", edad: 60, sexo: "M", pesoKg: 70, creatinina: 1.0, factores: { hta: true } });
+      a.mtrCacheResumenGuardar("111111", r);
+      const uno = a.mtrCacheResumenLeer("111111");
+      const dos = a.mtrCacheResumenLeer("111111");
+      t.cierto(uno === dos, "dos lecturas devuelven EL MISMO objeto, no dos copias");
+      t.cierto(uno === r, "y es el mismo que se guardó: la caché no clona al guardar ni al leer");
+      // La demostración del daño, en dos líneas:
+      uno.factores = Object.assign({}, uno.factores, { paSistolica: 999 });
+      t.igual(a.mtrCacheResumenLeer("111111").factores.paSistolica, 999,
+        "una escritura sobre lo leído queda en la caché para el siguiente que la consulte");
+    });
+
+    // =================================================================================
+    //  v18.0.37 — DOS FORMAS DE QUE EL MODAL DE AGENDAMIENTO ACTÚE POR SU CUENTA
+    //  «El médico manda, el script sugiere» (CLAUDE.md). Las dos lo violaban en silencio.
+    // =================================================================================
+    t.caso("v18.0.37: el desplegable de la toma de muestras NUNCA nace con una hora puesta", () => {
+      // La v16.4.0 quitó el atributo `selected` de la primera opción pero dejó el marcador
+      // vacío condicionado a un parámetro que la ruta normal no pasaba. Sin una opción vacía
+      // delante, el navegador selecciona la primera por su cuenta; y el bloque de abajo
+      // habilitaba el botón. Un clic reservaba el primer cupo del día —las 6:00 a. m.— que
+      // el médico nunca eligió.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+
+      // Los DOS modales que pintan horas de laboratorio, con la misma regla.
+      const pintados = codigo.match(/labTimeSel\.innerHTML = `<option[^`]*`/g) || [];
+      const conTurnos = pintados.filter((p) => /\$\{escapeHtml\(hRaw\)\}/.test(p) || /turnosConHora/.test(p));
+      t.cierto(pintados.length >= 2, "los dos modales pintan la lista de horas (" + pintados.length + ")");
+      pintados.forEach((p) => {
+        if (!/— elija/.test(p)) return;              // los mensajes de error no llevan lista
+        t.cierto(/<option value="" selected disabled>/.test(p),
+          "el marcador vacío va SIEMPRE y va `disabled`: sin él el navegador elige la primera hora solo");
+      });
+      t.falso(/exigirEleccion/.test(codigo),
+        "y ya no queda ningún parámetro que haya que acordarse de pasar para que esto se cumpla: " +
+        "acordarse era justamente la parte que fallaba");
+      t.falso(/if \(!exigirEleccion\) \{\s*confirmBtn\.disabled = false;/.test(codigo),
+        "nadie habilita el botón al pintar la lista: solo lo habilita el `change` del médico");
+    });
+
+    t.caso("v18.0.37: ningún interruptor del médico se escucha con { once: true }", () => {
+      // «Agendar también la Toma de Muestras» registraba su listener de `change` con
+      // { once: true }: se retiraba tras el PRIMER cambio y la bandera que recuerda la
+      // elección del médico se quedaba congelada. Si él la desmarcaba y se arrepentía, el
+      // siguiente repintado escribía la elección vieja encima de la casilla.
+      // La regla es general porque el defecto lo es: un listener de `change` que solo
+      // escucha una vez es casi siempre un error — la gente cambia de opinión.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      const unaVez = codigo.match(/addEventListener\(\s*["']change["'][\s\S]{0,240}?\{\s*once:\s*true\s*\}/g) || [];
+      t.igual(unaVez.length, 0,
+        "ningún `change` se registra para escuchar una sola vez: " + unaVez.join(" | ").slice(0, 200));
+      // Y la contrapartida: no escuchar una sola vez no puede significar apilar un listener
+      // por cada repintado del modal.
+      t.cierto(/if \(!labChk\.__vglEscuchaPuesta\) \{/.test(codigo),
+        "la escucha se instala UNA vez por elemento, no una por repintado");
+    });
+
+    t.caso("v18.0.34: el agendamiento no lee la tensión de la pantalla sin comprobar de quién es la historia", () => {
+      // El triaje que decide la franja horaria leía mtrLeerTensionDelDom(document) —ids
+      // globales, sin guarda— y la escribía en el resumen cacheado de ESTE paciente.
+      // Reproducido: con el paciente A en el modal y B en pantalla, la hoja que lee la IA
+      // para A decía «PA 186/114 mmHg», que es la crisis hipertensiva de B.
+      // Vive dentro del closure del modal de agendamiento, así que se fija por fuente, sin
+      // comentarios (para que el comentario que explica el arreglo no sea lo que la pasa).
+      const fs = require("fs");
+      const path = require("path");
+      const codigo = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/_pacienteSigueAbierto\(apt\.doc_id\)\s*&&\s*typeof mtrLeerTensionDelDom === "function"/.test(codigo),
+        "la lectura de la tensión cuelga de la guarda de identidad, no se hace y luego se pregunta");
+      t.falso(/resumenClin\.factores\s*=/.test(codigo),
+        "y el resultado no se escribe dentro del resumen cacheado: va a una copia local para el triaje");
+    });
+
+    // =================================================================
+    //  v18.0.54 — REPORTE EN VIVO DEL MÉDICO (1-sep): la nota decía «PRESIÓN ARTERIAL DE
+    //  110/70 MMHG» y su pantalla tenía 136/85. Peso y cintura sí coincidían.
+    //
+    //  LAS DOS CIFRAS DE LA TENSIÓN VIAJAN JUNTAS O NO VIAJAN. El refresco del resumen
+    //  resolvía sistólica y diastólica con dos `num(nuevo, previo)` INDEPENDIENTES, así
+    //  que una lectura a medias de hoy se completaba en silencio con la mitad de otra
+    //  medición: sistólica de una toma, diastólica de otra, firmadas como una sola
+    //  presión arterial de hoy. Esa tensión no existió nunca.
+    //
+    //  Se fija por fuente, y se dice que la comprobación es ESTRUCTURAL: la función que
+    //  la contiene es asíncrona y golpea la red, así que no se puede ejecutar entera
+    //  aquí; lo que sí se puede fijar es que las dos cifras se decidan con la MISMA
+    //  condición, que es justo lo que faltaba.
+    // =================================================================
+    t.caso("v18.0.54: la sistólica y la diastólica se deciden con la misma condición, nunca por separado", () => {
+      const fs2 = require("fs"), path2 = require("path");
+      const codigo2 = fs2.readFileSync(path2.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.falso(/paSistolica:\s*num\(fNue\.paSistolica,\s*fPrev\.paSistolica\)/.test(codigo2),
+        "ya no se resuelve la sistólica por su cuenta");
+      t.falso(/paDiastolica:\s*num\(fNue\.paDiastolica,\s*fPrev\.paDiastolica\)/.test(codigo2),
+        "ni la diastólica por la suya");
+      const cond = "\\(fNue\\.paSistolica != null \\|\\| fNue\\.paDiastolica != null\\)";
+      t.cierto(new RegExp("paSistolica:\\s*" + cond).test(codigo2),
+        "la sistólica se decide mirando SI HAY lectura nueva (cualquiera de las dos)");
+      t.cierto(new RegExp("paDiastolica:\\s*" + cond).test(codigo2),
+        "y la diastólica con exactamente la misma condición: las dos entran o ninguna");
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 15). (a) La prueba de arriba es un grep del fuente y su
+    // justificación («la función es asíncrona y golpea la red») no es cierta:
+    // mtrRecalcularConFactores es síncrona y pura, así que se fija el COMPORTAMIENTO — una
+    // variante que reintroduzca el defecto conservando el prefijo que el grep busca ya no pasa.
+    // (b) El OTRO sitio que fusiona dos mediciones de tensión —mtrResumenDesdeModalLabs, cuyo
+    // resumen alimenta el Panel, Agendar y el Redactor— seguía resolviendo cada cifra por su
+    // cuenta: Athenea con solo la sistólica (130) + la casilla de hoy con solo la diastólica
+    // (85) firmaban 130/85, una tensión que no existió.
+    t.caso("02-sep: mtrRecalcularConFactores — una lectura de hoy a medias NO se completa con la otra medición (comportamiento, no grep)", () => {
+      const c = cargar({ silencioso: true });
+      const r = c.api.mtrRecalcularConFactores({ factores: { paSistolica: 110, paDiastolica: 70 }, erc: { entradas: {} } }, { paSistolica: 136, paDiastolica: null }, "2026-09-01");
+      t.igual(r.factores.paSistolica, 136, "la sistólica de hoy manda");
+      t.igual(r.factores.paDiastolica, null, "y la diastólica de hoy, vacía, se queda vacía: 136/70 no existió");
+      const r2 = c.api.mtrRecalcularConFactores({ factores: { paSistolica: 110, paDiastolica: 70 }, erc: { entradas: {} } }, { paSistolica: null, paDiastolica: null }, "2026-09-01");
+      t.igual(r2.factores.paSistolica, 110, "sin lectura nueva se conserva la anterior entera");
+      t.igual(r2.factores.paDiastolica, 70);
+    });
+
+    t.caso("02-sep: mtrResumenDesdeModalLabs — la tensión de Athenea y la de la casilla de hoy no se mezclan", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.querySelector = (sel) => (/diastolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "85" } : null;
+      c.env.doc.getElementById = () => null;
+      const ent = (pas, pad) => ({ entradas: { edad: 60, sexo: "F", peso: 70, creatinina: 0.9, pas: pas, pad: pad } });
+      const res = c.api.mtrResumenDesdeModalLabs(ent(130, null), [], { nombre: "X" }, null);
+      t.igual(res.factores.paSistolica, 130, "Athenea trajo solo la sistólica");
+      t.igual(res.factores.paDiastolica, null, "y la diastólica de OTRA medición (la casilla de hoy) no la completa: antes 130/85");
+      const res2 = c.api.mtrResumenDesdeModalLabs(ent(null, null), [], { nombre: "X" }, null);
+      t.igual(res2.factores.paSistolica, null, "sin nada en Athenea, la casilla de hoy entra entera aunque esté a medias");
+      t.igual(res2.factores.paDiastolica, 85);
+      const res3 = c.api.mtrResumenDesdeModalLabs(ent(120, 80), [], { nombre: "X" }, null);
+      t.igual(res3.factores.paSistolica, 120, "una medición completa de Athenea gana entera");
+      t.igual(res3.factores.paDiastolica, 80);
+    });
+
+    // v18.0.104 — refutador de v18.0.99 (fila 15): la regla «gana la fuente que trae la medición
+    // COMPLETA» no la fijaba ninguna prueba (un mutante que tomara ent con una sola cifra dejaba
+    // suite_37 en verde). Aquí: Athenea parcial + casilla de hoy completa → la completa, entera.
+    t.caso("v18.0.104: con Athenea a medias y la casilla de hoy completa, gana la casilla de hoy entera", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.querySelector = (sel) => (/sistolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "120" } : (/diastolica/i.test(sel) && !/acostado/i.test(sel)) ? { value: "80" } : null;
+      c.env.doc.getElementById = () => null;
+      const res = c.api.mtrResumenDesdeModalLabs({ entradas: { edad: 60, sexo: "F", peso: 70, creatinina: 0.9, pas: 130, pad: null } }, [], { nombre: "X" }, null);
+      t.igual(res.factores.paSistolica, 120, "no 130: la medición completa de hoy gana entera");
+      t.igual(res.factores.paDiastolica, 80);
+    });
+
   },
 };

@@ -91,6 +91,45 @@ module.exports = {
       t.cierto(range.every(r => !api.esFestivo(r.dateObj))); // ningún festivo (07/08, 17/08)
     });
 
+    // =====================================================================
+    // v18.0.122 — REPORTE EN VIVO DEL MÉDICO (02-sep), con captura: «aparecen dos resaltados
+    // en morado "fecha seleccionada"; primero había elegido sábado pero ese sábado al parecer
+    // no se trabaja, entonces eligió el viernes pero quedó seleccionado el sábado como
+    // principal».
+    //
+    // La causa raíz vivía AQUÍ: el barrido de sábados recorría todo el intervalo, el propio
+    // centro incluido, así que un centro en sábado salía DOS VECES en el rango. Los dos casos
+    // de arriba usan un centro en JUEVES — por eso el banco nunca lo vio. Ese es el hueco de
+    // cobertura, y esto lo cierra.
+    // =====================================================================
+    t.caso("v18.0.122: con el centro en SÁBADO, su fecha aparece UNA sola vez en el rango", () => {
+      const range = api.calcRangoSondeoIso("2026-11-07");   // sábado — la fecha de su captura
+      const isos = range.map((r) => r.iso);
+      t.igual(isos.length, new Set(isos).size,
+        "ninguna fecha se repite: dos entradas con el mismo ISO son dos chips para el mismo día");
+      const delCentro = range.filter((r) => r.iso === "2026-11-07");
+      t.igual(delCentro.length, 1, "el centro entra una vez, no una como centro y otra como sábado");
+      t.igual(range.filter((r) => r.isCenter).length, 1, "y sigue habiendo exactamente un centro");
+      t.igual(delCentro[0].isCenter, true, "que es el propio centro");
+      // Y dice la verdad sobre sí mismo: antes iba fijo en `esSabado:false`, así que el día
+      // que el médico estaba mirando perdía el estilo y el `title` que explican qué significa
+      // un sábado en esta agenda.
+      t.igual(delCentro[0].esSabado, true, "un centro en sábado ES sábado");
+      // Los otros sábados del rango siguen estando, sin que el centro se los coma.
+      const sabados = range.filter((r) => r.esSabado === true).map((r) => r.iso);
+      t.cierto(sabados.indexOf("2026-10-31") >= 0 && sabados.indexOf("2026-11-14") >= 0,
+        "los sábados vecinos siguen ofreciéndose (" + sabados.join(", ") + ")");
+    });
+
+    t.caso("v18.0.122: ningún centro de la semana duplica su fecha (barrido de los 7 días)", () => {
+      // La regresión solo aparecía con el centro en sábado, pero la guarda se fija para
+      // cualquier día: un rango con fechas repetidas rompe todo registro por ISO aguas abajo.
+      for (const iso of ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08"]) {
+        const isos = api.calcRangoSondeoIso(iso).map((r) => r.iso);
+        t.igual(isos.length, new Set(isos).size, "centro " + iso + ": sin fechas repetidas");
+      }
+    });
+
     // ---------- todayStamp ----------
     t.caso("todayStamp: devuelve YYYY-MM-DD del día actual", () => {
       runWithMockDate("2026-08-10T12:00:00", (mockApi) => {
@@ -327,6 +366,39 @@ module.exports = {
         const nextDays = isos.slice(-3);
         t.igual(nextDays, ["2026-08-18", "2026-08-19", "2026-08-20"]);
       });
+    });
+
+
+    // v18.0.20 — LA MARCA DE MERIDIANO SE BUSCABA SIN ANCLAR, y una palabra suelta la
+    // convertía en un error de DOCE HORAS. La expresión miraba todo el resto de la cadena
+    // tras «HH:MM», así que cualquier «a» o «p» seguida de una palabra que empiece por M
+    // pasaba por meridiano. Medido antes de arreglar:
+    //     parseHoraMin("13:00 Cita Medica")       -> 60   (la 1:00 a. m.)  en vez de 780
+    //     parseHoraMin("19:00 Consulta Medicina") -> 420  (las 7:00 a. m.) en vez de 1140
+    // Si la hora llegara con un sufijo así —el texto de .labelHora en otra vista, o porque
+    // apiCampos elige como columna de hora una que arrastre texto, ya que esa función
+    // puntúa columnas llamando a parseHoraMin sobre valores arbitrarios— elapsedMin daría
+    // +12 h toda la tarde: la agenda entera en ÁMBAR pasada la gracia, y marcas de fraude
+    // falsas sobre pacientes que llegaron a su hora.
+    t.caso("v18.0.20: el meridiano se lee solo si viene pegado a la hora, no en cualquier palabra", () => {
+      t.igual(api.parseHoraMin("13:00 Cita Medica"), 780,
+        "«Cita Medica» no es «a. m.»: las 13:00 son las 13:00");
+      t.igual(api.parseHoraMin("19:00 Consulta Medicina"), 1140,
+        "«Consulta Medicina» tampoco");
+      t.igual(api.parseHoraMin("08:00 Anexo Modulo 3"), 480,
+        "ni «Anexo Modulo», que es el caso que más se parece a un meridiano de verdad");
+    });
+
+    t.caso("v18.0.20: y los meridianos REALES se siguen leyendo, en todas sus formas", () => {
+      t.igual(api.parseHoraMin("07:30 a. m."), 450, "la forma en que Everest los escribe");
+      t.igual(api.parseHoraMin("07:00 AM"), 420, "sin puntos y en mayúscula");
+      t.igual(api.parseHoraMin("7:30 A.M."), 450, "con puntos");
+      t.igual(api.parseHoraMin("11:45 p.m."), 1425, "por la tarde");
+      t.igual(api.parseHoraMin("12:00 p. m."), 720, "el mediodía");
+      t.igual(api.parseHoraMin("12:00 a. m."), 0, "y la medianoche");
+      t.igual(api.parseHoraMin("08:00 a. m. Control"), 480,
+        "un meridiano real seguido de más texto sigue valiendo");
+      t.igual(api.parseHoraMin("13:00"), 780, "y sin meridiano se lee en 24 h, como siempre");
     });
 
   }

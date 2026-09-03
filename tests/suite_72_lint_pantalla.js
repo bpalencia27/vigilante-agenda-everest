@@ -1,5 +1,5 @@
 // =====================================================================
-//  SUITE 70 — TANDA 0 DE LA AUDITORÍA DE EXPERIENCIA (27-ago-2026)
+//  SUITE 72 — TANDA 0 DE LA AUDITORÍA DE EXPERIENCIA (27-ago-2026)
 //
 //  Tres reglas que el proyecto YA tiene escritas —dos en CLAUDE.md, una en un
 //  comentario del propio código— y que hasta hoy dependían de que alguien se
@@ -29,9 +29,10 @@ module.exports = {
   cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
     "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
     "_tableroQueCambio", "mtrTextoDestinoTelemetria",
-    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades"],
+    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades",
+    "respaldoDiceDe", "traerRespaldoSoloParaConsulta"],
 
-  pruebas(t, api) {
+  async pruebas(t, api, env) {
     const src = fs.readFileSync(RUTA, "utf8");
 
     // =================================================================
@@ -379,6 +380,107 @@ module.exports = {
         "sin_pendientes", "sin poder comprobar la pertenencia no se inventa una exclusión");
     });
 
+    // =================================================================
+    //  v18.0.43 — CONSULTA AL RESPALDO (pedido del médico, 1-sep)
+    //
+    //  "SI ES POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE 'Dato faltante: sin registro en
+    //  PyM' SE PUEDA CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL PACIENTE TIENE
+    //  ACTIVIDADES PENDIENTES ... COMO SE PODRÍA HACER SIN ROMPER LO QUE YA FUNCIONA?"
+    //
+    //  Estas pruebas son justamente el "sin romper lo que ya funciona": las cuatro
+    //  contenciones de respaldoDiceDe(), cada una por separado.
+    // =================================================================
+    const _estado = (extra) => Object.assign({
+      pymFallback: false,
+      pymTodos: new Set(["111"]),
+      pymRespTodos: new Set(["222", "333"]),
+      pymResp: new Map([["222", ["Tamización cardiometabólica", "Mamografía"]], ["333", []]]),
+      pymRespNombre: "BASE PILOTO", pymRespMTime: "2026-05-20T10:00:00Z",
+    }, extra || {});
+
+    t.caso("RESPALDO — al paciente que SÍ está en la lista oficial no se le consulta el respaldo", () => {
+      // La contención número uno: la oficial manda. Si ella lo conoce, su respuesta es la
+      // única — incluido su "al día". El respaldo no puede contradecirla ni completarla.
+      t.igual(api.respaldoDiceDe("111", _estado()), null,
+        "está en la oficial: el respaldo no se consulta, y la pantalla se pinta igual que antes");
+    });
+
+    t.caso("RESPALDO — solo responde por quien la oficial NO conoce", () => {
+      const con = api.respaldoDiceDe("222", _estado());
+      t.igual(con.estado, "con_pendientes", "no está en la oficial y el respaldo sí lo tiene, con actividades");
+      t.igual(con.lista.length, 2, "y devuelve las que tiene anotadas");
+      t.igual(con.fuente, "BASE PILOTO", "con el nombre del archivo de donde salió");
+      t.igual(con.fecha, "2026-05-20T10:00:00Z", "y su fecha: el médico tiene que poder pesar la antigüedad");
+
+      const vacio = api.respaldoDiceDe("333", _estado());
+      t.igual(vacio.estado, "sin_pendientes", "está en el respaldo pero sin nada anotado — y eso NO es 'al día'");
+
+      const nadie = api.respaldoDiceDe("999", _estado());
+      t.igual(nadie.estado, "tampoco_esta", "no está en ninguna de las dos: se dice, no se calla");
+    });
+
+    t.caso("RESPALDO — si la lista ACTIVA ya es el respaldo, no se le pregunta dos veces a la misma fuente", () => {
+      t.igual(api.respaldoDiceDe("222", _estado({ pymFallback: true })), null,
+        "con la piloto como lista activa, consultar el respaldo sería preguntarle dos veces a la misma base");
+    });
+
+    t.caso("RESPALDO — sin lista oficial cargada, o sin respaldo, no se inventa nada", () => {
+      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: new Set() })), null,
+        "sin oficial cargada no hay con qué comparar: no se consulta");
+      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: null })), null,
+        "ni cuando todavía no se ha indexado ninguna base");
+      t.igual(api.respaldoDiceDe("222", _estado({ pymRespTodos: null })), null,
+        "y sin respaldo cargado tampoco: la tarjeta se queda como estaba");
+      t.igual(api.respaldoDiceDe("", _estado()), null, "sin documento no se consulta nada");
+    });
+
+    t.caso("RESPALDO — el mensaje del modal dice de dónde salió el dato y nunca lo pasa por dato de hoy", () => {
+      const con = api.pymMotivoSinActividades({
+        listaCargada: true, pacienteEnLista: false,
+        respaldo: { estado: "con_pendientes", lista: ["Tamización cardiometabólica"], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
+      });
+      t.igual(con.motivo, "no_esta_en_lista_pero_en_respaldo", "es un motivo propio, no el genérico");
+      t.cierto(/BASE PILOTO/.test(con.texto), "nombra el archivo del que salió");
+      t.cierto(/2026-05-20/.test(con.texto), "y su fecha");
+      t.cierto(/Tamización cardiometabólica/.test(con.texto), "dice qué figura pendiente");
+      t.cierto(/no es la agenda de hoy|puede estar desactualizado/i.test(con.texto),
+        "y advierte que no es la lista de hoy antes de que el médico ordene nada");
+
+      const vacio = api.pymMotivoSinActividades({
+        listaCargada: true, pacienteEnLista: false,
+        respaldo: { estado: "sin_pendientes", lista: [], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
+      });
+      t.igual(vacio.motivo, "no_esta_en_lista_respaldo_vacio", "motivo propio también");
+      t.cierto(/NO quiere decir que esté al día/i.test(vacio.texto),
+        "REGLA D al revés: que una base vieja no tenga nada anotado no prueba que hoy no le falte nada");
+
+      const nada = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false, respaldo: null });
+      t.igual(nada.motivo, "no_esta_en_lista", "sin respaldo que consultar, el mensaje de siempre, intacto");
+    });
+
+    await t.casoAsync("RESPALDO — un fallo de red NO quema el intento del día, y la lista activa queda intacta", async () => {
+      // El primer diseño marcaba el día ANTES de descargar, "para no reintentar en bucle".
+      // Con eso, un fallo de red al arrancar la jornada —la sesión de SharePoint a medio
+      // despertar, que es exactamente cuando esto corre— dejaba al respaldo sin responder
+      // el día entero: el médico volvía a ver "Dato faltante" en pacientes que SÍ están en
+      // la base, que es justo lo que pidió evitar. La marca se pone solo al conseguirlo.
+      const st = api.__state;
+      st.pym = new Map([["111", ["Tamización cardiometabólica"]]]);
+      st.pymTodos = new Set(["111"]);
+      st.pymFile = "Agenda_Dia_CMB.xlsx"; st.pymFallback = false;
+      st.pymResp = new Map(); st.pymRespTodos = null; st.pymRespCargado = "";
+      // En el banco no hay SharePoint: la descarga falla siempre, que es el caso a fijar.
+      const hecho = await api.traerRespaldoSoloParaConsulta();
+      t.falso(hecho, "sin poder bajar el archivo, devuelve que no lo consiguió");
+      t.igual(env.win.GM_getValue("vgl_resp_dl", ""), "",
+        "y NO marca el día: el siguiente intento puede volver a probarlo");
+      // Las contenciones que hacen que esto no rompa nada, comprobadas tras ejecutarlo:
+      t.igual(st.pymFile, "Agenda_Dia_CMB.xlsx", "la lista activa sigue siendo la oficial");
+      t.falso(st.pymFallback, "y no se marca como respaldo");
+      t.igual(st.pym.size, 1, "ni se toca el mapa de la lista activa");
+      t.igual(st.pymRespTodos, null, "y sin descarga no se inventa un índice de consulta");
+    });
+
     t.caso("REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada", () => {
       // Eran dos estados para tres situaciones: con ultimaLectura en 0 el reloj afirmaba
       // «Datos al día» sobre datos que no existen. No alarmar al arrancar está bien; decir
@@ -394,6 +496,171 @@ module.exports = {
         "«fresco» exige que HAYA habido una lectura");
       t.cierto(/toggle\("vgl-stale", _hubo && !fresco\)/.test(bloque),
         "y el arranque sigue sin pintarse en alarma: no se cambia una mentira por un susto");
+    });
+
+
+    // =================================================================
+    //  REGLA H — NINGÚN COMENTARIO `//` DENTRO DE UNA PLANTILLA DE TEXTO
+    //
+    //  BUG REAL, reportado por el médico el 31-ago sobre la build 18.0.5 que tenía
+    //  instalada: en «Resumen del turno», encima del botón Diag, aparecían impresas seis
+    //  líneas que empezaban por `//`. No era un fallo de CSS ni de datos: alguien escribió
+    //  un comentario de JavaScript ENTRE el ` de apertura de una plantilla y el HTML que
+    //  la plantilla construye. Ahí `//` no comenta nada — es texto, y el navegador lo pinta.
+    //
+    //  Es una frontera que se cruza en silencio: el archivo sigue siendo JavaScript válido,
+    //  no hay error en consola, ninguna prueba de conducta se entera, y el médico se lo
+    //  encuentra en pantalla en consulta. Por eso la guarda es un lint del código fuente y
+    //  no una prueba de comportamiento: hay que cazarlo ANTES de que se pinte.
+    //
+    //  El recorrido de abajo es un analizador de verdad (comillas, comentarios, plantillas y
+    //  su anidamiento con ${...}), no una expresión regular: una regex no puede saber si un
+    //  `//` está dentro de una plantilla o dentro de una URL.
+    // =================================================================
+    t.caso("REGLA H — ninguna línea `//` vive DENTRO de una plantilla de texto (bug del botón Diag, 31-ago)", () => {
+      const sospechosas = [];
+      let i = 0, linea = 1;
+      const pilaPlantilla = [];          // profundidad de ${} por plantilla abierta
+      let enLinea = false, enBloque = false, enCad = null;
+      let inicioDeLinea = true;
+      while (i < src.length) {
+        const ch = src[i], sig = src[i + 1];
+        if (ch === "\n") { linea++; enLinea = false; inicioDeLinea = true; i++; continue; }
+        const enTextoDePlantilla = pilaPlantilla.length > 0 && pilaPlantilla[pilaPlantilla.length - 1] === 0;
+
+        if (enLinea || enBloque) {
+          if (enBloque && ch === "*" && sig === "/") { enBloque = false; i += 2; continue; }
+          i++; continue;
+        }
+        if (enCad) {
+          if (ch === "\\") { i += 2; continue; }
+          if (ch === enCad) enCad = null;
+          i++; continue;
+        }
+        if (enTextoDePlantilla) {
+          if (ch === "\\") { i += 2; continue; }
+          if (ch === "`") { pilaPlantilla.pop(); i++; continue; }
+          if (ch === "$" && sig === "{") { pilaPlantilla[pilaPlantilla.length - 1] = 1; i += 2; continue; }
+          // AQUÍ está la caza: principio de línea (solo espacios delante) y luego `//`
+          if (inicioDeLinea && ch === "/" && sig === "/") {
+            sospechosas.push(linea + ": " + src.slice(i, src.indexOf("\n", i) < 0 ? undefined : src.indexOf("\n", i)).trim().slice(0, 90));
+          }
+          if (!/\s/.test(ch)) inicioDeLinea = false;
+          i++; continue;
+        }
+        // ---- código normal (incluye el interior de un ${...}) ----
+        if (ch === "/" && sig === "/") { enLinea = true; i += 2; continue; }
+        if (ch === "/" && sig === "*") { enBloque = true; i += 2; continue; }
+        if (ch === '"' || ch === "'") { enCad = ch; i++; continue; }
+        if (ch === "`") { pilaPlantilla.push(0); i++; continue; }
+        if (pilaPlantilla.length) {
+          if (ch === "{") pilaPlantilla[pilaPlantilla.length - 1]++;
+          else if (ch === "}") {
+            pilaPlantilla[pilaPlantilla.length - 1]--;
+            if (pilaPlantilla[pilaPlantilla.length - 1] <= 0) pilaPlantilla[pilaPlantilla.length - 1] = 0;
+          }
+        }
+        if (!/\s/.test(ch)) inicioDeLinea = false;
+        i++;
+      }
+      t.igual(sospechosas.length, 0,
+        "un `//` dentro de una plantilla NO comenta: se imprime en pantalla. Líneas: " + sospechosas.slice(0, 8).join("  ·  "));
+    });
+
+    // =================================================================
+    //  REGLA I — EL TEXTO QUE VA A escapeHtml() NO LLEVA ADORNO NI MARCADO
+    //
+    //  Mismo incidente del 31-ago, la otra mitad. `motivoTexto` (la píldora de complejidad
+    //  del modal de Agendamiento) mezclaba DATO y PRESENTACIÓN: traía el punto de color
+    //  pegado delante. Consecuencias reales, las dos vistas en pantalla:
+    //    · quien lo pinta le anteponía OTRO punto -> "🔴 🔴 Paciente complejo…", y en la
+    //      franja amarilla además contradictorio, "🟢 🟡 Control habitual…", porque quien
+    //      pintaba solo miraba `esComplejo` (dos estados) y aquí hay TRES;
+    //    · al sustituir el emoji por un <span> con el punto, escapeHtml() —que existe para
+    //      que nada de aquí se interprete como HTML— lo imprimió crudo en la pantalla.
+    //
+    //  La regla: este texto es dato. El adorno lo pone quien pinta.
+    // =================================================================
+    t.caso("REGLA I — motivoTexto es TEXTO: sin emoji, sin marcado, sin adorno (bug de la píldora, 31-ago)", () => {
+      // Los tres estados reales del triaje v2, con entradas que de verdad los alcanzan
+      // (mismos vectores que suite_24): sin cubrir las tres, esta regla no probaría nada.
+      const casos = [
+        { factores: {}, fallas: { hayGrave: true }, medicamentos: [] },                              // 🔴 primera_mitad
+        { factores: { diabetes: true }, riesgo: { categoria: "moderado" },
+          medicamentos: ["Metformina 850mg", "Losartán 50mg"] },                                     // 🟢 final_jornada
+        { factores: {}, riesgo: { categoria: "muy alto" }, medicamentos: ["Losartán 50mg"] },        // 🟡 adicional_30
+      ];
+      const vistos = new Set();
+      casos.forEach((c) => {
+        const r = api._evaluarComplejidadPaciente({}, c, []);
+        vistos.add(r.franjaSugerida);
+        t.falso(/[<>&]/.test(r.motivoTexto), "sin marcado: " + r.motivoTexto.slice(0, 70));
+        t.falso(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(r.motivoTexto.replace(/➔/g, "")),
+          "sin emoji pegado al dato: " + r.motivoTexto.slice(0, 70));
+        t.cierto(/^[A-ZÁÉÍÓÚÑ]/.test(r.motivoTexto), "empieza por la frase, no por un adorno: " + r.motivoTexto.slice(0, 40));
+        t.cierto(["primera_mitad", "final_jornada", "adicional_30"].indexOf(r.franjaSugerida) >= 0,
+          "la franja es una de tres claves cerradas, que es de donde sale el punto");
+      });
+      t.igual(vistos.size, 3, "los casos tocan las TRES franjas: " + [...vistos].join(", "));
+    });
+
+    t.caso("REGLA I — quien pinta la píldora elige el punto por la FRANJA (tres estados), no por esComplejo (dos)", () => {
+      const idx = src.indexOf('querySelector("#vgl-complexity-pill")');
+      t.cierto(idx > 0, "sigue existiendo la píldora de complejidad");
+      const bloque = src.slice(idx, idx + 1400);
+      t.cierto(/PUNTO\s*=\s*\{\s*primera_mitad:/.test(bloque),
+        "el punto sale de un mapa cerrado por franja: las tres, no dos");
+      t.cierto(/escapeHtml\(\s*compEval\.motivoTexto\s*\)/.test(bloque),
+        "y el texto sigue entrando por escapeHtml: nada que venga del dato puede volverse HTML");
+      t.falso(/\(compEval\.esComplejo \? "🔴 " : "🟢 "\)\s*\+/.test(bloque),
+        "ya no se antepone un punto por esComplejo sobre un texto que traía el suyo");
+    });
+
+    // =====================================================================
+    // v18.0.28 — REGLA J: UNA INTERPOLACIÓN VIVA DENTRO DE UN COMENTARIO SE EJECUTA IGUAL
+    //
+    // Tercer miembro de la misma familia de frontera JS/plantilla:
+    //   · Regla H (v18.0.6) — un `//` escrito dentro de una plantilla no comenta: se PINTA.
+    //   · Regla Q (v18.0.14) — un `*/` dentro de un comentario CSS lo cierra antes de
+    //     tiempo y el analizador se come la regla siguiente.
+    //   · Regla J (esta)     — un `${…}` dentro de un comentario de bloque SÍ se evalúa:
+    //     al motor de JavaScript el comentario CSS no le dice nada, la plantilla es una
+    //     plantilla y la interpolación corre.
+    //
+    // El caso real: dentro de `MTR_RCV_CSS` se escribió el nombre de la expresión que
+    // inserta ese CSS como si fuera una interpolación. Al inicializar la constante, la
+    // flecha leía `MTR_RCV_CSS` todavía en su ZONA MUERTA TEMPORAL, lanzaba ReferenceError,
+    // y `_cssSeguro` se lo tragaba devolviendo "": el comentario entregado al navegador
+    // quedaba como «…splicea (, invisible…».
+    //
+    // Y el filo que hace que esto no sea cosmético: solo NO tumba el arranque porque
+    // `_cssSeguro` es una declaración de tipo function, que está hoisted. El día que alguien
+    // la convierta en const o en arrow declarada más abajo, el archivo ENTERO deja de
+    // evaluarse en la carga — comprobado en aislamiento. Un userscript que no evalúa es un
+    // Centinela que no existe, en mitad de una consulta.
+    //
+    // Nota honesta: al escribir el arreglo cometí este mismo defecto DENTRO del comentario
+    // que lo explica —puse el ejemplo con su dólar y sus llaves— y el `node --check` lo
+    // cazó al instante. Por eso la regla mira el archivo entero y no solo el sitio conocido.
+    // =====================================================================
+    t.caso("Regla J - ningún comentario de bloque contiene una interpolación viva", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const malos = [];
+      const re = /\/\*[\s\S]*?\*\//g;
+      let m;
+      while ((m = re.exec(src)) !== null) {
+        const bloque = m.group === undefined ? m[0] : m[0];
+        if (bloque.indexOf("${") < 0) continue;
+        const linea = src.slice(0, m.index).split("\n").length;
+        const frag = (/\$\{[^}\n]{0,50}/.exec(bloque) || [""])[0];
+        malos.push(`L${linea}: ${frag}`);
+      }
+
+      t.igual(malos.length, 0,
+        `un \${...} dentro de un comentario de bloque se EJECUTA igual —el comentario es para CSS, no para JavaScript—, y si lee algo en su zona muerta temporal el archivo entero puede dejar de evaluarse. Para nombrar una expresión, escribirla sin el dólar. Casos: ${malos.slice(0, 5).join(" | ")}`);
     });
 
   },

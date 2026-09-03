@@ -116,6 +116,34 @@ module.exports = {
       t.igual(huerfanos, [], "llamada async a t.lanza/t.noLanza sin await: la prueba no puede fallar aunque el código esté roto");
     });
 
+    // v18.0.44 — EL AGUJERO GEMELO, Y ESTE SÍ ESTABA ABIERTO. Las dos reglas de arriba y la
+    // de abajo cubren `t.casoAsync` sin await y las suites que lo usan sin `async pruebas`.
+    // Faltaba la puerta de al lado: `t.caso("…", async () => { … })`. `t.caso` llama a `fn()`
+    // de forma SÍNCRONA y suma un acierto en el acto; una función async devuelve una promesa
+    // ahí mismo, así que la prueba se cuenta como pasada ANTES de ejecutar una sola
+    // afirmación — y sigue verde con el código completamente roto.
+    //
+    // Encontradas CINCO en el banco al escribir esta regla, cuatro de ellas anteriores:
+    // tres de `atheneaAutoLogin` (suite 18) y —la peor— la de inyección de atributos en
+    // `openLaboratoriosModal` (suite 31), una prueba de SEGURIDAD que llevaba tiempo sin
+    // comprobar nada. Convertidas a `await t.casoAsync`, las cuatro pasan de verdad; se
+    // verificó rompiendo a propósito la afirmación de la de seguridad, que ahora sí cae.
+    t.caso("ninguna prueba se declara con t.caso(..., async ...) — se contaría como pasada sin ejecutar una sola afirmación", () => {
+      const huecas = [];
+      for (const f of suites) {
+        const src = fs.readFileSync(path.join(dir, f), "utf8");
+        src.split("\n").forEach((linea, i) => {
+          const limpia = linea.replace(/\/\/.*$/, "");
+          // `t.caso(` exacto —nunca `t.casoAsync(`— seguido en la misma línea de una
+          // función asíncrona como segundo argumento.
+          if (!/\bt\.caso\s*\([^)]*,\s*async\b/.test(limpia)) return;
+          if (/\bt\.casoAsync\s*\(/.test(limpia)) return;
+          huecas.push(f + ":" + (i + 1) + "  " + limpia.trim().slice(0, 90));
+        });
+      }
+      t.igual(huecas, [], "t.caso con función async: la prueba se cuenta como pasada antes de comprobar nada — use await t.casoAsync");
+    });
+
     t.caso("todo t.casoAsync se invoca con await — si no, sus aserciones caen fuera de la cuenta", () => {
       const huerfanos = [];
       for (const f of suites) {

@@ -59,6 +59,58 @@ module.exports = {
       t.cierto(hayQuarantine, "Debe aislar el payload malformado en vgl_quarantine_* para auditoría forense");
     });
 
+    // v18.0.87 — HALLAZGO DE ENJAMBRE #39. Antes, un vgl_cfg corrupto se ponía en
+    // cuarentena y S volvía a los valores de FÁBRICA en silencio, pero la clave ROTA en
+    // localStorage nunca se reescribía — solo se curaba si el médico abría Ajustes y
+    // guardaba algo. En una instalación ya madura (todas las migraciones de una sola vez
+    // ya aplicadas) ninguna de ellas repara esto. La autorreparación corre al CARGAR el
+    // script (antes de boot()), así que se prueba con un cargar() fresco y vgl_cfg
+    // corrupto desde el arranque — mismo escenario que la reproducción del hallazgo.
+    t.caso("REGRESIÓN — un vgl_cfg corrupto se autorrepara al cargar, no se queda roto para siempre (hallazgo #39)", () => {
+      const cCorrupto = cargar({
+        silencioso: true,
+        almacen: {
+          vgl_cfg: '{"tamanoLetra":"muygrande","excluir":["vdrl"',   // truncado a propósito
+          // Instalación YA madura: todas las migraciones de una sola vez ya aplicadas —
+          // ninguna de ellas dispararía una reescritura de vgl_cfg por su cuenta.
+          vgl_v73: "1", vgl_v142_notif: "1", vgl_v154_notif: "1", vgl_v1420_estreno: "1",
+        },
+      });
+      t.igual(cCorrupto.api.__S.tamanoLetra, "normal",
+        "S cae a los valores de fábrica, como ya hacía antes (el médico pierde su letra muy grande)");
+      t.noLanza(() => JSON.parse(cCorrupto.env.storage.getItem("vgl_cfg")),
+        "pero la clave en localStorage YA NO se queda rota: se reescribe con algo interpretable");
+      t.igual(JSON.parse(cCorrupto.env.storage.getItem("vgl_cfg")).tamanoLetra, "normal",
+        "reescrita con el mismo valor sano que S está usando ahora mismo — antes seguía siendo el string truncado para siempre");
+      const hayCuarentena = Object.keys(cCorrupto.env.almacen).some((k) => k.startsWith("vgl_quarantine_vgl_cfg_"));
+      t.cierto(hayCuarentena, "y el original roto se conserva en cuarentena, como siempre — la reparación no lo borra sin dejar rastro");
+    });
+
+    t.caso("REGRESIÓN — con vgl_cfg SANO, cargar() no lo toca ni crea cuarentena (hallazgo #39)", () => {
+      const cSano = cargar({
+        silencioso: true,
+        almacen: { vgl_cfg: JSON.stringify({ tamanoLetra: "grande" }), vgl_v73: "1", vgl_v142_notif: "1", vgl_v154_notif: "1", vgl_v1420_estreno: "1" },
+      });
+      t.igual(cSano.api.__S.tamanoLetra, "grande", "un ajuste real y sano se respeta");
+      const hayCuarentena = Object.keys(cSano.env.almacen).some((k) => k.startsWith("vgl_quarantine_vgl_cfg_"));
+      t.falso(hayCuarentena, "sin corrupción, no se pone nada en cuarentena ni se reescribe de más");
+    });
+
+    // El aviso en pantalla depende de #vgl-toasts (buildOverlay()), que el DOM simulado del
+    // arnés no monta por completo sin traer de vuelta el resto de la UI (mismo límite que
+    // suite_42 ya documenta para _renderToast). Se fija por inspección de fuente: que el
+    // aviso se dispare DESPUÉS de buildOverlay(), condicionado a la corrupción detectada.
+    t.caso("REGRESIÓN — boot() avisa de la configuración reiniciada DESPUÉS de montar #vgl-toasts, no antes (hallazgo #39)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iniBoot = src.indexOf("function boot()");
+      const cuerpoBoot = src.slice(iniBoot, src.indexOf("\n  function ", iniBoot + 10));
+      const iBuildOverlay = cuerpoBoot.indexOf("buildOverlay();");
+      const iAviso = cuerpoBoot.indexOf("if (_vglCfgCorrupto)");
+      t.cierto(iBuildOverlay >= 0 && iAviso > iBuildOverlay,
+        "el aviso de configuración reiniciada vive DESPUÉS de buildOverlay(): antes #vgl-toasts no existe y el aviso se perdería, igual que ya le pasó al aviso de festivos (hallazgo #32)");
+      t.cierto(/showToast\("AMBAR", "Configuración reiniciada"/.test(cuerpoBoot), "y de verdad llama a showToast cuando corresponde");
+    });
+
     t.caso("R3.8: safeReadJSON con clave inexistente retorna default sin crear cuarentena", () => {
       const res = A.safeReadJSON("vgl_no_existe_absolutamente", 999);
       t.igual(res, 999);
@@ -324,5 +376,63 @@ module.exports = {
       const r = cVacio.api.injectLabsIntoCronicos([], "");
       t.igual(r.count, 0, "No debe diligenciar ninguna casilla si no hay paciente");
     });
+
+    // =====================================================================
+    // v18.0.27 — EL ABORTO QUE EL COMENTARIO DE v11.0.1 AFIRMA QUE EXISTE, ESCRITO DE VERDAD
+    //
+    // Ese comentario dice, textualmente: «Sin valores fabricados: el "07:00:00" y sobre todo
+    // el agendaId "282531" estaban cableados, de modo que un turno sin datos habría citado al
+    // paciente en una agenda arbitraria. Ahora, si falta cualquiera de los dos, SE ABORTA.»
+    // No había ningún aborto.
+    //
+    // Si el turno de ObtenerTurnosPorFecha no trae AgendaId / agendaId / id —el escenario que
+    // el comentario dice cubrir, y que ya ocurrió una vez con hora/Hora en la v12.3.31 cuando
+    // AppCita renombró un campo— `agendaId` quedaba `undefined` y se interpolaba TAL CUAL en
+    // la URL: se hacía la escritura REAL contra AppCita con «AgendaId=undefined». Si AppCita
+    // respondía 200 con error:false, el script daba la cita por creada, devolvía {ok:true} y
+    // ADEMÁS le mandaba al paciente un SMS citándolo a una toma cuya agenda no existe. El
+    // paciente se presenta al laboratorio y no hay cita.
+    //
+    // Cuarto comentario de esta jornada que promete una red que no está (v18.0.13 ×2,
+    // v18.0.19, v18.0.26).
+    // =====================================================================
+    await t.casoAsync("v18.0.27: un turno sin AgendaId aborta — no se escribe en AppCita ni se cita al paciente", async () => {
+      const llamadas = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        const u = String(o.url);
+        llamadas.push(u);
+        if (u.includes("ObtenerTurnosPorFecha")) {
+          // El turno llega SIN identificador de agenda: ni AgendaId, ni agendaId, ni id.
+          return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ data: [{ hora: "07:00:00" }] }) });
+        }
+        return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ error: false }) });
+      }});
+
+      const r = await c.api.apiLaboratorioAgendarAuto("5150076", "2026-09-10", "07:00:00", "3001234567");
+      t.falso(r && r.ok, "no se puede dar por creada una cita cuya agenda no se sabe cuál es");
+      t.falso(llamadas.some((u) => u.includes("AgendarCita")),
+        "y sobre todo: NO se llega a la escritura real contra AppCita con AgendaId=undefined");
+      t.falso(llamadas.some((u) => /AgendaId=undefined/.test(u)),
+        "en ninguna URL puede viajar un identificador de agenda inventado");
+    });
+
+    await t.casoAsync("v18.0.27: y el camino normal sigue agendando cuando el turno SÍ trae su agenda", async () => {
+      const llamadas = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        const u = String(o.url);
+        llamadas.push(u);
+        if (u.includes("ObtenerTurnosPorFecha")) {
+          return o.onload && o.onload({ status: 200,
+            responseText: JSON.stringify({ data: [{ hora: "07:00:00", AgendaId: 282531 }] }) });
+        }
+        return o.onload && o.onload({ status: 200, responseText: JSON.stringify({ error: false }) });
+      }});
+
+      await c.api.apiLaboratorioAgendarAuto("5150076", "2026-09-10", "07:00:00", "3001234567");
+      const book = llamadas.find((u) => u.includes("AgendarCita"));
+      t.cierto(!!book, "con AgendaId real sí se llega a agendar: no se sobre-corrigió");
+      t.cierto(/AgendaId=282531/.test(String(book)), "y viaja el identificador que trajo el turno, no uno inventado");
+    });
+
   }
 };

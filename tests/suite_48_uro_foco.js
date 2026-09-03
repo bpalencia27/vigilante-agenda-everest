@@ -1,3 +1,5 @@
+// v18.0.111 — el arnés, para las pruebas que necesitan un contexto propio (C10).
+const { cargar } = require("./harness");
 // =====================================================================
 //  SUITE 48 — Uroanálisis (ITU vs bacteriuria), foco clínico,
 //             banderas de educación y alerta de triglicéridos
@@ -722,5 +724,60 @@ module.exports = {
       t.igual((src.match(/const abrir = panel\.style\.display === "none";/g) || []).length, 1,
         "el conmutador vive en UN solo sitio: dos copias es como se coló el bug de la v14.6.0");
     });
+    // =====================================================================
+    // v18.0.111 (S+ flujo, C10) — «¿Tiene síntomas urinarios?» (decisión del médico, 02-sep)
+    // =====================================================================
+    t.caso("v18.0.111 (C10): se pregunta por síntomas urinarios SOLO con parcial sugestivo, sin respuesta vigente y fuera del embarazo", () => {
+      t.cierto(api.mtrDebePreguntarUroSintomas({ sugestivo: true }, null), "parcial sugestivo sin respuesta: se pregunta");
+      t.falso(api.mtrDebePreguntarUroSintomas({ sugestivo: false, bacteriuria: true }, null), "bacteriuria sin piuria (no sugestivo): la respuesta no cambia la conducta, no se pregunta");
+      t.falso(api.mtrDebePreguntarUroSintomas({ sugestivo: true }, { v: false, ts: Date.now() }), "ya respondido y vigente: se calla");
+      t.falso(api.mtrDebePreguntarUroSintomas({ sugestivo: true, embarazo: true }, null), "en embarazo la bacteriuria se trata siempre: no hace falta preguntar");
+      t.falso(api.mtrDebePreguntarUroSintomas(null, null), "sin uroanálisis no hay pregunta");
+      const q = api.mtrPreguntaUroSintomas({ sugestivo: true, criterios: ["nitritos (+)"] });
+      t.igual(q.clave, "uroSintomas", "clave del registro");
+      t.igual(q.severidad, "alta", "alta: la respuesta decide entre urocultivo y no tratar");
+      t.cierto(/síntomas urinarios/.test(q.etiqueta) && /disuria/.test(q.etiqueta), "la pregunta nombra los síntomas");
+      t.cierto(Array.isArray(q.afirman) && /nitritos/.test(q.afirman[0].detalle) && Array.isArray(q.niegan), "fuentes en el formato del modal, con los criterios del parcial");
+      t.igual(q.vigenciaDias, 7, "y declara su vigencia de 7 días");
+    });
+
+    t.caso("v18.0.111 (C10): la respuesta llega al motor (PROBABLE ITU / BACTERIURIA ASINTOMÁTICA) y caduca a los 7 días", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "123123123";
+      t.igual(c.api._uroSintomasConfirmados(doc), null, "sin respuesta: null (el motor pedirá confirmar)");
+      c.api._vglConfirmacionGuardar(doc, "uroSintomas", true);
+      t.igual(c.api._uroSintomasConfirmados(doc), true, "respondió que sí");
+      const h = { nitritos: "POSITIVO", leucocitos: "15-20 x campo" };
+      t.igual(c.api.mtrEvaluarUroanalisis(h, c.api._uroSintomasConfirmados(doc), null).estado, "PROBABLE ITU", "con síntomas: PROBABLE ITU (antes: REQUIERE SÍNTOMAS para siempre)");
+      c.api._vglConfirmacionGuardar(doc, "uroSintomas", false);
+      t.igual(c.api.mtrEvaluarUroanalisis(h, c.api._uroSintomasConfirmados(doc), null).estado, "BACTERIURIA ASINTOMÁTICA", "sin síntomas: bacteriuria asintomática, no se trata");
+      const hoy = Date.now();
+      t.cierto(!!c.api._vglConfirmacionVigente(doc, "uroSintomas", 7, hoy + 6 * 86400000), "a los 6 días sigue viva");
+      t.igual(c.api._vglConfirmacionVigente(doc, "uroSintomas", 7, hoy + 8 * 86400000), null, "a los 8 días caducó: se vuelve a preguntar");
+    });
+
+    t.caso("v18.0.111 (C10): la pregunta entra por el reconciliador con parcial sugestivo y se calla en cuanto el médico responde", () => {
+      const cE = cargar({ silencioso: true });
+      const dE = cE.env.doc;
+      const gebPrevE = dE.getElementById ? dE.getElementById.bind(dE) : () => null;
+      dE.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrevE(id)));
+      dE.querySelectorAll = (sel) => (sel === ".text-muted"
+        ? [{ textContent: "CC 11112222", closest: () => null }]
+        : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]);
+      cE.api.mtrCacheResumenGuardar("11112222", { factores: { sexo: "M", edad: 60 }, uroanalisis: { sugestivo: true, bacteriuria: true, criterios: ["nitritos (+)"], estado: "REQUIERE SÍNTOMAS" } });
+      let claves = cE.api.mtrReconciliarAhora("11112222", dE).frenan.map((x) => x.clave);
+      t.cierto(claves.indexOf("uroSintomas") >= 0, "parcial sugestivo: la pregunta está en la escalera");
+      cE.api._vglConfirmacionGuardar("11112222", "uroSintomas", true);
+      claves = cE.api.mtrReconciliarAhora("11112222", dE).frenan.map((x) => x.clave);
+      t.igual(claves.indexOf("uroSintomas"), -1, "respondida: no vuelve a salir");
+      cE.api.mtrCacheResumenGuardar("33334444", { factores: { sexo: "M", edad: 60 }, uroanalisis: { sugestivo: false, bacteriuria: false, estado: "SIN HALLAZGOS" } });
+      dE.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 33334444", closest: () => null }] : [{ textContent: "Marcaciones: HTA", innerText: "Marcaciones: HTA" }]);
+      claves = cE.api.mtrReconciliarAhora("33334444", dE).frenan.map((x) => x.clave);
+      t.igual(claves.indexOf("uroSintomas"), -1, "parcial limpio: no se pregunta");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.igual((src.match(/uroSintomas: _uroSintomasConfirmados\(apt && apt\.doc_id\)/g) || []).length, 1, "el resumen clínico recibe la respuesta vigente (antes: uroSintomas: null fijo)");
+      t.igual((src.match(/resumen\._uroSintomas = _uroSintomasConfirmados\(apt && apt\.doc_id\)/g) || []).length, 1, "y el insumo que sobrevive a la reclasificación también");
+    });
+
   },
 };

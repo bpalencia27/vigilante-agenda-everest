@@ -6,7 +6,7 @@ const path = require("path");
 
 module.exports = {
   nombre: "Red de seguridad remota, Kill-Switch y Canario (R5.1, R5.3)",
-  cubre: ["emergencyTeardown", "checkVersionMinimum"],
+  cubre: ["emergencyTeardown", "checkVersionMinimum", "_mostrarAvisoPausaClinica"],
 
   async pruebas(t, api, env, cargar) {
 
@@ -252,6 +252,47 @@ module.exports = {
       c.api.checkVersionMinimum();
 
       t.falso(c.api.__state.disabledFeatures.has("moduloExperimental"), "canary habilitó la característica para eq-piloto-01");
+    });
+
+    // =================================================================
+    //  v18.0.53 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  EL KILL-SWITCH SE ACTIVABA EN SILENCIO TOTAL.
+    //
+    //  El médico usa «modo oculto» (Ctrl+Shift+V) para trabajar sin la interfaz del
+    //  Vigilante «sin apagar su trabajo de fondo» — es la promesa explícita de esa
+    //  función, y el estado sobrevive recargas por diseño. Si el consultorio dispara el
+    //  kill-switch remoto con el modo oculto encendido, `emergencyTeardown` para el reloj
+    //  y borra la interfaz… y el ÚNICO aviso que lo delata (el cartel rojo de Pausa de
+    //  seguridad) lo escondía nuestra propia hoja de estilos, porque su id estaba dentro
+    //  del grupo que el modo oculto apaga.
+    //
+    //  Medido en Chromium con el CSS real (tools/verificar_pausa_modo_oculto.js): el
+    //  cartel se pintaba sin la clase y desaparecía con ella.
+    //
+    //  El propio comentario de ese bloque de CSS ya tenía escrita la regla, dos líneas más
+    //  arriba: «los sonidos críticos de fraude NO se apagan: son seguridad, no
+    //  decoración». El cartel del kill-switch es exactamente eso.
+    // =================================================================
+    t.caso("v18.0.53 — el cartel del kill-switch es inmune al modo oculto (por diseño, en la hoja)", () => {
+      const fs2 = require("fs"), path2 = require("path");
+      const src = fs2.readFileSync(path2.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/body\.vgl-modo-oculto #vgl-pausa-clinica\b/.test(src),
+        "el aviso de Pausa de seguridad no puede estar en la lista que el modo oculto esconde");
+      // Y el modo oculto tiene que seguir escondiendo lo que sí es interfaz: si esta
+      // comprobación cae, es que se vació la lista entera en vez de sacar un id.
+      t.cierto(/body\.vgl-modo-oculto #vgl-root\b/.test(src),
+        "el modo oculto sigue escondiendo el panel: no se rompió lo que sí debía seguir");
+    });
+
+    t.caso("v18.0.53 — y el kill-switch apaga el modo oculto: le gana a una preferencia de interfaz", () => {
+      // Segunda capa, y no sobra: si mañana alguien añade otra regla que esconda cosas en
+      // modo oculto, este aviso ya no depende de que se acuerde de excluirlo.
+      const c = cargar({ silencioso: true });
+      c.env.doc.body.classList.add("vgl-modo-oculto");
+      t.cierto(c.env.doc.body.classList.contains("vgl-modo-oculto"), "montaje: el modo oculto está encendido");
+      c.api._mostrarAvisoPausaClinica("Prueba");
+      t.falso(c.env.doc.body.classList.contains("vgl-modo-oculto"),
+        "al pintar el aviso de Pausa de seguridad, el modo oculto se apaga");
     });
 
   }

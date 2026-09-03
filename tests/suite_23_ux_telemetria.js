@@ -94,7 +94,12 @@ module.exports = {
       c.api.__S.reporte = false;
       const d = c.api.repDiagnostico();
       const p1 = d[0];
-      t.cierto(p1.paso.includes("Interruptor"), "la primera puerta es el interruptor");
+      // v18.0.6 — v17.58.2 renombró esta puerta ("Interruptor de envío" -> "Estado del
+      // envío"), porque desde esa versión la telemetría es obligatoria y el apagado ya no
+      // es un interruptor que el médico pueda tocar, sino un estado imposible por interfaz.
+      // Lo que la prueba protege no es el rótulo: es que la PRIMERA puerta del embudo sea
+      // el estado del envío, y que diga sin rodeos que está apagado.
+      t.cierto(/env[ií]o|interruptor/i.test(p1.paso), "la primera puerta es el estado del envío: " + p1.paso);
       t.falso(p1.ok, "y está cerrada");
       t.cierto(/APAGADO/.test(p1.detalle), "con la causa en claro");
       t.cierto(d.length >= 6, "el embudo completo se revisa igual (" + d.length + " puertas)");
@@ -242,6 +247,101 @@ module.exports = {
       const w = JSON.parse(c.env.win.localStorage.getItem("vgl_ux"));
       t.igual(w.acciones["error.js"], 9, "pero el CONTADOR sí ve los nueve");
       t.igual(w.acciones["error.distintos"], 1, "y sabe que es UNA sola falla, no nueve");
+    });
+
+    // =====================================================================
+    // v18.0.66 — EL CANAL DE ERRORES LLEVABA MUERTO DESDE LA v17.2.0
+    // Encontrado en el export del tablero que trajo el médico el 1-sep: la hoja `error` no
+    // tiene NI UNA fila por encima de la v17.2.0, y el 27-ago seis equipos en v18.0.4
+    // emitieron 81 `error.js` que nunca llegaron. No era el transporte —`entorno`,
+    // `fraude` y `prueba` sí llegan desde v18 por la misma cola—: la fila de `error` era la
+    // única que mandaba un campo SIN COLUMNA en la hoja (`veces`), añadido en la v17.1.0,
+    // la versión exacta donde se corta el historial.
+    //
+    // Esta regla no mira `veces`: fija el CONTRATO. La fila que sale a la red solo puede
+    // llevar campos que la hoja sepa escribir. Así el próximo campo nuevo se cae aquí y no
+    // en silencio durante medio año.
+    // =====================================================================
+    t.caso("v18.0.66: la fila de error solo lleva campos que la hoja del tablero tiene como columna", () => {
+      const c = cargar(cfgRed);
+      // Las columnas reales de la hoja `error`, tomadas del export del propio médico.
+      const COLUMNAS = ["token", "equipo", "ver", "evento", "ts", "dia", "lote",
+        "origen", "msg", "donde", "migas"];
+      c.api.reportarError("js", "TypeError: algo se rompió", "vigilante_agenda.user.js:12345:7");
+      const fila = cola(c).filter((f) => f.evento === "error")[0];
+      t.cierto(!!fila, "la fila se encola");
+      const sobran = Object.keys(fila).filter((k) => COLUMNAS.indexOf(k) < 0);
+      t.igual(sobran.length, 0,
+        "ningún campo sin columna: el receptor responde «err» y la fila se queda en la cola para siempre. Sobran: " + sobran.join(", "));
+    });
+
+    t.caso("v18.0.66: la cuenta de repeticiones no se pierde — se dobla dentro del mensaje", () => {
+      const c = cargar(cfgRed);
+      for (let i = 0; i < 4; i++) c.api.reportarError("js", "algo falló", "vigilante.user.js:1");
+      const filas = cola(c).filter((f) => f.evento === "error");
+      t.igual(filas.length, 1, "sigue siendo UNA fila por huella");
+      t.cierto(/algo falló/.test(filas[0].msg), "el mensaje real sigue ahí");
+      // La primera vez que viaja la huella `veces` vale 1, así que no se prefija nada; lo
+      // que importa es que el campo suelto ya no existe y que el mensaje admite el conteo.
+      t.falso(Object.prototype.hasOwnProperty.call(filas[0], "veces"),
+        "el campo suelto que la hoja no sabe escribir ya no viaja");
+    });
+
+    // v18.0.66 — BLINDAJE 2. `repFlush` rompía el bucle al primer fallo. Correcto con el
+    // panel caído (no tiene sentido insistir con 80 filas), pero si el servidor RECHAZA una
+    // fila concreta —que es lo que le pasó a `error` durante medio año— esa fila falla
+    // siempre, se queda la primera, y TODO lo que va detrás no sale nunca. Un solo defecto
+    // en un tipo de evento apagaba el canal entero.
+    await t.casoAsync("v18.0.66: una fila que el servidor rechaza siempre no puede callar el resto de la cola", async () => {
+      let rechazadas = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const cuerpo = String(o.data || "");
+          // El receptor responde «err» con HTTP 200 cuando no puede escribir la fila: eso
+          // es exactamente lo que `repPost` trata como fallo desde la v17.49.0.
+          if (cuerpo.indexOf('"error"') >= 0) { rechazadas++; if (o.onload) o.onload({ status: 200, responseText: "err", finalUrl: "" }); return; }
+          if (o.onload) o.onload({ status: 200, responseText: "ok", finalUrl: "" });
+        },
+      });
+      c.api.__S.reporte = true;
+      c.api.reportarError("js", "fila envenenada", "vigilante.user.js:1");
+      c.api.reportar("entorno", { nav: "Chrome", so: "Windows 10/11", zona: "America/Bogota", pantalla: "1920x1080", gestor: "Tampermonkey" });
+
+      for (let i = 0; i < 4; i++) { await c.api.repFlush(); await esperar(5); }
+
+      const q = cola(c);
+      t.cierto(rechazadas >= 3, "se reintentó la fila mala varias veces antes de rendirse: obtuvo " + rechazadas);
+      t.falso(q.some((f) => f && f.evento === "entorno"),
+        "y la fila BUENA que iba detrás sí salió: antes se quedaba encolada para siempre");
+      t.falso(q.some((f) => f && f.evento === "error"),
+        "la fila envenenada se descarta a los tres intentos en vez de atascar la cola");
+    });
+
+    // Se prueba por CONDUCTA, mirando lo que de verdad sale por la red. La primera versión
+    // de esta prueba llamaba a `_repFilaLimpia` directamente y por eso la mutación 177 —que
+    // quitaba su uso en `repPost`— no la rompía: la trampa de alcanzabilidad de siempre.
+    await t.casoAsync("v18.0.66: nada interno de la cola se cuela en la fila que sale a la red", async () => {
+      const enviados = [];
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          enviados.push(String(o.data || ""));
+          // Se rechaza para que la fila acumule `_intentos` y siga en la cola: es
+          // justamente el estado en el que la contabilidad interna existe y podría viajar.
+          if (o.onload) o.onload({ status: 200, responseText: "err", finalUrl: "" });
+        },
+      });
+      c.api.__S.reporte = true;
+      c.api.reportarError("js", "algo se rompió", "vigilante.user.js:1");
+      await c.api.repFlush(); await esperar(5);
+      await c.api.repFlush(); await esperar(5);
+
+      t.cierto(enviados.length >= 2, "se intentó entregar más de una vez: obtuvo " + enviados.length);
+      const conIntentos = cola(c).some((f) => f && f._intentos > 0);
+      t.cierto(conIntentos, "la fila SÍ lleva su contabilidad de intentos en la cola");
+      t.falso(enviados.some((cuerpo) => cuerpo.indexOf("_intentos") >= 0),
+        "pero esa contabilidad NUNCA sale a la red: sería otro campo que la hoja no sabe escribir");
     });
 
     t.caso("reportarError: nueve fallos DISTINTOS mandan nueve filas — ya no se tapan entre ellos", () => {
@@ -1212,6 +1312,43 @@ module.exports = {
       t.igual(c.api._rageEtiqueta(null), "generico", "y con nada, no lanza");
     });
 
+    // v18.0.63 — HALLAZGO DEL ENJAMBRE #27 (01-sep), CONFIRMADO en el export real del
+    // tablero del 1-sep: `rum.self.inp.detalle.host.needs_imp` = 7 — interacciones de
+    // NUESTRA interfaz (`rum.self.*`) atribuidas a Everest. En un <svg> (hay 45 íconos así,
+    // varios dentro de botones .vgl-*) `className` es un SVGAnimatedString, no un string:
+    // `String(...)` daba "[object SVGAnimatedString]", que nunca empieza por "vgl-", así
+    // que un ícono NUESTRO caía en "host" y el rastro de la lentitud se perdía. Es justo el
+    // error de atribución que el comentario de este bloque dice evitar.
+    t.caso("v18.0.63: un icono SVG NUESTRO no se reporta como si fuera de Everest", () => {
+      const c = cargar({ silencioso: true });
+      // Así se ve un <svg class="vgl-ico"> de verdad: getAttribute devuelve el string real,
+      // className NO es un string.
+      const svgNuestro = {
+        className: { baseVal: "vgl-ico", animVal: "vgl-ico" },
+        getAttribute: (k) => (k === "class" ? "vgl-ico" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgNuestro), "otro", "es nuestro, aunque sea un SVG: nunca 'host'");
+
+      // Y el SVG de Everest sigue siendo de Everest: el arreglo no puede reclamar lo ajeno.
+      const svgAjeno = {
+        className: { baseVal: "ng-star-inserted", animVal: "ng-star-inserted" },
+        getAttribute: (k) => (k === "class" ? "ng-star-inserted" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgAjeno), "host", "un SVG de Everest se sigue agrupando como host");
+
+      // Un SVG del catálogo conserva su nombre exacto, no cae en el cajón de "otro".
+      const svgCatalogo = {
+        className: { baseVal: "vgl-dock-btn", animVal: "vgl-dock-btn" },
+        getAttribute: (k) => (k === "class" ? "vgl-dock-btn" : null),
+      };
+      t.igual(c.api._rageEtiqueta(svgCatalogo), "dock-btn");
+
+      // Contención: el camino de siempre (className string, sin getAttribute) no se rompe.
+      t.igual(c.api._rageEtiqueta({ className: "vgl-tip-btn algo-mas" }), "tip-btn");
+      t.igual(c.api._rageEtiqueta({ className: "form-control ng-pristine" }), "host");
+      t.igual(c.api._rageEtiqueta({}), "generico");
+    });
+
     t.caso("_detectarRageClick: tres clics seguidos en el mismo sitio anotan la friccion UNA vez", () => {
       const c = cargar({ silencioso: true });
       c.api.__S.uxTelemetria = true;
@@ -1529,6 +1666,18 @@ module.exports = {
       c.api._repSello(true);
       t.cierto(!!ls.getItem("vgl_rep_last_err"),
         "el último fallo sobrevive a un éxito posterior: es historia, no estado");
+    });
+
+
+    // v18.0.108 — S+ robustez (B8): repBeacon mandaba la fila con sus campos internos (_intentos);
+    // el blindaje de v18.0.66 (_repFilaLimpia) solo estaba en repPost.
+    await t.casoAsync("v18.0.108 (S+ B8): repBeacon manda la fila LIMPIA, sin campos internos (_intentos), como repPost", async () => {
+      let cuerpo = null;
+      const c = cargar({ silencioso: true, fetch: async (u, o) => { cuerpo = o && o.body; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "ok", clone() { return this; } }; } });
+      t.cierto(c.api.repOn(), "montaje: el reporte está activo");
+      const fila = { token: "x", equipo: "eq-sint", ver: "18.0.108", evento: "ux", ts: "2026-09-02T10:00:00Z", dia: "2026-09-02", lote: "l1", _intentos: 2 };
+      t.cierto(c.api.repBeacon(fila), "el beacon sale");
+      t.cierto(!!cuerpo && !String(cuerpo).includes("_intentos") && String(cuerpo).includes("eq-sint"), "y el cuerpo no lleva _intentos (antes sí): " + String(cuerpo));
     });
 
   }

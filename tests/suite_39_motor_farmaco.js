@@ -289,6 +289,25 @@ module.exports = {
       t.igual(r, null);
     });
 
+    // v18.0.81 — HALLAZGO DE ENJAMBRE #33 (3 de 3 refutadores no lo tumbaron). Este POST es
+    // una consulta pura (lee medicamentos, no escribe nada) pero, sin __idempotent:true,
+    // _pageFetchJsonCore lo trataba como ESCRITURA: cero reintentos, y ni siquiera probaba
+    // la segunda vía (GM_xmlhttpRequest) ante un fallo transitorio de fetch — a diferencia
+    // de su hermano (el histórico de frecuencias, GET), que sí se recupera del mismo hipo.
+    await t.casoAsync("REGRESIÓN — un blip transitorio de fetch se recupera por GM_xmlhttpRequest, igual que su hermano GET (hallazgo #33)", async () => {
+      let llamadasGm = 0;
+      const c = cargar({
+        silencioso: true,
+        // El primer (y único) intento de fetch falla — la red del consultorio con un hipo.
+        fetch: async () => { throw new Error("red caída transitoria"); },
+        // La segunda vía SÍ responde: esto es lo que antes nunca se intentaba para este POST.
+        gmxhr: (o) => { llamadasGm++; o.onload({ status: 200, responseText: JSON.stringify(["LOSARTAN 50MG"]) }); },
+      });
+      const r = await c.api.mtrPedirMedicamentos(111);
+      t.igual(llamadasGm, 1, "con __idempotent:true, el fallo de fetch SÍ prueba la segunda vía — antes eran 0 llamadas");
+      t.igual(r, ["LOSARTAN 50MG"], "y el resultado real de esa segunda vía llega hasta el llamador, no null");
+    });
+
     await t.casoAsync("sin pacienteId no se pega al servidor siquiera", async () => {
       let n = 0;
       const c = cargar({
@@ -521,6 +540,59 @@ module.exports = {
       t.igual(r.motivo, "SIN_LISTA_DE_MEDICAMENTOS");
       t.igual(r.interacciones.length, 0);
       t.igual(r.avisos.length, 0);
+    });
+
+    // =================================================================================
+    //  v18.0.40 — CUANDO SÍ HAY ALGO QUE MOSTRAR, EL PIE SEGUÍA MINTIENDO (hallazgo L33460)
+    //
+    //  La cabecera de esta vista promete «el silencio SIEMPRE lleva motivo», y lo cumplía.
+    //  Faltaba el caso en que NO hay silencio: con n>0 el motivo colapsa a "OK" y con eso
+    //  desaparecía el único rastro de que la dosis renal no se había podido juzgar.
+    // =================================================================================
+    t.caso("v18.0.40: una sola interacción NO puede borrar el aviso de que no se juzgó ninguna dosis", () => {
+      const c2 = cargar({ silencioso: true });
+      const a2 = c2.api;
+      a2.__S.motorPortado = true;
+      const sinRenal = { tfgCkdEpi: null, tfgCockcroftGault: null };
+
+      // (A) Un solo fármaco: no hay hallazgos, y el aviso sale. Esto YA funcionaba.
+      const hA = a2.mtrRenderAvisosHtml(Object.assign({ medicamentos: ["METFORMINA 850 MG (TABLETA)"] }, sinRenal));
+      t.cierto(/Falta la función renal/.test(hA), "con un fármaco y sin hallazgos, el aviso sale");
+
+      // (B) Los mismos, más dos que disparan UNA interacción (calculable sin función renal).
+      const meds = ["METFORMINA 850 MG (TABLETA)", "LOSARTAN 50 MG (TABLETA)", "IBUPROFENO 400 MG (TABLETA)"];
+      const rB = a2.mtrAvisosFarmacologicos(Object.assign({ medicamentos: meds }, sinRenal));
+      t.igual(rB.motivo, "OK", "el motivo del conjunto colapsa a OK, que es correcto: algo se halló");
+      t.igual(rB.avisos.length, 0, "pero NO se evaluó ni una dosis renal");
+      t.igual(rB.motivoDosisRenal, "SIN_FUNCION_RENAL",
+        "y el motivo de la DOSIS viaja aparte, sin perderse en el colapso");
+
+      const hB = a2.mtrRenderAvisosHtml(Object.assign({ medicamentos: meds }, sinRenal));
+      t.cierto(/Falta la función renal/.test(hB),
+        "el aviso sigue saliendo aunque haya avisos que mostrar: antes desaparecía");
+      t.cierto(/NO se juzgó ninguna dosis/.test(hB), "y dice exactamente qué es lo que NO se hizo");
+      t.falso(/Calculado con la función renal de arriba/.test(hB),
+        "y el pie ya no afirma que se calculó con una función renal que no existe");
+      t.cierto(/No se pudo juzgar la dosis renal/.test(hB), "el pie dice la verdad");
+      // El aviso va ARRIBA de la LISTA, donde no hay forma de no verlo (misma decisión que
+      // la caja de cifras del Redactor, v17.14.0).
+      // La primera versión de esta aserción comparaba contra el pie y salió hueca: mover el
+      // aviso debajo de la lista pero encima del pie la seguía cumpliendo. Lo que importa es
+      // que vaya antes del PRIMER aviso pintado, no antes del cierre del bloque.
+      const iAvisoRenal = hB.indexOf("Falta la función renal");
+      const iPrimerPintado = Math.min.apply(null,
+        ["vgl-mtr-crit", "vgl-mtr-alto", "vgl-mtr-info"].map((c) => { const i = hB.indexOf(c); return i < 0 ? Infinity : i; }));
+      t.cierto(isFinite(iPrimerPintado), "hay al menos un aviso pintado con el que comparar");
+      t.cierto(iAvisoRenal < iPrimerPintado,
+        "el aviso de que no se juzgó la dosis va ANTES del primer aviso de la lista, no enterrado debajo");
+
+      // Contrapartida: CON función renal no debe aparecer ninguna de las dos frases nuevas.
+      const hC = a2.mtrRenderAvisosHtml({ medicamentos: meds, tfgCkdEpi: 25, tfgCockcroftGault: 24 });
+      t.falso(/Falta la función renal/.test(hC), "con TFG real no se avisa de nada que falte");
+      t.cierto(/Calculado con la función renal de arriba/.test(hC), "y el pie vuelve a ser el de siempre");
+      const rC = a2.mtrAvisosFarmacologicos({ medicamentos: meds, tfgCkdEpi: 25, tfgCockcroftGault: 24 });
+      t.cierto(rC.avisos.length >= 3,
+        "los MISMOS fármacos con TFG 25 sí producen avisos de dosis (" + rC.avisos.length + "): esa es la medida del daño");
     });
 
     // v17.6.28 — el panel de Medicamentos (mtrPanelMedicamentosHtml) nunca pasaba

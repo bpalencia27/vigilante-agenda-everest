@@ -18,6 +18,11 @@ const CSV_PILOTO = "CEDULA,TAMIZACION_VIH,ABANDONADOS_PES\n5150076,Susceptible,N
 function bufCSV() { return new TextEncoder().encode(CSV_PILOTO).buffer; }
 
 // Paquete v3 como el que deja pilotoGuardar en el almacén de Tampermonkey.
+// v18.0.134 — la fecha del paquete ya no puede ir quemada en 2020: desde el
+// arreglo A2 de la auditoría (2026-09-03) la caché piloto se purga cuando la
+// fecha de la cola es de hace más de 30 días, así que el fixture debe llevar
+// una fecha fresca calculada al vuelo (ayer en UTC: siempre dentro de la
+// ventana de 30 días sin importar la zona horaria del banco).
 function paqueteV3(extraMeta) {
   return JSON.stringify(Object.assign({
     v: 3,
@@ -25,7 +30,7 @@ function paqueteV3(extraMeta) {
     p: "5150076:0.1|300123:0",
     t: "5150076,300123,777",
     ab: "777",
-    date: "2020-05-05",
+    date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
     name: "BASE PILOTO.xlsx",
     mtime: "2026-08-01T10:00:00Z",
     fp: "BASE PILOTO.xlsx|2026-08-01T10:00:00Z",
@@ -122,11 +127,43 @@ module.exports = {
       t.igual(api.parseSpDocId("%E0%A4%A"), "");
     });
 
-    t.caso("spFallbackUrls: normaliza el id (llaves fuera, minúsculas) y da las DOS rutas de descarga", () => {
+    // v18.0.6 — el cambio de v18.0.5 (incidente del 31-ago: las dos rutas por ID seguían
+    // fallando con el vínculo regenerado) añadió una TERCERA vía por el GUID del vínculo de
+    // compartir, y se entregó SIN prueba: esta suite seguía exigiendo exactamente dos rutas
+    // y se puso roja al fusionar. Se fija la conducta real, y las dos mitades del `if`:
+    // con shareId configurado hay tres rutas, sin él siguen siendo las dos de siempre.
+    t.caso("spFallbackUrls: normaliza el id (llaves fuera, minúsculas) y da las rutas de descarga por ID", () => {
       const urls = api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}");
-      t.igual(urls.length, 2);
       t.igual(urls[0], SP_BASE + "/_api/web/GetFileById('" + PILOTO_GUID + "')/$value");
       t.igual(urls[1], SP_BASE + "/_layouts/15/download.aspx?UniqueId=" + PILOTO_GUID);
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: con shareId configurado añade la TERCERA vía, y solo esa", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = {
+        id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx",
+        shareId: "{2BD8F42A-F8F5-46E0-B2E1-B1D2E5FA5D4F}",
+      };
+      const urls = c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}");
+      t.igual(urls.length, 3, "las dos por UniqueId + la del vínculo de compartir");
+      t.igual(urls[2], SP_BASE + "/_api/web/GetFileById('2bd8f42a-f8f5-46e0-b2e1-b1d2e5fa5d4f')/$value",
+        "el shareId también se normaliza: llaves fuera y minúsculas");
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: SIN shareId la lista queda igual que antes (dos rutas)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = { id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx" };
+      t.igual(c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}").length, 2);
+    });
+
+    t.caso("v18.0.6 — spFallbackUrls: un shareId IGUAL al id no se repite como tercera ruta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__CONFIG.SP.respaldo = {
+        id: "{809A098B-69D1-44FE-9E51-B01F07290807}", name: "x.xlsx",
+        shareId: "809a098b-69d1-44fe-9e51-b01f07290807",
+      };
+      t.igual(c.api.spFallbackUrls("{809A098B-69D1-44FE-9E51-B01F07290807}").length, 2,
+        "pedir dos veces el mismo archivo no es un respaldo, es un intento perdido");
     });
 
     t.caso("pilotoId: el id configurado de fábrica, ya normalizado", () => {
@@ -419,11 +456,72 @@ module.exports = {
       t.igual(w.acciones["pym.fallback.red"], 1);
     });
 
-    await t.casoAsync("loadPymBaseDescarga: si las DOS rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
+    // =================================================================
+    //  v18.0.58 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido
+    //  con el arnés: LA TERCERA GUARDA, QUE FALTABA.
+    //
+    //  `loadPymBaseDescarga` comprueba `state.pymFile && !state.pymFallback` DOS veces
+    //  —antes y justo después de `readPym`— precisamente para no pisar un PyM real que
+    //  haya llegado mientras tanto. Pero `pilotoGuardar` empaqueta el índice con
+    //  `packPym`, que cede el hilo varias veces, y después de ESE await ya no se miraba.
+    //
+    //  Si en esa ventana `loadPymDiario` (cada 10 min, misma pestaña) termina de cargar el
+    //  archivo real de hoy, la base piloto vieja lo reemplaza — y encima `state.pymDia` se
+    //  vacía, así que el script vuelve a creer que la lista de hoy no ha llegado, y el
+    //  médico ve «Usando la base piloto (mientras llega la de hoy)»: falso, ya había
+    //  llegado. Puede consultar actividades desactualizadas sobre pacientes reales.
+    // =================================================================
+    await t.casoAsync("v18.0.58: si el PyM REAL de hoy llega mientras se guarda la piloto, la piloto NO lo pisa", async () => {
+      const cont = contadorNuevo("base_piloto.csv", "T-DESC");
+      const c = cargar({ silencioso: true, gmxhr: gmxhrPiloto(cont) });
+      c.ctx.TextDecoder = TextDecoder;
+      c.api.__CONFIG.SP.respaldo = { id: PILOTO_GUID, name: "base_piloto.csv" };
+
+      // La ventana de la carrera: `pilotoGuardar` escribe la copia con GM_setValue. Justo
+      // en ese instante se simula que la OTRA corrutina (loadPymDiario) terminó de aplicar
+      // el PyM real de hoy — que es exactamente lo que pasa en consultorio cuando el
+      // archivo de la sede aparece a media mañana.
+      const setOriginal = c.env.win.GM_setValue;
+      let yaSimulado = false;
+      c.env.win.GM_setValue = function (k, v) {
+        const r = setOriginal.apply(this, arguments);
+        if (k === "vgl_piloto" && !yaSimulado) {
+          yaSimulado = true;
+          const st = c.api.__state;
+          st.pym = new Map([["9999999", ["Tamización cardiometabólica"]]]);
+          st.pymTodos = new Set(["9999999"]);
+          st.pymFile = "Agenda_Dia_CMB_HOY.xlsx (PyM de hoy)";
+          st.pymFallback = false;
+          st.pymDia = c.api.todayStamp();
+        }
+        return r;
+      };
+
+      await c.api.loadPymBaseDescarga(true, null);
+
+      const st = c.api.__state;
+      t.cierto(yaSimulado, "la carrera se llegó a simular (control del escenario)");
+      t.falso(st.pymFallback, "la lista activa sigue siendo el PyM REAL de hoy, no la piloto");
+      t.igual(st.pymFile, "Agenda_Dia_CMB_HOY.xlsx (PyM de hoy)", "y con su nombre, no el de la piloto");
+      t.igual(st.pym.size, 1, "el paciente real no se perdió");
+      t.cierto(st.pym.has("9999999"), "es el del archivo de hoy");
+      t.igual(st.pymDia, c.api.todayStamp(),
+        "y el día NO se borra: si se borrara, el script volvería a creer que la lista de hoy no ha llegado");
+      // La copia en disco sí se guarda, y está bien: sirve para mañana. Lo que no puede
+      // pasar es aplicarla encima de la lista buena.
+      t.cierto(!!c.env.gm["vgl_piloto"], "la copia persistente de la piloto sí queda guardada");
+    });
+
+    await t.casoAsync("loadPymBaseDescarga: si TODAS las rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
       let intentos = 0;
       const c = cargar({ silencioso: true, gmxhr: (o) => { intentos++; o.onerror(); } });
       t.igual(await c.api.loadPymBaseDescarga(true, null), false);
-      t.igual(intentos, 2, "GetFileById y download.aspx, en ese orden, sin paralelismo");
+      // v18.0.6 — eran 2 hasta v18.0.4; v18.0.5 añadió la vía por shareId, que viene
+      // configurada de fábrica. Lo que esta prueba protege no es el número: es que se
+      // prueben EN ORDEN y de una en una (nunca en paralelo, que dispararía tres
+      // descargas de ~14 MB a la vez sobre la red de la IPS).
+      t.igual(intentos, c.api.spFallbackUrls(c.api.pilotoId()).length,
+        "una por cada ruta declarada, en orden y sin paralelismo");
       t.igual(c.api.__state.pymFile, "", "no debe quedar nada a medias");
     });
 
@@ -526,7 +624,7 @@ module.exports = {
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
       t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
-      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
+      t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Centinela PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
       c.api.spToast("segundo aviso", 0);
@@ -534,6 +632,28 @@ module.exports = {
       t.cierto(String(nodo.children[0].textContent).indexOf("segundo aviso") >= 0, "el texto se actualiza en el mismo aviso");
       c.api.dismissSpToast();
       t.falso(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe estar oculto");
+    });
+
+    // v18.0.75 — HALLAZGO DE ENJAMBRE #28. dismissSpToast programaba el remove() físico del
+    // nodo en un setTimeout de 260 ms sin guardar su id: si un aviso NUEVO llegaba dentro
+    // de esa ventana, spToast() reutilizaba el mismo nodo #vgl-sp y lo mostraba de nuevo,
+    // pero el remove() diferido de la llamada ANTERIOR seguía en pie y lo borraba igual —
+    // el aviso recién mostrado desaparecía del DOM sin ningún indicio de por qué.
+    await t.casoAsync("REGRESIÓN — un aviso nuevo dentro de la ventana de dismiss no lo borra el remove() diferido del anterior (hallazgo #28)", async () => {
+      const c = cargar({ silencioso: true });
+      c.api.spToast("progreso", 0);
+      const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
+      c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
+      // Se descarta el primero (programa el remove() diferido de 260 ms, capado a ~1 ms en
+      // el sandbox) y, ANTES de que ese remove() llegue a correr, llega el aviso final.
+      c.api.dismissSpToast();
+      c.api.spToast("resultado final", 0);
+      t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "el aviso final queda visible de inmediato");
+      // Se deja correr el bucle de eventos lo suficiente para que el remove() diferido del
+      // PRIMER dismiss, si sigue vivo, ya se haya disparado.
+      await dormir(30);
+      t.cierto(!!nodo._parent, "el nodo del aviso final sigue colgado del body: el remove() de la llamada anterior no debe alcanzarlo");
+      t.cierto(String(nodo.children[0].textContent).indexOf("resultado final") >= 0, "y sigue mostrando el mensaje correcto");
     });
 
     await t.casoAsync("spToast: con duración se autodescarta solo; dismissSpToast sin toast no lanza", async () => {

@@ -73,6 +73,19 @@ module.exports = {
       t.falso(api.isPending("x".repeat(40)), "un texto largo se descarta por coste");
     });
 
+    // v18.0.85 — HALLAZGO DE ENJAMBRE #37 (3 de 3 refutadores no lo tumbaron). El descarte
+    // barato por longitud medía la cadena CRUDA: relleno manual, pegado desde otra celda o
+    // Alt+Enter repetidos en Excel pueden inflar una celda real y corta por encima del
+    // límite de 32 sin agregar dato clínico, y la función la descartaba en silencio.
+    t.caso("REGRESIÓN — isPending recorta ANTES de medir la longitud, no después (hallazgo #37)", () => {
+      const conPadding = "   tamizar con ccu                    ";   // 38 sin recortar, 15 recortada
+      t.cierto(conPadding.length > 32, "el relleno por sí solo ya supera el límite: la prueba tiene sentido");
+      t.cierto(api.isPending(conPadding), "antes se descartaba por la longitud SIN recortar — el valor real sigue pendiente");
+      t.cierto(api.isPending("pendiente".padStart(20, " ").padEnd(20, " ")), "lo mismo con relleno a ambos lados");
+      // Y el descarte por longitud sigue funcionando cuando el contenido ÚTIL de verdad es largo.
+      t.falso(api.isPending("  " + "x".repeat(40) + "  "), "un texto realmente largo, con o sin relleno, se sigue descartando");
+    });
+
     // ---------- esSi: abandono del programa cardiovascular ----------
     t.caso("esSi solo acepta sí exacto", () => {
       t.cierto(api.esSi("Si"));
@@ -104,6 +117,19 @@ module.exports = {
     });
     t.caso("friendly arregla los encabezados en mayúsculas", () => {
       t.igual(api.friendly("OTRA_COSA_RARA"), "Otra cosa rara");
+    });
+    // v18.0.92 — hallazgo #44 del enjambre: "Último VIH"/"Última SOMF" están en el
+    // diccionario con capitalización MIXTA específica, y el segundo intento de friendly()
+    // solo compara contra TODO-MAYÚSCULAS — cualquier otra variante caía al respaldo
+    // crudo, sin traducir, en la única actividad de ETS que el propio código señala como
+    // la que se conserva siempre visible.
+    t.caso("REGRESIÓN — friendly traduce 'Último VIH' venga como venga capitalizado (hallazgo #44)", () => {
+      t.igual(api.friendly("Último VIH"), "VIH", "la forma exacta del diccionario sigue funcionando");
+      t.igual(api.friendly("Último Vih"), "VIH", "antes: se quedaba crudo, sin traducir");
+      t.igual(api.friendly("ÚLTIMO VIH"), "VIH", "antes: 'ÚLTIMO VIH' no calzaba con la clave mixta 'Último VIH'");
+      t.igual(api.friendly("ultimo vih"), "VIH", "minúsculas también");
+      t.igual(api.friendly("Última SOMF"), "SOMF (sangre oculta en materia fecal)");
+      t.igual(api.friendly("Ultima somf"), "SOMF (sangre oculta en materia fecal)", "mismo arreglo para SOMF");
     });
     t.caso("activityLabel añade el detalle cuando lo hay", () => {
       t.igual(api.activityLabel("TAMIZACION_VIH", "Susceptible"), "VIH");
@@ -246,6 +272,98 @@ module.exports = {
     // lo AFIRMA — justo lo opuesto de lo que decía.
     const RE_FUMA = /\bfumador|tabaquism|\bfuma\b/i;
     const RE_HTA = /\bhta\b|hipertens/i;
+    // =================================================================
+    //  v18.0.57 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  UNA NEGACIÓN SE LLEVABA POR DELANTE TODO LO QUE COMPARTIERA FRASE CON ELLA.
+    //
+    //  La lista vieja de negadores se probaba como substring sobre la frase ENTERA, sin
+    //  mirar dónde estaba el negador respecto del término clínico — y corría ANTES del
+    //  arreglo por proximidad de la v18.0.17, cortocircuitándolo.
+    //
+    //  El daño no es cosmético en ninguna de las dos direcciones: una discrepancia de
+    //  severidad ALTA FRENA la apertura del Panel del paciente hasta que el médico
+    //  responda un cuadro sobre un dato que él mismo acaba de afirmar; y leer como NO
+    //  diabético a un diabético decide qué tabla de vigencias rige y baja el riesgo
+    //  cardiovascular.
+    // =================================================================
+    const RE_DIAB = /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i;
+    t.caso("v18.0.57: negar UN hecho no niega los demás de la misma frase", () => {
+      const f = api.mtrTextoOpinaSobre;
+      // Las cinco frases con las que el enjambre lo reprodujo, todas normales en una historia.
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_DIAB), true,
+        "la diabetes está AFIRMADA: lo que se niega es el tabaquismo");
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_HTA), true, "y la hipertensión también");
+      t.igual(f("Niega tabaquismo, es diabético e hipertenso.", RE_FUMA), false,
+        "el tabaquismo sí queda negado — el negador está pegado a él");
+      t.igual(f("No fuma, pero es diabético.", RE_DIAB), true, "«no fuma» no niega la diabetes");
+      t.igual(f("Paciente diabético e hipertenso, niega tabaquismo.", RE_DIAB), true,
+        "y da igual el orden: la negación va al final y no alcanza a lo de antes");
+    });
+
+    t.caso("v18.0.57: y lo que SÍ era negación sigue siéndolo (las dos listas unificadas)", () => {
+      const f = api.mtrTextoOpinaSobre;
+      t.igual(f("Niega diabetes.", RE_DIAB), false, "«niega» pegado al término");
+      t.igual(f("No refiere diabetes.", RE_DIAB), false, "el negador de dos palabras");
+      t.igual(f("Sin antecedente de diabetes.", RE_DIAB), false, "y el de tres, con palabras en medio");
+      t.igual(f("Paciente no diabético, no fumador.", RE_DIAB), false, "la negación sin verbo (v18.0.17)");
+      t.igual(f("Nunca fumador.", RE_FUMA), false, "«nunca» delante");
+      // La contención que el comentario de v18.0.17 protege, y que no se puede perder:
+      t.igual(f("Sin control, diabético descompensado.", RE_DIAB), true,
+        "«sin control, diabético» es una AFIRMACIÓN: la coma corta la ventana del negador");
+      t.igual(f("Padre diabético.", RE_DIAB), null, "y lo de un tercero sigue sin opinar");
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 18): al unificar las listas, la ventana pasó de 20 a 25
+    // caracteres y «No asiste a controles de diabetes» (el «no» niega ASISTIR, no la diabetes)
+    // pasó a leerse como negación → discrepancia ALTA que frena el Panel. Ni 20 ni 25 son la
+    // respuesta (con 20, «No ha sido diagnosticado con diabetes» dejaba de ser negación): lo que
+    // decide es si el «no» niega una CONDUCTA (asistir, cumplir, tomar, controlarse, tratarse)
+    // o el hecho clínico.
+    t.caso("02-sep: «no» + conducta (asiste, cumple, toma, se controla, tratamiento) NO niega la enfermedad", () => {
+      const f = api.mtrTextoOpinaSobre;
+      t.igual(f("No asiste a controles de diabetes.", RE_DIAB), true, "lo que se niega es la asistencia (regresión de v18.0.57)");
+      t.igual(f("No toma metformina y es diabético.", RE_DIAB), true, "lo que se niega es la toma");
+      t.igual(f("Sin tratamiento actual diabetes tipo 2.", RE_DIAB), true, "sin tratamiento ≠ sin diabetes");
+      t.igual(f("No es adherente al tratamiento de la diabetes.", RE_DIAB), true, "sin adherencia ≠ sin diabetes");
+      t.igual(f("No se controla la diabetes.", RE_DIAB), true, "no controlarse ≠ no tener");
+      t.igual(f("HTA no controlada y diabetes mellitus tipo 2.", RE_DIAB), true, "«no controlada» tampoco niega lo que sigue");
+      // Y las negaciones de verdad, largas, siguen siéndolo — esto es lo que la ventana de 25 protege.
+      t.igual(f("No ha sido diagnosticado con diabetes.", RE_DIAB), false, "negación larga del hecho");
+      t.igual(f("No refiere antecedentes de diabetes mellitus.", RE_DIAB), false);
+      t.igual(f("No tiene diagnóstico de diabetes.", RE_DIAB), false);
+      t.igual(f("Nunca ha tenido diabetes.", RE_DIAB), false);
+    });
+
+    // v18.0.103 — refutador de v18.0.99 (fila 18): la limpieza convertía en AFIRMACIÓN
+    // negaciones reales cuando el «no» que precede a la conducta es el que niega el HECHO
+    // («no cumple criterios de», «no toma … ni es diabético», «sin medicamentos ni diabetes»)
+    // y, con historia negativa, disparaba la discrepancia ALTA que frena el Panel — el espejo
+    // del defecto que quería cerrar. Y la lista no cubría «no tiene/lleva/hay/recibe/hace/usa
+    // + control/tratamiento/dieta/insulina», ni dos auxiliares.
+    t.caso("v18.0.103: «ni» y «criterios» hacen que el «no» niegue el HECHO, y la lista de conductas cubre los auxiliares", () => {
+      const f = api.mtrTextoOpinaSobre;
+      // Negaciones de verdad (v18.0.99 las leía como afirmación):
+      t.igual(f("No cumple criterios de diabetes.", RE_DIAB), false, "«no cumple criterios de» niega el hecho");
+      t.igual(f("No cumple criterios para hipertension.", RE_HTA), false);
+      t.igual(f("No toma medicamentos ni es diabético.", RE_DIAB), false, "el «ni» niega lo que sigue");
+      t.igual(f("No toma ni tiene diabetes.", RE_DIAB), false);
+      t.igual(f("Sin medicamentos ni diabetes.", RE_DIAB), false);
+      t.igual(f("No toma alcohol ni es hipertenso.", RE_HTA), false);
+      // Y las conductas negadas siguen siendo afirmaciones del hecho:
+      t.igual(f("No tiene control de la diabetes.", RE_DIAB), true, "no tiene CONTROL ≠ no tiene diabetes");
+      t.igual(f("No tiene tratamiento para diabetes.", RE_DIAB), true);
+      t.igual(f("No lleva control de su diabetes.", RE_DIAB), true);
+      t.igual(f("No hay control de la diabetes.", RE_DIAB), true);
+      t.igual(f("No recibe tratamiento para diabetes.", RE_DIAB), true);
+      t.igual(f("No hace dieta para la diabetes.", RE_DIAB), true);
+      t.igual(f("No usa insulina por diabetes.", RE_DIAB), true);
+      t.igual(f("Nunca se ha controlado la diabetes.", RE_DIAB), true, "dos auxiliares");
+      t.igual(f("No esta en control de diabetes.", RE_DIAB), true, "auxiliar + preposición");
+      // La discrepancia que frenaba el Panel sobre un dato NEGADO por escrito:
+      const disc = api.mtrDiscrepanciasDeFuentes({ leidos: { diabetes: false }, cabecera: {}, textoLibre: "Glicemia en ayunas 108: no cumple criterios de diabetes." });
+      t.igual((disc || []).filter((d) => d && d.clave === "diabetes").length, 0, "el texto que NIEGA la diabetes no contradice una historia que también la niega");
+    });
+
     t.caso("v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo', no solo las frases largas", () => {
       t.igual(api.mtrTextoOpinaSobre("Paciente no fuma.", RE_FUMA), false, "'no fuma' debe negar, no afirmar");
       t.igual(api.mtrTextoOpinaSobre("No es hipertenso, tensión normal en consulta.", RE_HTA), false, "'no es hipertenso' debe negar");
@@ -254,6 +372,47 @@ module.exports = {
       // Y una afirmación limpia SIGUE afirmando (no se sobre-corrigió a negar todo).
       t.igual(api.mtrTextoOpinaSobre("Paciente fumador activo, un paquete/día.", RE_FUMA), true, "una afirmación real sigue devolviendo true");
       t.igual(api.mtrTextoOpinaSobre("Refiere ser hipertenso de larga data.", RE_HTA), true);
+    });
+
+    // v18.0.17 — NEGACIÓN SIN VERBO, que es como el médico escribe de verdad.
+    // La v17.6.30 cubrió «no + VERBO» («no fuma», «no es diabético»). No cubrió la forma
+    // habitual, que va sin verbo: «Paciente no diabético, no fumador», «sin diabetes
+    // conocida», «nunca fumador», «sin tabaquismo». Medido con el arnés antes de arreglar:
+    // 6 de 12 frases clínicas normales salían mal clasificadas, y no era cosmético — la
+    // discrepancia resultante es de severidad ALTA y FRENA la apertura del Panel del
+    // paciente hasta que el médico responda un cuadro sobre un dato que él mismo acaba de
+    // negar por escrito.
+    //
+    // El arreglo es por PROXIMIDAD (un negador dentro de la misma cláusula, antes del
+    // término), no con una lista de enfermedades: así vale para cualquier `re` futuro. Las
+    // dos trampas de abajo son las que obligan a que la frontera sea la COMA y no una
+    // distancia a secas — sin ella, dos afirmaciones reales se leerían como negaciones.
+    const RE_DM = /\bdiabet|\bdm2?\b/i;
+    t.caso("v18.0.17: mtrTextoOpinaSobre reconoce la negación por sustantivo o adjetivo, sin verbo", () => {
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, no fumador.", RE_DM), false,
+        "«no diabético» — la frase más habitual del examen físico — debe NEGAR");
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, no fumador.", RE_FUMA), false,
+        "y «no fumador» en la misma frase también");
+      t.igual(api.mtrTextoOpinaSobre("Paciente sin diabetes conocida.", RE_DM), false, "«sin + sustantivo»");
+      t.igual(api.mtrTextoOpinaSobre("Nunca fumador.", RE_FUMA), false, "«nunca + sustantivo»");
+      t.igual(api.mtrTextoOpinaSobre("Sin tabaquismo.", RE_FUMA), false, "«sin tabaquismo»");
+      t.igual(api.mtrTextoOpinaSobre("No hay evidencia de diabetes.", RE_DM), false,
+        "el negador puede estar a varias palabras, mientras siga en la misma cláusula");
+    });
+
+    t.caso("v18.0.17: la coma es la frontera — dos afirmaciones reales NO se leen como negación", () => {
+      t.igual(api.mtrTextoOpinaSobre("Sin control, diabético descompensado.", RE_DM), true,
+        "«sin control» niega el control, no la diabetes: la coma separa las dos cláusulas");
+      t.igual(api.mtrTextoOpinaSobre("Paciente no diabético, fumador activo.", RE_FUMA), true,
+        "el «no» es de la primera cláusula; el tabaquismo se AFIRMA en la segunda");
+      t.igual(api.mtrTextoOpinaSobre("No solo tiene hipertensión sino también diabetes.", RE_DM), true,
+        "«sino» no es «no» (límite de palabra) y el negador queda fuera de alcance");
+    });
+
+    t.caso("v18.0.17: no se sobre-corrigió — las afirmaciones limpias siguen afirmando", () => {
+      t.igual(api.mtrTextoOpinaSobre("Ex fumador, suspendió hace 5 años.", RE_FUMA), true, "«ex fumador» AFIRMA el antecedente");
+      t.igual(api.mtrTextoOpinaSobre("Paciente diabético en control.", RE_DM), true);
+      t.igual(api.mtrTextoOpinaSobre("Hipertenso de larga data.", RE_HTA), true);
     });
 
     t.caso("mtrTextoOpinaSobre descarta antecedentes de terceros (no del propio paciente)", () => {

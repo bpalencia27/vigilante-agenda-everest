@@ -364,7 +364,13 @@ module.exports = {
       // Fallos 4 y 5: entra al enfriamiento largo de apiUtil(), pero la URL sigue viva
       await e.c.api.apiLeerAgenda();
       await e.c.api.apiLeerAgenda();
-      t.igual(e.c.api.apiEspera(0), 300000, "5 fallos: enfriamiento de 5 min, contra la MISMA url");
+      // v18.0.9 — el descanso baja de 5 min a 1. Encargo del médico (31-ago): «hay que
+      // blindar que el Centinela siempre tenga acceso a la API de citas del día». Con 5 min,
+      // y sin respaldo posible dentro de una historia clínica (el raspado del DOM solo vive
+      // en «Citas del día»), cada reintento costaba hasta cinco minutos de ceguera. Lo que
+      // esta prueba protege NO es el número: es que la URL sobreviva a la racha y se siga
+      // reintentando contra la MISMA url, que es lo que evitó v17.6.16.
+      t.igual(e.c.api.apiEspera(0), 60000, "5 fallos: descanso de 1 min, contra la MISMA url");
       t.cierto(e.c.api.apiUtil(), "aún con 5 fallos, apiUtil() deja reintentar tras el enfriamiento (no purgó)");
       // Y si el servidor responde bien esta vez (p. ej. la sesión de Athenea se restauró
       // sola), vuelve la confianza SIN que nadie haya vuelto a Citas del día
@@ -766,5 +772,38 @@ module.exports = {
       t.cierto(u.includes("fecha=14%2F08%2F2026"), "la fecha viaja URL-encoded");
       t.cierto(u.includes("pacienteId=40"));
     });
+    // =====================================================================
+    // v18.0.117 (UI/UX #1) — la toma sin hora: motivo honesto, no un horario inventado
+    // =====================================================================
+    await t.casoAsync("v18.0.117 (UI/UX #1): sin hora elegida, apiLaboratorioAgendarAuto no consulta ni agenda, y el motivo dice la verdad (antes: «el horario elegido () ya no está disponible»)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => { o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "07:00", agendaId: 555 }] }) }); });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "");
+      t.falso(ok, "sin hora: no se agenda");
+      t.igual(e.c.api._labMotivoUltimoFallo(), "no se eligió la hora de la toma", "el motivo es el real, no un horario vacío entre paréntesis");
+      t.cierto(hayTexto(e.c, "No se eligió la hora de la toma"), "y se le dice al médico dónde elegirla");
+      const ok2 = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", null);
+      t.falso(ok2, "null también");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(!horaSeleccionada\) \{[\s\S]{0,240}_labUltimoFallo = "no se eligió la hora de la toma";/.test(src), "la guarda vive antes de buscar el turno");
+    });
+
+    await t.casoAsync("v18.0.118 (UI/UX #7): con {silencioso:true} el fallo de la toma NO abre el HUD «Centinela» (el modal ya lo dice por tres canales); sin la opción, sí", async () => {
+      const sinTurnos = (o) => { o.onload({ status: 200, responseText: JSON.stringify({ turnos: [] }) }); };
+      const e1 = entornoApi(); e1.setGm(sinTurnos);
+      const ok1 = await e1.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "", { silencioso: true });
+      t.falso(ok1, "no se agenda");
+      t.falso(hayTexto(e1.c, "NO se agendó"), "y el HUD no sale: el llamador ya avisa por toast, panel y botón");
+      t.cierto(!!e1.c.api._labMotivoUltimoFallo(), "pero el motivo se guarda igual, para el panel post-cita: " + e1.c.api._labMotivoUltimoFallo());
+      const e2 = entornoApi(); e2.setGm(sinTurnos);
+      const ok2 = await e2.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "");
+      t.falso(ok2, "sin la opción tampoco se agenda");
+      t.cierto(hayTexto(e2.c, "NO se agendó"), "y ahí el HUD sí sale (la toma sola es el único canal de ese cuadro)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_agmAgendarLabConCandado\(apt\.doc_id, labFecha\.iso, selectedLabTime, celularSms, false, \{ silencioso: true \}\)/.test(src), "Agendar es quien pide silencio");
+      const zona = src.slice(src.indexOf("async function apiLaboratorioAgendarAuto("), src.indexOf("async function apiLaboratorioAgendarAuto(") + 9000);
+      t.igual((zona.match(/\n\s*spToast\(/g) || []).length, 0, "dentro de la función ya no queda ningún spToast directo: todos pasan por _hud");
+    });
+
   }
 };

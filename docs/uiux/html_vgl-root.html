@@ -1,0 +1,142 @@
+<div id="vgl-root">
+      <div id="vgl-head">
+        <div id="vgl-tls">
+          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)" aria-label="Ocultar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 1L5 5M5 1L1 5"/></svg></button>
+          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)" aria-label="Minimizar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5"/></svg></button>
+          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo" aria-label="Restaurar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
+          <button class="vgl-tl hc" id="vgl-tl-hc" title="Alto contraste: fondo sólido y letra más grande (1 clic)" aria-label="Alto contraste" aria-pressed="false"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="0.7" stroke-linecap="round"><circle cx="3" cy="3" r="1.6" fill="currentColor" stroke="none"/><path d="M3 0.6V1.3M3 4.7V5.4M0.6 3H1.3M4.7 3H5.4M1.3 1.3L1.8 1.8M4.2 4.2L4.7 4.7M4.7 1.3L4.2 1.8M1.8 4.2L1.3 4.7"/></svg></button>
+        </div>
+        <div id="vgl-title">Centinela <small>v18.0.113</small></div>
+        <span id="vgl-clock" title="">08:00 · 1 h 20 min</span>
+        <span id="vgl-dot" title="Estado del asistente — tóquelo para ver qué está leyendo" role="button" tabindex="0"></span>
+      </div>
+      <div id="vgl-body">
+        <div id="vgl-sidebar">
+          <div id="vgl-find">
+            <svg class="vgl-find-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="vgl-q" type="text" spellcheck="false" placeholder="Buscar paciente por nombre o cédula…">
+          </div>
+          <div class="vgl-sb-lbl">Filtros</div>
+          <nav id="vgl-filters">
+            <button class="vgl-fchip sel" data-f="todas"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>Todas las citas</button>
+            <button class="vgl-fchip" data-f="riesgo" title="Alertas de atención e inasistencias"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Atención prioritaria</button>
+            <button class="vgl-fchip" data-f="sinpres"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.5 13.5-2 2"/><path d="m19.5 13.5 2 2"/></svg>Sin presentarse</button>
+            <button class="vgl-fchip" data-f="ensala"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg>En sala</button>
+            <button class="vgl-fchip" data-f="pym"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Con PyM</button>
+          </nav>
+          <div id="vgl-stats"><div class="vgl-stat hot"><span class="vgl-d" style="background:var(--c-rojo)"></span>No confirmadas<b>1</b></div><div class="vgl-stat"><span class="vgl-d" style="background:var(--c-verde)"></span>En sala<b>4</b></div><div class="vgl-stat"><span class="vgl-d" style="background:var(--c-atendido)"></span>Atendidas<b>2</b></div></div>
+          <div id="vgl-actions">
+            <button class="vgl-sb-btn primary" id="vgl-load" title="📂 Abrir PyM — cargar la lista de prevención del día (.xlsx / .csv)"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>Cargar prevención</button>
+            <button class="vgl-sb-btn" id="vgl-bell" title="Activar notificaciones de Windows">🔔 Alertas</button>
+            <button class="vgl-sb-btn" id="vgl-mute" title="Silenciar el sonido 15 minutos">🔉 Silenciar</button>
+            <button class="vgl-sb-btn" id="vgl-rep" title="Resumen de la jornada y reporte de atención"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Resumen</button>
+            <button class="vgl-sb-btn" id="vgl-cfg" title="Ajustes"><svg class="vgl-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</button>
+          </div>
+        </div>
+        <div id="vgl-main">
+          <div id="vgl-sum">Vigilando la agenda · 10 cita(s) · act. 08:00:00 · PyM: 42</div>
+          <div id="vgl-list"><div class="vgl-card">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-verde,#10B981);--trgb:var(--rgb-verde)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#10B981);box-shadow:0 0 10px var(--tc,#10B981)"></span>
+            <span class="vgl-time vgl-time-t1">07:00</span>
+            <span class="vgl-precon-dot listo"></span><span class="vgl-cd warn">en 12 min</span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#10B981) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">En sala</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 1</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1000</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">TAMIZAJE SINTETICO A</span><span class="vgl-chip">CONTROL SINTETICO B</span><span class="vgl-chip">ACTIVIDAD SINTETICA C</span><span class="vgl-chip vgl-chip-mas">+1 más</span></div></div></div><div class="vgl-card rojo">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-rojo,#E54D42);--trgb:var(--rgb-rojo)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#E54D42);box-shadow:0 0 10px var(--tc,#E54D42)"></span>
+            <span class="vgl-time vgl-time-t1">07:30</span>
+            
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-flag">⛔ NO CONFIRMADO</span><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#E54D42) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">No confirmado</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 2</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1001</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">TAMIZAJE SINTETICO A</span></div></div></div><div class="vgl-card ambar">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-ambar,#D97706);--trgb:var(--rgb-ambar)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#D97706);box-shadow:0 0 10px var(--tc,#D97706)"></span>
+            <span class="vgl-time vgl-time-t1">08:00</span>
+            <span class="vgl-cd late">+18 min</span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-flag agpend">🗓️ SIN TERMINAR</span><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#D97706) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">Confirmada</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 3</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1002</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-none falta">Dato faltante: sin registro en PyM</div></div></div><div class="vgl-card atendido">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-verde,#10B981);--trgb:var(--rgb-verde)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#10B981);box-shadow:0 0 10px var(--tc,#10B981)"></span>
+            <span class="vgl-time vgl-time-t1">08:30</span>
+            <span class="vgl-precon-dot listo"></span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--rgb-atendido),.16);color:var(--c-atendido) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-atendido),.32)">Atendido</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 4</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1003</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">CONTROL SINTETICO B</span></div></div></div><div class="vgl-card morado pes">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-morado,#0891B2);--trgb:var(--rgb-morado)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#0891B2);box-shadow:0 0 10px var(--tc,#0891B2)"></span>
+            <span class="vgl-time vgl-time-t1">09:00</span>
+            <span class="vgl-cd vgl-adh">2 inasist.</span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-flag pes">❤ ABANDONO PROGRAMA RCV</span><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#0891B2) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">Confirmada</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 5</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1004</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">TAMIZAJE SINTETICO A</span><span class="vgl-chip">ACTIVIDAD D</span></div></div></div><div class="vgl-card">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-azul,#7C3AED);--trgb:var(--rgb-azul)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#7C3AED);box-shadow:0 0 10px var(--tc,#7C3AED)"></span>
+            <span class="vgl-time vgl-time-t1">09:30</span>
+            
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-flag adic">➕ CANDIDATO ADICIONAL</span><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#7C3AED) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">En sala</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 6</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1005</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-none">Al día · sin PyM pendiente</div></div></div><div class="vgl-card">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-verde,#10B981);--trgb:var(--rgb-verde)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#10B981);box-shadow:0 0 10px var(--tc,#10B981)"></span>
+            <span class="vgl-time vgl-time-t1">10:00</span>
+            <span class="vgl-precon-dot listo"></span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#10B981) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">Confirmada</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 7</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1006</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">ACTIVIDAD SINTETICA C</span></div></div></div><div class="vgl-card atendido">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-verde,#10B981);--trgb:var(--rgb-verde)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#10B981);box-shadow:0 0 10px var(--tc,#10B981)"></span>
+            <span class="vgl-time vgl-time-t1">10:30</span>
+            
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--rgb-atendido),.16);color:var(--c-atendido) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-atendido),.32)">Atendido</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 8</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1007</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-none falta">PyM sin cargar</div></div></div><div class="vgl-card ambar">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-ambar,#D97706);--trgb:var(--rgb-ambar)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#D97706);box-shadow:0 0 10px var(--tc,#D97706)"></span>
+            <span class="vgl-time vgl-time-t1">11:00</span>
+            
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#D97706) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">Confirmada</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 9</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1008</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-pyms"><span class="vgl-chip">TAMIZAJE SINTETICO A</span></div></div></div><div class="vgl-card">
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-verde,#10B981);--trgb:var(--rgb-verde)">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,#10B981);box-shadow:0 0 10px var(--tc,#10B981)"></span>
+            <span class="vgl-time vgl-time-t1">11:30</span>
+            <span class="vgl-precon-dot listo"></span>
+          </div>
+          <div class="vgl-card-badges-wrap"><span class="vgl-badge vgl-badge-t1" style="background:rgba(var(--trgb),.16);color:var(--tc,#10B981) !important;box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32)">En sala</span></div>
+        </div>
+        <div class="vgl-card-mid vgl-card-mid-t1"><div class="vgl-name vgl-name-t1"><b>PACIENTE SINTETICO 10</b></div><span class="vgl-doc vgl-doc-t1">CC SYN-1009</span></div>
+        <div class="vgl-card-btm vgl-card-btm-t1"><div class="vgl-none resp">Sin registro en el PyM de hoy · según el respaldo:</div><div class="vgl-pyms"><span class="vgl-chip vgl-chip-resp">ACTIVIDAD DEL RESPALDO</span></div></div></div></div><div id="vgl-sheet"></div>
+        </div>
+      </div>
+      <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" class="vgl-d-none">
+    </div>

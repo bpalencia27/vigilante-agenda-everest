@@ -3,28 +3,21 @@
 const fs = require("fs");
 const { chromium } = require("playwright");
 
-const code = fs.readFileSync("/home/user/vigilante-agenda-everest/vigilante_agenda.user.js", "utf8");
-let css = "", inCss = false;
-for (const l of code.split("\n")) {
-  if (l.includes("style.textContent = `")) { inCss = true; continue; }
-  if (inCss && l.includes("`;")) { inCss = false; break; }
-  if (inCss) css += l + "\n";
+// 01-sep-2026 (cierre del enjambre) — el CSS ya no se extrae por texto (se perdía MTR_RCV_CSS_TODOS_LOS_MODALES, que
+// es un .replace() sobre otra hoja): se EJECUTA el script en el arnés y se lee el <style>
+// real, entero y ya resuelto — el mismo que recibe Chromium en el consultorio. Es el método
+// que prescribe CLAUDE.md y el que ya usa tools/auditar_color_todo_chromium.js.
+const { cargar } = require("/home/user/vigilante-agenda-everest/tests/harness.js");
+function cssReal() {
+  const c = cargar({ silencioso: true });
+  try { c.api.buildOverlay(); } catch (e) {}
+  const trozos = [];
+  const rec = (n) => { if (!n) return; if (n.tagName === "STYLE" && n.textContent) trozos.push(n.textContent); (n.children || []).forEach(rec); };
+  rec(c.env.doc.head); rec(c.env.doc.body);
+  return trozos.join("\n");
 }
-
-// v17.23.0 — el bloque principal SPLICEA otras hojas con `${_cssSeguro(() => XXX_CSS)}`
-// (MTR_CSS, MTR_RCV_CSS, ...). Esta extracción es textual, no ejecuta JS: sin este paso
-// esos marcadores quedaban como texto literal (CSS inválido) y cualquier clase que solo
-// viviera en una de esas hojas —como .vgl-mtr-* de MTR_CSS— nunca llegaba a Chromium,
-// aunque en producción sí se pinta ahí. Se resuelve cada marcador con el valor real de su
-// const, igual que hace el navegador al evaluar el template literal de verdad.
-for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
-  const nombre = m[1];
-  const ini = code.indexOf("const " + nombre + " = `");
-  if (ini < 0) continue;
-  const desde = ini + ("const " + nombre + " = `").length;
-  const fin = code.indexOf("`;", desde);
-  css = css.replace(m[0], code.slice(desde, fin));
-}
+const css = cssReal();
+if (!css || css.length < 100000) { console.log("AVISO: el <style> real salió demasiado corto (" + css.length + ")"); process.exit(1); }
 
 // El adversario: Everest es una SPA ajena y su CSS es una caja negra. Se simula lo PEOR
 // que puede tirar: una regla de tipo con !important sobre todo elemento de texto.
@@ -50,25 +43,35 @@ const CASOS = [
   { id: "vgl-confirma-modal", cls: "vgl-conf-desfase", que: "aviso: su respuesta anterior quedó desactualizada", token: "--c-ambar" },
   // v17.16.0 — el aviso de que no se pudo cruzar contra Athenea (Tanda 4).
   { id: "vgl-ordenar-modal", cls: "vgl-ord-nocruce", que: "aviso: no se pudo cruzar contra Athenea", token: "--c-ambar" },
-  // v17.24.0 — «Medicamentos actuales» (archivo pasivo, Panel del paciente → Resumen).
-  { id: "vgl-panel-modal", cls: "vgl-panel-meds-nom", que: "medicamentos actuales: nombre", token: "--fg" },
-  { id: "vgl-panel-modal", cls: "vgl-panel-meds-frec", que: "medicamentos actuales: frecuencia", token: "--fg3" },
+  // v17.24.0 — «Medicamentos actuales» (.vgl-panel-meds-nom/-frec) se RETIRÓ en v17.28.0
+  // («limpieza de Panel»): las dos entradas que había aquí sondeaban clases que ya no existen
+  // en el script y salían en el color del adversario por no tener regla — un rojo falso, no
+  // un secuestro. Retiradas (01-sep-2026, cierre del enjambre). La cobertura de lo que SÍ
+  // existe hoy la da tools/auditar_color_todo_chromium.js, que deriva el censo del HTML real.
 ];
 const BANDERAS = [
-  { cls: "agpend", que: "🗓️ SIN TERMINAR", debeSer: "--c-ambar" },
-  { cls: "adic",   que: "➕ CANDIDATO ADICIONAL", debeSer: "--c-azul" },
-  { cls: "pes",    que: "❤ ABANDONO PROGRAMA RCV", debeSer: "--c-pes" },
-  { cls: "",       que: "⛔ NO CONFIRMADO", debeSer: "--c-rojo" },
+  // 01-sep-2026 — las banderas son OUTLINE desde el refactor S+ visual (commit 7758df4): texto
+  // de acento + fondo tintado al 10 % + anillo. Lo que ataca el adversario es el COLOR del
+  // texto, así que eso es lo que se mide contra el token; el fondo se comprueba contra el
+  // tinte real, no contra un fondo sólido que ya no existe.
+  { cls: "agpend", que: "🗓️ SIN TERMINAR",        color: "--c-ambar", rgb: "--rgb-ambar" },
+  { cls: "adic",   que: "➕ CANDIDATO ADICIONAL",  color: "--c-azul",  rgb: "--rgb-azul" },
+  { cls: "pes",    que: "❤ ABANDONO PROGRAMA RCV", color: "--c-pes",   rgb: "--rgb-pes" },
+  { cls: "",       que: "⛔ NO CONFIRMADO",         color: "--c-rojo",  rgb: "--rgb-rojo" },
 ];
 
+// 01-sep-2026 — el badge de #vgl-cw-examenes NO tiene color por estado desde v17.41.0: por pedido
+// del médico se ve EXACTAMENTE como el botón nativo «Paquetes» (color literal rgba(0,0,0,.87)
+// !important, ver el comentario de la regla compartida con button#vgl-cw-ordenar-btn). Lo que
+// se verifica es que ese literal sobreviva al adversario, no un token que ya no aplica.
 // v17.18.0 — el widget de Conducta (#vgl-cw-examenes) usa selectores compuestos
 // (estado del contenedor + clase descendiente: ".vgl-cw-pend .vgl-cw-badge",
 // ".vgl-cw-venc .vgl-cw-nom") que el arreglo CASOS de arriba (una sola clase por
 // caso) no puede representar. Cada caso trae su propio HTML y su propio selector.
 const WIDGET_CASOS = [
-  { html: '<div id="vgl-cw-examenes" class="vgl-cw-pend"><div class="vgl-cw-badge" data-w="0">🧪 2</div></div>', sel: '[data-w="0"]', token: "--c-ambar", que: "badge: estado pendiente" },
-  { html: '<div id="vgl-cw-examenes" class="vgl-cw-ok"><div class="vgl-cw-badge" data-w="1">🧪</div></div>', sel: '[data-w="1"]', token: "--c-verde", que: "badge: estado al día" },
-  { html: '<div id="vgl-cw-examenes" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="2">🧪</div></div>', sel: '[data-w="2"]', token: "--fg3", que: "badge: sin juicio todavía" },
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-pend"><div class="vgl-cw-badge" data-w="0">🧪 2</div></div>', sel: '[data-w="0"]', token: "rgba(0,0,0,.87)", que: "badge: estado pendiente" },
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-ok"><div class="vgl-cw-badge" data-w="1">🧪</div></div>', sel: '[data-w="1"]', token: "rgba(0,0,0,.87)", que: "badge: estado al día" },
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="2">🧪</div></div>', sel: '[data-w="2"]', token: "rgba(0,0,0,.87)", que: "badge: sin juicio todavía" },
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-venc"><span class="vgl-cw-nom" data-w="3">CREATININA</span></div></div></div>', sel: '[data-w="3"]', token: "--c-rojo", que: "nombre de examen vencido" },
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-pedir"><span class="vgl-cw-nom" data-w="4">HEMOGLOBINA</span></div></div></div>', sel: '[data-w="4"]', token: "--c-ambar", que: "nombre de examen pendiente" },
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><span class="vgl-cw-que" data-w="5">vence en 12 días</span></div></div>', sel: '[data-w="5"]', token: "--fg2", que: "texto secundario de cada fila" },
@@ -101,6 +104,15 @@ const WIDGET_CASOS = [
   { html: '<div id="vgl-cw-farmaco" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="19">💊</div></div>', sel: '[data-w="19"]', token: "--fg3", que: "farmaco: badge sin juicio todavía" },
   { html: '<div id="vgl-cw-farmaco"><div class="vgl-mtr-crit"><span class="vgl-mtr-conducta" data-w="20">Ajustar dosis</span></div></div>', sel: '[data-w="20"]', token: "--c-rojo", que: "farmaco: conducta de aviso CRITICAL dentro del widget" },
   { html: '<div id="vgl-cw-farmaco"><div class="vgl-dup-bloque"><div class="vgl-dup-tope" data-w="21">Posible duplicidad</div></div></div>', sel: '[data-w="21"]', token: "--c-ambar", que: "farmaco: tope de duplicidad terapéutica" },
+  // v18.0.120 — la sección nueva del aviso de entrada: «fuera de metas, pero VIGENTE».
+  // #vgl-pym-modal cuelga de document.body, así que no hereda ninguna protección de un
+  // ancestro propio (CLAUDE.md). Su acento viaja por --sec-accent y lo pinta .vgl-pym-sec-t,
+  // que sí lleva la marca de prioridad: selector compuesto, por eso va aquí. Se comprueban
+  // las DOS cajas a la vez — si el ámbar se colara en rojo (o al revés) se estaría contando
+  // la misma mentira del reporte del médico en otro idioma.
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-ambar"><div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-t" data-w="22">Fuera de metas — puede adelantarlos</span></div></div></div>', sel: '[data-w="22"]', token: "--c-ambar", que: "aviso: título de «fuera de metas, vigente»" },
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-ambar"><div class="vgl-pym-sec-b" data-w="23">Estos exámenes NO están vencidos</div></div></div>', sel: '[data-w="23"]', token: "--fg2", que: "aviso: cuerpo de «fuera de metas, vigente»" },
+  { html: '<div id="vgl-pym-modal"><div class="vgl-pym-sec-rojo"><div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-t" data-w="24">Laboratorios RCV sin resultado vigente</span></div></div></div>', sel: '[data-w="24"]', token: "--c-rojo", que: "aviso: título de vencidos sigue en rojo" },
 ];
 
 (async () => {
@@ -120,15 +132,20 @@ const WIDGET_CASOS = [
   // cada id de emergente, no en :root. Pedirlas a documentElement devolvía vacío y el
   // "esperado" salía siendo el color de Everest — o sea, la prueba se daba la razón sola.
   const esperadoDe = (sel, token) => p.$eval(sel, (el, tk) => {
-    const v = getComputedStyle(el).getPropertyValue(tk).trim();
+    // Un token (--c-x) se resuelve DESDE EL PROPIO ELEMENTO; un literal (rgba(...)/#hex) se
+    // usa tal cual. En los dos casos se pasa por una sonda con priority "important", porque
+    // el !important de Everest le gana al estilo en línea normal.
+    const v = tk.startsWith("--") ? getComputedStyle(el).getPropertyValue(tk).trim() : tk;
     if (!v) return "(token vacío: " + tk + ")";
-    // OJO: el color de la sonda va con priority "important". El !important de la hoja de
-    // Everest GANA al estilo en línea normal, así que sin esto la sonda medía el color de
-    // Everest y la prueba se daba la razón a sí misma (todo "FALLA" con el mismo valor).
     const d = document.createElement("div");
     d.style.setProperty("color", v, "important");
     el.appendChild(d); const r = getComputedStyle(d).color; d.remove(); return r;
   }, token);
+  const esperadoFondo = (sel, rgbToken) => p.$eval(sel, (el, tk) => {
+    const d = document.createElement("div");
+    d.style.setProperty("background-color", "rgba(var(" + tk + "),.10)", "important");
+    el.appendChild(d); const r = getComputedStyle(d).backgroundColor; d.remove(); return r;
+  }, rgbToken);
 
   let fallos = 0;
   console.log("--- COLOR bajo un CSS de Everest agresivo (div,span,p{color:#111827 !important}) ---");
@@ -140,14 +157,17 @@ const WIDGET_CASOS = [
     if (!ok) fallos++;
     console.log(`${ok ? "OK  " : "FALLA"}  ${c.que.padEnd(34)} real=${real}  esperado=${esperado}`);
   }
-  console.log("--- FONDO de las banderas ---");
+  console.log("--- Banderas: COLOR del texto bajo el Everest agresivo, y FONDO tintado ---");
   for (let i = 0; i < BANDERAS.length; i++) {
     const f = BANDERAS[i];
-    const real = await val(`[data-f="${i}"]`, "background-color");
-    const esperado = await esperadoDe(`[data-f="${i}"]`, f.debeSer);
-    const ok = real === esperado;
-    if (!ok) fallos++;
-    console.log(`${ok ? "OK  " : "FALLA"}  ${f.que.padEnd(34)} real=${real}  esperado=${esperado} (${f.debeSer})`);
+    const realC = await val(`[data-f="${i}"]`, "color");
+    const espC = await esperadoDe(`[data-f="${i}"]`, f.color);
+    const okC = realC === espC; if (!okC) fallos++;
+    console.log(`${okC ? "OK  " : "FALLA"}  ${(f.que + " · color").padEnd(34)} real=${realC}  esperado=${espC} (${f.color})`);
+    const realF = await val(`[data-f="${i}"]`, "background-color");
+    const espF = await esperadoFondo(`[data-f="${i}"]`, f.rgb);
+    const okF = realF === espF; if (!okF) fallos++;
+    console.log(`${okF ? "OK  " : "FALLA"}  ${(f.que + " · fondo").padEnd(34)} real=${realF}  esperado=${espF} (rgba(var(${f.rgb}),.10))`);
   }
   console.log("--- Widget de Conducta (#vgl-cw-examenes, selectores compuestos) ---");
   for (const w of WIDGET_CASOS) {

@@ -33,6 +33,35 @@ module.exports = {
       const c = cargar();
       t.igual((c.api.__state.busqueda = "juan", c.api.highlight("JUAN PEREZ")), '<mark>JUAN</mark> PEREZ');
     });
+    // v18.0.94 — hallazgo #46 del enjambre: matchesSearch()/fuzzyMatch() ya son
+    // insensibles a acentos, así que un paciente SÍ aparece en la lista al buscar sin
+    // tilde ("jose" encuentra a "José"). Pero highlight() comparaba con acentos y nunca
+    // encontraba la coincidencia: el nombre se mostraba sin ningún <mark>, sin dar pista
+    // visual de por qué apareció en la lista filtrada.
+    t.caso("REGRESIÓN — highlight resalta aunque la búsqueda no lleve la tilde que sí tiene el nombre (hallazgo #46)", () => {
+      const c = cargar();
+      c.api.__state.busqueda = "jose";
+      t.igual(c.api.highlight("José Ramírez"), "<mark>José</mark> Ramírez",
+        "antes: sin ningún <mark>, aunque el paciente sí aparecía en la lista filtrada");
+      c.api.__state.busqueda = "ramirez";
+      t.igual(c.api.highlight("José Ramírez"), "José <mark>Ramírez</mark>", "también en medio de la frase");
+      c.api.__state.busqueda = "MUÑOZ";
+      t.igual(c.api.highlight("ana muñoz"), "ana <mark>muñoz</mark>", "la ñ también normaliza igual en los dos lados");
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 49): el índice se calcula sobre stripAccents (NFD) y el
+    // recorte sobre el texto original; con acentos DESCOMPUESTOS (letra + diacrítico
+    // combinante) los índices se desalinean y el <mark> parte un grafema: «José<mark> Pér</mark>ez».
+    t.caso("02-sep: highlight no parte un grafema cuando el nombre trae acentos descompuestos (NFD)", () => {
+      const c = cargar();
+      const nfd = "José Pérez";              // é como e + U+0301
+      c.api.__state.busqueda = "perez";
+      t.igual(c.api.highlight(nfd), "José <mark>Pérez</mark>", "el resaltado cae sobre el apellido entero — antes: «José<mark> Pér</mark>ez»");
+      c.api.__state.busqueda = "jose";
+      t.igual(c.api.highlight(nfd), "<mark>José</mark> Pérez", "y al principio, sin dejar el acento suelto fuera de la marca");
+      c.api.__state.busqueda = "";
+      t.igual(c.api.highlight(null), "", "null sigue dando cadena vacía");
+    });
 
     t.caso("countdown calcula tiempo faltante", () => {
       const c = cargar();

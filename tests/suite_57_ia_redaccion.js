@@ -22,6 +22,7 @@ function hojaDemo(api) {
 }
 
 // Respuesta con la FORMA real de la API de Gemini.
+const esperar57 = (ms) => new Promise((r) => setTimeout(r, ms));   // v18.0.112
 function respGemini(texto) {
   return JSON.stringify({ candidates: [{ content: { parts: [{ text: texto }] }, finishReason: "STOP" }] });
 }
@@ -284,6 +285,109 @@ module.exports = {
       const hojaConPa = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", imc: 27, paSistolica: 120, paDiastolica: 80 }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
       const limpias = api.mtrVerificarCifrasIA("Signos vitales: PA 120/80 mmHg.", hojaConPa);
       t.igual(limpias.length, 0, "PA 120/80 con hechos de 120/80: nada que marcar");
+    });
+
+    t.caso("v18.0.35: las cifras que el propio médico aportó NO se le marcan como inventadas por la IA", () => {
+      // El defecto: la caja roja solo daba por respaldadas las cifras de la HOJA. Las que el
+      // médico escribió o pegó en su cuadro de texto —el automonitoreo que le trae el
+      // paciente, la nota del control anterior— se marcaban como «el modelo pudo
+      // inventarlas». O sea: el borrador que usaba fielmente su contexto era justo el que
+      // salía en rojo. Un aviso que grita con lo que uno mismo aportó enseña a ignorarlo, y
+      // entonces deja de servir para lo único que importa, que es cazar la cifra inventada
+      // de verdad.
+      const hojaSinPa = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", imc: 27 }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const borrador = "REFIERE AUTOMONITOREO DOMICILIARIO CON CIFRAS PROMEDIO DE 132/84 mmHg.";
+      const sinRespaldo = api.mtrVerificarCifrasIA(borrador, hojaSinPa);
+      t.cierto(sinRespaldo.length >= 2, "sin el aporte del médico, 132 y 84 se marcan (y está bien: no están en la hoja)");
+
+      const loQueEscribioElMedico = ["TRAE TENSIONES DE CASA, PROMEDIO 132/84, BIEN TOLERADAS"];
+      const conRespaldo = api.mtrVerificarCifrasIA(borrador, hojaSinPa, loQueEscribioElMedico);
+      t.igual(conRespaldo.length, 0,
+        "con lo que él aportó como fuente conocida, esas mismas cifras dejan de marcarse");
+
+      // Y la contrapartida: que contar su aporte no vuelva la caja ciega para lo demás.
+      const inventada = api.mtrVerificarCifrasIA(borrador + " CREATININA 2.7 mg/dL.", hojaSinPa, loQueEscribioElMedico);
+      t.cierto(inventada.some((x) => String(x.numero) === "2.7"),
+        "una creatinina que no está ni en la hoja ni en lo que él escribió se sigue marcando");
+    });
+
+    t.caso("v18.0.35 (decisión del médico): lo que él pega es PASADO, lo calculado es PRESENTE, y el cambio se escribe en la nota", () => {
+      // Su decisión, al pie de la letra: «lo que es contexto se refiere a que es pasado, por
+      // lo que lo que el script calcula se considera presente, pero se debe dejar constancia
+      // del cambio en la misma redacción». Sin esta prueba la regla se puede borrar del
+      // prompt sin que nada se ponga rojo — pasó: la mutación M6 de esta versión no despertó
+      // a nadie hasta que se escribió este caso.
+      const p = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {
+        indicaciones: "EN EL CONTROL PASADO LA TENSION ERA 152/94",
+      });
+      const bloque = p.user.slice(p.user.indexOf("LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ"));
+      t.cierto(/CONTRADICE[\s\S]{0,120}manda la de arriba/.test(bloque),
+        "ante una contradicción manda la cifra de HOY, la que midió el script");
+      t.cierto(/antecedente/i.test(bloque),
+        "y lo que él aporta queda como el antecedente, no como el dato de hoy");
+      t.cierto(/No elijas en\s*\n?\s*silencio|no elijas en silencio/i.test(bloque.replace(/\s+/g, " ")) || /No elijas en silencio/.test(bloque.replace(/\s+/g, " ")),
+        "la elección NO se hace en silencio");
+      t.cierto(/escribe el cambio en la propia nota/i.test(bloque.replace(/\s+/g, " ")),
+        "el cambio se deja por escrito en la propia nota");
+      t.cierto(/con las dos cifras y su dirección/i.test(bloque.replace(/\s+/g, " ")),
+        "con las dos cifras y hacia dónde se movió");
+      t.cierto(/DESCENSO RESPECTO A/.test(bloque),
+        "y con un ejemplo de cómo se lee eso escrito como frase clínica, no como nota al margen");
+    });
+
+    t.caso("v18.0.35: y el modal le pasa de verdad esas fuentes a la caja roja", () => {
+      // La función es pura y ya aceptaba `extraConocido`; lo que faltaba era que el sitio de
+      // llamada le pasara lo que el médico aportó. Vive en el closure del modal, así que se
+      // fija por fuente, sin comentarios.
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      t.cierto(/mtrVerificarCifrasIA\(salida\.value, hoja, _respaldoDelMedico\)/.test(codigo),
+        "la caja roja se evalúa contra las fuentes del médico, no solo contra la hoja");
+      const decl = codigo.slice(codigo.indexOf("const _respaldoDelMedico"), codigo.indexOf("const _respaldoDelMedico") + 500);
+      t.cierto(/vgl-ia-indicaciones/.test(decl), "incluye el cuadro de datos e indicaciones");
+      t.cierto(/vgl-ia-pregunta/.test(decl), "incluye la pregunta del modo Preguntar");
+      t.cierto(/libreAhora\(\)/.test(decl), "e incluye lo que ya está escrito en la historia");
+    });
+
+    // v18.0.70 — HALLAZGO DEL ENJAMBRE #23, gravedad alta, 3 de 3 refutadores no lo tumbaron.
+    // La propia nota de la v18.0.35 (arriba) lo advertía sin saberlo: `mtrTextoDeOtrasCasillas`
+    // se añadió UNA VERSIÓN DESPUÉS (v18.0.36, para el prompt de Gemini vía `contextoLibre`) y
+    // esta prueba —fijada antes— nunca se actualizó para exigirlo también aquí. Lo que el
+    // médico escribe en OTRA casilla de texto libre (Recomendaciones, Análisis y plan,
+    // Enfermedad actual) SÍ llega al modelo como contexto, pero la caja roja seguía sin
+    // conocerlo: una cifra que Gemini citaba fielmente de esa otra casilla se marcaba igual
+    // como «sin respaldo — el modelo pudo inventarla», el aviso que el propio código llama
+    // «el más grave del módulo».
+    t.caso("v18.0.70: la caja roja TAMBIÉN conoce lo que el médico escribió en las OTRAS casillas", () => {
+      const codigo = require("fs").readFileSync(require("./harness").RUTA, "utf8")
+        .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      const decl = codigo.slice(codigo.indexOf("const _respaldoDelMedico"), codigo.indexOf("const _respaldoDelMedico") + 700);
+      t.cierto(/mtrTextoDeOtrasCasillas\(modo/.test(decl),
+        "la misma función que ya alimenta el prompt de Gemini (contextoLibre) también alimenta la caja roja");
+    });
+
+    t.caso("v18.0.70: EJECUTANDO — una cifra que el médico ya escribió en OTRA casilla deja de marcarse falso positivo", () => {
+      // Reproduce la evidencia exacta del hallazgo: el médico escribió "TFG de 45 mL/min" en
+      // Recomendaciones; Gemini la cita fielmente redactando Análisis y plan. Sin conocer esa
+      // casilla, la caja roja la marca como inventada.
+      const docFalso = {
+        getElementById: () => null,
+        querySelector: (sel) => (/RecomendacionesMedicas/.test(sel) ? { value: "TFG DE 45 ML/MIN, DIETA HIPOSODICA" } : null),
+        querySelectorAll: () => [],
+      };
+      const otrasCasillas = api.mtrTextoDeOtrasCasillas("analisis_plan", docFalso, null);
+      t.cierto(/45/.test(otrasCasillas), "mtrTextoDeOtrasCasillas sí trae el 45 que el médico escribió en Recomendaciones");
+
+      const borrador = "Se ajusta la dosis considerando la TFG de 45 mL/min reportada por el medico.";
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+
+      const sinOtrasCasillas = api.mtrVerificarCifrasIA(borrador, hoja, ["", "", ""]);
+      t.cierto(sinOtrasCasillas.some((x) => String(x.numero) === "45"),
+        "reproducido: sin mtrTextoDeOtrasCasillas, el 45 se marca como sin respaldo — el falso positivo del hallazgo");
+
+      const conOtrasCasillas = api.mtrVerificarCifrasIA(borrador, hoja, ["", "", "", otrasCasillas]);
+      t.igual(conOtrasCasillas.length, 0,
+        "arreglado: con lo que el médico ya escribió en Recomendaciones como fuente conocida, el 45 ya no se marca");
     });
 
     t.caso("mtrVerificarCifrasIA: un lab que la IA cambió se marca; el que copió bien no", () => {
@@ -568,14 +672,40 @@ module.exports = {
       [mo, re, an, cr].forEach((x) => t.cierto(/CERO INFERENCIA/.test(x.system), "todos: prohibido inventar"));
     });
 
-    t.caso("indicaciones del médico: entran al prompt como bloque propio Y pasan por el censor de nombres", () => {
+    t.caso("lo que el médico escribió o pegó: entra al prompt como bloque propio Y pasa por el censor de nombres", () => {
+      // v18.0.35 — el bloque se llamaba «INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN». Ese
+      // nombre solo contemplaba una de sus dos mitades: por ese mismo cuadro el médico pega
+      // el control anterior entero, que son DATOS, no una orden de estilo.
       const p2 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), { indicaciones: "enfatiza adherencia del paciente Pedro Perez y control en un mes" });
-      t.cierto(/INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN/.test(p2.user), "el bloque existe");
+      t.cierto(/LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA/.test(p2.user), "el bloque existe");
       t.cierto(/adherencia/.test(p2.user), "la instrucción llega");
       t.falso(/Pedro Perez/.test(p2.user), "el nombre NO viaja a Google (mtrSanearTextoLibreAI)");
       t.cierto(/NOMBRE_CENSURADO/.test(p2.user), "y queda la marca del censor en su lugar");
       const p3 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), {});
-      t.falso(/INSTRUCCIONES DEL MÉDICO/.test(p3.user), "sin indicaciones no hay bloque vacío");
+      t.falso(/LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ/.test(p3.user), "sin nada escrito no hay bloque vacío");
+    });
+
+    t.caso("v18.0.35: el cuadro del médico ya no se corta en seco a 800 caracteres", () => {
+      // Reporte en consulta: «no entiende los contextos anteriores que yo pego». El corte
+      // era un slice(0,800) sin aviso: de una nota de control anterior de 1.339 caracteres
+      // llegaban 800, y el corte caía en mitad de una palabra. Lo que se perdía solía ser la
+      // instrucción, que va al final de lo que uno escribe.
+      const larga = Array.from({ length: 60 }, (_, i) => "PUNTO " + (i + 1) + " DEL CONTROL ANTERIOR CON SU DETALLE").join("; ");
+      t.cierto(larga.length > 1500, "el texto de prueba es más largo que el tope viejo (" + larga.length + ")");
+      const p = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { indicaciones: larga });
+      t.cierto(p.user.indexOf("PUNTO 60 DEL CONTROL ANTERIOR") >= 0,
+        "el final del texto —donde suele ir la instrucción— sí llega al modelo");
+      // Y cuando de verdad hay que cortar, se corta por ítem completo, no a mitad de palabra.
+      const enorme = Array.from({ length: 400 }, (_, i) => "ITEM " + (i + 1) + " CON TEXTO DE RELLENO SUFICIENTE").join("; ");
+      const p2 = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { indicaciones: enorme });
+      const bloque = p2.user.slice(p2.user.indexOf("LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ"));
+      t.cierto(bloque.length > 5000, "se conserva muchísimo más que los 800 de antes");
+      // La propiedad que importa no es «no hay puntos suspensivos» —el corte los pone a
+      // propósito— sino que lo último que llega es un ÍTEM COMPLETO. El defecto viejo cortaba
+      // a mitad de palabra («PLAN: SE») y un fragmento colgante se puede leer como una orden.
+      const cola = bloque.slice(0, bloque.indexOf("…") + 1);
+      t.cierto(/ITEM \d+ CON TEXTO DE RELLENO SUFICIENTE…$/.test(cola),
+        "lo último que llega es un ítem entero, no media palabra: " + JSON.stringify(cola.slice(-60)));
     });
 
     // v17.3.0 — mismo motivo que la prueba de arriba: "gemini-2.5-flash" salió de
@@ -630,6 +760,66 @@ module.exports = {
       t.igual(c.api.mtrCasillaDeModo("modo_inventado"), null, "modo desconocido: null");
     });
 
+    // v18.0.83 — HALLAZGO DE ENJAMBRE #35. dataset.vglVigilado marcaba el ELEMENTO como
+    // vigilado, no el PACIENTE. Si Angular reutiliza el mismo <textarea> al cambiar de
+    // historia (el propio hallazgo admite no haberlo verificado contra Everest real, pero
+    // el código no tenía ninguna guarda que lo descartara), la primera edición REAL del
+    // médico sobre el paciente nuevo encontraba `antes===undefined` (nunca sembrado para
+    // ESE paciente) y se trataba como «primera vista» — sin invalidar el resumen en caché.
+    t.caso("REGRESIÓN — un cambio de paciente sobre el MISMO nodo <textarea> resiembra el texto vigilado, no lo ignora en silencio (hallazgo #35)", () => {
+      const c = cargar({ silencioso: true });
+      const textarea = { value: "", dataset: {}, _listeners: {}, addEventListener(t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); } };
+      const anamesis = {};
+      const textMuted = { textContent: "111111", closest: () => null };
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? anamesis : null);
+      c.env.doc.querySelector = (sel) => (sel === 'textarea[name="UltimaEnfermedad"]' ? textarea : null);   // sin app-index: cae a `document` mismo
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [textMuted] : []);
+
+      // PAC_A abre la historia: se vigila la casilla, sembrada vacía para ÉL.
+      c.api._vglVigilarTextoLibre("111111");
+      t.igual(textarea.dataset.vglVigilado, "1", "la casilla queda marcada como vigilada");
+      t.igual(textarea.dataset.vglVigiladoDoc, "111111", "y se guarda DE QUIÉN es, no solo que ya se vigiló");
+
+      // Angular cambia a PAC_B reutilizando el MISMO nodo <textarea> (mismo objeto JS).
+      textMuted.textContent = "222222";
+      c.api._vglVigilarTextoLibre("222222");
+      t.igual(textarea.dataset.vglVigiladoDoc, "222222", "el guardián detecta el cambio de dueño y lo actualiza");
+      t.igual(Object.keys(textarea._listeners.blur || []).length, 1, "sin volver a añadir un segundo listener de blur");
+
+      // El médico escribe algo nuevo y real en la casilla de PAC_B — su primera edición.
+      const invalido = c.api._vglNotarTextoLibre("222222", "enfermedad_actual", "Dolor abdominal de 3 días de evolución");
+      t.cierto(invalido, "la primera edición REAL sobre el paciente nuevo SÍ invalida el resumen en caché — antes no lo hacía");
+    });
+
+    // v18.0.107 — S+ flujo (C3): al salir de una casilla de texto libre el resumen en caché se
+    // BORRABA: el botón «Panel del paciente» desaparecía del dock, los widgets de Conducta se
+    // escondían hasta 30 s + red y Agendar volvía a «Analizando…» — por escribir una frase.
+    // Ahora se recalcula en el acto con lo de pantalla, queda marcado «desactualizado» (el
+    // cálculo completo se dispara en segundo plano) y el sello de tiempo no se renueva.
+    t.caso("v18.0.107 (C3): editar una casilla de texto libre deja el resumen en caché DISPONIBLE y marcado «desactualizado», sin renovar su edad; un resumen fresco quita la marca", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : null);
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 111111", closest: () => null }] : []);
+      const R = { factores: { edad: 60, sexo: "F" }, erc: { entradas: {} }, plan: { drivers: [], pasajeros: [] }, programa: "HTA" };
+      c.api.mtrCacheResumenGuardar("111111", R);
+      c.api.__envejecerCacheResumen(60000);   // calculado hace 1 min (dentro de la vigencia de la caché)
+      c.api._vglNotarTextoLibre("111111", "motivo_consulta", "control");        // primera vista: siembra
+      const cambio = c.api._vglNotarTextoLibre("111111", "motivo_consulta", "control de hipertensión");
+      t.cierto(cambio, "montaje: el texto cambió de verdad");
+      t.cierto(!!c.api.mtrCacheResumenLeer("111111"), "el resumen SIGUE en caché (antes: null → el dock quitaba el botón «Panel»)");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("111111"), "y queda marcado «desactualizado» para que el cálculo completo corra en segundo plano");
+      t.igual(c.api.mtrCacheResumenEdadMin("111111"), 1, "sin renovar la edad: «leídos hace 1 min» sigue siendo verdad (renovada: 0)");
+      c.api.mtrCacheResumenGuardar("111111", R);
+      t.falso(c.api.mtrCacheResumenDesactualizado("111111"), "un resumen fresco quita la marca");
+      // si la pantalla ya es de OTRO paciente, no se recalcula sobre ella: se borra, como antes
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 222222", closest: () => null }] : []);
+      c.api._vglNotarTextoLibre("111111", "motivo_consulta", "otra cosa");
+      t.igual(c.api.mtrCacheResumenLeer("111111"), null, "con otra historia delante, la caché se borra en vez de recalcularse sobre datos ajenos");
+      // el disparador en segundo plano trata la marca como «no hay caché»
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(mtrCacheResumenLeer\(docId\) && !mtrCacheResumenDesactualizado\(docId\)\) return;/.test(src), "autoCalcularResumenSiNecesario: un resumen «desactualizado» sí dispara el cálculo completo");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: vacía inserta; ocupada NO pisa y devuelve el texto previo; sin casilla dice la pestaña", () => {
       const c = cargar({ silencioso: true });
       const caja = { value: "", isConnected: true, dispatchEvent: () => {} };
@@ -664,6 +854,25 @@ module.exports = {
       t.igual(caja.value, "", "cero escritura: la casilla queda intacta (bug real: se insertaba igual)");
     });
 
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 8) — REPORTE DEL BARRIDO: Insertar dos
+    // casillas seguidas del Redactor IA («Enfermedad actual» → auto-avanza → «Análisis y
+    // plan») y pulsar «↩ Deshacer» en la última revertía TAMBIÉN la primera. Las dos
+    // inserciones se guardaban bajo la MISMA etiqueta «Redactor IA» y el mismo docId —
+    // condición exacta de acumulación de lotes de v18.0.59 — así que el auto-avance (que
+    // existe precisamente para encadenar casillas DISTINTAS) las acumulaba en un solo lote.
+    // Verificado en Chromium real además de con el arnés.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 8): cada inserción del Redactor IA se guarda con SU PROPIA etiqueta de casilla, no «Redactor IA» a secas", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const llamadas = [...src.matchAll(/_vglGuardarDeshacer\(resumen\._docId, \[[^\]]*\], ([^;]*?)\);/g)].map((m) => m[1]);
+      t.cierto(llamadas.length === 2, "las dos rutas de Insertar del Redactor IA guardan deshacer (normal y reemplazo): " + llamadas.length);
+      llamadas.forEach((et) => t.cierto(et === '"Redactor IA · " + (info.etiqueta || modo)',
+        "la etiqueta incluye la casilla, no el literal fijo «Redactor IA»: " + et));
+      t.falso(/_vglGuardarDeshacer\(resumen\._docId, \[[^\]]*\], "Redactor IA"\)/.test(src),
+        "no queda ningún rastro de la etiqueta fija «Redactor IA» sin la casilla");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: si la historia abierta es de OTRO paciente, se niega sin tocar nada", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
@@ -684,6 +893,31 @@ module.exports = {
       const c2 = cargar({ silencioso: true });
       c2.env.doc.querySelector = () => null;
       t.igual(c2.api.mtrRedactorModoSugerido(), "enfermedad_actual", "sin casillas a la vista: la de siempre");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 6) — REPORTE DEL BARRIDO: con el Panel
+    // abierto ≥3 min (uso normal en consulta), tres rutas de guardado que NO leen laboratorios
+    // (el vigilante de 20 s, la reconciliación al abrir, el refresco de medicamentos tras
+    // prescribir) renovaban el sello de tiempo igual que una lectura real, así que el pie
+    // decía «Datos recién leídos» sobre laboratorios de media hora atrás, y el TTL de 3 min
+    // nunca se cumplía de verdad durante toda la consulta.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 6): mtrCacheResumenGuardar(...,{sinRed:true}) no renueva el sello de tiempo ni borra «desactualizado»", () => {
+      const c = cargar({ silencioso: true });
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA" });
+      c.api.__envejecerCacheResumen(60000);   // 1 min: sigue vigente (TTL 3 min)
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 1, "control: 1 minuto de antigüedad");
+      c.api.mtrCacheResumenMarcarDesactualizado("222");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("222"), "control: queda marcado «desactualizado»");
+      // Un repintado puro (sin red): la edad NO se renueva y la marca sobrevive.
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA", medicamentos: ["X"] }, { sinRed: true });
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 1, "{sinRed:true}: la edad NO se renueva a 0");
+      t.cierto(c.api.mtrCacheResumenDesactualizado("222"), "{sinRed:true}: sigue marcado «desactualizado»");
+      // Un guardado NORMAL (con red real) sí renueva todo, exactamente como antes.
+      c.api.mtrCacheResumenGuardar("222", { programa: "HTA" });
+      t.igual(c.api.mtrCacheResumenEdadMin("222"), 0, "un guardado real SÍ renueva la edad a 0");
+      t.falso(c.api.mtrCacheResumenDesactualizado("222"), "y quita la marca «desactualizado»");
     });
 
     t.caso("caché del resumen: edad en minutos y borrado explícito (para el «Recalcular ahora» de la Ficha)", () => {
@@ -776,11 +1010,13 @@ module.exports = {
 
     t.caso("los ejemplos de estilo se guardan desidentificados y se limitan a 3", () => {
       const c = cargar({ silencioso: true });
-      c.api.mtrEstiloGuardar("Paciente acude a control de su programa; correo juan@x.com por error incluido, y evoluciona estable sin novedades.");
+      // v18.0.103 — aprender estilo exige conocer el nombre del paciente (S+ robustez #1):
+      // las llamadas llevan un nombre sintético; sin él, no se guarda nada.
+      c.api.mtrEstiloGuardar("Paciente acude a control de su programa; correo juan@x.com por error incluido, y evoluciona estable sin novedades.", "NOMBRE SINTETICO");
       const arr = c.api.mtrEstiloLeer();
       t.igual(arr.length, 1, "un ejemplo guardado");
       t.cierto(arr[0].indexOf("juan@x.com") < 0, "el correo se censuró al guardar");
-      for (let i = 0; i < 5; i++) c.api.mtrEstiloGuardar("Ejemplo número " + i + " con suficiente texto para enseñar el estilo del médico.");
+      for (let i = 0; i < 5; i++) c.api.mtrEstiloGuardar("Ejemplo número " + i + " con suficiente texto para enseñar el estilo del médico.", "NOMBRE SINTETICO");
       t.igual(c.api.mtrEstiloLeer().length, 3, "nunca más de 3");
     });
 
@@ -955,10 +1191,92 @@ module.exports = {
     t.caso("el panel de redacción ya NO congela el texto libre en una foto única al abrir", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
-      const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
-      // v17.34.0 — "Generar todo" se retiró (encargo del médico: "casi ni lo uso, más bien
-      // estorba"); queda un solo disparador de generación.
+      // v18.0.36 — la forma cambió: `contextoLibre` ya no es una sola expresión, porque
+      // además de lo que lee libreAhora() (Revisión por sistemas y Examen físico) ahora
+      // recoge lo que el médico lleva tecleado en las OTRAS casillas de la historia. Lo que
+      // esta prueba fija sigue siendo lo mismo: que se lea EN EL CLIC, no al abrir el panel.
+      const usos = (src.match(/contextoLibre: \[libreAhora\(\)\.combinado,/g) || []).length;
       t.igual(usos, 1, "el disparador de generación lee fresco en el momento del clic");
+      t.cierto(/mtrTextoDeOtrasCasillas\(modo, document, _res\._nombrePaciente\)/.test(src),
+        "y en ese mismo momento recoge lo que él lleva tecleado en las otras casillas");
+    });
+
+    t.caso("v18.0.36: la hoja de hechos se recalcula del resumen vigente, no se arrastra la de la foto", () => {
+      // La promesa de la v17.47.0 era «el JSON que va a la IA no puede ir caducado». Pero la
+      // rama del caso NORMAL —la caché guarda el MISMO objeto que la foto, que es lo que pasa
+      // casi siempre porque el panel saca su resumen de la caché— devolvía la hoja de la
+      // foto sin tocarla. Y ese resumen puede haber cambiado POR DENTRO desde entonces:
+      // hasta la v18.0.34 el agendamiento le escribía la tensión encima. La hoja que leía la
+      // IA quedaba desincronizada de su propio resumen sin que nada lo dijera.
+      const c2 = cargar({ silencioso: true });
+      const a2 = c2.api;
+      const r = a2.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 62, sexo: "M", pesoKg: 70, creatinina: 1.0,
+        paSistolica: 128, paDiastolica: 78, factores: { hta: true },
+      });
+      r._docId = "111111";
+      a2.mtrCacheResumenGuardar("111111", r);
+      const hojaDeLaFoto = { __marcaDePrueba: "esta es la hoja vieja" };
+      const v = a2.mtrIaResumenVigente(r, hojaDeLaFoto);
+      t.cierto(v.resumen === r, "el resumen vigente es el de la caché (aquí, el mismo objeto)");
+      t.falso(v.hoja === hojaDeLaFoto, "pero la hoja NO es la de la foto: se recalcula");
+      t.falso(!!(v.hoja && v.hoja.__marcaDePrueba), "y no conserva nada de la hoja vieja");
+      t.cierto(!!v.hoja, "hay hoja nueva de verdad");
+      t.falso(v.refrescado, "y no se anuncia como «refrescado» cuando el objeto no cambió: eso sería mentir sobre el origen");
+    });
+
+    t.caso("v18.0.36: lo que el médico teclea en las otras casillas SÍ llega al prompt, menos la que está generando", () => {
+      // Hallazgo del enjambre: lo que él escribe en Enfermedad actual, Análisis y plan o
+      // Recomendaciones no llegaba al prompt POR NINGUNA VÍA hasta que guardara la historia
+      // y el script la releyera de la API. mtrLeerTextoLibreHistoria solo mira Revisión por
+      // sistemas y Examen físico. Redactar «con lo que él escribió» sin haberlo leído es
+      // exactamente lo que reportó.
+      // Se prueba EJECUTANDO. La primera versión de esta prueba miraba el fuente y una
+      // mutación la dejó en ridículo: bastaba un `return` temprano para volver el bloque
+      // inalcanzable —el texto seguía escrito— y la prueba pasaba en verde. Es la misma
+      // trampa que ya había caído en la v18.0.33. Por eso la lógica salió del closure a
+      // mtrTextoDeOtrasCasillas, que sí se puede llamar.
+      const casillas = {
+        enfermedad_actual: { value: "  REFIERE CEFALEA OCASIONAL DESDE HACE DOS SEMANAS  " },
+        analisis_plan: { value: "CONTINUAR LOSARTAN, VIGILAR FUNCION RENAL" },
+        recomendaciones: { value: "DIETA HIPOSODICA" },
+        motivo_consulta: { value: "ESTO NO DEBE VIAJAR NUNCA" },
+      };
+      // mtrCasillaAnalisis no busca por nombre: barre los <textarea> y mira el placeholder.
+      casillas.analisis_plan.placeholder = "Ingrese la descripción del análisis y plan";
+      const docFalso = {
+        getElementById: () => null,
+        querySelector: (sel) => {
+          if (/UltimaEnfermedad/.test(sel)) return casillas.enfermedad_actual;
+          if (/RecomendacionesMedicas/.test(sel)) return casillas.recomendaciones;
+          if (/MotivoConsulta/.test(sel)) return casillas.motivo_consulta;
+          return null;
+        },
+        querySelectorAll: (sel) => (sel === "textarea" ? [casillas.analisis_plan] : []),
+      };
+
+      const generandoEA = api.mtrTextoDeOtrasCasillas("enfermedad_actual", docFalso, null);
+      t.falso(/CEFALEA OCASIONAL/.test(generandoEA),
+        "generando Enfermedad actual, NO se le devuelve al modelo el borrador de esa misma casilla");
+      t.cierto(/CONTINUAR LOSARTAN/.test(generandoEA), "pero sí lo que él escribió en Análisis y plan");
+      t.cierto(/ANÁLISIS Y PLAN: /.test(generandoEA), "y va rotulado, no pegado a lo demás");
+      t.falso(/ESTO NO DEBE VIAJAR NUNCA/.test(generandoEA),
+        "Motivo de consulta queda fuera: por decisión C2 (v17.6.3) la IA ve siempre la constante, no la casilla");
+
+      const generandoAP = api.mtrTextoDeOtrasCasillas("analisis_plan", docFalso, null);
+      t.cierto(/CEFALEA OCASIONAL/.test(generandoAP), "generando Análisis y plan, sí llega la Enfermedad actual que él tecleó");
+      t.falso(/CONTINUAR LOSARTAN/.test(generandoAP), "y se excluye la casilla que se está generando");
+
+      // El censor de nombres, que es la barrera que cerró la v18.0.15.
+      const conNombre = { querySelector: (sel) => (/UltimaEnfermedad/.test(sel) ? { value: "PACIENTE PEDRO PEREZ REFIERE MEJORIA" } : null),
+                          querySelectorAll: (sel) => [], getElementById: () => null };
+      const censurado = api.mtrTextoDeOtrasCasillas("analisis_plan", conNombre, "PEDRO PEREZ");
+      t.falso(/PEDRO PEREZ/.test(censurado), "el nombre NO viaja a Google");
+      t.cierto(/MEJORIA/.test(censurado), "pero el contenido clínico sí llega");
+
+      t.igual(api.mtrTextoDeOtrasCasillas("analisis_plan", null, null), "", "sin documento no lanza y devuelve vacío");
+      t.igual(api.mtrRotuloDeModo("enfermedad_actual"), "ENFERMEDAD ACTUAL");
+      t.igual(api.mtrRotuloDeModo("recomendaciones"), "RECOMENDACIONES");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
@@ -1561,7 +1879,7 @@ module.exports = {
     // entraba al prompt de OTROS pacientes.
     t.caso("mtrEstiloGuardar: el ejemplo se guarda ya sin nombres (no basta scrubPII: no toca nombres propios)", () => {
       const c = cargar({ silencioso: true });
-      c.api.mtrEstiloGuardar("PACIENTE Maria Rodriguez asiste a control de hipertension, refiere buena adherencia al tratamiento.");
+      c.api.mtrEstiloGuardar("PACIENTE Maria Rodriguez asiste a control de hipertension, refiere buena adherencia al tratamiento.", "Maria Rodriguez");   // v18.0.103: con nombre conocido
       const guardados = c.api.mtrEstiloLeer();
       t.igual(guardados.length, 1, "quedo guardado");
       t.falso(/Maria|Rodriguez/.test(guardados[0]), "y sin el nombre del paciente dentro");
@@ -1734,7 +2052,7 @@ module.exports = {
     // Vive dentro del cierre de mtrAbrirPanelRedaccion — se protege por texto fuente.
     t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los 4 puntos de envío de texto libre a la IA", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
+      t.cierto(/resumen\._nombrePaciente = _mtrNombreEfectivo\(apt && apt\.nombre, apt && apt\.doc_id\);/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual) — desde v18.0.103, el de la agenda o el del paquete de Everest");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
       // v17.34.0 — "Generar todo" se retiró; queda un solo objeto opts.
       // v17.47.0 — el objeto del que se lee dejó de llamarse `resumen`: el manejador de
@@ -2105,6 +2423,465 @@ module.exports = {
       t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-08-30",
         drivers: [{ clave: "GLUCOSA", estado: "D", vence: "2026-11-02" }] }), null,
         "si ningún vencimiento fijó la fecha, se calla en vez de señalar a uno");
+    });
+
+    // =====================================================================
+    // v18.0.15 — FUGA DE PHI, hallazgo del barrido exhaustivo del 31-ago (40.810 líneas,
+    // verificado adversarialmente y REPRODUCIDO con el arnés antes de tocar nada).
+    //
+    // El módulo tiene DOS caminos que llevan la historia de Everest al prompt de Gemini:
+    //   · la vía de RED (mtrHechosDesdeHcEverest) — pasa por mtrHcTachar + mtrHcValorLimpio;
+    //   · la cosecha EN VIVO de la pantalla (mtrCosecharHcDelDom, v17.10.0) — NO pasaba por
+    //     nada. Guardaba `v.slice(0,300)`: el texto crudo que el médico acababa de teclear.
+    //
+    // Y de ahí no se quedaba quieto: mtrHcAcumularDelDom lo persiste en `hcEverest.dom`,
+    // mtrHcTextoParaHoja lo vuelca tal cual bajo «escrito en la historia de HOY», y
+    // mtrRedaccionPrompt lo mete en los HECHOS DEL PACIENTE que salen del equipo. Una
+    // cédula, un celular o un correo escritos a mano en una observación viajaban enteros.
+    //
+    // La cabecera del módulo (v17.9.0) ya prometía lo contrario: «defensa en profundidad:
+    // todo lo que sea texto pasa igual por scrubPII». Esta ruta era la excepción, y no
+    // estaba declarada en ningún comentario — que es justo lo que la hacía invisible.
+    // =====================================================================
+    t.caso("v18.0.15 — la cosecha EN VIVO de la pantalla desidentifica igual que la vía de red", () => {
+      const TEXTO = "Paciente APELLIDO NOMBRE CC 80123456 cel 3001234567 correo x@correo.com";
+      const doc = { querySelectorAll: () => [
+        { name: "revisionSistema.observaciones", type: "text", value: TEXTO },
+      ]};
+      const c = api.mtrCosecharHcDelDom(doc);
+      const v = c["revisionSistema.observaciones"];
+      t.cierto(typeof v === "string" && v.length > 0, "la casilla clínica sigue cosechándose (no se censura de más)");
+      t.cierto(v.indexOf("80123456") < 0, "la cédula tecleada a mano no puede salir del equipo");
+      t.cierto(v.indexOf("3001234567") < 0, "ni el celular");
+      t.cierto(v.indexOf("x@correo.com") < 0, "ni el correo");
+      // Y la comprobación que de verdad fija la regla: las DOS vías al mismo prompt tienen
+      // que dar lo mismo. Mientras eso se cumpla, no puede volver a haber una saneada y
+      // otra no — que es exactamente la forma que tuvo este defecto.
+      t.igual(v, api.mtrHcValorLimpio(TEXTO), "las dos vías al mismo prompt desidentifican igual");
+    });
+
+    t.caso("v18.0.15 — el saneo no rompe los números: peso, talla y tensión siguen siendo números", () => {
+      const doc = { querySelectorAll: () => [
+        { name: "signosVitales.peso", type: "text", value: "72,5" },
+        { name: "signosVitales.talla", type: "text", value: "168" },
+      ]};
+      const c = api.mtrCosecharHcDelDom(doc);
+      t.igual(c["signosVitales.peso"], 72.5, "el peso sigue llegando como número, no como texto censurado");
+      t.igual(c["signosVitales.talla"], 168, "y la talla también");
+    });
+
+    // Y lo que el texto de la hoja acaba diciendo: la comprobación de arriba mira la
+    // cosecha; esta mira el ESLABÓN SIGUIENTE, que es el que llega al modelo.
+    t.caso("v18.0.15 — lo cosechado llega ya desidentificado al texto de la hoja de hechos", () => {
+      const hechos = { dom: { "revisionSistema.observaciones": api.mtrCosecharHcDelDom({
+        querySelectorAll: () => [{ name: "revisionSistema.observaciones", type: "text",
+          value: "control, CC 80123456, cel 3001234567" }],
+      })["revisionSistema.observaciones"] } };
+      const texto = api.mtrHcTextoParaHoja(hechos);
+      t.cierto(texto.indexOf("80123456") < 0, "la cédula no aparece en el texto que se le entrega al modelo");
+      t.cierto(texto.indexOf("3001234567") < 0, "ni el celular");
+      t.cierto(/control/i.test(texto), "pero el contenido clínico sí sobrevive");
+    });
+
+
+
+    // =====================================================================
+    // v18.0.25 — LA TACHADURA DE NOMBRES DESTROZABA EL TEXTO CLÍNICO
+    //
+    // `mtrHcTachaduras` admitía todo token del nombre de longitud >= 3, y `mtrHcTachar`
+    // construía `new RegExp(esc, "gi")` SIN límites de palabra: esas letras se tachaban
+    // dentro de cualquier palabra clínica. Medido con el arnés, tachando «ANA»:
+    //   "MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan."
+    //   -> "MAREO y [CENSURADO]SARCA. [CENSURADO]MNESIS … SEM[CENSURADO]. [CENSURADO]LISIS"
+    // Y «MAR» convierte MAREO en «[CENSURADO]EO». El síntoma desaparece del contexto y el
+    // modelo redacta la Enfermedad Actual sin él, o con la palabra rota. Nombres cortos y
+    // frecuentes aquí —ANA, MAR, LUZ, PAZ, CRUZ, MORA, LEÓN— entran de lleno.
+    //
+    // DECISIÓN DEL MÉDICO (31-ago), textual: «Solo palabras completas, y mínimo 4 letras»,
+    // sobre la regla que él mismo fijó antes: «solo se sanitiza hasta donde sea seguro para
+    // mi proyecto y grounding. si va a romper el código entonces no se aplica en ese caso».
+    //
+    // COSTE ACEPTADO Y DECLARADO: un componente de TRES letras ya no se tacha por identidad.
+    // Lo que tiene FORMA —cédula, celular, correo, fechas— lo sigue tachando scrubPII aparte.
+    // Estas pruebas fijan las DOS direcciones, porque una defensa que se pasa de frenada
+    // destruye el grounding y una que se queda corta deja salir el nombre.
+    // =====================================================================
+    t.caso("v18.0.25: tachar un nombre no puede romper una palabra clínica", () => {
+      const TXT = "Paciente refiere MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan.";
+      const r = api.mtrHcTachar(TXT, ["ROSA", "MORA"]);
+      t.cierto(/MAREO/.test(r), "MAREO sigue entero");
+      t.cierto(/ANASARCA/.test(r), "ANASARCA sigue entera");
+      t.cierto(/ANAMNESIS/.test(r), "ANAMNESIS sigue entera");
+      t.cierto(/SEMANA/.test(r), "SEMANA sigue entera");
+      t.cierto(/ANALISIS/.test(r), "ANALISIS sigue entero");
+      t.falso(/CENSURADO/.test(r), "y no se tachó nada: ninguno de esos apellidos aparece como palabra suelta");
+    });
+
+    t.caso("v18.0.25: pero un apellido que SÍ aparece como palabra suelta se sigue tachando", () => {
+      const r = api.mtrHcTachar("Acompaña la señora ROSA, refiere MAREO.", ["ROSA"]);
+      t.falso(/ROSA,/.test(r), "el apellido suelto no puede viajar al modelo");
+      t.cierto(/CENSURADO/.test(r), "se tachó");
+      t.cierto(/MAREO/.test(r), "y el dato clínico de la misma frase sobrevive");
+    });
+
+    t.caso("v18.0.25: el límite es de PALABRA, no de subcadena", () => {
+      t.cierto(/ROSACEA/.test(api.mtrHcTachar("Se observa ROSACEA en mejillas.", ["ROSA"])),
+        "ROSACEA contiene ROSA y no debe tocarse");
+      t.cierto(/LEONINA/.test(api.mtrHcTachar("Facies LEONINA.", ["LEON"])),
+        "ni LEONINA con LEON");
+      t.cierto(/CRUZADO/.test(api.mtrHcTachar("Ligamento CRUZADO anterior.", ["CRUZ"])),
+        "ni CRUZADO con CRUZ");
+    });
+
+    // v18.0.102 — DECISIÓN NUEVA DEL MÉDICO (02-sep, cierre adversarial, fila 13b): «alinealo».
+    // El mínimo de 4 letras de v18.0.25 dejaba pasar a Gemini, por el canal del paquete de
+    // Everest, apellidos de 2-3 letras que el otro canal (mtrSanearTextoLibreAI, dos letras
+    // desde v18.0.52) sí tachaba. Ahora los dos canales usan la MISMA regla, en un solo sitio
+    // (_mtrTokenDeNombreTachable): dos letras o más, y ni partícula ni palabra funcional.
+    // El coste de v18.0.52 pasa a los dos canales: ANA/PAZ/LUZ como palabra suelta se tachan
+    // cuando el paciente se llama así (el límite de palabra sigue protegiendo ANASARCA, etc.).
+    t.caso("v18.0.102: mtrHcTachaduras usa la misma regla de dos letras que el otro canal — decisión del médico del 02-sep", () => {
+      const tach = api.mtrHcTachaduras({
+        datosUsuario: { nombre: "ANA", primer_Apellido: "GOMEZ", segundo_Apellido: "PAZ" },
+      });
+      t.cierto(tach.indexOf("GOMEZ") >= 0, "el apellido de 5 letras entra");
+      t.cierto(tach.indexOf("ANA") >= 0, "«ANA» (3) ahora SÍ entra: antes viajaba a Gemini por este canal");
+      t.cierto(tach.indexOf("PAZ") >= 0, "«PAZ» (3) también");
+      const dos = api.mtrHcTachaduras({ datosUsuario: { nombre: "KIM", primer_Apellido: "LI", segundo_Apellido: "HA" } });
+      t.cierto(dos.indexOf("LI") >= 0, "un apellido de DOS letras entra — el hueco de la fila 13b");
+      t.falso(dos.indexOf("HA") >= 0, "pero «HA», palabra funcional, no: tacharla destrozaría «NO HA PRESENTADO»");
+      t.falso(api.mtrHcTachaduras({ datosUsuario: { nombre: "ANA DE LA CRUZ" } }).some((x) => x === "DE" || x === "LA"),
+        "y las partículas siguen fuera");
+      // Los dos canales, de verdad la misma regla: lo que uno tacha, el otro también.
+      const nombre = "KIM LI HA DE LA CRUZ";
+      const porTexto = api.mtrSanearTextoLibreAI("PACIENTE KIM LI HA DE LA CRUZ. NO HA PRESENTADO DOLOR.", nombre);
+      // KIM LI se censuran juntos, HA DE LA quedan (funcional + partículas), CRUZ se censura.
+      t.cierto(/PACIENTE \[NOMBRE_CENSURADO\] HA DE LA \[NOMBRE_CENSURADO\]\. NO HA PRESENTADO DOLOR\./.test(porTexto), "canal de texto: " + porTexto);
+      const porPaquete = api.mtrHcTachar("PACIENTE KIM LI HA DE LA CRUZ. NO HA PRESENTADO DOLOR.", api.mtrHcTachaduras({ datosUsuario: { nombreCompleto: nombre } }));
+      t.cierto(/NO HA PRESENTADO DOLOR\./.test(porPaquete) && !/KIM|\bLI\b|CRUZ/.test(porPaquete), "canal del paquete: " + porPaquete);
+    });
+
+    t.caso("v18.0.102: de punta a punta, un apellido de dos letras del paquete de Everest ya no llega a la hoja de hechos", () => {
+      const hechos = api.mtrHechosDesdeHcEverest({
+        datosUsuario: { nombre: "NOMBREPRUEBA", primer_Apellido: "LI", segundo_Apellido: "MUÑOZ", identificacion: "80123456" },
+        antecedentePatologicos: { hipertension: true, diabetes: false },
+        examenFisico: { peso: 70, talla: 165 },
+        habitosGestionRiesgo: { sedentarismo: true },
+        ultimaEnfermedad: "PACIENTE LI MUNOZ REFIERE CEFALEA OCASIONAL.",
+      });
+      const txt = String((hechos && hechos.textos && hechos.textos.ultimaEnfermedad) || "");
+      t.falso(/\bLI\b/.test(txt), "«LI» no viaja: " + txt);
+      t.falso(/MUNOZ/.test(txt), "ni «MUNOZ» (tildes, v18.0.97)");
+      t.cierto(/CEFALEA OCASIONAL/.test(txt), "y lo clínico sobrevive");
+    });
+
+    // v18.0.103 — refutador de v18.0.97 (fila 13b): la regla de dos letras se aplicaba a TODOS
+    // los campos de datosUsuario. Un relleno como «NA» en celular o «NO TIENE» en correo se
+    // convertía en tachadura y borraba «NA 138» (el sodio) y «TIENE» de la hoja de hechos.
+    t.caso("v18.0.103: los campos de contacto solo aportan tachaduras con FORMA — «NA» en celular no borra el sodio", () => {
+      const tach = api.mtrHcTachaduras({ datosUsuario: { nombre: "NOMBREPRUEBA", celular: "NA", correo: "NO TIENE", telefono: "SD", identificacion: "80123456", primer_Apellido: "NN" } });
+      t.falso(tach.indexOf("NA") >= 0, "«NA» en celular NO es una tachadura");
+      t.falso(tach.indexOf("TIENE") >= 0 || tach.indexOf("NO") >= 0, "ni «NO TIENE» en correo");
+      t.falso(tach.indexOf("SD") >= 0, "ni «SD» en teléfono");
+      t.cierto(tach.indexOf("80123456") >= 0, "la cédula, que sí tiene forma, sí entra");
+      t.cierto(tach.indexOf("NN") >= 0, "y un apellido de dos letras sigue entrando (es un campo de nombre)");
+      const hechos = api.mtrHechosDesdeHcEverest({
+        datosUsuario: { nombre: "NOMBREPRUEBA", primer_Apellido: "SINTETICO", celular: "NA", correo: "NO TIENE" },
+        antecedentePatologicos: { hipertension: true }, examenFisico: { peso: 70 },
+        ultimaEnfermedad: "PACIENTE NOMBREPRUEBA TIENE DOLOR. LABS: NA 138, K 4.1. NO TIENE ALERGIAS.",
+      });
+      const txt = String(hechos.textos.ultimaEnfermedad);
+      t.cierto(/NA 138/.test(txt) && /NO TIENE ALERGIAS/.test(txt), "el sodio y «NO TIENE» sobreviven: " + txt);
+      t.falso(/NOMBREPRUEBA/.test(txt), "y el nombre sí se tacha");
+    });
+
+    // v18.0.103 — S+ ROBUSTEZ #1 y #2 (dos fugas de PHI hacia Gemini que ningún enjambre
+    // anterior cubrió). (1) Sin nombre en la agenda (`apt = { doc_id }`: paciente adicional,
+    // otro médico, o snapshot aún vacío tras la recarga de Everest) `_nombrePaciente` era null
+    // y la única defensa contra nombres en MAYÚSCULAS se apagaba en todos los canales; el
+    // borrador aceptado se archivaba como «estilo» con el nombre y se reinyectaba en otros
+    // pacientes; `.map(mtrSanearTextoLibreAI)` pasaba el índice como nombre; y el marcador
+    // «Paciente Everest» tachaba la palabra PACIENTE y dejaba el nombre real. (2) La hoja de
+    // hechos era el único bloque del prompt sin el censor de nombres.
+    t.caso("v18.0.103 PHI: el nombre del paquete de Everest sirve de tachadura cuando la agenda no trae nombre, y «Paciente Everest» no cuenta como nombre", () => {
+      const c = cargar({ silencioso: true });
+      const payload = { datosUsuario: { nombre: "ZUTANA", primer_Apellido: "PERENCEJO", identificacion: "80123456" }, antecedentePatologicos: { hipertension: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "CONTROL." };
+      c.api.mtrHcGuardar("80123456", payload);
+      t.igual(c.api._mtrNombreEfectivo(null, "80123456"), "ZUTANA PERENCEJO", "sin nombre de agenda, el del paquete (en RAM)");
+      t.igual(c.api._mtrNombreEfectivo("Paciente Everest", "0080123456"), "ZUTANA PERENCEJO", "el marcador genérico no es un nombre; la cédula se compara canónica");
+      t.igual(c.api._mtrNombreEfectivo("ANA GOMEZ", "80123456"), "ANA GOMEZ", "con nombre de agenda, manda la agenda");
+      t.igual(c.api._mtrNombreEfectivo(null, "999"), null, "sin nada, null (y no se inventa)");
+      const hc = c.api.mtrHcLeer("80123456");
+      t.falso(JSON.stringify(hc || {}).indexOf("PERENCEJO") >= 0, "el nombre NO se persiste con la historia: vive solo en memoria");
+      t.falso(JSON.stringify(c.env.almacen || {}).indexOf("PERENCEJO") >= 0, "ni en localStorage");
+      t.cierto(c.api.mtrSanearTextoLibreAI("PACIENTE ZUTANA PERENCEJO REFIERE CEFALEA.", c.api._mtrNombreEfectivo(null, "80123456")).indexOf("PERENCEJO") < 0, "y con ese nombre el texto en MAYÚSCULAS sí se tacha");
+    });
+
+    t.caso("v18.0.103 PHI: la hoja de hechos y los ejemplos de estilo pasan por el censor de nombres; sin nombre no se aprende estilo", () => {
+      const hoja = api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+        ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+        hcEverest: { dom: { "RevisionSistema.Observaciones": "PACIENTE ZUTANO PERENCEJO REFIERE CEFALEA OCASIONAL" }, textos: { ultimaEnfermedad: "PACIENTE ZUTANO PERENCEJO ASINTOMATICO" } },
+      });
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", hoja, {
+        nombrePaciente: "ZUTANO PERENCEJO",
+        estiloEjemplos: ["PACIENTE ZUTANO PERENCEJO ESTABLE, CONTINUA IGUAL MANEJO Y CONTROL EN TRES MESES SIN NOVEDAD."],
+      });
+      const todo = String(p.system || "") + "\n" + String(p.user || "");
+      t.falso(/PERENCEJO/.test(todo), "el apellido no viaja ni en la hoja de hechos (bloque «escrito en la historia de HOY») ni en los ejemplos de estilo");
+      t.cierto(/CEFALEA OCASIONAL/.test(todo), "y el contenido clínico de la hoja sobrevive");
+      const pGen = api.mtrRedaccionPrompt("enfermedad_actual", hoja, { nombrePaciente: "Paciente Everest", estiloEjemplos: ["EJEMPLO SIN NOMBRE, LO BASTANTE LARGO PARA ENSEÑAR ESTILO."] });
+      t.cierto(/PACIENTE/.test(String(pGen.user || "")), "«Paciente Everest» no tacha la palabra PACIENTE del texto clínico");
+      // Aprender estilo exige conocer el nombre: si no, el borrador con el nombre dentro se
+      // archivaría y volvería en los prompts de los pacientes siguientes.
+      const c = cargar({ silencioso: true });
+      const largo = "PACIENTE ZUTANO PERENCEJO ESTABLE, CONTINUA IGUAL MANEJO Y CONTROL EN TRES MESES SIN NOVEDAD.";
+      t.falso(c.api.mtrEstiloGuardar(largo, null), "sin nombre NO se guarda");
+      t.falso(c.api.mtrEstiloGuardar(largo, "Paciente Everest"), "con el marcador genérico tampoco");
+      t.cierto(c.api.mtrEstiloGuardar(largo, "ZUTANO PERENCEJO"), "con nombre sí");
+      t.falso(JSON.stringify(c.api.mtrEstiloLeer()).indexOf("PERENCEJO") >= 0, "y lo guardado no lleva el nombre");
+    });
+
+    t.caso("v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const soloCodigo = (txt) => txt.split("\n")
+        .filter((l) => !/^\s*\/\//.test(l)).map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+      const ini = src.indexOf("function mtrHcTachar");
+      const cuerpo = soloCodigo(src.slice(ini, src.indexOf("\n  function ", ini + 10)));
+      t.cierto(cuerpo.includes("MTR_LETRA_ES"),
+        "mtrHcTachar debe usar la misma clase de letras españolas que mtrSanearTextoLibreAI: si las dos defensas discrepan, una tacha lo que la otra deja pasar");
+      t.cierto(/\(\?<!"\s*\+\s*limite/.test(cuerpo) && /\(\?!"\s*\+\s*limite/.test(cuerpo),
+        "y con límite por los dos lados, no solo por delante");
+      // v18.0.86 — hallazgo #38: para una tachadura NUMÉRICA (celular/teléfono/
+      // identificación) el límite de LETRA no protege de la adyacencia de OTROS dígitos —
+      // el límite correcto ahí es de dígito, no de letra.
+      // v18.0.97 — cierre del enjambre: la decisión numérico/letra se saca a `esNumero`, y
+      // el token NO numérico se casa con el mismo patrón tolerante a tildes que usa
+      // mtrSanearTextoLibreAI (_mtrPatronConTildes): «MUÑOZ» registrado tacha «MUNOZ»
+      // escrito. Las dos defensas comparten límite Y tolerancia a tildes.
+      t.cierto(/const limite = esNumero \? "\\\\d" : /.test(cuerpo),
+        "las tachaduras puramente numéricas usan límite de DÍGITO, no de letra");
+      t.cierto(/const esc = esNumero \? String\(x\) : _mtrPatronConTildes\(x\)/.test(cuerpo),
+        "y el token no numérico se casa con el patrón tolerante a tildes que comparte con mtrSanearTextoLibreAI");
+    });
+
+    // =================================================================
+    //  v18.0.55 — REPORTE EN VIVO DEL MÉDICO (1-sep), con la nota generada delante.
+    //  Dos defectos en la misma sección del papel que él firma.
+    // =================================================================
+    t.caso("v18.0.55: la lista de próximos laboratorios va con NOMBRES, no con claves de programador", () => {
+      // Lo que salía en la nota, textual:
+      //     :: PRÓXIMOS LABORATORIOS (EN ~3 MESES):
+      //     COLESTEROL_LDL
+      //     GLUCOSA
+      //     UROANALISIS
+      // Regla C del proyecto incumplida en el peor sitio: el documento clínico.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true, dislipidemia: true },
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 }, HBA1C: { fecha: "2026-05-30", valor: 6.64 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      t.cierto(j.order_list.length > 0, "hay exámenes que ordenar (control del escenario)");
+      // La lista de CLAVES sigue existiendo: sus lectores la cruzan con el catálogo de CUPS.
+      t.cierto(j.order_list.indexOf("GLUCOSA") >= 0, "la lista de claves NO se toca: la usa el cruce con CUPS");
+      // Y la nueva, la que el prompt manda listar, va en castellano.
+      t.igual(j.order_list_legible.length, j.order_list.length, "una entrada legible por cada clave");
+      t.cierto(j.order_list_legible.indexOf("Glicemia") >= 0, "«GLUCOSA» se lee «Glicemia»");
+      const crudas = j.order_list_legible.filter((n) => /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(n));
+      t.igual(crudas, [], "y NINGUNA entrada legible puede tener forma de clave de programador");
+    });
+
+    t.caso("v18.0.55: el prompt manda listar la lista LEGIBLE, no la de claves", () => {
+      // Comprobación de alcance: sin esto, se puede añadir el campo legible y dejar el
+      // prompt pidiendo el de claves — el defecto seguiría igual con el arreglo puesto.
+      const fs2 = require("fs"), path2 = require("path");
+      const src2 = fs2.readFileSync(path2.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/listando order_list_legible uno por línea/.test(src2),
+        "el prompt lista la versión legible");
+      t.falso(/listando order_list uno por línea/.test(src2),
+        "y ya no la de claves");
+    });
+
+    t.caso("v18.0.55: al modelo no le llega NI UNA fecha de calendario, y se le prohíbe calcularla", () => {
+      // La nota decía «CITA ... EL 2026-12-03». Comprobado con el arnés: en el JSON que
+      // recibe el modelo no viaja ninguna fecha exacta —todas se relativizan a propósito,
+      // porque una fecha es un cuasi-identificador—, así que esa fecha la CALCULÓ él solo.
+      // El médico se la encuentra firmada como si fuera una cita agendada.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true },
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      const isos = JSON.stringify(j).match(/\d{4}-\d{2}-\d{2}/g) || [];
+      t.igual(isos, [], "ninguna fecha ISO cruda viaja al modelo");
+      t.cierto(/en .*d[ií]a|en ~|mes/.test(String(j.ftl_date) + " " + String(j.control_date)),
+        "las fechas van como PLAZO relativo: " + j.ftl_date + " / " + j.control_date);
+
+      const fs3 = require("fs"), path3 = require("path");
+      const src3 = fs3.readFileSync(path3.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/NUNCA conviertas un plazo en una fecha de calendario/.test(src3),
+        "y se le prohíbe de frente convertir el plazo en una fecha");
+      t.falso(/CITA CONTROL DE RIESGO CARDIOVASCULAR EL \[control_date\]/.test(src3),
+        "la plantilla ya no lleva el «EL» que invitaba a poner una fecha");
+    });
+
+    // =================================================================
+    //  v18.0.56 — REPORTE EN VIVO DEL MÉDICO (1-sep): su pantalla mostraba el uroanálisis
+    //  como ANORMAL, con esterasa leucocitaria 3+, y la sección de REVISIÓN PARACLÍNICA
+    //  de la nota **no lo mencionaba en absoluto**.
+    //
+    //  Dos causas encadenadas, las dos comprobadas con el arnés:
+    //   (1) Esa sección del prompt tenía CUATRO ítems —función renal, perfil lipídico,
+    //       metabolismo glucídico y análisis de metas— y ninguno era el uroanálisis: el
+    //       modelo escribía una revisión de paraclínicos donde el parcial de orina no
+    //       tenía sitio.
+    //   (2) Y aunque lo hubiera tenido, no había QUÉ escribir: los valores leídos entraban
+    //       a mtrEvaluarUroanalisis, se usaban para decidir… y no salían. Solo salía la
+    //       conclusión, así que ningún consumidor podía NOMBRAR lo que se vio.
+    // =================================================================
+    t.caso("v18.0.56: los valores del uroanálisis salen del motor, no solo la conclusión", () => {
+      const uro = api.mtrHallazgosUroDesdeLabs([
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "3+" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+      ]);
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true }, uroHallazgos: uro,
+        ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, {});
+      t.cierto(j.uro_valores.length > 0, "los valores llegan al JSON de la nota");
+      t.cierto(j.uro_valores.join(" ").indexOf("3+") >= 0,
+        "y con la cifra que el médico tiene en pantalla: " + JSON.stringify(j.uro_valores));
+
+      // La contención: sin uroanálisis evaluado NO se inventa nada, y entonces el prompt
+      // manda omitir el ítem entero — nunca decir que fue normal.
+      const sinUro = api.mtrResumenClinico({
+        hoyIso: "2026-09-01", edad: 69, sexo: "F", pesoKg: 70, creatinina: 0.86,
+        factores: { diabetes: true }, ultimos: { GLUCOSA: { fecha: "2026-05-30", valor: 115 } },
+      });
+      t.igual(api.mtrJsonV68DesdeResumen(sinUro, {}).uro_valores, [],
+        "sin uroanálisis, lista vacía: no se fabrica un parcial de orina");
+    });
+
+    t.caso("v18.0.56: la revisión paraclínica tiene un ítem de uroanálisis, y no puede llamarlo normal", () => {
+      const fs4 = require("fs"), path4 = require("path");
+      const src4 = fs4.readFileSync(path4.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src4.indexOf("===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL");
+      t.cierto(ini > 0, "se encontró la sección de revisión paraclínica del prompt");
+      const seccion = src4.slice(ini, src4.indexOf('",', ini));
+      t.cierto(/:: UROANÁLISIS/.test(seccion), "la sección incluye el uroanálisis");
+      t.cierto(/uro_valores/.test(seccion), "y le dice de qué campo sacar los valores");
+      t.cierto(/OMITE el ítem entero/.test(seccion),
+        "sin uroanálisis se omite el ítem: no se afirma que fue normal ni que no se hizo");
+      t.cierto(/NO HAY CRITERIOS DE INFECCIÓN URINARIA/.test(seccion),
+        "y con valores alterados pero sin criterios de ITU, se dice eso — nunca «normal», porque no lo fue");
+    });
+
+    // =====================================================================
+    // v18.0.112 (S+ flujo, C7) — progreso visible, «Cancelar» y ⏳ en el dock
+    // =====================================================================
+    await t.casoAsync("v18.0.112 (C7): el conector avisa por dónde va (modelo e intento) en cada rotación", async () => {
+      let n = 0;
+      const c = cargar({ silencioso: true, gmxhr: (opts) => {
+        n++;
+        if (n < 3) setTimeout(() => opts.onload({ status: 429, responseText: '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}' }), 0);
+        else setTimeout(() => opts.onload({ status: 200, responseText: respGemini("nota") }), 0);
+        return { abort() {} };
+      } });
+      c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const progreso = [];
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", { onProgreso: (pg) => progreso.push(pg) });
+      t.cierto(r.ok, "al final responde");
+      t.igual(progreso.length, 3, "un aviso por intento (antes: «Generando con…» fijo hasta 7 × 25 s)");
+      t.igual(progreso.map((x) => x.intento).join(","), "1,2,3", "numerados");
+      t.cierto(progreso.every((x) => x.de === 7 && typeof x.modelo === "string" && x.modelo.length > 0), "con el total y el modelo de cada intento");
+      t.falso(c.api.mtrIaGenerando(), "al terminar, nada en vuelo");
+    });
+
+    await t.casoAsync("v18.0.112 (C7): «Cancelar» aborta la petición en vuelo, resuelve «cancelado» y una respuesta tardía ya no cuenta", async () => {
+      let abortado = 0, guardado = null;
+      const c = cargar({ silencioso: true, gmxhr: (opts) => { guardado = opts; return { abort() { abortado++; } }; } });
+      c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const control = {};
+      const p = c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", { control });
+      await esperar57(5);
+      t.cierto(c.api.mtrIaGenerando(), "mientras responde, hay una generación en vuelo (el dock pinta ⏳)");
+      t.cierto(typeof control.cancelar === "function", "el control recibió la función de cancelar");
+      control.cancelar();
+      const r = await p;
+      t.cierto(!r.ok && r.motivo === "cancelado", "resuelve como cancelado");
+      t.igual(abortado, 1, "y la petición GM se abortó");
+      t.falso(c.api.mtrIaGenerando(), "ya no hay nada en vuelo");
+      t.noLanza(() => guardado.onload({ status: 200, responseText: respGemini("tarde") }), "una respuesta que llega tarde no revienta");
+      t.falso(c.api.mtrIaGenerando(), "ni deja el contador en negativo/positivo");
+      t.noLanza(() => guardado.ontimeout(), "un timeout tardío tampoco");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-ia-cancelar" class="vgl-agm-btn sec vgl-d-none"/.test(src), "el Redactor tiene el botón «Cancelar», oculto hasta que haya algo que cancelar");
+      t.cierto(/if \(!r\.ok && r\.motivo === "cancelado"\) \{[\s\S]{0,400}salida\.value = _textoAntes \|\| "";/.test(src), "al cancelar se conserva lo que había en la casilla (no se pisa con los hechos)");
+      t.cierto(/VGL_ROTULOS\.redactar \+ \(mtrIaGenerando\(\) \? " · ⏳" : ""\)/.test(src), "el dock dice ⏳ mientras la IA trabaja");
+      t.cierto(/mtrIaGenerando\(\) \? "IA" : "ia"/.test(src), "y la firma del dock lo incluye, para que se repinte");
+    });
+
+    // =====================================================================
+    // v18.0.125 (auditoría UI/UX, filas 32 y 33 · UX-19, UX-20) — dos cosas que el Redactor
+    // le decía al médico y no eran para él.
+    // =====================================================================
+    t.caso("v18.0.125 (fila 32): «Copiado al portapapeles» solo se dice cuando la copia DE VERDAD salió", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("btnCop.addEventListener(");
+      t.cierto(i >= 0, "existe el botón «Copiar»");
+      // v18.0.131 (barrido por recorridos, hallazgo 2): la ventana crece para incluir la
+      // guarda de paciente nueva (si cambió de historia, no se copia a ciegas) que ahora
+      // antecede al try/await.
+      const bloque = src.slice(i, i + 1300);
+      // navigator.clipboard.writeText devuelve una PROMESA: sin await, el rechazo (permiso
+      // denegado, pestaña sin foco) cae FUERA del try —es asíncrono— y el médico lee
+      // «Copiado», pega en Everest y no hay nada. Además se contaba como nota adoptada.
+      t.cierto(/await navigator\.clipboard\.writeText\(salida\.value\);/.test(bloque),
+        "se espera el desenlace real de la copia");
+      t.cierto(/addEventListener\("click", async \(\) =>/.test(bloque),
+        "y por eso el manejador es asíncrono");
+      const iEstado = bloque.indexOf('estado.textContent = "Copiado al portapapeles."');
+      const iAwait = bloque.indexOf("await navigator.clipboard.writeText");
+      t.cierto(iAwait >= 0 && iEstado > iAwait, "el anuncio va DESPUÉS de la espera, no antes");
+      const iAdop = bloque.indexOf('uxTrack("ia.adopcion.');
+      t.cierto(iAdop > iAwait, "y la telemetría de adopción tampoco cuenta una copia que no ocurrió");
+    });
+
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 2) — mismo defecto que Generar (probado
+    // con clic real en suite_59): si el médico cambia de paciente con el Redactor abierto,
+    // «Copiar» ponía en el portapapeles lo que hubiera en `salida` sin comprobar de quién
+    // era esa historia — y quien pega, pega en la del paciente equivocado.
+    // =====================================================================
+    t.caso("v18.0.131 (hallazgo 2): Copiar también se niega si el paciente en pantalla ya cambió, ANTES de tocar el portapapeles", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("btnCop.addEventListener(");
+      t.cierto(i >= 0, "existe el botón «Copiar»");
+      const bloque = src.slice(i, i + 1300);
+      const iGuarda = bloque.indexOf("_pacienteSigueAbierto(resumen._docId)");
+      const iAwait = bloque.indexOf("await navigator.clipboard.writeText");
+      t.cierto(iGuarda >= 0 && iAwait > 0 && iGuarda < iAwait,
+        "la guarda de paciente corre ANTES de escribir en el portapapeles");
+      const iReturn = bloque.indexOf("return", iGuarda);
+      t.cierto(iReturn > iGuarda && iReturn < iAwait, "y si no coincide, sale sin llegar al clipboard");
+    });
+
+    t.caso("v18.0.125 (fila 33): el nombre técnico del modelo sale de la línea que lee el médico", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/estado\.textContent = "Generando con "/.test(src),
+        "la línea principal ya no dice «Generando con gemini-…»: ese nombre no le dice nada en consulta");
+      t.cierto(/estado\.textContent = "Redactando la nota…"/.test(src), "dice lo que está pasando, en su idioma");
+      // El dato no se pierde: sigue sirviendo para diagnosticar, pero donde no estorba.
+      t.igual((src.match(/estado\.title = "Modelo: "/g) || []).length, 2,
+        "el modelo viaja al title, en los dos sitios (primer intento y reintentos)");
+      // El número de intento SÍ importa: dice que se está reintentando.
+      t.cierto(/"Redactando la nota" \+ \(pg\.de > 1 \? " · intento "/.test(src),
+        "el reintento se sigue diciendo");
     });
 
   },

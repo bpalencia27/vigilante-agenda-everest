@@ -1,7 +1,23 @@
 # Manual de Operación y Resolución de Incidentes en Consultorio (Runbook) — Vigilante de Agenda
 
 **Dirigido a:** Médicos de Consulta Externa, Coordinación Médica PyM y Soporte Técnico de Sede  
-**Versión:** 1.0.0 (RC v14.1.6)
+**Versión:** 18.0.4 (despliegue estable 2026-08-31 05:00 UTC-05:00)
+
+---
+
+## Procedimiento de Publicación de una Versión (checklist despliegue 5 AM)
+
+| # | Paso | Responsable | Verificación |
+|---|---|---|---|
+| 1 | Subir `vigilante_agenda.user.js` v18.0.4 a `gistfile1.txt` **y** `gistfile2.txt` del Gist `d231aab6f54de51a5c472b392aac1b91` | Soporte | GET en vivo a ambas URL raw devuelve `// @version 18.0.4` |
+| 2 | Re-desplegar `TABLERO/VersionCheck.gs` en Apps Script (MIN_VERSION = 18.0.4) **sin cambiar la URL** del despliegue | Soporte (sesión de Google) | GET al `/exec` devuelve `"minVersion":"18.0.4"` |
+| 3 | Re-desplegar `TABLERO/Codigo.gs` en el mismo proyecto (arreglos de telemetría, hoja `uso`) | Soporte (sesión de Google) | Tablero recibe filas sin versión corrupta |
+| 4 | Confirmar suite completa en CI/runner: `node tests/runner.js` → 2331 checks en verde | Soporte | `comprobaciones : 2331 pasan` |
+| 5 | Hash SHA-256 del archivo coincide con la fila `18.0.4` de `PUBLICACIONES.md` | Soporte | `sha256sum` idéntico (B4542F80…) |
+| 6 | Verificación en consulta con el médico piloto (`docs/VERIFICACION_EN_CONSULTA.md` → v18.0.4) | Médico piloto | Los 6 pasos de la lista marcan ☐ |
+| 7 | Merge del PR #109 (`trae/agent-VVP3FH` → `main`) | Soporte | Sin conflictos esperados (verificado) |
+
+**Rollback:** restaurar el contenido anterior en `gistfile1.txt`/`gistfile2.txt` (procedimiento genérico en `docs/ROLLBACK.md`). El Kill-Switch remoto (VersionCheck.gs `KILL_SWITCH.active=true`) frena la flota en minutos si hiciera falta.
 
 ---
 

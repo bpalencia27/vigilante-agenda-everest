@@ -5918,3 +5918,6603 @@ también el otro mecanismo.
 **Lo que NO se perdía:** la línea `FRAUDE_EXTEMPORANEO` de la auditoría se escribe cuando suena
 el aviso y no depende de la clave. La evidencia para reclamaciones de los casos ya afectados
 sigue en el CSV; lo que se perdía era el color de la tarjeta.
+
+
+## v18.0.6 — 31-ago-2026 · FUSIÓN DE LAS DOS LÍNEAS DE TRABAJO (rama ↔ main)
+
+Las dos ramas se habían separado en `87849d3` (v17.6.82) y siguieron por caminos distintos:
+la rama llegó a v17.56.0 (51 commits) y `main` a v18.0.4 (136 commits). **Ninguna de las dos
+era superset de la otra, y en direcciones opuestas:**
+
+| | rama | main | se toma de |
+|---|---|---|---|
+| `vigilante_agenda.user.js` | v17.56.0 | **v18.0.4** (0 marcadores exclusivos de la rama) | **main**, y encima la build v18.0.5 instalada |
+| banco de pruebas | **2.213 casos** | 1.926 casos | **la rama** (main había perdido 349 casos) |
+| `INFORME_MUTACIONES.md` | **872 filas** | 319 filas | **la rama**, injertando las 23 de main |
+
+Se comprobó midiendo, no opinando: cero marcadores `v1x.y.z` exclusivos de la rama en el
+userscript (main los tiene todos, más v17.57.0→v18.0.4), y 349 títulos `t.caso` presentes solo
+en la rama. Donde la versión de main de una suite pasaba y la de la rama no, se tomó la de main
+**injertándole** los casos que solo existían en la rama, en vez de reemplazar y perderlos.
+
+Renombrada `suite_70_lint_pantalla.js` → `suite_72_lint_pantalla.js`: main traía su propia
+`suite_70_enjambre_pre_despliegue.js` y dos suites no pueden llevar el mismo número.
+
+### Mutaciones verificadas de esta entrega
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | **comentario `//` dentro de la plantilla** — se devuelve una línea `// …` entre el `` ` `` de apertura de `el.sheet.innerHTML` y el `<div>` del botón Diag (el defecto original de la v18.0.5, visto en pantalla por el médico) | "REGLA H — ninguna línea `//` vive DENTRO de una plantilla de texto" (`suite_72`) | Sí — 17/17 |
+| 2 | **adorno dentro del dato** — se devuelve el `"🔴 "` al principio de `motivoTexto` | "REGLA I — motivoTexto es TEXTO: sin emoji, sin marcado, sin adorno" (`suite_72`) | Sí — 17/17 |
+
+**Regla H no es una prueba de conducta, es un analizador del código fuente**, y por eso caza
+esta familia entera: recorre el archivo distinguiendo comillas, comentarios y plantillas (con
+su anidamiento `${…}`), y marca cualquier línea que empiece por `//` dentro del texto de una
+plantilla. Una expresión regular no puede hacerlo: no sabe si un `//` está dentro de una
+plantilla o dentro de una URL. El bug original no daba error en consola, no rompía ninguna
+prueba de comportamiento y el archivo seguía siendo JavaScript válido — se veía solo en la
+pantalla del médico, en consulta.
+
+### Conducta de la v18.0.5 que se entregó sin prueba, y que ahora la tiene
+
+- **Tercera ruta de descarga por `shareId`** (`spFallbackUrls`): `suite_12` exigía exactamente
+  dos rutas y se puso roja al fusionar. Ahora se fijan las dos mitades del `if` (con `shareId`
+  → tres rutas; sin él → dos) y que un `shareId` igual al `id` no se repite. Y la prueba de
+  `loadPymBaseDescarga` deja de contar «2» a mano: cuenta contra `spFallbackUrls().length`, para
+  que lo que protege sea lo que importa —una ruta cada vez, en orden, nunca en paralelo— y no
+  un número que caduca.
+
+### Cambio CLÍNICO de la v18.0.5 que se conserva pero queda señalado
+
+- **Piso por diabetes plano** (`vigilante_agenda.user.js:33660`): la v18.0.5 revirtió el
+  refinamiento de la v17.6.94. Antes, sabiendo el tiempo de evolución mandaba el consenso y un
+  diabético de 5–12 años sin otros factores podía quedar MODERADO; ahora **todo** diabético
+  entra en ALTO. **No se revierte desde el banco de pruebas** —es la conducta que el médico
+  tiene instalada y corriendo—, pero se deja escrito su coste, que no es pequeño: ALTO baja la
+  meta de LDL de 100 a 70; con `MTR_FALLA_UMBRAL = 0` (estricto, D9) un LDL de 110 pasa de estar
+  en meta a estar fuera; su vigencia se parte a la mitad (regla del 50 %); y el arrastre del
+  grupo lipídico (`mtrPlanParaclinicos`, regla 1.15) se lleva colesterol total, HDL y
+  triglicéridos al mismo viaje. Pendiente de que el médico confirme o revierta.
+
+### Filas de mutación que solo existían en `main` y se recuperan aquí
+
+| **rojo de tendencias (v17.55.0)** | `_mtrTendUmbralGrave` vuelto a `const factor = 1.3` (revive el +30 %) | `suite_67` | *#123 rojo por VALOR* → *131 con meta 116 ya está sobre la meta: rojo en riesgo bajo también* (esperaba "grave", obtuvo null) y *#123: HbA1c usa la meta del paciente...* → *9,2 con meta individual de 8,0 está sobre ella* (esperaba "grave", obtuvo null) |
+| **chips PyM en la tarjeta (v17.22.0)** | `pymsVisibles = pymsPanel.slice(0, 0)` (amputa los chips otra vez) | `suite_15` | *render: ... los chips PyM volvieron en v17.22.0* → *el chip de PyM pendiente vuelve a la tarjeta*; *T4/v14.0.2 + v17.22.0...* → *la fila de chips PyM volvió*; *v14.0.2 + v17.22.0...* → *y muestra el chip PyM del paciente* (las tres obtuvieron false) |
+| **mensaje de labs sin lectura (v17.8.1)** | la rama `_noSePudoLeer` vuelta al texto viejo «No se encontraron paraclínicos recientes» | `suite_15` | *openLaboratoriosModal (v17.8.1): sin poder leer el portal...* → *el fallo fue del sistema: se dice como tal (obtuvo false)* |
+| **botón del modal de órdenes sin lista (v17.16.0)** | el confirm vuelto a «Sin actividades para ordenar» siempre (sin distinguir «No hay lista que consultar») | `suite_15` | *openOrdenamientoModal: sin coincidencia PyM...* → *y el botón no invita a ordenar nada (antes decía 'Sin actividades'...) (obtuvo false)* |
+| **claves muertas del banner (v17.19.0)** | `bannerPym: false` revivido en DEFAULTS | `suite_15` | *v15 (v17.19.0): el bloque T7 se retiró entero...* → *la clave del banner ya no existe en los ajustes (esperaba undefined y obtuvo false)* |
+| **escalón 1 (tratamiento)** | en `mtrDebePreguntarTratamientoEje` se retira el «indagó y SÍ tiene: no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *con estatina en la historia ya no se pregunta (obtuvo true)* |
+| **escalón 2 (adecuación)** | en `mtrDebePreguntarAdecuacionEje` se retira el «si la dedujo, no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *LDL: la inercia ya la deduce (inadecuado) (obtuvo true)* |
+| **escalón 3 (adherencia)** | en `mtrDebePreguntarAdherenciaEje` se retira el «respondida y vigente -> se calla» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *respondida y vigente -> se calla (obtuvo true)* |
+| **caducidad de la adherencia** | en `mtrReconciliarAhora` se deja la clave de adherencia vencida en `confEje` (no se borra) | `suite_63` | *la adherencia caduca* → *pero la adherencia de hace 3 días CADUCÓ: se vuelve a preguntar (obtuvo false)* |
+| **eje de la glicemia** | en `mtrEjesEnFallaAdherencia` se retira `a === "Glicemia"` (la glicemia ya no comparte la escalera de diabetes) | `suite_63` | *mtrEjesEnFallaAdherencia* → *glicemia sola también es eje de diabetes: esperaba "hba1c" y obtuvo ""* |
+| **vigencia declarada** | en `mtrPreguntaAdherenciaEje` se retira `vigenciaDias: MTR_ADHERENCIA_VIGENCIA_DIAS` | `suite_63` | *las preguntas de la escalera* → *y la adherencia declara su vigencia de 1 día (esperaba 1 y obtuvo undefined)* |
+| **memoria de lo ya preguntado** | en `_mtrMediaMarcarPreguntada` se retira `s.add(clave)` (la marca no se guarda) | `suite_63` | *memoria de lo ya preguntado* → *marcado -> ya fue preguntada (obtuvo false)* y *las MEDIA ya mostradas NO reaparecen* → *2ª apertura ... NO reaparecen (obtuvo true)* |
+| **media que vuelven a bloquear** | en `_vglModalConfirmarDatos` el `listo` vuelve a `!pendientes.size` (las MEDIA retienen el flujo) | `suite_63` | *RECONCILIADOR de punta a punta* (regresión existente) → *y el módulo se abrió solo, sin volver a preguntar (obtuvo false)* |
+| **marcar lo renderizado** | en `_vglModalConfirmarDatos` se retira el `_mtrMediaMarcarPreguntada` al pintar las filas | `suite_63` | *las MEDIA ya mostradas NO reaparecen* → *2ª apertura: las MEDIA ya mostradas NO reaparecen (obtuvo true)* |
+| **reinicio diario** | en `diaNuevo()` se retira el `_mtrMediaPreguntadas.clear()` | `suite_63` | *diaNuevo reinicia la memoria* → *al día siguiente se vuelve a ofrecer (obtuvo true)* |
+| **reaprovechamiento del salto** | en el llamador se vuelve a `cargarHoras()` sin pasarle `otroDia.res` (re-consulta el día encontrado) | `suite_15` | *openAgendamientoModal v17.58.1: el salto al día con agenda propia NO re-consulta BuscarCitasDisponibles — el día elegido se trae 2 veces (búsqueda + sondeo), nunca 3* → máximo por día 3 y el sábado elegido con 3 (esperaba 2) |
+| **forzado de la política** | se retiran `S.reporte = true; S.uxTelemetria = true;` (una config guardada con `false` vuelve a ganar) | `suite_31` | *Telemetría: nace ENCENDIDA por política del dueño (v17.58.2); el forzado gana a una config guardada con false* → `el forzado gana a una config guardada con reporte=false (obtuvo false)` |
+| **atribución del INP** | se retira el `uxTrack("rum.self.inp.detalle…")` dentro del observer de eventos | `suite_23` | *_iniciarRumObserver: la interacción lenta se atribuye por el ELEMENTO que el médico tocó* → `el INP malo nuestro dice qué botón: agm-btn: esperaba 1 y obtuvo undefined` |
+| **render en lote** | en el render de turnos se vuelve a `slotsEl.appendChild(btn)` por turno (además del lote) | `suite_23` | *v17.58.2: los handlers … se montan en lote (INP)* → `y no queda un appendChild por turno (obtuvo true)` |
+| **fase del Diario de Lentitud** | en el handler del chip de día se vuelve a `cargarHoras()` a secas (sin `_rumTramo`) | `suite_23` | *v17.58.2: los handlers … anotan su fase con _rumTramo (INP)* → `el clic en un chip de día anota su fase (agm.clickDia) (obtuvo false)` |
+| **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
+| **ventana crítica del sondeo** | en `_hayCitaCritica` (línea 27068), `VENTANA_CRITICA_MS` pasa de `90000` a `90000000` (toda cita "Sin presentarse" se vuelve crítica) | `suite_04` | *_hayCitaCritica: 'Sin presentarse' a 30 s de la gracia…* → `2 min antes de la gracia -> no crítica (obtuvo true)` |
+| **marca de onboarding** | en `_onboardingColores` (línea 27027), `setItem("vgl_onb_colores", "1")` pasa a `"2"` (la marca nunca queda válida) | `suite_17` | *_onboardingColores: la leyenda de colores se muestra UNA sola vez…* → `la marca queda guardada en localStorage: esperaba "1" y obtuvo "2"` |
+
+## v18.0.7 — 31-ago-2026 · CUATRO REPORTES EN VIVO DE CONSULTORIO
+
+Todo lo de esta entrega sale de reportes del médico con el script corriendo en consulta, y
+del diagnóstico sanitizado de su propio equipo. Ninguna es una mejora especulativa.
+
+### 1. El aviso de PyM y el de abandono de RCV dejaron de salir (a él y a sus compañeros)
+
+El diagnóstico de su equipo lo dijo sin ambigüedad:
+
+```
+Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
+Pacientes con pendientes: 0
+Documentos totales en la hoja: 1396
+COINCIDEN: 0/20
+```
+
+El libro se descargó y se leyó bien —1.396 documentos, la columna del documento SÍ se
+encontró— pero ninguna fila traía actividad pendiente. **Era otro libro.** El listado no es
+de una carpeta: `fetchSpFilesMultiFolder` junta las TRES de `CONFIG.SP.folders`, y una es
+`…/ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE BELLO`, donde vive ese archivo de
+productividad. La 2ª regla de `pickTodaysFile` acepta cualquier `.xlsx` sin fecha en el
+nombre modificado hoy: lo cumplía, y se eligió como «el PyM de hoy».
+
+**El daño era doble**, y esa segunda mitad es la que dejó al médico sin aviso toda la
+jornada: al dar por encontrado el de hoy, `state.pymFP` quedaba puesto, el siguiente chequeo
+cortaba por huella, y **nunca se caía al respaldo de la base piloto ni se seguía buscando el
+CMB real** — desactivando la regla que el médico tenía escrita: *«mientras no esté subido el
+CMB del día se usa la base piloto, y cada X minutos se rectifica si ya subieron el oficial»*.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | la 2ª regla vuelve a aceptar archivos de subcarpetas (se quita `sueltoEnLaRaiz`) | *un libro de una SUBCARPETA no puede pasar por «el PyM de hoy»* y *entre el libro de la subcarpeta y el suelto en la raíz, gana el de la raíz* (`suite_03`) | Sí — 23/23 |
+| 2 | `MTR_PYM_DOCS_SOSPECHA` a 999999 (la guarda de contenido nunca dispara) | *mtrLibroNoParecePym — muchos documentos y CERO pendientes es OTRO libro* (`suite_03`) | Sí — 23/23 |
+
+Tres capas, no una: (a) la 2ª regla solo mira archivos **sueltos en la carpeta principal**,
+que es donde el propio `CONFIG` dice que aparece el PyM del día; (b) `mtrLibroNoParecePym`
+rechaza cualquier libro con ≥50 documentos y CERO pendientes, **lo dice** y recuerda la
+huella para no reintentarlo cada diez minutos; (c) la caché del día (`vgl_pym`) se purga
+sola si trae un índice con esa firma — sin esto, toda pestaña que arrancara volvería a
+cargar el índice malo y el aviso seguiría mudo aunque la descarga ya estuviera arreglada.
+
+### 2. Avisos ÁMBAR de pacientes YA ATENDIDOS
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 3 | se quita `if (_consultorioTiene(a.doc_id)) callar = true` | *si el médico abrió HOY su historia, el mismo ÁMBAR se marca para callar* (`suite_04`) | Sí — 68/68 |
+| 4 | se calla PERDIENDO la evidencia (`if (a.callar) return` antes de contar) | *LA EVIDENCIA NO SE PIERDE — se sigue contando y se sigue escribiendo la fila de auditoría* (`suite_04`) | Sí — 68/68 |
+| 5 | `_consultorioTiene` deja de canonizar la cédula | *la cédula se compara canonizada — los ceros de relleno no abren un boquete* (`suite_04`) | Sí — 68/68 |
+
+La mutación 4 es la importante: prueba que la supresión apaga **solo la interrupción**. El
+ÁMBAR se conserva, `bumpStatCita` cuenta y la fila `INASISTENCIA` se escribe — la evidencia
+de las reclamaciones queda intacta. Misma contención que la decisión v16.2.8 del médico.
+
+### 3. El botón «Ordenar pendientes» flotando sobre «Citas del día»
+
+Se pinta en `document.body` con `position:absolute` y coordenadas de PÁGINA, y el único que
+lo escondía era su propio tick, que solo corre en la pestaña Conducta. Al navegar la SPA
+fuera de la historia nadie lo retiraba. Ahora: oculto al usuario final (encargo del médico,
+queda tras el modo programador), candado de ruta, y `mtrOcultarBotonOrdenarPendientes()` que
+el tick general llama en cada vuelta esté donde esté el médico.
+
+### 4. D11 (KDIGO) — punto 9 de la orden de ejecución del 29-ago
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | `kdigoFrena = false` (la guarda del motor del panel) | *la falla terapéutica NO se apaga…* y *D11 PUNTA A PUNTA…* (`suite_49`) | Sí — 39/39 |
+| 7 | se quita la guarda del camino del aviso de entrada | *la guarda vive TAMBIÉN en la vara del aviso de entrada y del antiduplicado de PyM* (`suite_49`) | Sí — 39/39 |
+| 8 | el corte pasa de `< 60` a `<= 60` | *la guarda solo mira los cuatro lípidos, y solo por debajo de 60* (`suite_49`) | Sí — 39/39 |
+
+Vive en los DOS caminos que parten la vigencia a propósito: con la guarda en uno solo, el
+panel diría «vence en 180» y el aviso de entrada seguiría reclamando el mismo LDL a los 90
+sobre el MISMO paciente. Dos varas para una regla es peor que una vara equivocada.
+
+Y no choca con CERO VENCIDOS: la guarda solo puede ALARGAR una vigencia, así que la fecha de
+toma no se adelanta y, por construcción, nada puede vencer antes de ella. Hay una prueba que
+lo comprueba recorriendo todo el plan.
+
+Banco completo al cerrar: **2.716 comprobaciones pasan, 0 fallan.**
+
+## v18.0.8 — 31-ago-2026 · LA CAUSA REAL DEL AVISO FALSO, Y LA CORRECCIÓN DEL MÉDICO
+
+La v18.0.7 había tratado el síntoma: callaba el aviso ÁMBAR de un paciente ya atendido pero
+**seguía contando la inasistencia**, «para no perder evidencia». El médico lo desmontó en una
+frase: *«no puede ser inasistencia porque el paciente sí llegó a tiempo y se atendió
+normalmente»*, y añadió lo que resultó ser la clave del diagnóstico: *«no es posible que un
+paciente aparezca sin presentarse y que ya haya confirmado su cita; o vino o no vino»* y *«por
+lo general el script es el del problema, no Everest»*.
+
+Tenía razón en las dos cosas. Una fila `INASISTENCIA` sobre un paciente que vino no es
+evidencia: es evidencia FALSA, y ensucia justo el CSV con el que reclama.
+
+### La causa, reproducida antes de tocar nada
+
+```
+1) 10:03  la agenda dice «Sin presentarse»  -> se confirma
+   ...45 minutos sin un solo tick...
+2) 10:20:44 la agenda dice «Atendido» -> colorAndAlert devuelve:
+   estado "Sin presentarse" · color AMBAR · elapsed 20,7
+```
+
+**20,7 es la cifra literal de su captura.** El script no leyó mal Everest: **descartó la
+lectura buena y evaluó con una memoria de 45 minutos antes.** El antirrebote de v17.6.21
+existe para absorber un parpadeo entre dos fuentes (API y raspado del DOM) que discrepan en el
+MISMO instante: exige ver la lectura nueva dos veces seguidas. Es correcto con dos lecturas
+separadas por un tick (~5 s). Tras un apagón, la lectura «anterior» ya no es un competidor: es
+un recuerdo — y se imponía igual, calculando encima el desfase contra la hora actual.
+
+Y el apagón tenía su propia causa, encontrada en el mismo barrido: `heartbeat()` lo dispara el
+canal «latido», que vive en el nivel superior del IIFE y corre en TODA pestaña de Everest;
+pero el canal «tick», el que evalúa, solo se registra en `restartPolling()`, que empieza con
+`if (!el || !el.root) return`. **Una pestaña sin panel construido latía, ganaba el mando y no
+miraba nada**, mientras las demás se ponían `leader = false`. Es exactamente la regla que el
+médico tenía escrita: *«siempre debe estar analizando citas del día con esa pestaña líder».*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | el antirrebote vuelve a imponerse tras un hueco largo (se quita `!huecoLargo`) | *tras un apagón largo, la lectura FRESCA manda (el caso exacto del 31-ago)* + *una inasistencia ya contada se RECTIFICA…* (`suite_04`) | Sí — 71/71 |
+| 2 | `huecoMax` a 999999999 (ningún hueco se considera largo) | las mismas dos (`suite_04`) | Sí — 71/71 |
+| 3 | se quita la rectificación retroactiva | *una inasistencia ya contada se RECTIFICA al ver al paciente en sala o atendido* (`suite_04`) | Sí — 71/71 |
+| 4 | el ÁMBAR callado vuelve a contarse | *si el paciente estuvo en consulta, NO se cuenta ni se registra inasistencia* (`suite_04`) | Sí — 71/71 |
+| 5 | se quita la guarda de liderazgo (`_puedoEvaluarLaAgenda`) | *una pestaña SIN reloj de evaluación no puede ser líder*, *la pestaña ciega tampoco PUBLICA latido* y *la pestaña ciega SUELTA el mando…* (`suite_17`) | Sí — 48/48 |
+
+La mutación 2 merece una nota: es la que prueba que la ventana está **atada a la cadencia
+real de sondeo** (`max(30 s, 4 × POLL_MS)`) y no a un número suelto. Si el médico pone el
+refresco en 2 s o en 120 s, la ventana lo acompaña sola.
+
+### Lo que NO se rompió, y también se prueba
+
+`el parpadeo REAL de un tick sigue absorbido`: una lectura discrepante a 5 s sigue esperando
+confirmación, y se acepta a la segunda. El mecanismo de v17.6.21 queda intacto; lo único que
+cambia es que deja de aplicarse donde nunca tuvo sentido.
+
+### Rectificación retroactiva (decisión del médico)
+
+Si de una cita ya se contó una `INASISTENCIA` y después la agenda dice EN SALA o ATENDIDO, se
+descuenta del contador del día y se escribe una fila `RECTIFICACION_INASISTENCIA`. **La fila
+original NO se borra**: se añade el porqué. Borrarla dejaría un hueco mudo en el CSV; quien lo
+lea después tiene que poder seguir el razonamiento completo.
+
+### El aviso de ceguera, que no podía salir donde el médico trabaja
+
+`if (leader && _enModuloHCHealth() && !enVistaVigilada && …)` — y `enVistaVigilada` es
+`secc !== "otra"`, o sea VERDADERO también dentro de una historia clínica. Pero el respaldo
+que justifica el aviso (el raspado del DOM) solo funciona en «Citas del día». Dentro de una
+historia, con el API caído, el Vigilante está igual de ciego… y ahí es donde el médico pasa la
+jornada. La condición correcta no era «no estoy en una vista vigilada» sino «aquí no puedo
+leer la agenda del DOM»: `secc !== "agenda"`. Con su prueba, y con la contraria (en «Citas del
+día» NO se declara ciego, que sería un falso aviso).
+
+Banco completo: **2.725 comprobaciones pasan, 0 fallan.**
+
+### Anexo v18.0.8 — el piso por diabetes NO tapaba ningún MUY ALTO (medido, sin tocar código)
+
+Precisión del médico (31-ago): *«todo diabético entra en alto riesgo pero se sigue
+clasificando con el método de 4 pasos del consenso colombiano de dislipidemias, es decir que
+los diabéticos aún pueden subir a muy alto»*.
+
+Se midió sobre el corpus dorado ANTES de proponer nada, y **no hizo falta cambiar el código**:
+de los **125 vectores diabéticos, 102 salen MUY ALTO y 23 ALTO — ninguno por debajo**. La razón
+es estructural: «muy alto» lo produce ÚNICAMENTE el paso 1, que corre ANTES del piso; los
+pasos 3 y 4 solo pueden dar alto/moderado/bajo, así que el `return` del piso no puede tapar
+ninguno.
+
+Se añaden dos pruebas para que ese razonamiento no se pierda con el tiempo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | el piso por diabetes se adelanta ANTES del paso 1 | *en TODO el corpus dorado, ningún diabético queda por debajo de ALTO — y la mayoría sube a MUY ALTO* (`suite_45`), además de otras tres ya existentes | Sí — 63/63 |
+
+La segunda prueba nueva es de forma, no de conducta: recorre el clasificador y exige que
+**toda** línea que produzca `categoria: "muy alto"` lleve `paso: 1`. Si alguien añadiera una
+vía a «muy alto» en el paso 3 o el 4, el piso empezaría a tapar categorías en silencio y esta
+prueba lo obliga a decidirlo a conciencia.
+
+## v18.0.9 — 31-ago-2026 · BLINDAR EL ACCESO A LA AGENDA
+
+Encargo del médico, textual: *«lo que hay que blindar es que el Centinela siempre tenga
+acceso a la API de citas del día o algún otro método que sea infalible para este tipo de
+cosas que me están poniendo muchos problemas últimamente»*.
+
+### Lo que se midió antes de tocar
+
+```
+fallos seguidos -> espera hasta el siguiente intento
+  1 -> 10 s   2 -> 15 s   3 -> 20 s   4 -> 25 s
+  5 -> 300 s  6 -> 300 s  7 -> 300 s …
+tiempo hasta agotar los 5 intentos: 370 s
+y a partir de ahí, un intento cada 5 minutos
+```
+
+Cinco minutos de descanso entre intentos. Y dentro de una historia clínica **no hay respaldo
+posible**: el raspado del DOM solo funciona en «Citas del día». Así que cada reintento costaba
+hasta cinco minutos de ceguera total, sin ninguna señal. Baja a **1 minuto** (`API_DESCANSO_MS`):
+una petición por minuto contra un servidor caído no es martilleo, y devuelve el camino directo
+en cuanto la red vuelve.
+
+**Corrección a una propuesta mía anterior, dicha porque estaba equivocada:** llegué a
+proponerle al médico «compartir la URL aprendida entre pestañas» como si no se hiciera. **Sí se
+hace** desde v17.6.14: se persiste ofuscada en `localStorage` (`vgl_api_url`) y se lee al
+cargar. Ese hueco no existía.
+
+### Relevo por ceguera
+
+Hasta aquí el mando solo cambiaba por VISIBILIDAD (v14.1.5): un líder OCULTO, estrangulado por
+el navegador, se lo cede a uno a la vista. Pero un líder **a la vista y sin ninguna fuente**
+—API caído y fuera de «Citas del día», que es exactamente el médico trabajando dentro de una
+historia— lo retenía indefinidamente mientras otra pestaña capaz de leer se quedaba callada.
+
+Ahora el latido lleva `ve` (¿puedo leer la agenda?), y quien ve puede relevar a quien no ve.
+Con el mismo enfriamiento que el relevo por visibilidad, y con dos guardas: si las dos
+pestañas están ciegas NO hay relevo (movería la ceguera de sitio), y a un líder que sí ve no
+se le quita el mando por esta vía.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se quita el relevo por ceguera de la condición | *una pestaña que SÍ ve releva a un líder ciego, aunque el líder esté a la vista* (`suite_17`) | Sí — 52/52 |
+| 2 | el relevo se dispara aunque yo tampoco vea (se quita `&& yoVeo`) | *si el líder ciego y yo estamos los dos ciegos, NO hay relevo* (`suite_17`) | Sí — 52/52 |
+| 3 | el latido deja de publicar `ve` | *el latido publica si esta pestaña PUEDE leer la agenda* (`suite_17`) | Sí — 52/52 |
+
+La mutación 2 es la que importa de verdad: sin ella el relevo degeneraría en dos pestañas
+ciegas pasándose el mando en ráfaga, que es peor que el defecto original.
+
+Banco completo: **2.731 comprobaciones pasan, 0 fallan.**
+
+## v18.0.10 — 31-ago-2026 · SE RETIRA LA HEURÍSTICA DEL CONSULTORIO
+
+Decisión del médico (31-ago), a propuesta mía: **«quítala entonces»**.
+
+### Qué era, y por qué se va
+
+La v18.0.7 añadió una heurística: *«si el médico abrió hoy la historia de ese paciente, calla
+el aviso ÁMBAR de Sin presentarse»*. Nació de un reporte real —dos avisos de pacientes ya
+atendidos— pero **atacaba el síntoma**. La v18.0.8 encontró la causa de verdad (el antirrebote
+resucitaba un estado de 45 minutos antes) y la arregló, con lo que esta heurística se quedó
+sin trabajo.
+
+Y tenía un filo que el propio médico señaló al dar el criterio bueno —*«o vino o no vino»*—:
+**abrir una historia no prueba que el paciente viniera.** Si la abre para revisar un dato de
+alguien que al final no se presentó, esa inasistencia REAL quedaba silenciada y sin contar.
+Cambiar un falso positivo por un falso negativo, justo en el CSV con el que reclama, es peor
+negocio que el problema original.
+
+### Qué se retiró, entero
+
+`_consultorioLeer` / `_consultorioMarcar` / `_consultorioTiene`, la clave de almacenamiento
+`vgl_consultorio_dia`, el campo `state.enConsultorio`, la marca `callar` que ponía en el
+ÁMBAR, la salida temprana de `maybeNotify` para ese caso, y sus cinco pruebas.
+`extractPacienteAbierto()` vuelve a ser un **extractor puro**: se le había añadido un efecto
+secundario (anotar al paciente) para no olvidarse de ninguno de sus 27 llamadores, y ese
+efecto ya no tiene razón de ser. `callar` vuelve a ponerlo **solo** el ROJO de «sin
+presentarse → atendido» (v16.2.8 / v18.0.4), que es evidencia que el médico sí quiere.
+
+### Verificación de que no se abre un agujero al quitarla
+
+Reproducido con el arnés, ya sin la heurística:
+
+```
+CASO DEL 31-AGO   -> estado "Atendido"  color VERDE  elapsed 20,7   (el aviso falso NO sale)
+INASISTENCIA REAL -> color AMBAR  callar=false                      (sigue avisando y contando)
+```
+
+La protección viene del antirrebote con ventana (v18.0.8), no de la heurística. No hace falta
+mutación nueva: las mutaciones 1 y 2 de la v18.0.8 ya fijan esa protección, y siguen en verde.
+Lo que sí queda comprobado aquí es la otra mitad —que una inasistencia REAL vuelve a avisar y
+a contarse sin nadie que la calle—, que era justo el riesgo de la heurística retirada.
+
+Banco completo: **2.726 comprobaciones pasan, 0 fallan** (cinco menos que la v18.0.9: las de
+la heurística, que se van con ella).
+
+## v18.0.11 — 31-ago-2026 · LA GUARDA EN TODOS LOS CAMINOS, Y EL «NO SÉ POR QUÉ»
+
+Dos huecos que quedaban abiertos tras la v18.0.7, verificados contra el código actual.
+
+### 1. `applyPymIdx` instalaba un libro equivocado por las otras dos puertas
+
+La v18.0.7 puso la guarda del libro equivocado en la descarga automática y en el captador de
+la pestaña de SharePoint. Pero a `applyPymIdx` se llega **además** desde la base piloto
+(`loadPymBaseDescarga`) y desde el **selector manual de archivo**. Y es ahí donde está el daño
+de verdad, porque `applyPymIdx` hace tres cosas seguidas:
+
+1. `afterPymLoaded(...)` **sella el día** → `debeBuscarPymDiario()` pasa a decir «ya está» y
+   el reloj de 10 minutos **deja de buscar la lista real hasta medianoche**;
+2. `savePymCache(...)` **persiste el índice malo**, que se readmite en cada recarga;
+3. `localStorage.setItem("vgl_pym_dia", …)` deja la marca de «ya tengo la de hoy».
+
+Un libro equivocado por cualquiera de esas puertas apagaba el aviso la jornada entera. La
+guarda pasa a vivir **en `applyPymIdx`**, que es el cuello por el que pasan todos.
+
+### 2. Los tres mensajes que explicaban el fallo eran inalcanzables
+
+`loadPymDiario` tiene tres ramas de fallo bien redactadas, todas dentro de `if (!silent)`. Las
+**tres** llamadas de producción pasan `silent = true`. El diagnóstico se calculaba y se tiraba
+en cada vuelta, y al médico le quedaba un «PyM sin cargar» mudo. Sus palabras: *«no sé por
+qué»*. Ahora la razón se guarda en `state.pymUltimoFallo` y se enseña **donde él ya mira**: la
+línea de estado del panel y el bloque `--- PyM ---` del Diag. Sin interrumpir nada — no es un
+aviso nuevo, es la respuesta esperando en el sitio donde surge la pregunta.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se quita la guarda de `applyPymIdx` | *applyPymIdx RECHAZA un libro que no parece PyM — venga por donde venga*, + las dos del motivo (`suite_03`) | Sí — 27/27 |
+| 2 | el motivo se anota pero no se limpia al cargar bien | *al cargar bien, el motivo anterior se OLVIDA — no se queda colgado del día* (`suite_03`) | Sí — 27/27 |
+
+La mutación 2 protege algo que se olvida fácil: **un motivo viejo que sobrevive a una carga
+buena es una mentira sobre el estado actual**, y de las peores — le diría al médico que algo
+falla justo cuando ya funciona.
+
+Banco completo: **2.730 comprobaciones pasan, 0 fallan.**
+
+## v18.0.12 — 31-ago-2026 · LA PREMISA DE v16.2.8 ERA FALSA
+
+El médico corrigió una afirmación mía sobre el ROJO y, al tirar del hilo, resultó que
+corregía una decisión suya de agosto. Sus palabras, en dos mensajes:
+
+> «el rojo es cuando cambia de "sin presentarse" a "en sala" después del tiempo de
+> confirmación. **en ningún momento pasará de sin presentarse a atendido**»
+>
+> «yo soy el que decido si se atiende o no al que llega tarde […] **JAMÁS pasaría a la
+> leyenda "atendido" si yo no estoy de acuerdo en atenderlo**»
+
+En Everest la cita SIEMPRE pasa por «En Sala» —ahí él llama al paciente— antes de
+«Atendido». La v16.2.8 (20-ago) trató el salto directo como un hecho real y decidió «no
+notificar, pero registrar en rojo». Lo que veía entonces no era Everest saltándose un
+estado: era **el script perdiéndose esa lectura**, el mismo hueco arreglado hoy por tres
+sitios (líder ciego, antirrebote que resucitaba estados viejos, y el descanso de 5 min del
+API). Un dato que solo aparece cuando el script parpadea no es un hallazgo clínico: es la
+huella del parpadeo.
+
+### Lo que se midió antes de cambiarlo
+
+| | contador «fraude» | filas del CSV |
+|---|---|---|
+| Salto imposible (hueco de lectura) | **1** | INASISTENCIA · RECTIFICACIÓN · CAMBIO_ESTADO |
+| Fraude real (pasa por «En Sala») | 1 | INASISTENCIA · RECTIFICACIÓN · **FRAUDE_EXTEMPORANEO** · CAMBIO_ESTADO |
+
+Mismo número, **sin la fila que lo respalda**. El médico veía «1 confirmación extemporánea»
+y no encontraba la línea con la que reclamar. Después del cambio, la primera fila queda en
+`fraude = 0` y escribe `HUECO_DE_LECTURA`, que es el hecho verdadero; la segunda no cambia.
+
+El color pasa a VERDE, y eso **no** afirma «llegó a tiempo»: `maybeNotify` exige `arrival`
+—una llegada observada EN VIVO— para contar o avisar un verde, y aquí `arrival` es false
+porque nadie vio la llegada. Así que no cuenta, no suena y no miente.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | vuelve la conducta de v16.2.8 (ROJO + `alertedFraud`) | *el salto imposible a Atendido NO es un fraude — es un hueco de lectura* (`suite_04`) | Sí — 68/68 |
+| 2 | se quita el candado y la fila se repite en cada vuelta | *y no se repite en cada vuelta — una cita, un hueco, una fila* (`suite_04`) | Sí — 68/68 |
+| 3 | el fraude REAL deja de sonar | *el FRAUDE REAL (pasa por En Sala) no se toca* + **dos pruebas preexistentes** (`suite_04`) | Sí — 68/68 |
+
+La mutación 3 es la que de verdad importa: comprueba que al retirar el fraude falso **no se
+tocó el verdadero**, y lo confirman dos casos que ya existían desde antes de esta entrega.
+La 2 protege la bitácora: el sondeo pasa cada pocos segundos y sin candado se llenaría de la
+misma línea.
+
+`suite_32` (R2.5) afirmaba también la conducta vieja: se conserva el caso —la rama sigue
+siendo alcanzable y hay que fijar su conducta— reescrito a lo que ahora debe pasar.
+
+Banco completo: **2.732 comprobaciones pasan, 0 fallan.**
+
+## v18.0.13 — 31-ago-2026 · EL CUADRE DEL CSV, POR EL OTRO LADO
+
+Lo encontró una **auditoría adversarial de mi propia entrega v18.0.12**, lanzada para
+intentar refutarla. Confirmó el arreglo… y destapó dos cosas más, una de ellas peor.
+
+### 1. Un comentario que inventaba una red de seguridad
+
+`maybeNotify` afirmaba: *«la fila de auditoría se escribe SOLO si de verdad se contó, para
+que el número de la cabecera del CSV y el número de filas del cuerpo cuadren siempre (hay una
+prueba de conciliación en suite_10 que lo exige)»*.
+
+**Esa prueba no existía.** El único caso de `suite_10` que toca `exportAudit` inyecta a mano
+`{fraude:3}` junto a DOS filas y solo comprueba el formateo — un ejemplo deliberadamente no
+conciliado. Un comentario que inventa una red de seguridad es peor que no tener red: quien lo
+lee deja de mirar. Por ese hueco pasaron **dos** defectos, uno en cada dirección.
+
+### 2. Fila SIN contar (la dirección contraria a la de v18.0.12)
+
+`logEvent(FRAUDE_EXTEMPORANEO)` vivía en `colorAndAlert` y `bumpStatCita("fraude")` en
+`maybeNotify`. Y `tick()` llama a la primera sin la segunda en el **primer sondeo de cada
+pestaña**: `if (!state.summarized) { _sembrarEstadoInicial(processed) } else if (leader) {
+processed.forEach(maybeNotify) }`. Una pestaña que hereda `fraudWatch` de otra —se comparte
+entre pestañas— y ve «En Sala» en su primer sondeo escribía la fila y no la contaba. Medido:
+
+```
+CABECERA del CSV -> Confirmaciones extemporáneas: 0
+CUERPO   del CSV -> filas FRAUDE_EXTEMPORANEO   : 1
+```
+
+La fila se muda a `maybeNotify`, atada al mismo `_conto` que decide el número: contar y
+registrar dejan de poder separarse. Verificado en tres escenarios (primer sondeo sin
+`maybeNotify`, camino completo, y repeticiones): los tres cuadran.
+
+### 3. La prueba que faltaba, escrita de verdad
+
+`suite_10` gana **el cuadre del CSV**: recorre el motor real (`colorAndAlert` +
+`maybeNotify`, sin inyectar contadores a mano), exporta el CSV y compara cabecera contra
+cuerpo en las tres categorías. Detalle que la prueba dejó al descubierto y que conviene
+tener escrito: **«En Sala» hay que leerlo DOS veces** para que el antirrebote de v17.6.21 lo
+confirme; con una sola lectura el fraude no se detecta. Escribir el escenario con una sola
+lectura habría sido probar algo que no ocurre en la cadencia real.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | la fila del fraude vuelve a `colorAndAlert`, separada del conteo | *cuadra TAMBIÉN en el primer sondeo de una pestaña, que no llama a maybeNotify* (`suite_10`) | Sí — 28/28 |
+| 2 | se cuenta el fraude pero no se escribe la fila | *EL CUADRE DEL CSV — la cabecera y las filas del cuerpo dicen lo mismo* (`suite_10`) | Sí — 28/28 |
+
+Una mutación por dirección, y cada una tumba exactamente la prueba de su lado.
+
+**Nota de proceso.** El caso de v18.0.12 *«el FRAUDE REAL … sigue dejando su fila»* se puso
+rojo con este cambio: comprobaba la fila llamando solo a `colorAndAlert`. Se corrigió para
+recorrer el camino entero —que es el real— y se le añadió la comprobación del contador. Una
+prueba que solo mira media tubería es justo cómo se coló el defecto.
+
+Banco completo: **2.734 comprobaciones pasan, 0 fallan.**
+
+## v18.0.14 — 31-ago-2026 · EL CSS DE EVEREST SÍ SE ESTABA COLANDO (yo medí mal)
+
+Origen: el médico reportó el 31-ago que *«la mayoría de los módulos quedaron con problemas
+con el rework visual»*, y marcó los cuatro síntomas —colores que parecen Everest, texto
+ilegible, cosas fuera de sitio o cortadas, y se ve apretado— en los cuatro módulos
+(Agendamiento, Panel del paciente, Laboratorios, panel del Centinela).
+
+**Yo lo descarté con una medición mal hecha.** Mi analizador solo contaba reglas cuyo
+selector llevara un id de módulo (`#vgl-…`), así que se me escaparon las reglas de SOLO
+CLASE —`.vgl-agm-sub b`, `.vgl-uro-badge`, `.vgl-chip-mas`…—, que son las más numerosas y
+viven dentro de todos los módulos a la vez. Le dije que la cascada no se estaba colando. El
+censo real era de **125 declaraciones secuestrables**, no una. Tenía razón él.
+
+### 1. El blindaje completo de `color`
+
+Medido en Chromium con el Everest hostil que prescribe `CLAUDE.md`
+(`div,span,p,b,small,label{color:#111827 !important}`):
+
+| | antes | después |
+|---|---|---|
+| nodos de texto del panel que perdían su color | **46 de 58** (mediana 1,62:1) | 0 |
+| documento del paciente (Laboratorios, tema oscuro) | 1,03:1 — **invisible** | legible |
+| rótulo «Función renal:» (Laboratorios, tema oscuro) | 1,04:1 — **invisible** | legible |
+
+Se blindan **todas** las declaraciones de `color` de la hoja: 423 declaraciones, **0
+expuestas**. El total de `!important` pasa de 475 a 635.
+
+Comprobado ANTES de barrer, porque era el riesgo real de barrer de más: `grep "style.color
+="` devuelve **cero** en todo el archivo, así que ningún `!important` nuestro puede apagar un
+color que el script pinte a mano desde JS.
+
+### 2. El blindaje tipográfico estaba escrito de dos formas, y una no servía
+
+Cuatro reglas lo escribían con el id DENTRO del `:where()`
+—`:where(#vgl-cw-examenes :not([class])){color:inherit}`—, lo que deja la regla en
+especificidad **(0,0,0)**: la gana cualquier `span{color:X}` de Everest. Pasan a la forma
+fuerte que ya usaba el blindaje general de v12.3.15 (id FUERA, `!important`):
+`#vgl-cw-examenes :where(:not([class])){color:inherit !important}` = (1,0,0).
+
+**Corrección a mi propio criterio, que tenía mal.** Yo creía que el blindaje debía quedarse
+sin `!important` «por tener especificidad cero». Eso confundía dos defensas distintas: la que
+cierra el bug #1 del proyecto (nuestra regla vieja gana a nuestra clase nueva) es el
+`:not([class])`, que hace al blindaje y a nuestras clases de acento **disjuntos por
+construcción** — nunca alcanzan al mismo elemento, así que no pueden competir. La falta de
+`!important` no defendía de nada; solo lo hacía perder contra Everest.
+
+### 3. Un blindaje que hereda de un padre secuestrado no blinda nada
+
+Aun con lo anterior, Chromium seguía marcando en rojo el `<b>vencido</b>` del widget de
+Exámenes. El blindaje SÍ forzaba `color:inherit`… y heredaba de `.vgl-cw-panel` /
+`.vgl-cw-fila`, que son `<div>` **con clase y sin color propio**: la regla
+`div{color:X !important}` de Everest los pintaba a ellos. La cadena entera necesita color
+propio desde la raíz. Se blindan las dos raíces (`#vgl-cw-examenes`, `#vgl-cw-farmaco`) y sus
+contenedores estructurales.
+
+### 4. Y debajo había un defecto vivo desde la v17.24.0
+
+Midiendo el punto 3 apareció que la **regla raíz del widget de Fármacos no se aplicaba en
+absoluto**: `position` salía `static` y `max-width` salía `none`. La causa estaba cinco
+líneas más arriba, en un comentario que documentaba las clases del panel con comodines:
+
+```
+(.vgl-mtr-*/.vgl-dup-*)
+        ↑ este "*/" CIERRA el comentario aquí
+```
+
+El analizador de CSS se queda con el **primer** `*/`, no con el que el autor tenía en la
+cabeza. El resto de la frase pasaba a leerse como selector y el analizador seguía tragando
+hasta poder recuperarse: **se comía la regla siguiente entera**.
+
+Lo que llevaba meses muerto: `z-index:var(--z-widget)` (el widget podía pintarse por debajo
+de elementos de Everest), `max-width:320px` (se estiraba sin freno) y `font-family`. La
+posición se salvaba de milagro porque JS la pone en línea desde la v17.38.0 — que es
+exactamente por qué el fallo pudo pasar meses sin verse.
+
+Es la misma familia que la Regla N (un backtick suelto tumba el archivo entero), pero **mucho
+más silenciosa**: no hay error de sintaxis ni en JS ni en CSS. El archivo carga, el banco
+pasa, y una regla simplemente no existe.
+
+### Pruebas nuevas
+
+- **Regla P** (`suite_25`) — TODA declaración de `color` de la hoja lleva `!important`, sin
+  excepción, recorriendo el CSS entero sin filtrar por selector (que es donde estaba mi punto
+  ciego). Y en la otra dirección: cada rama de cada `:where()` debe conservar `:not([class])`,
+  que es la condición que hace seguro ese `!important`.
+- **Regla Q** (`suite_25`) — ningún comentario se cierra antes de tiempo. Dos comprobaciones:
+  sintáctica (ningún `*/` seguido de texto en la misma línea) y semántica (tras despiezar los
+  comentarios *como lo hace el analizador*, ningún selector con caracteres no ASCII — todos
+  los nuestros son ASCII, la prosa del proyecto lleva tildes).
+- **La regla raíz de `#vgl-cw-farmaco`** sobrevive al despiece y conserva sus cuatro
+  propiedades.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | se le quita `!important` a `.vgl-labsv-lead` (clase suelta, fuera de `#vgl-root`) | *Regla P* (`suite_25`) | Sí — 2.738 |
+| 2 | se le quita `:not([class])` a una rama del blindaje de `#vgl-labsv-modal` | *Regla P*, segunda mitad (`suite_25`) | Sí — 2.738 |
+| 3 | se reintroduce el `*/` prematuro del comentario de v17.24.0 | *Regla Q* (`suite_25`) | Sí — 2.738 |
+
+**Nota de proceso — la mutación 2 encontró un fallo en mi propia prueba.** Escrita al
+principio sobre `reglasCss`, NO se puso roja: el extractor de `suite_25` parte los selectores
+por comas, **incluidas las comas de dentro de un `:where()`**, así que sus entradas traen
+fragmentos con paréntesis sin cerrar y la comprobación no veía nada. Se reescribió esa mitad
+sobre el CSS crudo, con recorrido de paréntesis balanceados. Sin la mutación, la prueba se
+habría entregado verde y hueca.
+
+Banco completo: **2.738 comprobaciones pasan, 0 fallan.**
+
+## v18.0.15 — 31-ago-2026 · LA COSECHA EN VIVO MANDABA PHI A GEMINI SIN SANEAR
+
+Hallazgo del **barrido exhaustivo de las 40.810 líneas** (97 agentes, cada hallazgo
+verificado adversarialmente; 72 confirmados). Este es el primero que se arregla porque no es
+una decisión de diseño: es una violación directa de la regla **Cero PHI** del proyecto, con
+el dato saliendo del equipo.
+
+### El defecto
+
+El módulo tiene **dos caminos** que llevan la historia de Everest al prompt de Gemini:
+
+| camino | desidentifica |
+|---|---|
+| vía de RED — `mtrHechosDesdeHcEverest` | sí: `mtrHcTachar` + `mtrHcValorLimpio` (→ `scrubPII`) |
+| cosecha EN VIVO de la pantalla — `mtrCosecharHcDelDom` (v17.10.0) | **no: `v.slice(0,300)` crudo** |
+
+Y de ahí no se quedaba quieto: `mtrHcAcumularDelDom` lo persiste en `hcEverest.dom`,
+`mtrHcTextoParaHoja` lo vuelca tal cual bajo «escrito en la historia de HOY», y
+`mtrRedaccionPrompt` lo mete en el bloque HECHOS DEL PACIENTE que viaja a
+`generativelanguage.googleapis.com`.
+
+Reproducido con el arnés, salida literal antes del arreglo:
+
+```
+COSECHADO DEL DOM  : "…CC 80123456 cel 3001234567 correo x@correo.com"
+VÍA DE RED (limpio): "…CC [CENSURADO] cel [TEL_CENSURADO] correo [CORREO_CENSURADO]"
+```
+
+La cabecera del módulo (v17.9.0) **prometía lo contrario**: *«Defensa en profundidad: todo lo
+que sea texto pasa igual por scrubPII»* y *«nunca se vuelca el DOM»*. Ningún comentario del
+archivo declaraba esta ruta como excepción — que es justo lo que la hacía invisible. Es la
+misma forma que el defecto de v17.45.0 (`mtrDatosExtraTexto` sin el nombre del paciente):
+**cinco canales llegan al mismo prompt y basta con que uno se salte la defensa.**
+
+### El arreglo
+
+`mtrCosecharHcDelDom` pasa el texto por `mtrHcValorLimpio`, el mismo saneador de la vía de
+red. Los valores numéricos siguen siendo números (peso, talla, tensión no se tocan), y si el
+saneo deja la casilla vacía no viaja — la regla de la casa.
+
+### Lo que este arreglo NO cierra, y hay que decirlo
+
+`scrubPII` reconoce cédula, teléfono, correo y fechas **porque tienen forma**. Un **nombre
+propio escrito a mano sigue pasando** por esta vía. La vía de red lo tacha con
+`mtrHcTachar(crudo, mtrHcTachaduras(payload))`, usando la identidad que trae el propio
+paquete — identidad que, **por diseño, no se guarda en ningún sitio** (`mtrHcTachaduras` la
+usa y la tira). La cosecha del DOM no tiene esa fuente.
+
+Cerrarlo exige decidir de dónde sale el nombre del paciente abierto, y además **depende de
+otro defecto abierto del mismo barrido** (`mtrHcTachar` tacha por subcadena sin límite de
+palabra: un nombre de 3-4 letras destroza el grounding clínico). Se declara aquí en vez de
+improvisarlo: un examen que no se pide sin explicación es indistinguible de un olvido, y una
+defensa a medias que nadie declaró es exactamente cómo apareció este defecto.
+
+### Pruebas nuevas (`suite_57`)
+
+- La cosecha en vivo desidentifica **igual** que la vía de red — comparación directa
+  `mtrCosecharHcDelDom(...) === mtrHcValorLimpio(...)`. Mientras eso se cumpla no puede
+  volver a haber un camino saneado y otro no, que es la forma que tuvo el defecto.
+- El saneo **no rompe los números**: peso 72,5 y talla 168 siguen llegando como números.
+- El eslabón siguiente: lo cosechado llega ya desidentificado a `mtrHcTextoParaHoja`, que es
+  el texto que de verdad ve el modelo.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 4 | se restaura `salida[nombre] = v.slice(0, 300)` (la fuga original) | *la cosecha EN VIVO desidentifica igual que la vía de red* y *lo cosechado llega ya desidentificado al texto de la hoja* (`suite_57`) | Sí — 2.741 |
+
+Banco completo: **2.741 comprobaciones pasan, 0 fallan.**
+
+## v18.0.16 — 31-ago-2026 · MI PROPIO BLINDAJE SE COMIÓ CUATRO AVISOS
+
+Regresión **mía**, de la v18.0.14, encontrada al comprobar si mi barrido de `!important`
+podía haber roto el rediseño visual que el médico echa en falta. Podía, y lo hizo.
+
+### Qué rompí
+
+`CLAUDE.md` daba por sentado — y era cierto hasta esa entrega — que *«el estilo inline SÍ es
+inmune a esto (gana a cualquier regla no-`!important`)»*. **Dejó de serlo el día que
+nuestras propias reglas ganaron `!important`**: un `!important` de hoja le gana a un estilo
+en línea que no lo lleva. Y el blindaje tipográfico alcanza a todo elemento **sin clase
+propia**, que es exactamente lo que eran los cuatro sitios afectados.
+
+Medido en Chromium, v18.0.13 contra v18.0.15:
+
+| sitio | antes | después de mi barrido |
+|---|---|---|
+| hora asignada del modal de agendamiento | `#4ff0b8` | **blanco** |
+| etiqueta de fecha («mañana», «hoy») | `#4ff0b8` | **blanco** |
+| caja «la IA escribió una cifra que no está en los hechos» | `#8b1a1a` | **negro** |
+| el número señalado dentro de esa caja | `#c00` | **negro** |
+
+Los dos últimos son **el aviso más grave del módulo de redacción**. Los dos primeros son
+cifras que el médico lee **antes de confirmar una cita**.
+
+Y un quinto, **anterior a mi barrido**: los dos «✓ Activa en este equipo» de Ajustes pintaban
+su verde en línea sobre un `.vgl-fld .vgl-hint` que ya declaraba `color:var(--fg2) !important`
+desde antes. Nunca se vieron verdes. Se arregla de paso.
+
+### Por qué la Regla B no lo cazó
+
+La Regla B de `suite_25` existe literalmente para esto — «`!important` nuestro contra `.style`
+de JS nuestro» — y mira `.style.color =`. Los cuatro pintaban por **`cssText`** o por
+**`style="…"` dentro del HTML**, dos vías que la regla no miraba. Yo mismo me apoyé en ella:
+antes de barrer comprobé `grep "style.color ="` → cero, y di el riesgo por descartado. La
+comprobación era correcta y el alcance era demasiado estrecho.
+
+### El arreglo
+
+El idioma que el proyecto ya tenía escrito: **quien lleva color propio lleva clase propia**, y
+entonces el `:not([class])` del blindaje no lo alcanza nunca. Los seis sitios pierden el color
+en línea y lo reciben desde la hoja, con `!important` porque cuelgan de `document.body`.
+
+Efecto lateral bueno: ahora esos cuatro avisos **también sobreviven al Everest hostil**, cosa
+que antes no hacían — el estilo en línea sin `!important` perdía contra cualquier regla de
+Everest que sí lo llevara.
+
+### Prueba nueva — Regla R (`suite_25`)
+
+Ningún color pintado en línea puede quedarse sin `!important`, contando **las tres vías**:
+`style="…"` en el HTML, `elemento.style.cssText`, y `elemento.style.color =`. El invariante:
+o lleva `!important` (y gana a todo, nuestro y de Everest), o no existe y el elemento lleva
+clase propia con su color en la hoja, donde la Regla P ya lo obliga a blindarse. Las dos
+salidas son seguras; lo inseguro es el término medio, que es lo que había.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 5 | se le devuelve el `color:#8b1a1a` en línea a la caja de cifras y se le quita la clase | *Regla R* (`suite_25`) | Sí — 2.742 |
+
+Banco completo: **2.742 comprobaciones pasan, 0 fallan.**
+
+## v18.0.17 — 31-ago-2026 · TRES DEL BARRIDO: LA NEGACIÓN SIN VERBO, EL CONTADOR QUE SE DESCONTABA POR PESTAÑA, Y EL AVISO QUE SE QUEMABA SOLO
+
+Primeros tres defectos del **barrido de las 40.810 líneas** que no dependen de una decisión
+del médico. Los tres reproducidos con el arnés antes de tocar nada.
+
+### 1. «Paciente no diabético, no fumador» se leía como una AFIRMACIÓN
+
+`mtrTextoOpinaSobre` reconocía la negación **con verbo** («no fuma», «no es diabético»,
+arreglo de v17.6.30) pero no la forma en que el médico escribe de verdad, que va **sin
+verbo**: «no diabético», «sin diabetes conocida», «nunca fumador», «sin tabaquismo». Todas
+caían en el `return true` del final.
+
+Medido con el arnés antes de arreglar: **6 de 12 frases clínicas normales mal clasificadas.**
+
+Y no era cosmético. `mtrDiscrepanciasDeFuentes` devolvía una discrepancia de severidad ALTA,
+`mtrDiscrepanciasQueFrenan` la dejaba **frenando**, y el Panel del paciente **no abría** hasta
+que el médico respondiera un cuadro «Las fuentes no coinciden» sobre un dato que él mismo
+acababa de negar por escrito. Si respondía «Sí», se archivaba una confirmación falsa.
+
+**El arreglo es por proximidad, no por catálogo.** Se mira si hay un negador
+(`no|sin|nunca|jamás`) justo antes de donde casó el término clínico, dentro de la misma
+cláusula. Así vale para cualquier `re` que se le pase, hoy y en el futuro, sin mantener una
+lista de enfermedades en paralelo.
+
+La frontera es **la coma**, y esa decisión la obligan dos casos reales que deben seguir siendo
+afirmaciones:
+
+| frase | debe salir | por qué |
+|---|---|---|
+| «Sin control, diabético descompensado» | **AFIRMA** | «sin control» niega el control, no la diabetes |
+| «Paciente no diabético, fumador activo» | **AFIRMA** (para tabaquismo) | el «no» es de la primera cláusula |
+| «No solo tiene hipertensión sino también diabetes» | **AFIRMA** | «sino» no es «no» (límite de palabra) |
+
+Después del arreglo: **19 de 19 correctas**, incluidas las tres trampas y el descarte de
+antecedentes de terceros, que sigue intacto.
+
+### 2. El contador de inasistencias se descontaba una vez POR PESTAÑA
+
+La rectificación retroactiva de v18.0.8 vivía **112 líneas antes** del
+`if (!state.leader) … return`, así que la ejecutaban **todas** las pestañas. Y desde la
+v18.0.4 `_fraudeCompartidoFusionar` copia `contadas` a las no líderes cada 10 s, con lo que
+todas llegaban con la marca puesta.
+
+Con tres pestañas abiertas, el contador del día bajaba **3 → 0** en vez de 3 → 2, y se
+escribían **tres filas** `RECTIFICACION_INASISTENCIA` por un único hecho. Una inasistencia
+falsa borraba dos verdaderas. Son los números con los que el médico reclama.
+
+La asimetría era evidente una vez vista: **contar** ya era exclusivo del líder y estaba
+deduplicado por `contadas` (`bumpStatCita`); **descontar** no tenía ni lo uno ni lo otro.
+
+**La guarda va sobre el bloque entero, no solo sobre el descuento**, y eso importa: si una
+pestaña no líder borrase su marca local y llamara a `_fraudeCompartidoGuardar()`, empujaría
+esa borradura al almacén compartido y el líder ya no vería la marca — **no rectificaría
+nunca**. El arreglo a medias habría sido peor que el defecto.
+
+### 3. El aviso de ceguera se quemaba solo, en el primer tick
+
+`avisoYaVisto` está fechado **por día** y vive en localStorage compartido entre pestañas: el
+aviso «Vigilante sin lectura de la agenda» sale **una vez al día y punto**.
+
+Y salía en el primer tick de cada arranque. `state.apiCitas` nace `null` y `tickApi()` solo se
+invoca **al final** del propio tick, así que `data === null` siempre la primera vez. Al
+recargar (F5) o abrir Everest dentro de una historia clínica —donde el médico pasa el 90 % de
+la jornada— la guarda se cumplía sin falta.
+
+Dos daños, y el segundo es el grave:
+
+1. se le afirmaba al médico que la conexión «aún no se aprendió esta sesión», **cosa falsa**
+   cuando `API.url` ya está aprendida y persistida y el sondeo funciona un segundo después;
+2. ese disparo espurio **consumía el único aviso del día**. Si a media mañana el Vigilante se
+   quedaba ciego de verdad, el aviso ya no salía. El arreglo de v18.0.8, que existe
+   precisamente para que la ceguera no pase en silencio, **quedaba anulado por el propio
+   arranque de la pestaña**.
+
+Condición que faltaba: que esta pestaña haya **intentado** leer el API al menos una vez. Sin
+URL aprendida el mensaje sí es cierto y sigue saliendo — la ceguera real no se silencia.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 6 | se quita la negación por proximidad | *reconoce la negación por sustantivo o adjetivo, sin verbo* (`suite_01`) | Sí — 2.748 |
+| 7 | se quita la guarda de líder de la rectificación | *una pestaña NO líder no descuenta la inasistencia* (`suite_04`) | Sí — 2.748 |
+| 8 | se quita la exigencia de haber intentado leer el API | *el aviso de ceguera exige haber INTENTADO leer el API* (`suite_42`) | Sí — 2.748 |
+
+**Nota sobre la prueba del punto 3.** Es una regresión de **código fuente**, y se dice por
+qué: ejercitar el defecto de verdad exige el `tick()` completo con su DOM, su liderazgo y su
+reloj — una prueba así comprobaría media docena de cosas a la vez y se rompería por cualquiera
+de ellas. Lo que hay que fijar es un cable. Mismo criterio que la regresión de fuente de
+`suite_71` sobre el enganche de los widgets y la de `suite_57` sobre el nombre que viaja al
+saneador.
+
+Banco completo: **2.748 comprobaciones pasan, 0 fallan.**
+
+## v18.0.18 — 31-ago-2026 · LA MEMORIA DEL PACIENTE: UNA RESPUESTA DESCARTADA Y UN ALMACÉN REESCRITO CADA 2 SEGUNDOS
+
+Dos defectos del barrido, los dos en `_vglCosechaGuardar` —la función que archiva lo que el
+script sabe de cada paciente— y los dos reproducidos con el arnés.
+
+### 1. Una respuesta del médico se descartaba en silencio, y la pregunta volvía para siempre
+
+La guarda de escritura de la v18.0.4 («no escribir si nada cambió») comparaba firmas con un
+replacer que borraba **toda** clave llamada `ts`, a cualquier profundidad. Entre ellas,
+`confirmaciones[clave].ts` — que **no es ruido de reloj**: es lo único que decide si la
+respuesta sigue viva (`_vglConfirmacionVigente`).
+
+Reproducido:
+
+```
+vigente a los 31 días (30 de vigencia):  NO -> se vuelve a preguntar (correcto)
+tras responder de nuevo, el sello guardado es de hace 31 días
+¿vale ahora la respuesta?                NO
+```
+
+El médico responde «¿está embarazada?» —30 días de vigencia, severidad ALTA, **frena** el
+Panel del paciente—, pasan 31 días, se le vuelve a preguntar y contesta lo mismo. La firma
+nueva salía idéntica a la vieja y **no se escribía nada**: el sello seguía siendo el de hace
+31 días y la misma pregunta bloqueante reaparecía cada vez que se abre el Panel,
+indefinidamente. Sin toast y sin registro. Con la escalera de adherencia (vigencia 1 día), a
+partir del segundo día no vuelve a callarse nunca.
+
+Se ciegan **solo los dos sellos que de verdad son ruido**, y por su sitio, no por su nombre:
+el del registro del paciente y el de `hcEverest` (que se renueva en cada cosecha de pantalla).
+`confirmaciones[*].ts` y `factores[*].ts` quedan dentro de la firma.
+
+### 2. El almacén entero se reescribía cada 2–5 segundos
+
+Las tres líneas que anotan la pestaña vista ponían `Date.now()` **en cada vuelta del reloj**.
+El sello viaja bajo la clave «Antecedentes» (no `ts`), así que la guarda no lo veía y la firma
+cambiaba siempre. Medido: **10 escrituras en 10 vueltas sin un solo cambio real**.
+
+Con 80 pacientes archivados eso es ~1 MB de `JSON.stringify` más un `setItem` síncrono cada
+2–5 s, en cada pestaña con una historia abierta — y reabría justo la carrera que el comentario
+de la v18.0.4 dice haber cerrado: dos pestañas que leen-fusionan-reescriben el almacén entero
+en la misma vuelta pueden pisarse y **perder la fusión de la otra**, que es la memoria clínica
+del paciente.
+
+Conservar el sello viejo es seguro, y no de palabra: **el valor no se lee en ningún sitio**. El
+único consumidor recorre `Object.keys(anotadas)`, no sus fechas.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 9 | vuelve la firma que ciega todo `ts` | *re-responder lo mismo tras la caducidad SÍ renueva la vigencia* (`suite_32`) | Sí — 2.751 |
+| 10 | vuelve el sello incondicional de las pestañas | *el sello de la pestaña ya anotada no se renueva en cada vuelta* (`suite_32`) | Sí — 2.751 |
+
+**Nota de proceso: la mutación 10 destapó que mis dos primeras pruebas eran HUECAS.**
+Simulaban a mano la línea de producción (`if (!n["Antecedentes"]) …`) en vez de ejecutarla, así
+que comprobaban su propia lógica local: al revertir el arreglo en el script **seguían verdes**.
+Se reescribieron llamando a `_vglCosecharDePantalla`, que es la función que contiene de verdad
+esas líneas, con la barra de pestañas de Everest simulada como ya hace `suite_64`. Es la
+segunda vez hoy que una mutación encuentra un fallo en una prueba mía — y las dos veces la
+prueba se habría entregado verde y vacía.
+
+Banco completo: **2.751 comprobaciones pasan, 0 fallan.**
+
+## v18.0.19 — 31-ago-2026 · EL AVISO DE ACTUALIZACIÓN LEÍA UN ARCHIVO DISTINTO DEL QUE SE INSTALA
+
+Encontrado leyendo la telemetría real de la flota que el médico subió, no auditando código.
+
+### El dato que lo destapó
+
+De **74 equipos** en el histórico, **23 activos** en los últimos tres días. Repartidos así:
+
+| rama | equipos activos |
+|---|---|
+| v18.0 | 10 |
+| v17.28 | 1 |
+| **v17.0** | **12** |
+
+Doce equipos en producción, reportando hoy mismo, **sin ninguno de los arreglos de la
+jornada** — incluido el del libro de PyM equivocado que los compañeros del médico reportaron.
+
+### La causa
+
+`VGL_UPDATE_GIST_URL` apuntaba a `gistfile2.txt` con el comentario **«= @updateURL del
+encabezado»**. El encabezado apunta a `gistfile1.txt` desde el commit `62c09c2` («alinear
+@updateURL con gistfile1, canal real de los equipos»). Se movió el canal y la constante se
+quedó atrás, con su comentario jurando lo contrario.
+
+Tampermonkey seguía instalando bien —lee el encabezado— pero el aviso proactivo
+**«⬆ Actualización disponible» consultaba otro archivo**. Si ése se quedó congelado, el aviso
+no sale nunca y un equipo solo se actualiza si Tampermonkey completa su ciclo diario por su
+cuenta.
+
+Es la misma clase de defecto que la v18.0.13: **un comentario que inventa una red de
+seguridad**. Quien lo lee deja de comprobar.
+
+**Lo que no pude verificar y hay que decirlo:** el proxy de la sesión bloquea
+`gist.githubusercontent.com` (`CONNECT tunnel failed, 403`), así que no pude leer los dos
+archivos para confirmar cuál está vivo. La corrección se apoya en lo que el propio código
+declara —el encabezado es lo que el gestor usa para instalar— y en el mensaje del commit que
+movió el canal. Conviene que el médico lo confirme de un vistazo en el Gist.
+
+### El arreglo
+
+No es cambiar el literal: es que **no pueda volver a separarse**. La URL se toma de `GM_info`,
+que expone la misma cadena que el gestor usa para instalar — imposible que difieran. El
+literal queda solo de respaldo, y ahora sí coincide con el encabezado.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 11 | el respaldo vuelve a apuntar a `gistfile2.txt` | *el aviso de actualización consulta el MISMO archivo que Tampermonkey instala* (`suite_42`) | Sí — 2.752 |
+
+La prueba fija el **invariante**, no el literal: encabezado y constante deben apuntar al mismo
+archivo. El día que se cambie el canal, cambiarlo en un sitio y no en el otro pone el banco en
+rojo — que es exactamente lo que no pasó la última vez.
+
+Banco completo: **2.752 comprobaciones pasan, 0 fallan.**
+
+## v18.0.20 — 31-ago-2026 · UN FALLO DE RED PRESENTADO COMO HECHO CLÍNICO, Y UN ERROR DE DOCE HORAS
+
+Dos defectos más del barrido, los dos reproducidos con el arnés.
+
+### 1. «A este paciente le faltan estos exámenes» cuando lo que hubo fue un fallo de red
+
+Cuando Athenea contesta **5 de 8** solicitudes, el lector devuelve lo que sí llegó pero
+**marcado**: `__vglIncompleto = 3`, puesto con `Object.defineProperty({enumerable:false})`
+para que no ensucie las iteraciones sobre el array.
+
+`JSON.stringify` **no serializa propiedades no enumerables**. Al persistir la pre-consulta, la
+marca desaparecía:
+
+```
+antes de guardar  · ¿marcado como incompleto? true  ( 3 solicitudes ilegibles )
+tras persistir    · ¿marcado como incompleto? false ( undefined )
+```
+
+Aguas abajo: `_preconHidratar` mete ese array en `_labsPrefetch`, `checkAvisoUniversal`
+calcula `labsListos = true`, y `_analitosRcvVencidos` declara **vencidos** los analitos que
+venían en las solicitudes ilegibles. El aviso de entrada los lista como «Laboratorios RCV sin
+resultado vigente» y `avisoMarcarVisto` lo silencia el resto de la jornada.
+
+Al médico se le afirma **«a este paciente le faltan estos exámenes»** cuando lo que pasó fue
+que tres solicitudes no se dejaron leer. Es exactamente lo que la regla **«casilla vacía antes
+que dato inventado»** existe para impedir, y el aviso además se auto-silencia, así que la
+afirmación falsa no vuelve a revisarse en todo el día.
+
+Se guarda como campo normal —que sí viaja en el JSON— y se **recuelga al leer**, otra vez como
+no enumerable, para que ninguna iteración la vea como un resultado más.
+
+### 2. Doce horas de error por una palabra suelta
+
+La marca de meridiano se buscaba **sin anclar**, sobre todo el resto de la cadena tras
+`HH:MM`. Cualquier «a» o «p» seguida de una palabra que empiece por M pasaba por meridiano:
+
+| entrada | daba | debía dar |
+|---|---|---|
+| `13:00 Cita Medica` | **60** (1:00 a. m.) | 780 |
+| `19:00 Consulta Medicina` | **420** (7:00 a. m.) | 1140 |
+
+Si la hora llegara con un sufijo así —el texto de `.labelHora` en otra vista, o porque
+`apiCampos` elige como columna de hora una que arrastre texto, ya que esa función puntúa
+columnas llamando a `parseHoraMin` sobre valores arbitrarios— `elapsedMin` daría **+12 h toda
+la tarde**: la agenda entera en ÁMBAR pasada la gracia, y marcas de fraude falsas sobre
+pacientes que llegaron a su hora.
+
+Anclado al principio del resto. Comprobadas las once formas: `7:30 a. m.`, `07:00 AM`,
+`7:30 A.M.`, `11:45 p.m.`, `12:00 p. m.`, `12:00 a. m.`, con texto detrás y sin meridiano.
+**11 de 11 correctas.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 12 | se desancla el meridiano | *el meridiano se lee solo si viene pegado a la hora* (`suite_02`) | Sí — 2.757 |
+| 13 | se deja de persistir la marca de lectura incompleta | *la marca de lectura incompleta sobrevive a la persistencia* (`suite_08`) | Sí — 2.757 |
+
+Banco completo: **2.757 comprobaciones pasan, 0 fallan.**
+
+## v18.0.21 — 31-ago-2026 · LA EVIDENCIA DEL FRAUDE SE PERDÍA POR TENER DOS VENTANAS, Y UNA HORA QUE NO EXISTE
+
+### 1. Quien no avisa se comía la marca de un solo disparo
+
+`alertedFraud` es lo que gobierna `if (sound) { logEvent(FRAUDE_EXTEMPORANEO); reportarFraude(); }`:
+se dispara **una vez por cita**. Pero `colorAndAlert` corre en **toda** pestaña que lea la
+agenda —`render` la llama con `.map` sin mirar el liderazgo— y desde la v18.0.4 las no líderes
+fusionan `fraudWatch` del almacén compartido cada 10 s.
+
+Así que una pestaña no líder llegaba a la rama del fraude, **marcaba y compartía** la marca.
+Su propio `sound` se descarta (el `return` de no-líder lo pone en `false`), pero la marca ya
+estaba puesta para todos: cuando el líder evaluaba la misma cita, la veía consumida y **no
+escribía la fila de auditoría ni reportaba el fraude al tablero**.
+
+La evidencia de una reclamación desaparecía por tener una segunda ventana abierta.
+
+Es la **tercera vez hoy** que aparece la misma familia: v18.0.13 (la fila del fraude se
+escribía sin contarse), v18.0.17 (la rectificación descontaba una vez por pestaña) y esta. El
+patrón común: **un efecto de una sola vez, ejecutado en un camino que corre en todas las
+pestañas.** `sound` se sigue calculando igual, así que el camino del líder no cambia en nada.
+
+### 2. «1h60» es una hora que no existe, y salía media hora de cada hora
+
+`elapsed` viene redondeado a un decimal. Un paciente con **119,7 min** pasados daba
+`Math.floor(119,7/60) = 1` y `Math.round(119,7 % 60) = Math.round(59,7) = 60`: la tarjeta
+mostraba **«hace 1h60»** y el `title` **«Lleva 1h60 pasado de la tolerancia»**, en vez de
+«hace 2h00». Ocurría siempre que los minutos caían en `[59,5 ; 60)` —media hora de cada
+hora— y también del lado positivo («en 1h60»).
+
+Se redondea **una sola vez, al total**, y se reparte después: el acarreo a la hora siguiente
+ya no puede perderse.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 14 | vuelve el redondeo que produce «1h60» | *la cuenta regresiva nunca imprime «h60»* (`suite_04`) | Sí — 2.760 |
+| 15 | se quita la guarda de líder de `alertedFraud` | *una pestaña NO líder no consume la marca de fraude del líder* (`suite_04`) | Sí — 2.760 |
+
+`countdownParts` **no tenía ninguna prueba** en todo el banco antes de esta entrega — se
+comprobó con `grep` sobre `tests/`. Una función que pinta una cifra en cada tarjeta de la
+agenda, sin una sola prueba: por eso «1h60» pudo estar ahí sin que nada lo notara.
+
+Banco completo: **2.760 comprobaciones pasan, 0 fallan.**
+
+## v18.0.22 — 31-ago-2026 · LA REGLA DE LA FAMILIA, EN VEZ DE UN CUARTO PARCHE
+
+Cuatro veces en una sola jornada apareció **el mismo defecto**, con cuatro caras:
+
+| entrega | cara |
+|---|---|
+| v18.0.13 | la fila del fraude se escribía sin contarse |
+| v18.0.17 | la rectificación de inasistencias descontaba una vez **por pestaña** |
+| v18.0.21 | una pestaña no líder consumía la marca de un solo disparo del fraude |
+| **v18.0.22** | el registro del HUECO DE LECTURA — **escrito por mí ese mismo día** (v18.0.12), con exactamente el mismo agujero |
+
+El patrón, una vez visto, es siempre el mismo: `colorAndAlert` corre en **toda** pestaña que
+lea la agenda —`render` la llama con `.map`, sin mirar el liderazgo— y su
+`if (!state.leader) … return` está **al final**. Todo efecto de una sola vez escrito antes de
+esa línea lo ejecutan todas las ventanas: se duplican filas de auditoría, se descuentan
+contadores de más, y se consumen marcas que el líder ya no vuelve a ver.
+
+### El cuarto caso
+
+`state.contadas.add(marca)` + `_fraudeCompartidoGuardar()` + `logEvent(HUECO_DE_LECTURA)`
+corrían sin guarda. Una pestaña no líder empujaba `contadas` al almacén compartido —el mismo
+empujón indebido que la v18.0.17 tuvo que cerrar en la rectificación— y, como la marca es por
+pestaña hasta que la fusión de los 10 s la reparta, **dos ventanas que vean el hueco en la
+misma vuelta escriben dos filas por un solo hecho**.
+
+### Y la regla, que es lo que de verdad importa
+
+Arreglar el cuarto caso y seguir no sirve de nada: el quinto se escribiría igual. `suite_04`
+gana una **regresión estructural**: dentro de `colorAndAlert`, y antes de la guarda de líder,
+todo efecto secundario (`_apptMarcar`, `_fraudeCompartidoGuardar`, `logEvent`, `bumpStatCita`,
+`rectificarStat`, `_noShowRegistrar`, `reportarFraude`, `contadas.add/delete`) tiene que estar
+gobernado por `state.leader`. Censo actual: **10 efectos protegidos, 0 sin proteger.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 16 | se quita la guarda del `HUECO_DE_LECTURA` | *ningún efecto de una sola vez corre sin ser líder* (`suite_04`) | Sí — 2.761 |
+| 17 | se quita la guarda de la **rectificación** (otro miembro de la familia) | la misma regla | Sí — 2.761 |
+
+La mutación 17 se hizo a propósito sobre un miembro **distinto** del que se acababa de
+arreglar: una regla que solo cazara su propio caso no sería una regla, sería el parche otra
+vez.
+
+**Nota de proceso — la primera versión de esta regla era HUECA, y lo destapó su propia
+mutación.** El contexto que examinaba incluía los comentarios, y los comentarios que explican
+el arreglo contienen la cadena «state.leader»: la comprobación la encontraba siempre y pasaba
+aunque se quitara la guarda de verdad. **Es exactamente el defecto que la regla existe para
+cazar, cometido dentro de la regla misma.** Ahora el contexto se filtra a código.
+
+Van **tres pruebas huecas** encontradas hoy por la disciplina de mutación (Regla P, las dos de
+la memoria del paciente, y esta). Ninguna habría fallado nunca; las tres se habrían entregado
+en verde.
+
+Banco completo: **2.761 comprobaciones pasan, 0 fallan.**
+
+## v18.0.23 — 31-ago-2026 · UN PUNTO VERDE SOBRE UN «CONTRAINDICADO», Y DOS FÁRMACOS QUE NO EXISTEN
+
+### 1. El punto de «Medicamentos» salía verde «al día» sobre avisos CRÍTICOS
+
+Se calculaba así: `estados.medicamentos = (meds === null || !meds.length) ? "nd" : "ok"`. La
+**mera existencia** de fármacos pintaba el punto de verde.
+
+Reproducido con el arnés — enalapril + losartán + espironolactona + ibuprofeno, TFG 45 y
+potasio 5,4:
+
+```
+avisos+interacciones: 4
+por severidad: {"CRITICAL":2,"HIGH":2}
+ejemplo: "Espironolactona: CONTRAINDICADA con potasio sérico 5.4 mEq/L (>= 5.0 mEq/L)"
+
+punto de la pestaña HOY: ok  <-- verde «al día»
+```
+
+El médico que recorre la tira de pestañas veía **verde en Medicamentos** y no tenía ningún
+motivo para abrirla. El estado `pend` (ámbar, «revisar») ya existía y estaba declarado en la
+hoja; aquí nadie lo usaba.
+
+El cálculo se **extrajo a `mtrEstadoPuntoMedicamentos`** por dos motivos: dentro del cierre del
+render no había forma de que el banco lo ejercitara, y así usa **exactamente el mismo contexto**
+que arma la pestaña (misma deduplicación, mismo Cockcroft-Gault, mismo potasio) — si leyeran
+datos distintos, volverían a poder discrepar. Devuelve `nd` cuando el motor no puede opinar:
+no se afirma «al día» sobre algo que no se pudo revisar.
+
+### 2. «Otros medicamentos: 2» sobre dos fármacos que el paciente no toma
+
+La cifra salía de **restar dos listas deduplicadas con claves distintas**:
+`mtrMedicamentosUnicos` conserva la dosis y `mtrMedicamentosRcv` la ignora desde la v17.6.74
+—a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus longitudes atribuye ese
+agrupamiento a «medicamentos que no son del programa».
+
+Un paciente con LOSARTAN 100 y 50 MG, METFORMINA 850 MG y ATORVASTATINA 40 y 20 MG —5
+renglones, **3 fármacos, todos cardiovasculares**— veía «Medicamentos del programa
+cardiovascular (3)» y debajo «Otros medicamentos: 2».
+
+Es el **mismo defecto que la v17.1.0 ya corrigió una vez en este mismo renglón** (las fórmulas
+postfechadas), y que volvió por otra puerta cuando `medsRcv` cambió de clave. Ahora se cuenta
+lo que se quiere contar en vez de deducirlo de una resta.
+
+### 3. Una clase que la hoja no declara
+
+El chip del sábado que el médico **sí** trabaja recibía `vgl-agm-pbtn-sabado-mio`; la regla
+existe con otro nombre (`…-suyo`). Los dos sábados salían idénticos en pantalla y la única
+diferencia era el `title`, que obliga a pasar el ratón chip por chip. El dato tenía dos estados
+y la pantalla uno.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 18 | el punto vuelve a salir de la mera existencia de la lista | *el punto de Medicamentos avisa cuando hay avisos CRÍTICOS* (`suite_67`) | Sí — 2.767 |
+| 19 | vuelve la resta de listas con claves distintas | *«Otros medicamentos» no inventa fármacos* (`suite_67`) | Sí — 2.767 |
+| 20 | la clase del sábado vuelve a desparejarse | *la clase del sábado propio existe en la hoja* (`suite_67`) | Sí — 2.767 |
+
+**Nota de proceso — la mutación 19 destapó la CUARTA prueba hueca del día.** La primera versión
+calculaba la cuenta buena *en la propia prueba* (`unicos.filter(...)`) en vez de ejercitar la
+línea de producción: al revertir el arreglo seguía verde. Se reescribió llamando a
+`mtrFichaVivaFilas`, que es quien arma de verdad ese renglón, y leyendo **lo que el médico
+vería en pantalla**.
+
+El patrón de las cuatro es el mismo y conviene dejarlo escrito: **una prueba que reimplementa
+la lógica que quiere vigilar no vigila nada.** Tiene que llamar al código de producción.
+
+Banco completo: **2.767 comprobaciones pasan, 0 fallan.**
+
+## v18.0.24 — 1-sep-2026 · EL REPINTADO «BARATO» NO ERA BARATO, Y ADEMÁS SE COMÍA UN AVISO
+
+`refrescarCuentas` es el camino **rápido** del repintado: el que corre en cada vuelta del reloj
+cuando la agenda no cambió. Traía dos defectos.
+
+### 1. Coste que crece solo
+
+Llamaba `_noShowPrevia(a.doc_id)` **una vez por tarjeta**, y esa función hace
+`localStorage.getItem` + `JSON.parse` del historial **entero**, más un `_vglBuscarPorDoc` que
+en el caso de fallo —el paciente sin inasistencias previas, o sea casi todos— recorre el mapa
+completo cédula a cédula.
+
+Con 30 tarjetas: **30 lecturas y 30 parses por vuelta**, en el hilo de la interfaz. Y
+`vgl_nosh_hist` **no caduca nunca** (lo dice su propio comentario), así que ese mapa crece sin
+techo con los meses: el coste por vuelta **aumenta solo**, sin que nadie toque nada.
+
+Se parte en dos: `_noShowPreviaEn(hist, docId)`, que recibe el mapa ya leído, y el envoltorio
+`_noShowPrevia` de siempre para los demás llamadores, que no cambian en nada. El historial se
+lee **una vez por vuelta**.
+
+### 2. La cuenta regresiva y el badge se confundían
+
+El badge de inasistencias previas es `<span class="vgl-cd vgl-adh">` y vive en
+`.vgl-card-time-wrap`, que va **antes** que `.vgl-card-badges-wrap` en el árbol. Cuando la
+tarjeta se pintó **sin** cuenta regresiva (faltaba más de hora y media para la cita) y luego
+entró en la ventana, `querySelector(".vgl-cd")` devolvía el **badge**: se le sobrescribían
+`className`, `title` y `textContent` con los de la cuenta —perdía su `.vgl-adh` y su aviso— y
+en la vuelta siguiente se creaba **además** una cuenta nueva. La tarjeta acababa con dos
+cuentas y el aviso de inasistencias convertido en un cronómetro congelado.
+
+De paso: `refrescarCuentas` insertaba la cuenta que faltaba en `.vgl-card-badges-wrap`,
+mientras `render()` la pinta dentro de `.vgl-card-time-wrap`. **La misma tarjeta se veía de
+dos maneras según por qué camino se hubiera pintado.** Ahora las dos vías coinciden.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 21 | el selector vuelve a confundir cuenta y badge | *la cuenta y el badge no se confunden entre sí* (`suite_04`) | Sí — 2.772 |
+| 22 | vuelve la lectura del historial por tarjeta | *lee el historial UNA vez por vuelta* (`suite_04`) | Sí — 2.772 |
+
+### Nota: el termómetro, no la fiebre
+
+Al afinar el selector a `.vgl-cd:not(.vgl-adh)`, **dos pruebas existentes de `suite_15` se
+pusieron rojas**. No era una regresión: el DOM falso de esa suite es un stub memoizado **por
+cadena de selector**, con un nodo por selector, y `:not(...)` le creaba un nodo distinto.
+
+La tentación era bajar producción a un selector más pobre para que el simulador lo entendiera.
+Se hizo al revés: **el stub normaliza `:not(...)`**, porque en ese mundo falso `.vgl-cd` y
+`.vgl-cd:not(.vgl-adh)` designan la misma cosa. Doblar el código de producción para complacer
+al banco es arreglar el termómetro en vez de la fiebre — y habría dejado el defecto vivo en la
+pantalla del médico, que es donde importa.
+
+También se anotó, dentro de las dos comprobaciones de fuente, el filtro de comentarios que ya
+hizo falta en la v18.0.22: los comentarios que explican un arreglo citan los selectores
+literalmente, así que un barrido sobre el texto crudo los encuentra siempre y pasa aunque el
+código vuelva atrás. Segunda vez el mismo día; por eso el filtro se escribe una vez y se
+comparte.
+
+Banco completo: **2.772 comprobaciones pasan, 0 fallan.**
+
+## v18.0.25 — 1-sep-2026 · LA TACHADURA DE NOMBRES DESTROZABA EL TEXTO CLÍNICO
+
+Implementa una **decisión expresa del médico**, y cierra el defecto del que dependía la parte
+que la v18.0.15 dejó declarada como abierta.
+
+### El defecto
+
+`mtrHcTachaduras` admitía todo token del nombre de longitud ≥ 3, y `mtrHcTachar` construía
+`new RegExp(esc, "gi")` **sin límites de palabra**: esas letras se tachaban dentro de cualquier
+palabra clínica. Medido con el arnés, tachando «ANA» sobre un texto normal de consulta:
+
+```
+"Paciente refiere MAREO y ANASARCA. ANAMNESIS completa. Control en una SEMANA. ANALISIS y plan."
+      ->  "MAREO y [CENSURADO]SARCA. [CENSURADO]MNESIS completa. … SEM[CENSURADO]. [CENSURADO]LISIS y plan."
+```
+
+Y «MAR» convierte MAREO en `[CENSURADO]EO`. **El síntoma desaparece del contexto** y el modelo
+redacta la Enfermedad Actual sin él, o con la palabra rota. Nombres cortos y frecuentes aquí
+—ANA, MAR, LUZ, PAZ, CRUZ, MORA, LEÓN— entran de lleno.
+
+### La decisión
+
+Del médico, textual: **«Solo palabras completas, y mínimo 4 letras»**, sobre la regla que él
+mismo había fijado antes: *«solo se sanitiza hasta donde sea seguro para mi proyecto y
+grounding. si va a romper el código entonces no se aplica en ese caso»*.
+
+**Coste aceptado y declarado:** un componente de **tres** letras ya no se tacha por identidad.
+Lo que tiene **forma** —cédula, celular, correo, fechas— lo sigue tachando `scrubPII` aparte.
+Lo que se pierde es la tachadura por identidad de los componentes cortos; lo que se gana es que
+el texto clínico llegue entero. Él eligió el grounding, y queda escrito quién lo eligió.
+
+El límite es el **mismo** que ya usaba `mtrSanearTextoLibreAI`, con la misma clase de letras
+españolas: si las dos defensas del módulo discreparan, una tacharía lo que la otra deja pasar.
+
+### Lo que desbloquea
+
+La v18.0.15 dejó anotado que el nombre propio seguía pasando por la vía de la cosecha del DOM,
+y que cerrarlo **dependía de este defecto** (no se podía aplicar `mtrHcTachar` ahí sin destrozar
+el grounding). Con el límite de palabra, esa puerta queda técnicamente abierta; sigue faltando
+decidir de dónde sale el nombre del paciente en esa vía, que es lo que la v18.0.15 declaró.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 23 | vuelve la tachadura por subcadena | *el límite es de PALABRA, no de subcadena* y *las dos defensas usan el MISMO límite* (`suite_57`) | Sí — 2.777 |
+| 24 | vuelve el mínimo de 3 letras | *mtrHcTachaduras exige 4 letras* (`suite_57`) | Sí — 2.777 |
+
+Las pruebas fijan **las dos direcciones**: que no se pase de frenada (ROSACEA, LEONINA,
+CRUZADO siguen enteras) y que no se quede corta (un apellido de 4+ letras que aparece como
+palabra suelta se sigue tachando). Una defensa que solo se comprueba por un lado acaba siendo
+la que destruye el dato o la que lo deja salir.
+
+Banco completo: **2.777 comprobaciones pasan, 0 fallan.**
+
+## v18.0.26 — 1-sep-2026 · UNA FALLA TERAPÉUTICA QUE NUNCA OCURRIÓ, Y UNA CASILLA ESCRITA A ESCONDIDAS
+
+### 1. «No evaluable» se convertía en «FALLA PARCIAL», y eso acaba firmado
+
+El comentario de `mtrEvaluarMetaLdl` **ya lo decía**: *«devuelve un objeto explícito en vez de
+un booleano, porque no evaluable por falta de LDL basal no es lo mismo que no está en meta»*.
+El código no lo cumplía: `cumpleReduccion` colapsaba `reduccion === null` a `false`, igual que
+una reducción **medida** e insuficiente.
+
+El caso es el del **paciente nuevo**, que es lo normal: `mtrLdlBasalDeSerie` devuelve `null`
+cuando la serie tiene menos de dos puntos. Medido:
+
+| paciente | antes | ahora |
+|---|---|---|
+| MUY ALTO, LDL 45 (meta <55), **sin** LDL previo | `meta_parcial` → **«FALLA PARCIAL»** | `en_meta_reduccion_no_evaluable` → «EN META (reducción no evaluable: falta LDL previo)» |
+| MUY ALTO, LDL 45, basal 120 (−62,5 %) | «EN META» | «EN META» |
+| MUY ALTO, LDL 45, basal 60 (−25 %, corta) | «FALLA PARCIAL» | **«FALLA PARCIAL»** — la falla real sigue siendo falla |
+| MUY ALTO, LDL 90, sin basal | «FUERA DE META» | «FUERA DE META» |
+| MODERADO, LDL 90 (no exige reducción) | «EN META» | «EN META» |
+
+Ese texto viaja al JSON que alimenta la nota clínica de la IA **y al registro permanente del
+paciente**: la historia que el médico **firma** decía falla terapéutica parcial de alguien que
+está en meta, y lo único que faltaba era el laboratorio anterior.
+
+`reduccionEvaluable` viaja aparte para que ningún consumidor tenga que deducirlo del texto, y
+`enMeta` incluye el estado nuevo: el LDL bajo meta **es un hecho medido**; lo que no se pudo
+evaluar es la reducción.
+
+Es **otro comentario que prometía una red que no existía** — el mismo patrón que costó dos
+defectos en la v18.0.13 y uno en la v18.0.19.
+
+**Comprobado que no rompe el corpus dorado**: el banco completo, con los 991 vectores de
+`suite_45`, sigue en verde.
+
+### 2. Se escribía en una casilla deshabilitada, sin contarlo ni poder deshacerlo
+
+`_vglMarcarRadio` hacía `el.click()`, `el.checked = true` y despachaba un `change` hacia
+Angular **antes** de llegar a su `if (el.disabled === true) return false`. Devolvía `false`, el
+llamador hacía `pares.pop()`, y salía el peor de los tres mundos a la vez:
+
+- la casilla quedaba **marcada** en pantalla, con su evento ya emitido hacia Everest;
+- **fuera de la foto de «Deshacer»**, así que no había forma de revertirla;
+- `escritas` seguía en 0 y el toast decía «No había ninguna casilla que llenar en esta
+  pantalla».
+
+Se escribía en la historia del paciente **sin contarlo, sin avisarlo y sin poder deshacerlo**
+— las tres cosas que la regla de la casilla existe para impedir. La guarda se sube al
+principio: lo que está deshabilitado no se toca.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 25 | la guarda de `disabled` vuelve abajo, después de escribir | *una casilla deshabilitada no se toca* (`suite_32`) | Sí — 2.783 |
+| 26 | «no evaluable» vuelve a colapsar en falla | *sin LDL previo, un paciente bajo meta NO se declara en falla* (`suite_45`) | Sí — 2.783 |
+
+Banco completo: **2.783 comprobaciones pasan, 0 fallan.**
+
+## v18.0.27 — 1-sep-2026 · UN SMS CITANDO A UNA AGENDA QUE NO EXISTE, Y UN FALLO DEL SISTEMA PRESENTADO COMO HUECO DEL PACIENTE
+
+### 1. El aborto que el comentario de v11.0.1 afirma que existe, escrito de verdad
+
+Ese comentario dice, textualmente:
+
+> *«Sin valores fabricados: el "07:00:00" y sobre todo el agendaId "282531" estaban cableados,
+> de modo que un turno sin datos habría citado al paciente en una agenda arbitraria. Ahora, si
+> falta cualquiera de los dos, **se aborta**.»*
+
+**No había ningún aborto.** Si el turno de `ObtenerTurnosPorFecha` no trae `AgendaId` /
+`agendaId` / `id` —el escenario que el propio comentario dice cubrir, y que **ya ocurrió una
+vez** con `hora`/`Hora` en la v12.3.31, cuando AppCita renombró un campo— `agendaId` quedaba
+`undefined` y se interpolaba tal cual en la URL:
+
+```
+…/AgendarCita?…&AgendaId=undefined&…
+```
+
+Se hacía **la escritura real** contra AppCita. Si AppCita respondía 200 con `error:false`, el
+script daba la cita por creada, devolvía `{ok:true}` y **además le mandaba al paciente un SMS
+citándolo** a una toma cuya agenda no existe. El paciente se presenta al laboratorio y no hay
+cita.
+
+**Cuarto comentario de esta jornada que promete una red que no está** (v18.0.13 ×2, v18.0.19,
+v18.0.26). Aquí la red se escribe, y con la prueba que la ejercita de verdad: la red simulada
+confirma que **no se llega a `AgendarCita`** y que ninguna URL lleva `AgendaId=undefined`.
+
+### 2. «Framingham oficial: faltan sexo», con el sexo delante
+
+`mtrFraminghamEverest` exige exactamente `"M"` o `"F"`. Cuando la demografía de la API no trae
+un sexo reconocible, `mtrResumenDesdeModalLabs` cae al respaldo de la cabecera (v17.6.85), que
+devuelve la **palabra completa**: «Sexo: MASCULINO». Ese valor crudo llegaba al motor:
+
+```
+sexo="MASCULINO"  ->  puntos=null  faltantes=["sexo", …]
+sexo="M"          ->  puntos=…     (funciona)
+```
+
+Y la cabecera de riesgo pintaba «Framingham oficial: **faltan sexo**» **en el mismo recuadro**
+donde la TFG ya se había calculado **con ese mismo sexo**. Un fallo del sistema presentado al
+médico como un hueco del paciente — y el puntaje predicho del formulario oficial no se
+calculaba nunca para ese paciente.
+
+Los normalizadores ya existían (`mtrEsSexoFemenino` / `mtrEsSexoMasculino`) y son los que usa
+el resto del motor: aquí simplemente **no se llamaban**. Cuando el sexo de verdad no se sabe
+(`""`, `null`, `"X"`), se sigue declarando faltante: no se sobre-corrigió hasta inventarlo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 27 | se quita el aborto por `AgendaId` ausente | *un turno sin AgendaId aborta — no se escribe en AppCita ni se cita al paciente* (`suite_33`) | Sí — 2.788 |
+| 28 | el sexo vuelve a pasarse crudo | *el llamador del Framingham normaliza el sexo antes de pasarlo* (`suite_55`) | Sí — 2.788 |
+
+**Nota de método.** La prueba del Framingham incluye a propósito una comprobación del **cable**
+—que el llamador normalice— además de las de conducta. Sin ella, las otras dos comprobarían los
+normalizadores, *que ya funcionaban*, y no el defecto, que era que **nadie los llamaba en ese
+punto**. Es la lección de las cuatro pruebas huecas del 31-ago, aplicada por adelantado.
+
+Y una cara nueva de esa misma lección: la primera versión de esa comprobación recortaba 900
+caracteres del archivo desde el llamador, y la nota que explica el arreglo ocupa más de mil —
+el recorte se quedaba **entero dentro del comentario** y no veía una sola línea de código. La
+ventana se toma ahora sobre el código ya despojado de comentarios.
+
+Banco completo: **2.788 comprobaciones pasan, 0 fallan.**
+
+## v18.0.28 — 1-sep-2026 · UNA INTERPOLACIÓN VIVA DENTRO DE UN COMENTARIO SE EJECUTA IGUAL
+
+Tercer miembro de la misma **familia de frontera JS/plantilla**, y el más silencioso de los
+tres:
+
+| regla | qué caza |
+|---|---|
+| **H** (v18.0.6) | un `//` escrito dentro de una plantilla no comenta: se **pinta** en pantalla |
+| **Q** (v18.0.14) | un `*/` dentro de un comentario CSS lo cierra antes de tiempo y el analizador **se come la regla siguiente** |
+| **J** (esta) | un `${…}` dentro de un comentario de bloque **sí se evalúa** |
+
+### El caso
+
+Dentro de `MTR_RCV_CSS` se escribió el nombre de la expresión que inserta ese CSS **como si
+fuera una interpolación**. Al motor de JavaScript el comentario CSS no le dice nada: la
+plantilla es una plantilla y la interpolación corre al inicializar la constante. La flecha leía
+`MTR_RCV_CSS` **todavía en su zona muerta temporal**, lanzaba `ReferenceError`, y `_cssSeguro`
+se lo tragaba devolviendo `""`. El comentario entregado al navegador quedaba como
+«…splicea **(**, invisible…».
+
+Reproducido en aislamiento con el mismo `_cssSeguro`:
+
+```
+lo que queda en el comentario entregado al navegador: ""
+```
+
+### El filo, que es lo que lo hace grave
+
+Esto **solo no tumba el arranque** porque `_cssSeguro` es una declaración de tipo `function`,
+que está hoisted. El día que alguien la convierta en `const` o en una arrow declarada más
+abajo, **el archivo entero deja de evaluarse en la carga** — comprobado en aislamiento:
+
+```
+ReferenceError: el archivo ENTERO dejaría de evaluarse en la carga
+```
+
+Un userscript que no evalúa es un Centinela que no existe, en mitad de una consulta.
+
+### Nota honesta
+
+Al escribir el arreglo **cometí este mismo defecto dentro del comentario que lo explica** —puse
+el ejemplo con su dólar y sus llaves— y el `node --check` lo cazó al instante. Por eso la
+Regla J mira el archivo entero y no solo el sitio conocido: el patrón es fácil de reintroducir
+justo al documentarlo.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 29 | vuelve la interpolación viva en el comentario CSS | *Regla J — ningún comentario de bloque contiene una interpolación viva* (`suite_72`) | Sí — 2.789 |
+
+Banco completo: **2.789 comprobaciones pasan, 0 fallan.**
+
+## v18.0.29 — 1-sep-2026 · EL AUTO-LOGIN DE ATHENEA LLEVABA ROTO DESDE SIEMPRE, Y LA CONSOLA DECÍA LO CONTRARIO
+
+### El defecto
+
+`ATH_CRED_KEY` y `atheneaLoginBloqueado` se declaraban **1.340 líneas por debajo** del bloque
+de Athenea, y ese bloque hace `return` al terminar. En la web de Athenea el hilo **sale del
+ámbito antes de evaluarlas**, así que quedaban en su **zona muerta temporal para siempre** en
+esa página.
+
+`atheneaCredsSet` / `atheneaCredsGet` sí existen —son declaraciones de tipo `function`,
+izadas— pero al tocar `ATH_CRED_KEY` lanzaban `ReferenceError`, que **sus propios try/catch se
+tragaban** devolviendo `false`/`null`. Reproducido en aislamiento:
+
+```
+dentro del bloque que hace return temprano:      false
+tras evaluar el const, ya fuera de ese camino:   "valor:vgl_ath_creds"
+```
+
+Resultado en el consultorio: el médico teclea usuario y contraseña en Athenea, el script los
+captura, **el guardado falla siempre**, y la consola imprime igual «Credenciales capturadas y
+guardadas para auto-login permanente». El auto-login nunca funcionó, y nada lo decía.
+
+**Un fallo del sistema presentado como un hecho** — el mismo patrón del Framingham (v18.0.27) y
+del aviso de ceguera (v18.0.17). Y la **tercera zona muerta temporal** de la jornada, con la de
+`MTR_CSS` que la flota reporta 771 veces (ya resuelta en ramas v17+) y la del comentario de
+`MTR_RCV_CSS` (v18.0.28).
+
+### El arreglo, en tres partes
+
+1. Las dos declaraciones suben por encima del bloque de Athenea.
+2. El mensaje se condiciona al **resultado**: si el guardado falla, sale un `console.warn`
+   diciendo que el auto-login no funcionará.
+3. Queda anotado en el sitio de donde se movieron, para que nadie las devuelva.
+
+### Por qué la prueba es de código fuente, y se dice
+
+El arnés carga el script con hostname de **Everest**, no de Athenea, así que **ese camino —el
+único donde el defecto se manifiesta— no se recorre nunca en el banco**. Una prueba de conducta
+aquí daría verde con el defecto puesto. Lo que hay que fijar es el **orden de declaración**, y
+eso se vigila sobre el fuente: `const ATH_CRED_KEY` debe aparecer antes que el `if` del
+hostname de Athenea.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 30 | las declaraciones vuelven abajo (zona muerta) | *ATH_CRED_KEY se declara ANTES del bloque de Athenea* (`suite_37`) | Sí — 2.791 |
+| 31 | el mensaje vuelve a imprimirse siempre | *el mensaje depende del resultado* (`suite_37`) | Sí — 2.791 |
+
+Banco completo: **2.791 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.30 — Auto-Labs: un «Deshacer» que borraba el lote ANTERIOR, y una rama muda
+
+Tres hallazgos del mismo módulo (el botón «🧪 Exámenes») y de la misma familia: el asistente
+decía —o callaba— cosas que no se correspondían con lo que había hecho.
+
+### 1. El «↩ Deshacer» borraba trabajo ya aceptado (el grave)
+
+Tras un llenado que escribía **cero casillas**, el ofrecimiento de deshacer salía igual. Con
+`count = 0` **no se guarda lote nuevo** (`_vglGuardarDeshacer` sale en seco si no hay pares),
+así que la única ranura de deshacer seguía conteniendo **el lote anterior** — el examen físico
+que el médico ya había aceptado un minuto antes. Y la guarda de `_vglEjecutarDeshacer` solo
+comprueba que sea **el mismo paciente**, no que sea el mismo lote: no lo impedía.
+
+Es decir: el botón aparecía pegado al mensaje «✋ no toqué nada» y, al pulsarlo, deshacía otra
+cosa. Pasaba en las **dos** ramas de Auto-Labs (la principal y la del reintento tras el
+auto-inicio de sesión). Ahora cada una comprueba su propia escritura antes de ofrecerlo.
+
+### 2. Con el llenado desactivado, la rama era muda del todo
+
+`_vglFeedbackBoton` escribe el aviso EN el botón y lo deja 8 s; la línea de al lado
+(`btn.innerHTML = "🧪 Exámenes";`) se lo borraba **en el mismo tick**, y esa rama tampoco tenía
+aviso flotante. El médico pulsaba Exámenes, no veía pasar nada y se quedaba creyendo que el
+laboratorio no tenía resultados. Se quita el borrado y se añade el aviso que faltaba. El mismo
+borrado en la rama de «cambió el paciente» se quita también (allí el toast sí existía, pero el
+mensaje del botón duraba cero milisegundos).
+
+### 3. En el reintento, «no pude leer» seguía diciéndose como «no tiene»
+
+La v17.6.58 separó `labs === null` (fallo de lectura) de `labs === []` (el paciente de verdad no
+tiene) en la rama principal. A la rama del **reintento** se le quedó sin aplicar: los dos casos
+mostraban «Sin resultados en el laboratorio para este paciente». Un fallo de red presentado como
+un hecho clínico verificado. De paso, esa rama cantaba «✓ N casillas escritas» en **verde**
+aunque N fuera 0 — el mismo hallazgo que la v17.8.1 ya había arreglado en la principal.
+
+### Las pruebas son de conducta, y donde no pueden serlo se dice
+
+Los casos 1 y 2 se prueban **de punta a punta**: el contexto nuevo completa la cadena de 3 pasos
+de Athenea (`BusquedaPaciente → BuscarPaciente → DatosPaciente → consultaDetalleSolicitud`), así
+que `getAtheneaLabsAuto` devuelve un analito real y el flujo entra en la rama «hay laboratorios»
+— que hasta ahora **nadie recorría entera en el banco**. Como el documento falso no tiene
+casillas `input[id^="resultado"]`, se escriben 0: exactamente el escenario del defecto.
+
+Dos detalles del arnés obligaron a instrumentar en vez de mirar el DOM al final:
+
+- **capa todo `setTimeout` a 1 ms**, así que el rótulo vuelve y el «Deshacer» se retira casi en
+  el mismo instante en que aparecen. Se graba lo que **pasó** (cada texto escrito en el botón,
+  cada nodo colgado del body), no lo que queda.
+- **`_renderToast` reparte el cuerpo con `querySelector` interno** que el DOM pelado no resuelve:
+  sin `enriquecerDom`, el aviso se pierde en el try/catch y la prueba diría «mudo» tanto con el
+  arreglo puesto como sin él.
+
+La rama del **reintento** pediría un mock con estado que simule el login real de Athenea; se fija
+por código fuente, acotado a `_ejecutarLlenadoExamenes`, y la propia prueba lo dice.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 32 | vuelve el borrado del aviso del kill-switch (y se calla el toast) | *con el llenado desactivado el aviso se queda a la vista* (`suite_15`) | Sí — 2.794 |
+| 33 | solo se quita el aviso flotante del kill-switch | *(la misma)* — el toast por sí solo ya la sostiene | Sí — 2.794 |
+| 34 | el «Deshacer» vuelve a ofrecerse tras escribir 0 casillas (rama principal) | *tras escribir CERO casillas no se ofrece «↩ Deshacer»* + la de fuente (`suite_15`) | Sí — 2.794 |
+| 35 | el «Deshacer» vuelve a ofrecerse sin escritura en el reintento | *en el reintento, ni «Deshacer» sin escritura ni «no tiene» cuando no se pudo leer* (`suite_15`) | Sí — 2.794 |
+| 36 | el reintento vuelve a decir «no tiene» cuando no pudo leer | *(la misma)* | Sí — 2.794 |
+| 37 | el reintento vuelve a cantar verde con cero casillas | *(la misma)* | Sí — 2.794 |
+
+Banco completo: **2.794 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.31 — Seis nombres del hemograma se llevaban la casilla de la hemoglobina
+
+Hallazgo (C) del frente de laboratorios. `«HEMOGLOBINA»` casa por **subcadena**, y el hemograma
+trae varios nombres que la contienen. Reproducido con el arnés **antes de tocar nada**, contra el
+archivo vivo:
+
+```
+nombre                                             | casa con
+HEMOGLOBINA                                        | HEMOGLOBINA
+HEMOGLOBINA CORPUSCULAR MEDIA                      | HEMOGLOBINA   <- HCM, en pg
+CONCENTRACION DE HEMOGLOBINA CORPUSCULAR MEDIA     | HEMOGLOBINA   <- CHCM, en g/dL
+HEMOGLOBINA GLOBULAR MEDIA                         | HEMOGLOBINA
+HEMOGLOBINA A1C                                    | HEMOGLOBINA   <- la glicosilada, en %
+HEMOGLOBINA FETAL                                  | HEMOGLOBINA
+```
+
+Los tres del panel son **numéricos y de la misma fecha**, así que `_nuevoReemplazaCandidato`
+empata y gana **el primero que Athenea devuelva**: qué cifra acaba escrita en la historia lo
+decidía el orden de las filas, no la clínica. Una anemia de 9,8 podía quedar documentada como
+**30,2** (el HCM); una A1c de 7,2, como una anemia severa que el paciente no tiene.
+
+Mismo patrón de exclusión que ya protege a `CREATININA` (v11.0.1) y a `COLESTEROL_LDL`
+(v14.2.10). Los CUPS exactos (2034/902207) siguen mandando sobre el nombre, así que ningún
+examen legítimo se pierde; y un nombre raro que hoy caía por error queda **sin casar** —
+casilla vacía antes que dato inventado.
+
+### Y la fragilidad de mis propias pruebas de la v18.0.30
+
+Las dos pruebas de conducta de la v18.0.30 esperaban **40 ms fijos** a que terminara la cadena
+async de Athenea. Eso las hacía depender de la carga de la máquina: con el banco corriendo en
+paralelo (o con Chromium al lado) se ponen rojas sin que haya regresión ninguna — que es
+exactamente lo que un revisor externo observó y reportó como «el banco no es determinista».
+**Medido: cinco corridas seguidas del banco completo, todas 2.794/0.** El banco sí es
+determinista; lo frágil era la espera. Se cambia por esperar **a que pase lo que se mide**
+(`esperarA(cond, 5000)`), con tope generoso. No es un cambio de conducta del script, así que no
+lleva mutación propia: lo que fija esas dos pruebas siguen siendo las mutaciones 32–37.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 38 | se quita la exclusión entera (vuelve el defecto) | *los índices del hemograma NO se llevan la casilla de hemoglobina sérica* (`suite_08`) | Sí — 2.795 |
+| 39 | solo se quita `CORPUSCULAR` (el HCM vuelve a robar la casilla) | *(la misma)* | Sí — 2.795 |
+| 40 | solo se quita `A1C` (la glicosilada vuelve a la casilla de hemoglobina) | *(la misma)* | Sí — 2.795 |
+| 41 | la exclusión se pasa de rosca y se come la hemoglobina de verdad | *(la misma)* **+ una prueba vieja de la suite** | Sí — 2.795 |
+
+La mutación 41 es la contrapartida deliberada: una guarda que se «arregla» excluyéndolo todo
+también tiene que ponerse roja, o la prueba solo vigilaría una dirección.
+
+Banco completo: **2.795 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.32 — El parcial de orina: dos defectos independientes, los dos cerrando el caso sin urocultivo
+
+Hallazgos (A) `L1496` y (B) `L39755` del barrido. **No son el mismo defecto visto dos veces:**
+arreglar uno dejaba el otro en pie, y cada uno por su cuenta bastaba para que un parcial
+infeccioso saliera rotulado como normal. Reproducidos con el arnés **antes de tocar nada**.
+
+### (A) El agrupador tiraba el ancla de panel
+
+`_agruparUroanalisisParaTabla` comprimía cada fila a `{nombre, resultado}` y descartaba
+`NombreParametroPadre`. Aguas abajo, `mtrHallazgosUroDesdeLabs` exige `_esAnalitoDeOrina(lab)`,
+que sin padre cae al respaldo **por nombre** — y ese respaldo, **a propósito** (v12.3.37), no
+reconoce `LEUCOCITOS`/`HEMATIES`/`SANGRE`, porque esos nombres también existen en el hemograma
+en sangre. Medido:
+
+```
+CRUDO       hallazgos: {"esterasa":"PRESENTE","leucocitos":999,"nitritos":"NEGATIVO"}
+COMPRIMIDO  hallazgos: {"esterasa":"PRESENTE","nitritos":"NEGATIVO"}      <- se pierde la piuria
+COMPRIMIDO  _resumenClinicoUro: {"esPatologico":false, ...}               -> «Sin hallazgos patológicos (Normal)»
+```
+
+No se arregla relajando `_esAnalitoDeOrina` para que reconozca esos nombres: eso reintroduce el
+bug que el comentario de la v12.3.37 prohíbe. Se conserva el dato real, no se amplía la
+heurística.
+
+### (B) Una esterasa en cruces CON número se contaba como recuento de leucocitos
+
+`mtrUroRecuento("3+")` devuelve 3, y la guarda vieja solo reconocía la cruz pelada (`/^[+-]+$/`).
+Una esterasa `3+` entraba al campo del **recuento** como «3 leucocitos por campo»: por debajo del
+umbral de piuria (10) y, peor, **afirmando un conteo normal que nadie midió**.
+
+```
+informe típico: tira LEUCOCITOS «3+» + sedimento «15-20» x campo + NITRITOS negativo
+ANTES:   {"leucocitos":20,"nitritos":"NEGATIVO"}   -> SIN HALLAZGOS
+                                                      «no se pide urocultivo por este resultado»
+DESPUÉS: {"esterasa":"3+","leucocitos":20,...}     -> REQUIERE SÍNTOMAS
+                                                      «confirme síntomas antes de ordenar urocultivo»
+```
+
+Bordes verificados intactos: `20+`, `100+` y `MAYOR A 100` siguen siendo **recuentos** (son cotas
+de conteo, no cruces); `0` sigue siendo 0; el negativo pelado sigue yendo a esterasa. El regex va
+**anclado** a propósito: desanclarlo cambia este defecto por el contrario.
+
+### (A-bis) Una mutación destapó un hueco en mi propio arreglo
+
+**M2 no puso roja a nadie.** Conservar el ancla de panel pero mandar al motor el valor **de
+pantalla** (`"—"`, que es relleno visual para la tabla) hacía que `esValorReal` lo aceptara —solo
+rechaza vacío, `PENDIENTE` e `idEstado 1`— y el motor se inventaba un hallazgo sobre un paciente
+**sin parcial de orina**:
+
+```
+hallazgos:  {"nitritos":"—","esterasa":"—"}
+evaluación: CONFIRMAR — «Hay valores que el asistente no pudo interpretar (nitritos: —;
+            esterasa leucocitaria: —). Revíselos a mano en el parcial y decida.»
+```
+
+El valor **crudo** viaja aparte del de pantalla. Prueba añadida y M2 repetida: ahora sí cae.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 42 | el agrupador vuelve a tirar el ancla de panel | *el bloque agrupado NO pierde la piuria* (`suite_51`) | Sí — 2.799 |
+| 43 | el agrupador manda el «—» de pantalla al motor | **primero NO cayó nadie** → prueba nueva *(A-bis)* → repetida y cae | Sí — 2.799 |
+| 44 | vuelve la guarda vieja: solo la cruz pelada | *(B)* + *(B de punta a punta)* (`suite_51`) | Sí — 2.799 |
+| 45 | el regex se pasa de rosca y se come «20+»/«100+» | *(B)* — los recuentos de verdad siguen siéndolo | Sí — 2.799 |
+| 46 | el regex se desancla (una cruz en medio de otra cosa cuenta) | *(B)* | Sí — 2.799 |
+
+Las mutaciones 45 y 46 van en la **dirección contraria** a propósito: un arreglo que solo se
+vigila en un sentido no está vigilado.
+
+Banco completo: **2.799 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.33 — «Utiliza cifras incorrectas de PA, peso, etc.»: el Panel firmaba con la tensión de otro
+
+Reporte del médico en consulta. Hallazgo `L22392` del barrido, confirmado por el enjambre del
+01-sep como **el de la queja**. Reproducido con el arnés antes de tocar nada.
+
+### La causa: cuatro lectores, una sola guarda
+
+De los cinco datos antropométricos que el Panel mete en el resumen, **solo uno** llevaba guarda
+de identidad:
+
+| dato | lector | guarda |
+|---|---|---|
+| IMC / factores | `mtrLeerFactoresRcvDelDom(docId, doc)` | **sí** — `_pacienteSigueAbierto` |
+| PA | `mtrLeerTensionDelDom(document)` | no — ids globales |
+| Peso | `mtrLeerPesoDelDom(document)` | no — `id="peso"` |
+| Cintura | `mtrLeerCinturaDelDom(document)` | no — por rótulo |
+
+Y un `|| {}` convertía la **negativa** del único protegido («en pantalla hay otro paciente, no
+leo») en «no hay factores», con lo que los otros tres entraban igual:
+
+```
+A) resumen de A recién cacheado:   {"imc":24,"paSistolica":118,"paDiastolica":72,"pesoKg":68,"cinturaCm":86}
+   pantalla ahora = paciente B     PA 186/114 · peso 103 · cintura 121
+B) DESPUÉS de abrir el Panel de A con B en pantalla, BAJO LA CÉDULA DE A:
+   {"imc":24,"paSistolica":186,"paDiastolica":114,"pesoKg":103,"cinturaCm":121}
+   línea que se le manda a la IA:
+   >> Signos vitales: PA 186/114 mmHg · peso 103 kg · IMC 24 · circunferencia abdominal 121 cm
+```
+
+La huella que el médico veía en pantalla era esa línea **internamente incoherente**: el IMC era
+el suyo (único protegido) y los otros tres, los del paciente de al lado. Y se **regrababa en la
+caché** de A, de donde la leen después el Panel y el Redactor IA.
+
+### El arreglo
+
+`mtrPanelFactoresDePantalla(docId, doc)` — función **nombrada**, y por tanto ejecutable desde el
+banco: lee **todo o nada**. Los dos sitios (al abrir y el repaso de 20 s) pasan por ella. Cuando
+se niega, el Panel **lo dice** en su propio aviso, no en un cartel flotante más.
+
+El tick de 20 s ya estaba protegido *de rebote* (`_tableroFirmaDom` devuelve `""` y el `return`
+de arriba corta), pero era un efecto colateral, no una guarda. Se hace explícita.
+
+### La prueba vieja que se puso roja, y por qué se cambió y no se revirtió
+
+`suite_46` fijaba **por texto fuente** las dos líneas de la cintura que este refactor movió. La
+intención («la cintura se lee en los cuatro sitios») sigue viva, así que se actualizó la prueba
+— y se **subió de nivel**: la función nueva sí se puede ejecutar, y la conducta real se fija
+ahora en `suite_63`. Cambiar una comprobación de texto por una de conducta es siempre una
+mejora; al revés, nunca.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 47 | la función deja de negarse con otro paciente | *cruce de pacientes* + *sin cédula legible* (`suite_63`) | Sí — 2.803 |
+| 48 | `\|\| {}` en el sitio de abrir **y** `if (true)` | **primero NO cayó nadie** → prueba reforzada → repetida y cae | Sí — 2.803 |
+| 49 | la cintura se cae de la función con guarda | *CABLEADO* (`suite_46`) + *contrapartida* (`suite_63`) | Sí — 2.803 |
+| 50 | el repaso de 20 s vuelve a leer sin guarda | *CABLEADO* (`suite_46`) | Sí — 2.803 |
+| 51 | el Panel se calla | *y no se calla* (`suite_63`) | Sí — 2.803 |
+| 52 | la guarda se pasa de rosca y devuelve null siempre | *contrapartida* (`suite_63`) | Sí — 2.803 |
+
+**La 48 merece leerse dos veces.** Mi prueba del aviso miraba el fuente y comprobaba que el
+MENSAJE existiera. La mutación dejó el mensaje intacto y volvió su rama **inalcanzable**
+(`if (true)`): el texto seguía escrito, muerto, y la prueba pasaba en verde. Es la sexta forma
+de prueba hueca de la jornada, y la más sutil: *comprobar que algo existe no comprueba que
+pueda llegar a ocurrir*. La prueba ahora fija la FORMA del condicional.
+
+Banco completo: **2.803 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.34 — El mismo cruce, en el agendamiento; y una regla que destapó un tercer sitio
+
+Hallazgo `L23432` del barrido, hermano del que cerró la v18.0.33. Reproducido con el arnés
+antes de tocar nada:
+
+```
+A) resumen de A recién cacheado:                PA 118/72
+   ¿mtrCacheResumenLeer devuelve la MISMA referencia?  true
+B) en pantalla ahora: paciente 222222 con PA    186/114
+   ¿el paciente A sigue abierto?                false      <-- el script YA lo sabía
+C) DESPUÉS de abrir el agendamiento de A con B en pantalla:
+   PA cacheada BAJO LA CÉDULA DE A:             186/114
+   línea que se le manda a la IA para A:        Signos vitales: PA 186/114 mmHg · peso 68 kg
+```
+
+**Dos defectos en cuatro líneas.** El triaje que decide la franja horaria leía
+`mtrLeerTensionDelDom(document)` —ids globales, sin guarda de identidad— y, peor, asignaba el
+resultado sobre `resumenClin.factores`, siendo `resumenClin` la **referencia viva** que devuelve
+`mtrCacheResumenLeer`. La cifra de otro paciente quedaba escrita en la caché de este, y de ahí
+la leen el Panel y el Redactor IA.
+
+### La regla de familia, y el tercer sitio que apareció al escribirla
+
+En vez de un segundo parche puntual, `suite_37` gana una **regresión estructural**: para cada
+variable declarada a partir de `mtrCacheResumenLeer(...)`, ninguna línea de su bloque puede
+asignarle una propiedad. Censo: **14 sitios de lectura, 0 escrituras**.
+
+Al ejecutarla por primera vez encontró **un tercer sitio que nadie había reportado**: el
+refresco de medicamentos del widget de Fármacos (`resumen.medicamentos = lista`). Ahí la
+identidad sí estaba garantizada —`mtrCacheResumenLeer(docId)` devuelve null si la caché es de
+otro—, pero mutar en sitio tiene su propio precio: quien tenga una referencia a ese objeto (el
+Redactor guarda la suya al abrirse) ve cambiar la lista por debajo, y su hoja de hechos queda
+desincronizada de su propio resumen. Pasa a copia.
+
+La regla se acompaña de una prueba de conducta que **demuestra su premisa** (dos lecturas
+devuelven el mismo objeto, y escribirle encima queda en la caché). Sin ella, la regla sería una
+manía de estilo; con ella, es la consecuencia de un hecho medido.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 53 | vuelve la lectura de tensión sin guarda | *el agendamiento no lee sin comprobar de quién es* | Sí — 2.806 |
+| 54 | vuelve la escritura dentro del resumen cacheado | *regla de familia* **+** *el agendamiento…* (las dos) | Sí — 2.806 |
+| 55 | vuelve la escritura en sitio del widget de Fármacos | *regla de familia* | Sí — 2.806 |
+| 56 | la caché pasa a CLONAR al leer | *la premisa de esa regla es real* | Sí — 2.806 |
+
+La **56 es la que le da sentido a la regla**: si algún día `mtrCacheResumenLeer` empezara a
+clonar, la prohibición dejaría de tener motivo — y la prueba de la premisa cae para avisarlo,
+en vez de dejar una regla huérfana que nadie sabe por qué existe.
+
+Banco completo: **2.806 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.35 — El Redactor: lo que el médico escribe llega entero, y deja de salirle en rojo
+
+Reporte en consulta: *«no está teniendo muy en cuenta lo que yo escribo en el cuadro de texto
+antes de generar y no entiende los contextos anteriores que yo pego»*. Tres defectos distintos
+detrás de esa frase, los tres del enjambre del 01-sep.
+
+### 1. El corte en seco a 800 caracteres
+
+`slice(0, 800)`, sin aviso a nadie. Medido con una nota de control anterior pegada de **1.339
+caracteres**: llegaban 800 y se perdían 539, con el corte cayendo a mitad de palabra. Y lo que
+se pierde suele ser **la instrucción**, porque uno la escribe al final.
+
+El tope sube a 6.000 y el corte, cuando toca, se hace por **ítem completo** —la misma función
+que ya usa el ancla del control anterior desde la v17.0.1, por este mismo motivo—. La pregunta
+del modo «Preguntar» sube de 300 a 2.000: una pregunta clínica con contexto no cabe en 300.
+
+### 2. El rótulo del bloque contemplaba solo la mitad de lo que trae
+
+Se llamaba «INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN». Pero por ese mismo cuadro el médico
+pega el control anterior entero, que son **datos**, no una orden de estilo — así que una nota
+pegada se leía como instrucción.
+
+Pasa a **LO QUE EL MÉDICO ESCRIBIÓ O PEGÓ PARA ESTA NOTA**, con la decisión del médico escrita
+dentro: lo que él aporta es **pasado**, lo que el script calcula es **presente**, y ante una
+contradicción manda lo de hoy — pero **no en silencio**: el cambio se escribe en la propia nota,
+con las dos cifras y su dirección, como frase clínica y no como nota al margen.
+
+> Al renombrar el bloque, la prueba *«todo rótulo que el prompt cita, el mensaje lo emite de
+> verdad»* (v17.13.0) se puso roja: había renombrado el bloque en el mensaje y no en la lista de
+> precedencia del prompt. Cazó una desconexión **real** que yo acababa de introducir.
+
+### 3. La caja roja marcaba como inventadas las cifras del propio médico
+
+`mtrVerificarCifrasIA` solo daba por respaldadas las de la **hoja**. El automonitoreo que el
+paciente le trae, la nota del control anterior que él pegó — todo eso salía en rojo como «el
+modelo pudo inventarlas». O sea: **el borrador que usaba fielmente su contexto era justo el que
+salía marcado**. Un aviso que grita con lo que uno mismo aportó enseña a ignorarlo, y entonces
+deja de servir para lo único que importa.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 57 | vuelve el corte en seco a 800 | *ya no se corta en seco* | Sí — 2.810 |
+| 58 | se sube el tope pero se corta a mitad de palabra | *ya no se corta en seco* (la mitad del ítem completo) | Sí — 2.810 |
+| 59 | la caja roja vuelve a ignorar el aporte del médico | *el modal le pasa esas fuentes* | Sí — 2.810 |
+| 60 | `extraConocido` deja de contarse dentro de la función | *las cifras que él aportó NO se marcan* | Sí — 2.810 |
+| 61 | el bloque se renombra en el mensaje y no en la precedencia | *rótulo que el prompt cita* + otras dos | Sí — 2.810 |
+| 62 | se pierde la regla de pasado/presente | **primero NO cayó nadie** → prueba nueva → repetida y cae | Sí — 2.810 |
+
+La **62** es la séptima prueba hueca de la jornada: una **decisión explícita del médico** vivía
+solo en el texto del prompt, sin nada que la vigilara. Se podía borrar y el banco seguía verde.
+
+Banco completo: **2.810 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.36 — El grounding deja de ser una foto, y llega lo que el médico lleva tecleado
+
+Dos hallazgos del enjambre del 01-sep, los dos detrás de la misma queja.
+
+### 1. La hoja de hechos se arrastraba de la foto
+
+La v17.47.0 prometía «el JSON que va a la IA no puede ir caducado» y resolvía el resumen
+vigente en el instante del clic. Pero la rama del **caso normal** —la caché guarda el MISMO
+objeto que la foto, que es lo que pasa casi siempre porque el panel saca su resumen de la
+caché— devolvía la hoja de la foto **sin tocarla**:
+
+```js
+if (vigente === resumenFoto) { salida.edadMin = …; return salida; }   // <- se va con la hoja vieja
+```
+
+Y ese resumen puede haber cambiado **por dentro** desde entonces: hasta la v18.0.34 el
+agendamiento le escribía la tensión encima. La hoja que leía la IA quedaba desincronizada de su
+propio resumen sin que nada lo dijera. `mtrHojaDesdeResumen` es pura y barata: se recalcula
+siempre. `refrescado` pasa a significar lo que dice (cambió el objeto), en vez de un `true` fijo.
+
+### 2. Lo que el médico teclea no llegaba hasta que guardara
+
+`mtrLeerTextoLibreHistoria` solo mira **Revisión por sistemas** y **Examen físico**. Lo que él
+escribe en **Enfermedad actual**, **Análisis y plan** o **Recomendaciones** no llegaba al prompt
+por ninguna vía hasta que guardara la historia y el script la releyera de la API. Redactar «con
+lo que él escribió» sin haberlo leído es exactamente lo que reportó.
+
+Dos exclusiones, las dos a propósito: **la casilla del modo que se está generando** (devolverle
+su propio borrador lo llevaría a parafrasearlo en vez de redactar desde los hechos) y **Motivo
+de consulta** (decisión C2 de la v17.6.3: la IA ve siempre la constante).
+
+### La lección de la v18.0.33, aplicada esta vez de verdad
+
+La primera versión de la prueba miraba el **fuente**. Una mutación la dejó en ridículo: bastaba
+un `return` temprano para volver el bloque inalcanzable —el texto seguía escrito— y la prueba
+pasaba en verde. **La misma trampa que había caído dos versiones antes.**
+
+En vez de reforzar otra vez la comprobación de texto, la lógica salió del closure a
+`mtrTextoDeOtrasCasillas(modo, doc, nombrePaciente)` — función **nombrada y ejecutable**. La
+prueba ahora la llama con un DOM falso y comprueba conducta. Es el mismo camino que
+`mtrPanelFactoresDePantalla` en la v18.0.33: *lo que se puede ejecutar se puede probar de verdad*.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 63 | vuelve la rama que arrastra la hoja de la foto | *la hoja se recalcula del resumen vigente* | Sí — 2.812 |
+| 64 | se anuncia «refrescado» sin que cambie el objeto | *la hoja se recalcula…* | Sí — 2.812 |
+| 65 | la función nueva se queda muda (rama inalcanzable) | *lo que teclea SÍ llega* — **la caza porque la ejecuta** | Sí — 2.812 |
+| 66 | se le devuelve su propio borrador de la casilla en curso | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 67 | el texto sale sin pasar por el censor de nombres | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 68 | desaparecen los rótulos por casilla | *lo que teclea SÍ llega…* | Sí — 2.812 |
+| 69 | el modal deja de llamar a la función (existe, nadie la usa) | *ya NO congela el texto libre* | Sí — 2.812 |
+
+La **69** cubre el hueco que la 65 no puede ver por sí sola: una función correcta que nadie
+llama es código muerto con buena conciencia.
+
+Banco completo: **2.812 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.37 — Dos formas de que el modal de agendamiento actuara por su cuenta
+
+*«El médico manda, el script sugiere»* (CLAUDE.md). Las dos lo violaban en silencio.
+Hallazgos `L24897` y `L23853` del barrido.
+
+### 1. Un clic agendaba una hora que el médico nunca eligió
+
+La v16.4.0 quitó el `selected` de la primera opción, pero dejó el marcador vacío **condicionado
+a un parámetro** (`exigirEleccion`) y dejó vivo el bloque que habilitaba el botón. Por la ruta
+normal —el primer pintado y el clic en un chip de día— la función se llama **sin argumento**:
+
+```js
+const placeholder = exigirEleccion ? `<option value="" selected>…` : "";   // <- vacío
+…
+if (!exigirEleccion) { confirmBtn.disabled = false; confirmBtn.textContent = "✓ Agendar…"; }
+```
+
+Sin una opción vacía delante, el navegador **selecciona la primera por su cuenta**, y el botón
+nacía habilitado. Un clic reservaba el primer cupo del día —las 6:00 a. m.— sin que nadie lo
+hubiera elegido.
+
+El marcador vacío pasa a ir **siempre**, con `disabled`, y el parámetro **desaparece**:
+acordarse de pasarlo era justamente la parte que fallaba. Una regla que depende de que alguien
+la recuerde en cada sitio de llamada no es una regla.
+
+### 2. La casilla que se marcaba sola porque solo se escuchaba una vez
+
+«Agendar también la Toma de Muestras» registraba su `change` con `{ once: true }`. El listener
+se retira tras el **primer** cambio, así que la bandera que recuerda la elección del médico se
+queda congelada:
+
+> desmarca *(queda registrado `false`, listener retirado)* → se arrepiente y la vuelve a marcar
+> *(ya no hay quien lo oiga)* → elige otro día → el repintado escribe `checked = false` encima.
+
+La casilla del médico es sagrada **también cuando cambia de opinión dos veces**. Se escucha
+siempre, con una marca en el elemento para no apilar un listener por repintado — que es lo que
+`{ once: true }` estaba evitando, a costa del defecto.
+
+La regla que lo vigila es **general**, porque el defecto lo es: *ningún `change` se registra
+para escuchar una sola vez*. La gente cambia de opinión.
+
+### La prueba vieja que se rompió por la firma, no por lo vigilado
+
+`suite_15` cortaba el fuente por `indexOf("async function cargarHorasLabSolo(exigirEleccion) {")`.
+Al retirar el parámetro, `indexOf` devolvió **-1** y el `slice` acabó mirando el final del
+archivo. Se corta ahora por el **nombre**, que es lo estable: una prueba no debe romperse porque
+cambie la firma de lo que vigila, solo porque cambie su conducta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 70 | vuelve el marcador vacío condicionado a un parámetro | *nunca nace con una hora puesta* | Sí — 2.814 |
+| 71 | se le quita el `disabled` al marcador vacío | *nunca nace con una hora puesta* | Sí — 2.814 |
+| 72 | vuelve el `{ once: true }` | *ningún interruptor se escucha una sola vez* | Sí — 2.814 |
+| 73 | se quita el `once` pero se apila un listener por repintado | *ningún interruptor…* (la otra mitad) | Sí — 2.814 |
+
+La **73** es la mutación en dirección contraria: quitar el `once` sin más habría cambiado un
+defecto (dejar de escuchar) por otro (escuchar N veces y contar N cambios por uno).
+
+Banco completo: **2.814 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.38 — Un examen no es un paquete
+
+Hallazgo `L25747`. La función devolvía «hecho» **en cuanto UNA fila casara**, y con eso el modal
+deshabilita la casilla y escribe en pantalla *«se realizó hace N días; por ser tan reciente no la
+marcamos»*: una afirmación falsa sobre una tamización que nadie hizo. Reproducido con el arnés:
+
+```
+Z108 (7 CUPS), y Athenea solo trae la creatinina, de hace 3 meses
+  ANTES   {"iso":"2026-06-01","dias":92}     <- el paquete entero por cubierto
+  DESPUÉS null
+
+Z103 «Hemoglobina y Hematocrito», y solo hay una HbA1c (que NO es del paquete)
+  ANTES   {"iso":"2026-08-25","dias":7}      <- «hemoglobina» casa por SUBCADENA
+  DESPUÉS null
+```
+
+### El tercer defecto, que apareció al reproducir los otros dos
+
+Con el paquete **completo** pero fechas dispares —seis componentes de marzo y uno de agosto—
+devolvía la **más reciente**:
+
+```
+  ANTES   {"iso":"2026-08-28","dias":4}                     <- «hecho hace 4 días»
+  DESPUÉS {"iso":"2026-03-01","dias":184,"componentes":7}   <- la verdad
+```
+
+Un perfil lipídico de hace seis meses se daba por actual porque los triglicéridos se repitieron
+la semana pasada. Y esa fecha es exactamente la que decide si el paquete sigue vigente.
+
+### La regla nueva, y su dirección
+
+Se exige **cobertura completa por código CUPS**, que es inequívoco, y se devuelve la fecha del
+componente **más antiguo**. Las palabras clave dejan de contar para la cobertura: no se puede
+saber a qué CUPS corresponde un nombre suelto, y ya se vio lo que pasa cuando se supone (es la
+misma familia que la v18.0.31, donde seis nombres del hemograma se llevaban la casilla de la
+hemoglobina sérica). Siguen valiendo solo para paquetes que no declaran CUPS, donde no hay nada
+mejor.
+
+**La dirección del error es deliberada:** si no se puede establecer que TODO el paquete está
+cubierto, no se afirma que esté hecho. Quedarse corto cuesta repetir una orden; pasarse cuesta
+una tamización que nadie hizo y que el script dio por hecha.
+
+> El banco seguía verde con el defecto puesto: **ninguna prueba cubría esta conducta**. Por eso
+> vivía. Las cuatro mutaciones de abajo existen para que no vuelva a pasar.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 74 | vuelve «basta con uno» | *un paquete de 7 CUPS NO se da por hecho con un examen suelto* | Sí — 2.817 |
+| 75 | vuelve la fecha más reciente en vez de la más antigua | *un paquete es tan viejo como su componente más viejo* | Sí — 2.817 |
+| 76 | las palabras clave vuelven a cubrir un paquete con CUPS | las **tres** pruebas nuevas | Sí — 2.817 |
+| 77 | un PENDIENTE vuelve a contar como hecho | *un examen PENDIENTE no cuenta* (v17.6.99, ya existía) | Sí — 2.817 |
+
+Y una nota sobre el propio banco: la meta-regla **M4-AST** (`suite_34`) rechazó una aserción
+tautológica `t.cierto(true, …)` que yo había puesto como salida defensiva por si el paquete no
+existía en el catálogo. Tenía razón: una prueba que puede pasar sin comprobar nada no es una
+prueba. Se sustituyó por la comprobación real de que Z103 sigue declarando esa palabra clave.
+
+Banco completo: **2.817 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.39 — «Paciente Everest» no es un nombre
+
+Hallazgo `L11731`. Es el **relleno** que pone `extractAgenda` cuando la tarjeta de Everest no
+deja leer ningún nombre (`nombre: nombre || "Paciente Everest"`, línea ~11802). Usarlo como
+identidad convierte a **todas** las citas sin nombre legible de una misma hora en una sola cita
+para el script. Reproducido con el arnés:
+
+```
+apptKey(A) = Paciente Everest@m480
+apptKey(B) = Paciente Everest@m480      <- otro paciente, misma clave: true
+tras marcar a A por inasistencia:  ["Paciente Everest@m480"]
+¿B figura marcado?  true
+```
+
+**La variante peor** es la que mide el daño real: A es ilegible y B —otro paciente de la misma
+hora— sí tiene su cédula. La marca de A entra como `Paciente Everest@m480`, y `_apptKeysLegado`
+consulta la forma por nombre: B sale **ROJO con sonido** por algo que hizo A, y con su fila en el
+CSV con el que el médico reclama.
+
+### El genérico deja de identificar en las TRES puertas
+
+No basta con arreglar `apptKey`: la identidad de una cita entra por tres sitios y los tres tenían
+que taparse a la vez — la clave que se **escribe** (`apptKey`), las formas viejas que se **leen**
+(`_apptKeysLegado`) y las que se **marcan** (`_apptMarcar`). Arreglar una sola habría dejado el
+contagio vivo por las otras dos.
+
+Sin documento y sin nombre propio, `apptKey` cae a la **posición** (`#0@m480`): no es una
+identidad —y por eso `_apptPuedeAcusar` dice que no— pero impide que dos filas distintas
+colapsen en la contabilidad interna.
+
+### Y no se acusa a quien no se puede señalar
+
+Una fila que no identifica a nadie **ya no origina** una marca de fraude: queda una línea en la
+bitácora (`CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE`) para que el médico vea que hubo algo raro,
+sin que el script acuse a nadie. *Una acusación que no se puede atribuir tampoco se puede
+reclamar.*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 78 | el genérico vuelve a ser identidad en `apptKey` | *dos citas ilegibles no colapsan* | Sí — 2.820 |
+| 79 | `_apptMarcar` vuelve a escribir la forma por nombre | *dos citas ilegibles no colapsan* | Sí — 2.820 |
+| 80 | `_apptKeysLegado` vuelve a emitirla | *el genérico tampoco contagia a quien SÍ tiene cédula* | Sí — 2.820 |
+| 81 | `_apptPuedeAcusar` se vuelve permisivo | *no se puede acusar a nadie* | Sí — 2.820 |
+| 82 | el reconocedor se vuelve sensible a mayúsculas y espacios | *no se puede acusar a nadie* | Sí — 2.820 |
+
+La **82** cubre lo que casi siempre se escapa: comparar `"Paciente Everest"` con `===` funciona
+hasta que Everest devuelve `"  PACIENTE  EVEREST "`. Se normaliza acentos, espacios y caja.
+
+Banco completo: **2.820 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.40 — Una interacción borraba el aviso de que no se juzgó ninguna dosis
+
+Hallazgo `L33460`. La cabecera de esa vista promete *«el silencio SIEMPRE lleva motivo»*, y lo
+cumplía. Faltaba el caso en que **no hay silencio**: con `n > 0` el motivo colapsa a `"OK"` y con
+eso desaparecía el único rastro de que la dosis renal no se había podido juzgar.
+
+Reproducido con el arnés (`__S.motorPortado = true`), paciente **sin TFG**:
+
+```
+A) METFORMINA sola                       → «Falta la función renal… no se puede juzgar la dosis»  ✔
+B) + LOSARTAN + IBUPROFENO (1 interacción) → el aviso DESAPARECE
+                                            pie: «Calculado con la función renal de arriba»       ✘
+contraste: los MISMOS tres con TFG 25    → 3 avisos de dosis renal
+```
+
+El médico veía un panel completo y tranquilizador —«1 para revisar», con su pie de calculado—
+donde el motor **no juzgó ni una sola dosis**. Con TFG 25 uno de esos avisos es metformina
+CONTRAINDICADA.
+
+### El arreglo
+
+El motivo de la **dosis** viaja aparte del motivo del **conjunto** (`motivoDosisRenal`), así que
+colapsar el segundo ya no borra el primero. El aviso se pinta **encima de la lista** —donde no
+hay forma de no verlo, misma decisión que la caja de cifras del Redactor (v17.14.0)— y el pie
+dice la verdad en vez de lo contrario.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 83 | el motivo de la dosis deja de viajar aparte | *una interacción no puede borrar el aviso* | Sí — 2.821 |
+| 84 | el aviso vuelve a pintarse solo cuando no hay nada | *idem* | Sí — 2.821 |
+| 85 | el pie vuelve a afirmar que se calculó | *idem* | Sí — 2.821 |
+| 86 | el aviso se pinta DEBAJO de la lista | **primero NO cayó nadie** → aserción reescrita → cae | Sí — 2.821 |
+| 87 | el aviso se pinta siempre, también con TFG real | *idem* (la contrapartida) | Sí — 2.821 |
+
+**La 86 es la octava prueba hueca de la jornada**, y de una variedad nueva: mi aserción de
+posición comparaba el aviso contra el **pie del bloque**, así que moverlo debajo de la lista
+—pero encima del pie— la seguía cumpliendo. Ahora se compara contra el **primer aviso pintado**,
+que es lo que de verdad decide si el médico lo ve antes o después de leerse la lista entera.
+
+Banco completo: **2.821 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.41 — Dos afirmaciones falsas en pantalla
+
+### 1. «· albuminuria: vigilancia estrecha» sobre una glicemia (`L35453`)
+
+El sufijo pertenece a la promoción a **R** del RAC con albuminuria, pero colgaba de
+`vencidoBase`, que solo significa «estaba vencido» y vale igual para la glicemia, la creatinina
+y el LDL. Reproducido con el arnés, paciente **sin RAC medido** (`ctx.rac = null`):
+
+```
+GLUCOSA vencida:  «vencido hace 418 día(s) — resultado del 2025-01-10 · albuminuria: vigilancia estrecha»
+LDL vencido:      «vencido hace 396 día(s) — resultado del 2025-02-01 · albuminuria: vigilancia estrecha»
+```
+
+Ese motivo es **literalmente** lo que se pinta en la lista «Ya vencidos» del recuadro clínico. El
+médico leía que su paciente tiene albuminuria y vigilancia estrecha sobre una glicemia, en
+alguien a quien **nadie le midió la albuminuria**. El sufijo se ata ahora a la promoción a R, que
+es de quien de verdad la tiene.
+
+### 2. Anular la cita de control borraba la marca de la toma de muestras (`L19487`)
+
+La toma vive en AppCita y el script **no puede anularla** — el propio comentario de la v15.5.0 lo
+dice. Borrar su marca local era afirmar que ya no está agendada cuando sigue estándolo, y apagaba
+**dos cosas a la vez**:
+
+- el aviso *«la cita de control quedó anulada, la TOMA DE MUESTRAS sigue agendada»*, que se decide
+  leyendo esa misma marca justo después: no podía salir nunca, porque acababa de borrarse;
+- el **antiduplicados** del modal de laboratorio, con lo que tras cancelar el control se podía
+  crear una **segunda** toma para el mismo paciente y el mismo día sin la segunda confirmación.
+
+Paciente que llega en ayunas a una toma huérfana, o con dos tomas el mismo día, y el médico nunca
+fue avisado.
+
+Además, la foto del estado se toma **antes** de anular. Aunque la marca ya no se borre, decidir un
+aviso releyendo un almacén que la operación de al lado acaba de tocar es la forma de que el aviso
+vuelva a desaparecer en silencio la próxima vez que alguien cambie esa limpieza.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 88 | el sufijo vuelve a pegarse a todo examen vencido | *NO se pega a cualquier examen vencido* | Sí — 2.825 |
+| 89 | el sufijo desaparece también del RAC promovido | *(contrapartida)* el RAC SÍ lo conserva | Sí — 2.825 |
+| 90 | anular la cita vuelve a borrar la marca de la toma | *no borra la marca* **+** *foto antes de anular* | Sí — 2.825 |
+| 91 | el aviso vuelve a decidirse releyendo el almacén | *foto antes de anular* | Sí — 2.825 |
+
+La **89** es la mutación en dirección contraria, y aquí importa especialmente: el arreglo se podía
+«cumplir» borrando el sufijo de todas partes, y con eso se habría perdido la prioridad de atención
+que la v17.6.75 puso ahí a propósito.
+
+Banco completo: **2.825 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.42 — LA REGRESIÓN DE DISEÑO: un comentario mío se comió 878 líneas de CSS
+
+**Reporte del médico, en vivo, sobre la v18.0.32 que tiene instalada:** *«hubo una regresión muy
+grande en temas de diseño en todo el script, actualmente se ve horrible… el azul de Everest se
+mezcla con el nuestro, los botones parecen viejos de Windows 98, todo lo bueno que teníamos se
+perdió»*.
+
+### La causa, y es mía
+
+En la v18.0.28 escribí, dentro de `MTR_RCV_CSS`, un comentario que **nombraba el peligro de la
+Regla Q escribiendo la secuencia de cierre literal**:
+
+```
+   … y la Regla Q (un */ que cierra un
+   comentario CSS antes de tiempo).
+```
+
+Ese cierre **terminó el comentario en mitad de la frase**. Todo lo que venía detrás dejó de ser
+comentario y pasó a ser CSS inválido; el parser perdió el hilo y **descartó las 878 líneas
+restantes de la hoja**. Es exactamente el defecto que ese comentario describía, cometido dentro
+del comentario que lo describe — el mismo error que la v18.0.28 ya había cometido con una
+interpolación viva, en el mismo sitio.
+
+### Medido en Chromium, con el CSS real generado por `buildOverlay()`
+
+```
+                        ANTES        DESPUÉS
+reglas aceptadas         746          1105        (+359 resucitadas)
+.vgl-bento-head       ausente        presente
+.vgl-ux-seccion-tit   ausente        presente
+.vgl-prod-pct         ausente        presente
+muestra de 26 selectores repartidos:  23/26  ->  26/26
+```
+
+La última regla viva era `.vgl-rcv-aviso`. De ahí al final —el tablero «Estado de un vistazo»,
+la vista de productividad, la hoja de UX entera— **no existía para el navegador**. Sin esas
+reglas, cada elemento cae al estilo por defecto del navegador y al CSS global de Everest: de ahí
+los botones de Windows 98 y el azul ajeno.
+
+### Por qué la guarda que existe para esto no lo vio
+
+`suite_25` extraía **solo** el bloque `style.textContent` de `buildOverlay()` y **no resolvía**
+los `${_cssSeguro(() => XXX_CSS)}`. Todo lo que vive en `MTR_CSS`, `MTR_RCV_CSS`,
+`MTR_RCV_CSS_TODOS_LOS_MODALES` y `VGL_UX_CSS` era invisible para **todas** las reglas de la
+suite — la P, la Q y la R incluidas.
+
+Y el propio comentario roto afirmaba que esa suite ya lo veía («invisible para esa suite **hasta
+esta versión**»). Es la quinta vez en esta jornada que aparece el mismo patrón: **un comentario
+que promete una red de seguridad que no existe**. Esta vez costó el diseño entero.
+
+Ahora la suite resuelve los splices —incluida la constante derivada
+`MTR_RCV_CSS_TODOS_LOS_MODALES`, que se compone en tiempo de ejecución— y verifica que **no
+quede ninguno sin resolver**: uno solo deja una hoja completa fuera del alcance de las reglas.
+
+### Dos censos, no uno
+
+El censo histórico de `!important` se calibró sobre el bloque principal y de ahí sale su lista
+detallada de excepciones, así que se queda ahí. Las hojas spliceadas reciben **censo propio**
+(132): hasta hoy no tenían ninguno, y por ese hueco pasó esto.
+
+### Además, en la misma versión
+
+- **`.vgl-uro-arrow`** (la flechita ▾ del acordeón del uroanálisis) no tenía **ninguna** regla
+  de color en toda la hoja: heredaba, y la herencia pierde contra una regla de tipo de Everest
+  con `!important`. Medido: **18,67:1 → 1,10:1**, invisible.
+- **El titular y el icono del aviso flotante, y la insignia de estado de cada tarjeta de cita**,
+  pintaban su color **en línea sin `!important`**. La Regla R —escrita en la v18.0.16 justo para
+  eso— era ciega: su `style="([^"]*)"` se corta en la primera comilla doble, y esos atributos
+  llevan una dentro de la interpolación (`String(color || "AZUL")`). Tres coincidencias en esa
+  línea, **ninguna** con `color:`. Se neutralizan las interpolaciones antes de buscar,
+  conservando los saltos de línea para que los números de línea del informe sigan siendo reales.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 92 | se reintroduce el cierre literal en `MTR_RCV_CSS` | **Regla Q** — ahora sí lo ve (2 fugas) | Sí — 2.825 |
+| 93 | se quita la regla de `.vgl-uro-arrow` | censo de `!important` del bloque principal | Sí — 2.825 |
+| 94 | se quita el `!important` de un color en línea | **Regla R** — con las interpolaciones neutralizadas | Sí — 2.825 |
+| 95 | se deja un splice sin resolver | *no queda ningún splice sin resolver* | Sí — 2.825 |
+
+Banco completo: **2.825 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.43 — la agrupación de exámenes: 59 días de vigencia quemados en un viaje que todavía no existe
+
+**Reporte en vivo del médico (1-sep), con captura de pantalla:** *"ESTO TAMPOCO TIENE SENTIDO
+LA FORMA EN LA QUE SE AGRUPAN TODOS LOS EXÁMENES QUE INCLUSO ESTAN A MUCHO TIEMPO SE SUGIERE LA
+REALIZACION EN DICIEMBRE Y NO ES ASÍ".* El plan ponía la toma el **23 de diciembre** —a 113
+días, porque ese día vencía la creatinina— y arrastraba **siete exámenes que vencían el 20 de
+febrero** (a 172 días), cada uno rotulado *"se aprovecha el mismo viaje"*.
+
+### La asimetría, medida antes de tocar nada
+
+`tools/medir_arrastre_lejano.js` (nuevo, mismo método que `medir_cercania.js`: Monte Carlo
+determinista, 10.000 pacientes sintéticos por población, cero datos reales). Lo primero que
+salió fue que la población de `medir_cercania.js` **no contiene el caso del médico**: con el
+último resultado de cada driver repartido entre 0 y 250 días, casi siempre hay algo vencido, y
+entonces la toma cae a 14-21 días (84,3 % de los planes). El paciente de la captura acaba de
+hacerse el panel completo — nada vencido — y ahí la toma se va a meses vista. Con esa población
+añadida (0-30 días), **31,7 % de los planes ponen la toma a más de 30 días**.
+
+La cosecha medía el margen **solo contra el 33 % de la vigencia del propio examen**, nunca
+contra la distancia a la que está la toma. Con algo por pedir esa distancia es como mucho
+`MTR_TECHO_ESTADO_A`, así que el canje "vigencia por viaje" que el médico aprobó en v17.6.0 se
+cobraba sobre un viaje inminente. Sin nada por pedir, la misma regla seguía corriendo contra un
+viaje que todavía no existe: entre hoy y diciembre el plan se recalcula en cada consulta.
+
+Qué regla cosecha qué, en la población del caso reportado:
+
+| regla | % de lo cosechado | adelanto medio | máximo |
+|---|---|---|---|
+| grupo de lípidos (sin tope) | 52,1 % | 122,0 d | 168 d |
+| cosecha del 33 % | 32,1 % | 15,3 d | 59 d |
+| vence con la toma | 8,5 % | 0 d | 0 d |
+| gracia de 14 d | 5,6 % | 59,9 d | 73 d |
+| ANR (creatinina / RAC) | 1,7 % | 53-73 d | 108 d |
+
+### El arreglo
+
+La **cosecha genérica** (el 33 % y la gracia de 14 días) solo corre si la toma cae dentro de
+`MTR_TECHO_ESTADO_A` (21 d) — la ventana que este proyecto ya llamaba *"el mismo viaje"*. Misma
+forma que el guardarraíl que el médico pidió en v17.30.0 para el ANR: cuando la fecha la
+gobierna otra cosa, la cosecha genérica no se suma encima. Y hace verdadera la frase de
+pantalla.
+
+**Lo que NO se toca, a propósito:** el ANR (lo ordenó el médico explícitamente) y el grupo de
+lípidos — que es el que más adelanta de todos y aun así se deja sin tope, porque **los cuatro
+lípidos no se pueden pedir sueltos en Everest** (`CONDUCTA_LI_TEXTO_POR_ANALITO` no tiene texto
+de `<li>` para ninguno: solo existen dentro del paquete). Excluirlos no evitaría que el
+laboratorio los procese; solo enseñaría una lista que no coincide con lo que el paquete agrega.
+Y no hace falta acotarlo por otro lado: esa regla solo dispara si YA va un lípido en la visita,
+así que se apaga sola cuando se apaga la cosecha que la alimentaba.
+
+Coste medido con umbral 21 d:
+
+| población | planes que cambian | viajes extra | vigencia devuelta |
+|---|---|---|---|
+| todos los días (0-250 d) | 39 de 10.000 | **1 paciente de 10.000** | 5.373 d |
+| panel recién hecho (0-30 d) | 2.770 de 10.000 | 1.158 (11,58 %) | 265.951 d (21,8 d/examen) |
+
+Con umbral 14 el coste en la población de todos los días se multiplica por 29 (1.131 planes);
+con 30 y con 45 no se gana nada más. **21 es el codo de la curva** y además es el número que el
+proyecto ya usa para decir "el mismo viaje".
+
+### Y se dice por qué, y cuánto cuesta
+
+Cada cosechado viaja ahora con `motivoCosecha` y `adelantoDias`, y la pastilla "qué ordenar"
+los usa. El texto único de antes (*"se aprovecha el mismo viaje"*) era verdad para un examen
+que vence en una semana y mentira para uno que vence en febrero, y los dos salían idénticos:
+
+- lípidos → *"viene en el mismo perfil lipídico, no se pide suelto"*
+- ANR → *"la ventana renal lo trae a esta toma"*
+- 33 % / gracia → *"se adelanta N d para salir en la misma toma"* — con el número delante
+- el que fija la fecha → *"justo el día de la toma"*
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 96 | `tomaEsElMismoViaje` forzado a `true` (la conducta vieja) | los 7 de febrero vuelven a arrastrarse a diciembre — 3 fallan | Sí — 86 ok |
+| 97 | `tomaEsElMismoViaje` forzado a `false` (se apaga también donde sí sirve) | el borde de 21 días y la gracia — 7 fallan | Sí — 86 ok |
+| 98 | se quita el guardarraíl **solo** de la gracia | la gracia arrastra con la toma lejos — 3 fallan | Sí — 86 ok |
+| 99 | `cosechar` empuja el objeto original en vez de una copia | *el driver original no queda marcado* — 1 falla | Sí — 86 ok |
+
+La mutación 97 es la que importa en la dirección contraria: prueba que el guardarraíl **no**
+apaga la cosecha donde el médico la aprobó — con el viaje a la vuelta de la esquina sigue
+adelantando sus 59 días.
+
+---
+
+## v18.0.44 — al paciente que la lista oficial no conoce, ahora se le pregunta al respaldo
+
+**Pedido del médico (1-sep), con captura:** *"HAY ALGUNOS PACIENTES QUE ME APARECEN ASÍ CON LA
+BASE DE DATOS OFICIAL PERO QUERÍA PREGUNTARTE SI ES POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE
+'Dato faltante: sin registro en PyM' SE PUEDA CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL
+PACIENTE TIENE ACTIVIDADES PENDIENTES ... COMO SE PODRÍA HACER SIN ROMPER LO QUE YA FUNCIONA?"*
+
+Hasta esta versión la base piloto era **excluyente**: se cargaba en lugar de la lista del día
+cuando esa no aparecía, y en cuanto llegaba la oficial se reemplazaba entera. Un paciente que
+no cruza con el `Agenda_Dia_CMB` de hoy salía como *"Dato faltante: sin registro en PyM"* y ahí
+moría, aunque el respaldo estuviera guardado en la misma máquina.
+
+### Cómo se hizo sin romper lo que ya funciona
+
+**Un segundo índice de solo consulta** (`state.pymResp*`), que convive con la oficial en vez de
+sustituirla. Cuatro contenciones, cada una con su prueba:
+
+1. **Nunca sustituye a la oficial.** Se consulta SOLO cuando `pymTodos` no tiene al paciente.
+   Quien está en la oficial se lee solo de ella, incluido su *"al día"*.
+2. **Nunca se mezcla en `state.pym`.** Ningún consumidor existente —`getActivities`,
+   `pymPendientesRestantes`, el módulo de ordenamiento, el aviso al abrir la historia— cambia
+   de comportamiento. El respaldo **no** alimenta el ordenamiento automático: informa, y el
+   médico decide.
+3. **Nunca se presenta como dato de hoy.** Todo lo que sale del respaldo viaja con su
+   procedencia y su fecha pegadas, en ámbar y con borde punteado en la tarjeta.
+4. **Nunca dice "al día".** Si el respaldo tiene al paciente sin nada anotado, eso no prueba
+   que hoy no le falte nada. Se dice exactamente eso — la Regla D del proyecto, aplicada al
+   revés.
+
+**No descarga nada nuevo:** lee la copia que el script ya guarda (`vgl_piloto`, escrita por
+`pilotoGuardar` desde v7.8.1). Si esa copia no existe todavía, el respaldo no responde y la
+pantalla se queda exactamente como estaba.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 100 | se quita la contención *"está en la oficial"* | *al paciente que SÍ está en la lista oficial no se le consulta el respaldo* | Sí — 23 ok |
+| 101 | se quita la contención *"la activa YA es el respaldo"* | *no se le pregunta dos veces a la misma fuente* | Sí — 23 ok |
+| 102 | el respaldo vacío se presenta como *"está al día"* | *REGLA D al revés* | Sí — 23 ok |
+| 103 | el mensaje deja de decir de dónde salió el dato | *dice de dónde salió el dato* | Sí — 23 ok |
+
+### Y una trampa nueva, anotada
+
+El primer intento sumaba **cinco** `!important` al censo de la suite 25 en vez de cuatro: el
+quinto era la palabra escrita **dentro de un comentario del propio CSS**. Ese censo cuenta texto
+crudo, así que una mención en prosa le inventa una regla que no existe. Misma familia que la
+trampa del `*/` de la v18.0.42: **el comentario de una hoja de estilos no es un lugar neutral**.
+Queda anotado en el comentario de esa regla para no repetirlo. Censo: 645 → 649.
+
+### v18.0.44 (segunda entrega) — el respaldo se trae solo, y una prueba hueca de la peor clase
+
+**El hueco que hacía inútil lo anterior.** La copia `vgl_piloto` solo se escribe cuando el
+respaldo se carga como lista ACTIVA, y eso solo pasa los días en que la lista de la sede llega
+tarde (`loadPymBase` corta con `if (state.pymFile) return true`). En una máquina donde el
+`Agenda_Dia_CMB` llega puntual varios días seguidos, la copia puede no existir — y la consulta
+al respaldo no respondería nunca. Se añade `traerRespaldoSoloParaConsulta()`: una vez al día,
+solo la pestaña líder, solo con la base automática encendida, **después** de que la lista del
+día esté cargada, y sin pasar por `applyPymIdx` ni tocar `state.pym` / `pymFile` / `pymFallback`.
+
+**Un error de diseño propio, corregido por su prueba.** El primer intento marcaba el día
+*antes* de descargar, "para no reintentar en bucle". Efecto real: un fallo de red al arrancar
+la jornada —la sesión de SharePoint a medio despertar, que es exactamente cuando esto corre—
+dejaba el respaldo mudo el día entero, justo lo que el médico pidió evitar. Ahora la marca se
+pone **solo al conseguirlo**, y el bucle se corta con un contador en memoria (3 por pestaña).
+
+**LA PRUEBA HUECA #9 DE LA SESIÓN, Y LA MÁS CARA.** La prueba que descubrió lo anterior estaba
+escrita como `t.caso("…", async () => { … })`. `t.caso` llama a `fn()` de forma **síncrona** y
+suma un acierto en el acto; una función `async` devuelve una promesa ahí mismo, así que la
+prueba se cuenta como pasada **antes de ejecutar una sola afirmación**. Al convertirla a
+`await t.casoAsync` se puso roja contra el código sin mutar — y así apareció el error de diseño.
+
+Un barrido del banco encontró **cinco**, cuatro de ellas anteriores a esta sesión:
+
+| suite | prueba | qué comprobaba (o creía comprobar) |
+|---|---|---|
+| 18 | `atheneaAutoLogin` (a) | que con el interruptor apagado no hace nada |
+| 18 | `atheneaAutoLogin` sin credenciales | que no exige médico identificado |
+| 18 | `atheneaAutoLogin` v12.5.8 | que el motivo ya no es mudo |
+| **31** | **`openLaboratoriosModal`** | **inyección de atributos en `<a>` vía `doc_id` — una prueba de SEGURIDAD que llevaba tiempo sin comprobar nada** |
+| 72 | respaldo (nueva) | la de arriba |
+
+Las cuatro pasan de verdad tras convertirlas. Se verificó rompiendo a propósito la afirmación
+de la de seguridad (suite 31): ahora sí cae, y antes no.
+
+El banco ya tenía tres reglas para `t.casoAsync` sin `await` y para suites sin `async pruebas`;
+faltaba la puerta de al lado. Se añade la cuarta en `suite_26`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 104 | la marca del día se pone antes de conseguirlo | *un fallo de red NO quema el intento del día* | Sí — 24 ok |
+| 105 | la descarga fallida igual escribe el índice de consulta | *sin descarga no se inventa un índice* | Sí — 24 ok |
+| 106 | se reintroduce una prueba hueca `t.caso(..., async ...)` | la regla nueva de `suite_26` | Sí — 10 ok |
+
+Banco completo: **0 fallan.**
+
+---
+
+## v18.0.45 — los dos primeros del enjambre de funciones: un aviso farmacológico sobre una cifra que nadie midió, y PHI en el archivo llamado «sanitizado»
+
+Los dos de mayor daño entre los 47 confirmados por el enjambre
+(`docs/ENJAMBRE_FUNCIONES_20260901.md`). Los dos comprobados contra la cabeza actual antes de
+tocar nada — el enjambre corrió contra un HEAD anterior a la v18.0.33.
+
+### 1. `eGFR = null` se evaluaba como `eGFR = 0` (gravedad alta, clínico)
+
+`mtrEvaluarInteracciones` recibe `egfr` en **`null`** cuando la función renal nunca se ha
+medido: paciente nuevo, o falta el peso para calcularla. Las dos comparaciones eran
+`egfr < 30` y `egfr < 60` a pelo, y en JavaScript **`null < 30` es `true`** (null se convierte
+a 0). Un paciente sin función renal medida se evaluaba como si tuviera una eGFR de **cero**.
+
+Medido antes y después con el arnés, mismos fármacos:
+
+| | antes | después |
+|---|---|---|
+| LOSARTÁN + ESPIRONOLACTONA, eGFR `null`, K⁺ 4,0 | `HIPERKALEMIA_SINERGICA` (severidad alta) | — |
+| los mismos, eGFR **25** real | `HIPERKALEMIA_SINERGICA` | `HIPERKALEMIA_SINERGICA` |
+| METFORMINA + CONTRASTE, eGFR `null` | `METFORMINA_CONTRASTE` («suspender 48 h») | — |
+| los mismos, eGFR **45** real | `METFORMINA_CONTRASTE` | `METFORMINA_CONTRASTE` |
+
+Es «casilla vacía antes que dato inventado» del lado peor: un aviso farmacológico falso o
+gasta la atención del médico, o le hace suspender un fármaco por una cifra que no existe.
+
+Se arregla con **una variable** (`egfrMedida`), no parcheando cada comparación: así una regla
+nueva que mire la función renal no puede volver a caer en la coerción sin darse cuenta. El K⁺
+alto sigue disparando por su cuenta — la regla tiene dos disparadores y solo se desactivó el
+que dependía de una cifra ausente.
+
+### 2. La cédula viajaba cruda en el diagnóstico «sanitizado» (gravedad alta, PHI)
+
+`san()`, dentro de `downloadDiagnostic`, tacha con `···` todo el **texto** visible de la
+tarjeta —y ya había pruebas de cero PHI para eso—, pero de los atributos solo vaciaba los
+`data-*`: los cinco de `KEEP` (`class`, `role`, `routerlink`, `type`, `name`) se conservaban
+con su **valor original**. Angular escribe rutas como `[routerLink]="['/paciente', doc.cedula]"`,
+así que la cédula podía salir de la clínica dentro de un archivo llamado
+`diagnostico_vigilante_SANITIZADO.txt`.
+
+No se borran los atributos —su presencia y su forma son justo lo que hace útil el
+diagnóstico—: se va el dato. Cualquier corrida de **4 o más dígitos** pasa a `···`.
+
+    /Paciente/1122334455   ->  /Paciente/···        (identificadores sintéticos)
+    /hc/1122334455/lab/98765 ->  /hc/···/lab/···
+    card patient-link      ->  card patient-link    (las clases no se tocan)
+    col-6                  ->  col-6                (los números cortos tampoco)
+
+**Por qué esto nunca se había probado**, y qué se hizo al respecto: el DOM del banco no tiene
+`cloneNode` ni atributos iterables, así que `san()` entera no se puede ejecutar allí (`grep`
+de `cloneNode` en `tests/`: cero coincidencias). El saneador se saca a **función propia con
+nombre** (`_diagValorAtributoSeguro`) y se prueba de verdad; la rama que lo llama se fija con
+una comprobación **estructural**, declarada como tal en la propia prueba en vez de disfrazarse
+de comprobación de conducta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 107 | vuelve `egfr < 30` (coerción de null) en la hiperkalemia | *sin función renal medida no se inventa una eGFR de cero* | Sí — 21 ok |
+| 108 | vuelve `egfr < 60` en metformina + contraste | la misma | Sí — 21 ok |
+| 109 | el atributo conservado se reescribe con su valor original | *ningún atributo conservado se escribe sin pasar por el saneador* | Sí — 40 ok |
+| 110 | el saneador de atributos no tacha nada | *el diagnóstico «sanitizado» no deja pasar una cédula* | Sí — 40 ok |
+
+Quedan **45 hallazgos confirmados** del enjambre sin aplicar, con su reproducción y su arreglo
+propuesto en `docs/ENJAMBRE_FUNCIONES_20260901.md`.
+
+---
+
+## v18.0.46 — tres más del enjambre: una tilde, un cero y una coma
+
+Tres defectos de gravedad alta que comparten forma: **un carácter** —una tilde, un cero, una
+coma— y en los tres el fallo del programa se le presentaba al médico como un hecho sobre el
+paciente. Los tres comprobados contra la cabeza actual antes de tocar nada.
+
+### 1. Una tilde apagaba el módulo de PyM la jornada entera
+
+`findDocIdx` no quitaba acentos. Los encabezados llegan en mayúsculas y recortados, pero no
+sin tildes, así que una columna llamada **«CÉDULA»** —la ortografía correcta en español—
+fallaba por las dos vías: no coincide exacto con `"CEDULA"` de `DOC_EXACT`, y
+`includes("CEDULA")` tampoco, por la É. `makeIndexer` entonces lanza «No se encontró la
+columna con la identificación del paciente» y **el módulo de Actividades Preventivas queda
+apagado todo el día**.
+
+Se normaliza dentro de la función y no en los llamadores porque son tres, y **uno vive dentro
+del Web Worker** (`findDocIdx` se serializa con `.toString()`): arreglar solo el de arriba
+habría dejado roto el camino normal de un `.xlsx`. `stripAccents` ya se serializa antes que
+ella, así que se puede usar. De paso queda robusto a un encabezado sin `toUpperCase`.
+
+### 2. Un RAC de 0 de hoy perdía contra un RAC de 45 de enero
+
+Auto-Labs escribía en la historia el **45** —albuminuria franca, de hace meses— y decía
+«✓ casillas escritas» en verde. No salía en `sinCasilla` ni en `implausibles`: el médico veía
+y firmaba un dato falso.
+
+La causa estaba a un nivel de distancia. `_labNumerico` termina en `n > 0 ? n : null`, y ese
+cero se rechaza **a propósito** («nunca 0, que en una creatinina sería catastrófico») — pero
+esa exclusión es **global para los 13 analitos**, y el desempate de `_nuevoReemplazaCandidato`
+la reutilizaba como si significara «no es un número». En el RAC, donde 0 sí es un resultado
+posible, el valor real y más reciente quedaba tratado como texto y perdía contra cualquier
+valor viejo distinto de cero.
+
+**No se toca `_labNumerico`**: su cero sigue siendo veneno donde debe serlo. Lo que cambia es
+el desempate, y solo para los dos analitos donde el cero es un resultado de verdad —RAC y
+uroanálisis—, con una lista corta y explícita porque ampliarla es una decisión clínica. Y solo
+un cero **limpio** (`0`, `0.0`, `0,00`): un rango `0-2` o un `NEGATIVO` siguen sin ser número.
+
+### 3. Una coma entrecomillada borraba a un paciente, en silencio
+
+`parseCSV` era `l.split(",")` a pelo. Un apellido escrito `"Pérez, Juan"` —lo que produce
+Excel al exportar cualquier campo con coma— corría todas las columnas siguientes un puesto,
+la del documento devolvía el texto equivocado, y el paciente **no entraba ni en `map` ni en
+`todos`**. Y como tampoco estaba en `todos`, el panel le decía al médico, con toda confianza,
+que ese paciente «NO aparece en la lista de prevención de hoy».
+
+Ahora se lee carácter a carácter con las reglas de CSV de verdad: campo entrecomillado,
+comillas escapadas por duplicación, y **saltos de línea dentro de un campo** (que el
+`split("\n")` de antes tampoco podía manejar).
+
+> **Y una prueba que era el guardaespaldas del defecto.** `suite_16` decía «NO interpreta
+> comillas» *como si fuera una decisión* y clavaba el resultado roto para que nadie lo
+> cambiara. Un comentario que llama «a propósito» a un defecto es peor que el defecto: la
+> prueba deja de proteger y pasa a defenderlo. Reescrita.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 111 | `findDocIdx` vuelve a no quitar tildes | *una tilde no puede apagar el módulo de PyM* | Sí — 14 ok |
+| 112 | el desempate vuelve a usar `_labNumerico` a pelo | *un RAC de 0 de hoy le gana a un RAC de 45* | Sí — 140 ok |
+| 113 | el cero se acepta en TODOS los analitos | *el cero sigue siendo veneno donde un 0 no es un paciente sano* | Sí — 140 ok |
+| 114 | vuelve el `split(",")` ingenuo | *una coma dentro de comillas ya no parte la fila* (2 fallan) | Sí — 26 ok |
+
+Banco completo: **2.845 comprobaciones pasan, 0 fallan.** Quedan **41 hallazgos confirmados**
+del enjambre sin aplicar, documentados en `docs/ENJAMBRE_FUNCIONES_20260901.md`.
+
+---
+
+## v18.0.47 — dos del enjambre en la misma función: el `fetch` que nunca vuelve y el 401 que nadie contaba
+
+Los dos en `_pageFetchJsonCore`, el núcleo por el que pasa **toda** llamada del asistente a
+Everest.
+
+### 1. Una conexión colgada bloqueaba para siempre la acción REAL del médico
+
+La segunda vía (`GM_xmlhttpRequest`) lleva `timeout: 15000` desde siempre. La primera —la que
+se usa en el 100 % de los casos normales— **no tenía ninguno**. Una conexión que acepta y no
+responde (la red de la sede cayendo a medias, un proxy que no cierra) no da error: se queda
+abierta. Y como todo aquí se hace con `await`, la acción que la disparó —**Agendar**,
+**Guardar orden**, **Buscar paciente**— se cuelga con ella. Sin error, sin aviso, sin vuelta.
+
+Ahora la petición lleva `AbortController` con el **mismo tope de 15 s**, sacado a constante
+(`PAGE_FETCH_TIMEOUT_MS`) para que las dos vías no puedan volver a separarse en silencio. Al
+abortar, el flujo sigue por donde ya iba para un fallo de red — incluida la regla de v11.0.1 de
+**no reenviar una escritura**, que aquí importa más que nunca: la petición abortada pudo haber
+llegado al servidor.
+
+### 2. Una sesión caducada se trataba igual que un «no existe»
+
+Un **401/403** caía en el mismo `return null` que un 404 y **nunca** llamaba a
+`_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y no ponía en
+rojo el panel de salud. El asistente se quedaba ciego —sin fuente de agenda, sin avisos de
+llegada— y por dentro seguía creyéndose sano. El médico no tenía **una sola señal**.
+
+No se reintenta (reintentar un 401 no lo arregla) pero **sí se cuenta**. Y la contención: un
+404 o un 400 son respuestas legítimas, no un API caído, y siguen sin contar — contarlas
+abriría el cortacircuitos por nada.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 115 | se quita el aborto por tiempo del `fetch` | **el banco entero se colgó**: `suite_05` no terminó ni con 180 s de tope — la demostración más literal posible del defecto | Sí — 29 ok |
+| 116 | el 401 vuelve al `return null` mudo | *un 401 SÍ cuenta como fallo* | Sí — 29 ok |
+| 117 | cualquier 4xx cuenta como fallo (contención rota) | *un 404 NO es un fallo del API* | Sí — 29 ok |
+
+La 115 merece subrayarse: **no puso una prueba en rojo, dejó al banco sin terminar.** Un
+defecto que se manifiesta como «nada vuelve nunca» no produce un fallo que se pueda leer —
+produce silencio, que es justo lo que le pasaba al médico delante del paciente.
+
+Banco completo: **2.847 comprobaciones pasan, 0 fallan.** Van **7 de los 47** del enjambre.
+
+---
+
+## v18.0.48 — el cruce de pacientes, cuarto sitio: la historia clínica se archivaba bajo quien estuviera abierto al LLEGAR
+
+Hallazgo del enjambre de funciones, gravedad alta. `mirar()`, dentro de `mtrHcEnganchar`,
+leía `extractPacienteAbierto()` **en el momento de la llegada de la respuesta**, no en el de
+la petición. Entre las dos hay segundos de red — y Everest **recarga la página** al abrir un
+paciente. Si el médico cambia de historia en ese lapso, los antecedentes, hábitos y examen
+físico del paciente **anterior** quedaban archivados bajo la cédula del **nuevo**, y de ahí
+salen a alimentar al Redactor y al Panel.
+
+Es el mismo defecto, por cuarta vez, en un sitio distinto:
+
+| versión | dónde | qué se cruzaba |
+|---|---|---|
+| v14.1.5 | `injectLabsIntoCronicos` | los laboratorios |
+| v18.0.33 | Panel del paciente | tensión, peso y cintura |
+| v18.0.34 | agendamiento y widget de Fármacos | el resumen clínico |
+| **v18.0.48** | **`mtrHcEnganchar`** | **la historia clínica entera** |
+
+Se cierra con la guarda que ya existía —`_pacienteSigueAbierto(idAlPedir)`—, anotando en el
+`send`/`fetch` quién estaba abierto al **pedirlo**. La rama `"envio"` corre de forma síncrona
+dentro del propio `send`, así que ahí el paciente es por construcción el correcto y no lleva
+guarda; el riesgo vivía solo en los dos caminos asíncronos. Y el descarte **se dice por
+consola**: callarlo sería indistinguible de no haber leído nada.
+
+### Y una prueba que se rompía sola
+
+`v17.12.0 — la escucha no rompe Everest` cortaba el fuente con `iEng + 6000`, un número
+mágico. Mi comentario hizo crecer la función y la prueba se puso **roja sin que el código
+estuviera mal** — la peor forma de fallar, porque la siguiente persona sube el número y no
+mira más. Ahora corta por un **ancla real** y comprueba que el ancla exista, para que un
+renombre la ponga en rojo por el motivo correcto en vez de medir un trozo cualquiera. De paso
+sus dos regexes ahora **exigen** el argumento de identidad.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 118 | se quita la guarda de identidad | *una historia que llega tras cambiar de paciente NO se archiva* | Sí — 42 ok |
+| 119 | el `fetch` vuelve a no anotar quién pidió la historia | la anterior + la de fuente (2 fallan) | Sí — 42 ok |
+| 120 | la guarda acepta que no se pueda LEER la cédula | *tampoco se archiva a ciegas* | Sí — 42 ok |
+
+La 120 es la que importa de las tres: sin ella, un DOM que Angular está re-renderizando —cuando
+la cédula no se puede leer— haría pasar la historia por buena. La regla del proyecto es la
+contraria: **sin cédula legible, no se escribe.**
+
+Banco completo: **2.849 comprobaciones pasan, 0 fallan.** Van **8 de los 47** del enjambre.
+
+---
+
+## v18.0.49 — la dosis del otro principio activo, y un cero pegado a una cifra real
+
+### 1. En una combinación de dosis fija se leía la dosis del OTRO principio (gravedad alta)
+
+«Amlodipino/Atorvastatina 5/40mg» es una presentación real y común en HTA + dislipidemia.
+`mtrDosisDeTexto` tomaba **el primer número que hubiera después del nombre buscado**, y
+después de «atorvastatina» lo primero que aparece es el **5 del amlodipino**.
+
+Medido de punta a punta:
+
+    mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg …", "atorvastatina")  ->  5   (la real es 40)
+    mtrEstatinaAltaIntensidad([…])                                        ->  null
+    mtrInerciaEstatina(true, […])  ->  "LDL en falla SIN estatina de alta intensidad: revise intensidad"
+
+Esa última frase es **clínicamente falsa** para un paciente que ya está en atorvastatina 40 mg
+—el techo habitual de esa dosis fija— y empuja a subir una dosis que ya está bien, o a
+desconfiar de un dato que sí es correcto.
+
+En una combinación los números van en el **mismo orden que los nombres** («A/B N1/N2»), así
+que se emparejan por posición: es la única lectura que la presentación permite. Y cuando no
+hay pareja clara —un combo con un solo número, como «Amlodipino/Atorvastatina 5 mg», donde ese
+5 puede ser de cualquiera de los dos— **no se adivina**: se devuelve vacío. Ahí estuvo el
+detalle fino del arreglo: hay que distinguir «esto no es un combo» de «es un combo y no se
+puede emparejar», porque confundirlos devuelve el llamador a la lectura vieja y al mismo
+error. Lo primero es `undefined`, lo segundo `null`.
+
+### 2. «PA Descontrolada (0/105)» (gravedad alta según el enjambre; cosmético según su refutador)
+
+La guarda de la v17.8.1 se escribió **justo para esto** —no imprimir un dato falso pegado a
+uno real, «(165/NaN)», «(165/0)»— y quedó **coja**: exigía `pad > 0` pero nunca `pas > 0`. Con
+la sistólica en 0 (lectura fallida) y una diastólica real de 105, salía **«(0/105)»**.
+
+El refutador tenía razón en una cosa y se anota: la **conducta no cambia**, porque
+`paDescontrolada` ya era cierto por la diastólica sola, así que la franja horaria sugerida es
+la misma. Lo que cambia es lo que el médico **lee**. Se arregla igual: la guarda que el
+proyecto ya había decidido tener, completa en vez de a medias.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 121 | se quita el emparejamiento por posición | *cada dosis se empareja con SU principio* (2 fallan) | Sí — 41 ok |
+| 122 | un combo sin emparejar vuelve a caer a la lectura de siempre | *si no se puede emparejar, se devuelve vacío* | Sí — 41 ok |
+| 123 | se emparejan **al revés** | *cada dosis se empareja con SU principio* | Sí — 41 ok |
+| 124 | la guarda de la PA vuelve a quedar coja | *nunca imprime un cero como si fuera media lectura* | Sí — 41 ok |
+
+La 123 merece la pena: sin ella, invertir el emparejamiento habría pasado la prueba del caso
+principal (la atorvastatina saldría 40 igual si solo se comprobara ese) — por eso la prueba
+comprueba **los dos** principios del mismo texto.
+
+Banco completo: **2.852 comprobaciones pasan, 0 fallan.** Van **10 de los 47** del enjambre.
+
+---
+
+## v18.0.50 — el reporte del médico de esta mañana: «nunca me avisó que el paciente llegó»
+
+**Reporte en vivo (1-sep), textual:** *«HOY NO ME AVISÓ SOBRE CUANDO LLEGÓ UN PACIENTE, PASÓ DE
+ESTADO "SIN PRESENTARSE" A "EN SALA" MIENTRAS YO ATENDÍA A OTRA PACIENTE CON SU HISTORIA
+CLÍNICA ABIERTA Y NUNCA ME AVISÓ»*. El enjambre de funciones lo encontró el mismo día por su
+cuenta, reproducido con el arnés — dos caminos independientes al mismo defecto.
+
+### La causa
+
+El candado de leyendas era **uno solo por paciente y por día** (`legend|<cédula>`), compartido
+por **tres avisos que dicen cosas distintas**:
+
+| aviso | qué dice |
+|---|---|
+| MORADO | «última llamada»: queda ~1 min de gracia |
+| VERDE | **«confirmó a tiempo»: el paciente YA ESTÁ EN SALA** |
+| AZUL | checklist de cierre de consulta |
+
+El primero de los tres que ocurriera en el día **gastaba el único cupo**. Y MORADO → VERDE no
+son dos avisos rivales: son **las dos etapas de la misma espera**, en ese orden y con segundos
+de diferencia. Cualquier paciente que confirme en el último minuto dispara el MORADO y, acto
+seguido, el VERDE. No era un caso raro: era **el** caso.
+
+Resultado: el médico recibía la alarma de «se está por vencer» y **nunca la buena noticia de
+que sí llegó**. Podía creer que el paciente seguía sin confirmar teniéndolo en sala.
+
+El candado se mantiene —su motivo original sigue en pie— pero pasa a ser **por tipo de
+leyenda**. Tres avisos distintos, tres cupos; el mismo aviso, uno solo. El `tipo` es
+obligatorio: dejarlo opcional habría permitido que un llamador nuevo volviera a compartir cupo
+sin notarlo, que es exactamente cómo nació este defecto.
+
+### Y el hueco de siempre, mordiendo por tercera vez en la sesión
+
+La primera versión de la prueba de contención comprobaba `_legendMarcaUnaVez` **directamente**.
+Con eso, **borrar la llamada entera desde `maybeNotify` dejaba el banco en verde**: el candado
+se probaba a sí mismo y nadie vigilaba que siguiera conectado. Es el mismo hueco de v18.0.33 y
+v18.0.36 — **comprobar que una función se porta bien no comprueba que se llame**.
+
+La prueba se rehízo por conducta, sobre el canal real (`crossTabDup` escribe su marca en
+`localStorage` dentro de `_dispararAvisoAudible`, así que la marca existe si y solo si el aviso
+llegó a dispararse), y con el segundo VERDE bajo **otra clave de cita y el mismo paciente**,
+para que la deduplicación de 12 s de `crossTabDup` no pudiera tapar el resultado.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 125 | el candado vuelve a ser uno solo por paciente (**el defecto reportado**) | *el aviso de última llamada ya no se come el de que llegó* (2 fallan) | Sí — 81 ok |
+| 126 | se quita el candado del todo (vuelve el ruido que lo motivó) | *una leyenda NO se repite para el mismo paciente* | Sí — 81 ok |
+
+La 126 es la que hubo que ganarse: en su primer intento **no mordió**, y eso destapó el hueco
+de alcanzabilidad de arriba.
+
+Banco completo: **2.854 comprobaciones pasan, 0 fallan.** Van **11 de los 47** del enjambre, y
+queda cerrado el segundo de los cinco reportes en vivo del médico.
+
+---
+
+## v18.0.51 — «lo mandé a desactivar y sale en todas las pestañas»: el quinto y último reporte en vivo
+
+**Reporte del médico (1-sep), textual:** *«EL BOTON DE "ORDENAR PENDIENTES" ESTÁ ACTIVO Y YO LO
+MANDÉ A DESACTIVAR. LO PEOR ES QUE SALE EN TODAS LAS PESTAÑAS ENFRENTE DE TODO»*. El enjambre
+de funciones lo confirmó y lo reprodujo con el arnés.
+
+### Un arreglo a medias, de mi propia mano
+
+La **v18.0.7** ya había atendido este mismo reporte… **para uno de los tres widgets
+flotantes**. Los tres usan idéntica arquitectura —se pintan en `document.body` con
+`position:absolute` y coordenadas de PÁGINA, y solo se esconden dentro de **su propio tick**,
+que corre únicamente con `secc === "historia"`— pero el rescate del tick general
+(`mtrOcultarBotonOrdenarPendientes`) tocaba **solo** `#vgl-cw-ordenar-btn`.
+
+Medido por el enjambre: al navegar a «Citas del día», `#vgl-cw-examenes` y `#vgl-cw-farmaco`
+seguían con `display:""` — la pastilla 🧪 de exámenes y la 💊 de alertas farmacológicas
+flotando sobre la lista de citas **con el juicio clínico del PACIENTE ANTERIOR**. Eso no es
+estorbo: es un dato clínico de una persona encima de la pantalla de otra.
+
+### Y la primera mitad del reporte era el mismo defecto por el otro lado
+
+*«Lo mandé a desactivar y sigue activo»*: apagar `S.conductaWidgets` solo surtía efecto **la
+próxima vez que corriera el tick de cada widget**, o sea **solo estando dentro de una
+historia**. Un widget ya huérfano en otra pantalla no se enteraba nunca de que el médico lo
+había apagado.
+
+Por eso el apagador se llama ahora en **las dos** situaciones: fuera de la historia **y** con
+el interruptor apagado. Y los tres widgets se agrupan en una sola función a propósito: **tener
+un apagador por widget es exactamente cómo se quedaron dos sin él.**
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 127 | el apagador vuelve a tocar solo un widget | *retira LOS TRES widgets flotantes* | Sí — 85 ok |
+| 128 | el tick general vuelve a llamar solo al apagador viejo | *los retira al salir de la historia Y al apagar el interruptor* | Sí — 85 ok |
+
+Banco completo: **2.856 comprobaciones pasan, 0 fallan.**
+
+**Los cinco reportes en vivo del médico quedan cerrados**: la regresión de diseño (v18.0.42),
+el grounding antiguo (v18.0.36), la agrupación de exámenes (v18.0.43), el aviso de llegada del
+paciente (v18.0.50) y este. Del enjambre van **12 de 47**.
+
+---
+
+## v18.0.52 — el apellido real podía llegar intacto a Gemini
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés. Viola
+directamente la regla no negociable de `CLAUDE.md`: **cero PHI**.
+
+En texto **en mayúsculas sostenidas** —el estilo real de Everest— la defensa por TOKENS es la
+**única** capaz de tachar el nombre: la de honoríficos exige mayúscula inicial + minúsculas y
+no puede actuar. Y tenía dos huecos:
+
+| hueco | medido |
+|---|---|
+| `t.length >= 3` descartaba apellidos de dos letras (Li, Wu, Ng, Ho, Vo) | «…CON LA FAMILIA **LI** EN CASA…» salía **sin tachar** |
+| sin normalizar tildes, «Muñoz» no casaba con «MUNOZ» | «PACIENTE **MUNOZ** REFIERE…» salía **sin tachar** |
+
+El segundo no es un caso raro: el desajuste entre el nombre registrado con tilde y su
+aparición sin ella es **la norma** en cualquier sistema que pase el texto a ASCII. Ahora el
+patrón casa en las **dos direcciones** —«Muñoz» encuentra «MUNOZ» y «Munoz» encuentra
+«MUÑOZ»— convirtiendo cada letra con variantes acentuadas en una clase que las admite todas.
+
+### Por qué NO se hizo lo que proponía el hallazgo
+
+El arreglo propuesto era «bajar el filtro a 1 o quitarlo». Eso censuraría **cada «de» y cada
+«la»** del texto clínico y lo dejaría ilegible — exactamente el defecto que ya costó la
+v18.0.25 («la tachadura de nombres destrozaba el texto clínico»). Un hallazgo puede tener
+razón en el diagnóstico y equivocarse en la receta.
+
+Se hizo con **mínimo dos letras, menos una lista corta de partículas** (`de, del, la, los, y,
+san, van, von, di, mac…`) que no identifican a nadie por sí solas. Comprobado: con el nombre
+«Pedro De La Cruz», «CRUZ» se tacha y «DOLOR DE CABEZA DE LA MAÑANA» **queda entero**.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 129 | vuelve el filtro de 3 letras | *un apellido de dos letras también se tacha* | Sí — 45 ok |
+| 130 | se quita la tolerancia a tildes | *la tilde no puede ser un escondite* | Sí — 45 ok |
+| 131 | se quita la lista de partículas | *las partículas NO se censuran: destrozarían la nota* | Sí — 45 ok |
+
+La 131 es la que protege el arreglo **de sí mismo**: sin ella, endurecer la censura un poco
+más habría vuelto a romper el texto clínico y el banco no se habría enterado.
+
+Banco completo: **2.859 comprobaciones pasan, 0 fallan.** Van **13 de los 47** del enjambre.
+
+---
+
+## v18.0.53 — el kill-switch se activaba en silencio total
+
+Hallazgo del enjambre de funciones, gravedad alta, **verificado en Chromium con el CSS real**.
+
+El médico usa «modo oculto» (Ctrl+Shift+V) para trabajar sin la interfaz del Vigilante *«sin
+apagar su trabajo de fondo»* — es la promesa explícita de esa función, y el estado **sobrevive
+recargas** por diseño. Si el consultorio dispara el kill-switch remoto con el modo oculto
+encendido, `emergencyTeardown` para el reloj y borra la interfaz… y el **único** aviso que lo
+delata (el cartel rojo de Pausa de seguridad) lo escondía **nuestra propia hoja de estilos**,
+porque su id estaba dentro del grupo que el modo oculto apaga.
+
+    SIN modo oculto  → #vgl-pausa-clinica: block   · #vgl-root: flex
+    CON modo oculto  → #vgl-pausa-clinica: none    · #vgl-root: none     (antes)
+    CON modo oculto  → #vgl-pausa-clinica: block   · #vgl-root: none     (después)
+
+El médico seguía tecleando creyendo que el asistente vigilaba vigencias, fraude y PyM cuando
+ya no vigilaba nada. **Y el propio comentario de ese bloque de CSS ya tenía escrita la regla,
+dos líneas más arriba**: *«los sonidos críticos de fraude NO se apagan: son seguridad, no
+decoración»*. El cartel del kill-switch es exactamente eso.
+
+**Dos capas, y ninguna sobra.** (1) Su id sale del grupo: inmune al modo oculto por diseño.
+(2) `_mostrarAvisoPausaClinica` apaga el modo oculto entero — si mañana alguien añade otra
+regla que esconda cosas, este aviso ya no depende de que se acuerde de excluirlo.
+
+Verificador nuevo: `tools/verificar_pausa_modo_oculto.js`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 132 | el aviso vuelve a la lista del modo oculto | *es inmune al modo oculto* | Sí — 11 ok |
+| 133 | el kill-switch deja de apagar el modo oculto | *le gana a una preferencia de interfaz* | Sí — 11 ok |
+| 134 | se vacía la lista entera en vez de sacar un id | *el modo oculto sigue escondiendo el panel* | Sí — 11 ok |
+
+La 134 es la contención: sin ella, «arreglarlo» borrando el grupo entero habría dejado el modo
+oculto sin ocultar nada, y el banco no se habría enterado.
+
+Y una nota de proceso: el comentario de este arreglo se escribió **dos veces**. El primero
+llevaba backticks y la palabra de prioridad dentro de un comentario de CSS — las dos trampas
+que ya mordieron hoy (v18.0.42 rompió el parseo, v18.0.44 falseó el censo). Documentadas en la
+bitácora esta mañana y aun así reincididas la misma tarde: por eso quedan escritas **dentro
+del propio comentario**, donde el siguiente que edite esa zona las va a leer.
+
+Banco completo: **2.861 comprobaciones pasan, 0 fallan.** Van **14 de los 47** del enjambre.
+
+---
+
+## v18.0.54 — «PRESIÓN ARTERIAL DE 110/70» en la nota, y 136/85 en la pantalla
+
+**Reporte en vivo del médico (1-sep)**, con captura de su pantalla de Examen físico y de la
+nota generada. Peso (70), cintura (95) e IMC (27,34) coincidían; **solo la tensión estaba
+mal**, y estaba mal de la peor forma: una cifra que nadie midió hoy, firmada en la historia
+como hallazgo del examen físico de hoy.
+
+### Dos defectos encadenados
+
+**(1) Se prefería la casilla equivocada.** Everest tiene DOS pares de tensión: **«T.A:*»**
+—obligatoria, la que el médico llena siempre— y **«T.A Acostado:»** —opcional, vacía en su
+captura—. `mtrLeerTensionDelDom` pedía **primero la de acostado**.
+
+**(2) El respaldo nunca leía la diastólica**: devolvía `pad: null` cableado. Así que en el
+mejor de los casos la tensión de hoy llegaba **a medias**.
+
+**Y entonces la mitad que faltaba se rellenaba sola.** El refresco del resumen resolvía las
+dos cifras con dos `num(nuevo, previo)` **independientes**:
+
+    paSistolica:  num(fNue.paSistolica,  fPrev.paSistolica)
+    paDiastolica: num(fNue.paDiastolica, fPrev.paDiastolica)
+
+Sistólica de una toma + diastólica de otra = una presión arterial **que no existió nunca**,
+impresa como una sola medición de hoy.
+
+### El arreglo
+
+- El lector prefiere la **obligatoria** y lee **siempre las dos cifras**; la de acostado queda
+  como lo que es, un respaldo para cuando sea la única que hay.
+- **Las dos cifras viajan juntas o no viajan**: si la lectura nueva trae al menos una, manda
+  la nueva **entera** (aunque la otra quede vacía — una casilla vacía es honesta); solo si no
+  trae ninguna se usa la anterior, y entonces **las dos** de la anterior. Es el mismo
+  principio todo-o-nada de `mtrPanelFactoresDePantalla` (v18.0.33), pero aquí el cruce no es
+  entre pacientes: es entre **mediciones del mismo paciente**.
+
+### Lo que NO se da por cerrado, y por qué
+
+Los nombres de campo de esta fila **no están verificados contra el DOM real**, y los ids de
+Everest ya engañaron a este proyecto una vez (cuatro campos comparten dos ids; la cintura solo
+es alcanzable por su rótulo — ver `_mtrRotuloDeCampo`). Así que se prueban varios nombres por
+casilla y queda `DIAGNOSTICO_TENSION_CASILLAS.js` para fijarlos **con evidencia** en
+consultorio, igual que se hizo con la cintura. Lo que esta versión sí garantiza, sean cuales
+sean los ids: **nunca se mezclan dos mediciones**.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 135 | vuelven los dos `num()` independientes (**el defecto reportado**) | *la sistólica y la diastólica se deciden con la misma condición* | Sí — 22 ok |
+| 136 | el lector vuelve a preferir la casilla de acostado | *manda la tensión obligatoria* (2 fallan) | Sí — 19 ok |
+| 137 | el respaldo vuelve a no leer la diastólica | *se leen siempre las dos cifras* | Sí — 19 ok |
+
+Banco completo: **2.863 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.55 — claves de programador en el papel que firma el médico, y una fecha que el modelo se inventó
+
+Los otros dos defectos del reporte del 1-sep, encontrados comparando la nota generada contra
+las capturas de la pantalla.
+
+### 1. `COLESTEROL_LDL` en un documento clínico
+
+La sección de la nota salía así:
+
+    :: PRÓXIMOS LABORATORIOS (EN ~3 MESES):
+    COLESTEROL_LDL
+    GLUCOSA
+    UROANALISIS
+
+Es la **Regla C** del proyecto —«lo que lee un humano no lleva identificadores de
+programador», hallazgo #61— incumplida en el peor sitio posible.
+
+La causa no era el JSON: `order_list` lleva claves **a propósito**, y su propio comentario lo
+explica («sus lectores las cruzan con el catálogo de CUPS; meterle nombres libres la
+rompería»). El defecto era que **el prompt le pedía a la IA imprimir esa lista tal cual**. Se
+añade la lista **paralela** `order_list_legible`, construida con el traductor único que ya
+existe y ya está probado (`mtrNombreLegibleAnalito`), y el prompt pasa a listar esa. La de
+claves sigue viajando para quien la necesita.
+
+### 2. Una fecha de calendario que nadie le dio al modelo
+
+La nota decía **«CITA CONTROL DE RIESGO CARDIOVASCULAR EL 2026-12-03»**. Comprobado con el
+arnés sobre el JSON real que recibe el modelo:
+
+    Fechas ISO crudas en el JSON que va a la IA: (ninguna)
+    ftl_date: "en 14 días"   ·   control_date: "en 21 días"
+
+**Ni una sola fecha de calendario viaja al modelo** —todas se relativizan a propósito, porque
+una fecha exacta es un cuasi-identificador—. Así que **esa fecha la calculó él solo** a partir
+del plazo, y el médico se la encuentra firmada como si fuera una cita agendada. Es exactamente
+el primero de los tres daños que el médico marcó en la entrevista: *«se inventa cifras que
+nadie midió»*.
+
+Dos cambios, porque una plantilla no basta para cerrar una tentación: la plantilla pierde el
+«EL» que invitaba a poner una fecha, y se añade una regla explícita —*«NUNCA conviertas un
+plazo en una fecha de calendario … Una fecha que tú calculas es una cita que nadie agendó»*.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 138 | el prompt vuelve a listar las claves crudas | *el prompt manda listar la lista legible* | Sí — 155 ok |
+| 139 | la lista legible se arma sin el traductor | *ninguna entrada puede tener forma de clave* | Sí — 155 ok |
+| 140 | se quita la prohibición de calcular fechas | *se le prohíbe de frente convertir el plazo en fecha* | Sí — 155 ok |
+
+La 139 es la que importa del par: sin ella, añadir el campo y llenarlo con las mismas claves
+habría pasado la prueba del prompt y dejado el defecto intacto.
+
+Banco completo: **2.866 comprobaciones pasan, 0 fallan.**
+
+---
+
+## v18.0.56 — el uroanálisis anormal que la nota no mencionaba
+
+Cuarto y último defecto del reporte del 1-sep. La pantalla del médico mostraba el uroanálisis
+como **ANORMAL**, con **esterasa leucocitaria 3+** y hematíes 3,20; la sección de REVISIÓN
+PARACLÍNICA de la nota **no lo mencionaba en absoluto**, y el plan volvía a pedir uroanálisis
+sin decir nada del que ya estaba alterado.
+
+### Dos causas encadenadas
+
+**(1) La sección del prompt no tenía sitio para él.** Sus ítems eran cuatro —función renal,
+perfil lipídico, metabolismo glucídico y análisis de metas— y ninguno era el uroanálisis. El
+modelo escribía exactamente lo que se le pedía.
+
+**(2) Y aunque lo hubiera tenido, no había qué escribir.** Los valores leídos entraban a
+`mtrEvaluarUroanalisis`, se usaban para decidir… **y no salían**. El objeto devuelto llevaba la
+conclusión (`estado`, `criterios`, `conducta`) pero nunca los valores, así que ningún
+consumidor —ni el Panel, ni la nota, ni la IA— podía **nombrar** lo que el parcial mostró.
+
+    uro_valores (antes)   : []
+    uro_valores (después) : ["esterasa: 3+", "nitritos: NEGATIVO"]
+
+### La contradicción que había que evitar al arreglarlo
+
+Con esterasa 3+ el motor devuelve `itu_estado: "SIN HALLAZGOS"` — y **es correcto como
+decisión**: la esterasa sola, sin recuento de piuria, no es criterio de ITU, y no tratar una
+bacteriuria asintomática es una regla clínica ya acordada. Pero escrito en la nota junto a
+«esterasa 3+» se leería como una contradicción.
+
+**No se toca la etiqueta**: «SIN HALLAZGOS» es un rótulo clínico del médico y lo esperan varias
+pruebas. Lo que se hace es decirle al modelo qué significa: *«se refiere ÚNICAMENTE a criterios
+de infección urinaria; si hay valores alterados y dice SIN HALLAZGOS, escribe que NO HAY
+CRITERIOS DE INFECCIÓN URINARIA — nunca que el uroanálisis fue normal, porque no lo fue»*.
+
+Y sin uroanálisis evaluado, el ítem **se omite entero**: no se afirma que fue normal ni que no
+se hizo. Casilla vacía antes que dato inventado.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 141 | los valores vuelven a no salir del motor | *los valores del uroanálisis salen del motor* | Sí — 157 ok |
+| 142 | la sección del prompt vuelve a no tener uroanálisis | *la revisión paraclínica tiene un ítem de uroanálisis* | Sí — 157 ok |
+| 143 | se quita la regla de no llamarlo normal | *no puede llamarlo normal* | Sí — 157 ok |
+
+### Queda anotado, y es decisión del médico
+
+`mtrHallazgosUroDesdeLabs` capturó `esterasa` y `nitritos` pero **no los hematíes** (3,20 en su
+pantalla). La hematuria no llega al motor. No se toca aquí porque cambiar qué componentes del
+parcial se vigilan es una decisión clínica, no técnica.
+
+Banco completo: **2.868 comprobaciones pasan, 0 fallan.** Los **cuatro** defectos del reporte
+del 1-sep quedan cerrados.
+
+---
+
+## v18.0.57 — una negación se llevaba por delante todo lo que compartiera frase con ella
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+La lista vieja de negadores (v17.6.30) se probaba como **substring sobre la frase entera**, sin
+mirar dónde estaba el negador respecto del término clínico — y encima corría **antes** del
+arreglo por proximidad de la v18.0.17, cortocircuitándolo. Cinco frases perfectamente normales
+en una historia:
+
+| texto | diabetes leída como |
+|---|---|
+| «Niega tabaquismo, es diabético e hipertenso» | **NEGADA** (y la HTA también) |
+| «No fuma, pero es diabético» | **NEGADA** |
+| «Paciente diabético e hipertenso, niega tabaquismo» | **NEGADA** |
+
+El daño va en las dos direcciones, y ninguna es cosmética. `mtrDiscrepanciasDeFuentes` marca
+diabetes e HTA con severidad **ALTA**, y una discrepancia alta **frena la apertura del Panel
+del paciente** hasta que el médico responda un cuadro «Las fuentes no coinciden» sobre un dato
+que él mismo acaba de afirmar por escrito. Y al revés es peor: un paciente diabético leído como
+no diabético cambia qué tabla de vigencias rige y baja su riesgo cardiovascular.
+
+Las dos listas se unifican en **una sola comprobación por proximidad**, la que la v18.0.17 ya
+había escrito bien: el negador tiene que estar cerca del término **y en la misma cláusula**. Se
+conserva el caso real que ese comentario protege —«sin control, diabético descompensado» es una
+AFIRMACIÓN— porque la ventana no puede cruzar la coma.
+
+Detalle que costó una vuelta: la alternancia va **de la forma más larga a la más corta**. Con
+`no` delante, `no refiere` nunca se reconocería entero y la ventana quedaría corta.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 144 | vuelve la lista vieja sin proximidad (**el defecto**) | *negar UN hecho no niega los demás de la misma frase* | Sí — 50 ok |
+| 145 | se pierde la frontera de coma | *«sin control, diabético» es una afirmación* (3 fallan) | Sí — 50 ok |
+
+### Y una trampa de PROCESO, nueva y de las que engañan
+
+Las mutaciones 145 y 146 **salieron verdes en el primer intento**, y estuve a punto de
+apuntarlo como «la prueba no muerde». No era eso: mi `replace(..., 1)` sustituía la **primera**
+aparición del patrón en el archivo, que estaba **dentro del comentario que acababa de escribir**
+—porque el comentario cita la regla textualmente—, no en la línea de código. La mutación editaba
+prosa y dejaba el código intacto.
+
+**Una mutación que no muerde exige comprobar primero que la mutación se aplicó.** Un verde
+después de mutar puede significar dos cosas muy distintas —la prueba es hueca, o la mutación
+no llegó— y confundirlas hace descartar una prueba que sí servía. Al repetirlas contra la línea
+real, la 145 tumbó 3 comprobaciones. La 146 (reordenar la alternancia) sigue sin morder de
+verdad: se anota como hueco conocido en vez de inventarle una prueba a medida.
+
+Banco completo: **2.870 comprobaciones pasan, 0 fallan.** Van **15 de los 47** del enjambre.
+
+---
+
+## v18.0.58 — la base piloto vieja podía pisar el PyM real de hoy, y decirlo al revés
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+`loadPymBaseDescarga` comprueba `state.pymFile && !state.pymFallback` **dos veces** —antes y
+justo después de `readPym`— precisamente para no pisar un PyM real que haya llegado mientras
+tanto. Pero `pilotoGuardar` empaqueta el índice con `packPym`, **que cede el hilo varias
+veces**, y después de ESE `await` ya no se volvía a mirar.
+
+Si en esa ventana `loadPymDiario` —que corre cada 10 minutos en la misma pestaña— termina de
+cargar el archivo real de hoy, las líneas de abajo lo reemplazan por la base piloto. Reproducido:
+`state.pym.size` pasaba de **1 (el paciente real) a 0 (la piloto)**.
+
+Y el daño no acaba en el reemplazo:
+
+- `applyPymIdx` se llama **sin el 5.º parámetro**, así que `state.pymDia` se vacía y
+  `debeBuscarPymDiario()` vuelve a creer que la lista de hoy no se ha cargado.
+- El médico ve el cartel ámbar **«Usando la base piloto (mientras llega la de hoy)»** — una
+  afirmación **falsa**, porque la de hoy ya había llegado.
+- Y consulta actividades de referencia desactualizadas sobre pacientes reales hasta el
+  siguiente ciclo.
+
+El arreglo es **la misma guarda, una tercera vez**, justo antes de aplicar. La copia en disco
+se sigue guardando —eso está bien, sirve para mañana—; lo que no puede pasar es **aplicarla**
+encima de la lista buena.
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 147 | se quita la tercera guarda (**el defecto**) | *si el PyM real de hoy llega mientras se guarda la piloto, la piloto NO lo pisa* | Sí — 46 ok |
+
+La prueba abre la ventana de la carrera de verdad: envuelve `GM_setValue` y, en el instante en
+que `pilotoGuardar` escribe la copia, simula que la otra corrutina acaba de aplicar el PyM real.
+No es una simulación teórica — es lo que pasa en consultorio cuando el archivo de la sede
+aparece a media mañana.
+
+Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **16 de los 47** del enjambre.
+
+---
+
+## v18.0.59 — «Deshacer» revertía una casilla distinta de la que el médico creía
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés. Rompe una de las
+reglas no negociables del proyecto —«la casilla del médico es sagrada»— **desde el propio botón
+que existe para rescatarla**.
+
+La ranura de deshacer es única, y desde v17.0.1 se avisa antes de destruir un lote vivo… pero
+ese aviso solo se daba `if (anterior !== etiqueta)`. Con el **mismo botón pulsado dos veces**
+—Athenea respondió distinto la segunda vez, o simplemente se reintentó— la etiqueta es
+idéntica: **no había aviso y el primer lote se perdía igual**.
+
+    clic 1  ->  escribe la casilla A
+    clic 2  ->  escribe la casilla B      (el lote de A se pierde, en silencio)
+    ↩ Deshacer  ->  revierte solo B, y canta «volvió exactamente a como estaba»
+
+El médico cree que corrigió el dato malo del primer clic. Ese dato sigue escrito en la historia
+**sin ninguna forma de deshacerlo**.
+
+### El arreglo, y el detalle que lo hace correcto
+
+Se toma la mejor de las dos salidas posibles: con el **mismo paciente y el mismo botón**, y el
+lote vivo, los pares nuevos se **acumulan** en vez de reemplazar — así «Deshacer» revierte todo
+lo que ese botón escribió en la tanda de clics, que es lo que el médico espera. Y cuando de
+verdad se sustituye un lote (otro botón, otro paciente) **se avisa siempre**, ya sin la
+condición de la etiqueta.
+
+**El detalle que decide la corrección:** al acumular, si una casilla ya estaba en el lote se
+conserva su valor previo **más viejo** y se descarta el nuevo. Deshacer tiene que devolver la
+casilla a como estaba **antes de la primera escritura automática**, no a como la dejó el clic
+anterior — que también era nuestro. Sin eso, «deshacer» dejaría dentro un valor que el médico
+nunca escribió.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 148 | vuelve el reemplazo en vez de acumular (**el defecto**) | *el mismo botón dos veces revierte LAS DOS casillas* | Sí — 45 ok |
+| 149 | al acumular se pisa el valor previo viejo con el nuevo | *vuelve al valor anterior a TODO lo automático* | Sí — 45 ok |
+
+La 149 es la que protege el arreglo de sí mismo: acumular mal deja la casilla con un valor que
+también escribimos nosotros, y el toast seguiría diciendo «volvió exactamente a como estaba».
+
+Banco completo: **2.871 comprobaciones pasan, 0 fallan.** Van **17 de los 47** del enjambre.
+
+---
+
+## v18.0.60 — la memoria clínica del paciente se orfanizaba en silencio
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+`_vglCosechaGuardar` escribía **siempre bajo el docId crudo**. Pero un registro archivado antes
+de la canonicalización de v17.48.0 vive bajo la clave con ceros de relleno («0000111111»), y
+`extractPacienteAbierto()` entrega hoy la canónica («111111»). La primera cosecha del día
+—basta con que el médico entre a Antecedentes o Hábitos— creaba una clave **nueva y vacía**, y
+el almacén quedaba con **dos entradas del mismo paciente**.
+
+Y la tolerancia de lectura no salva: `_vglBuscarPorDoc` devuelve la coincidencia **exacta**
+antes de buscar la canónica, así que a partir de ahí gana siempre la vacía.
+
+Lo que desaparecía sin un solo aviso: la **confirmación de embarazo** (severidad alta, vigencia
+30 días), la de adherencia, los **programas de Ruta Crónicos** y el resto del contexto ya
+documentado. La compuerta vuelve a preguntar lo ya respondido y el clasificador de riesgo se
+queda sin comorbilidades.
+
+Se resuelve la clave de **escritura** con el patrón que `_noShowRegistrar` ya usa desde
+v17.53.0 para su propio almacén: si el paciente ya tiene entrada bajo cualquier forma de su
+cédula, se escribe encima de esa; solo si no existe ninguna se crea con la canónica de hoy.
+
+### Una precisión que salió al escribir la prueba, y se anota en vez de exagerar el daño
+
+**`factores` NO era lo que se perdía.** `_vglCosecharFactoresVisibles` relee el archivo con
+`_vglCosechaLeer` —que sí es tolerante con la forma de la cédula— y entrega el mapa ya
+fusionado, así que los factores se rescataban solos por esa vía. Lo que se perdía eran las
+claves de primer nivel que **nadie prefusiona**: `programas`, `confirmaciones` y cualquier otra
+que se añada mañana. La primera versión de la prueba afirmaba lo contrario y se puso roja: se
+corrigió la prueba, no el código.
+
+### Una prueba ajena que este arreglo dejó sin sentido, y por qué se reescribió
+
+`suite_64` fabricaba el duplicado **llamando dos veces a `_vglCosechaGuardar`** con las dos
+formas de la cédula. Desde esta versión eso ya no produce un duplicado — que es justo el
+objetivo. La prueba se rehace montando el duplicado **como se produce de verdad**: un registro
+que quedó en disco escrito por una versión anterior. El detector sigue haciendo falta
+exactamente para eso: **los duplicados viejos ya están en las máquinas.**
+
+### Mutación verificada
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 150 | vuelve a escribir bajo la clave cruda (**el defecto**) | *una cosecha nueva no orfaniza la memoria archivada* | Sí — 45 ok |
+
+Banco completo: **2.873 comprobaciones pasan, 0 fallan.** Van **18 de los 47** del enjambre.
+
+---
+
+## v18.0.61 — «falta el peso» sobre un peso que sí estaba
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+El motor **ya distingue** «dato ausente» de «dato presente pero implausible»: por eso existe
+`peso_fuera_de_rango` (20–300 kg) además de `peso`. Pero solo la creatinina tenía su bloque
+propio de mensaje; el peso caía en la rama genérica y el diccionario `ETIQUETA` lo traducía
+**igual que si nunca se hubiera tomado**:
+
+    peso = 15 kg registrado  ->  «Función renal: no se puede calcular — falta el peso.»
+
+Un 15 en vez de 51, o la talla escrita en la casilla del peso, es **exactamente** el error de
+transcripción que ese rango existe para atrapar. Y el mensaje hace dos cosas mal a la vez: dice
+algo **falso** —el dato sí está en Everest— y manda al médico a **tomar signos vitales otra
+vez** en vez de a corregir una casilla concreta.
+
+Ahora recibe el mismo trato explícito que su caso gemelo, **con el valor delante**:
+
+> 🫘 **Función renal:** no se puede calcular — el peso registrado (**15** kg) queda fuera del
+> rango plausible (20–300 kg). **El dato SÍ está en Everest**, así que no hace falta volver a
+> tomar los signos vitales: revise esa casilla, suele ser un dígito de más o de menos, o la
+> talla escrita en el lugar del peso.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 151 | se quita el bloque propio (**el defecto**) | *un peso implausible NO se anuncia como ausente* | Sí — 43 ok |
+| 152 | el bloque nuevo se traga también el peso AUSENTE | *un peso realmente ausente sigue diciendo que falta* (2 fallan) | Sí — 43 ok |
+
+La 152 es la contención: sin ella, «arreglarlo» de más habría hecho lo contrario —decir que un
+peso que no existe está mal digitado— y el médico iría a revisar una casilla vacía.
+
+Banco completo: **2.875 comprobaciones pasan, 0 fallan.** Van **19 de los 47** del enjambre.
+
+## v18.0.62 — un parpadeo del documento anulaba el antirrebote y fabricaba una llegada
+
+Hallazgo del enjambre de funciones, gravedad alta, reproducido con el arnés.
+
+El proyecto ya sabía que **el `doc_id` aparece y desaparece entre lecturas** —la API lo trae, el
+respaldo por DOM a veces no— y lo tiene escrito en el comentario de `apptKey`. Por eso los
+CONJUNTOS de fraude (`fraudWatch`, `alertedFraud`) se leen y se marcan con
+`_apptMarcada`/`_apptMarcar`, que cubren todas las identidades de la cita.
+
+Los MAPAS `state.historical`, `state.historicalAt` y `state.estadoPendiente` no tenían
+equivalente: leían y escribían con la clave **cruda**. Un parpadeo del documento cambia la
+clave de la MISMA cita, y con eso:
+
+1. `esNueva` sale `true` → **el antirrebote de v17.6.21 queda anulado por completo**: la
+   tarjeta salta a VERDE «En Sala» con una sola lectura sin confirmar. Es exactamente el
+   defecto que aquella versión cerró, reabierto por la puerta del documento en vez de la del
+   estado.
+2. Sin ningún cambio real de estado, se genera una **segunda llegada fantasma**
+   (`arrival: true` otra vez): el aviso vuelve a sonar por un paciente que ya estaba en sala.
+3. `historicalAt` vuelve a 0 → «hueco largo» → la guarda de v18.0.8 desactiva el antirrebote
+   por su cuenta, aunque el punto 1 estuviera resuelto.
+
+Ahora los tres mapas usan `_apptMapaLeer` / `_apptMapaEscribir` / `_apptMapaBorrar`. Leer
+tolerante **no basta**: si la vuelta siguiente solo trae el nombre, no hay forma de derivar la
+clave por documento — hay que haberla escrito antes. Por eso se escribe bajo todas las
+identidades, igual que `_apptMarcar`, y por eso el borrado tiene que barrer las mismas
+entradas que la escritura sembró.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 153 | la escritura vuelve a anotar solo bajo la clave cruda (**el defecto**) | *no se cuenta como segunda llegada* + *no anula el antirrebote* + *el candidato no sobrevive* (3 fallan) | Sí — 86 ok |
+| 154 | la lectura de `historical` vuelve a `.get(key)` a pelo | *si el documento APARECE entre lecturas* + *el candidato no sobrevive* (2 fallan) | Sí — 86 ok |
+| 155 | la lectura de `historicalAt` vuelve a `.get(key)` a pelo | *la marca de tiempo del antirrebote sobrevive al parpadeo* | Sí — 86 ok |
+| 156 | el borrado de `estadoPendiente` solo quita la clave cruda | *el candidato del antirrebote no sobrevive bajo la otra identidad* | Sí — 86 ok |
+
+Las cuatro muerden por vías distintas y ninguna es redundante: 153 cubre el parpadeo
+documento→sin-documento, 154 el inverso (sin-documento→documento, donde no hay clave por
+documento que derivar), 155 la mitad del antirrebote que vive en la marca de tiempo, y 156 la
+puerta de atrás —un candidato que sobrevive a su propia confirmación y se acepta a la primera
+lectura la próxima vez que vuelve por la otra vía—.
+
+**Precisión de proceso.** La primera versión de este arreglo solo hacía la lectura tolerante, y
+la sonda seguía dando llegada fantasma: con el documento perdido no existe forma de derivar la
+clave por documento. Y las mutaciones 154 y 155 **no mordieron** contra la primera tanda de
+pruebas, porque escribir bajo todas las identidades ya dejaba el valor bajo la clave cruda: las
+que faltaban eran las pruebas del sentido inverso, no código. Se corrigieron **las pruebas**.
+
+Banco completo: **2.880 comprobaciones pasan, 0 fallan.** Van **20 de los 47** del enjambre.
+
+## v18.0.63 — reabrir «Ordenar» creaba una segunda orden real del mismo examen
+
+Dos hallazgos del enjambre de funciones, los dos con respaldo en la telemetría real del
+1-sep (ver `docs/TELEMETRIA_20260901.md`).
+
+### A. El duplicado de órdenes (hallazgo #19, gravedad alta, 3 de 3 refutadores fallaron)
+
+El único filtro antiduplicado que vivía DENTRO del modal era la consulta EN VIVO a Everest, y
+el propio código documenta que **«un fallo de red aquí NO bloquea nada»**. Si esa consulta
+falla —o si Everest simplemente todavía no indexó la orden que el script acaba de crear—
+reabrir el modal ofrecía «Generar» otra vez, en silencio y con el mismo mensaje de éxito. Con
+una mamografía o un PSA eso no es un renglón administrativo de más: **es un examen repetido de
+verdad al paciente**.
+
+La marca local `markOrdenesCreadasHoy` existía desde la v12.3, pero guardaba agrupadores y
+etiquetas del Excel — **nunca QUÉ paquete**. Ahora guarda también los CIE-10, y el modal:
+
+1. **No premarca** un paquete ya ordenado hoy, y lo dice con todas las letras. No lo bloquea:
+   el médico manda y puede tener un motivo real para repetirlo.
+2. **Relee la marca justo antes de cada POST**, no solo al pintar. Y se omite **solo** si la
+   casilla venía premarcada por el script y el médico no la tocó — si la tocó él, la decisión
+   es suya y se respeta.
+3. **Escribe la marca en cuanto el servidor confirma cada orden**, no al terminar el lote. Es
+   lo que cierra la ventana de la reproducción: generar → cancelar a mitad → reabrir.
+4. Cuando todo lo seleccionado se omite por duplicado, el mensaje ya no dice «no se pudo
+   generar ninguna… puede reintentar sin riesgo de duplicar» —que era falso y además el
+   consejo exactamente contrario al correcto—: dice que ya estaban generadas.
+
+**Respaldo en la telemetría del 1-sep:** «Ordenar» es el embudo con más abandono de todo el
+script (6 abiertos, 2 completados, **4 abandonados**), y abandonar a mitad del lote es
+literalmente el gesto de la reproducción.
+
+Una marca ANTERIOR a esta versión no lleva la lista de CIE-10 y por tanto **no dice nada**
+sobre qué paquete se ordenó: se trata como «sin evidencia» y no desmarca nada. Casilla vacía
+antes que dato inventado.
+
+### B. Los íconos propios se reportaban como de Everest (hallazgo #27)
+
+En un `<svg>` —y hay 45 íconos así, varios dentro de botones `.vgl-*`— `className` es un
+`SVGAnimatedString`, no un string: `String(...)` daba `"[object SVGAnimatedString]"`, que nunca
+empieza por `vgl-`, así que un ícono NUESTRO caía en la etiqueta `host` (= de Everest). Es
+justo el error de atribución que el comentario de ese bloque dice evitar.
+
+**Confirmado en el export real del 1-sep:** `rum.self.inp.detalle.host.needs_imp` = 7 —
+interacciones de NUESTRA interfaz (`rum.self.*`) atribuidas a Everest. Ahora se lee la clase
+con `getAttribute("class")`, igual que ya hacía `_rumNodoEsNuestro` dos líneas más arriba.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 157 | se quita la guarda antes del POST (**el defecto**) | *reabrir «Ordenar» y volver a pulsar NO crea una segunda orden real* | Sí — 187 ok |
+| 158 | la guarda ignora que el médico tocó la casilla | *si el médico marca él mismo la casilla, la orden SÍ se repite* | Sí — 187 ok |
+| 159 | el modal vuelve a premarcar lo ya ordenado hoy | *el modal no premarca lo que ya se ordenó hoy, y lo dice* | Sí — 187 ok |
+| 160 | la marca vuelve a escribirse solo al final del lote | *la marca se escribe en cuanto el servidor confirma cada orden* | Sí — 187 ok |
+| 161 | `ordenCreadaHoyParaCie10` afirma sobre una marca vieja | *una marca ANTERIOR no afirma nada* | Sí — 187 ok |
+| 162 | `_rageEtiqueta` vuelve a `String(className)` | *un icono SVG NUESTRO no se reporta como de Everest* | Sí — 103 ok |
+
+Las 158, 159 y 161 son contenciones: sin ellas, «arreglarlo» de más habría bloqueado al
+médico, desmarcado exámenes que quizá nunca se pidieron, o convertido una marca sin datos en
+una afirmación.
+
+**Precisión de proceso — una prueba que pasaba por el motivo equivocado.** La primera versión
+de la prueba del duplicado **compartía el objeto de casilla falsa entre las dos aperturas**, y
+tras crear la orden el propio código la deja `checked = false`: la segunda vuelta no
+seleccionaba nada, así que no había nada que duplicar y la prueba habría pasado igual sin el
+arreglo. **La mutación 157 la destapó** (no mordió). Se da una casilla nueva en cada apertura,
+como hace el DOM real al repintar. Es la décima forma de prueba hueca de estas jornadas, y la
+regla vuelve a ser la misma: *una mutación que no muerde no absuelve al código, acusa a la
+prueba.*
+
+Banco completo: **2.886 comprobaciones pasan, 0 fallan.** Van **22 de los 47** del enjambre.
+
+## v18.0.64 — cuatro reportes en vivo del médico en una sola tarde
+
+Todo lo de esta versión salió de reportes con captura del 1-sep, con el script corriendo en
+consulta real. El análisis de la telemetría que los acompaña está en
+`docs/TELEMETRIA_20260901.md`.
+
+### A. «Se sigue colando el azul de Everest» — y esta vez en TODO el script
+
+Dos capturas: «atendidas de su agenda» (Productividad) y el 🫀 de «Abandono Programa RCV»
+(recuadro clínico), los dos en el azul oscuro de Everest. Y la orden: *«LOCALÍZALO EN TODO EL
+SCRIPT Y ELIMÍNALO, SOLAMENTE MI SCRIPT DEBE TENER MI PROPIO CSS NADA DE EVEREST»*.
+
+`CLAUDE.md` documenta dos formas de fuga. Esta es **una tercera que no estaba escrita**: una
+clase NUESTRA que **no declara color en absoluto** y depende de heredar. Un valor heredado no
+participa en la cascada — pierde SIEMPRE contra cualquier regla que apunte al elemento, tenga
+la especificidad que tenga. El blindaje tipográfico existente no la cubre porque lleva
+`:not([class])` a propósito, justo para no competir con nuestras clases de acento.
+
+Se escribió `tools/auditar_color_todo_chromium.js`, que **no lleva lista escrita a mano**:
+deriva los candidatos de la hoja real y del HTML real, los monta en su contenedor real y los
+mide en Chromium contra un Everest hostil. Resultados:
+
+| censo | antes | después |
+|---|---|---|
+| declaraciones de color sin prioridad | 0 | 0 |
+| clases con texto propio y sin color declarado | **36** | **0** |
+
+Dos correcciones del propio programa durante el barrido, las dos porque el resultado no era
+creíble: (1) su primer filtro descartaba las costuras de concatenación y con eso se le escapó
+`.vgl-pym-ic` —el círculo del emoji que el médico ve azul en su captura—; (2) leía el CSS por
+extracción textual y no podía resolver `MTR_RCV_CSS_TODOS_LOS_MODALES`, dejando **14.500
+caracteres de CSS real sin medir**. Ahora ejecuta el script en el arnés y lee el `<style>` que
+de verdad genera: 267.336 caracteres, cero marcadores sin resolver.
+
+Y una cuarta fuga, de otra familia: la pastilla «⏳ Abriendo la pestaña Conducta…» del Redactor
+IA pinta su color **en línea**, que es inmune a cualquier regla normal pero NO a una con
+prioridad. La **Regla R** del banco existe exactamente para esto y no la vio: su patrón miraba
+solo la PRIMERA cadena del `cssText`, y aquí el color vive en la segunda. Es la misma ceguera
+que la v18.0.42 ya cerró en la otra rama de esa regla; ahora consume la concatenación entera.
+
+**Dos intentos descartados por el propio banco**, los dos por el bug #1 de `CLAUDE.md` (nuestra
+regla nueva peleando con la nuestra vieja): escribir el blindaje como `#vgl-root .clase`
+(1,1,0) empataba con `#vgl-paquete-modal .vgl-paq-aldia` —la Regla A lo cazó—, y escribirlo
+como `#vgl-root :where(.clase)` (1,0,0) habría ganado a cualquier clase de acento suelta, que
+es el mismo bug por la puerta de atrás. Queda como clase a secas, la forma del resto de la hoja.
+
+### B. «¿Cómo así que 23/36?» — Productividad medía otra cosa
+
+*«¿NO DEBERÍA MÁS BIEN MOSTRAR CUÁNTOS PACIENTES HE VISTO DE LOS QUE TENGO QUE VER A LA
+SEMANA? ¿Y ASÍ TAMBIÉN CON EL DEL MES?»*
+
+El denominador era «la meta de los días que ya trabajó» (un martes: 2 × 18 = 36), que responde
+a otra pregunta. Ahora es la meta COMPLETA del periodo, con los días que faltan incluidos:
+**23/90** la semana, **10/396** el mes. Qué días cuentan:
+
+- domingo y festivo: nunca — él lo confirmó por escrito: *«YO NO TRABAJO NI DOMINGOS NI FESTIVOS»*;
+- un día pasado sin ninguna atendida: tampoco (protección que ya existía, no reprochar un día
+  que no le tocaba);
+- hoy y los días futuros de lunes a viernes: sí;
+- un **sábado futuro**: no. Sus sábados no son fijos y su propia telemetría lo prueba — trabajó
+  el sábado 22-ago y no el 29-ago. Darlo por hecho inflaría la meta en 24 pacientes.
+
+Y el COLOR pasa a seguir al **ritmo** (contra lo que ya debería estar hecho), no al avance
+sobre el periodo: sin eso, el día 1 del mes la tarjeta saldría en rojo con un 2,5 % que no
+significa que vaya mal, sino que el mes acaba de empezar.
+
+Las atendidas se suman siempre, aunque el calendario diga que ese día no tocaba: el numerador
+no puede depender de que nuestra tabla de festivos esté bien (ya tuvo un 2024-11-18 erróneo).
+
+### C. «¿49 avisos hoy? ¿No es mucho?» — el CSV de auditoría se inundaba
+
+De los 49 eventos de su CSV real, **36 eran legítimos** (10 pacientes × 2 CAMBIO_ESTADO + 10
+INGRESO_A_TIEMPO, más 3 inasistencias con su ÚLTIMA_LLAMADA) y **13 eran una misma constancia
+repetida**: una sola cita la generó SIETE veces. La rama que la escribe no marca `fraudWatch`
+a propósito, así que sin candado propio volvía a escribirla en cada vuelta del reloj mientras
+durase la gracia del relevo — y esa gracia se reabre cada vez que el médico cambia de pestaña.
+El CSV es el documento con el que él reclama: repetir un hecho siete veces no añade evidencia,
+la entierra. Ahora es UNA por cita, con dos conjuntos separados (uno por tipo de constancia),
+porque `_apptMarcar` añade además las claves legadas SIN prefijo y con un solo conjunto un
+tipo habría tapado al otro.
+
+### D. «Última toma completa» no hacía lo que dice
+
+*«DEBE FUNCIONAR COMO EL DE ABAJO … LA DIFERENCIA ES QUE SOLAMENTE TRAE LOS RESULTADOS DE LOS
+ÚLTIMOS 90 DÍAS … PARA AMBOS DEBE SER EL ÚLTIMO RESULTADO DISPONIBLE POR CADA ANALITO».*
+
+**No estaba configurado así.** Se quedaba con los resultados de UNA sola fecha, la máxima: si
+la toma más fresca solo traía creatinina y glicemia, el LDL de doce días antes —dentro de los
+90— desaparecía de la pantalla aunque fuera el último disponible de ese analito. Ahora la
+ventana es de 90 días y la elección del último por analito la sigue haciendo
+`injectLabsIntoCronicos`, igual que la opción de abajo. Si ninguna fecha se puede leer, se
+devuelve la lista tal cual: un fallo de parseo no puede borrarle la pantalla.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Cómo se destapó | Restaurado y verde |
+|---|---|---|---|
+| 163 | `.vgl-prod-cap` se queda sin color (**el defecto de la captura**) | el barrido del Resumen: 2 nodos secuestrados | Sí |
+| 164 | se quita el blindaje de las 34 clases | el barrido completo: 35 clases secuestradas | Sí |
+| 165 | la pastilla del Redactor pierde su prioridad | *Regla R* de suite_25 | Sí |
+| 166 | la ventana de 90 días vuelve a ser «solo la fecha máxima» | *conserva el último de CADA analito* (2 fallan) | Sí |
+| 167 | sin fechas legibles se devuelve vacío | *no se le borra la pantalla al médico* | Sí |
+| 168 | la meta del periodo vuelve a ser la de los días trabajados | *la meta incluye los días por delante* | Sí |
+| 169 | las atendidas de un festivo vuelven a perderse | *la semana suma lunes y miércoles* | Sí |
+| 170 | la constancia vuelve a escribirse en cada tick (**el defecto del CSV**) | *UNA vez por cita, no una por tick* | Sí |
+| 171 | el candado se hace global y calla otra cita | *sigue registrándose para OTRA cita distinta* | Sí |
+
+Las 167, 169 y 171 son contenciones: sin ellas, «arreglarlo» de más habría dejado la pantalla
+de laboratorios en blanco, borrado pacientes realmente atendidos, o enterrado evidencia de una
+cita distinta.
+
+**Precisión de proceso.** La corrección del CSS entró tres veces y las tres la rechazó el
+banco antes de llegar al médico: dos por colisión de especificidad con nuestras propias clases
+de acento (Reglas A y P) y una por los censos de `!important`, cuyo reparto entre la hoja
+principal y las spliceadas **no era el que deduje leyendo el diff** — hubo que medirlo. Queda
+escrito en la propia suite: *si vuelven a moverse, medirlos otra vez antes de tocarlos.*
+
+Banco completo: **2.890 comprobaciones pasan, 0 fallan.**
+
+## v18.0.65 — el cuadro «Las fuentes no coinciden» lo dejaba encerrado
+
+**Bloqueo en consulta real, reportado en vivo con captura (01-sep):** *«ME ESTÁ SALIENDO ESTE
+MENSAJE Y NO ME DEJA AVANZAR, NI CERRAR EL MÓDULO, LE DOY QUE SÍ TIENE ESAS ENFERMEDADES Y AÚN
+ASÍ VUELVE Y ME APARECE INDEFINIDAMENTE».*
+
+El cuadro frena un ítem si NO está confirmado **o** si está «desfasado» (su respuesta dice una
+cosa y la casilla de la historia dice la contraria). Responder guardaba la respuesta… pero no
+cambiaba la casilla de la historia, así que la contradicción seguía ahí en la vuelta siguiente
+y el ítem volvía a frenar. **La única respuesta capaz de cerrar el cuadro era la que coincidiera
+con la historia**: si el médico sabía que el paciente SÍ es diabético y la casilla decía que no,
+quedaba encerrado sin salida.
+
+Lo más incómodo es que el propio comentario del reconciliador ya decía la intención —«vuelve a
+preguntar **UNA vez** en lugar de callarse»— pero **el mecanismo del “una vez” no existía**.
+
+Ahora la respuesta guarda también qué decía la pantalla cuando él respondió (`vp`), y el
+desfase solo vuelve a frenar si la historia dice algo **distinto** de lo que él ya vio y
+resolvió. Una contradicción nueva sí merece preguntarse otra vez; la misma de siempre, no. Lo
+que NO cambia: la historia sigue mandando sobre el valor — resolver el bloqueo no reescribe el
+documento oficial. Y una respuesta guardada por una versión anterior (sin `vp`) se sigue
+tratando como antes: se vuelve a preguntar una vez, que es el comportamiento documentado.
+
+### Y los textos del módulo de agendamiento
+
+*«NO QUIERO QUE APAREZCAN ESOS DOS TEXTOS CONTRADICTORIOS EN MI PUNTO DE VISTA, SOLO QUIERO
+SIMPLIFICAR LO MÁS POSIBLE EL MÓDULO YA QUE MUY POCO LO USAN Y SI LO ABARROTAMOS DE TEXTO MENOS
+LO USARÍAN».*
+
+En su captura, el recuadro de sugerencia decía «toma de laboratorios **21 nov**» y justo debajo
+el aviso decía «la toma quedaría el **lun 23 nov**»: dos fechas de toma en pantalla a la vez —
+una la sugerida, otra la derivada de la fecha que él eligió— leídas como una contradicción. Y
+la fecha sugerida aparecía **tres veces** en el mismo cuadro: en el recuadro, en el cuerpo del
+aviso y en el botón.
+
+- El aviso deja de repetir la fecha de la toma: dice el hecho y nada más — qué examen llega
+  vencido y por cuántos días. De 3 frases a 1.
+- Se retira la frase «La fecha que el asistente sugiere … es el X»: el recuadro de arriba ya la
+  dice y el botón se llama «Pasar a la fecha sugerida».
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 172 | vuelve el bucle: se ignora lo que el médico ya vio (**el defecto**) | *responder cierra el cuadro aunque la historia siga diciendo lo contrario* (2 fallan) | Sí |
+| 173 | se deja de guardar lo que la historia decía al responder | las mismas dos | Sí |
+| 174 | el candado se hace ciego y calla también un choque NUEVO | *una contradicción NUEVA sí se vuelve a preguntar* (3 fallan) | Sí |
+| 175 | el aviso vuelve al texto largo que repetía la fecha | *ya no abre repitiendo la fecha* | Sí |
+
+La 174 es la contención, y es la que importa: «arreglarlo» de más habría convertido un cuadro
+que molesta demasiado en uno que se calla cuando de verdad hay algo nuevo que decir. La 175 no
+mordió en el primer intento —ninguna prueba fijaba el texto nuevo— y se añadió la que faltaba
+antes de darla por buena.
+
+Banco completo: **2.892 comprobaciones pasan, 0 fallan.**
+
+## v18.0.66 — el canal de errores llevaba muerto desde la v17.2.0
+
+Orden del médico, sin matices: *«Lo más grave: el canal de errores lleva muerto desde la
+v17.2.0 — DEFINITIVAMENTE HAY QUE BLINDAR ESTO».*
+
+### El hallazgo, y por qué era invisible
+
+En el export del tablero del 1-sep, la hoja `error` no tiene **ni una fila** de ninguna versión
+por encima de **17.2.0**. Y no es que no haya errores: el 27-ago, seis equipos distintos en
+v18.0.4 emitieron **81 `error.js` / 81 `error.distintos`** en `uso_detalle` — los contadores
+que `reportarError` incrementa en su **primera línea**, antes del tope diario y antes de
+`repOn()`. La función corrió 81 veces y no llegó ninguna fila.
+
+No era el transporte: `entorno`, `fraude` y `prueba` **sí** llegan desde v18 por la misma cola
+y el mismo `repPost`. La diferencia estaba en la fila. De los cuatro eventos, `error` era el
+único que mandaba un campo **sin columna en la hoja**:
+
+| | campos que viajan | ¿todos tienen columna? |
+|---|---|---|
+| `entorno` | nav · so · zona · pantalla · gestor | sí |
+| `fraude` | hora · min | sí |
+| `prueba` | (ninguno extra) | sí |
+| **`error`** | origen · msg · donde · migas · **veces** | **no: `veces` no existe** |
+
+`veces` se añadió en la **v17.1.0 (#148)** — la versión exacta a partir de la cual se corta el
+historial. El receptor envuelve su trabajo en un try/catch que responde `err` con HTTP 200, que
+`repPost` trata como fallo desde la v17.49.0: la fila se quedaba en la cola para siempre.
+
+El dato no se pierde: la cuenta de repeticiones se dobla dentro de `msg`, que sí tiene columna.
+
+### Tres blindajes, porque es la TERCERA vez que este canal se calla
+
+v14.1.6 (el filtro de `ev.filename`) y v17.1.0 #148 (el recorte de la cola por la cabeza) fueron
+las dos anteriores. Arreglar el campo no basta:
+
+1. **Nada interno viaja en la fila.** `repPost` manda una copia sin las claves que empiezan por
+   `_`. La contabilidad de reintentos que este mismo cambio introduce habría sido, si no,
+   exactamente el defecto que cierra: otro campo que la hoja no sabe escribir.
+2. **La cola no se atasca detrás de una fila envenenada.** `repFlush` rompía el bucle al primer
+   fallo — correcto con el panel caído, fatal cuando el servidor rechaza una fila CONCRETA: esa
+   fila falla siempre, se queda la primera, y nada de lo que va detrás sale nunca. Ahora cada
+   fila lleva su cuenta de intentos; a los tres (tres vueltas del temporizador de 10 minutos,
+   media hora) se descarta, se anota el descarte y se sigue. Un corte de red sigue rompiendo el
+   bucle como antes.
+3. **Que el silencio se vea.** Lo que dejó esto muerto medio año no fue el campo de más: fue que
+   nadie podía notarlo. Se añade `error.entregado` junto al `error.js` que ya existía; la
+   diferencia entre detectados y entregados delata el canal roto desde la telemetría de uso —
+   la que sí funciona— sin exportar nada ni esperar a que el médico lo reporte.
+
+### Y los sábados, que ahora se saben
+
+*«LOS SÁBADOS DE TRABAJO SON CADA 2 SEMANAS, ME TOCA ESTE SÁBADO NUEVAMENTE 5/09/2026».*
+
+La v18.0.64 dejaba fuera de la meta **todo** sábado futuro porque no había forma de saber
+cuáles le tocaban. Con su ancla sí se sabe, y el resultado se valida solo contra su propia
+telemetría: el 22-ago le tocaba **y trabajó** (1.534 eventos), el 29-ago no le tocaba **y no
+trabajó** (ni uno). Las metas quedan **23/114** la semana y **10/444** el mes.
+
+El ancla es un dato suyo, no una constante técnica: si su turno cambia, se cambia en un solo
+sitio.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 176 | vuelve el campo sin columna (**el defecto**) | *la fila de error solo lleva campos que la hoja tiene como columna* (2 fallan) | Sí |
+| 177 | la contabilidad interna vuelve a viajar a la red | *nada interno se cuela en la fila* | Sí |
+| 178 | la cola vuelve a atascarse en la primera fila mala | *una fila rechazada no puede callar el resto de la cola* | Sí |
+| 179 | los sábados del médico se ignoran otra vez | *3 × 18 + 24 del sábado que le toca* | Sí |
+| 180 | se cuentan TODOS los sábados, le toquen o no | la misma | Sí |
+
+**Precisión de proceso.** La 177 **no mordió** en el primer intento: la prueba llamaba a
+`_repFilaLimpia` directamente, así que quitar su uso en `repPost` no la rompía — la trampa de
+alcanzabilidad de siempre. Se reescribió por conducta, mirando lo que de verdad sale por la red
+en una fila que ya acumuló reintentos.
+
+Banco completo: **2.896 comprobaciones pasan, 0 fallan.**
+
+## v18.0.67 — el 50 % por fuera de metas ahora lo decide el médico
+
+Regla nueva suya (01-sep), con la instrucción explícita de comprobar que no chocara con lo que
+ya existe. Chocaba en dos sitios; los dos los resolvió él en la entrevista. Todo queda escrito
+en `docs/REGLAS_MEDICO_20260901.md`.
+
+### La regla
+
+> *«Cuando un paciente se encuentra fuera de metas al momento de calcular los exámenes que se
+> ordenarán en el siguiente control se le debe preguntar al médico que si en ese paciente desea
+> repetir los exámenes fuera de metas sí o no. Si la respuesta es sí se repiten al 50 % de la
+> vigencia original, si la respuesta es no se repiten en su vigencia normal sin adelantar.»*
+
+- **UNA pregunta por paciente**, con la lista de exámenes fuera de meta delante (decisión suya:
+  menos interrupciones). Severidad media: se ofrece, no retiene el flujo.
+- **Vale solo para esta consulta.** El estado del paciente cambia entre citas.
+- **Se repiten sí o sí, sin preguntar:** creatinina en suero con **TFG por Cockcroft-Gault < 60**
+  y **RAC > 30 mg/g**.
+- **Mientras no responda, manda la conducta de siempre** (adelantar). El script no cambia nada
+  por su cuenta: hace falta un «no» explícito suyo para relajar una vigencia.
+
+### Las dos colisiones, y cómo las resolvió él
+
+**KDIGO manda sobre su respuesta.** Con TFG < 60 el perfil lipídico no se adelanta aunque
+responda que sí, y por eso los lípidos ni siquiera entran en la pregunta — pero la pantalla lo
+DICE, con el motivo. Callar por qué un examen no aparece en la lista convertiría la regla en una
+caja negra.
+
+**La creatinina obligatoria usa Cockcroft-Gault**, como él la dictó, mientras la regla vecina
+(KDIGO) usa CKD-EPI 2021. Son números distintos y un mismo paciente puede quedar a un lado u
+otro del 60 según cuál se mire. Se respeta lo que pidió y queda escrito en el código para que
+nadie las unifique creyendo que es un descuido.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 181 | el «no» del médico se ignora (la regla no se implementa) | *el NO del médico relaja la vigencia* | Sí |
+| 182 | el «no» apaga también los dos obligatorios | *la creatinina y la RAC no dependen de la respuesta* | Sí |
+| 183 | la creatinina obligatoria pasa a CKD-EPI | *manda Cockcroft-Gault* (2 fallan) | Sí |
+| 184 | KDIGO deja de mandar y el lípido entra en la pregunta | *el lípido lo frena KDIGO* | Sí |
+
+Las 182, 183 y 184 son contenciones, y las tres protegen una decisión clínica que él tomó
+explícitamente: sin ellas, «implementar la regla» habría desactivado dos exámenes que él quiere
+siempre, cambiado a qué pacientes les aplica la obligatoriedad, y contradicho la precedencia que
+él fijó entre su regla y KDIGO.
+
+Banco completo: **2.901 comprobaciones pasan, 0 fallan.**
+
+## v18.0.68 — el ancla de sábado es por médico, no una constante del script
+
+**Corrección del propio médico sobre su pedido anterior**, la misma tarde: *«no es lo mismo
+para todos los médicos, toca indagar médico por médico cuál de todos los sábados le toca
+laborar, pero el ancla de 5 septiembre me sirve a mí, a maría edineth pino, a sinai mijares».*
+
+La v18.0.66 escribió `MTR_PROD_SABADO_ANCLA` como constante del script — correcto para tres
+médicos concretos y equivocado para cualquier otro que use el mismo instalador. Ahora es un
+ajuste (`S.sabadoAncla`, campo de fecha en Ajustes), con el 5-sep como valor predeterminado —
+sigue funcionando sin tocar nada para quien ya lo usaba, y cualquier otro médico pone el suyo.
+
+Reglas nuevas explícitas:
+- **Ancla vacía = no trabaja sábados.** No es «no se sabe»: es una respuesta, y la respuesta es
+  que ningún sábado le suma meta.
+- **Un ancla que no cae en sábado no se adivina de cuál habla**: se ignora.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 185 | ancla vacía deja de significar «no trabaja sábados» | ninguna (ver nota) | — |
+| 186 | un ancla mal escrita ya no se ignora | *el 8-sep es martes, no un ancla válida* | Sí |
+| 187 | se ignora `S.sabadoAncla` y siempre usa el predeterminado | *otro médico con turno desfasado* | Sí |
+
+**Nota sobre la 185.** No mordió, y no es una prueba hueca: `mtrFechaDesdeIso("")` ya devuelve
+`null`, así que el `if (!f || !a) return false;` de la línea siguiente cubre el caso vacío por
+otra vía. La guarda explícita es una redundancia **deliberada** — documenta la intención («ancla
+vacía = respuesta, no ausencia de dato») para quien lea el código después, aunque hoy el
+resultado ya esté garantizado aguas abajo. Se deja tal cual: quitarla no cambia el
+comportamiento actual, pero borraría la explicación.
+
+Banco completo: **2.902 comprobaciones pasan, 0 fallan.**
+
+## v18.0.69 — el módulo consulta cupo de laboratorio antes de sugerir la toma
+
+Encargo del médico (01-sep), con caso real: *«el módulo debe consultar la disponibilidad de
+agendas de laboratorios antes de sugerir una fecha, porque hoy 01/09 me está sugiriendo un
+examen para mañana 02/09 porque X examen ya está vencido, pero para mañana ya no hay citas de
+laboratorio».* Cuatro reglas fijadas por él en la entrevista, escritas en
+`docs/REGLAS_MEDICO_20260901.md`: buscar hacia **atrás**, nunca después; margen de **5 días
+hábiles** antes de detenerse a preguntar; mover **solo la toma**, nunca el control; y si AppCita
+no responde, **decirlo**, nunca inventar disponibilidad.
+
+### Lo que ya existía, y por qué no bastaba
+
+Sí había una sonda de cupos (`_afinarLabsPrimeroConCupos`, v15.4.0), pero con dos defectos
+reales, verificados los dos con el arnés:
+
+1. **Compromiso sin verificar.** El bucle probaba hasta 8 días hacia adelante desde el piso; si
+   se acababan los 8 intentos sin encontrar cupo, tomaba el **noveno día como bueno sin haberlo
+   consultado nunca**. Con un examen vencido el piso queda en «mañana» pero el techo sigue a
+   ~21 días — una ventana de hasta 20 días que 8 pasos no alcanzan a cubrir, así que el defecto
+   se activaba justo en el escenario que él reportó.
+2. **Extracción ciega de la respuesta.** Leía `r.turnos || r.data || r` y comprobaba
+   `Array.isArray(...)`. El camino que SÍ reserva el turno de verdad
+   (`apiLaboratorioAgendarAuto`) usa `extractAgendasList`, que reconoce seis formas distintas en
+   que AppCita envuelve la lista (`dtCitasDisponibles`, `agendas`, `citas`, `Table`, `Table1`,
+   además de `turnos`/`data`) — formas observadas en otros endpoints reales de esta misma API.
+   La sonda vieja solo reconocía dos de las seis: cualquier día cuya respuesta viniera envuelta
+   en otra forma se leía **siempre** como «sin cupo», tuviera turnos reales o no.
+
+### Lo nuevo
+
+- `mtrDiasParaSondearCupo` / `mtrBuscarCupoLaboratorio`: función pura que ordena los días a
+  consultar (ideal primero, luego hacia atrás día hábil por día hábil, nunca cruza el piso ni
+  el techo, nunca repite un día) y decide entre tres resultados — `encontrada`,
+  `sin_cupo_en_margen` (AppCita respondió que no) y `sin_verificar` (AppCita no respondió) — sin
+  confundir nunca los dos últimos.
+- `mtrVerificarCupoLab`: el verificador real, usando `extractAgendasList` (la misma del camino
+  de reserva) y `gmPostJsonEx` (para distinguir un 500 real de «cero turnos»).
+- `mtrNotaDisponibilidadLab`: el aviso de una sola línea cuando no se pudo decidir solo — nunca
+  dos textos que se contradigan, siguiendo la regla del médico de esa misma tarde sobre no
+  abarrotar el módulo.
+- `_afinarLabsPrimeroConCupos` reescrita sobre lo anterior: si no encuentra cupo dentro del
+  margen, **no mueve nada** y lo dice en el banner, en vez de comprometerse con un día sin
+  verificar.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 188 | la búsqueda deja de preferir «antes» (regla 1) | *sin cupo en la ideal, se busca hacia atrás* (2 fallan) | Sí |
+| 189 | el margen de 5 días hábiles deja de respetarse (regla 2) | *agotado el margen, se detiene y pregunta* | Sí |
+| 190 | un NO real se confunde con «no se pudo verificar» (regla 4) | *una mezcla de NO y sin verificar cuenta como respuesta real* (3 fallan) | Sí |
+| 191 | `mtrVerificarCupoLab` deja de distinguir un 500 de «sin turnos» | *un 500 no es lo mismo que cero turnos reales* | Sí |
+| 192 | `mtrVerificarCupoLab` vuelve a la extracción ciega original | *reconoce las formas reales de AppCita* | Sí |
+
+La 192 es la reproducción directa del defecto histórico: revertir a `r.turnos || r.data || r` +
+`Array.isArray` hace caer exactamente las pruebas que fijan las seis formas de
+`extractAgendasList`.
+
+**Alcance de esta entrega.** El motor (las funciones puras) y el sitio del reporte literal del
+médico —la toma forzada por un examen vencido— quedan completos. Hay otros dos sitios del
+módulo con la misma forma de sugerencia sin verificar (`cargarHoras` cuando el control ya está
+elegido, y el modal de «toma sola»); comparten la misma causa de fondo pero el médico no los
+reportó como confusos y ya tienen un mecanismo de recuperación en el momento de confirmar (el
+propio AppCita lista los horarios libres si el elegido ya no lo está). Quedan como siguiente
+paso, con el motor ya construido y probado.
+
+Banco completo: **2.913 comprobaciones pasan, 0 fallan.**
+
+## v18.0.70 — la caja roja de «cifras sin respaldo» no conocía las otras casillas del médico
+
+Hallazgo #23 del enjambre de funciones, gravedad alta, 3 de 3 refutadores no lo tumbaron.
+
+Lo que el médico escribe en OTRA casilla de texto libre (Recomendaciones, Análisis y plan,
+Enfermedad actual — la que NO se está redactando ahora) **sí** viaja a Gemini como contexto vía
+`mtrTextoDeOtrasCasillas` (se añadió en la v18.0.36, para el prompt). Pero `_respaldoDelMedico`
+— la lista de «hechos conocidos» que usa la caja roja «⚠ cifra sin respaldo» — solo juntaba las
+alertas de dosis, el cuadro de indicaciones, la pregunta del modo Preguntar y lo ya escrito en
+la historia: **nunca** esa misma función. Si Gemini citaba fielmente una cifra que el médico ya
+había dejado escrita en otra casilla —justo lo que el prompt le pide hacer—, la caja la marcaba
+igual como inventada. Es el aviso que el propio código llama «el más grave del módulo»: un falso
+positivo en el flujo normal de trabajo (escribir Recomendaciones antes que Análisis y plan, o al
+revés) enseña a ignorarlo, y entonces deja de servir para cazar la cifra de verdad inventada.
+
+La propia prueba de la v18.0.35 (que fija qué fuentes lleva `_respaldoDelMedico`) ya lo advertía
+sin saberlo: `mtrTextoDeOtrasCasillas` se añadió una versión después y esa prueba nunca se
+actualizó para exigirla también aquí — quedó documentado en el propio hallazgo del enjambre.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 193 | se quita `mtrTextoDeOtrasCasillas` de `_respaldoDelMedico` (**el defecto original**) | *la caja roja también conoce lo que el médico escribió en las otras casillas* | Sí |
+
+**Sobre la cobertura de esta versión.** `_pintarCifras` vive dentro del closure del modal del
+Redactor y no es alcanzable por el arnés (mismo caso que documentó la v18.0.35: «se fija por
+fuente, sin comentarios»). Se añadieron DOS pruebas: la de fuente (la única que de verdad
+protege el CABLEADO — la que mordió con M193) y una «EJECUTANDO» que reproduce el escenario
+exacto del hallazgo (la cifra 45 de «TFG de 45 mL/min» escrita en Recomendaciones) llamando
+directamente a `mtrTextoDeOtrasCasillas` + `mtrVerificarCifrasIA` — mecanismo real, pero
+independiente del cableado del modal, así que **no** mordió con M193 y no debe leerse como
+protección de la conexión. Se deja constancia explícita para no sobreclamar cobertura que la
+prueba no da: documenta el mecanismo y reproduce el hallazgo, la de fuente es la que vigila
+que el cableado no se vuelva a romper.
+
+Banco completo: **2.915 comprobaciones pasan, 0 fallan.**
+
+## v18.0.71 — un consecutivo con la fecha empotrada podía colarse como el PyM de hoy
+
+Hallazgo #16 del enjambre de funciones, gravedad alta, 2 de 3 refutadores no lo tumbaron.
+
+`esNombreDeHoy` (regla 1 de `pickTodaysFile`) aplicaba la guarda «no cola de otro número»
+(`nameHasToken`) SOLO a los tokens con mes en letras («1 de septiembre»); los numéricos
+(«192026», «20260901»…) usaban `n.includes(t)` a pelo, **sin ninguna protección de borde** — ni
+siquiera la del lado izquierdo que sí tienen los de letras. Un consecutivo, factura o radicado
+de 6-8 dígitos que por casualidad trae la fecha de hoy **empotrada** (p. ej.
+`Reporte_45192026_Final.xlsx` el 1-sep: «192026» vive dentro de «45192026») se tomaba como el
+PyM del día — y a diferencia de la regla 2 (que la v18.0.7 ya restringió a la raíz), esta regla
+buscaba en **las tres carpetas** que junta `fetchSpFilesMultiFolder`, subcarpetas ajenas
+incluidas.
+
+Hoy (1-sep, día y mes de un solo dígito) es justo el peor caso: el token corto («192026», 6
+dígitos) es el que más fácil se empotra en un número más largo.
+
+### La reparación, y su límite deliberado
+
+`nameHasToken` gana un tercer parámetro (`exigirBordeCompleto`): además de que no haya dígito
+ANTES del token (lo de siempre), exige que tampoco haya dígito DESPUÉS. `esNombreDeHoy` gana un
+segundo parámetro (`fueraDeLaRaiz`): fuera de la raíz, los tokens numéricos pasan también por
+`nameHasToken` con el borde completo; dentro de la raíz, nada cambia.
+
+Por qué el corte es solo fuera de la raíz, y por qué solo mira dígitos y no letras: el caso real
+ya conocido, `Agenda_v2_20260806.xlsx`, tiene un dígito pegado a la IZQUIERDA de la fecha (la
+«2» de «v2») y vive en la raíz — es justo el motivo por el que el código nunca aplicó esta
+guarda a los numéricos. Aplicarla en la raíz lo habría roto. Y un candidato con **letras** a los
+dos lados (`Consolidado_192026_v2.xlsx` — el «2» de «v2» viene después, separado por la letra
+«v», no pegado) es estructuralmente el MISMO patrón de confianza que `Agenda_v2_*`: el código no
+puede distinguir con justicia «la letra viene antes» de «la letra viene después», así que trata
+los dos casos igual y los sigue aceptando.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 194 | la regla 1 vuelve a no distinguir raíz de subcarpeta (**el defecto original**) | *un consecutivo con dígito pegado se rechaza fuera de la raíz* | Sí |
+| 195 | el borde completo deja de exigir el lado derecho | *nameHasToken con el borde completo* (prefijo de un número más largo) | Sí |
+| 196 | `fueraDeLaRaiz` deja de activar la guarda estricta | *esNombreDeHoy con fueraDeLaRaiz* (2 fallan) | Sí |
+| 197 | la raíz TAMBIÉN aplica la guarda estricta (**rompe el caso real conocido**) | *Agenda_v2_20260806.xlsx en la raíz sigue intacto* (2 fallan) | Sí |
+
+La 197 es la contención central: sin ella, «cerrar el hueco» habría roto el archivo real que la
+v18.0.7 ya documentó como necesario proteger.
+
+**Precisión de proceso.** Mi primera tanda de pruebas asumía, siguiendo la letra de la
+reproducción del hallazgo, que `Consolidado_192026_v2.xlsx` debía rechazarse igual que los otros
+dos ejemplos — y la implementación (correcta) la seguía aceptando, así que la prueba falló.
+Revisando el porqué: ese nombre no tiene ningún dígito pegado al token, solo la letra «v»
+después — es el mismo patrón de confianza que `Agenda_v2_*`, no una cola de otro número. La
+reproducción del hallazgo mostraba que las TRES cadenas volvían `true` bajo el código VIEJO (sin
+ninguna protección), no que las tres debieran rechazarse bajo el arreglo. Se corrigió la
+prueba, no el código.
+
+Banco completo: **2.920 comprobaciones pasan, 0 fallan.**
+
+## v18.0.72 — la poda de la cola de carpeta podía desincronizar un guardado en curso
+
+Hallazgo #20 del enjambre de funciones, gravedad alta, 2 de 3 refutadores no lo tumbaron. Un
+tercer refutador sostenía que era imposible («no hay ningún `await` entre el chequeo de poda y
+el `.set()` dentro de una sola llamada, así que corre de forma atómica») — cierto, pero no
+refuta el hallazgo: la atomicidad de UNA llamada no protege la clave que dejó una llamada
+ANTERIOR, todavía en vuelo.
+
+Reproducido primero contra el código real, sin tocar nada (`vglCarpetaGuardarInstantanea`,
+`_vglCarpetaCola`), antes de decidir si aplicar el arreglo:
+
+`Map.set()` sobre una clave YA existente no cambia su posición de inserción — solo una clave
+NUEVA se añade al final. Un paciente («P») cuya única actividad ocurrió al principio de la
+jornada queda entonces SIEMPRE al frente del `Map`, y la poda por >200 pacientes distintos lo
+elige como «el más viejo» sin mirar si tiene un guardado en curso ahora mismo.
+
+Secuencia exacta que lo dispara:
+1. Primer guardado de P: su clave queda al frente de la cola.
+2. 199 pacientes distintos se cuelan por delante — la cola llega a 200, todavía sin podar.
+3. Segundo guardado de P arranca (su lectura de disco tarda): la cola sigue en 200, no poda
+   todavía. `.set()` reutiliza la clave de P sin moverla de posición: sigue siendo la más vieja.
+4. Un paciente distinto más cruza el umbral de 200.
+5. Tercer guardado de P arranca MIENTRAS el segundo sigue en vuelo: la cola ya tiene 201, poda
+   la más vieja — que sigue siendo la de P — y la borra. Este tercer guardado busca la clave de
+   P para encadenarse detrás del segundo, no la encuentra (se acaba de borrar A SÍ MISMA) y
+   arranca de cero, en paralelo con el segundo: dos lecturas/escrituras concurrentes sobre el
+   mismo archivo, la carrera exacta que la cola existe para impedir.
+
+`tests/repro_hallazgo20b.js` (guion suelto, no forma parte del banco) confirmó la secuencia paso
+a paso contra `vglCarpetaGuardarInstantanea` real: el tercer guardado arrancaba su lectura antes
+de que el segundo (todavía colgado en la suya) terminara.
+
+### La reparación
+
+Antes de decidir si podar, la llamada saca su PROPIA clave de la cola (si ya existía) y la
+vuelve a insertar al reencolarse: eso la mueve al FINAL, así que nunca puede podarse a sí misma,
+y la posición de cada clave pasa a reflejar su ÚLTIMO uso, no el primero. La poda solo alcanza
+ahora a un paciente que de verdad lleva 200 pacientes distintos sin ninguna actividad —
+exactamente la garantía que el comentario original de esta cola siempre dijo tener.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 198 | se revierte al `.get()`/poda del orden original (**el defecto real, reproducido antes de tocar nada**) | *REGRESIÓN — la poda de la cola de carpeta NO puede desincronizar un guardado en curso (hallazgo #20)* | Sí |
+
+Banco completo: **2.921 comprobaciones pasan, 0 fallan.**
+
+## v18.0.73 — `_isoAMs` ya rechaza fechas que el calendario no tiene
+
+Hallazgo #21 del enjambre, gravedad alta, 2 de 3 refutadores no lo tumbaron. El disidente
+argumentó bien pero solo sobre UNA de las tres rutas reales que llaman a `_isoAMs`: la de
+`mtrLdlBasalDeSerie`/`mtrPenultimaCreatinina`, que recibe series de laboratorio de la API viva
+de Athenea — un backend ASP.NET/SQL Server cuyo tipo `DateTime` no puede representar un 31 de
+abril. Ese argumento es correcto para esa ruta. Pero `_isoAMs` tiene una TERCERA ruta
+(`mtrAnclaControlAnterior`, línea 39239) que lee `control.fecha` del historial LOCAL en disco
+(`vglCarpetaGuardarInstantanea`/`_vglCarpetaGuardarAhora`, ver v18.0.72 arriba) — un JSON de
+texto plano en una carpeta que el médico elige, editable por cualquier programa o persona, no
+protegido por ningún tipo de columna de base de datos. El refutador no la examinó.
+
+Con todo, rastreando esa tercera ruta hasta su origen (`todayStamp()`, que construye `fecha`
+desde `new Date()` sin argumentos) el dato que ESTE script escribe siempre es un calendario
+válido — igual que las fechas de Athenea. El hallazgo, estrictamente, no tiene hoy un camino de
+clic-a-daño demostrado con datos reales por NINGUNA de las tres rutas.
+
+Se aplica el arreglo de todos modos, y no como excepción a la disciplina de «reproducir antes de
+tocar» sino porque lo que hay que corregir aquí no es un camino de daño sino una inconsistencia
+de código verificable sin datos externos: `mtrFechaDesdeIso`, en el mismo archivo y para el
+mismo propósito, ya hace el round-trip que rechaza fechas imposibles; `_isoAMs` no lo hacía. El
+costo del arreglo es cero (una comparación más, sin cambiar el resultado para ninguna fecha
+real) y cierra la brecha frente a cualquier ruta futura que no se haya auditado todavía — la
+carpeta local ya demostró en el hallazgo #20 que no es tan blindada como Athenea.
+
+**No se delega en `mtrFechaDesdeIso`** porque esa construye en UTC y `_isoAMs`, a propósito
+(según su propio comentario, para que el conteo de días de una ventana no se mueva según el
+huso del navegador), en hora LOCAL. El arreglo repite el mismo round-trip pero sobre el `Date`
+local que la función ya construía.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 199 | se revierte a la implementación sin round-trip (**el defecto original**) | *REGRESIÓN — _isoAMs rechaza fechas que el calendario no tiene* y *REGRESIÓN — mtrLdlBasalDeSerie no acepta un basal con fecha de calendario imposible* (2 fallan) | Sí |
+
+Banco completo: **2.923 comprobaciones pasan, 0 fallan.**
+
+## v18.0.74 — una fecha de laboratorio que el calendario no tiene ya no se escribe ni se reclama
+
+Hallazgo #26 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. Verificado contra
+HEAD antes de tocar nada: el defecto sigue exactamente como lo describe el hallazgo.
+
+`_parseFechaHoraLike` solo validaba el rango 1-31/1-12 (día y mes por separado), no si el día
+existe DENTRO de ese mes — «31/04/2026» pasa ese rango entero aunque abril no tenga 31. Ese ISO
+fabricado (`"2026-04-31"`) llegaba entero hasta `injectLabsIntoCronicos`, que lo escribía en un
+`<input type="date">` real; el navegador la rechaza y la casilla queda vacía — pero, a
+diferencia del VALOR (blindado desde v17.6.45, ver arriba en este mismo informe), la escritura
+de fecha no comprobaba el retorno de `setNgValue`: el médico veía un resultado numérico sin su
+fecha, sin ningún aviso, y la casilla vacía quedaba además «reclamada» en `_fechasYaUsadas`, sin
+poder servir de respaldo a otro analito que la necesitara.
+
+### La reparación, en dos capas
+
+1. **Raíz.** `_parseFechaHoraLike` gana `_diaValidoParaMes(año, mes, día)` — el mismo round-trip
+   de `new Date(...)` que ya usa `mtrFechaDesdeIso` en otra parte del archivo — aplicado en las
+   dos ramas (ISO y dd/mm/aaaa). Una fecha de calendario imposible se rechaza en el origen, antes
+   de que ningún consumidor tenga que descubrirlo por su cuenta.
+2. **Red de seguridad.** Las TRES escrituras de fecha de `injectLabsIntoCronicos` (la principal,
+   el reintento de uroanálisis, y la ruta «sin casilla de resultado pero sí de fecha» — esta
+   última no citada por el hallazgo original pero con el mismo defecto exacto, corregida por la
+   misma razón) ahora comprueban el retorno de `setNgValue` antes de reclamar la casilla o
+   avisar éxito, y avisan por consola cuando el navegador rechaza la fecha — mismo patrón que ya
+   protege el valor.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 200 | se quita `_diaValidoParaMes` de las dos ramas de `_parseFechaHoraLike` (**el defecto original**) | *REGRESIÓN — _parseFechaHoraLike rechaza un día que el mes no tiene* | Sí |
+| 201 | la escritura PRINCIPAL de fecha deja de comprobar el retorno de `setNgValue` | *v18.0.74: las tres escrituras de fecha... comprueban el retorno* | Sí |
+| 202 | la ruta «sin casilla de resultado» deja de comprobarlo | *misma prueba* | Sí |
+| 203 | el reintento de uroanálisis deja de comprobarlo | *misma prueba* | Sí |
+
+Banco completo: **2.926 comprobaciones pasan, 0 fallan.**
+
+## v18.0.75 — un aviso nuevo del piloto de SharePoint ya no lo borra el descarte del anterior
+
+Hallazgo #28 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+señaló con razón que esto corre solo en la pestaña de SharePoint (`bootSharepointLite()`,
+staff, no el médico en consulta) y que el dato ya quedó guardado ANTES del toast final — el
+toast es puramente informativo. Aun así, el bug de código es real y el arreglo es trivial: se
+aplica por higiene del indicador (el staff que mira esa pestaña sí merece ver si la captura
+funcionó o no), no como excepción a la disciplina de trazar daño clínico.
+
+`dismissSpToast()` programaba el `remove()` físico del nodo en un `setTimeout` de 260 ms sin
+guardar su id, así que nadie podía cancelarlo. `spToast()` reutiliza el mismo nodo `#vgl-sp` si
+ya existe: si un aviso nuevo llega dentro de esa ventana de 260 ms (el patrón real de
+`bootSharepointLite`: aviso de progreso seguido, segundos después, del resultado final), el
+nodo se reutiliza y se vuelve a mostrar, pero el `remove()` diferido de la llamada ANTERIOR
+sigue en pie y lo borra igual — el aviso recién mostrado desaparece sin ningún indicio de por
+qué.
+
+### La reparación
+
+El id de ese `setTimeout` se guarda en una nueva variable de módulo (`spToastRemoveTimer`,
+mismo patrón que `spToastTimer`) y se cancela en dos puntos: al programar uno nuevo dentro de
+`dismissSpToast()` (por si se llama dos veces seguidas) y, el punto que de verdad cierra el
+hallazgo, al INICIO de `spToast()`, antes de reutilizar o reconstruir el nodo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 204 | se revierte a los dos `setTimeout` sin guardar (**el defecto original**) | *REGRESIÓN — un aviso nuevo dentro de la ventana de dismiss no lo borra el remove() diferido del anterior* | Sí |
+
+Banco completo: **2.927 comprobaciones pasan, 0 fallan.**
+
+## v18.0.76 — la pestaña que parpadea ya no restaura el título de la primera alerta del día
+
+Hallazgo #29 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron.
+
+El arreglo propuesto por el hallazgo («quitar la guarda `origTitle===null` y capturar en cada
+llamada») no bastaba por sí solo: se verificó primero con una reproducción directa (`node -e`
+contra el arnés real) que, incluso quitando esa guarda, el título seguía corrompiéndose, porque
+`startFlash()` llama a `stopFlash()` ANTES de recapturar — y `stopFlash()` restauraba
+`document.title` siempre que `origTitle` no fuera null, SIN comprobar si de verdad había un
+parpadeo activo en ese momento. Con dos alertas de pacientes distintos separadas por una
+navegación real de Everest entre medias, esa restauración incondicional pisaba el título REAL
+(el de la sección donde el médico está ahora) con el título obsoleto de la primera alerta,
+ANTES de que la recaptura pudiera ver el título verdadero — el síntoma persistía, solo que por
+un mecanismo distinto al que describía el hallazgo.
+
+### La reparación (dos partes, verificadas por separado)
+
+1. `startFlash()` captura `origTitle = document.title` en CADA llamada, sin guarda.
+2. `stopFlash()` solo restaura `document.title` si de verdad HABÍA un parpadeo corriendo cuando
+   se le llamó (`habiaFlash = !!flashTimer`, leído ANTES de limpiar el temporizador) — no basta
+   con que `origTitle` no sea null.
+
+Verificado con una reproducción manual antes y después del arreglo: tras la 2a alerta, con el
+arreglo completo, `document.title` conserva "Everest — Historia clínica" en vez de volver a
+"Everest — Agenda del día" (el título de la 1a alerta).
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 205 | se revierte la parte 1 (vuelve la guarda `origTitle===null`) | *REGRESIÓN — una segunda alerta captura el título REAL de ahora* | Sí |
+| 206 | se revierte la parte 2 (`stopFlash` vuelve a restaurar sin comprobar `habiaFlash`) | *misma prueba* | Sí |
+
+Banco completo: **2.928 comprobaciones pasan, 0 fallan.**
+
+## v18.0.77 — Escape y el chip de filtro ya no descartan un borrador sucio de Ajustes
+
+Hallazgo #30 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron** — el mayor
+consenso de todo el enjambre entre los pendientes.
+
+«Cierre de Ajustes respetando cambios sin guardar» (v15.6.0) documentaba la intención de que
+_ajustesIntentarCerrar() fuera LA puerta de salida, pero Escape y el clic en un chip de filtro
+rápido llamaban a `closeSheet()` directo, sin pasar por ella: un cambio sin guardar (la meta de
+HbA1c, el nombre del consultorio) se perdía en silencio, sin ninguna pregunta ni forma de
+deshacerlo — justo lo que la v15.6.0 decía que ya no podía pasar.
+
+### La reparación
+
+Tal como proponía el hallazgo: en vez de perseguir cada atajo por separado, se protege en el
+punto de unión. `closeSheet()` mismo consulta si hay Ajustes abiertos con un borrador sucio y,
+si los hay, delega en `_ajustesIntentarCerrar()` en vez de cerrar directo — así todo call-site
+presente y futuro queda protegido sin tener que acordarse uno por uno. Los que ya pasaban por
+`_ajustesIntentarCerrar()` no se ven afectados: para cuando llegan a `closeSheet()`, el borrador
+ya quedó vacío.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 207 | `closeSheet()` vuelve a cerrar directo sin consultar el borrador (**el defecto original**) | *REGRESIÓN — closeSheet() directo (Escape, chip de filtro) ya no descarta un borrador sucio* | Sí |
+
+Banco completo: **2.930 comprobaciones pasan, 0 fallan.**
+
+## v18.0.78 — el motor de disponibilidad de laboratorio llega a los otros dos sitios
+
+Pedido explícito del médico, dicho en el mismo momento en que reportó otro tema («Lo que dejé
+explícito como pendiente, no oculto... [hazlo]»). No es un hallazgo del enjambre: es la
+conexión, documentada como pendiente desde v18.0.69 en `docs/REGLAS_MEDICO_20260901.md`, del
+motor de disponibilidad de laboratorio (`mtrBuscarCupoLaboratorio` + `mtrVerificarCupoLab` +
+`mtrNotaDisponibilidadLab`, ya construido y probado) en los otros dos sitios del módulo que
+sugerían una fecha de toma sin verificar cupo real en AppCita:
+
+- **`cargarHoras`** (modo control-primero, dentro de `openAgendamientoModal`): el control ya
+  está elegido y la toma se sugiere 5 días hábiles antes. Se pinta primero SIN verificar (no
+  bloquea la interfaz) y se afina en segundo plano — mismo patrón que `_afinarLabsPrimeroConCupos`
+  (v18.0.69), con un token propio (`_tomaControlAfinarToken`) para no pisar una elección manual
+  del médico (chip de día o calendario de la toma) hecha mientras la ronda de red seguía en vuelo.
+- **`openLabSoloModal`** («toma sola»), en el caso exacto que el médico reportó: cuando ya hay
+  una cita de control agendada y la toma se sugiere 5 días hábiles antes de ella. El modo libre
+  (sin cita de control) usa otra lógica —el próximo día hábil, no «antes de un control»— y queda
+  fuera de esta conexión: no es el caso reportado.
+
+En ambos sitios, sin cupo confirmado en ningún día del margen de 5 hábiles hacia atrás, la
+sugerencia se queda en la fecha clínica (nunca se inventa una) y se avisa en pantalla — reglas
+2 y 4 del médico, exactamente como ya hace `_afinarLabsPrimeroConCupos`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 208 | `openLabSoloModal` nunca dispara el afinado | *REGRESIÓN — openLabSoloModal afina la toma con cupo real, hacia atrás* y *REGRESIÓN — openLabSoloModal avisa, sin inventar fecha* (2 fallan) | Sí |
+| 209 | `cargarHoras` nunca dispara el afinado | *REGRESIÓN — openAgendamientoModal (control-primero) avisa, sin inventar fecha* y *REGRESIÓN — el afinado de cargarHoras respeta labs-primero...* (2 fallan) | Sí |
+| 210 | el techo de `_afinarTomaControlPrimeroConCupos` deja de ser el propio ideal (podría sugerir una toma DESPUÉS de los 5 días hábiles antes del control) | *REGRESIÓN — el afinado de cargarHoras respeta labs-primero y la elección manual...* | Sí |
+| 211 | el clic en un chip de toma deja de invalidar el afinado en vuelo (`_tomaControlAfinarToken++` retirado) | *misma prueba* | Sí |
+
+Banco completo: **2.934 comprobaciones pasan, 0 fallan.**
+
+## v18.0.79 — el badge de inasistencias previas ya se ve con el paciente en sala
+
+Hallazgo #31 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+El badge «⚠ N inasistencias previas» solo lo pintaba `refrescarCuentas()`, nunca la plantilla
+inicial de `render()`. Y dentro de `refrescarCuentas()`, `if (!p) { if (cd) cd.remove();
+continue; }` saltaba TAMBIÉN el bloque que calcula y pinta ese badge en cuanto
+`countdownParts(a)` daba `null` — y da `null` exactamente para «En sala» y «Atendido». Como
+cualquier cambio de estado dispara un repintado completo (`signatureOf` incluye `a.estado`) que
+arma una tarjeta fresca sin el badge, el aviso quedaba inalcanzable todo el tiempo que el
+médico tiene al paciente delante — justo cuando el propio tooltip del interruptor dice que
+sirve «para priorizar el recordatorio o el diálogo» con él. El dato (`_noShowPrevia`) seguía
+correcto en el historial; solo dejaba de mostrarse cuando servía.
+
+### La reparación
+
+1. Se quita el `continue`: sin cuenta regresiva se retira la cuenta (si la había) y se sigue de
+   largo hasta el bloque del badge, que ahora corre siempre.
+2. `render()` también pinta el badge en el primer pintado (igual que ya hace con `countdown(a)`),
+   para no depender de una vuelta posterior de `refrescarCuentas()`.
+3. El texto y el título del badge se extraen a `_adhBadgeInfo(adhN)`, compartida entre las dos
+   rutas, para que no puedan divergir entre sí.
+
+No se pudo reproducir con el DOM simulado del arnés (mismo límite que v18.0.24 ya documentó
+para esta función: no entiende `:not()` ni el árbol real de la tarjeta), así que se verifica por
+inspección de fuente — mismo patrón que v18.0.24 ya estableció aquí mismo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 212 | vuelve el `continue` (**el defecto original**) | *REGRESIÓN — refrescarCuentas ya no se salta el badge de inasistencias...* | Sí |
+| 213 | `render()` deja de pintar el badge en el primer pintado | *REGRESIÓN — render() también pinta el badge de inasistencias...* | Sí |
+
+Banco completo: **2.936 comprobaciones pasan, 0 fallan.**
+
+## v18.0.80 — un arranque matado por el kill-switch ya no se come el aviso de festivos
+
+Hallazgo #32 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente tenía
+razón en varios puntos reales (hoy no existe ninguna discrepancia tabla-vs-cálculo en 2024-2028;
+`esFestivo()`, la que de verdad decide fechas hábiles, no depende de este aviso; el kill-switch
+ya muestra su propio banner rojo permanente) — pero el defecto de código es real y el arreglo es
+gratis, así que se aplica de todos modos: es exactamente el mismo patrón que ya se corrigió una
+vez en este archivo (el aviso de ceguera de agenda, línea ~28646) para no marcar "visto" algo
+que nunca se mostró.
+
+`_festivosAvisarSiVencida()` vivía en `boot()` ANTES del chequeo del kill-switch, y ya dejaba
+escrita `localStorage['vgl_festivos_aviso'] = hoy` aunque `boot()` fuera a abortar por el
+kill-switch un instante después — `#vgl-toasts` (donde `showToast()` necesita pintar) todavía no
+existía en ese punto. El aviso quedaba "consumido" sin haberse mostrado nunca, y no se repetía
+el resto del día ni con el kill-switch ya desactivado.
+
+### La reparación
+
+Se mueve la llamada a después de `buildOverlay()` (que crea `#vgl-toasts`) y del propio chequeo
+del kill-switch (que corta el arranque con `return` si está activo) — la primera de las dos
+salidas que proponía el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 214 | vuelve la llamada temprana, antes del kill-switch (**el defecto original**) | *REGRESIÓN — un arranque MATADO por el kill-switch no consume el aviso de festivos sin haberlo mostrado* | Sí |
+
+Banco completo: **2.937 comprobaciones pasan, 0 fallan.**
+
+## v18.0.81 — un blip de red ya no apaga el motor de seguridad farmacológica
+
+Hallazgo #33 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+`mtrPedirMedicamentos` (POST) es una consulta pura — lee los medicamentos del paciente, no
+escribe nada — pero sin `__idempotent: true` en las opciones, `_pageFetchJsonCore` lo trataba
+como ESCRITURA: cero reintentos, y ni siquiera probaba la segunda vía (`GM_xmlhttpRequest`) ante
+el primer fallo. Su hermano (el histórico de frecuencias, GET) sí se recupera del mismo hipo de
+red. Un solo blip transitorio de wifi de consultorio apagaba TODO el motor de seguridad
+farmacológica (avisos de dosis renal + las interacciones) con más frecuencia de la que la red
+real lo justificaba.
+
+### La reparación
+
+Se agrega `__idempotent: true` a la llamada, exactamente como ya hace `apiAccesoBuscarCitasDisponibles`
+para su propio POST de solo lectura — el mismo remedio que el hallazgo señaló por su nombre.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 215 | se quita `__idempotent: true` (**el defecto original**) | *REGRESIÓN — un blip transitorio de fetch se recupera por GM_xmlhttpRequest, igual que su hermano GET* | Sí |
+
+Banco completo: **2.938 comprobaciones pasan, 0 fallan.**
+
+## v18.0.82 — estadioParaDosis ya sigue de verdad al PEOR de los dos estadios
+
+Hallazgo #34 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente tenía
+razón en que hoy nadie lee `estadioParaDosis` (grep completo del archivo: solo aparece en su
+propio cálculo y en el objeto de retorno) — no hay camino de clic-a-daño hoy. Pero es un campo
+con nombre y contrato («el estadio para decidir la dosis») que ya miente sobre lo que calcula,
+listo para que una función futura lo conecte confiando en su nombre y herede la inversión
+exactamente en la población que el propio código identifica como la de mayor riesgo de
+discrepancia (peso muy alto o muy bajo). El comentario de cabecera del bloque dice textualmente
+«las dosis siguen al peor», y el código no lo cumplía.
+
+El `||` de repliegue (`(posClinico > posAdmin && posClinico >= 0) ? estadioClinico :
+(estadioClinico || estadioAdmin)`) solo cubría explícitamente el caso en que el CLÍNICO
+(CKD-EPI) es peor. En cualquier otro caso —incluido cuando el ADMINISTRATIVO (Cockcroft-Gault)
+es el peor, el caso real de peso muy bajo/sarcopenia que el propio aviso de discordancia cita
+como ejemplo— el `||` devolvía `estadioClinico` (el MEJOR) por ser el primer operando truthy.
+
+### La reparación
+
+Se compara la posición de los dos estadios y gana la MAYOR (peor) de las que sean válidas
+(`pos >= 0`); si una de las dos no es válida, gana la otra — exactamente el arreglo propuesto
+por el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 216 | vuelve el `\|\|` de repliegue original (**el defecto original**) | *REGRESIÓN — cuando el estadio ADMINISTRATIVO es PEOR que el clínico, las dosis también lo siguen a él* | Sí |
+
+Banco completo: **2.939 comprobaciones pasan, 0 fallan.**
+
+## v18.0.83 — el guardián del texto libre vigila por PACIENTE, no solo por elemento
+
+Hallazgo #35 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+señaló con razón que la premisa central (Angular reutilizando el MISMO nodo `<textarea>` al
+abrir la historia de un paciente DISTINTO) no está verificada contra Everest real — el propio
+autor del hallazgo lo admite. Aun así, el defecto de código es real e independiente de esa
+duda: `dataset.vglVigilado` marca el ELEMENTO como vigilado, nunca registra DE QUIÉN. Si esa
+reutilización llega a pasar (el código no tiene ninguna guarda que la descarte), la primera
+edición real del médico sobre el paciente nuevo encuentra `antes===undefined` (nunca sembrado
+para ese paciente) y `_vglNotarTextoLibre` la trata como «primera vista» — sin invalidar el
+resumen en caché. Se aplica el arreglo por ser gratis y puramente defensivo (no puede empeorar
+nada aunque la reutilización de nodo nunca ocurra en producción), no como excepción a la
+disciplina de trazar daño real.
+
+### La reparación
+
+Se guarda también `dataset.vglVigiladoDoc` (de quién es el nodo vigilado). En cada tick, si el
+nodo ya está vigilado pero el paciente actual es distinto al guardado, se resiembra
+`_vglTextoPrevio` para la clave nueva — sin volver a añadir un segundo listener de `blur`.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 217 | vuelve el guardián por elemento sin registrar el dueño (**el defecto original**) | *REGRESIÓN — un cambio de paciente sobre el MISMO nodo... resiembra el texto vigilado* | Sí |
+
+Banco completo: **2.940 comprobaciones pasan, 0 fallan.**
+
+## v18.0.84 — el uroanálisis ya reconoce su propio hallazgo más grave
+
+Hallazgo #36 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+`_esUroComponenteAlterado` decide DOS resaltados rojos que el médico usa para escanear la tabla
+de un vistazo (la fila del Uroanálisis en la tabla general de Laboratorios, y cada ítem del
+acordeón). El resultado cualitativo MÁS grave que puede traer un parcial de orina — leucocitos u
+hematíes «incontables»/«innumerables»/«campo cubierto» (piuria o hematuria masiva) — pasaba como
+NORMAL: `parseFloat('incontables')` es `NaN` y ninguna de las palabras clave existentes lo
+cubría. El propio proyecto ya reconoce este léxico exacto como severidad máxima en otra función
+del mismo archivo (`mtrUroGrado`, grado 4).
+
+### La reparación
+
+Se agrega el mismo léxico, en la misma forma (`/^(incontables?|innumerables?|campo\s+cubierto)$/`),
+para no mantener dos catálogos de «qué es grave» que puedan volver a divergir — «muy
+abundante(s)» no hacía falta agregarlo: ya lo cubría el `.includes("abundante")` existente.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 218 | se quita el chequeo de severidad máxima (**el defecto original**) | *REGRESIÓN — leucocitos/hematíes INCONTABLES/INNUMERABLES/CAMPO CUBIERTO sí se reconocen como alterados* | Sí |
+
+Banco completo: **2.941 comprobaciones pasan, 0 fallan.**
+
+## v18.0.85 — isPending recorta antes de medir la longitud, no después
+
+Hallazgo #37 del enjambre, gravedad media, **3 de 3 refutadores no lo tumbaron**.
+
+El comentario de la propia función dice la intención correcta ("primero los descartes baratos,
+y solo después se normaliza la cadena"), pero el descarte por longitud (`s.length > 32`) se
+aplicaba sobre la cadena CRUDA, no sobre la recortada. Relleno manual, pegado desde otra celda o
+Alt+Enter repetidos en Excel pueden inflar una celda real y corta ("Tamizar con CCU", 15
+caracteres útiles) por encima del límite de 32 sin agregar ningún dato clínico — la función la
+descartaba en silencio, como si no existiera. La actividad de tamizaje nunca entraba al índice
+de PyM: no aparecía en el panel, no disparaba el aviso al abrir la historia.
+
+### La reparación
+
+Se recorta `s` antes de medir la longitud, exactamente como proponía el hallazgo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 219 | vuelve a medir la cadena cruda (**el defecto original**) | *REGRESIÓN — isPending recorta ANTES de medir la longitud, no después* | Sí |
+
+Banco completo: **2.942 comprobaciones pasan, 0 fallan.**
+
+## v18.0.86 — el tachado de números ya no corrompe un número clínico no relacionado
+
+Hallazgo #38 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+demostró con datos clínicos realistas (orden de laboratorio, código de barras, dosis) que
+NINGUNO se corrompe hoy, y que la defensa PRIMARIA contra fuga de cédula/celular es `scrubPII`
+(por patrón), no este mecanismo — `mtrHcTachaduras` es defensa en profundidad SECUNDARIA, tal
+como el propio historial del proyecto (v18.0.15, v18.0.25) documenta por escrito. El caso que
+dispara el bug es una coincidencia construida a propósito (un número que contiene el celular
+exacto del paciente como subcadena), no un escenario clínico típico.
+
+Aun así, el defecto de código es real: `mtrHcTachar` usa el límite de PALABRA (`MTR_LETRA_ES`,
+letras españolas) que v18.0.25 diseñó para NOMBRES, también para las tachaduras NUMÉRICAS
+(celular/teléfono/identificación) — y ese límite no protege contra la adyacencia de OTROS
+DÍGITOS, porque las letras no son dígitos. Un celular que aparece como subcadena dentro de un
+número más largo (una orden, un código de barras) se tachaba igual, partiéndolo con
+`[CENSURADO]` en medio — y ese texto es justo el que se manda a la hoja de hechos que lee la IA.
+
+### La reparación
+
+Para una tachadura puramente numérica (`/^\d+$/`), el límite pasa a ser de DÍGITO
+(`(?<!\d)...(?!\d)`) en vez de letra; para todo lo demás (nombres) se conserva exactamente el
+límite que el médico decidió en v18.0.25. No hay compromiso: el celular real, como token propio,
+se sigue tachando igual que siempre — solo deja de partir un número no relacionado que lo
+contenga por coincidencia.
+
+Una prueba existente (`v18.0.25: las dos defensas del módulo usan el MISMO límite de palabra`)
+quedó desactualizada por el refactor — comprobaba literalmente `(?<![` en el código fuente, y la
+nueva construcción usa una variable (`limite`) en vez de la clase de letras inline. Se corrigió
+la PRUEBA para reflejar la nueva forma (que sigue verificando el mismo invariante: límite en los
+dos lados, y ahora también que el caso numérico usa dígito) — no el código, que es correcto.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 220 | vuelve el límite de letra para todos los casos (**el defecto original**) | *v18.0.86, suite_31: número clínico no relacionado sobrevive intacto* + *suite_57: límite numérico de dígito* (2 suites, 2 fallan) | Sí |
+
+Banco completo: **2.942 comprobaciones pasan, 0 fallan.**
+
+## v18.0.87 — un vgl_cfg corrupto se autorrepara, en vez de quedarse roto para siempre
+
+Hallazgo #39 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+argumentó bien en dos frentes: (1) no hay un clic real que dispare la corrupción — es un fallo
+externo de almacenamiento sin incidente real registrado, y los backends atómicos de
+localStorage (LevelDB/SQLite) rara vez truncan una sola clave así; (2) aun aceptándola, el daño
+mostrado es cosmético, no clínico — los valores de fábrica a los que cae son prudentes (`excluir`
+nunca oculta VIH, las plantillas de SMS vuelven a `""` que es el fallback "honesto" que la propia
+regla de casa pide), y el único efecto negativo verificado es el tamaño de letra volviendo a
+"normal" — una molestia de accesibilidad de la UI del propio asistente.
+
+Se aplica de todos modos: el arreglo es gratis, no reduce ninguna protección existente, y cierra
+un caso real documentado por el propio código (`safeReadJSON` YA pone en cuarentena y sabe que
+hubo corrupción — simplemente no hacía nada con ese conocimiento para la clave más importante
+del script).
+
+### La reparación
+
+Al construir `S` (la primera línea del script que lee `vgl_cfg`), se detecta si había una cadena
+guardada que no se pudo interpretar y, si la hay, se reescribe la clave con el valor sano que `S`
+ya está usando — autorreparación inmediata, sin esperar a que el médico abra Ajustes. El aviso en
+pantalla (un toast AMBAR) se dispara en `boot()`, DESPUÉS de `buildOverlay()` — el mismo remedio
+que v18.0.80 (hallazgo #32) ya aplicó una vez para el mismo problema de fondo: `#vgl-toasts` no
+existe hasta ese punto, y un aviso disparado antes se pierde sin pintarse.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 221 | nunca se detecta ni se autorrepara la corrupción (**el defecto original**) | *REGRESIÓN — un vgl_cfg corrupto se autorrepara al cargar* | Sí |
+| 222 | el aviso corre ANTES de `buildOverlay()` (se perdería, como el hallazgo #32) | *REGRESIÓN — boot() avisa de la configuración reiniciada DESPUÉS de montar #vgl-toasts* | Sí |
+
+Banco completo: **2.945 comprobaciones pasan, 0 fallan.**
+
+## v18.0.88 — Alto Contraste ya no encoge la letra que el médico eligió en Ajustes
+
+Hallazgo #40 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+concedió que el mecanismo es real (`_vglAlternarAltoContraste` fijaba `raiz.style.zoom = "1.12"`
+sin mirar `S.tamanoLetra`) pero calificó el daño de cosmético, no clínico: el resto del asistente
+(`VGL_FZ_OBJETIVOS` vía `aplicarTamanoLetra`) no lo toca este botón y se queda en 1.28, así que
+solo el panel principal retrocede — el médico sigue viendo letra grande en el resto de la
+pantalla, no ceguera total.
+
+Se aplica de todos modos: si el médico ya eligió "letra muy grande" (1.28) en Ajustes por una
+razón real (fatiga visual, consulta larga), un botón de accesibilidad que la ENCOGE al activar
+OTRA accesibilidad (Alto Contraste) es exactamente lo opuesto de lo que ambas opciones prometen
+— y el arreglo es gratis, no reduce ninguna protección existente.
+
+### La reparación
+
+`_vglAlternarAltoContraste` ahora calcula el zoom como el MAYOR entre el 1.12 propio de Alto
+Contraste y el zoom que ya corresponde a `S.tamanoLetra` (vía `_fzZoomDe`, reutilizando el mismo
+helper que usa `aplicarTamanoLetra`). Con letra normal, sigue dando 1.12 como siempre — el
+cambio es transparente para el caso común. Con letra muy grande, da 1.28 en vez de encoger a
+1.12.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 223 | vuelve el 1.12 fijo sin mirar `S.tamanoLetra` (**el defecto original**) | *suite_61: REGRESIÓN — _vglAlternarAltoContraste nunca reduce la letra que el médico ya eligió en Ajustes (hallazgo #40)* | Sí |
+
+Banco completo: **2.946 comprobaciones pasan, 0 fallan.**
+
+## v18.0.89 — un examen que Everest exige (swRequerido) y sigue vacío ya no se calcula y se tira a la basura
+
+Hallazgo #41 del enjambre, gravedad media, 2 de 3 refutadores no lo tumbaron. El disidente
+confirmó la parte "código muerto" al pie de la letra (`r.obligatoriasVacias`/`r2.obligatoriasVacias`
+se calculan en `injectLabsIntoCronicos` pero ningún llamador los lee, grep de 6 apariciones
+confirmado) pero cuestionó el salto a "daño clínico": `swRequerido` viene del propio endpoint de
+validación de Everest (`GetValidacionExamenCronicos`), y es probable que el frontend NATIVO de
+Everest ya le muestre al médico que esa casilla es obligatoria (asterisco rojo, bloqueo al
+guardar) — un patrón que el propio archivo ya documenta para otro campo obligatorio de Everest
+(el celular, línea 19136).
+
+Se aplica de todos modos: aunque Everest avise por su cuenta, el propio motor de Auto-Labs YA
+tiene esa información calculada con datos reales del DOM de esta vista concreta — descartarla en
+silencio en vez de decirla es tirar trabajo ya hecho, y el arreglo sigue exactamente el mismo
+patrón que ya existe para `r.sinCasilla` y `r.implausibles` en el mismo bloque.
+
+### La reparación
+
+En los dos llamadores de `injectLabsIntoCronicos` (la rama principal y la de reintento tras
+auto-login), se lee `r.obligatoriasVacias`/`r2.obligatoriasVacias` y, si trae elementos, se
+muestra un aviso ámbar con los nombres de los exámenes que Everest exige y que la vista actual
+todavía tiene vacíos — mismo patrón (mismo `showToast`, mismo `uxTrack`) que ya usan
+`sinCasilla` e `implausibles` en el bloque de al lado.
+
+**Nota aparte, fuera del alcance de este hallazgo:** al escribir la prueba se confirmó que
+`showToast` deduplica por `título+apptKey` **dentro del mismo flush** (500 ms) — dos avisos
+ámbar de "Exámenes" en el mismo clic (p. ej. `sinCasilla` y `obligatoriasVacias` a la vez, o el
+verde de éxito y `obligatoriasVacias`) hacen que solo el PRIMERO en orden de código se pinte y el
+resto se descarte en silencio. Es un defecto real y verificado del propio `showToast`, preexistente
+a este cambio (ya afectaba a `sinCasilla` contra `implausibles`), pero no es lo que pidió el
+hallazgo #41 ni se toca aquí — la prueba de este hallazgo se aisló a propósito para no depender de
+esa colisión. Se deja constancia para un hallazgo futuro.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 224 | la rama principal deja de leer `r.obligatoriasVacias` (**el defecto original**) | *suite_15: hallazgo #41 — un examen que Everest exige (swRequerido) y sigue vacío ahora SÍ se avisa* | Sí |
+| 225 | la rama de reintento (tras auto-login) deja de leer `r2.obligatoriasVacias` | *suite_15: hallazgo #41 — la rama de reintento también lee r2.obligatoriasVacias* | Sí |
+
+Banco completo: **2.948 comprobaciones pasan, 0 fallan.**
+
+## v18.0.90 — fetchAtheneaLabs ya no duplica tráfico contra un portal que el propio código ya sabe frágil
+
+Hallazgo #42 del enjambre, gravedad media, 3 de 3 refutadores no lo tumbaron. `fetchAtheneaLabs`
+(la función que trae los RESULTADOS de laboratorio, llamada desde `_getAtheneaLabsAutoNucleo` para
+cada solicitud del paciente) llamaba a `GM_xmlhttpRequest` directamente, sin pasar por `_gmReq` —
+el "seguro anti-doble-disparo" que la v16.7.0 instaló por orden explícita del médico ("todas las
+llamadas a endpoint deben tener ese seguro") y que las demás llamadas GM a Athenea de este mismo
+archivo (`_atheneaToken`, búsqueda de paciente) sí usan. Confirmado con el arnés: dos peticiones
+idénticas simultáneas para la misma solicitud/año generaban DOS llamadas reales a Athenea. El
+propio archivo documenta (línea ~2627) que Athenea "contestó las tres primeras [solicitudes] y se
+cayó" bajo carga — este hueco duplicaba exactamente el tipo de tráfico que ya se sabe que la hace
+fallar, justo cuando el médico más lo necesita (abriendo la historia).
+
+### La reparación
+
+`fetchAtheneaLabs` ahora llama a `_gmReq({method, url, headers, data})` en vez de
+`GM_xmlhttpRequest` directo. `_gmReq` está declarada MÁS ABAJO en el archivo, pero es una
+`function` de nivel superior (hoisted) — la referencia hacia adelante es idiomática en este
+proyecto y no necesita reordenar nada. El parseo de la respuesta (fechas heredadas, blindaje de
+formato, distinción `bolValido===false` vs "no encontrado" vs error de red) se conserva IDÉNTICO,
+movido de los callbacks `onload`/`onerror`/`ontimeout` a un `.then(onCumplida, onRechazada)` sobre
+la promesa que `_gmReq` ya da. La clave de deduplicación de `_gmReq` (`method|url|data`) incluye el
+`ano` dentro de `data`, así que el reintento por año (2026/2025/2024) nunca se confunde entre sí —
+solo dos peticiones REALMENTE idénticas (mismo idSolicitud, mismo año) comparten una sola llamada
+real, verificado con una prueba dedicada que confirma lo uno (dedup dentro del mismo año) y lo
+otro (sin dedup entre años distintos).
+
+El mensaje exacto de error (`"NetErr"` vs `"Timeout"` de `_gmReq`, en vez del texto crudo de GM)
+se simplifica, pero no cambia nada observable: el único consumidor de la promesa
+(`_getAtheneaLabsAutoNucleo`) ya descarta el motivo del rechazo con `.catch(() => null)` — solo le
+importa que se pudo leer o no, nunca el texto.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 226 | vuelve `GM_xmlhttpRequest` directo, sin `_gmReq` (**el defecto original**, función completa restaurada desde v18.0.89) | *suite_05: hallazgo #42 — dos peticiones IDÉNTICAS y simultáneas comparten UNA sola llamada real a Athenea* | Sí |
+
+Banco completo: **2.950 comprobaciones pasan, 0 fallan.**
+
+## v18.0.91 — el selector "Exámenes"/"Examen normal" ya se cierra con Escape, como el resto de modales
+
+Hallazgo #43 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. `_vglChooserModal`
+era el único modal del script que no pasaba por `_activarAccesibilidadModal` (el patrón universal
+del proyecto, usado en ~9 sitios distintos): Escape no lo cerraba y Tab no quedaba atrapado dentro
+de él. El refutador disidente concedió el mecanismo exacto (confirmado con el arnés: el modal solo
+registraba `'click'`, cero `'keydown'`) pero argumentó que el daño se desinfla porque el chooser
+YA tiene otros dos canales de cierre estándar del proyecto (botón "✕" y "clic afuera cierra", el
+mismo patrón `bgClick` que usan `#vgl-paquete-modal`/`#vgl-labs-modal`) — cancelar sigue siendo un
+clic, no una acción bloqueada.
+
+Se aplica de todos modos: el arreglo es gratis (una línea, mismo patrón que los otros ~9 modales),
+no reduce ninguna protección existente, y cierra una inconsistencia real de UX que el médico
+reportaría como "¿por qué Escape no funciona AQUÍ, si funciona en todo lo demás?".
+
+### La reparación
+
+`_vglChooserModal` ahora llama `_activarAccesibilidadModal(modal, cerrar)` justo después de
+cablear los canales de cierre existentes (botón "✕" y clic-afuera), reutilizando la MISMA función
+`cerrar` que ya usan esos dos — sin capturar el cleanup que devuelve, igual que hacen la mayoría
+de los otros call sites del proyecto (el modal se destruye entero al cerrar, así que no hace falta
+desinstalar el listener a mano).
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 227 | se quita la llamada a `_activarAccesibilidadModal` (**el defecto original**) | *suite_15: hallazgo #43 — _vglChooserModal ahora pasa por _activarAccesibilidadModal* | Sí |
+
+Banco completo: **2.951 comprobaciones pasan, 0 fallan.**
+
+## v18.0.92 — friendly() traduce "Último VIH" en CUALQUIER capitalización, no solo dos formas exactas
+
+Hallazgo #44 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. Para las claves con
+guion bajo (`CITA_PF`, `TAMIZACION_*`) el segundo intento de `friendly()` (comparar en
+mayúsculas) cubre cualquier capitalización porque el diccionario ya las tiene en mayúsculas. Pero
+`"Último VIH"`/`"Última SOMF"` están guardadas con una capitalización MIXTA específica (inicial
+mayúscula + resto en mayúsculas), así que ese mismo segundo intento —que compara contra la
+versión TODO-MAYÚSCULAS del encabezado— nunca puede calzar con esas claves: `"ÚLTIMO VIH"` no es
+igual a `"Último VIH"`. Cualquier variante de capitalización que no fuera exactamente una de las
+dos formas guardadas caía al respaldo crudo, y el médico veía el encabezado del Excel tal cual
+("Último Vih") en vez de la etiqueta clínica limpia "VIH".
+
+El refutador disidente concedió el defecto técnico exacto (verificado con el arnés) pero lo llamó
+puramente cosmético por dos motivos: (1) no hay clic del médico en la cadena causal — el header
+viene de un Excel de SharePoint cuya capitalización exacta el propio código documenta como
+"confirmado con captura real"; (2) `isExcludedActivity()` decide si el chip de VIH se OCULTA
+comparando en minúsculas sin acentos, así que es inmune a este bug — el pendiente de VIH nunca
+deja de mostrarse, solo cambia el texto visible.
+
+Se aplica de todos modos: aunque el peor caso verificable sea cosmético, el arreglo es gratis, no
+depende de que el Excel escriba el encabezado en una de dos formas exactas, y cierra la brecha
+para cualquier fuente futura del mismo header (no solo SharePoint).
+
+### La reparación
+
+Se añade `FRIENDLY_NORM`, un índice auxiliar construido UNA sola vez a partir de `FRIENDLY`
+(`stripAccents(clave).toUpperCase()` → mismo valor), y un tercer intento en `friendly()` que
+compara el encabezado entrante normalizado de la misma forma contra ese índice, después de los
+dos intentos existentes (exacto, y todo-mayúsculas) y antes del respaldo crudo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 228 | se quita el tercer intento normalizado (**el defecto original**) | *suite_01: REGRESIÓN — friendly traduce 'Último VIH' venga como venga capitalizado (hallazgo #44)* | Sí |
+
+Banco completo: **2.952 comprobaciones pasan, 0 fallan.**
+
+## v18.0.93 — la burbuja del "modo acompañado" ya sigue al botón, no se queda pegada a la posición vieja
+
+Hallazgo #45 del enjambre, gravedad baja, 2 de 3 refutadores no lo tumbaron. `_acompMostrar`
+recalcula `r` (el `getBoundingClientRect()` del botón objetivo) en CADA vuelta, pero cuando la
+burbuja ya está mostrando el MISMO `hint.id`, ese `r` recién medido se descarta sin usarlo — la
+función devuelve antes de tocar `previa.style.top/left`. La burbuja se queda pegada a las
+coordenadas del primer tick para siempre, aunque el botón (o el resto del dock a su alrededor)
+cambie de posición mientras tanto.
+
+El refutador disidente tenía razón en un punto técnico real y verificado: los CUATRO objetivos
+posibles de `hint.target` son elementos `position:fixed` con coordenadas absolutas de viewport
+(`#vgl-acciones-dock{top:200px;left:8px}`, `.vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj{position:fixed;
+left:8px...}`), así que un SCROLL de la página —el disparador que proponía el hallazgo— nunca
+mueve su `getBoundingClientRect()`; ese camino específico está cerrado. Pero el defecto de código
+en sí es real e independiente de esa vía concreta: el dock tiene un botón de colapsar
+(`#vgl-acciones-dock.colapsado .vgl-dock-btns{display:none}`, línea ~15930) que cambia qué
+botones existen dentro del contenedor fijo, y cualquier cambio en el layout INTERNO del dock
+(otro botón que aparece/desaparece en el stack) puede correr la posición de un botón concreto sin
+mover el contenedor — el mismo síntoma, sin necesidad de scroll.
+
+Se aplica de todos modos: el arreglo es gratis, no depende de qué dispare el reflow, y cierra
+exactamente el defecto de código que el propio comentario de v17.0.3 dice haber eliminado para
+siempre ("nunca flotando en el aire").
+
+### La reparación
+
+Cuando `previa && previa.dataset.vglHint === hint.id`, en vez de devolver de inmediato se
+actualiza `previa.style.top`/`left` con el `r` ya medido (misma fórmula que usa la rama de
+creación), y SOLO entonces se devuelve.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 229 | vuelve el `return` inmediato sin reposicionar (**el defecto original**) | *suite_15: hallazgo #45 — la burbuja de acompañamiento SIGUE al botón cuando su posición cambia entre ticks* | Sí |
+
+Banco completo: **2.953 comprobaciones pasan, 0 fallan.**
+
+## v18.0.94 — highlight() resalta el nombre aunque la búsqueda no lleve la tilde que sí tiene
+
+Hallazgo #46 del enjambre, gravedad baja (estilo), 2 de 3 refutadores no lo tumbaron.
+`matchesSearch()`/`fuzzyMatch()` ya son insensibles a acentos (`stripAccents+toLowerCase` en los
+dos lados), así que un paciente SÍ aparece en la lista filtrada al buscar "jose" sin tilde. Pero
+`highlight()` hacía `txt.toLowerCase().indexOf(q)` SIN quitar acentos, así que nunca encontraba
+"jose" dentro de "josé" (la é no es e) y el nombre se mostraba sin ningún `<mark>` — sin pista
+visual de por qué ese paciente quedó en el resultado.
+
+El refutador disidente concedió el defecto (reproducido byte a byte con el arnés) pero lo llamó
+puramente cosmético: `highlight()` solo decide si se pinta un `<mark>` — el texto que se muestra
+sigue siendo `escapeHtml(a.nombre)` completo y correcto en los dos casos, sin truncado ni dato
+erróneo; `<mark>` no se usa en ningún otro lugar del script (grep confirmado), así que nada
+depende de su presencia; y el propio hecho de que el paciente aparezca en la lista filtrada YA es
+la confirmación de por qué está ahí.
+
+Se aplica de todos modos: el arreglo es gratis, es la misma normalización que el proyecto ya
+decidió y usa en `fuzzyMatch`, y cierra una inconsistencia de UX (un paciente sin resaltar en
+medio de una lista con varios sí resaltados genera un segundo de duda evitable).
+
+### La reparación
+
+`highlight()` normaliza `q` y `txt` con `stripAccents(...).toLowerCase()` (mismo patrón que
+`fuzzyMatch`) para ENCONTRAR la posición de la coincidencia, pero sigue recortando el fragmento a
+mostrar sobre el `txt` ORIGINAL (con sus tildes intactas) — el `<mark>` envuelve el texto real del
+paciente, no una versión sin acentos.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 230 | vuelve la comparación sin `stripAccents` (**el defecto original**) | *suite_06: REGRESIÓN — highlight resalta aunque la búsqueda no lleve la tilde que sí tiene el nombre (hallazgo #46)* | Sí |
+
+Banco completo: **2.954 comprobaciones pasan, 0 fallan.**
+
+## v18.0.95 — se retira el potenciador "diabetes sin FR mayores": código muerto desde v18.0.5
+
+Hallazgo #47 del enjambre (el último de los 47), gravedad baja (código muerto), 2 de 3
+refutadores no lo tumbaron. El potenciador "diabetes sin otros factores de riesgo mayores"
+(`mtrContarPotenciadores`, añadido en v17.6.94 para el paso 3 del clasificador) es inalcanzable:
+el piso incondicional por diabetes de `mtrClasificarRiesgoCv` (v18.0.5, "todo diabético entra
+como riesgo ALTO como mínimo" — decisión del médico tras un reporte real en consulta) intercepta
+a TODO paciente con `x.diabetes` y devuelve ANTES de que la función llegue a invocar
+`mtrContarPotenciadores`, que es su única llamada real en todo el archivo (grep: 2 coincidencias,
+la declaración y esa única llamada). El refutador disidente confirmó exactamente el mismo
+mecanismo con el arnés, sin poder tumbarlo.
+
+Sin daño clínico hoy: el piso da "alto", igual o más conservador que el "moderado" que habría
+dado el potenciador muerto, así que ningún paciente sale subvalorado. El daño es de
+mantenimiento: el comentario de v17.6.94 prometía "los de <10 años puntúan igual que antes", una
+garantía que ya no se cumple —esos pacientes ya no llegan nunca hasta esa rama—, y un futuro
+cambio que vuelva condicional el piso (como ya pasó una vez, entre v17.6.94 y v18.0.5) confiaría
+en que este potenciador sigue vivo y cubre el hueco, cuando en realidad ya está muerto.
+
+### La decisión: retirar, no resucitar
+
+El hallazgo proponía dos caminos: (a) borrar la rama muerta, dejando el piso incondicional como
+la única regla vigente; o (b) mover el piso para que corra DESPUÉS del potenciador, devolviendo
+la gradación moderado/alto por años de evolución. Se eligió (a) sin dudarlo: el piso incondicional
+es la decisión MÁS RECIENTE del médico (v18.0.5, 31-ago), tomada explícitamente para corregir un
+reporte real en consulta ("aparecía ALTO y apenas le puse que son 3 años cambió a RCV BAJO").
+Resucitar el potenciador (opción b) revertiría esa corrección y volvería a bajar de categoría a
+diabéticos con evolución corta y sin otros factores de riesgo — exactamente el error que v18.0.5
+ya solucionó. Tocar una regla de clasificación de riesgo cardiovascular en una dirección que
+CONTRADICE la decisión más reciente del médico está fuera de lo que este cambio de mantenimiento
+debe hacer.
+
+### La reparación
+
+Se retira la línea `if (x.diabetes && conteoFr === 0) pot.push(...)` de `mtrContarPotenciadores`
+y su comentario asociado (ya con una garantía falsa), dejando una nota breve que explica por qué
+se retiró y remite al piso de `mtrClasificarRiesgoCv` como la única regla vigente para el
+diabético. Sin cambio de comportamiento observable: la rama nunca fue alcanzable desde el único
+llamador real.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 231 | vuelve la rama de diabetes muerta a `mtrContarPotenciadores` (**el defecto original**) | *suite_45: REGRESIÓN — mtrContarPotenciadores ya no tiene la rama de diabetes muerta (hallazgo #47)* | Sí |
+
+Banco completo: **2.955 comprobaciones pasan, 0 fallan.**
+
+---
+
+## Cierre del enjambre del 01-sep-2026
+
+Los 47 hallazgos confirmados de `docs/ENJAMBRE_FUNCIONES_20260901.md` quedan todos aplicados
+(v18.0.72 a v18.0.95, mutaciones #198 a #231), cada uno con su reproducción empírica contra el
+HEAD real, su refutación adversarial de 3 votos, su mutación verificada en las dos direcciones, y
+su fila en este informe. El banco completo pasa de principio a fin: **2.955 comprobaciones
+pasan, 0 fallan.**
+
+## v18.0.96 — el blindaje de color se mide sobre el HTML REAL, y aparecen dos secuestros que el censo sintético no veía
+
+Cierre del enjambre (madrugada del 02-sep). El médico preguntó «¿el diseño está blindado?» y la
+respuesta honesta exigía medirlo, no recordarlo. Las herramientas existentes decían que sí:
+`suite_25` 24/24, `tools/auditar_color_todo_chromium.js` «0 / 0». Un auditor adversarial
+independiente montó en Chromium el HTML REAL del modal de Agendar (13.393 caracteres, tal como lo
+genera `openAgendamientoModal`) y encontró la pastilla `#vgl-complexity-pill.vgl-complex-pill`,
+en su estado inicial («Analizando historia clínica del paciente...»), pintada con el color de
+Everest en oscuro y en claro. Pre-existente desde v17.6.2; ningún commit del enjambre la tocó.
+
+### Por qué el censo decía cero
+
+Tres puntos ciegos, uno detrás de otro, en `tools/auditar_color_todo_chromium.js`:
+
+1. La expresión del censo exigía `class=` pegado a la etiqueta: `<div id="…" class="…">` no
+   entraba. Cerrado: se admite cualquier atributo antes y después de `class`.
+2. Una clase contaba como «con color» si CUALQUIER selector que la contuviera declaraba color —
+   y `.vgl-complex-pill.warn{color:…}` cubría a `.vgl-complex-pill` a secas, que en su estado
+   inicial no tiene ninguna regla. Cerrado: cobertura consciente de compuestos (el último
+   compuesto del selector tiene que estar contenido en las clases del elemento), de id y de
+   etiqueta.
+3. Con (1) y (2) cerrados, el censo pasó a 11 «secuestrados», de los que 9 eran contenedores
+   (`.vgl-bento-card`, `.vgl-ficha-fila`, `.vgl-agm-foot`…) cuyo «texto» era una costura de
+   concatenación `' + x + '`. Cerrado: se exige texto LITERAL (tres letras seguidas fuera de
+   costuras y huecos de plantilla).
+
+Con los tres cerrados el censo marca exactamente la pastilla — y solo la pastilla — antes del
+arreglo, y cero después.
+
+### La medición que sí vale: HTML real, todas las superficies
+
+`tools/auditar_html_real_chromium.js` (nuevo): abre cada superficie EN EL ARNÉS (la misma
+función que la abre en consulta), serializa su HTML real, lo monta con el `<style>` real
+ejecutado, en oscuro y claro, bajo el Everest hostil canónico de CLAUDE.md, y mide TODOS los
+elementos con texto propio. 17 superficies, 324 elementos. La cobertura se imprime siempre:
+Resumen/Ajustes, «toma sola», tablero y Redactor IA no se abren en el arnés y se dice.
+
+Resultado antes del arreglo: 2 elementos reales secuestrados (×2 temas): la pastilla y el ícono
+de las opciones del menú de elección (`#vgl-chooser-modal .vgl-chooser-ico`, sin regla de color;
+hoy es un emoji y no se nota, el día que sea un glifo de texto sí). Después: **0**.
+
+De paso, `tools/verificar_color_chromium.js` daba «9 FALLAN» desde hacía semanas por
+expectativas viejas (una clase retirada en v17.28.0, banderas que pasaron a outline, un badge
+fijado a propósito igual al botón nativo de Everest) y por extraer el CSS por texto (se perdía
+`MTR_RCV_CSS_TODOS_LOS_MODALES`). Corregido en el commit anterior: 47 sondas, TODO SOBREVIVE.
+
+### La reparación
+
+- `.vgl-complex-pill{…;color:var(--fg) !important}` (VGL_UX_CSS): `var(--fg)` es exactamente
+  el color que ya heredaba «limpio» en los dos temas — no cambia ni un píxel, solo lo blinda.
+- `#vgl-chooser-modal .vgl-chooser-ico{…;color:var(--fg) !important}`.
+- `suite_25`, **Regla S** (nueva): todo elemento con clase propia y texto literal tiene una regla
+  de color que le APLICA de verdad (por clase-compuesto, id o etiqueta). El banco ahora atrapa
+  esta familia sin Chromium; la medición exacta con ancestros la hace el tool nuevo.
+- `suite_25`, Regla G: 652 → 653 en el bloque principal (el ícono) y 133 → 134 en las hojas
+  spliceadas (la pastilla), con su motivo.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 232 | se quita `color:var(--fg) !important` de `.vgl-complex-pill` (**el defecto original**) | *suite_25: Regla S* (y el censo de Regla G, −1); `auditar_color_todo_chromium.js` → «CENSO 2: 1 · .vgl-complex-pill»; `auditar_html_real_chromium.js` → «SECUESTRADO» en oscuro y claro, «NO blindado» | Sí — suite_25 25/25, censo 0/0, «VEREDICTO: blindado» |
+
+Banco completo: **2.956 comprobaciones pasan, 0 fallan.**
+
+## v18.0.97 — cuatro brechas del enjambre adversarial de cierre, reproducidas y cerradas
+
+Madrugada del 02-sep. Terminados los 47 hallazgos, se lanzó un enjambre DISTINTO al que los
+produjo, con la orden inversa: demostrar que cada arreglo falta, está incompleto, tiene prueba
+hueca o dejó un sitio hermano sin tocar (8 auditores, 3 refutadores por brecha). Estas cuatro las
+reprodujo el auditor con el arnés y las volví a reproducir yo contra HEAD antes de tocar nada;
+las cuatro se arreglaron en un worktree aparte para no moverle la base a los refutadores.
+
+### Fila 8 — `mtrHcEnganchar`: la guarda de cruce se saltaba cuando la cédula no se pudo leer al pedir
+
+`if (idAlPedir && !_pacienteSigueAbierto(idAlPedir))` se cortocircuitaba con `idAlPedir = ""`
+—cabecera sin renderizar, que es justo la petición que Everest hace al ABRIR el paciente— y la
+historia se archivaba bajo quien estuviera abierto AL LLEGAR: el defecto original de v18.0.48,
+de vuelta, y en contra del comentario del propio arreglo. Descartar a secas cuando no se leyó
+mataría esa misma captura «al abrir». La salida está en el propio paquete: Everest manda la
+cédula en `datosUsuario.identificacion`. Ahora, si viene, ella decide (se archiva solo si
+coincide con el paciente abierto ahora); si no viene, la guarda de v18.0.48 se aplica en su
+forma ESTRICTA. El montaje de la prueba «sin cambio de paciente, la historia SÍ se archiva» abría
+a «111111» con un paquete de «80123456» — dos personas —; se corrigió el montaje, no la regla.
+
+### Fila 9 — `mtrDosisDeTexto`: las combinaciones con «+» y «-» leían la dosis del otro principio
+
+El emparejamiento por posición de v18.0.49 solo se activaba con «/». «Amlodipino + Atorvastatina
+5/40 mg» → 5, y `mtrInerciaEstatina` volvía a acusar «LDL en falla sin estatina de alta
+intensidad» a un paciente en atorvastatina 40. Se admiten «/», «+» y «-» en los nombres y, en
+las dosis, «5/40», «5 mg + 40 mg» y «5mg/40mg». Lo ambiguo sigue devolviendo null.
+
+### Fila 13a — `mtrSanearTextoLibreAI`: un apellido de dos letras que es palabra de la lengua destrozaba la nota
+
+Bajar el mínimo a dos letras (v18.0.52) dejó pasar «Ha», «Su», «Lo», «Le», «No»: con un paciente
+de apellido «Ha» la regex tachaba cada «HA» del texto («NO [NOMBRE_CENSURADO] PRESENTADO
+DOLOR»). Exactamente el destrozo de la v18.0.25. Se añade `MTR_PALABRAS_FUNCION_ES` (palabras
+cortas de altísima frecuencia clínica) al filtro. Residuo aceptado por el médico el 01-sep («sí,
+acepto» que un nombre que coincide con una palabra pueda quedar) antes que una nota ilegible.
+«Li» no es palabra de la lengua y se sigue tachando.
+
+### Fila 13b — `mtrHcTachar` (canal del paquete de Everest → hoja de hechos → Gemini): sin tolerancia a tildes
+
+El token se casaba LITERAL: «MUÑOZ» registrado no tachaba «MUNOZ» escrito, ni al revés — el mismo
+hueco de tildes que la v18.0.52 cerró en el otro canal. Ahora usa `_mtrPatronConTildes`, el
+mismo patrón. Los números se casan tal cual y conservan su límite de dígito (v18.0.86). El
+mínimo de 4 letras de este canal NO se toca: es decisión explícita del médico (v18.0.25); un
+apellido de dos letras sigue pasando por aquí y se le pregunta a él si quiere alinearlo con el
+otro canal.
+
+### Mutaciones verificadas
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 233 | vuelve la guarda cortocircuitable `idAlPedir && …`, sin mirar la cédula del paquete (**el defecto**) | *suite_31: v18.0.97 CRUCE — cédula ILEGIBLE al pedir + paquete de otra persona: NO se archiva* y *… paquete SIN cédula: no se archiva* (2 fallan) | Sí |
+| 234 | vuelve el separador «/» a secas en los nombres (**el defecto**) | *suite_49: v18.0.97: las combinaciones con «+» y «-» … emparejan por posición* | Sí |
+| 235 | se quita la lista de palabras funcionales del filtro (**el defecto**) | *suite_31: v18.0.97 PHI — un apellido que es palabra funcional … NO destroza la nota* | Sí |
+| 236 | el token vuelve a casarse literal, sin tolerancia a tildes (**el defecto**) | *suite_31: v18.0.97 PHI — el canal del paquete de Everest tolera tildes en las DOS direcciones* | Sí |
+
+La prueba de fuente de suite_57 («las dos defensas del módulo usan el MISMO límite de palabra»)
+se actualizó a la forma nueva de `mtrHcTachar` y ahora exige, además, que el token no numérico
+pase por `_mtrPatronConTildes` — las dos defensas comparten límite Y tolerancia a tildes.
+
+Banco completo: **2.962 comprobaciones pasan, 0 fallan.**
+
+## v18.0.98 — cierre adversarial (02-sep), filas 24 y 23: Agendar creaba DOS citas reales, y una llegada se contaba dos veces
+
+Dos brechas de la auditoría adversarial del cierre del enjambre, ambas reproducidas con el arnés
+contra HEAD antes de tocar nada.
+
+**Fila 24 (alta) — modal de Agendar.** El mismo gesto que el hallazgo #19 cerró en Ordenar
+(v18.0.63) —confirmar, cerrar el cuadro mientras el servidor responde, reabrir, confirmar— creaba
+**dos citas reales** vía `AsignarTurno`: `if (!vivo()) return;` iba ANTES de `markCitaAgendadaHoy`,
+así que con el POST en vuelo la cita quedaba en Everest pero la marca local nunca se escribía; el
+panel seguía ofreciendo «Agendar» y el modal reabría limpio. Medido: 2 `AsignarTurno`. Ahora la
+marca se escribe en cuanto el servidor confirma, se avise o no al cuadro, y además un candado por
+cédula (`_agmAsignandoDocs`) rechaza un segundo confirmar mientras el primero sigue en vuelo.
+
+**Fila 23 (alta) — identidad de la cita.** Las cinco pruebas de v18.0.62 cubrían parpadeos del
+documento SIN cambio de estado. Si el cambio de estado se CONFIRMABA en una lectura sin cédula y la
+cédula reaparecía después, el historial bajo la cédula seguía rancio: `colorAndAlert` devolvía
+`arrival:true` dos veces, dos avisos VERDE y dos «atiempo» en el CSV. `apptKey` aprende ahora el
+alias nombre@hora → cédula@hora en cuanto ve la cédula y lo devuelve para las lecturas sin
+documento del mismo día (`diaNuevo()` lo olvida). Las pruebas de v18.0.62 olvidan el alias a
+propósito (`__apptAliasDoc.clear()`, publicado por el arnés) para seguir ejercitando la capa de
+lectura tolerante, que es el respaldo cuando el alias no existe (reinicio del script).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 237 | la marca vuelve a depender de `vivo()` (`if (ok && vivo())`) (**el defecto**) | *suite_15: v18.0.98 ANTIDUP — cerrar el modal con AsignarTurno en vuelo NO borra la marca* | Sí |
+| 238 | se quita el candado de vuelo (`_agmAsignandoDocs`) | *suite_15: v18.0.98 ANTIDUP — cerrar el modal con AsignarTurno en vuelo NO borra la marca* | Sí |
+| 239 | `apptKey` deja de aprender el alias nombre→cédula (**el defecto**) | *suite_04: v18.0.98: un cambio de estado confirmado en una lectura SIN documento no produce una segunda llegada* | Sí |
+
+Banco completo: **2.964 comprobaciones pasan, 0 fallan.**
+
+## v18.0.99 — cierre adversarial (02-sep), filas 6, 15, 18, 20 y 21
+
+Cinco brechas más de la auditoría adversarial, todas reproducidas con el arnés contra HEAD
+antes de tocar nada (los guiones de reproducción de los auditores se corrieron uno por uno).
+
+**Fila 6 (media) — tres `fetch` sin tope.** El tope de v18.0.47 solo cubría `_pageFetchJsonCore`.
+`apiEnviarOrdenPorCorreo`, `apiOrdenamientoGenerarLinks` y `reenviarSmsRecordatorio` llaman a
+`FETCH0 || window.fetch` a pelo y se esperan con `await` detrás de un botón que se deshabilita
+hasta que la promesa vuelva: «Enviando...» para siempre. Medido: las tres «SIGUE COLGADA tras
+1500 ms» con el mismo mock de suite_05. Ahora pasan por `_fetchConTope` (mismo
+`PAGE_FETCH_TIMEOUT_MS`, `AbortController`; si el llamador trae su señal, se respeta).
+
+**Fila 15 (media) — la tensión del resumen del modal de Laboratorios.** `mtrResumenDesdeModalLabs`
+resolvía sistólica y diastólica por separado (Athenea primero, casilla de hoy de respaldo):
+Athenea con solo la sistólica (130) + casilla de hoy con solo la diastólica (85) → 130/85, una
+tensión que no existió — el mismo defecto que v18.0.54 cerró en `mtrRecalcularConFactores`.
+Ahora la fuente se decide UNA vez para las dos cifras: gana la medición completa (Athenea
+primero); si ninguna está completa, entra entera la que tenga algo. Además, la prueba de
+v18.0.54 era un grep del fuente con una justificación falsa («la función es asíncrona y golpea
+la red»: es síncrona y pura); se añadió la prueba de COMPORTAMIENTO, que la variante
+`num(fNue.paDiastolica, fPrev.paDiastolica)` —la que el grep no veía— sí pone en rojo.
+
+**Fila 18 (media) — regresión de v18.0.57.** Al unificar los negadores, la ventana pasó de 20 a
+25 caracteres y «No asiste a controles de diabetes» (el «no» niega ASISTIR) pasó a leerse como
+negación → discrepancia ALTA que frena el Panel sobre un dato que el médico acaba de afirmar.
+Volver a 20 rompe «No ha sido diagnosticado con diabetes» (23 caracteres): la ventana no es la
+respuesta. Antes de buscar el negador se borra del tramo todo «no/sin/nunca + CONDUCTA»
+(asistir, acudir, cumplir, adherirse, controlarse, seguir, tomar, aplicarse, tratamiento,
+manejo, medicación). De paso, «HTA no controlada y diabetes» deja de negar lo que sigue.
+
+**Fila 20 (baja) — «Deshacer» sin cédula.** La acumulación de v18.0.59 comparaba
+`docId === docId` también cuando los dos eran "" (cabecera ilegible): dos historias distintas
+con el mismo botón se acumulaban en un lote y «Deshacer» en el segundo paciente restauraba la
+casilla del primero, incluida una escrita a mano. «El mismo paciente» solo se afirma con
+cédula: sin ella el lote se sustituye (con su aviso), como antes de v18.0.59.
+
+**Fila 21 (media) — la carpeta local con ceros de relleno.** `mtrNombreArchivoPaciente` quitaba
+letras pero no los ceros a la izquierda, y la lectura era por nombre exacto: un historial
+guardado como «0000111111.json» (anterior a la canonicalización de v17.48.0) no se encontraba
+al abrir hoy al mismo paciente con «111111», y la siguiente instantánea creaba «111111.json» al
+lado — dos archivos, el viejo huérfano en silencio. Ahora el nombre es canónico
+(`normalizeKey`), la implementación real publica `listar()`, y `_vglCarpetaResolverNombre`
+lee y escribe donde YA está archivado (mismo patrón que `_vglClaveDeDoc`). Un `fs` sin
+`listar` se comporta exactamente como antes.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 240 | `reenviarSmsRecordatorio` vuelve al `fetch` a pelo (**el defecto**) | *suite_05: 02-sep: _fetchConTope corta un fetch colgado, y los tres fetch directos … pasan por él* | Sí |
+| 241 | el resumen vuelve a resolver sistólica y diastólica por separado (**el defecto**) | *suite_37: 02-sep: mtrResumenDesdeModalLabs — la tensión de Athenea y la de la casilla de hoy no se mezclan* | Sí |
+| 242 | `mtrRecalcularConFactores`: la diastólica vacía de hoy se rellena con la previa (`num(...)`) — la variante que el grep de v18.0.54 no veía | *suite_37: 02-sep: mtrRecalcularConFactores — una lectura de hoy a medias NO se completa…* | Sí |
+| 243 | se deja de limpiar «no + conducta» del tramo (**el defecto**) | *suite_01: 02-sep: «no» + conducta … NO niega la enfermedad* | Sí |
+| 244 | vuelve a acumularse el lote sin cédula (**el defecto**) | *suite_31: v17.16.0 — el Deshacer …* (bloque 02-sep, fila 20) | Sí |
+| 245 | la carpeta vuelve al nombre exacto, sin tolerancia (**el defecto**) | *suite_68: 02-sep: un historial archivado con ceros de relleno se encuentra…* | Sí |
+
+Banco completo: **2.969 comprobaciones pasan, 0 fallan.**
+
+## v18.0.100 — cierre adversarial (02-sep), filas 22, 24b, 27, 30, 33a/33b y 34
+
+Seis brechas más, reproducidas con el arnés contra HEAD antes de tocar nada.
+
+**Fila 22 (baja) — `mtrEvaluarErc` con un peso implausible.** v18.0.61 cerró «falta el peso» sobre
+un peso de 15 kg en la vía legacy, pero el motor nuevo devolvía `crcl:null, faltan:[]`, y la ficha
+viva y el panel renal decían «falta algún dato» / «sin dato». Ahora `faltan` dice «peso plausible
+(hay 15 kg registrados, fuera de 20–300)» (y lo mismo para edad y creatinina fuera de rango); la
+ficha viva muestra el 15 para corregirlo. `pesoFaltaParaEstadio` sigue mirando «peso» a secas —
+que ahora significa, correctamente, «ausente».
+
+**Fila 24b (media) — prueba hueca.** La prueba de contención de v18.0.63 («si el médico marca él
+mismo la casilla, la orden SÍ se repite») montaba `_casillaOrd(false, true, 0)` (premarcada=0), con
+lo que la guarda `_premarcada && !_tocada` se saltaba por el primer operando sin llegar a
+`!_tocada`: la mutación M158 dejaba suite_15 en verde. Con premarcada=1 Y tocada=1 la cláusula es
+la que decide (HEAD: 2 POST; M158: 1) — ver #247.
+
+**Fila 27 (baja) — `xlsViejoDeHoy`.** El gemelo de `pickTodaysFile` llamaba a `esNombreDeHoy` sin
+la guarda de borde completo fuera de la raíz (v18.0.71): un `.xls` ajeno en una subcarpeta con la
+fecha de hoy empotrada en un consecutivo disparaba «PyM en formato antiguo» una vez al día.
+`_pymSueltoEnLaRaiz` se saca a función propia y la usan los dos.
+
+**Fila 30 (baja) — prueba hueca.** La prueba conductual de v18.0.74 solo miraba el valor y el
+conteo, y pasaba igual con el defecto original puesto de vuelta. Ahora exige el efecto observable
+de la rama del rechazo (el aviso por consola «rechazada por el navegador»), que es excluyente con
+la rama que reclama la casilla.
+
+**Fila 33a (media) — dos salidas de Ajustes sin pregunta.** `toggleSheet("resumen")` (Alt+R, el
+botón #vgl-rep, el doble clic en el dock) pisaba la hoja con borrador sucio y al volver
+`renderSettings()` arrancaba con borrador vacío; `_vglAlternarModoProg` (Ctrl+Shift+D) repintaba y
+lo borraba en el acto. Ahora `toggleSheet` pregunta primero (`_ajustesIntentarCerrar(luego)`, con
+continuación: decidido, se abre la hoja pedida) y el modo programador conserva el borrador y dice
+por qué no repinta.
+
+**Fila 33b (baja → cuelgue) — recursión mutua.** El arreglo de v18.0.77 hizo que `closeSheet()`
+delegue en `_ajustesIntentarCerrar()` con borrador sucio, pero las dos salidas de emergencia de
+esta última (`!bar` y el `catch`) llamaban de vuelta a `closeSheet()`: sin barra #vgl-set-bar la
+pestaña se colgaba (medido: el ejecutor no termina en 120 s). Ahora cierran con `closeSheet(true)`
+— y solo `true`, porque el botón Cerrar llega con el evento como primer argumento.
+
+**Fila 34 (baja) — `render()` releía el historial de inasistencias por tarjeta.** v18.0.79 puso el
+badge en la plantilla inicial llamando a `_noShowPrevia(a.doc_id)` por tarjeta (getItem +
+JSON.parse del mapa entero, que no caduca): medido, 30 lecturas con 30 tarjetas. Se lee UNA vez
+antes del bucle, igual que v18.0.24 hizo en `refrescarCuentas`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 246 | `faltan` vuelve a callar el peso implausible (**el defecto**) | *suite_45: 02-sep: un peso registrado pero implausible no se anuncia como ausente…* | Sí |
+| 247 | M158 de nuevo: la guarda ignora que el médico tocó la casilla (`_premarcada && !_tocada` → `_premarcada`) | *suite_15: v18.0.63 (contención): si el médico marca él mismo la casilla, la orden SÍ se repite* — **antes de la fila 24b esta mutación dejaba la suite en verde** | Sí |
+| 248 | `xlsViejoDeHoy` sin la guarda fuera de la raíz (**el defecto**) | *suite_03: 02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz* | Sí |
+| 249 | la fecha rechazada vuelve a reclamarse sin aviso (el defecto original de v18.0.74) | *suite_08: v18.0.74: injectLabsIntoCronicos no reclama una casilla de fecha que el navegador rechazó* — **antes de la fila 30 esta prueba pasaba igual** (y la de grep) | Sí |
+| 250 | `toggleSheet` vuelve a pisar Ajustes sucios (**el defecto**) | *suite_15: 02-sep: salir de Ajustes hacia Resumen (Alt+R) con borrador sucio pregunta primero…* | Sí |
+| 251 | Ctrl+Shift+D vuelve a repintar con borrador sucio (**el defecto**) | *suite_15: 02-sep: Ctrl+Shift+D con Ajustes sucios NO borra el borrador* (y *renderSettings: la sección técnica…*) | Sí |
+| 252 | las DOS salidas de emergencia vuelven a `closeSheet()` a secas (**el defecto**) | **el ejecutor no termina** (`timeout 90` → 124) — con una sola salida mutada la otra sigue cortando el bucle, por eso se mutan las dos | Sí |
+| 253 | `render()` vuelve a `_noShowPrevia(a.doc_id)` por tarjeta (**el defecto**) | *suite_04: 02-sep: render() lee el historial … UNA vez por pintado* y *suite_15: 02-sep: render() con 30 tarjetas lee el historial … UNA vez (medido)* | Sí |
+
+Banco completo: **2.976 comprobaciones pasan, 0 fallan.**
+
+## v18.0.101 — cierre adversarial (02-sep), filas 39a/39b, 41, 43, 44, 49 y 50: las últimas seis
+
+Con estas, las **23 brechas** que el enjambre adversarial reportó sobre los 47 arreglos quedan
+cerradas (tabla completa en `docs/ENJAMBRE_FUNCIONES_20260901.md`, sección «Cierre adversarial»).
+
+**Filas 39a/39b (media/baja) — un solo catálogo para el uroanálisis.** El léxico de v18.0.84 estaba
+anclado al texto completo: «INCONTABLES X CAMPO» (el formato del LIS), «> 100 INCONTABLES» o
+«INNUMERABLES/CAMPO» pasaban como NORMAL mientras `mtrUroRecuento`, en el mismo archivo, ya daba
+999; y los positivos cualitativos que `mtrUroGrado` reconoce desde v16.7.0 (PRESENTE, REGULARES,
+SE OBSERVAN, OBSERVADAS) no se resaltaban. `_esUroComponenteAlterado` delega ahora en esas dos
+funciones; ESCASAS/TRAZAS siguen en 0 a propósito.
+
+**Fila 41 (media) — `scrubPII` partía un número.** La forma de teléfono no tenía límite de dígito y
+casaba DENTRO de un número más largo: «930012345678» → «9[TEL_CENSURADO]8» en la hoja de hechos
+(`mtrHcValorLimpio` → `scrubPII`), el daño exacto del hallazgo #38 un paso más adelante del mismo
+pipeline. Ahora lleva `(?<!\d)` y `(?!\d)`; el celular real al lado sigue tachándose.
+
+**Fila 43 (baja) — letra vs Alto Contraste, en el otro orden.** v18.0.88 solo miraba
+`S.tamanoLetra` al pulsar el botón; con el contraste ya encendido y «letra muy grande» elegida
+después, el inline 1.12 seguía ganando a la hoja de 1.28. `aplicarTamanoLetra` recalcula el inline
+(`_vglHcZoom`, un solo sitio) cuando el contraste está activo.
+
+**Fila 44 (media) — el AMBAR tragado por el VERDE.** `showToast` deduplica por apptKey|título
+dentro del mismo flush: cuando Auto-Labs SÍ escribía, el VERDE de éxito («Exámenes») se tragaba el
+AMBAR «Everest exige …» —el arreglo #41 era mudo justo en el caso común— y «sin casilla» e
+«implausibles» se tragaban entre sí. Cada aviso AMBAR de ese clic lleva ahora título propio
+(«Exámenes · sin casilla», «· fuera de rango», «· casilla obligatoria»). Medido con el flujo real
+de Auto-Labs (creatinina escrita + hemoglobina obligatoria vacía): antes 1 aviso, ahora 2.
+
+**Fila 49 (baja) — `highlight` con acentos descompuestos.** El índice se calculaba sobre
+`stripAccents` (NFD) y el recorte sobre el original: con «é» como e + U+0301 el `<mark>` partía un
+grafema («José<mark> Pér</mark>ez»). El texto se normaliza a NFC antes de medir.
+
+**Fila 50 (baja) — `MOTOR_RCV_V68_SPEC.md`.** Dos filas de «Divergencias deliberadas» describían
+reglas que el código ya no tiene (el piso condicional de v17.6.94, retirado por el piso plano de
+v18.0.5; el potenciador «DM sin FR mayores», retirado en v18.0.95). Corregidas y fechadas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 254 | el resaltado del uroanálisis vuelve a su catálogo anclado, sin el del motor (**el defecto**) | *suite_51: 02-sep: el resaltado del uroanálisis usa el MISMO catálogo que el motor* | Sí |
+| 255 | el teléfono vuelve sin límite de dígito (**el defecto**) | *suite_31: scrubPII: censura celulares colombianos…* (bloque 02-sep, fila 41) | Sí |
+| 256 | `aplicarTamanoLetra` deja de recalcular el inline del contraste (**el defecto**) | *suite_61: 02-sep: cambiar la letra en Ajustes con Alto Contraste YA encendido actualiza el zoom del panel* | Sí |
+| 257 | el AMBAR de casilla obligatoria vuelve al título «Exámenes» (**el defecto**) | *suite_15: 02-sep: cuando Auto-Labs SÍ escribe, el aviso «Everest exige …» llega igual* | Sí |
+| 258 | `highlight` sin normalizar a NFC (**el defecto**) | *suite_06: 02-sep: highlight no parte un grafema cuando el nombre trae acentos descompuestos* | Sí |
+
+Banco completo: **2.980 comprobaciones pasan, 0 fallan.**
+
+## v18.0.102 — decisión del médico (02-sep): `mtrHcTachaduras` pasa a la regla de dos letras del otro canal
+
+La fila 13b del cierre adversarial dejó explícita una decisión pendiente: el mínimo de 4 letras de
+`mtrHcTachaduras` (v18.0.25) hacía que un apellido de 2-3 letras viajara a Gemini por el canal del
+paquete de Everest (`ultimaEnfermedad` → hoja de hechos → prompt), mientras el otro canal
+(`mtrSanearTextoLibreAI`) ya tachaba desde dos letras (v18.0.52) con protección de partículas y,
+desde v18.0.97, de palabras funcionales. El médico respondió «alinealo».
+
+Un solo sitio decide ahora qué token del nombre se tacha — `_mtrTokenDeNombreTachable`: dos
+letras o más, y ni partícula de apellido (`MTR_PARTICULAS_APELLIDO`) ni palabra funcional
+(`MTR_PALABRAS_FUNCION_ES`). Los dos canales lo usan. El coste que v18.0.52 ya había aceptado para
+el canal de texto aplica ahora a los dos: si el paciente se llama ANA, LUZ o PAZ, esa palabra
+suelta se tacha en su nota (el límite de palabra sigue protegiendo ANASARCA, MAREO, LEONINA…).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 259 | vuelve el mínimo de 4 letras en `mtrHcTachaduras` (**la política vieja**) | *suite_57: v18.0.102: mtrHcTachaduras usa la misma regla de dos letras…* y *… de punta a punta, un apellido de dos letras del paquete de Everest ya no llega a la hoja de hechos* | Sí |
+| 260 | la regla única deja de proteger las palabras funcionales | *suite_57: v18.0.102: mtrHcTachaduras usa la misma regla…* («HA» se tacharía) y *suite_31: v18.0.97 PHI — un apellido que es palabra funcional … NO destroza la nota* — los DOS canales caen a la vez: es la misma regla | Sí |
+
+Banco completo: **2.981 comprobaciones pasan, 0 fallan.**
+
+## v18.0.103 — lo que los refutadores y el auditor S+ de robustez encontraron sobre el cierre (02-sep)
+
+Tras subir v18.0.97–v18.0.102 se lanzó una segunda ronda: cinco refutadores (uno por versión, dos
+lentes: reproducción + sitios hermanos, regresión + pruebas huecas) y tres auditorías S+. Dos
+refutadores (v18.0.98 y v18.0.100) murieron por límite de sesión antes de verificar; los otros
+tres y las tres auditorías S+ entregaron. Esta versión cierra lo que era regresión mía o fuga de
+PHI; lo demás va en v18.0.104.
+
+**Dos fugas de PHI hacia Gemini (S+ robustez, gravedad alta).** (1) Cuando el paciente abierto no
+está en la agenda del día (adicional, urgencia, otro médico) o el snapshot aún está vacío tras la
+recarga que Everest hace al abrir una historia, el dock arma `apt = { doc_id }` sin nombre,
+`resumen._nombrePaciente` quedaba null y la ÚNICA defensa capaz de tachar un nombre en
+MAYÚSCULAS (la de tokens de `mtrSanearTextoLibreAI`) se apagaba en todos los canales; además el
+borrador aceptado se archivaba como «estilo» con el nombre dentro y se reinyectaba en los prompts
+de los pacientes siguientes, `.map(mtrSanearTextoLibreAI)` pasaba el ÍNDICE como nombre, y el
+marcador «Paciente Everest» tachaba la palabra PACIENTE dejando el nombre real. (2) La hoja de
+hechos era el único bloque del prompt sin el censor de nombres: el texto cosechado del DOM de la
+historia salía con el nombre intacto aunque el asistente lo conociera. Ahora: el nombre del
+paquete de Everest (`datosUsuario`) se retiene por cédula **solo en RAM** (`_mtrNombreRam`, nunca
+se persiste), `_mtrNombreEfectivo` decide el nombre que sirve para tachar (agenda si es un nombre
+real, si no el del paquete, si no null), la hoja de hechos y los ejemplos de estilo pasan por el
+censor con ese nombre, y sin nombre no se aprende estilo.
+
+**Cuatro regresiones.** Fila 9 (refutador v18.0.97): admitir «-»/«+» como separador de nombres
+hacía que «ATORVASTATINA-CALCICA 40 MG» devolviera null (antes 40) → «sin estatina de alta
+intensidad» en falso; solo la barra afirma combinación, el resto cae a la lectura de siempre.
+Fila 13b (v18.0.102): la regla de dos letras se aplicaba a celular/correo/identificación —
+«NA» en celular borraba «NA 138» (el sodio) de la hoja; los campos de contacto solo aportan
+tokens con forma (dígitos o «@»). Fila 18 (refutador v18.0.99): la limpieza «no + conducta»
+convertía en afirmación «No cumple criterios de diabetes» y «No toma medicamentos ni es diabético»
+y disparaba la discrepancia ALTA sobre un dato negado por escrito; si el tramo trae «ni» o
+«criterio(s)» no se limpia nada y «ni» es negador; la lista cubre dos auxiliares y un artículo.
+Fila 41 (refutador v18.0.101): con el límite de dígito, «573001234567» (indicativo sin «+»)
+viajaba entero; el indicativo entra en la forma con o sin «+».
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 261 | los campos de contacto vuelven a la regla de nombre (**el defecto de v18.0.102**) | *suite_57: v18.0.103: los campos de contacto solo aportan tachaduras con FORMA* | Sí |
+| 262 | el guion vuelve a anular la dosis (**el defecto de v18.0.97**) | *suite_49: v18.0.103: un guion o «+» que no es de combinación … no anula la dosis* | Sí |
+| 263 | «ni/criterios» dejan de proteger la negación (**el defecto de v18.0.99**) | *suite_01: v18.0.103: «ni» y «criterios» hacen que el «no» niegue el HECHO…* | Sí |
+| 264 | el indicativo 57 vuelve a exigir «+» (**el defecto de v18.0.101**) | *suite_31: scrubPII: censura celulares colombianos…* (bloque v18.0.103) | Sí |
+| 265 | la hoja de hechos vuelve sin censor (**la fuga #2**) | *suite_57: v18.0.103 PHI: la hoja de hechos y los ejemplos de estilo pasan por el censor…* | Sí |
+| 266 | el estilo se aprende sin nombre (**parte de la fuga #1**) | *suite_57: v18.0.103 PHI: la hoja de hechos y los ejemplos…* | Sí |
+| 267 | el nombre efectivo ignora el del paquete (**la fuga #1**) | *suite_57: v18.0.103 PHI: el nombre del paquete de Everest sirve de tachadura…* | Sí |
+
+Banco completo: **2.986 comprobaciones pasan, 0 fallan.**
+
+## v18.0.104 — lo que quedó de la segunda ronda: tope hasta el cuerpo, avisos por paciente, carpeta por cédula, deshacer sin cédula
+
+Segunda mitad de lo que trajeron los refutadores del cierre adversarial (02-sep). Ninguna de
+estas era una regresión de PHI (eso fue v18.0.103); son huecos que las pruebas de la primera
+ronda no cubrían porque miraban el mecanismo y no el efecto.
+
+**Fila 6, tope incompleto (refutador v18.0.99).** `_fetchConTope` soltaba el temporizador
+en cuanto llegaban las CABECERAS: un servidor que responde 200 y luego se cuelga sin cerrar el
+cuerpo dejaba `resp.text()`/`resp.json()` esperando para siempre — exactamente el caso que
+el tope quería evitar. Ahora el tope vive hasta que se lea el cuerpo (los cuatro lectores se
+envuelven y sueltan el temporizador al terminar), `_pageFetchJsonCore` hace lo mismo con su
+`json()`, y los tres `fetch` directos que faltaban (SMS automático, impresión del recordatorio y
+los tres de SharePoint) pasan por él.
+
+**Fila 44, avisos huecos (refutador v18.0.101 + S+ flujo).** Cuatro avisos de Auto-Labs del
+mismo clic superaban el umbral de tres y llegaban como «Alerta Múltiple (4)» SIN cuerpos: el
+médico veía que había cuatro cosas y no cuál. Con `apptKey` `"labs|" + docId` en los seis
+`showToast` se agrupan como «N avisos de este paciente» con sus textos; además los títulos de
+tres avisos ámbar dicen ahora cuál función y por qué («Redactar con IA · sin datos», «Modo
+programador · Ajustes sin guardar»).
+
+**Fila 39a, comparadores del LIS (refutador v18.0.101).** `_esUroComponenteAlterado` seguía con
+`parseFloat` sobre el valor crudo: «> 50 X CAMPO» daba NaN y no se marcaba; ahora delega en
+`mtrUroRecuento`, que ya entiende comparadores y rangos (límite superior).
+
+**Fila 21, carpeta por cédula (refutador v18.0.99).** `_vglCarpetaResolverNombre` devolvía el
+PRIMER archivo cuya clave normalizada coincidiera, y como `listar()` devolvía todo, un mutante
+que resolviera al primer archivo de la carpeta leía la historia de OTRA cédula. Ahora
+`_vglCarpetaNombresDeDoc` filtra por `normalizeKey` estricto, ordena canónico-primero, y cuando
+hay escisión (canónico + legado) se lee la FUSIÓN de todos con `mtrHistorialAgregar` en vez de
+uno solo, y al guardar se fusiona sobre esa unión para no perder consultas.
+
+**Fila 15, fuente a medias (refutador v18.0.99).** `_taFuente` prefería la fuente que trajera
+la medición completa, pero con Athenea a medias (130/null) y la casilla de hoy completa
+(120/80) devolvía la mezcla; ahora, si la casilla de hoy está completa, gana entera.
+
+**Fila 20 residuo, deshacer sin cédula (refutador v18.0.99).** Si el lote se guardó sin cédula
+(paquete llegó sin `identificacion`) y al pulsar Deshacer SÍ se lee una cédula en la historia,
+no había forma de confirmar que era el mismo paciente y se deshacía sobre la casilla ajena.
+Ahora: sin cédula en el lote y con cédula en pantalla → aviso ámbar y no se toca nada.
+
+**Fila 8, cruce del paquete sin cédula (refutador v18.0.97).** Verificado, no era defecto:
+la guarda de v18.0.48 sigue en pie cuando el paquete llega sin cédula y el paciente cambia
+entre pedir y recibir — se añade la prueba que lo fija.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 268 | `_fetchConTope` vuelve a soltar el tope en las cabeceras (la pieza) | el runner no termina: **EL EJECUTOR NO LLEGÓ AL FINAL — el banco NO está verde** (el caso *v18.0.104: el tope cubre la lectura del CUERPO…* de suite_05 se queda esperando) | Sí |
+| 269 | `_pageFetchJsonCore` suelta el tope antes de `resp.json()` (el núcleo) | *suite_05: v18.0.104: el tope cubre la lectura del CUERPO (pieza y núcleo), y los fetch que faltaban pasan por él* | Sí |
+| 270 | los seis `showToast` de Auto-Labs sin `apptKey` | *suite_15: v18.0.104: cuatro avisos de Auto-Labs del mismo clic llegan agrupados por paciente con sus cuerpos, no como «Alerta Múltiple» vacía* | Sí |
+| 271 | `_esUroComponenteAlterado` vuelve a `parseFloat` | *suite_51: v18.0.104: los comparadores y rangos del LIS se leen como el motor (límite superior)* | Sí |
+| 272 | `_vglCarpetaNombresDeDoc` sin el filtro de cédula (resuelve al primer archivo) | *suite_68: v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones, y listar() real funciona* | Sí |
+| 273 | la lectura de la carpeta vuelve a un solo archivo (sin fusión) | *suite_68: v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones…* | Sí |
+| 274 | `_taFuente` sin `if (taCompleta) return ta;` | *suite_37: v18.0.104: con Athenea a medias y la casilla de hoy completa, gana la casilla de hoy entera* | Sí |
+| 275 | Deshacer sin la guarda «lote sin cédula + cédula en pantalla» | *suite_31: v17.16.0 — el Deshacer: una sola ranura…* (bloque v18.0.104, «no se puede confirmar el paciente → no se deshace») | Sí |
+| 276 | la guarda de v18.0.48 (cambio de paciente entre pedir y recibir) retirada | *suite_31: v18.0.104 CRUCE — paquete SIN cédula, legible al pedir y cambio de paciente al llegar: NO se archiva* | Sí |
+
+Banco completo: **2.992 comprobaciones pasan, 0 fallan.**
+
+## v18.0.105 — el refutador de v18.0.98, relanzado: dos pestañas, la recarga en vuelo, la toma de muestras, Ordenar y los homónimos
+
+Los refutadores de v18.0.98 y v18.0.100 habían muerto por límite de sesión; el médico pidió
+relanzarlos. El de v18.0.98 (filas 24 y 23, las dos de gravedad alta del cierre adversarial)
+trajo esto, todo reproducido con el arnés antes de tocar nada.
+
+**Fila 24, incompleta (media).** El candado en vuelo de v18.0.98 vivía en RAM de UNA pestaña y la
+marca local solo se escribía al llegar la respuesta. Con dos pestañas de Everest abiertas —caso
+real del médico— la segunda no veía nada y creaba una segunda cita real; con una recarga de
+página con el POST en vuelo (Everest recarga al abrir una historia), la pestaña moría sin
+escribir la marca y la recargada agendaba de nuevo. Medido: 2 AsignarTurno en los dos gestos.
+Ahora hay una marca «en vuelo» en `vgl_proc_today` (compartida entre pestañas, caduca con el
+día): se escribe ANTES del POST y se borra al responder, pase lo que pase; si otra pestaña —o la
+misma antes de recargar— la ve fresca (menos de 60 s), no crea nada en silencio: avisa en el
+botón y exige un segundo clic consciente (el médico manda). Pasados 60 s se da por muerta la
+pestaña que la puso y la marca se limpia sola: nadie queda bloqueado.
+
+**Fila 24, sitio hermano (media).** La toma de muestras en AppCita tenía por único candado una
+variable DEL MODAL (`isSubmitting`): cerrar y reabrir con AgendarCita en vuelo daba un modal
+nuevo, sin marca y sin candado — dos tomas reales (medido). Mismo hueco en el tramo de
+laboratorio del modal combinado. Y Ordenar no tenía candado por cédula: en la misma pestaña lo
+salvaba por accidente la fusión de peticiones IDÉNTICAS de `pageFetchJson`; con dos pestañas se
+generaban las órdenes dos veces (medido). Un solo candado por cédula fuera de los modales para
+la toma (`_agmAgendarLabConCandado`) y para Ordenar (`_ordGenerandoDocs`), más la marca «en
+vuelo» compartida en los tres sitios; la llave del candado es la cédula canónica.
+
+**Fila 24, pruebas huecas (baja).** La aserción «no dispara otro POST» de la prueba de v18.0.98
+la cumplía esa fusión de peticiones idénticas, no el candado: con OTRO turno salían dos citas y
+ninguna prueba lo cubría. Y nada fijaba que el candado se SOLTARA cuando AsignarTurno falla:
+un mutante que solo lo soltaba con `ok` dejaba la suite en verde y al paciente bloqueado el
+resto de la jornada. Las dos cosas quedan fijadas.
+
+**Fila 23, regresión (baja por frecuencia, alta por lo que toca).** El alias nombre@hora
+apuntaba a la ÚLTIMA cédula vista, así que con dos homónimos a la misma hora una lectura sin
+cédula del segundo se resolvía a la cédula del PRIMERO: «a tiempo» para quien no llegó, su
+historial reescrito y la bitácora con un cambio de estado suyo. Ahora, si el mismo nombre@hora
+ya apunta a OTRA cédula, la entrada se marca ambigua y nadie hereda nada. Además la clave del
+alias era el nombre CRUDO: si la lectura por API y la del DOM traen el mismo nombre con distinta
+tilde o mayúscula, el alias no cruzaba y volvía el doble conteo que vino a cerrar — la clave es
+el nombre normalizado. Y dos pruebas huecas: ni el alias por HORA ni su olvido en `diaNuevo`
+estaban fijados.
+
+**De paso.** El aviso verde «la cita quedó creada aunque cerró el cuadro» no decía de quién era
+(el médico ya puede estar en otra historia) ni que la toma de muestras pedida NO se agendó (el
+tramo de laboratorio va después de esa salida): ahora dice las dos cosas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 277 | `marcarEnVuelo` no escribe nada (el candado vuelve a ser solo de RAM) | *suite_15: v18.0.105 ANTIDUP — dos pestañas: la segunda ve la cita en vuelo de la primera y NO crea otra en silencio; tras recargar en vuelo, tampoco…* y *…hermano — Ordenar en dos pestañas…* | Sí |
+| 278 | el candado de Agendar no se suelta en el `finally` (**el mutante que la prueba de v18.0.98 no veía**) | *suite_15: v18.0.105 ANTIDUP — el candado se suelta cuando AsignarTurno falla (se puede reintentar) y frena un segundo turno DISTINTO en vuelo* (y la de v18.0.98) | Sí |
+| 279 | la toma de muestras vuelve a no tener candado por cédula (solo `isSubmitting` del modal) | *suite_15: v18.0.105 ANTIDUP hermano — toma de muestras: cerrar y reabrir el modal con AgendarCita en vuelo NO crea una segunda toma real* | Sí |
+| 280 | Ordenar sin la marca «en vuelo» compartida | *suite_15: v18.0.105 ANTIDUP hermano — Ordenar en dos pestañas…* | Sí |
+| 281 | homónimos: el alias vuelve a apuntar a la ÚLTIMA cédula vista (**el defecto**) | *suite_04: v18.0.105: homónimos a la misma hora — una lectura sin cédula del segundo NO se resuelve a la cédula del primero* | Sí |
+| 282 | la clave del alias vuelve al nombre crudo (**el defecto**) | *suite_04: v18.0.105: el alias cruza tildes y mayúsculas…* (la primera versión de la prueba, con cinco lecturas, NO lo cazaba: el antirrebote exige dos lecturas seguidas para confirmar el cambio; con la sexta lectura sí cae) | Sí |
+| 283 | alias por nombre SIN hora (el M23d del refutador) | *suite_04: v18.0.105: el alias es por nombre@HORA (dos citas del mismo paciente no se confunden) y se olvida al cambiar el día* | Sí |
+| 284 | `diaNuevo` deja de vaciar el alias (el M23c del refutador) | *suite_04: v18.0.105: el alias es por nombre@HORA … y se olvida al cambiar el día* | Sí |
+| 285 | la marca «en vuelo» nunca caduca | *suite_15: v18.0.105 ANTIDUP — dos pestañas … una marca de hace más de 60 s no bloquea a nadie* | Sí |
+
+Banco completo: **2.999 comprobaciones pasan, 0 fallan.**
+
+## v18.0.106 — el refutador de v18.0.100, relanzado: sitios hermanos y pruebas huecas de las filas 22, 24b, 27, 30, 33a, 33b y 34
+
+Ninguna de las seis filas resultó mal cerrada en lo que cerraba; lo que trajo el refutador son
+sitios hermanos del mismo defecto y pruebas que pasaban con el defecto puesto de vuelta. Todo
+reproducido con el arnés antes de tocar nada.
+
+**Fila 22, sitios hermanos (media y baja).** `pesoFaltaParaEstadio` buscaba «peso» exacto en
+`faltan`, así que con 15 kg registrados (la entrada dice «peso plausible (hay 15 kg…)») el plan
+de exámenes de ERC caía en «no hay ningún examen que vigilar con este programa y estadio» — la
+misma frase que v17.6.51 llamó mentira — mientras con peso ausente sí decía «falta el peso».
+Ahora el plan dice que el peso registrado es implausible, con el valor y el rango, para
+corregirlo. Y la hoja de hechos para la IA llevaba «peso 15 kg» sin marca, como si fuera
+cierto: viaja marcado como implausible (no se inventa otro, no se calla).
+
+**Fila 24b, prueba hueca (media).** La huella `vglTocada` la escribe SOLO el listener `change`
+de la casilla de Ordenar, y ninguna prueba lo disparaba: la contención la ponía a mano. Un
+mutante que borraba esa línea dejaba la suite en verde y, en el navegador, la guarda se comía
+la decisión del médico. Prueba nueva con el gesto real (su listener).
+
+**Fila 27, prueba hueca (baja).** La mitad «en la raíz se conserva la coincidencia laxa» no la
+fijaba nadie: un mutante «siempre estricto» pasaba y dejaba de ver el caso real
+`Agenda_v2_<hoy>.xls`. Fijada.
+
+**Fila 30, prueba hueca (baja).** La conductual miraba el CANAL (el texto de `console.warn`) y
+no el EFECTO: el defecto entero con el aviso conservado pasaba en verde. Prueba nueva con el
+efecto observable: dos analitos cuya casilla de fecha resuelve al mismo nodo que rechaza; si la
+casilla rechazada quedara reclamada, el segundo recibiría «ya la ocupó otro analito».
+
+**Fila 33a, sitio hermano (baja–media) y prueba hueca.** Dentro de la propia hoja, «Guardar» y
+«Borrar» credenciales de Athenea repintaban con `renderSettings()`, que vacía el borrador: un
+cambio sin guardar en otra casilla se perdía en silencio — el mismo patrón que la fila cerró
+para Ctrl+Shift+D. Ahora solo se repinta el estado de la credencial, en su sitio. Y la prueba
+de Alt+R solo ejercitaba «Salir sin guardar»: «Guardar y salir» sin continuación pasaba en
+verde. Fijado.
+
+**Fila 33b, prueba hueca e incompleta (baja).** La prueba solo quitaba la barra; un mutante en
+el que SOLO el `catch` volvía a `closeSheet()` pasaba en verde y en el navegador reventaba con
+«Maximum call stack» en cuanto `querySelector` lanzara. Y las salidas de emergencia cerraban
+Ajustes sin abrir la hoja pedida ni vaciar el borrador. Ahora descartan el borrador (sin barra
+no hay forma de preguntar), cierran y siguen a donde iba; la prueba hace lanzar a
+`querySelector`.
+
+**Fila 34, sitio hermano (baja).** La línea de al lado, `isAgendamientoPendiente(a.doc_id)`,
+leía y parseaba `vgl_proc_today` una vez por tarjeta (y, si el día aún no existía, lo escribía
+30 veces). Una lectura por pintado, pasada a las dos funciones como mapa opcional.
+
+**Residuo (fuera de las filas).** Con el almacén lleno, «Guardar» dejaba `S` mutado en memoria,
+`vgl_cfg` sin persistir y el aviso VERDE de «guardados». `saveSettings` devuelve si pudo
+escribir y, si no, el aviso es ámbar: los cambios funcionan en esta pestaña pero se pierden al
+recargar.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 286 | `pesoFaltaParaEstadio` vuelve a buscar «peso» exacto (**el hermano**) | *suite_45: v18.0.106: con un peso implausible el plan de ERC dice que el peso es implausible (no «no hay nada que vigilar») y la hoja de hechos lo marca* | Sí |
+| 287 | la hoja de hechos vuelve a llevar «peso 15 kg» sin marca | *suite_45: v18.0.106: con un peso implausible…* | Sí |
+| 288 | «Guardar credenciales» vuelve a `renderSettings()` (**el hermano**) | *suite_15: v18.0.106: «Guardar credenciales» de Athenea NO borra un borrador sucio de otra casilla…* | Sí |
+| 289 | la salida de emergencia `!bar` sin `despues()` | *suite_15: v18.0.106: si querySelector LANZA con borrador sucio…* (parte b, sin barra). La primera versión de la prueba solo hacía LANZAR a `querySelector` y este mutante sobrevivía (216 ok): se añadió la pasada con la barra ausente | Sí |
+| 289b | solo el `catch` vuelve a `closeSheet()` a secas (el mutante del refutador) | *suite_15: v18.0.106: si querySelector LANZA…* («no revienta»: Maximum call stack) | Sí |
+| 290 | «Guardar y salir» sin `despues()` | *suite_15: v18.0.106: «Guardar y salir» guarda, abre la hoja pedida y deja el borrador limpio* | Sí |
+| 291 | `isAgendamientoPendiente(a.doc_id)` sin el mapa ya leído (**el hermano**) | *suite_15: 02-sep: render() con 30 tarjetas lee el historial de inasistencias UNA vez…* (aserción nueva: `vgl_proc_today` leído 30) | Sí |
+| 292 | el listener `change` de la casilla de Ordenar deja de escribir `vglTocada` (el mutante del refutador) | *suite_15: v18.0.106: el gesto REAL del médico sobre la casilla (su listener change) deja la huella que la guarda respeta* | Sí |
+| 293 | `xlsViejoDeHoy` siempre estricto (el mutante del refutador) | *suite_03: 02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz* (aserción nueva: `Agenda_v2_<hoy>.xls` en la raíz) | Sí |
+| 294 | la fecha rechazada vuelve a reclamarse, con el aviso conservado (el mutante del refutador) | *suite_08: v18.0.106: una casilla de fecha rechazada NO queda reclamada…* (y la de grep de v18.0.74) | Sí |
+| 295 | «Guardar» canta VERDE aunque `saveSettings` devuelva false | *suite_15: v18.0.106: si el navegador rechaza la escritura de vgl_cfg, «Guardar» no canta «guardados»…* | Sí |
+
+Banco completo: **3.006 comprobaciones pasan, 0 fallan.**
+
+## v18.0.107 — oportunidades S+ del flujo de consulta, prioridad 1: el foco, el resumen que se borraba y la toma que fallaba en silencio
+
+El médico pidió aplicar las correcciones que propone `docs/OPORTUNIDADES_SPLUS_20260902.md`
+(los ítems marcados «pendiente»; los ⚖️ siguen siendo decisión suya). Los tres de prioridad 1
+del auditor de flujo comparten un patrón: el asistente sabía lo que pasaba, pero se lo decía
+al médico por el canal equivocado o en el momento equivocado.
+
+**C2 — el aviso que robaba el foco.** «Pendientes de este paciente» llega 5-15 s después de
+abrir la historia, cuando el médico ya teclea en una casilla de Everest; el foco saltaba al
+primer botón del cuadro y el siguiente Enter pulsaba «Entendido» (y ese aviso no vuelve en la
+jornada). `_activarAccesibilidadModal` aplica ahora el mismo criterio que Escape: si el activo
+es un campo editable de FUERA del cuadro, el cuadro se pinta pero no toca el cursor. Los cuadros
+que abre el médico con un clic no cambian: el activo entonces es el botón pulsado.
+
+**C3 — el resumen que se borraba por escribir una frase.** Al salir de una casilla de texto
+libre, `_vglNotarTextoLibre` borraba el resumen en caché: el botón «Panel del paciente»
+desaparecía del dock, los widgets de Conducta se escondían hasta 30 s + red y Agendar volvía a
+«Analizando…». Ahora el resumen se recalcula en el acto con lo que hay en pantalla (la misma
+función pura del Panel al abrir; cero red; conserva laboratorios y medicamentos), se queda en
+la caché marcado «desactualizado», el sello de tiempo no se renueva («leídos hace N min» sigue
+siendo verdad), el cálculo completo se dispara en segundo plano y el botón del dock dice
+«actualizando…» en vez de desaparecer. Con otra historia delante no se recalcula sobre datos
+ajenos: se borra, como antes.
+
+**C4 — la toma que no quedó.** Si la cita se creaba pero la toma de muestras fallaba, el
+botón, el panel post-cita y el aviso verde decían éxito, y el fallo solo salía por el HUD
+«Centinela PyM», abajo a la derecha. Ahora `apiLaboratorioAgendarAuto` deja el motivo del
+último fallo (`_labMotivoUltimoFallo`), el botón dice «Cita creada · agendando la toma…»
+mientras corre y, si falla, «la toma NO quedó agendada»; sale un aviso ámbar fijo con el
+motivo y el panel post-cita lleva una línea roja con él.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 296 | el cuadro vuelve a llevarse el foco aunque el médico esté escribiendo (**el defecto C2**) | *suite_35: v18.0.107 (C2): _activarAccesibilidadModal NO roba el foco si el médico está escribiendo en una casilla de Everest…* | Sí |
+| 297 | `_vglNotarTextoLibre` vuelve a borrar la caché (**el defecto C3**) | *suite_57: v18.0.107 (C3): editar una casilla de texto libre deja el resumen en caché DISPONIBLE y marcado «desactualizado»…* | Sí |
+| 298 | el recálculo renueva el sello de tiempo («leídos hace 0 min» falso) | *suite_57: v18.0.107 (C3)…* («sin renovar la edad») | Sí |
+| 299 | `autoCalcularResumenSiNecesario` ignora la marca (nunca recalcula del todo) | *suite_57: v18.0.107 (C3)…* (aserción de fuente) | Sí |
+| 300 | el panel post-cita sin la línea roja de la toma (**el defecto C4**) | *suite_15: v18.0.107 (C4): la toma que NO quedó agendada se dice en el panel post-cita, con el motivo real del fallo de AppCita* | Sí |
+| 301 | el tramo de laboratorio de Agendar no pasa el motivo al panel | *suite_15: v18.0.107 (C4)…* (aserción de fuente sobre el tramo) | Sí |
+| 302 | `apiLaboratorioAgendarAuto` no deja el motivo del fallo | *suite_15: v18.0.107 (C4)…* («el motivo del fallo queda disponible») | Sí |
+
+Banco completo: **3.009 comprobaciones pasan, 0 fallan.**
+
+## v18.0.108 — oportunidades S+ de robustez (gravedad media): el candado que se perdía en silencio, el espejo que no se podaba, la carpeta sincronizada, el correo «enviado» y el beacon sucio
+
+Segunda entrega de lo que el médico pidió («aplica la corrección que sugieres a las
+oportunidades S+»): los ítems de robustez de gravedad media del auditor (B3–B6) y el B8, de una
+línea. Todos reproducidos con los guiones del auditor (`splus_robustez/`) antes de tocar nada.
+
+**B3 — el candado que se perdía en silencio.** Si el navegador rechazaba la escritura de
+`vgl_proc_today` (cuota llena), `markOrdenesCreadasHoy`/`markCitaAgendadaHoy` seguían como si
+nada: el candado «ya ordenado / ya agendado hoy» no existía, el dock volvía a ofrecer Ordenar
+y Agendar, y nadie avisaba — una orden o una cita duplicada de verdad. Ahora toda escritura de
+esa memoria pasa por `_procGuardar`: si falla, la copia en memoria de la pestaña manda
+(`getProcessedToday` la devuelve), se avisa en rojo una sola vez (otras pestañas no la verán;
+se perderá al recargar) y, cuando el almacén vuelve a aceptar, lo acumulado se escribe entero.
+Y `vgl_proc_today` entra en el espejo GM: si el navegador pierde el almacén a media jornada, el
+arranque la restaura; como caduca con el día, un espejo de ayer no hace nada.
+
+**B4 — el espejo que no se podaba.** El espejo GM de la bitácora diaria (`espejo_vgl_ev_*`,
+con nombre y cédula) crecía para siempre: `purgeEventDays` solo miraba `localStorage`. Ahora
+poda también el espejo con la misma regla de días, con los permisos `GM_listValues` y
+`GM_deleteValue` que el userscript no pedía.
+
+**B5 — la carpeta sincronizada.** Ajustes prometía «Todo se queda en su equipo» para la
+carpeta de `<cédula>.json` sin advertir sobre OneDrive/Drive/Dropbox, y decía que al cerrar
+Chrome había que volver a elegirla (falso desde v17.0.1). El texto dice ahora lo que pasa, y al
+elegir una carpeta cuyo nombre delata un servicio de sincronización se avisa en ámbar (no se
+bloquea: el médico manda, y el navegador solo entrega el nombre, no la ruta).
+
+**B6 — el correo «enviado».** «Enviar órdenes al correo» daba por enviado con solo `resp.ok`:
+un 200 con `error:true` se anunciaba como enviado, el mismo defecto que v17.6.2 corrigió para
+el SMS. Sin captura del cuerpo real del endpoint, la cautela es la de v17.0.3: solo se rechaza
+lo que el cuerpo declara rechazado; un cuerpo vacío o no JSON no cambia el veredicto.
+
+**B8 — el beacon sucio.** `repBeacon` mandaba la fila con sus campos internos (`_intentos`);
+el blindaje de v18.0.66 solo estaba en `repPost`. Una línea.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 303 | `getProcessedToday` ignora la copia en memoria cuando la escritura falló (**el defecto B3**) | *suite_19: v18.0.108 (S+ B3): con el almacén lleno, el candado «ya ordenado/agendado hoy» sigue en pie en esta pestaña, se avisa en rojo y vgl_proc_today va al espejo GM* | Sí |
+| 304 | sin el aviso rojo | *suite_19: v18.0.108 (S+ B3)…* («se avisa en rojo») | Sí |
+| 305 | `vgl_proc_today` fuera del espejo GM | *suite_19: v18.0.108 (S+ B3)…* («está en el espejo GM») | Sí |
+| 306 | `purgeEventDays` sin la poda del espejo (**el defecto B4**) | *suite_10: v18.0.108 (S+ B4): purgeEventDays también poda el espejo GM de la bitácora…* | Sí |
+| 307 | `_vglCarpetaPareceSincronizada` siempre false (**el defecto B5**) | *suite_68: v18.0.108 (S+ B5): una carpeta que parece sincronizada con la nube se acepta pero queda marcada y se avisa…* | Sí |
+| 308 | un 200 con `error:true` vuelve a ser «enviado» (**el defecto B6**) | *suite_20: v18.0.108 (S+ B6): el correo de las órdenes no se da por enviado con un 200 que trae error:true…* | Sí |
+| 309 | `repBeacon` vuelve a mandar la fila cruda (**el defecto B8**) | *suite_23: v18.0.108 (S+ B8): repBeacon manda la fila LIMPIA, sin campos internos (_intentos), como repPost* | Sí |
+
+Banco completo: **3.014 comprobaciones pasan, 0 fallan.**
+
+## v18.0.109 — oportunidades S+ de flujo (prioridad 2-4) y de robustez (baja): diez ítems de bajo riesgo
+
+Tercera entrega de lo que el médico pidió («aplica la corrección que sugieres a las
+oportunidades S+»). Quedan fuera, a propósito, los que cambian hábitos o son proyectos (C7,
+C9, C10, C15, C19, C21, B7) y los ⚖️ que son decisión suya.
+
+- **C5 — el desenlace del SMS automático se dice en el panel post-cita.** Solo se conocía por
+  consola. Ahora se anota por turno (`_smsAnotarDesenlace`) y, si el panel de esa cita está
+  en pantalla, su nota de SMS dice «✓ enviado al 300****33» o «NO se entregó (motivo):
+  reenvíelo desde aquí».
+- **C6 — el panel post-cita no se destruye cuando AppCita confirma la toma.** Se recreaba
+  entero (lo que el médico tecleaba se perdía). Si el panel de ESTA cita ya está, solo se añade
+  o sustituye el bloque de laboratorio.
+- **C8 — el interruptor «Enviar SMS de recordatorio» manda sobre los dos SMS.** Apagado en
+  Ajustes, la casilla del modal de Agendar nacía marcada, el SMS de la cita se suprimía y el de
+  la toma salía igual. Ahora la casilla nace apagada (y lo dice) y la toma va con `Telefono=0`.
+- **C13 — sin `confirm()` ni `alert()` nativos.** El cierre del Redactor con borradores sin
+  insertar pasa a doble toque en el mismo ✕ (con aviso ámbar); el «no se pudo generar ninguna
+  orden» de Ordenar pasa a un aviso rojo fijo.
+- **C14 — `persist` también manda en VERDE/AZUL.** La leyenda de colores y «Órdenes generadas»
+  (persist=true) se cerraban solos a los 9 s.
+- **C16 — «🗓️ SIN TERMINAR» solo con el clic del médico en un turno.** La preselección ⭐ lo
+  marcaba con solo abrir Agendar para mirar, contra el contrato de `markAgendamientoPendiente`.
+- **C18 — un aviso = un canal visible.** El toast verde de «Cita asignada» y el de «Órdenes
+  generadas» duplicaban el panel post-cita y el bloque verde del modal; ahora solo salen si la
+  pestaña no se está mirando (entonces van al sistema).
+- **B9 — las notificaciones del sistema van sin cédula.** En el Centro de actividades de un PC
+  compartido salían nombre y cédula; ahora la cédula va enmascarada (●●●455) y el nombre queda.
+  Dentro de la página el texto sigue completo.
+- **B10 — la consola de EnviarSMS ya no imprime 500 caracteres del cuerpo crudo**, sino un
+  extracto saneado de 120.
+- **B11 — doble clic en «Exámenes».** Con una consulta en vuelo, el segundo clic no abre otro
+  chooser ni pisa el veredicto del primero (`btn.dataset.vglEnCurso`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 310 | `persist` vuelve a ignorarse en VERDE/AZUL (**C14**) | *suite_42: v18.0.109 (C14): un aviso VERDE con persist=true NO se cierra solo; sin persist, sí* | Sí |
+| 311 | `_vglSinCedulas` devuelve el texto tal cual (**B9**) | *suite_42: v18.0.109 (B9): lo que sale al sistema va sin cédula…* | Sí |
+| 312 | `_smsPintarDesenlace` nunca pinta (**C5**) | *suite_15: v18.0.109 (C5/C6): el panel post-cita dice el desenlace del SMS automático…* | Sí |
+| 313 | el panel post-cita vuelve a recrearse para añadir la toma (**C6**) | *suite_15: v18.0.109 (C5/C6)…* («es el MISMO panel») | Sí |
+| 314 | el SMS de la toma ignora el interruptor de Ajustes (**C8**) | *suite_15: v18.0.109 (C8): con «Enviar SMS de recordatorio» apagado en Ajustes, la toma de laboratorio tampoco manda SMS…* | Sí |
+| 315 | la preselección ⭐ vuelve a marcar «SIN TERMINAR» (**C16**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 316 | sin la guarda de vuelo del botón «Exámenes» (**B11**) | *suite_15: v18.0.109 (B11): con una consulta de exámenes en vuelo, un segundo clic en «Exámenes» no abre otro chooser* | Sí |
+| 317 | el toast verde de «Cita asignada» vuelve a salir siempre (**C18**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 318 | la consola vuelve a imprimir 500 caracteres del cuerpo (**B10**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+| 319 | el Redactor cierra sin preguntar con borradores sin insertar (**C13**) | *suite_15: v18.0.109 (C13/C16/C18/B10, fuente)…* | Sí |
+
+Banco completo: **3.020 comprobaciones pasan, 0 fallan.**
+
+## v18.0.110 — oportunidades S+ restantes de bajo riesgo: la bitácora entre pestañas, el hueco renal, la regla única del clic fuera y una sola petición de paciente
+
+Cuarta entrega («aplica también C7, C9, C10, C15, C19, C21 y B7»): los cuatro que no cambian
+hábitos. Los otros tres (C7, C9, C10) y los ⚖️ van en las entregas siguientes con lo que el
+médico decidió en la entrevista del 02-sep (`docs/OPORTUNIDADES_SPLUS_20260902.md`, sección D).
+
+- **B7 — la bitácora no se pisa entre pestañas.** La caché en memoria de v17.1.0 hacía que dos
+  pestañas se sobrescribieran (A escribe A1,A2; B escribe B1,B2; A vuelve con su copia vieja +
+  A3: B1 y B2 desaparecen; reproducido con el guion del auditor). Cada escritura deja una
+  «generación» (`pestaña:n`) en una clave diminuta; antes de usar la caché se compara con la del
+  disco y, si otra pestaña escribió entre medias, se relee y se hereda lo suyo. Reparsear los
+  64 KB sigue ocurriendo solo cuando de verdad hubo otra escritura.
+- **C15 — el recuadro renal ya no empuja la tabla.** «Laboratorios» nace con el hueco
+  `#vgl-labs-renal` reservado (altura mínima, «calculando con los resultados que van
+  llegando…») en vez de aparecer de golpe cuando termina el cálculo.
+- **C21 — regla única del clic fuera (decisión del médico).** Los cuadros de **consulta**
+  (chooser de Exámenes, paquete, Laboratorios, Pendientes del paciente, cartel) cierran con
+  clic en el fondo; los de **escritura** (Agendar, Ordenar, Panel, Redactor, Llenar, Confirmar,
+  post-cita) nunca. Dos listas explícitas y una prueba que exige que todo id de cuadro que crea
+  el script esté en una de las dos: un cuadro nuevo obliga a decidir.
+- **C19 — una sola petición de paciente.** `BuscarPacienteDetallado` se pedía hasta tres veces
+  por consulta (Agendar, Ordenar, demográficos). Ahora los tres pasan por
+  `apiPacienteDetalladoCacheado` (60 s, invalidada al cambiar de historia; un fallo no se
+  cachea). Y el sondeo ±7 días de Agendar salta el día central (que `cargarHoras` ya está
+  pidiendo) y va de dos en dos en vez de tres. Nota honesta del banco: la fusión de dos
+  peticiones EN VUELO ya la hacía `pageFetchJson` (GHOST) por URL; lo que la caché añade es la
+  reutilización entre módulos que llegan uno detrás de otro — el mutante que quitaba solo la
+  fusión en vuelo sobrevivió por eso y se sustituyó por uno que salta la caché desde los
+  demográficos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 320 | la caché de la bitácora se usa sin mirar la generación del disco (**B7**) | *suite_10: v18.0.110 (S+ B7): dos pestañas escribiendo la bitácora no se pisan…* | Sí |
+| 321 | el hueco `#vgl-labs-renal` nace vacío y sin clase de altura (**C15**) | *suite_15: v18.0.110 (C15): el modal de Laboratorios nace con el hueco del recuadro renal reservado…* | Sí |
+| 322 | `_vglCerrarConClicFuera` ignora la lista y engancha en cualquier cuadro (**C21**) | *suite_15: v18.0.110 (C21): regla única…* («ningún cuadro de escritura cierra con clic fuera») | Sí |
+| 323 | cualquier clic (también dentro) cierra el cuadro (**C21**) | *suite_15: v18.0.110 (C21): regla única…* («un clic DENTRO del cuadro no lo cierra») | Sí |
+| 324 | los demográficos vuelven a pedir la URL cruda sin pasar por la caché (**C19**) | *suite_15: v18.0.110 (C19): BuscarPacienteDetallado se pide UNA vez…* («sin otra petición») | Sí |
+| 325 | la caché nunca acierta (TTL 0) (**C19**) | *suite_15: v18.0.110 (C19)…* | Sí |
+| 326 | el sondeo vuelve a pedir el día central (**C19**) | *suite_15: v18.0.110 (C19)…* («salta el día central») | Sí |
+| 327 | `_demograficosInvalidar` no vacía la caché del paciente detallado (**C19**) | *suite_15: v18.0.110 (C19)…* («al cambiar de historia se vuelve a pedir») | Sí |
+
+Banco completo: **3.024 comprobaciones pasan, 0 fallan.**
+
+## v18.0.111 — lo decidido en la entrevista, primera tanda: la pregunta de síntomas urinarios (C10), un diccionario de rótulos (C9) y solo el login de Everest identifica al médico (B12)
+
+- **C10 — «¿Tiene síntomas urinarios?»** Nadie lo preguntaba y el motor se quedaba en «REQUIERE
+  SÍNTOMAS» consulta tras consulta. Decisión del médico (02-sep): se pregunta **solo con parcial
+  sugestivo** (la respuesta es lo único que separa PROBABLE ITU de BACTERIURIA ASINTOMÁTICA;
+  con bacteriuria sin piuria no cambia nada) y la respuesta vale **7 días**. En embarazo no se
+  pregunta (la bacteriuria se trata siempre). Entra por la escalera del reconciliador con el
+  mismo formato que la de embarazo, y `mtrResumenClinico` recibe la respuesta vigente en
+  `uroSintomas` (antes: `null` fijo, también en el insumo que sobrevive a la reclasificación).
+- **C9 — un diccionario de rótulos (`VGL_ROTULOS`).** El botón del dock, el título del cuadro
+  que abre y las leyendas que remiten a él dicen la MISMA palabra: «Laboratorios», «Agendar»,
+  «Ordenar», «Panel del paciente», «Redactar», «Próximo control», «Exámenes». La leyenda de
+  Laboratorios remitía a «Programación de cita», que no está en ningún botón. Una prueba
+  compara dock, títulos y leyendas contra la tabla.
+- **B12 — solo el login de Everest identifica al médico.** `S.medicoId`/`S.medicoNombre` eran
+  un respaldo «manual» sin casilla en Ajustes que 8 llamadas usaban como identidad (y un
+  aviso mandaba a buscar esa casilla inexistente). Decisión del médico: retirarlo. Un id
+  manual guardado de una versión vieja ya no firma citas ni órdenes; el aviso manda a abrir
+  la agenda del día para que Everest lo identifique.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 328 | se pregunta también con bacteriuria sin piuria (**C10**) | *suite_48: v18.0.111 (C10): se pregunta por síntomas urinarios SOLO con parcial sugestivo…* | Sí |
+| 329 | se pregunta en embarazo (**C10**) | *suite_48: v18.0.111 (C10): se pregunta… SOLO con parcial sugestivo…* | Sí |
+| 330 | `mtrResumenClinico` vuelve a recibir `uroSintomas: null` (**C10**) | *suite_48: v18.0.111 (C10): la pregunta entra por el reconciliador…* | Sí |
+| 331 | `_uroSintomasConfirmados` devuelve true también para «no» (**C10**) | *suite_48: v18.0.111 (C10): la respuesta llega al motor…* | Sí |
+| 332 | la pregunta no se empuja a la escalera (**C10**) | *suite_48: v18.0.111 (C10): la pregunta entra por el reconciliador…* | Sí |
+| 333 | `apiAccesoAsignarTurno` vuelve a caer a `S.medicoId` (**B12**) | *suite_05: v18.0.111 (S+ B12): solo el login de Everest identifica al médico…* | Sí |
+| 334 | el dock dice «Laboratorio» fuera del diccionario (**C9**) | *suite_15: v18.0.111 (C9): un diccionario de rótulos…* | Sí |
+| 335 | el título del modal dice «Paraclínicos» (**C9**) | *suite_15: v18.0.111 (C9)…* («el título pintado») | Sí |
+
+Banco completo: **3.029 comprobaciones pasan, 0 fallan.**
+
+## v18.0.112 — decisiones de la entrevista, segunda tanda: el Redactor dice por dónde va y se puede cancelar (C7), el menú de Exámenes recuerda y admite teclado (C20) y el botón «Faltan antecedentes» (C12)
+
+- **C7 — progreso visible y «Cancelar».** «Generando con…» se quedaba fijo hasta 7 modelos ×
+  25 s. Ahora el conector avisa en cada rotación («Generando con X · intento 3 de 7…»), el
+  Redactor muestra «✕ Cancelar» mientras responde (aborta la petición GM en vuelo, resuelve
+  «cancelado» y **conserva lo que había en la casilla**, nunca la pisa con los hechos), una
+  respuesta tardía tras cancelar no cuenta ni deja el contador de vuelo torcido, y el dock
+  dice «Redactar · ⏳» mientras la IA trabaja (aunque el cuadro esté minimizado). No se añade
+  «Generar todo»: el Redactor se simplificó a propósito (v17.6.24) y el médico no lo pidió.
+- **C20 — el menú de «Exámenes» recuerda y admite teclado (decisión del médico).** La última
+  opción va primera, marcada «· la última vez»; Enter la elige; 1/2 eligen por número (cada
+  opción muestra su tecla). Enter sobre un botón de opción no elige dos veces. Un clic sigue
+  siendo un clic. Sin `recordar` no se guarda nada.
+- **C12 — «📝 Faltan antecedentes» (decisión del médico).** Con antecedentes por documentar el
+  botón «Panel» no existía y el ayudante que los llena (con Deshacer) era inalcanzable. Un
+  botón atenuado dice QUÉ falta y en qué pestaña, y abre el ayudante; si esas casillas no se
+  pueden llenar desde aquí, lo dice. Solo con resumen y factores leídos: mientras carga no
+  se inventa ningún faltante.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 336 | el conector no avisa el progreso (**C7**) | *suite_57: v18.0.112 (C7): el conector avisa por dónde va…* | Sí |
+| 337 | «Cancelar» no aborta la petición GM (**C7**) | *suite_57: v18.0.112 (C7): «Cancelar» aborta la petición en vuelo…* | Sí |
+| 338 | al cancelar, la casilla se pisa con los hechos en vez de conservar lo que había (**C7**) | *suite_57: v18.0.112 (C7): «Cancelar»…* («se conserva lo que había») | Sí |
+
+Nota del banco: el mutante «una respuesta tardía tras cancelar vuelve a entrar en `onload`» sobrevivió porque `resolve` ya está blindado contra la doble resolución (la guarda de `onload` solo evita trabajo y telemetría de más); se sustituyó por el de arriba.
+| 339 | el contador de vuelo nunca baja (**C7**) | *suite_57: v18.0.112 (C7): el conector avisa…* («al terminar, nada en vuelo») | Sí |
+| 340 | la opción recordada no va primera (**C20**) | *suite_15: v18.0.112 (C20): el menú de elección recuerda…* | Sí |
+| 341 | no se guarda la elección (**C20**) | *suite_15: v18.0.112 (C20)…* («y se recuerda») | Sí |
+| 342 | Enter sobre un botón elige dos veces (**C20**) | *suite_15: v18.0.112 (C20)…* («nunca dos veces») | Sí |
+| 343 | el botón «Faltan antecedentes» no existe (**C12**) | *suite_15: v18.0.112 (C12): con antecedentes por documentar…* | Sí |
+| 344 | el botón no va atenuado (**C12**) | *suite_15: v18.0.112 (C12)…* («atenuado») | Sí |
+
+Banco completo: **3.033 comprobaciones pasan, 0 fallan.**
+
+## v18.0.113 — reporte en vivo del médico (02-sep): «las notificaciones se repiten en varias pestañas de Chrome, la misma más de una vez»
+
+Lo que había: `crossTabDup` (ventana de **12 s** entre pestañas, por canal) y `avisoYaVisto`
+(registro del día) que solo consultaba la notificación de Windows y las leyendas VERDE/MORADO.
+Tres agujeros reales, reproducidos con dos arneses que comparten `localStorage`:
+
+1. Dos pestañas con cadencias de sondeo distintas (o en dos ventanas de Chrome, que las dos
+   «tienen foco») evaluaban el mismo hecho con más de 12 s de diferencia y **las dos avisaban**.
+2. `notify()` sin `uid` (Cita asignada, Órdenes generadas, PyM actualizado…) solo tenía la
+   ventana de 12 s por título.
+3. El canal de la página (toast) y el del sistema no compartían registro: el mismo hecho
+   podía salir por Windows en una pestaña y como toast en otra.
+
+Ahora: `_avisoUnaVezPorNavegador(uid)` (registro compartido del día, `vgl_vistos`) lo consulta
+todo aviso con identidad — `_dispararAvisoAudible` (agenda), `notify()` (que a los avisos sin
+`uid` les da identidad por texto: título + cuerpo) y `GM_notification`. **Un hecho, un aviso
+por navegador y por jornada**, salga por la pestaña que salga y por el canal que salga. Los
+toasts de acción propia (p. ej. «Órdenes · ninguna se creó») no cambian: son de la pestaña
+donde el médico pulsó.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 345 | `_dispararAvisoAudible` deja de consultar el registro del día | *suite_42: v18.0.113: dos pestañas que evalúan el mismo hecho…* | Sí |
+| 346 | `notify()` sin uid vuelve a no tener identidad | *suite_42: v18.0.113: notify() sin uid toma identidad del texto…* | Sí |
+| 347 | `notify()` no consulta el registro antes del toast | *suite_42: v18.0.113: notify() sin uid…* («la pestaña visible no pinta el toast») | Sí |
+| 348 | `_gmNotify` ignora el registro del día | *suite_42: v18.0.113: GM_notification…* | Sí |
+| 349 | la identidad de texto ignora el cuerpo | *suite_42: v18.0.113: notify() sin uid…* («otro texto = otro aviso») | Sí |
+
+Banco completo: **3.036 comprobaciones pasan, 0 fallan.**
+
+## v18.0.114 — dos reportes en vivo del médico (02-sep, con captura): la anulación muda y sin camino de vuelta a Agendar
+
+**1. «Error detectado al intentar cancelar esta cita».** La captura mostraba DOS avisos rojos
+idénticos: «Anular cita · Everest NO confirmó la anulación. La cita sigue vigente; no se tocó
+ninguna marca local», sin motivo. Causa: `pageFetchJson` devuelve `null` ante CUALQUIER fallo
+de una escritura (HTTP 4xx/5xx, sesión caducada, tope de red de 15 s, cuerpo no JSON), así que
+el aviso no podía decir qué pasó; y el veredicto exigía exactamente `error === false`, con lo
+que una respuesta 200 con otra forma (`isError:false`, o solo un «mensaje») se anunciaba como
+«sigue vigente». El segundo aviso era el reintento del médico, apilado encima del primero.
+Ahora la escritura devuelve status y cuerpo (`_apiPostConDetalle`, con el mismo tope de red),
+el veredicto (`_anulacionConfirmada`, pura) acepta las formas conocidas de Everest y un
+`error:true` manda sobre cualquier mensaje, el aviso lleva el motivo real (`_anulacionMotivo`:
+sesión caducada, servidor, rechazo con el mensaje de Everest, 200 sin confirmar, tope de red
+con la indicación de VERIFICAR en la agenda antes de reintentar), el reintento sustituye el
+aviso anterior en vez de apilarlo, el botón pasa a «Reintentar la cancelación» y el motivo se
+escribe también bajo el botón, donde el médico pulsó. La bitácora anota status y extracto
+saneado de cada intento, para poder diagnosticar el siguiente.
+
+**2. «Tampoco tengo forma de volver al módulo una vez queda agendada la cita».** Con cita y
+toma agendadas el dock solo ofrecía «Recordatorio» (o un botón gris e inerte «Agendado» si no
+había radicado guardado). Ahora el recordatorio tiene «📅 Abrir Agendar de nuevo» (otra cita,
+p. ej. otra especialidad, o rehacer esta), el botón gris pasa a «Agendado · abrir» y abre el
+módulo, y el aviso del cuadro de Agendar dice qué hacer si es otra cita o la misma. El
+antiduplicado no cambia: el cuadro avisa de la cita de hoy y la confirmación sigue siendo un
+clic consciente del médico.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 350 | el veredicto vuelve a exigir solo `error === false` | *suite_15: v18.0.114: el veredicto de la anulación acepta las formas conocidas…* | Sí |
+| 351 | `error:true` deja de mandar sobre el mensaje | *suite_15: v18.0.114: el veredicto…* («error:true manda») | Sí |
+| 352 | el motivo del 5xx desaparece | *suite_15: v18.0.114: el veredicto…* («5xx») y *«Cancelar esta cita» dice el motivo real…* | Sí |
+| 353 | el aviso rojo vuelve a apilarse en el reintento (sin clave) | *suite_15: v18.0.114: «Cancelar esta cita» dice el motivo real…* («SUSTITUYE») | Sí |
+| 354 | la nota bajo el botón no dice el motivo | *suite_15: v18.0.114: el recordatorio ofrece «Abrir Agendar de nuevo»…* | Sí |
+| 355 | «Abrir Agendar de nuevo» no hace nada | *suite_15: v18.0.114: el recordatorio ofrece…* («abre el módulo») | Sí |
+| 356 | el dock vuelve a no abrir Agendar con las dos hechas | *suite_15: v18.0.114: con cita y toma agendadas hoy y sin radicado…* | Sí |
+
+Banco completo: **3.040 comprobaciones pasan, 0 fallan.**
+
+## v18.0.115 — decisiones de la entrevista, tercera tanda: «Laboratorios» sirve la precarga fresca (C11) y Agendar recuerda tipo y especialidad (C17)
+
+- **C11 — «Laboratorios» abre al instante con la precarga si tiene menos de 2 min** (decisión del
+  médico: precarga fresca + botón «Buscar nuevos»). Antes ignoraba la precarga y recalculaba
+  todo (3-6 s y red duplicada). La chapa dice «⚡ Leídos hace N s (precarga)» o «✓ Consultado en
+  vivo ahora», y «🔄 Buscar laboratorios nuevos» cierra y reabre consultando en vivo. Una
+  precarga de más de 2 min, o de otra cédula, no se sirve. La regla «el clic consulta en vivo»
+  (v12.3.35) se conserva para el llenado de Exámenes, que escribe en la historia.
+- **C17 — Agendar recuerda el tipo de cita y la especialidad de la última cita creada** y abre
+  en el paso 2 con el chip «Como la última vez: … · cambiar» (decisión del médico). Solo se
+  guarda cuando la cita se creó de verdad (justo antes de la marca del día); «solo
+  laboratorios» no se recuerda (va a otro cuadro). Lo recordado se aplica ANTES de la primera
+  carga de horas, para que esa carga ya salga con la especialidad correcta (una petición, no
+  dos).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 357 | una precarga de cualquier edad se sirve (**C11**) | *suite_15: v18.0.115 (C11): «Laboratorios» sirve la precarga…* («5 min NO se sirve») | Sí |
+| 358 | «Buscar laboratorios nuevos» sirve la precarga en vez de consultar (**C11**) | *suite_15: v18.0.115 (C11)…* («el botón consulta en vivo») | Sí |
+| 359 | se sirve la precarga de otra cédula (**C11**) | *suite_15: v18.0.115 (C11)…* («OTRA cédula») | Sí |
+| 360 | se recuerda «solo laboratorios» (**C17**) | *suite_15: v18.0.115 (C17): Agendar recuerda…* | Sí |
+| 361 | con recuerdo no se salta al paso 2 (**C17**) | *suite_15: v18.0.115 (C17)…* («abre en el paso 2») | Sí |
+| 362 | la especialidad recordada no se aplica a la carga de horas (**C17**) | *suite_15: v18.0.115 (C17)…* («EspecialidadId=46») | Sí |
+
+Banco completo: **3.042 comprobaciones pasan, 0 fallan.**
+
+## v18.0.116 — «Un solo estado del paciente», paso 1 (decisión del médico): un detector pasivo de desacuerdos entre módulos
+
+Antes de tocar ninguna precedencia (A1–A13 del auditor de estado único), el médico decidió
+empezar por medir: `mtrDetectarDesacuerdos` (pura) compara lo que cada fuente tiene en la mano
+en el mismo instante — tensión y peso del registro histórico de la API frente a la casilla de
+hoy, sexo de la API frente a la cabecera, programas de la cabecera frente a Ruta Crónicos, y
+la llave de la caché de medicamentos (cédula, por el widget de Conducta) frente al id de
+paciente que usa el resumen (el caso A3). Solo señala desacuerdos REALES: con una medición
+incompleta no afirma nada (casilla vacía antes que dato inventado), el sexo se canonicaliza
+antes de comparar (A5) y el peso exige ≥ 1 kg de diferencia. El resumen clínico cuelga la
+lista (`_desacuerdos`, sobrevive a la caché), se anota UNA vez por paciente y combinación en
+la telemetría anónima (`estado.desacuerdo.<eje>`) y en la bitácora (ejes, nunca la cédula), y
+el modo programador (Ctrl+Shift+D → Ajustes) la muestra para el paciente abierto. No cambia
+ningún valor ni ningún orden de preferencia: eso es el paso 2, con la tabla de frecuencias
+delante.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 363 | la tensión solo compara la sistólica | *suite_63: v18.0.116 (A, paso 1): el detector solo señala desacuerdos reales…* | Sí |
+| 364 | el peso nunca desacuerda (umbral 100 kg) | *suite_63: v18.0.116 (A, paso 1): el detector…* («peso: 90 vs 70») | Sí |
+| 365 | los programas no se comparan | *suite_63: v18.0.116 (A, paso 1): el detector…* («programa») | Sí |
+| 366 | la llave de medicamentos no se compara | *suite_63: v18.0.116 (A, paso 1): el detector…* («medicamentos») | Sí |
+| 367 | se anota cada vez (no una por combinación) | *suite_63: v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez…* | Sí |
+| 368 | el resumen no anota lo detectado | *suite_63: v18.0.116 (A, paso 1): los desacuerdos se anotan UNA vez…* («cuelga la lista y la anota») | Sí |
+
+Banco completo: **3.044 comprobaciones pasan, 0 fallan.**
+
+## v18.0.117 — auditoría UI/UX del enjambre (02-sep), primer lote: las tres fricciones de gravedad alta del flujo
+
+El médico pidió aplicar toda la auditoría (`docs/AUDITORIA_UIUX_20260902.md`). Este lote son los tres
+fragmentos de gravedad **alta** del recorrido clínico (F-1, F-2, F-3), cada uno reproducido en el código
+antes de tocarlo.
+
+**F-1 — la toma marcada SIN hora ya no pasa.** El select de la hora vive plegado tras «✎ Cambiar fecha u
+hora», así que con la casilla marcada (por labs-primero o a mano) y sin hora elegida **la cita se creaba** y
+la toma fallaba después con un motivo falso: «el horario de laboratorio elegido () ya no está disponible» —
+paréntesis vacío incluido. Ahora Confirmar despliega el detalle, enfoca el select y pide la hora (no se
+inventa ninguna: la elige el médico o desmarca la casilla); si la casilla nace marcada y la hora está sin
+elegir, el detalle se muestra solo; y `apiLaboratorioAgendarAuto` gana una segunda red que dice la verdad
+(«no se eligió la hora de la toma») en vez de hablar de un horario que nadie eligió.
+
+**F-2 — el aviso de vencimiento se ve donde el médico está.** Al pulsar Confirmar en el paso 3, el segundo
+aviso («esta fecha deja vencer un examen») se pintaba en `#vgl-agm-vencaviso`, que vivía **dentro del paso 2,
+oculto**: el médico veía el botón pidiendo otro clic y nunca el motivo ni el botón «🎯 Pasar a la fecha
+sugerida». El nodo sale de las vistas de paso (su CSS es por id) y «Pasar a la fecha sugerida» vuelve al paso
+2, que es donde están los chips de día.
+
+**F-3 — el post-cita dice el desenlace del SMS de la toma.** `apiLaboratorioAgendarAuto` ya devolvía
+`smsEnviado` y no lo leía nadie: el panel mostraba la toma sin decir si el paciente recibió su hora (C5 solo
+cubrió el SMS de la cita). Ahora lo dice; si no lo sabe, no pinta nada (casilla vacía antes que dato
+inventado), y el cuadro de la toma sola declara que no maneja celular.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 369 | la guarda de la toma sin hora no aplica (**F-1**) | *suite_15: v18.0.117 (UI/UX #1): con la toma marcada y sin hora…* | Sí |
+| 370 | la guarda no despliega el detalle de la hora (**F-1**) | *suite_15: v18.0.117 (UI/UX #1)…* («el detalle de la toma se despliega») | Sí |
+| 371 | la segunda red de la API desaparece (**F-1**) | *suite_13: v18.0.117 (UI/UX #1): sin hora elegida…* | Sí |
+| 372 | el aviso de vencimiento vuelve dentro del paso 2 (**F-2**) | *suite_15: v18.0.117 (UI/UX #2): el aviso de vencimiento vive FUERA…* | Sí |
+| 373 | «Pasar a la fecha sugerida» no vuelve al paso 2 (**F-2**) | *suite_15: v18.0.117 (UI/UX #2)…* | Sí |
+| 374 | el panel no dice el desenlace del SMS de la toma (**F-3**) | *suite_62: v18.0.117 (UI/UX #3): el panel post-cita dice el desenlace…* | Sí |
+| 375 | la línea del SMS se pinta aunque no haya dato (**F-3**) | *suite_62: v18.0.117 (UI/UX #3)…* («sin dato NO se pinta») | Sí |
+
+Banco completo: **3.048 comprobaciones pasan, 0 fallan.**
+
+## v18.0.118 — auditoría UI/UX, lote 2: el recuadro de decisión de Agendar, el dock que no deja huecos, Próximo control que dice la verdad, los chips que no se mueven y el HUD que calla
+
+Segundo lote de `docs/AUDITORIA_UIUX_20260902.md` (fragmentos F-4 a F-12), más la primera de las
+decisiones que el médico tomó en la entrevista de esa auditoría.
+
+- **F-4 — un recuadro de decisión en vez de tres reescrituras del botón.** El botón de confirmar
+  era el canal de tres avisos encadenados (vuelo ajeno, cita de hoy, examen que llegaría vencido),
+  de ~100 caracteres cada uno y cada uno exigiendo otro clic: el médico podía pulsar cuatro veces
+  sin ver un solo cuadro de decisión. Ahora el aviso vive en `#vgl-agm-confirm-aviso` con dos
+  salidas explícitas («Sí, crear igual» / «Revisar»), el botón conserva su rótulo, y **el
+  consentimiento solo se marca al pulsar «Sí, crear igual»** (antes bastaba con volver a pulsar
+  el botón, que es justo lo que hace quien no leyó). Cambiar de turno o de fecha retira el aviso
+  viejo. El cuerpo del confirmar pasa a función con nombre para no depender de un clic sintético.
+- **F-5 — el dock no deja un hueco mientras lee.** Con el resumen aún calculándose (3-6 s, más si
+  Athenea va lenta) el sexto botón aparecía de golpe. Ahora existe, atenuado y deshabilitado:
+  «Panel del paciente · leyendo…». **Su propia prueba destapó un defecto real**: el estado «hay
+  resumen» no estaba en la firma del dock, así que el botón se habría quedado puesto cuando el
+  resumen llegara con los factores aún incompletos.
+- **F-6 — «Próximo control» deja de pedir lo que el médico ya hizo.** Sin resumen decía «abra la
+  historia un momento», estando el botón solo disponible dentro de la historia. Ahora dice que
+  está leyendo y ofrece «Reintentar ahora», que calcula y repinta en el sitio.
+- **F-7 — un hecho, un canal.** Una toma fallida disparaba cuatro avisos a la vez; desde Agendar
+  el HUD «🛡️ Centinela PyM» calla (`{silencioso:true}`), porque el modal ya lo dice por toast,
+  panel post-cita y botón. En el cuadro de la toma sola el HUD sigue, que allí es el único canal.
+- **F-8 — «Alerta Múltiple» dice de qué son los avisos**, no solo cuántos.
+- **F-9 — los chips de día sin agenda se apagan, no desaparecen.** El sondeo los borraba y los
+  vecinos se corrían bajo el cursor: el clic caía en otro día. Ahora quedan tachados y dicen por qué.
+- **F-10 — el «Siguiente» del paso 2 explica por qué está apagado** («Elija un horario para
+  continuar»), y recupera su rótulo al elegir turno. La explicación vivía en el botón del paso 3,
+  que desde el paso 2 está oculto.
+- **F-11 — cada pregunta con sus rótulos.** «Sí tiene / No tiene» se le ponía también a «¿Está
+  tomando su medicamento?». Ahora cada pregunta trae los suyos («Sí lo toma / No lo toma»), y el
+  título deja de decir «Las fuentes no coinciden» cuando no hay ninguna contradicción.
+- **F-12 — cerrar Ordenar espera a que termine el lote.** Cerrar a mitad perdía los botones de
+  imprimir y el correo de las órdenes ya creadas; ✕, «Cancelar» y Escape esperan, a la vista.
+- **Decisión del médico (02-sep): Ordenar ya no salta a la pestaña del PDF.** Se abre detrás y el
+  foco se queda en Everest, donde están el progreso, el bloque verde y «Imprimir orden de…».
+
+Seis pruebas anteriores fijaban las superficies viejas (el rótulo del botón como canal del aviso,
+los chips que desaparecían, el hueco del dock): se reescribieron para verificar **la misma
+protección** en la superficie nueva, sin bajar ninguna exigencia.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 376 | el flag de consentimiento se marca al mostrar el aviso (**F-4**) | *suite_15: v18.0.118 (UI/UX #4): con cita de hoy, Confirmar pinta el recuadro…* | Sí |
+| 377 | «Revisar» deja el consentimiento puesto (**F-4**) | *suite_15: v18.0.118 (UI/UX #4)…* («sin consentir nada») | Sí |
+| 378 | el dock no muestra nada mientras lee (**F-5**) | *suite_15: v18.0.118 (UI/UX #5): sin resumen calculado…* | Sí |
+| 379 | el estado del resumen sale de la firma del dock (**F-5**) | *suite_15: v18.0.118 (UI/UX #5)…* («ese estado entra en la firma») | Sí |
+| 380 | «Próximo control» vuelve a mandar a abrir la historia (**F-6**) | *suite_15: v18.0.118 (UI/UX #6): sin resumen…* | Sí |
+| 381 | el HUD suena aunque se pida silencio (**F-7**) | *suite_13: v18.0.118 (UI/UX #7): con {silencioso:true}…* | Sí |
+| 382 | «Alerta Múltiple» vuelve a decir solo el conteo (**F-8**) | *suite_42: v18.0.118 (UI/UX #8): «Alerta Múltiple» dice DE QUÉ…* | Sí |
+| 383 | los chips sin agenda vuelven a desaparecer (**F-9**) | *suite_15: openAgendamientoModal v14: un sábado sin turnos reales…* | Sí |
+| 384 | el «Siguiente» del paso 2 no explica nada (**F-10**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+| 385 | los rótulos de la escalera vuelven a «Sí tiene» (**F-11**) | *suite_63: v18.0.118 (UI/UX #11): cada pregunta de la escalera…* | Sí |
+| 386 | el título habla de fuentes sin contradicción (**F-11**) | *suite_63: v18.0.118 (UI/UX #11)…* | Sí |
+| 387 | cerrar Ordenar a mitad del lote (**F-12**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+| 388 | Ordenar vuelve a robar la pantalla con el PDF (**decisión**) | *suite_15: v18.0.118 (UI/UX #10 + decisión de Ordenar)…* | Sí |
+
+Banco completo: **3.055 comprobaciones pasan, 0 fallan.**
+
+## v18.0.119 — reporte en vivo: «hay que blindar que SÍ se pueda cancelar la cita porque parece un error de cableado»
+
+El médico reportó que «Cancelar esta cita» no consigue anular en Everest. Un refutador adversarial
+revisó el cableado entero (`scratchpad/cancelar/refut_cableado.md`) y su hallazgo principal es
+incómodo y hay que decirlo: **la captura original del endpoint (19-ago) no existe en el
+repositorio ni en su historial**. Lo que hay es una transcripción de memoria, con tres desvíos
+verificables frente a `AsignarTurno`, que es la única escritura de ese API que sí funciona en
+consulta: tipos mezclados en el cuerpo, `Ip` vacío (frente a `127.0.0.1`) y un motivo libre. La
+transición a `_apiPostConDetalle` (v18.0.114) NO cambió la petición en el cable: el fallo es
+anterior. Sin la captura no se puede afirmar cuál es el contrato correcto — así que en vez de
+adivinar uno, el asistente aprende el de verdad y, mientras tanto, prueba las formas plausibles.
+
+**1. La llamada real se aprende.** Cuando el médico cancela una cita **a mano en Everest**, el
+asistente ve pasar esa petición y guarda su FORMA: método, ruta, nombres de parámetros y valores
+constantes. **Nunca guarda identificadores**: los que reconoce por el nombre del parámetro
+(`CitaId`, `PacienteId`, `UsuarioId`, `Observacion`…) se sustituyen por un marcador, y si aparece
+cualquier otro valor con pinta de identificador (cinco dígitos o más), la plantilla se descarta
+entera. Lo que sí se aprende es justo lo que falta: parámetros extra (`TipoCancelacion=2`),
+constantes (`Ip=127.0.0.1`) e ids de catálogo (`motivoId: 4`, que NO se confunde con el texto del
+motivo). La próxima cancelación desde el asistente usa esa plantilla.
+
+**2. Variantes ante un rechazo de forma.** Sin plantilla aprendida: si Everest responde **4xx**
+(rechazó la petición **sin actuar**), se prueba la forma alineada con AsignarTurno (`Ip` real,
+identificadores numéricos) y, si tampoco, todo por query. **Nunca** se reintenta ante 401/403
+(sesión), 5xx (servidor), fallo de red (la cancelación pudo llegar) ni ante un 200 que no
+confirma (ahí Everest decidió sobre la cita, no sobre la forma). La que funciona se recuerda.
+
+**3. El veredicto, en las dos direcciones.** `{error:false, mensaje:"La cita no se puede
+cancelar"}` se daba por **anulada** y se borraban las marcas locales de una cita que sigue viva;
+y un «Cancelado Correctamente» que llegara como cadena o envuelto en `data` se rechazaba. Ahora
+el mensaje manda sobre la bandera, y se aceptan las tres formas. Si Everest dice que **ya estaba
+cancelada**, no es un fallo: se limpian las marcas y se dice qué pasó.
+
+**4. Y si aun así falla**, el aviso lo dice con su motivo y añade la salida real: anúlela en la
+agenda de Everest — y en cuanto lo haga, el asistente aprende esa llamada. El modo programador
+muestra qué plantilla hay aprendida y qué variante funcionó.
+
+**Además, una pregunta del médico en consulta:** «*Exámenes · casilla obligatoria — Everest exige
+HEMOGLOBINA, FÓSFORO EN SUERO, ALBÚMINA EN SUERO para esta ruta y la casilla sigue vacía.
+Revíselo.* NO ENTIENDO QUÉ QUIERE DECIR ESTO». Tenía razón: el aviso decía el hecho y no el
+porqué ni el qué hacer. Ahora dice que Everest no deja guardar esa Ruta Crónicos sin esos
+exámenes, que la casilla quedó vacía porque el laboratorio no trajo el resultado (o llegó
+pendiente), que el asistente no lo inventa, y que si tiene el resultado lo escriba a mano.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 389 | el mensaje deja de mandar sobre `error:false` | *suite_15: v18.0.119: el veredicto de la anulación…* | Sí |
+| 390 | un «Cancelado» en cadena vuelve a rechazarse | *suite_15: v18.0.119: el veredicto…* | Sí |
+| 391 | se reintenta con otra forma ante cualquier fallo | *suite_15: v18.0.119: si Everest RECHAZA la forma (400)…* | Sí |
+| 392 | se prueban todas las formas siempre | *suite_15: v18.0.119: si Everest RECHAZA la forma…* («no se insiste») | Sí |
+| 393 | la forma que funcionó no se recuerda | *suite_15: v18.0.119: si Everest RECHAZA la forma…* | Sí |
+| 394 | «ya estaba cancelada» vuelve a tratarse como fallo | *suite_15: v18.0.119: si Everest RECHAZA la forma…* («hecho consumado») | Sí |
+| 395 | la plantilla guarda un identificador desconocido | *suite_15: v18.0.119: el asistente APRENDE la cancelación real…* | Sí |
+| 396 | el detector de identificadores deja pasar cifras largas | *suite_15: v18.0.119: el asistente APRENDE…* («no guarda ningún identificador») | Sí |
+| 397 | `motivoId: 4` se sustituye por el texto del motivo | *suite_15: v18.0.119: el asistente APRENDE…* («conserva… constantes») | Sí |
+
+Banco completo: **3.059 comprobaciones pasan, 0 fallan.** *(v18.0.119)*
+
+---
+
+## v18.0.120 — «fuera de metas» dejó de significar «vencido»
+
+**Reporte en vivo del médico (02-sep), con captura:** el aviso de entrada le mostró
+«*Laboratorios RCV sin resultado vigente · Colesterol LDL*» sobre un examen que **todavía
+estaba dentro de su vigencia**. Sus palabras: «*el script no debe dar por hecho que está
+vencido un examen que aún no cumple sus días de vigencia y que tiene un resultado fuera de
+metas*». Y tenía razón dos veces: son dos hechos distintos, y el mensaje afirmaba el falso.
+
+**Qué pasaba, medido con el arnés.** Un LDL de 160 mg/dL (meta < 100 en riesgo alto) tomado
+hace 100 días, con 180 de vigencia normativa. La regla del 50 % por fuera de metas —decisión
+suya del 20-ago— partía el plazo a 90, y `_analitosRcvVencidos` comparaba los 100 días contra
+ESE número y lo metía en la lista roja. Al examen le quedaban **80 días**.
+
+Al reproducirlo aparecieron dos varas más, en la misma función y en la misma dirección:
+
+1. **La respuesta del propio médico se ignoraba.** Desde v18.0.67 él contesta, una vez por
+   paciente y por consulta, «¿repetir antes los exámenes fuera de meta?». El motor del panel
+   la obedece; este camino —el aviso de entrada y el antiduplicado de PyM— seguía adelantando
+   por su cuenta. Medido: con «no» respondido, el panel daba 180 y el aviso 90.
+2. **El piso de recontrol de la HbA1c no se aplicaba.** En ERC G4 el motor da 90 días
+   (`MTR_RECONTROL.hba1c.pisoDias`, decisión suya del 26-ago); este camino partía 120 a mano y
+   daba 60. Treinta días de diferencia sobre el mismo paciente.
+
+**Qué se hizo.** `_vigenciaNormaDiasParaAnalito` (la vigencia de la tabla, sin el adelanto)
+decide ahora si algo está vencido; el adelanto solo decide si conviene repetirlo antes.
+`_analitosRcvVencidos` marca cada analito con `vencido` y, si no lo está, con los días que le
+quedan. El aviso pinta dos cajas: la roja de siempre para lo vencido, y una ámbar nueva —
+«Fuera de metas — puede adelantarlos», «Estos exámenes NO están vencidos» — para lo demás. Y
+el acortamiento sale ya de `mtrAcortarPorFueraDeMeta`, la misma función del motor: una regla,
+un número.
+
+Verificado también en Chromium contra el Everest hostil que prescribe CLAUDE.md
+(`tools/verificar_color_chromium.js`, tres casos nuevos): el ámbar del título nuevo, su cuerpo
+y el rojo del título de vencidos sobreviven a `div,span,p,b{color:#111827 !important}`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 398 | todo lo que pasa la vigencia *efectiva* vuelve a declararse vencido | *suite_08: v18.0.120 (reporte en vivo): un LDL fuera de metas y DENTRO de su vigencia…* — y *suite_04: v18.0.120 PUNTA A PUNTA…* | Sí |
+| 399 | se ignora la respuesta del médico («no, en su vigencia normal») | *suite_08: v18.0.120: la respuesta del médico… manda también en este camino* | Sí |
+| 400 | vuelve la mitad a pelo, sin el piso de recontrol del motor | *suite_28: v17.6.96: la regla del 50 % alcanza por fin a la HbA1c* | Sí |
+| 401 | la caja de «fuera de metas» vuelve a ser la roja de vencidos | *suite_04: v18.0.120: un examen VIGENTE pero fuera de metas NO entra en la lista roja…* (y la de convivencia) | Sí |
+| 402 | el aviso deja de repartir las dos listas | *suite_04: v18.0.120 PUNTA A PUNTA (reporte en vivo 02-sep)…* | Sí |
+| 403 | se borra el acento ámbar de la sección nueva | *Chromium (`verificar_color_chromium.js`): «aviso: título de «fuera de metas, vigente»» cae a `rgb(17,24,39)` — el color del adversario* | Sí |
+
+Banco completo: **3.070 comprobaciones pasan, 0 fallan.** *(v18.0.120)*
+
+---
+
+## v18.0.121 — el banner de Agendar decía lo mismo tres veces
+
+**Reporte en vivo del médico (02-sep), con captura:** «*este mensaje es confuso y siempre
+aparece, y también aparece otro mensaje abajo por lo que saldría redundante; yo te pedí que
+blindaras esto y no lo has hecho*». Tenía razón, y su propia regla del 01-sep
+(`docs/REGLAS_MEDICO_20260901.md` §4) ya lo cubría: «*un hecho por mensaje, sin repetir lo que
+otro elemento de la misma pantalla ya dice*».
+
+**Las tres repeticiones, medidas sobre el mismo recuadro:**
+
+1. El párrafo decía «*…porque ya hay examen(es) vencido(s)…*» **justo debajo** de la fila
+   «Ya vencidos: Colesterol LDL», que los nombra uno por uno. El motivo ya estaba a la vista
+   con nombre y apellido — es lo que él mismo pidió en la v16.2.5.
+2. Al tocar un plazo, `_aplicarPlazoElegido` **apilaba** un segundo recuadro con
+   `innerHTML +=` que repetía la MISMA fecha que la cabecera ya daba como «control médico»,
+   bajo otro nombre: «la fecha que evita el vencimiento». Dos nombres para el mismo dato, uno
+   encima del otro: se lee como si fueran dos fechas distintas.
+3. «Es una sugerencia, no una imposición» iba en prosa, cuando los chips de plazo y la propia
+   nota de «está viendo SU plazo» ya lo demuestran de hecho.
+
+**Y un defecto de datos que lo agravaba:** ese mismo camino rehacía `_sugeridaControl` **sin**
+`vencidos` ni `porVencerDetalle`. En cuanto el médico tocaba un plazo, las fichas —el porqué
+concreto— desaparecían y solo sobrevivía el párrafo abstracto. Exactamente lo contrario de lo
+que hace falta.
+
+**Ahora:** una sola nota, nunca dos. La razón la dicen las fichas, que ya no se pierden. La
+nota de «su plazo» no repite la fecha (está en la cabecera) y solo ofrece el camino de vuelta,
+compartido por las dos ramas del banner.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 404 | vuelve el segundo recuadro apilado con `innerHTML +=` | *suite_15: v18.0.121: al tocar un plazo el banner NO apila un segundo recuadro…* | Sí |
+| 405 | se vuelven a perder las fichas al rehacer `_sugeridaControl` | *suite_15: v18.0.121: …ni pierde las fichas* | Sí |
+| 406 | la nota vuelve a repetir el motivo en prosa | *suite_15: notaLP… sin repetir lo que las fichas ya dicen* | Sí |
+| 407 | solo una de las dos ramas del banner usa la nota única | *suite_15: v18.0.121: …las dos ramas usan la MISMA nota* | Sí |
+| 408 | la nota vuelve a repetir la fecha que ya está en la cabecera | *suite_15: v18.0.121: …la nota NO repite la fecha* | Sí |
+
+Banco completo: **3.071 comprobaciones pasan, 0 fallan.** *(v18.0.121)*
+
+---
+
+## v18.0.122 — dos chips de día marcados como «seleccionado» a la vez
+
+**Reporte en vivo del médico (02-sep), con captura:** «*aparecen dos resaltados en verde el
+borde «los sábados» no sé si sea normal, y aparecen dos resaltados en morado «fecha
+seleccionada»; primero había elegido sábado pero ese sábado al parecer no se trabaja, entonces
+eligió el viernes pero quedó seleccionado el sábado como principal. Este tipo de cosas tuvo que
+haber salido en las auditorías pero nunca pasó*».
+
+**Causa raíz: una línea de más, y una fecha que salía dos veces.** En `calcRangoSondeoIso` el
+día central se añade aparte, y el barrido de sábados recorre TODO el intervalo — el centro
+incluido. Con la fecha sugerida en sábado, el mismo ISO salía **dos veces**. Medido con el
+arnés sobre `2026-11-07`, la fecha de su captura: **18 entradas, 17 ISO únicos**.
+
+**La cadena hasta la pantalla:** `renderDayChips` pintaba dos botones «Sáb 07/11», y su
+registro `botonesPorIso` —una clave por ISO— se quedaba con el segundo. El chip central, el del
+🎯 y la marca `active`, quedaba **huérfano del registro**; todas las limpiezas de «seleccionado»
+recorren ese registro, así que ese chip no perdía la marca nunca. Al saltar del sábado sin
+agenda al viernes, el viernes se marcaba **y el sábado seguía marcado**. Dos «fecha
+seleccionada» a la vez, con el pie del cuadro diciendo, correctamente, solo una.
+
+**Los dos bordes verdes eran otra cosa** y sí son normales: son dos sábados distintos de la
+fila. El tercero —el duplicado— quedaba tachado por el sondeo y su verde se perdía al lado del
+gemelo morado.
+
+**Por qué la auditoría no lo vio, en una frase:** midió pantallas, no recorridos. Y el banco
+tampoco: `suite_02` fijaba `calcRangoSondeoIso` con el centro en **jueves**, nunca en sábado, y
+las dos pruebas del salto buscaban «el primer chip marcado» con `find` — con dos marcados
+habrían pasado igual. Las tres cosas quedan corregidas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 409 | vuelve la fecha duplicada del centro en sábado | *suite_02: v18.0.122: con el centro en SÁBADO, su fecha aparece UNA sola vez…* (y el barrido de los 7 días) | Sí |
+| 410 | el centro en sábado vuelve a negar que es sábado | *suite_02: v18.0.122: …un centro en sábado ES sábado* | Sí |
+| 411 | la limpieza de «seleccionado» vuelve al mapa por ISO | *suite_15: v18.0.122: la marca «seleccionado» se limpia sobre la lista COMPLETA…* | Sí |
+| 412 | el día abandonado sigue ofreciéndose como elegible | *suite_15: openAgendamientoModal v14.0.1: …salta solo al día más cercano…* | Sí |
+
+Banco completo: **3.074 comprobaciones pasan, 0 fallan.** *(v18.0.122)*
+
+---
+
+## v18.0.123 — auditoría UI/UX, lote visual 1: el presupuesto de esquinas y el color medido
+
+Aplica los fragmentos **F-13, F-14, F-15, F-16 y F-22** de `docs/AUDITORIA_UIUX_20260902.md`
+(filas 4, 5, 6, 20, 21, 22, 23, 29 y 48).
+
+**F-13 — presupuesto de esquinas.** El panel vive en la esquina inferior derecha, y ahí se le
+encimaban cuatro cosas: los avisos, el panel post-cita, «Deshacer» y la barra mínima. Solapes
+medidos en Chromium a 1366×768: 384×185, 336×160, 176×38 y 142×30 px. Ahora los flotantes se
+van a la columna libre a la izquierda del panel **mientras el panel ocupa esa esquina**, y la
+recuperan en cuanto se pliega, se minimiza, va al dock o se oculta. Un solo token
+(`--vgl-col-libre`) para los cuatro: con un número por flotante, el día que el panel cambie de
+ancho se moverían tres y se quedaría uno. Verificado con `tools/medir_esquinas_chromium.js`
+(nuevo): **cero solapes** con el panel a la vista, y los cuatro de vuelta en su margen sin él.
+De paso, la fila 48: `--z-toast` estaba declarado **sin un solo consumidor** mientras la regla
+usaba el literal a pelo.
+
+**F-14 — el vidrio, un punto más opaco.** Se calibró «sobre OLED» y en consulta vive sobre un
+Everest **blanco**. A `.94` los siete nodos por debajo de AA bajan a uno.
+
+**F-15 — los acentos claros, un paso más oscuros.** `--c-morado`, `--c-azul` y `--c-verde` del
+tema claro daban 3,4-4,4:1 sobre sus propios tintes en «Generar», «Siguiente», la cuenta
+regresiva y «+1 más». Con los hexadecimales se mueven **sus canales `--rgb-*`**: si uno cambia
+y el otro no, el tinte queda de un color y la letra de otro. Eso ahora lo vigila la **Regla T**.
+
+**F-16 — texto sobre acento: nunca un literal.** `#fff` y `#020617` cocidos encima de un acento
+solo pueden acertar en uno de los dos temas (2,63-2,84:1 en el que fallan). Los cinco sitios
+pasan a `var(--bg-solid)`.
+
+**F-22 — un solo vidrio en el panel.** El desenfoque de la barra lateral iba **anidado dentro
+del del panel**: invisible (98 % opaco) y una pasada de blur extra por cuadro en cada arrastre.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 413 | un `--rgb-*` deja de casar con su `--c-*` | *suite_25: Regla T - cada --rgb-* coincide exactamente con el hexadecimal de su --c-*| Sí |
+| 414 | vuelve el vidrio al 88 % | *suite_25: v18.0.123 - el vidrio a .94…* | Sí |
+| 415 | vuelve el blanco literal sobre el acento | *suite_25: v18.0.123 - …el texto sobre acento por token…* | Sí |
+| 416 | vuelve el desenfoque anidado de la barra lateral | *suite_25: v18.0.123 - …un solo desenfoque en el panel* | Sí |
+| 417 | los flotantes vuelven a la esquina del panel | *suite_15: v18.0.123 (F-13): los cuatro flotantes viven en la columna libre…* | Sí |
+| 418 | el cuerpo deja de decir si el panel ocupa la esquina | *suite_15: v18.0.123 (F-13): el cuerpo declara si el panel ocupa la esquina…* | Sí |
+
+Banco completo: **3.078 comprobaciones pasan, 0 fallan.** *(v18.0.123)*
+
+---
+
+## v18.0.124 — auditoría UI/UX, lote visual 2: lo que solo se ve pulsando Tab
+
+Aplica **F-17, F-18, F-19, F-20 y F-21** (filas 24, 25, 26, 27, 28 y 40). Con esto quedan
+aplicados los **22 fragmentos** de `docs/AUDITORIA_UIUX_20260902.md`.
+
+**F-17 — sin opacidad apilada sobre texto ya muteado.** `--fg3` ES el token muteado; ponerle
+`opacity` encima lo baja otra vez: el año del resultado de laboratorio medía 3,30:1 en claro y
+el pie del bento 3,51:1, los dos bajo AA. Se quita en los cinco sitios que listaba la auditoría
+— y en un **sexto que ella no vio y destapó la guarda nueva** (`#vgl-cw-farmaco.vgl-cw-nd
+.vgl-cw-badge`, `.85`). Tres tamaños entran en la escala (`--t-nano/--t-mini/--t-small`),
+**detrás de `--t-hero`** para no partir la secuencia que leen las Reglas H e I.
+
+**F-18 — el interruptor de Ajustes se ve en tema claro.** Riel apagado 1,25:1 y perilla 1,32:1,
+con WCAG 1.4.11 pidiendo 3:1 para un componente. Medido después: **3,53:1**.
+
+**F-19 — «Alto contraste» que contrasta.** El botón lo prometía y solo quitaba el vidrio: en
+claro dejaba las mismas seis fallas. Ahora mueve los tokens secundarios en los dos temas.
+
+**F-20 — `prefers-reduced-motion` completo.** Faltaban los siete modales de flujo de la v15.6.0
+y cuatro flotantes: seguían animando con el sistema pidiendo lo contrario.
+
+**F-21 — el foco de teclado llega a los semáforos y a doce sitios más.** En `.vgl-tl` vivía un
+`outline:none` **con marca de prioridad** que le ganaba a `:focus-visible`: medido con Tab real,
+los tres semáforos devolvían «outline: none 0px». Se borra — **censo 656 → 655**, el único Δ
+negativo de toda la auditoría — y solo el clic con ratón apaga el anillo. Doce clases que se
+navegan con Tab y caían al «auto 1px» del navegador (invisible sobre el vidrio) reciben anillo
+propio. Y los semáforos se separan 12 px: centros a 24, la excepción de separación de WCAG 2.5.8.
+
+**Verificado en Chromium con Tab de verdad** (`tools/medir_foco_chromium.js`, nuevo). Dos cosas
+que solo aparecen midiendo: `.vgl-type-card` devolvía «solid 0px» porque su `transition:all
+.18s` hace **entrar el anillo animado** —el fotograma cero— y había que dejar asentar la
+transición; y el clic con ratón sigue sin encender el anillo, que es justo lo que
+`:focus-visible` existe para distinguir.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 419 | vuelve la opacidad apilada sobre `--fg3` | *suite_25: v18.0.124 - sin opacidad apilada sobre --fg3…* | Sí |
+| 420 | vuelve el `outline:none` con marca en el semáforo | *suite_25: v18.0.124 - el anillo de foco ya no se apaga…* (y la Regla G: el censo vuelve a 656) | Sí |
+| 421 | «Alto contraste» vuelve a no mover ningún token | *suite_25: v18.0.124 - «Alto contraste» mueve tokens…* | Sí |
+| 422 | los modales de flujo vuelven a animar | *suite_25: v18.0.124 - …prefers-reduced-motion cubre los modales de flujo* | Sí |
+| 423 | el interruptor claro vuelve a ser invisible | *suite_25: v18.0.124 - …el riel apagado tiene color propio en claro* | Sí |
+
+Banco completo: **3.081 comprobaciones pasan, 0 fallan.** *(v18.0.124)*
+
+---
+
+## v18.0.125 — auditoría UI/UX: seis promesas que la pantalla hacía y el código no cumplía
+
+Filas 30, 32, 33, 34, 36 y 37 (UX-17, UX-19, UX-20, UX-21, UX-23, UX-24).
+
+**Fila 30 — la chapa del laboratorio decía «✓ En línea» aunque el portal no respondiera.** Nacía
+así y solo se reescribía en el camino de ÉXITO: con el portal caído o la sesión vencida se
+quedaba afirmando «En línea» encima de una tabla vacía. El fallo del sistema presentado como
+hueco del paciente — justo lo que la regla de la casilla vacía existe para impedir.
+
+**Fila 32 — «Copiado al portapapeles» sin haber copiado.** `navigator.clipboard.writeText`
+devuelve una **promesa**, y el anuncio iba antes de esperarla: con el permiso denegado o la
+pestaña sin foco, el rechazo caía **fuera** del `try` (es asíncrono), el médico leía «Copiado»,
+pegaba en Everest y no había nada. Y se contaba como nota adoptada.
+
+**Fila 33 — el nombre técnico del modelo en la línea principal.** «Generando con
+gemini-2.5-flash…» ocupaba el único renglón que tenía que informarle. El dato sigue disponible
+para diagnosticar, en el `title`.
+
+**Fila 34 — el post-cita se cerraba a media frase.** El tope de 5 minutos se disparaba mientras
+el médico **tecleaba el celular del reenvío**. Ahora se cuenta desde la última vez que tocó algo.
+
+**Fila 36 — la búsqueda del primer cupo no se podía parar.** Recorre hasta 30 días hábiles con
+varias consultas por día (~4,7 s cada una, medido en la flota) y la única salida era cerrar el
+cuadro y perder lo elegido. El propio botón es ahora el freno; el token de cancelación ya
+existía, solo no tenía quién lo accionara desde la pantalla.
+
+**Fila 37 — «Aceptar y llenar en Everest» con todo en «No sé».** Todas las filas nacen en «No
+sé» (correcto: el asistente no supone nada), pero pulsar el primario escribía **cero** casillas
+y sacaba un aviso de éxito. Ahora nace apagado, dice qué falta, y cuando se enciende dice
+**cuántas** va a escribir.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 424 | la chapa vuelve a decir «En línea» con el portal caído | *suite_15: v18.0.125 (fila 30)…* | Sí |
+| 425 | se anuncia «Copiado» sin esperar la promesa | *suite_57: v18.0.125 (fila 32)…* | Sí |
+| 426 | vuelve el nombre del modelo a la línea principal | *suite_57: v18.0.125 (fila 33)…* | Sí |
+| 427 | el post-cita vuelve a cerrarse mientras se escribe | *suite_15: v18.0.125 (fila 34)…* | Sí |
+| 428 | el segundo clic relanza en vez de detener | *suite_15: v18.0.125 (fila 36)…* | Sí |
+| 429 | el primario se enciende sin ninguna respuesta | *suite_15: v18.0.125 (fila 37)…* | Sí |
+
+Banco completo: **3.087 comprobaciones pasan, 0 fallan.** *(v18.0.125)*
+
+---
+
+## v18.0.126 — decisiones de la entrevista del médico (02-sep), lote 1
+
+**El programa que decide de qué contrato sale la cita ya no se preselecciona solo** (fila 35 ·
+UX-22). Con más de un programa inscrito se elegía **el primero de la lista**, sin avisar. Ahora
+arranca en «— elija el programa —», y Confirmar no asigna nada hasta que él elija: mandar un
+programa supuesto es exactamente lo que la regla del dato inventado prohíbe. Con un solo
+programa no hay ambigüedad que preguntar y se deja como estaba.
+
+**«SOLO Laboratorios» abierto desde Agendar tiene camino de vuelta** (fila 38 · UX-25). Ese
+cuadro no tiene stepper, y su «Cancelar» cerraba y dejaba al médico en Everest: equivocarse de
+tipo de cita costaba volver a abrir Agendar desde el dock y repetir el paso 1. Ahora el
+secundario dice «↩ Atrás» y reabre Agendar. La ✕ sigue siendo la salida de verdad.
+
+**El punto verde late tres veces y se queda quieto.** Solo dice «estoy mirando la agenda en
+segundo plano», y latía sin parar en el borde del campo visual toda la consulta. El ámbar de
+fallo sostenido **sí** sigue latiendo: eso es una alerta, no un latido de fondo.
+
+**Los tamaños de la tabla de laboratorios ya estaban unificados** por F-17 (v18.0.124): las
+cuatro columnas usan `--t-micro`, `--t-nano`, `--t-body` y `--t-strong`. No había nada que
+aplicar aquí, y se anota para no volver a buscarlo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 430 | vuelve la preselección del primer programa | *suite_15: v18.0.126 (fila 35)…* | Sí |
+| 431 | Confirmar deja de pedir el programa y lo supone | *suite_15: v18.0.126 (fila 35)…* | Sí |
+| 432 | «SOLO Laboratorios» pierde de dónde viene | *suite_15: v18.0.126 (fila 38)…* | Sí |
+| 433 | el punto verde vuelve a latir sin parar | *suite_15: v18.0.126: el punto verde late tres veces…* | Sí |
+
+Banco completo: **3.090 comprobaciones pasan, 0 fallan.** *(v18.0.126)*
+
+---
+
+## v18.0.127 — decisiones de la entrevista, lote 2: la pastilla «Pendientes» y la densidad
+
+**La pastilla «🩺 Pendientes (N)» en el dock.** El cuadro de pendientes salía **una sola vez**,
+al abrir la historia; si el médico lo cerraba sin apuntar nada, no había forma de volver a verlo
+en toda la jornada. Ahora hay una pastilla que lo reabre, con el mismo contenido.
+
+Lo que hacía falta antes de poder añadirla: el cálculo vivía **dentro** de
+`checkAvisoUniversal`, mezclado con las compuertas de «ya se avisó hoy» y «espera a que Athenea
+responda». Se extrae a `_pendientesUniversales(doc)`: ahí queda el **qué**, y en
+`checkAvisoUniversal` solo el **cuándo**. Repetir el recuento en el dock habría creado la
+segunda vara que este proyecto lleva versiones eliminando — el mismo error que causó el reporte
+del LDL en la v18.0.120.
+
+Dos detalles que no son cosméticos: la pastilla **solo aparece si N > 0** (un control que dice
+«0» ocupa sitio en un dock apretado y no informa de nada), y **no marca nada como visto** — lo
+pidió él, así que no consume el aviso automático del día. El número entra en la firma del dock:
+sin eso se congelaba en el conteo del primer tick y no bajaba al ordenar los exámenes.
+
+**Cuatro citas a la vista en 1366×768.** Medido con `docs/uiux/render.js` sobre el HTML y el CSS
+reales: **3 tarjetas completas antes, 4 después** (alturas 165/135/123/135 → 143/116/109/116).
+Solo espaciado: **ni un tamaño de letra**, porque la letra es lo que se lee de un vistazo entre
+paciente y paciente. Acotado a pantallas bajas — en 1920×1080 no hace falta apretar nada, y ahí
+siguen entrando 5.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 434 | la pastilla se pinta aunque no haya pendientes | *suite_15: v18.0.127: la pastilla «🩺 Pendientes (N)»…* (+ las 3 pruebas del dock, que la contaban) | Sí |
+| 435 | el número sale de la firma del dock y se congela | *suite_15: …y la firma que la mantiene viva* | Sí |
+| 436 | la vara se parte: el dock cuenta distinto que el aviso | *suite_04: v18.0.127: _pendientesUniversales es la única vara…* | Sí |
+| 437 | vuelve el espaciado ancho en 1366×768 | *suite_25: v18.0.127 - la densidad de 1366x768…* | Sí |
+
+Banco completo: **3.094 comprobaciones pasan, 0 fallan.** *(v18.0.127)*
+
+---
+
+## v18.0.128 — auditoría UI/UX, filas 31 y 47
+
+**Una sola numeración en Agendar** (fila 31 · UX-18). La barra de pasos dice «1 · 2 · 3» y los
+rótulos de dentro numeraban **otra vez** por su cuenta, con números que no casaban: dentro del
+paso 2 convivían una insignia «2» y una «3». Y la leyenda citaba entre comillas «Confirmar y
+asignar cita», un rótulo que el botón **no lleva la mayor parte del tiempo** — mientras falta
+algo dice qué falta, y mientras trabaja dice «⏳ Asignando cita…». Pedirle buscar un botón con un
+nombre que no está en pantalla es peor que no decir nada.
+
+**Un solo lenguaje de íconos en la columna del panel** (fila 47 · UI-21). «🔔 Alertas» y
+«🔉 Silenciar» eran los únicos dos con emoji entre cinco botones; sus tres vecinos ya llevan el
+mismo trazo Lucide. Al hacerlo apareció el motivo por el que el emoji del timbre **desaparecía
+al conceder el permiso**: `updateBell` escribía `textContent` sobre el botón entero y se llevaba
+el ícono por delante. El rótulo pasa a tener su propio nodo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 438 | vuelve la numeración doble dentro del paso 2 | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
+| 439 | el estado vuelve a escribirse sobre el botón y borra el ícono | *suite_15: v18.0.128 (filas 31 y 47)…* | Sí |
+
+Banco completo: **3.095 comprobaciones pasan, 0 fallan.** *(v18.0.128)*
+
+---
+
+## v18.0.129 — antes del Panel, un solo cuadro (última decisión de la entrevista)
+
+Abrir el Panel podía encadenar **dos emergentes seguidos**: primero el reconciliador
+(contradicciones entre fuentes) y, al cerrarlo, el de casillas de antecedentes en blanco. Dos
+cuadros seguidos, con botones distintos, sobre el mismo paciente y en el mismo instante, se leen
+como dos interrupciones y no como una conversación. La decisión del médico en la entrevista del
+02-sep: **un solo cuadro, con «Confirme» y «Complete»**.
+
+**Cómo se hizo, y qué NO se tocó.** La sección de llenado entra **dentro** de la tarjeta del
+reconciliador, como bloque aditivo. La mecánica de ese cuadro —severidades, cuáles preguntas
+frenan y cuáles no, el repaso cada 20 s, «Decidir luego» que sí continúa (v17.0.2)— no cambia ni
+una línea: la sección nueva **no frena nada**, escribe solo lo que él contesta, y nunca toca un
+«No sé». Y el llamador deja de dejar salir el segundo emergente detrás.
+
+Es un refactor de una compuerta clínica, así que las pruebas fijan las dos cosas por separado:
+que el cuadro nuevo se pinta entero **dentro de la misma tarjeta** —declarar la sección y no
+inyectarla dejaría al médico sin la mitad del cuadro, y eso pasa la prueba ingenua—, y que la
+condición de continuar sigue siendo exactamente la de antes.
+
+Con esto quedan aplicadas **las 48 filas de la auditoría, sus 22 fragmentos y las 8 decisiones
+de la entrevista**.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 440 | vuelve el segundo emergente detrás del primero | *suite_68: v18.0.129: antes del Panel se pinta UN cuadro…* | Sí |
+| 441 | un «No sé» empieza a contar como respuesta que se escribe | *suite_68: v18.0.129: …solo cuenta lo que él contestó* | Sí |
+| 442 | la sección «Complete» se declara pero no se inyecta en la tarjeta | *suite_68: v18.0.129: …va dentro de la misma tarjeta* | Sí |
+
+Banco completo: **3.096 comprobaciones pasan, 0 fallan.**
+
+## v18.0.130 — tres reportes en vivo del 02-sep: el tubo de lípidos, el 50 % sobre una vigencia ya corta, y la toma «de un día para otro»
+
+Los tres salieron de la misma captura del médico y ninguno es cosmético: los tres cambian qué
+examen se pide y cuándo se cita al paciente.
+
+**1. Los cuatro lípidos van en el mismo tubo.** La pantalla ordenaba el LDL arriba y dejaba
+colesterol total, HDL y triglicéridos abajo, en «lo que sigue vigente». En Everest esos cuatro
+no se piden sueltos: van juntos. Enseñarlos separados le miente al médico sobre lo que el
+paquete de verdad agrega. El cierre del paquete (`_cerrarPaqueteLipidos`) existía, pero corría
+**antes** de la regla de gracia, así que un lípido que entraba a la toma por gracia ya no
+arrastraba a los otros tres. Se extrae a un cierre nombrado y se llama **después**. Además la
+fila del resumen ahora dice *por qué* se repiten: si alguno está fuera de metas, nombra a ese
+(«se repite porque X está fuera de metas, y los cuatro van en el mismo tubo»); si no, dice que
+el perfil completo cumple su vigencia y no se pide suelto.
+
+Medido, no opinado: `tools/medir_lipidos_y_pisos.js` barre 1.680 combinaciones (3 programas ×
+7 estadios × DM2 × fuera-de-metas × 10 fechas × LDL con y sin resultado) y contaba **46 casos
+rotos** —un lípido arriba, otro en «sigue vigente»—. Después del cambio: **0**.
+
+**2. El 50 % no se aplica donde la norma ya acortó por estadio.** Su glicemia, tomada el
+10/07/2026, aparecía vencida el 9 de agosto: 30 días. La norma para ese contexto son 60, y la
+regla de «fuera de metas parte la vigencia a la mitad» los partió otra vez sobre una vigencia
+que el estadio renal **ya había acortado**. Se parte dos veces lo mismo. `mtrNormaYaAcortadaPorEstadio`
+compara la norma del estadio real contra la del estadio más benigno (G1); si ya viene acortada,
+el 50 % no vuelve a morder. El comparador es contra **G1**, no contra «sin estadio»: en ERC no
+existe celda «sin estadio» (devuelve `null`) y la primera versión de la guarda nunca disparaba
+—se detectó midiendo, no leyendo—. Resultado medido en su caso: **30 d → 60 d**, vence el
+2026-09-08 en vez del 2026-08-09.
+
+Esta decisión la tomó él en la entrevista («el 50 % no se aplica donde la norma ya acortó por
+estadio → 60 d») y **reemplaza a su decisión del 26-ago** sobre la HbA1c en ERC G4, que pasa de
+90 a 120 d. Eso está anotado dentro de la prueba de suite_28, con su fecha, para que nadie la
+«arregle» de vuelta creyendo que es una regresión.
+
+**3. Ningún examen se cita de un día para otro.** El motor adelantaba la toma al primer cupo,
+y en la práctica ahí no hay citas de laboratorio. El médico fijó la ventana: **entre 7 y 14
+días calendario**, y el piso de 7 solo se usa **si de verdad falta o venció uno de los
+principales** —colesterol total, HDL, LDL, triglicéridos, uroanálisis, HbA1c en diabéticos,
+RAC, creatinina en suero—. PTH, fósforo, albúmina y hemoglobina pueden esperar a la fecha
+normal. `MTR_PISO_LAB_URGENTE = 7`, y el caso urgente se filtra ahora por `vencidosPrincipales`,
+no por cualquier vencido.
+
+El costo lo aceptó él explícitamente: una prueba vieja que pedía la toma a 3 días ya no es
+alcanzable, y quedó reescrita para fijar `[7,14]`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 443 | el cierre del paquete de lípidos vuelve a correr antes de la regla de gracia | *suite_24: v18.0.130 (reporte 1): si un lípido entra en la toma, los otros tres entran con él* (2 caen) | Sí |
+| 444 | `estadioFrena` fijo en `false`: el 50 % vuelve a morder sobre la vigencia ya acortada | *suite_28: v18.0.130: el 50 % no parte una vigencia que el estadio ya acortó* | Sí |
+| 445 | la guarda compara contra «sin estadio» en vez de contra G1 (en ERC devuelve `null` y nunca dispara) | *suite_28* (2 caen) | Sí |
+| 446 | el piso urgente vuelve a ser «mañana» en vez de 7 días | *suite_24 #137 / suite_62* (3 caen) | Sí |
+| 447 | el caso urgente se filtra por `vencidos` en vez de `vencidosPrincipales` | *suite_24: el piso de 7 solo lo abre un principal* | Sí |
+| 448 | el motivo del paquete se fija en `"vigencia"`: la fila deja de nombrar al analito fuera de metas | *suite_24: v18.0.130 (reporte 1)…* | Sí |
+| 449 | `_todosLosLipidos` vuelve a mirar solo `faltantes\|vencidos\|cosechados` (el LDL fuera de metas suele estar aún en `diferidos`) | *suite_24: v18.0.130 (reporte 1)…* | Sí |
+
+Tres pruebas previas quedaron **reescritas, no borradas**, porque las reglas nuevas las
+contradicen a propósito: suite_24 #137 (ahora fija `[7,14]`), suite_62 (`labMinIso`
+2026-08-24 → 2026-08-28) y suite_28 (HbA1c ERC G4, 90 → 120 d, con la nota de que esto
+reemplaza la decisión del 26-ago por instrucción del propio médico).
+
+Banco completo: **3.103 comprobaciones pasan, 0 fallan.**
+
+## v18.0.131 — el barrido por recorridos: 12 defectos que solo aparecen en la costura entre dos momentos
+
+El médico pidió (02-sep) un barrido distinto: «haz un barrido haciendo RECORRIDOS ahora en
+vez de mirar pantallas». Un workflow de 49 agentes enumeró 30 secuencias reales de consulta,
+recorrió las 14 de mayor riesgo reproduciendo con el arnés (y en un caso, en Chromium real), y
+sometió cada hallazgo a dos refutadores independientes con la carga de la prueba invertida
+(«tu trabajo no es confirmarlo: es tumbarlo»). La primera corrida se cortó a mitad de la
+refutación por un apagón de acceso a nivel de organización — 8 de 14 hallazgos quedaron sin
+ver un refutador, contados como «tumbados» por la lógica del script cuando en realidad tenían
+**cero votos**, no un refutador que los tumbara. Se detectó leyendo el journal crudo del
+workflow, se reanudó (los 6 ya refutados y los 30 recorridos quedaron en caché, no se
+repitieron), y esta vez los 28 veredictos de refutación completaron: **12 confirmados, 2
+tumbados con razón** (uno porque el reloj de fondo del dock sí repone la caché antes de que
+un médico real complete un recorrido de 3 min; otro porque es una decisión ya tomada por el
+propio médico el 01-sep, documentada en el código).
+
+Los 12 comparten una firma: ninguno está en la lógica de negocio de una sola función. Todos
+viven en la costura entre dos momentos — un `await` en vuelo mientras el modal sigue
+interactivo, una caché con TTL que una pantalla lee como «verdad reciente» mientras otra la
+reescribe sin volver a consultar la fuente real, una guarda que existe en un botón gemelo pero
+no se replicó en el que el médico realmente usa, un candado que una acción borra sin dejar
+marca de «esto ya se resolvió», un panel que sobrevive a un cambio de paciente porque nada lo
+invalida al navegar.
+
+**1 · La toma de muestras se agendaba en una fecha que el médico nunca confirmó.** En
+`_confirmarCita` (modo «control + laboratorios»), `isLabChecked`/`selectedLabTime` se
+congelaban antes del `await apiAccesoAsignarTurno`, pero la FECHA de la toma se leía después,
+en vivo, de `selectedLabDateInfo` — una variable de closure que un clic en otro chip de día, o
+el propio sondeo de fondo, pueden reasignar mientras ese await está en vuelo. `labFechaElegida`
+se congela junto a las otras dos decisiones.
+
+**2 · El Redactor IA sobrevivía al cambio de paciente.** «Generar» y «Copiar» no tenían la
+guarda que sí tiene «Insertar» desde hace versiones (`_pacienteSigueAbierto`): si el médico
+cambiaba de historia con el cuadro abierto, los síntomas, el examen físico y el nombre del
+OTRO paciente viajaban a Gemini mezclados con las cifras del paciente dueño del cuadro, o se
+copiaban al portapapeles para pegarse en la historia equivocada.
+
+**3 · La rectificación retroactiva no dejaba huella de haberse rectificado.** Borraba
+`inasistencia@<clave>` sin sellar nada: si la cita volvía a oscilar (el parpadeo API↔DOM
+documentado en v17.6.21 puede sostenerse ~90 s sin ningún hueco de lectura largo), la misma
+inasistencia se contaba dos veces. Ahora sella `rectificada@<clave>`, y `bumpStatCita` la
+respeta.
+
+**4 · «Buscar laboratorios nuevos» borraba la caché ANTES de preguntar.** Si Athenea no
+respondía, `getAtheneaLabsAuto` devuelve `null` («no pude leer», distinto de `[]` «no tiene»),
+pero esa distinción se perdía y un resumen vacío se guardaba con sello fresco — el pie mentía
+«recién leídos» y la caché envenenada alimentaba Agendar/Ordenar/Conducta/IA 3 minutos.
+
+**5 · «Última toma completa» cacheaba la lista YA recortada a 90 días.** `_labsPrefetch` (la
+caché compartida, 10 min de TTL) perdía analitos vigentes tomados hace más de 90 días para
+TODO el script, no solo para lo que se escribe con esa opción concreta. Se cachea la lectura
+íntegra, antes del recorte.
+
+**6 · El Panel abierto rejuvenecía la caché sin tocar la red.** Tres rutas de guardado puras
+(vigilante de 20 s, reconciliación al abrir, refresco de medicamentos tras prescribir)
+renovaban el sello de tiempo igual que una lectura real: el TTL de 3 min nunca se cumplía
+durante toda la consulta. `mtrCacheResumenGuardar(...,{sinRed:true})` conserva el sello
+anterior y la marca «desactualizado».
+
+**7 · El repaso de 20 s trataba «no pude leer» como «se resolvió».** Si el médico se distraía
+un momento (u otra fuente caducaba), `rec.frenan` llegaba vacío por falta de datos, no porque
+la contradicción se aclarara — y el cuadro se cerraba solo, en VERDE, afirmando que la
+historia ya lo aclaraba.
+
+**8 · Insertar dos casillas seguidas: «↩ Deshacer» revertía las dos.** Las tres inserciones del
+Redactor IA se guardaban bajo la MISMA etiqueta «Redactor IA»: el auto-avance (que existe para
+encadenar casillas DISTINTAS) cumplía la condición de acumulación de v18.0.59. Ahora cada una
+lleva «Redactor IA · <casilla>».
+
+**9 · «Última toma completa» solo-uroanálisis: Deshacer revertía el lote ANTERIOR.** El diff
+que arma el lote solo mira `input[id^="resultado"]`; las casillas de uroanálisis se escriben
+por `placeholder`. `_vglGuardarDeshacer` ahora devuelve `false` cuando no hay nada que guardar,
+y el botón solo se ofrece si el guardado devolvió `true` — no solo si `r.count>0`.
+
+**10 · «Ordenar pendientes» del paquete no era idempotente.** Su gemelo de Conducta ya tenía
+el candado `isOrdenLabsConductaHoy`; aquí faltaba, y un segundo clic duplicaba órdenes reales.
+
+**11 · Cambiar de especialidad dejaba los chips de día tachados con el veredicto anterior.**
+`cargarHoras()` solo carga los horarios del día ya elegido; solo `renderDayChips()` limpia el
+DOM de los chips, y el manejador del chip de especialidad nunca lo llamaba.
+
+**12 · «Cancelar esta cita» cruzando medianoche no llamaba a Everest.** `_anularCitaAsignadaReal`
+buscaba citaId/pacienteId en `getProcessedToday()` en el instante del clic, y esa función
+reinicia `citasDetalle` entero al cambiar el día. `abrirRecordatorioCita` ya tenía esos datos
+en su propio `det` al abrir el recordatorio; ahora los pasa como `opciones`, que la función
+prefiere sobre lo que diga el almacén en ese momento.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 450 | la toma vuelve a leer `selectedLabDateInfo` en vivo tras el await | *suite_15: hallazgo 1 — labFechaElegida congelada* | Sí |
+| 451 | Generar pierde la guarda de paciente | *suite_59: hallazgo 2 — Generar se niega* | Sí |
+| 452 | Copiar pierde la guarda de paciente | *suite_57: hallazgo 2 — Copiar se niega* | Sí |
+| 453 | la rectificación deja de sellar `rectificada@` | *suite_04: hallazgo 3 — sella rectificada* | Sí |
+| 454 | `bumpStatCita` deja de respetar el sello `rectificada@` | *suite_04: hallazgo 3 — no recuenta* | Sí |
+| 455 | vuelve el borrado previo al await + se guarda una lectura fallida como fresca | *suite_15: hallazgo 4* | Sí |
+| 456 | `_labsPrefetch` vuelve a cachear la lista YA recortada a 90 días | *suite_15: hallazgo 5* | Sí |
+| 457 | `{sinRed:true}` deja de tener efecto en `mtrCacheResumenGuardar` | *suite_57: hallazgo 6* | Sí |
+| 458 | el repaso de 20 s vuelve a cerrar el cuadro sin comprobar `rec.leidos`/la caché | *suite_63: hallazgo 7* | Sí |
+| 459 | las dos inserciones del Redactor IA vuelven a compartir la etiqueta «Redactor IA» | *suite_57: hallazgo 8* | Sí |
+| 460 | «↩ Deshacer» de Exámenes vuelve a ofrecerse solo por `_huboEscritura`, sin `_seGuardoLote` | *suite_15: v18.0.30 (L6643/L6714), fortalecida* | Sí |
+| 461 | «Ordenar pendientes» del paquete pierde el candado `isOrdenLabsConductaHoy` | *suite_15: hallazgo 10* | Sí |
+| 462 | cambiar de especialidad deja de repintar los chips de día | *suite_15: hallazgo 11* (destapó además un bug propio: el `indexOf` de la prueba encontraba «renderDayChips» dentro de su propio comentario explicativo — se corrigió filtrando comentarios, como ya hace suite_09) | Sí |
+| 463 | `abrirRecordatorioCita` deja de pasar `det.citaId`/`det.pacienteId` a `onCancelar` | *suite_62: hallazgo 12 — la fila de verificación de la fuente* | Sí |
+| 464 | `_anularCitaAsignadaReal` deja de preferir `opciones.citaId`/`opciones.pacienteId` sobre `det` | *suite_62: hallazgo 12 — cruce de medianoche* | Sí |
+
+Banco completo: **3.116 comprobaciones pasan, 0 fallan.**
+
+## v18.0.133 — la suite de recorridos: la marca única, verificada por donde el médico camina
+
+El barrido de v18.0.131 dejó un pendiente propio: la suite que CAMINA las secuencias reales
+del modal de agendamiento en lugar de mirar pantallas sueltas. `suite_73_recorridos` recorre
+nueve caminos (R1–R8): abrir con el plazo por defecto, cambiar de plazo, la fecha manual de
+control y su «volver», el salto automático cuando el centro no tiene agenda propia, el sondeo
+que tacha un día sin agenda, el cambio de especialidad, el turno elegido al cambiar de día, la
+fecha manual de la TOMA, cerrar con ✕ y reabrir, y el stepper con su resumen. En cada parada,
+la misma invariante: **a lo sumo UNA marca activa** (día, plazo, especialidad, tipo, turno,
+chip de toma) y nunca una marca activa y bloqueada a la vez.
+
+**Dos rojos que no eran de producción.** R2 y R7 abrieron en rojo con asertos mal planteados:
+exigían «cero marcas» donde el diseño marca una (y solo una) a propósito. Tras «volver» del
+modo manual, v15.8.0 re-marca el plazo que explica el rango restaurado; y al reabrir, la
+preselección ⭐ de v15.4.0 marca el turno sugerido por el auto-análisis sobre el resumen clínico
+cacheado. Ambos asertos se reformularon a la invariante real — «sin estados dobles»: a lo sumo
+una marca, y si existe, debe ser LA correcta (el plazo cuya `calcBusinessTargetDate` explica el
+centro restaurado; el slot con clase `vgl-agm-sbtn-sugerido`, no un turno heredado).
+
+**Un rojo que sí era de producción (R6).** Escribir la fecha manual de la toma con un chip de
+día ya clicado no re-centraba los chips: `renderLabDayChips` prefería el `selectedLabDateInfo`
+viejo — el del chip clicado — y la cabecera `#vgl-lab-date-lbl` seguía anunciando la fecha que
+el médico ya había descartado. El manejador `change` del calendario manual ahora registra la
+fecha escrita como elección manual (`_labFechaTomaElegidaManual = true;`), suelta el chip
+(`selectedLabDateInfo = null;`) ANTES de renderizar, y repinta la etiqueta tras el render.
+
+**Una víctima colateral del comentario explicativo.** El comentario de 9 líneas del fix R6
+creció el código entre `_tomaControlAfinarToken++;` y `renderLabDayChips(v);` y rompió la
+ventana `{0,100}` de una comprobación de fuente preexistente de suite_15. Siguiendo el idiom
+del proyecto (v18.0.118 ya amplió ventanas cuando el código crece), la ventana pasó a `{0,900}`
+y el anclaje se REFUERZÓ con las dos fijaciones nuevas — el guardián ahora también muerde si
+alguien quita el fix completo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 465 | en el `change` del calendario manual de la toma, `_labFechaTomaElegidaManual = true;` y `selectedLabDateInfo = null;` vueltos no-ops (el render vuelve a preferir el chip clicado) | *suite_73: R6 — la fecha manual de toma re-centra los chips y sobrevive al cambio de día* | Sí |
+| 466 | quitados `selectedLabDateInfo = null;` y su `renderLabDayChips(v);` del manejador de la fecha manual | *suite_15: REGRESIÓN — el afinado de cargarHoras respeta labs-primero… «y el calendario manual de la toma también»* | Sí |
+
+Banco completo: **3.125 comprobaciones pasan, 0 fallan.**
+
+## v18.0.134 — la auditoría de rendimiento y seguridad aplicada de una vez: los 3 P, mutación a mutación
+
+El plan completo de la auditoría del 03-sep-2026 (`docs/AUDITORIA_RENDIMIENTO_SEGURIDAD_20260903.md`,
+commit `b085e24`) entró entero en este release: P1 (A1–A3, prioridad absoluta), P2 (M1–M8,
+memoria) y P3 (parches baratos B1–B13), con B4 y B5 documentados sin cambio de código (ver
+abajo). La nueva `suite_74_auditoria_p123` fija los arreglos con 18 casos: la fuente única de
+versión con la compuerta de integridad despierta (A1 — el tablero ahora SÍ publica la huella
+esperada), la purga del caché piloto vencido o de formato viejo (A2), la cosecha que solo corre
+cuando el DOM se movió y la firma barata que disuelve la doble serialización (A3/M2), el canal
+postMessage que solo acepta forma de estado (M1), el sondeo que respira según visibilidad y
+ventana crítica (M3), los topes que podan historial de inasistencias, bitácora y mapa de
+identidades al registrar (M4, M5/B1/B12, B9), el TTL de los ejemplos de estilo (B3), las URLs
+de blob que se revocan (B6/B7), las marcas de aviso que caducan (B8), el lote de deshacer con
+tope y liberación (M7), la sesión del día que se limpia de verdad (M8) y el apagado de
+emergencia que suelta observador y registro (B10/B13).
+
+**Dos mutantes enmascarados, rediseñados a mitad de camino.** Las mutaciones originales de M4
+y B9 desactivaban la poda por vencimiento… y SOBREVIVÍAN: las semillas de las pruebas traían
+más entradas que el tope, así que el recorte por tope eliminaba a los mismos elementos y la
+prueba no distinguía cuál de los dos mecanismos había trabajado. Se rediseñaron contra el tope
+(`sobraM4 = 0`, `sobranB9 = 0`), que la prueba sí separa del vencimiento. Toda mutación se
+aplicó con un script de escritura atómica sobre un respaldo verificado, y el userscript quedó
+restaurado y verde tras cada lote.
+
+**B4 y B5 quedan documentados, no parcheados.** B4 (el portapapeles retiene la nota tras
+copiar): sobrescribir el portapapeles del médico después de una copia explícita puede destruir
+lo que él acaba de copiar a propósito; el riesgo se acepta y queda anotado en la auditoría. B5
+(el `doGet` del Apps Script es público): es el diseño propio del VersionCheck — ya catalogado
+como SEC-03 «endpoint público seguro» — y su única puerta sigue siendo el token `vgl-2026`
+(M6/SEC-05), verificado idéntico en ambos extremos y con la decisión de rotación fechada para
+el cierre de 2026 en `docs/SECRETOS_EXPUESTOS.md`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 467 | en `_vglIntegridadFalla`, vuelta no-op la compuerta que ignora la huella de OTRA versión: un tablero atrasado apagaría el script en plena consulta | *suite_74: A1: cabecera, constante VERSION y arnés coinciden* | Sí |
+| 468 | en `pilotoDesdeCache`, la purga del paquete no-v3 o vencido vuelta no-op: el almacén retiene el bulto para siempre | *suite_74: A2: la base piloto vencida o vieja se purga del almacén* | Sí |
+| 469 | la compuerta de suciedad siempre-sucia: la cosecha corre aunque el DOM no se movió | *suite_74: A3.1: la cosecha solo corre cuando el DOM se movió* | Sí |
+| 470 | la firma del registro ciega al contenido: dos contenidos distintos firman igual | *suite_74: A3.2: la firma ignora sellos de tiempo, no contenido* | Sí |
+| 471 | `_vglChanMsgValido` acepta `t` como cadena: por el canal entra lo que no tiene forma de estado | *suite_74: M1: solo entra por el canal lo que tiene forma de estado* | Sí |
+| 472 | el sondeo con pestaña oculta sin cadencia lenta: 5 s en vez de 15 s | *suite_74: M3: pestaña oculta sondea lento y visible recupera cadencia* | Sí |
+| 473 | `_hayCitaCritica` nunca crítica: la ventana de 90 s antes de vencer la gracia no acelera nada | *suite_74: M3: la ventana crítica son 90 s antes de vencer la gracia* | Sí |
+| 474 | en el registro de inasistencias, `sobraM4 = 0` y la poda de vencidos no-op: el historial crece sin tope de 500 | *suite_74: M4: el historial de inasistencias se poda al registrar* | Sí |
+| 475 | la bitácora sin censura (`safeDetails[k] = val`): ids de turno y teléfonos dentro de textos quedan en claro | *suite_74: M5/B1/B12: la bitácora censura identificadores, no contenido* | Sí |
+| 476 | `vgl_estilo_ejemplos` sin TTL: los ejemplos de estilo nunca caducan a los 180 días | *suite_74: B3: los ejemplos de estilo caducan a los 180 días* | Sí |
+| 477 | el `setTimeout` que revoca la URL del blob de la bitácora, no-op: la URL vive para siempre | *suite_74: B6a: la URL del blob de la bitácora se libera* | Sí |
+| 478 | ídem para la URL del blob del diagnóstico | *suite_74: B6b: la URL del blob del diagnóstico se libera* | Sí |
+| 479 | la revocación de la URL del guion del worker, no-op: una fuga por cada carga de página | *suite_74: B7: la URL del guion del worker se revoca al crearlo* | Sí |
+| 480 | `if (false)` en la limpieza de marcas `vgl_n_*`: el aviso de hace 25 horas sigue en el almacén | *suite_74: B8: las marcas de aviso de más de 24 horas se limpian* | Sí |
+| 481 | en el mapa de identidades, `sobranB9 = 0`: sin tope de 20 logins, el mapa crece sin control | *suite_74: B9: el mapa de identidades se poda al guardar* | Sí |
+| 482 | sin el `while` que recorta al acumular el lote: 450 pares en vez del tope de 400 | *suite_74: M7: el lote de deshacer tiene tope y se libera al expirar* | Sí |
+| 483 | los `.clear()` de la sesión del día, borrados: las fechas de laboratorio sobreviven al cierre | *suite_74: M8: la sesión del día se limpia por completo* | Sí |
+| 484 | sin `disconnect()` del observador en el apagado de emergencia: queda conectado tras el cierre | *suite_74: B10+B13: el apagado de emergencia suelta observador y registro* | Sí |
+
+Banco completo: **3.143 comprobaciones pasan, 0 fallan.**

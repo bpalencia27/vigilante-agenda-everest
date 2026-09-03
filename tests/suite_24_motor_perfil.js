@@ -2,7 +2,9 @@ module.exports = {
   nombre: "Motor de perfil (D3-bis)",
   cubre: ["perfilPaciente", "recomendacionHorario", "clasificaCupoAgenda", "esCupoAdicional",
     // v15.4.0 — triaje v2 y regla labs-primero (reglas dictadas por el médico, 19-ago)
-    "_evaluarComplejidadPaciente", "mtrPlanLabsPrimero", "mtrControlDesdeLabs", "hora24De"],
+    "_evaluarComplejidadPaciente", "mtrPlanLabsPrimero", "mtrControlDesdeLabs", "hora24De",
+    // v18.0.130 — tres reportes en vivo del médico (02-sep) sobre el mismo paciente
+    "mtrNormaYaAcortadaPorEstadio", "mtrPlanParaclinicos"],
   pruebas(t, api) {
     t.caso("Eje A (franja) - diabéticos obtienen primera mitad", () => {
       t.igual(api.perfilPaciente(["Diabetes"]).franja, "primera_mitad");
@@ -220,6 +222,33 @@ module.exports = {
       t.igual(r.franjaSugerida, "primera_mitad");
       t.cierto(r.badges.join(" ").includes("Insulinorrequirente"), "con su insignia explicando por qué");
     });
+    // =================================================================
+    //  v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep).
+    //
+    //  La guarda de la v17.8.1 (hallazgo #87) se escribió justo para no imprimir un dato
+    //  falso pegado a uno real —«(165/NaN)», «(165/0)»— y quedó COJA: exigía `pad > 0`
+    //  pero nunca `pas > 0`. Con la sistólica en 0 (lectura fallida, casilla vacía) y una
+    //  diastólica real de 105 salía «PA Descontrolada (0/105)»: el mismo 0 que el propio
+    //  comentario llama «un dato falso», impreso como si fuera media lectura de tensión.
+    //
+    //  La conducta clínica no cambia —`paDescontrolada` ya era cierto por la diastólica
+    //  sola— pero lo que el médico LEE deja de mezclar un dato falso con uno verdadero.
+    // =================================================================
+    t.caso("triaje: la insignia de PA nunca imprime un cero como si fuera media lectura", () => {
+      const pa = (pas, pad) => api._evaluarComplejidadPaciente({}, {
+        factores: { paSistolica: pas, paDiastolica: pad },
+        riesgo: { categoria: "bajo" }, medicamentos: [],
+      }, []).badges.filter((b) => /PA Descontrolada/.test(b))[0] || "";
+
+      t.igual(pa(0, 105), "PA Descontrolada (diastólica 105)",
+        "sistólica en 0: se muestra SOLO la cifra que de verdad se leyó");
+      t.igual(pa(165, 0), "PA Descontrolada (sistólica 165)", "y al revés igual (esto ya funcionaba)");
+      t.igual(pa(-5, 105), "PA Descontrolada (diastólica 105)",
+        "una sistólica negativa —parseo corrupto— tampoco es una lectura");
+      // La otra dirección: con dos cifras reales se siguen mostrando las dos.
+      t.igual(pa(165, 105), "PA Descontrolada (165/105)", "dos lecturas buenas se muestran juntas, como siempre");
+    });
+
     t.caso("triaje v2: polifarmacia (>=5 fármacos DEL PROGRAMA) fuerza primera mitad", () => {
       // v16.4.0 — Reportado con pantallazo ("lista 27 medicamentos pero más de 20 no son
       // de riesgo cardiovascular"): la polifarmacia ahora se mide SOLO sobre fármacos del
@@ -366,15 +395,30 @@ module.exports = {
       };
       const r = api.mtrPlanLabsPrimero(plan, "2026-08-21");
       t.cierto(!!r && r.pisoRelajado, "el piso cede");
-      t.cierto(r.labMinIso <= "2026-08-24", "la toma queda en el vencimiento o antes, nunca después");
       t.cierto(/Glicemia/.test(r.motivoPiso), "y se dice por cuál examen: " + r.motivoPiso);
       // v17.6.73 — mismo criterio: sin verbo propio, listo para embeberse en notaLP.
       t.igual(r.motivoPiso, "el examen Glicemia vence el 2026-08-24 y esperar 14 días lo dejaría vencer",
         "motivo exacto del caso 2, sin 'adelantada al vencimiento de' propio");
-      // La comprobación que de verdad importa: el cambio RESUELVE el problema que #128
-      // solo pudo declarar. Con la fecha nueva, ya no hay aviso de vencimiento.
-      t.igual(api.mtrAvisoVencimiento(plan, r.labMinIso), null, "CERO VENCIDOS: con esta fecha el examen ya no llega vencido");
-      t.cierto(api.mtrLabsPrimeroVencimientoInevitable(plan, r.pisoNormalIso), "y en el piso viejo sí llegaba: por eso se movió");
+      // =====================================================================
+      // v18.0.130 — DECISIÓN DEL MÉDICO (reporte en vivo del 02-sep): «me sigue sugiriendo
+      // exámenes de un día para otro y por lo general en esos casos NO HAY CITAS DE EXÁMENES;
+      // el rango en días calendario para agendar un examen no debe ser menor a 7 días».
+      //
+      // Este caso es EXACTAMENTE el que paga esa decisión: la glicemia vence a los 3 días y el
+      // piso urgente ya no baja de 7, así que la toma cae DESPUÉS del vencimiento. Antes se
+      // adelantaba al día 3 y CERO VENCIDOS se cumplía sobre el papel.
+      //
+      // El médico lo decidió sabiéndolo: una fecha para la que no existe cupo en el laboratorio
+      // no salva ningún examen — solo manda al paciente a una ventanilla cerrada y le hace
+      // perder el viaje. Se prefiere una fecha que exista y decir la verdad sobre lo que se
+      // pierde, a una fecha imposible que cuadre una invariante en la pantalla.
+      // =====================================================================
+      const dias = (iso) => Math.round((new Date(iso + "T00:00:00") - new Date("2026-08-21T00:00:00")) / 86400000);
+      t.cierto(dias(r.labMinIso) >= 7, "nunca antes de 7 días calendario: " + r.labMinIso + " (" + dias(r.labMinIso) + " d)");
+      t.cierto(dias(r.labMinIso) <= 14, "ni después de 14: la ventana urgente es [7,14] y encaja bajo la normal [14,21]");
+      t.cierto(r.labMinIso > "2026-08-24",
+        "y sí: con el piso de 7 días este examen ya no se alcanza. Es el costo que el médico aceptó.");
+      t.cierto(api.mtrLabsPrimeroVencimientoInevitable(plan, r.pisoNormalIso), "en el piso normal tampoco llegaba: por eso el piso cede igual");
     });
     t.caso("mtrPlanLabsPrimero: un examen vigente que vence en <=30 días también la activa; a >30 días NO", () => {
       const plan30 = { drivers: [{ clave: "LDL", nombre: "LDL", subestado: "vigente", diasParaVencer: 25 }], pasajeros: [], vencidos: [] };
@@ -438,6 +482,169 @@ module.exports = {
       t.cierto(dias >= 4, "nunca por debajo de las 72 h que pide la norma (quedaron " + dias + " días)");
       // Con constancia de agenda propia en sábado, el objetivo se cumple exacto.
       t.igual(api.mtrControlDesdeLabs("2026-09-05", { grupoSabado: true }), "2026-09-12", "+7 clavado");
+    });
+
+    // =====================================================================
+    // v18.0.130 — TRES REPORTES EN VIVO DEL MÉDICO (02-sep), sobre el MISMO paciente y la
+    // MISMA pantalla. Los tres están reproducidos aquí con su contexto real.
+    // =====================================================================
+    const HOY130 = "2026-09-02";
+    const _dias130 = (iso, desde) => Math.round((new Date(iso + "T00:00:00") - new Date((desde || HOY130) + "T00:00:00")) / 86400000);
+
+    // ---- REPORTE 1: el perfil lipídico partido en dos listas ----
+    // «Cuando el LDL se debe ordenar en la siguiente cita, los demás exámenes del perfil
+    // lipídico deben aparecer arriba también». En Everest los cuatro van en el mismo tubo:
+    // enseñar tres en «lo que sigue vigente» le miente sobre lo que el paquete agrega.
+    t.caso("v18.0.130 (reporte 1): si un lípido entra en la toma, los otros tres entran con él", () => {
+      // El caso que lo destapó: el que entra NO es el LDL sino un triglicérido arrastrado por
+      // la regla de gracia, que corre DESPUÉS de donde vivía el cierre del paquete.
+      const ctx = {
+        hoyIso: HOY130, programa: "DM2", esDm2: true, categoriaRiesgo: "alto", edad: 62,
+        estadioAdministrativo: "G2", rac: 90, egfrCkdEpi: 88,
+        ultimos: {
+          COLESTEROL_TOTAL: { fecha: "2026-07-19", valor: 260 },
+          COLESTEROL_HDL: { fecha: "2026-06-24", valor: 30 },
+          COLESTEROL_LDL: { fecha: "2026-08-13", valor: 160 },
+          TRIGLICERIDOS: { fecha: "2026-05-30", valor: 320 },
+          GLUCOSA: { fecha: "2026-04-15", valor: 180 },
+          HBA1C: { fecha: "2026-04-15", valor: 9.5 },
+          CREATININA: { fecha: "2026-04-15", valor: 2.4 },
+          RAC: { fecha: "2026-04-15", valor: 90 },
+          UROANALISIS: { fecha: "2026-04-15", valor: 1 },
+        },
+      };
+      const plan = api.mtrPlanParaclinicos(ctx);
+      const LIP = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"];
+      const enOrdenar = new Set((plan.ordenar || []).map((a) => a.clave));
+      const dentro = LIP.filter((k) => enOrdenar.has(k));
+      t.cierto(dentro.length > 0, "precondición: al menos un lípido entra en la toma");
+      t.igual(dentro.length, 4, "y entonces entran LOS CUATRO: " + dentro.join(", "));
+      // La otra mitad: ninguno se queda en «lo que sigue vigente».
+      const vigentes = [].concat(plan.drivers || [], plan.pasajeros || [])
+        .filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !enOrdenar.has(a.clave))
+        .map((a) => a.clave);
+      t.igual(LIP.filter((k) => vigentes.indexOf(k) >= 0), [], "ningún lípido suelto en la otra lista");
+
+      // Y CADA UNO lleva el porqué clínico, que es lo segundo que pidió el médico. No basta con
+      // que salgan arriba: tienen que decir si se repiten por un lípido fuera de metas —y
+      // entonces siguen vigentes— o porque el perfil ya cumple su vigencia.
+      const arrastrados = (plan.ordenar || []).filter((a) => a.motivoCosecha === "paquete_lipidos");
+      t.cierto(arrastrados.length > 0, "hay lípidos arrastrados por el paquete");
+      for (const a of arrastrados) {
+        t.cierto(a.paqueteLipidosPor === "meta" || a.paqueteLipidosPor === "vigencia",
+          a.clave + " dice por cuál de los dos motivos entra (" + a.paqueteLipidosPor + ")");
+      }
+      t.cierto(arrastrados.some((a) => a.paqueteLipidosPor === "meta"),
+        "con un LDL en 160 y meta de 70, el motivo es la meta");
+      t.cierto(arrastrados.every((a) => !a.paqueteLipidosPor || a.paqueteLipidosPor !== "meta" || a.paqueteLipidosQuien),
+        "y se dice CUÁL examen está fuera de metas, no «alguno»");
+    });
+
+    t.caso("v18.0.130 (reporte 1): el cierre del paquete corre DESPUÉS de la gracia, que es lo que fallaba", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iDecl = src.indexOf("const _cerrarPaqueteLipidos = () => {");
+      const iGracia = src.indexOf('cosechar(d, "gracia");');
+      const iLlamada = src.indexOf("_cerrarPaqueteLipidos();");
+      t.cierto(iDecl >= 0 && iGracia >= 0 && iLlamada >= 0, "las tres piezas existen");
+      t.cierto(iLlamada > iGracia,
+        "el cierre se ejecuta DESPUÉS del arrastre por gracia: si corre antes, no ve el lípido que la gracia acaba de meter");
+      t.igual((src.match(/_cerrarPaqueteLipidos\(\);/g) || []).length, 1, "y una sola vez");
+    });
+
+    t.caso("v18.0.130 (reporte 1): cada lípido dice el porqué clínico, no solo el mecanismo del tubo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // Los dos casos que el médico pidió distinguir.
+      t.cierto(/se repite porque " \+ \(a\.paqueteLipidosQuien/.test(src),
+        "caso 1: se repite por un lípido fuera de metas, y se dice cuál");
+      t.cierto(/Sigue vigente hasta el " \+ mtrFechaLegible\(a\.vence\)/.test(src),
+        "…y se deja claro que los otros tres SIGUEN VIGENTES, con su fecha");
+      t.cierto(/el perfil lipídico completo cumple su vigencia/.test(src),
+        "caso 2: el perfil entero cumple su vigencia");
+      t.falso(/viene en el mismo perfil lipídico, no se pide suelto"\);\s*\}/.test(src),
+        "el texto único de antes ya no es la única salida");
+    });
+
+    // ---- REPORTE 2: la glicemia «vencida» a los 30 días ----
+    // «Se ordenó el 10/07/2026 y me aparece que ya venció el 9 de agosto — esto no es el 50 %
+    // de la vigencia del examen». Lo era, pero de 60: la norma ya la había acortado por el
+    // estadio renal, y el 50 % se apilaba encima. Decisión del 02-sep: no se apila.
+    t.caso("v18.0.130 (reporte 2): el 50 % no se apila sobre una vigencia que el estadio ya acortó", () => {
+      const ctx = {
+        hoyIso: HOY130, programa: "ERC", estadioAdministrativo: "G4", esDm2: true,
+        categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 25,
+      };
+      const a = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2026-07-10", valor: 180 }, ctx);
+      t.igual(a.vigenciaNormaDias, 60, "en ERC G4 la norma le da 60 d a la glicemia (no 180)");
+      t.igual(a.vigenciaDias, 60, "y esos 60 son el plazo: el 50 % no vuelve a partirlos");
+      t.igual(a.vence, "2026-09-08", "el paciente del reporte pasa de «venció el 9 ago» a «vence el 8 sep»");
+      t.igual(a.fueraDeMeta, true, "el examen SIGUE fuera de metas: eso no se oculta");
+      t.igual(a.estadioSinAcortar, true, "y se publica por qué no se acortó, para poder decirlo en pantalla");
+      // Donde la vigencia es la base del programa, el 50 % sí sigue aplicándose.
+      const b = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2026-07-10", valor: 180 },
+        { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88 });
+      t.igual(b.vigenciaNormaDias, 180, "en DM2 sin estadio la norma da 180");
+      t.igual(b.vigenciaDias, 90, "y ahí el 50 % sí manda: la regla no se desactiva, se acota");
+      t.igual(b.estadioSinAcortar, false, "y se dice que aquí no fue el estadio");
+    });
+
+    t.caso("v18.0.130 (reporte 2): la guarda compara contra el estadio MÁS LEVE, no contra «sin estadio»", () => {
+      // Primer intento del arreglo: comparar contra el programa sin estadio. En ERC esa celda
+      // no existe (devuelve null) y la guarda no se activaba nunca. Lo destapó medir, no leer.
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "glicemia", null, true, 62, null), null,
+        "en ERC no hay celda «sin estadio»: por eso la referencia es G1");
+      t.cierto(api.mtrNormaYaAcortadaPorEstadio("GLUCOSA", { programa: "ERC", estadioAdministrativo: "G4", esDm2: true, edad: 62 }),
+        "ERC G4 (60) contra ERC G1 (180): el estadio acortó");
+      t.falso(api.mtrNormaYaAcortadaPorEstadio("GLUCOSA", { programa: "ERC", estadioAdministrativo: "G2", esDm2: true, edad: 62 }),
+        "ERC G2 (180) contra ERC G1 (180): no acortó nada");
+      t.falso(api.mtrNormaYaAcortadaPorEstadio("GLUCOSA", { programa: "DM2", estadioAdministrativo: null, esDm2: true, edad: 62 }),
+        "sin estadio no hay nada que comparar: la guarda no frena");
+      // Y la misma vara en el camino del aviso de entrada (la lección de la v18.0.120).
+      const opts = { programa: "ERC", estadio: "G4", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true };
+      t.igual(api._vigenciaDiasParaAnalito("GLUCOSA", 180, opts), 60,
+        "el aviso de entrada juzga igual que el panel: 60, no 30");
+    });
+
+    // ---- REPORTE 3: la toma de un día para otro ----
+    // «Me sigue sugiriendo exámenes de un día para otro y por lo general en esos casos no hay
+    // citas de exámenes; el rango en días calendario no debe ser menor a 7 ni mayor a 14».
+    t.caso("v18.0.130 (reporte 3): la toma urgente se mueve entre 7 y 14 días, nunca mañana", () => {
+      const plan = {
+        drivers: [{ clave: "GLUCOSA", nombre: "Glicemia", subestado: "vencido", estado: "A", vence: "2026-06-01" }],
+        pasajeros: [], vencidos: [{ clave: "GLUCOSA", nombre: "Glicemia", estado: "A", subestado: "vencido", vence: "2026-06-01" }],
+      };
+      const r = api.mtrPlanLabsPrimero(plan, HOY130);
+      t.cierto(!!r, "con un principal vencido, labs-primero se activa");
+      t.cierto(r.pisoRelajado, "y el piso cede");
+      const d = _dias130(r.labMinIso);
+      t.cierto(d >= 7, "nunca antes de 7 días calendario (quedó en " + d + ")");
+      t.cierto(d <= 14, "ni después de 14 (quedó en " + d + ")");
+    });
+
+    t.caso("v18.0.130 (reporte 3): un PASAJERO vencido no adelanta la toma; los principales sí", () => {
+      // Palabras del médico: «los demás pueden esperar a la siguiente fecha: PTH, fósforo,
+      // albúmina, hemoglobina». Son exactamente MTR_PASAJEROS: la regla ya tenía el nombre
+      // puesto, lo que faltaba era usarlo aquí.
+      const soloPasajero = {
+        drivers: [{ clave: "COLESTEROL_LDL", nombre: "LDL", subestado: "vigente", estado: "D", diasParaVencer: 20, vence: "2026-09-22" }],
+        pasajeros: [], vencidos: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", estado: "A", subestado: "vencido", vence: "2026-06-01" }],
+      };
+      const r1 = api.mtrPlanLabsPrimero(soloPasajero, HOY130);
+      t.cierto(!!r1, "el módulo se activa igual (hay un LDL por vencer en ≤30 d)");
+      t.falso(r1.pisoRelajado, "pero el piso NO cede por una hemoglobina vencida: puede esperar");
+      t.cierto(_dias130(r1.labMinIso) >= 14, "la toma se queda en la ventana normal");
+
+      const conPrincipal = {
+        drivers: soloPasajero.drivers, pasajeros: [],
+        vencidos: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", estado: "A", subestado: "vencido", vence: "2026-06-01" },
+                   { clave: "CREATININA", nombre: "Creatinina", estado: "A", subestado: "vencido", vence: "2026-06-01" }],
+      };
+      const r2 = api.mtrPlanLabsPrimero(conPrincipal, HOY130);
+      t.cierto(r2.pisoRelajado, "con una creatinina vencida sí cede: esa es de las principales");
+      t.cierto(_dias130(r2.labMinIso) >= 7 && _dias130(r2.labMinIso) <= 14, "y aterriza en la ventana [7,14]");
     });
   }
 };

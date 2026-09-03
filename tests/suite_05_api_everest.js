@@ -228,6 +228,44 @@ module.exports = {
       t.cierto(fetchCalls.includes(new Date().getFullYear()));
     });
 
+    // v18.0.90 — hallazgo #42 del enjambre: fetchAtheneaLabs no pasaba por el seguro
+    // anti-doble-disparo (_gmReq, v16.7.0) que ya protege a las demás llamadas GM de
+    // Athenea de este archivo. Dos flujos pidiendo el MISMO laboratorio casi a la vez
+    // (el prefetch al abrir la historia + un clic del médico) duplicaban tráfico real
+    // contra un portal que el propio código documenta como frágil bajo carga.
+    await t.casoAsync("hallazgo #42 — dos peticiones IDÉNTICAS y simultáneas comparten UNA sola llamada real a Athenea", async () => {
+      let llamadasReales = 0;
+      let pendiente = null;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => { llamadasReales++; pendiente = opts; },   // no resuelve todavía: "en vuelo"
+      });
+
+      const p1 = c.api.fetchAtheneaLabs(7777, 2026);
+      const p2 = c.api.fetchAtheneaLabs(7777, 2026);
+      t.igual(llamadasReales, 1,
+        "dos peticiones idénticas mientras la primera sigue en el aire comparten UNA sola llamada real — antes (sin _gmReq) eran 2, duplicando tráfico");
+
+      pendiente.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.2" }]) }) });
+      const [r1, r2] = await Promise.all([p1, p2]);
+      t.igual(r1.length, 1);
+      t.igual(r1[0].NombreParametro, "CREATININA");
+      t.igual(JSON.stringify(r1), JSON.stringify(r2), "las dos llamadas ven exactamente el mismo resultado");
+    });
+
+    await t.casoAsync("hallazgo #42 — dos peticiones para AÑOS distintos NO se deduplican entre sí: cada año pide de verdad", async () => {
+      let llamadasReales = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => {
+          llamadasReales++;
+          opts.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.0" }]) }) });
+        },
+      });
+      await Promise.all([c.api.fetchAtheneaLabs(7777, 2025), c.api.fetchAtheneaLabs(7777, 2024)]);
+      t.igual(llamadasReales, 2, "años distintos son peticiones distintas: la deduplicación no se pasa de lista");
+    });
+
     // --- Pruebas de guardas de SMS (TAREA B1) ---
     // Montaje común para (a)-(d): mock de fetch que registra URLs
     await t.casoAsync("apiAccesoAsignarTurno dispara SMS correctamente al paciente (caso base)", async () => {
@@ -344,6 +382,141 @@ module.exports = {
     // con contador doble (fetch/gm) y un gmxhr que LIQUIDA la promesa (si no,
     // el runner queda colgado esperando para siempre).
     // ---------------------------------------------------------------
+
+    // =================================================================
+    //  v18.0.47 — DOS HALLAZGOS DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, los
+    //  dos en esta misma función.
+    // =================================================================
+
+    await t.casoAsync("_pageFetchJsonCore: una conexión colgada NO deja esperando para siempre", async () => {
+      // La segunda vía (GM_xmlhttpRequest) lleva `timeout: 15000` desde siempre; la
+      // primera —la que se usa en el 100 % de los casos normales— no tenía ninguno. Una
+      // conexión que acepta y no responde no da error: se queda abierta, y como todo aquí
+      // se hace con `await`, la acción REAL del médico que la disparó (Agendar, Guardar
+      // orden, Buscar paciente) se cuelga con ella. Sin error, sin aviso, sin vuelta.
+      let señalRecibida = null;
+      const c = cargar({
+        silencioso: true,
+        // Un fetch que NO resuelve nunca — exactamente la conexión colgada. Solo termina
+        // si alguien aborta su señal, que es lo que esta prueba comprueba que ocurre.
+        fetch: (u, init) => new Promise((_, reject) => {
+          señalRecibida = init && init.signal;
+          if (señalRecibida && señalRecibida.addEventListener) {
+            señalRecibida.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" })));
+          }
+        }),
+        gmxhr: (o) => o.onerror(new Error("red")),
+      });
+      // AbortController no existe en el DOM simulado: se inyecta el real, igual que
+      // suite_16 inyecta Blob/Response/DecompressionStream para probar el inflado.
+      c.ctx.AbortController = AbortController;
+
+      const t0 = Date.now();
+      const r = await c.api._pageFetchJsonCore("/x", { method: "POST", body: "{}", __timeoutMs: 40 });
+      const tardo = Date.now() - t0;
+
+      t.igual(r, null, "la llamada TERMINA (en null), no se queda colgada");
+      t.cierto(!!señalRecibida, "al fetch se le pasó una señal de aborto");
+      t.cierto(tardo < 5000, "y terminó por su propio tope, no por el del banco (tardó " + tardo + " ms)");
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 6): el tope de v18.0.47 solo cubría el núcleo. Tres
+    // `fetch` directos que se esperan con await detrás de un botón que se deshabilita hasta que
+    // la promesa vuelva («Enviar» del modal de órdenes: generar enlace + correo; reenviar SMS)
+    // seguían sin tope: «Enviando...» para siempre. Se comprueba la pieza (_fetchConTope corta
+    // de verdad) y el cableado (los tres pasan por ella: al fetch le llega una señal de aborto).
+    await t.casoAsync("02-sep: _fetchConTope corta un fetch colgado, y los tres fetch directos (correo, enlace, SMS) pasan por él", async () => {
+      const señales = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: (u, init) => new Promise((resolve) => {
+          señales.push((init && init.signal) || null);
+          resolve({ ok: true, status: 200, text: async () => "", clone() { return this; } });
+        }),
+        gmxhr: (o) => o.onerror(new Error("red")),
+      });
+      c.ctx.AbortController = AbortController;
+
+      // (a) La pieza: un fetch que NO resuelve nunca termina por su propio tope.
+      const colgado = (u, init) => new Promise((_, reject) => {
+        if (init && init.signal && init.signal.addEventListener) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" })));
+      });
+      const t0 = Date.now();
+      let err = null;
+      try { await c.api._fetchConTope(colgado, "/x", {}, 40); } catch (e) { err = e; }
+      const tardo = Date.now() - t0;
+      t.cierto(!!err && err.name === "AbortError", "el fetch colgado termina abortado, no espera para siempre");
+      t.cierto(tardo < 5000, "y por su propio tope (tardó " + tardo + " ms)");
+
+      // (b) El cableado: los tres fetch directos le pasan al navegador una señal de aborto.
+      await c.api.apiOrdenamientoGenerarLinks(1, "AGP-1");
+      await c.api.apiEnviarOrdenPorCorreo("AGP-1", "correo@ejemplo.com", 1);
+      await c.api.reenviarSmsRecordatorio("3001234567", 55);
+      t.igual(señales.length, 3, "los tres fetch salieron");
+      t.cierto(señales.every((s) => !!s), "y los tres llevan señal de aborto — ninguno puede volver a colgarse sin tope");
+    });
+
+    // v18.0.104 — refutador de v18.0.99 (fila 6): el tope se soltaba al llegar las CABECERAS y
+    // el `await resp.text()` de después quedaba fuera — un cuerpo que no termina colgaba igual
+    // (también en el núcleo, cuyo `finally { clearTimeout }` iba antes de `resp.json()`). Y
+    // quedaban tres fetch más sin tope: el SMS automático tras AsignarTurno, la impresión del
+    // recordatorio (pestaña en blanco) y los tres de SharePoint.
+    await t.casoAsync("v18.0.104: el tope cubre la lectura del CUERPO (pieza y núcleo), y los fetch que faltaban pasan por él", async () => {
+      const c = cargar({ silencioso: true, fetch: () => Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}), text: () => new Promise(() => {}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c.ctx.AbortController = AbortController;
+      // (a) La pieza: cabeceras que llegan y un cuerpo que nunca termina → abortado por el tope.
+      const cabecerasSinCuerpo = (u, init) => Promise.resolve({
+        ok: true, status: 200,
+        text: () => new Promise((_, reject) => { if (init && init.signal) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" }))); }),
+      });
+      const t0 = Date.now();
+      let err = null;
+      try { const r = await c.api._fetchConTope(cabecerasSinCuerpo, "/x", {}, 40); await r.text(); } catch (e) { err = e; }
+      t.cierto(!!err && err.name === "AbortError", "el cuerpo colgado termina abortado — antes el tope ya se había soltado al llegar las cabeceras");
+      t.cierto(Date.now() - t0 < 5000, "y por su propio tope");
+      // (b) El núcleo: json() que nunca termina, con la señal respetada.
+      const cNuc = cargar({ silencioso: true, fetch: (u, init) => Promise.resolve({ ok: true, status: 200, json: () => new Promise((_, reject) => { if (init && init.signal) init.signal.addEventListener("abort", () => reject(Object.assign(new Error("abortada"), { name: "AbortError" }))); }) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      cNuc.ctx.AbortController = AbortController;
+      const t1 = Date.now();
+      const r = await cNuc.api._pageFetchJsonCore("/x", { method: "POST", body: "{}", __timeoutMs: 40 });
+      t.igual(r, null, "el núcleo TERMINA (en null) aunque el cuerpo no llegue nunca");
+      t.cierto(Date.now() - t1 < 5000, "por su tope (tardó " + (Date.now() - t1) + " ms)");
+      // (c) El cableado de los que faltaban, por fuente (son flujos con window.open y GM que el arnés no monta).
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/_fetchConTope\(FETCH0 \|\| window\.fetch, smsUrl,/.test(src), "el SMS automático tras AsignarTurno lleva tope");
+      t.cierto(/const resp = await _fetchConTope\(f, url, \{ credentials: "same-origin" \}\);/.test(src), "imprimirRecordatorioCita lleva tope: la pestaña en blanco no espera para siempre");
+      t.igual((src.match(/_fetchConTope\(fetch, /g) || []).length, 3, "y los tres fetch de SharePoint (listado, descarga, respaldo)");
+      t.falso(/\bawait fetch\(spListUrl\(\)/.test(src) || /await fetch\(spDownloadUrl/.test(src), "sin fetch a pelo en bootSharepointLite");
+    });
+
+    await t.casoAsync("_pageFetchJsonCore: un 401 (sesión caducada) SÍ cuenta como fallo; un 404 no", async () => {
+      // Un 401 caía en el mismo `return null` que un 404 y nunca llamaba a
+      // `_apiMarcarResultado(false)`: no contaba como fallo, no abría el cortacircuitos y
+      // no ponía en rojo el panel de salud. El asistente se quedaba ciego —sin fuente de
+      // agenda, sin avisos de llegada— y por dentro seguía creyéndose sano.
+      const c401 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c401.api._apiCorteResetParaTest();
+      const r1 = await c401.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(r1, null, "sigue devolviendo null: un 401 no se reintenta, reintentarlo no lo arregla");
+      t.igual(c401.api._apiCorteEstadoParaTest().fallos, 1, "pero AHORA cuenta como fallo del API");
+      t.cierto(c401.api._saludRegParaTest().everest.falloDesde > 0, "y el panel de salud lo registra como caída de Everest");
+
+      const c403 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 403, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c403.api._apiCorteResetParaTest();
+      await c403.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c403.api._apiCorteEstadoParaTest().fallos, 1, "el 403 igual: también es la sesión, no el recurso");
+
+      // La contención: un 404 o un 400 son respuestas LEGÍTIMAS («no existe», «mal
+      // pedido»), no un API caído. Contarlas abriría el cortacircuitos por nada.
+      const c404 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 404, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c404.api._apiCorteResetParaTest();
+      await c404.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c404.api._apiCorteEstadoParaTest().fallos, 0, "un 404 NO es un fallo del API");
+      const c400 = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 400, json: async () => ({}) }), gmxhr: (o) => o.onerror(new Error("red")) });
+      c400.api._apiCorteResetParaTest();
+      await c400.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(c400.api._apiCorteEstadoParaTest().fallos, 0, "ni un 400");
+    });
 
     await t.casoAsync("_pageFetchJsonCore: escritura (POST) con 500 NO reintenta y NO se reenvía por GM", async () => {
       const cont = { fetch: 0, gm: 0 };
@@ -546,6 +719,22 @@ module.exports = {
 
       c.api._saludMarca("modulo_que_no_existe", false);
       t.igual(c.api._saludEstado(null, ahora), "nd", "un módulo desconocido no crea entradas fantasma");
+    });
+
+    await t.casoAsync("v18.0.111 (S+ B12): solo el login de Everest identifica al médico — un `medicoId` manual en Ajustes ya no firma citas ni órdenes", async () => {
+      let fetchCount = 0;
+      const c = cargar({ silencioso: true, fetch: async () => { fetchCount++; return respuesta({ id: "ok" }); } });
+      c.api.__state.activeDoctor = { id: 0, name: "" };
+      c.api.__S.medicoId = 999;                 // un ajuste viejo que quedó guardado
+      const res = await c.api.apiAccesoAsignarTurno("turno", "pac123", "2026-08-10", "obs");
+      t.cierto(res && res.error && /NO se creó la cita/.test(res.mensaje), "sin login detectado la cita NO se crea, aunque haya un id manual guardado");
+      t.igual(fetchCount, 0, "y no sale ninguna petición");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const codigo = src.replace(/\/\/[^\n]*/g, "");
+      t.falso(/S\.medicoId\b/.test(codigo), "ninguna llamada usa S.medicoId como respaldo de identidad");
+      t.falso(/S\.medicoNombre\b/.test(codigo), "ni S.medicoNombre");
+      t.falso(/escriba <b>su identificador de médico<\/b>/.test(src), "y el aviso ya no manda a buscar en Ajustes una casilla que nunca existió");
+      t.cierto(/agenda del día de Everest<\/b> para que el asistente lo reconozca/.test(src), "sino a abrir la agenda del día para que se detecte solo");
     });
 
   }

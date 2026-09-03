@@ -1,3 +1,4 @@
+const esperar42 = (ms) => new Promise((r) => setTimeout(r, ms));   // v18.0.113
 // =====================================================================
 //  SUITE 42 — Los canales de aviso, ejercitados de verdad
 //
@@ -208,6 +209,32 @@ module.exports = {
     t.caso("parar el parpadeo dos veces seguidas no revienta", () => {
       const c = cargar({ silencioso: true });
       t.noLanza(() => { c.api.stopFlash(); c.api.stopFlash(); });
+    });
+
+    // v18.0.76 — HALLAZGO DE ENJAMBRE #29. origTitle se capturaba UNA sola vez por sesión y
+    // quedaba fijado para siempre tras la primera alerta del día. Reconocer una SEGUNDA
+    // alerta, de otro paciente, después de que Everest navegara a otra sección entre
+    // medias, restauraba el título de la PRIMERA alerta, no el real de ahora mismo.
+    t.caso("REGRESIÓN — una segunda alerta captura el título REAL de ahora, no el de la primera del día (hallazgo #29)", () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.win.document;
+      c.api.__S.parpadeo = true;
+
+      doc.title = "Everest — Agenda del día";
+      c.api.startFlash("🔔 alerta 1", "AMBAR");
+      doc.title = "🔔 alerta 1";                 // como si el intervalo ya hubiera pintado
+      c.api.stopFlash();                          // el médico reconoce la 1a alerta
+      t.igual(doc.title, "Everest — Agenda del día", "la 1a se restaura bien");
+
+      doc.title = "Everest — Historia clínica";   // Everest navegó a otra sección entre medias
+      c.api.startFlash("🔔 alerta 2", "AMBAR");    // llega una 2a alerta, de otro paciente
+      t.igual(doc.title, "Everest — Historia clínica",
+        "startFlash de la 2a alerta NO debe pisar el título real con el de la 1a — antes lo hacía, incluso antes de que corriera el intervalo");
+
+      doc.title = "🔔 alerta 2";
+      c.api.stopFlash();
+      t.igual(doc.title, "Everest — Historia clínica",
+        "y al reconocer la 2a se restaura la sección real de AHORA, no la de la primera alerta del día");
     });
 
     // ---------- política v15.4.0: UN aviso = UN canal ----------
@@ -591,5 +618,230 @@ module.exports = {
       t.cierto(r === null || r === undefined || typeof r === "object",
         "tiene que devolver algo manejable, no un valor suelto");
     });
+
+    // =====================================================================
+    // v18.0.17 — EL AVISO DE CEGUERA SE QUEMABA SOLO EN EL PRIMER TICK
+    //
+    // `avisoYaVisto` está fechado POR DÍA y vive en localStorage compartido entre pestañas:
+    // el aviso «Vigilante sin lectura de la agenda» sale UNA vez al día y punto. Y salía en
+    // el primer tick de cada arranque, porque `state.apiCitas` nace null y `tickApi()` solo
+    // se invoca AL FINAL del propio tick, así que `data === null` siempre la primera vez.
+    // Dos daños: se le afirmaba al médico que la conexión «aún no se aprendió esta sesión»
+    // cuando ya estaba aprendida y persistida; y, sobre todo, ese disparo espurio CONSUMÍA
+    // el único aviso del día — si a media mañana el Vigilante se quedaba ciego de verdad, el
+    // aviso ya no salía. El arreglo de v18.0.8, que existe precisamente para que la ceguera
+    // no pase en silencio, quedaba anulado por el arranque de la propia pestaña.
+    //
+    // ESTO ES UNA REGRESIÓN DE CÓDIGO FUENTE, y se dice por qué: ejercitar el defecto de
+    // verdad exige el `tick()` completo con su DOM, su liderazgo y su reloj, y una prueba
+    // así comprobaría media docena de cosas a la vez y se rompería por cualquiera de ellas.
+    // Lo que hay que fijar aquí es UN CABLE: que la condición del aviso exija haber
+    // intentado leer el API. Mismo criterio que la regresión de fuente de suite_71 sobre el
+    // enganche de los widgets y la de suite_57 sobre el nombre que viaja al saneador.
+    t.caso("v18.0.17: el aviso de ceguera exige haber INTENTADO leer el API (no se quema en el arranque)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const i = src.indexOf('"vgl-sin-datos-agenda"');
+      t.cierto(i > 0, "sigue existiendo el aviso de ceguera con su identificador de una-vez-al-día");
+
+      // La condición que lo dispara está justo encima de la llamada a osNotify.
+      const bloque = src.slice(Math.max(0, i - 1400), i);
+      const cond = bloque.slice(bloque.lastIndexOf("if (leader"));
+      t.cierto(/_enModuloHCHealth\(\)/.test(cond), "sigue restringido al módulo clínico");
+      t.cierto(/secc !== "agenda"/.test(cond),
+        "y sigue siendo «aquí no puedo leer la agenda del DOM», que es el arreglo de v18.0.8");
+      t.cierto(/_intentoLeerApi/.test(cond),
+        "pero además exige que esta pestaña haya intentado leer el API: sin eso, el primer tick lo quema");
+
+      // Y la definición del testigo tiene que ser la correcta en las dos direcciones.
+      const def = src.slice(src.indexOf("const _intentoLeerApi"), src.indexOf("const _intentoLeerApi") + 90);
+      t.cierto(/!API\.url/.test(def),
+        "sin URL aprendida el mensaje SÍ es cierto y debe seguir saliendo: no se puede silenciar la ceguera real");
+      t.cierto(/API\.ok\s*\+\s*API\.fallos/.test(def),
+        "y con URL aprendida hace falta al menos un intento —correcto o fallido— antes de declarar ceguera");
+    });
+
+
+    // =====================================================================
+    // v18.0.19 — EL AVISO DE ACTUALIZACIÓN LEÍA OTRO ARCHIVO QUE EL QUE SE INSTALA
+    //
+    // `VGL_UPDATE_GIST_URL` apuntaba a gistfile2.txt con el comentario «= @updateURL del
+    // encabezado», mientras el encabezado apunta a gistfile1.txt desde el commit 62c09c2
+    // («canal real de los equipos»). Tampermonkey instalaba bien —lee el encabezado— pero
+    // el aviso proactivo «⬆ Actualización disponible» consultaba OTRO archivo: si ése se
+    // quedó congelado, el aviso no sale nunca y los equipos solo se actualizan si
+    // Tampermonkey completa su ciclo diario por su cuenta.
+    //
+    // Lo respalda la telemetría real del 31-ago: de 23 equipos activos, 12 seguían en la
+    // v17.0.2 — sin ninguno de los arreglos de la jornada.
+    //
+    // La prueba fija el invariante, no el literal: el encabezado y la constante tienen que
+    // apuntar al MISMO archivo. Así el día que se cambie el canal, cambiarlo en un sitio y
+    // no en el otro pone el banco en rojo — que es justo lo que no pasó la última vez.
+    // =====================================================================
+    t.caso("v18.0.19: el aviso de actualización consulta el MISMO archivo que Tampermonkey instala", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const cab = /^\/\/\s*@updateURL\s+(\S+)/m.exec(src);
+      t.cierto(!!cab, "el encabezado sigue declarando @updateURL");
+
+      const bloque = src.slice(src.indexOf("const VGL_UPDATE_GIST_URL"), src.indexOf("function mtrCheckActualizacionGist"));
+      const literales = bloque.match(/https:\/\/gist\.githubusercontent\.com\/\S+?\.txt/g) || [];
+      t.cierto(literales.length >= 1, "la constante conserva una URL de respaldo por si GM_info no la expone");
+      for (const u of literales) {
+        t.igual(u, cab[1],
+          `el respaldo de VGL_UPDATE_GIST_URL debe ser EXACTAMENTE el @updateURL del encabezado (encabezado: ${cab[1]})`);
+      }
+
+      // Y la defensa que impide que vuelvan a separarse: la URL se toma de GM_info cuando
+      // está, que es la misma cadena que usa el gestor para instalar.
+      t.cierto(/GM_info/.test(bloque),
+        "la constante debe derivarse de GM_info, no ser solo un literal que alguien pueda olvidar de actualizar");
+    });
+
+
+    // v18.0.109 — S+ flujo (C14): `persist` no hacía nada en los avisos VERDE/AZUL: la leyenda
+    // de colores y «Órdenes generadas» (persist=true) se cerraban solos a los 9 s.
+    await t.casoAsync("v18.0.109 (C14): un aviso VERDE con persist=true NO se cierra solo; sin persist, sí", async () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.doc; const crearBase = doc.createElement;
+      doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { const k = String(sel).replace(/:not\([^)]*\)/g, ""); if (!memo.has(k)) memo.set(k, doc.createElement("div")); return memo.get(k); }; e.querySelectorAll = () => []; return e; };
+      const bandeja = doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); n.parentElement = bandeja; };
+      const getOrig = doc.getElementById;
+      doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : getOrig(id));
+      c.api._renderToast("VERDE", "Leyenda de colores", "se queda", true, "");
+      c.api._renderToast("VERDE", "Aviso normal", "se va solo", false, "");
+      t.igual(bandeja.children.length, 2, "montaje: los dos avisos se pintaron");
+      await new Promise((r) => setTimeout(r, 40));   // el arnés capa los 9 s de autocierre a 1 ms
+      const vivos = bandeja.children.filter((n) => !(n.classList && n.classList.contains && n.classList.contains("out")));
+      const titulos = vivos.map((n) => { try { return String(n.querySelector(".vgl-toast-title").textContent); } catch (e) { return ""; } });
+      t.cierto(titulos.includes("Leyenda de colores"), "el persistente sigue (antes: se cerraba a los 9 s): " + JSON.stringify(titulos));
+      t.falso(titulos.includes("Aviso normal"), "el normal se cerró solo, como siempre");
+      doc.getElementById = getOrig;
+    });
+
+    // v18.0.109 — S+ robustez (B9): las notificaciones del SISTEMA (Centro de actividades de
+    // Windows, PC compartido) llevaban nombre + cédula. Ahora van sin cédula; el aviso dentro de
+    // la página conserva el texto completo.
+    t.caso("v18.0.109 (B9): lo que sale al sistema va sin cédula (nombre sí); dentro de la página el texto sigue completo", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._vglSinCedulas("PACIENTE PRUEBA UNO · CC 1122334455 · 07:00"), "PACIENTE PRUEBA UNO · CC ●●●455 · 07:00", "la cédula se enmascara y el nombre y la hora quedan");
+      const capturadas = [];
+      c.ctx.Notification = class { constructor(titulo, opciones) { capturadas.push([titulo, (opciones && opciones.body) || ""]); } static get permission() { return "granted"; } close() {} };
+      const salio = c.api._notificarSistema("ROJO", "⛔ PACIENTE PRUEBA UNO", "CC 1122334455 · llegó tarde", true, "prueba|b9");
+      t.cierto(salio && capturadas.length === 1, "montaje: salió por el sistema");
+      t.cierto(!/1122334455/.test(capturadas[0][1]) && /●●●455/.test(capturadas[0][1]), "el cuerpo que ve Windows no lleva la cédula: " + capturadas[0][1]);
+      t.cierto(/PACIENTE PRUEBA UNO/.test(capturadas[0][0]), "y el nombre sí, para saber de quién es");
+      delete c.ctx.Notification;
+    });
+
+    // =====================================================================
+    // v18.0.113 — REPORTE EN VIVO (02-sep): «las notificaciones se repiten en varias pestañas»
+    // =====================================================================
+    t.caso("v18.0.113: dos pestañas que evalúan el mismo hecho con más de 12 s de diferencia avisan UNA sola vez (registro compartido del día)", () => {
+      const almacen = {};
+      const mk = () => {
+        const c = cargar({ silencioso: true, almacen });
+        conAudio(c);
+        let os = 0;
+        function FakeNotification() { os++; return { close() {}, onclick: null }; }
+        FakeNotification.permission = "granted";
+        c.env.win.Notification = FakeNotification;
+        c.env.win.document.visibilityState = "hidden";
+        c.api.__S.sonido = true;
+        return { c, cuenta: () => os };
+      };
+      const A = mk(), B = mk();
+      const p = { uid: "cita-7|AMBAR", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false };
+      t.cierto(A.c.api._dispararAvisoAudible(p), "la pestaña A avisa");
+      t.igual(A.cuenta(), 1, "y sale por Windows una vez");
+      // la ventana de 12 s de crossTabDup se da por vencida a mano (otra cadencia de sondeo)
+      almacen["vgl_n_full|cita-7|AMBAR"] = String(Date.now() - 60000);
+      t.falso(B.c.api._dispararAvisoAudible(p), "la pestaña B, un minuto después, NO vuelve a avisar el mismo hecho (antes: sí, pasados los 12 s)");
+      t.igual(B.cuenta(), 0, "ninguna notificación repetida");
+      const p2 = { uid: "cita-8|AMBAR", color: "AMBAR", title: "t2", body: "b2", flashText: "f", persist: false };
+      t.cierto(B.c.api._dispararAvisoAudible(p2), "otro hecho sí avisa");
+      t.igual(B.cuenta(), 1, "por Windows");
+    });
+
+    await t.casoAsync("v18.0.113: notify() sin uid toma identidad del texto — el mismo aviso no sale dos veces en el navegador, ni por toast ni por Windows, ni en otra pestaña", async () => {
+      const almacen = {};
+      const mk = (visible) => {
+        const c = cargar({ silencioso: true, almacen });
+        let os = 0;
+        function FakeNotification() { os++; return { close() {}, onclick: null }; }
+        FakeNotification.permission = "granted";
+        c.env.win.Notification = FakeNotification;
+        c.env.win.document.visibilityState = visible ? "visible" : "hidden";
+        c.env.win.document.hasFocus = () => !!visible;
+        return { c, cuenta: () => os };
+      };
+      const A = mk(false), B = mk(false);
+      A.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      t.igual(A.cuenta(), 1, "A: una notificación");
+      almacen["vgl_n_os|" + Object.keys(almacen).filter((k) => k.indexOf("vgl_n_os|") === 0).map((k) => k.slice(9))[0]] = String(Date.now() - 60000);
+      B.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      t.igual(B.cuenta(), 0, "B, un minuto después con el mismo texto: nada (antes: la misma notificación otra vez)");
+      B.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "OTRO PACIENTE PRUEBA · 02/10/2026");
+      t.igual(B.cuenta(), 1, "otro texto = otro aviso");
+      // canal de la página: la pestaña visible tampoco repite lo que ya salió por Windows
+      const C = mk(true);
+      // DOM «enriquecido» mínimo: _renderToast arma el aviso con querySelector sobre el nodo creado
+      const crearBase = C.c.env.doc.createElement;
+      C.c.env.doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, crearBase("div")); return memo.get(sel); }; return e; };
+      const enCola = [];
+      C.c.api.__state.muteUntil = 0;
+      const stOrig = C.c.env.doc.getElementById;
+      C.c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? { prepend: (n) => enCola.push(n), appendChild: (n) => enCola.push(n), children: [] } : stOrig(id));
+      C.c.api.notify("VERDE", "✅ Cita asignada exitosamente", "PACIENTE PRUEBA · 01/10/2026");
+      await esperar42(30);
+      t.igual(enCola.length, 0, "la pestaña visible no pinta el toast de un aviso que ya salió en el navegador");
+      C.c.api.notify("AZUL", "Aviso nuevo de prueba", "solo en esta pestaña");
+      await esperar42(30);
+      t.igual(enCola.length, 1, "y un aviso nuevo sí se pinta (la prueba del toast no es vacía)");
+      t.igual(C.c.api._avisoUidDeTexto("a", "b"), C.c.api._avisoUidDeTexto("a", "b"), "la identidad de texto es estable");
+      t.cierto(C.c.api._avisoUidDeTexto("a", "b") !== C.c.api._avisoUidDeTexto("a", "c"), "y distinta para textos distintos");
+    });
+
+    t.caso("v18.0.113: GM_notification (sin permiso del sitio) también obedece el registro del día", () => {
+      const almacen = {};
+      let gm = 0;
+      const mk = () => { const c = cargar({ silencioso: true, almacen }); c.env.win.GM_notification = () => { gm++; }; return c; };
+      const A = mk(), B = mk();
+      t.cierto(A.api._gmNotify("AMBAR", "t", "b", false, "gm-uid-1"), "A avisa por la extensión");
+      almacen["vgl_n_gm|gm-uid-1"] = String(Date.now() - 60000);
+      t.falso(B.api._gmNotify("AMBAR", "t", "b", false, "gm-uid-1"), "B, un minuto después: no repite");
+      t.igual(gm, 1, "una sola notificación de la extensión");
+    });
+
+    await t.casoAsync("v18.0.118 (UI/UX #8): «Alerta Múltiple» dice DE QUÉ son los avisos, no solo cuántos", async () => {
+      const c = cargar({ silencioso: true });
+      const pintados = [];
+      const bandeja = c.env.doc.createElement("div");
+      bandeja.prepend = (n) => { bandeja.children.unshift(n); pintados.push(n); };
+      bandeja.appendChild = (n) => { bandeja.children.push(n); pintados.push(n); };
+      const crearBase = c.env.doc.createElement;
+      c.env.doc.createElement = function (tag) { const e = crearBase(tag); const memo = new Map(); e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, crearBase("div")); return memo.get(sel); }; return e; };
+      const g = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-toasts" ? bandeja : g(id));
+      c.api.showToast("ROJO", "07:30 · Confirmación extemporánea", "cuerpo 1", false, "p1");
+      c.api.showToast("AMBAR", "08:00 · Inasistencia", "cuerpo 2", false, "p2");
+      c.api.showToast("MORADO", "08:30 · Última llamada", "cuerpo 3", false, "p3");
+      c.api.showToast("AZUL", "Órdenes generadas", "cuerpo 4", false, "p4");
+      await esperar42(600);
+      t.igual(pintados.length, 1, "los cuatro se agrupan en un solo aviso");
+      const cuerpo = pintados[0].querySelector(".vgl-toast-b").textContent;
+      t.cierto(/3 críticas · 1 rutinarias/.test(cuerpo), "dice cuántas de cada tipo");
+      ["Confirmación extemporánea", "Inasistencia", "Última llamada", "Órdenes generadas"].forEach((tit) => {
+        t.cierto(cuerpo.includes(tit), "y nombra «" + tit + "» (antes: solo el conteo, sin saber de qué ni de quién)");
+      });
+      c.env.doc.getElementById = g;
+    });
+
   },
 };

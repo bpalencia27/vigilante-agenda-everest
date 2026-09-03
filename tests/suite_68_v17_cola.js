@@ -108,9 +108,53 @@ module.exports = {
 
     t.caso("REGRESIÓN — «Decidir luego» y Escape en el reconciliador no dejan sin Panel", () => {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 6000);
+      // v17.58.0 — la ventana creció de 6000 a 8000: `_vglModalConfirmarDatos` ganó el
+      // bloque de las preguntas MEDIA de la escalera de adherencia (que se muestran pero
+      // no retienen el flujo) justo antes de `_luego`, y la aserción dejó de alcanzarlo.
+      // v18.0.129 — 8000 -> 13000 por lo mismo: la sección «Complete» (las casillas en blanco,
+      // que antes eran un SEGUNDO emergente detrás de este) vive ahora dentro de esta función.
+      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 13000);
       t.cierto(/const _luego = \(\) =>/.test(zona), "hay una salida común para la ✕ y Escape");
       t.cierto(/alContinuar\(\)/.test(zona), "y esa salida continúa el flujo: antes el médico se quedaba sin módulo");
+    });
+
+    // =====================================================================
+    // v18.0.129 — DECISIÓN DEL MÉDICO (entrevista del 02-sep): «un solo cuadro antes del
+    // Panel, con Confirme y Complete». Abrir el Panel encadenaba DOS emergentes seguidos:
+    // el reconciliador (contradicciones entre fuentes) y, al cerrarlo, el de casillas
+    // vacías. Dos cuadros seguidos sobre el mismo paciente y en el mismo instante se leen
+    // como dos interrupciones, no como una conversación.
+    // =====================================================================
+    t.caso("v18.0.129: antes del Panel se pinta UN cuadro, nunca dos seguidos", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const zona = src.slice(src.indexOf("function _vglModalConfirmarDatos"), src.indexOf("function _vglModalConfirmarDatos") + 13000);
+
+      // La sección «Complete» vive DENTRO de la tarjeta del reconciliador.
+      t.cierto(/function _vglModalConfirmarDatos\(apt, discrepancias, alContinuar, faltan\)/.test(src),
+        "el cuadro recibe también las casillas por llenar");
+      t.cierto(/id="vgl-conf-llenar"/.test(zona), "y las pinta en su propia sección");
+      // Que la sección EXISTA no basta: tiene que estar inyectada en la tarjeta, justo detrás
+      // de las preguntas. Declararla y no pintarla dejaría al médico sin la mitad del cuadro.
+      t.cierto(/\$\{filas\}\s*\$\{_filasLlenar\}/.test(zona),
+        "y va dentro de la misma tarjeta, detrás de las preguntas");
+      t.cierto(/Y estas casillas están en blanco en la historia/.test(zona), "con su propio título");
+
+      // El llamador ya no deja salir el segundo emergente detrás.
+      const llamador = src.slice(src.indexOf("const _rec = mtrReconciliarAhora"), src.indexOf("const _rec = mtrReconciliarAhora") + 1800);
+      t.cierto(/let _faltanJuntas = \[\];/.test(llamador), "las casillas por llenar se calculan antes");
+      t.cierto(/saltarLlenado: _faltanJuntas\.length > 0/.test(llamador),
+        "y si viajaron dentro del cuadro, el segundo emergente ya no sale");
+
+      // Lo que NO cambia: la mecánica del reconciliador. La sección de llenado es aditiva.
+      t.cierto(/const pendientesBloquean = new Set\(/.test(zona), "siguen existiendo las preguntas que frenan");
+      t.cierto(/const listo = hayAlta \? pendientesBloquean\.size === 0 : pendientes\.size === 0;/.test(zona),
+        "y la condición de continuar es la misma: el llenado no frena nada");
+      // Y nunca se escribe un «No sé»: es exactamente lo que el médico dijo que no se toca.
+      t.cierto(/_resp\[k\] === true \|\| _resp\[k\] === false/.test(zona), "solo cuenta lo que él contestó");
+      t.cierto(/Llenar en Everest \(" \+ n \+ "\)"/.test(zona), "y el botón dice cuántas va a escribir");
+      // Lo escrito cambia la clasificación: la caché se rehace, como al confirmar.
+      t.cierto(/mtrCacheResumenBorrar\(\); \} catch \(e\) \{\}\s*try \{ _vglOfrecerDeshacer/.test(zona),
+        "se invalida la caché y se ofrece Deshacer, igual que en el cuadro que sustituye");
     });
 
     t.caso("REGRESIÓN — los emergentes que piden una decisión no se pueden minimizar", () => {
@@ -347,6 +391,72 @@ module.exports = {
       // La ruta directa también responde por sí misma.
       const r = await api._vglCarpetaGuardarAhora("", { fecha: "2026-08-21" }, fs);
       t.falso(r.ok, "sin cédula, no");
+    });
+
+    // v18.0.72 — HALLAZGO DE ENJAMBRE #20, reproducido antes de tocar nada. `Map.set()`
+    // sobre una clave YA existente no cambia su posición de inserción: un paciente con
+    // actividad solo al principio de la jornada quedaba SIEMPRE al frente del Map, «el
+    // más viejo» para la poda por >200 pacientes, aunque tuviera un guardado en curso
+    // AHORA MISMO. La poda lo podía elegir como víctima, y un guardado siguiente para ESE
+    // MISMO paciente encontraba su propia clave ya borrada y arrancaba sin encadenar
+    // detrás del que seguía en vuelo — la carrera exacta que la cola existe para impedir.
+    await t.casoAsync("REGRESIÓN — la poda de la cola de carpeta NO puede desincronizar un guardado en curso (hallazgo #20)", async () => {
+      const disco = {};
+      const orden = [];
+      const fsInstant = () => ({
+        leer: async (n) => disco[n],
+        escribir: async (n, txt) => { disco[n] = txt; return true; },
+      });
+      let liberarLectura2 = null;
+      const bloqueoLectura2 = new Promise((r) => { liberarLectura2 = r; });
+      const fsLentoParaGuardado2 = () => ({
+        leer: async (n) => { orden.push("2:leyendo"); await bloqueoLectura2; orden.push("2:leyó"); return disco[n]; },
+        escribir: async (n, txt) => { orden.push("2:escribiendo"); disco[n] = txt; orden.push("2:escribió"); return true; },
+      });
+      const fsInstantParaGuardado3 = () => ({
+        leer: async (n) => { orden.push("3:leyendo"); return disco[n]; },
+        escribir: async (n, txt) => { orden.push("3:escribiendo"); disco[n] = txt; orden.push("3:escribió"); return true; },
+      });
+
+      // 1) Primer guardado de P: siembra su clave AL FRENTE de la cola.
+      const r1 = await api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-01", laboratorios: { A: 1 } }, fsInstant());
+      t.cierto(r1.ok, "primer guardado de P");
+
+      // 2) 199 pacientes distintos se cuelan por delante: la cola llega a 200, justo bajo
+      //    el umbral de poda, sin tocar todavía la clave de P.
+      for (let i = 0; i < 199; i++) {
+        await api.vglCarpetaGuardarInstantanea(String(20000000 + i), { fecha: "2026-08-01" }, fsInstant());
+      }
+
+      // 3) Segundo guardado de P, con su lectura retenida a mano (simula I/O lento real).
+      //    Al arrancar la cola tiene 200 (no poda todavía): su clave se reutiliza sin
+      //    moverse de posición — sigue siendo la más vieja.
+      const p2 = api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-02" }, fsLentoParaGuardado2());
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+
+      // 4) Un paciente distinto más cruza el umbral de 200: la PRÓXIMA llamada poda.
+      await api.vglCarpetaGuardarInstantanea("30000000", { fecha: "2026-08-01" }, fsInstant());
+
+      // 5) Tercer guardado de P, MIENTRAS el segundo sigue colgado en su lectura. Antes del
+      //    fix, la poda de esta misma llamada borraba la clave de P (la más vieja) y esta
+      //    llamada arrancaba sin encadenar detrás del segundo: los dos leían/escribían el
+      //    mismo archivo a la vez.
+      const p3 = api.vglCarpetaGuardarInstantanea("900000001", { fecha: "2026-08-03" }, fsInstantParaGuardado3());
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+
+      t.falso(orden.indexOf("3:leyendo") >= 0, "el tercer guardado NO arranca mientras el segundo sigue colgado en su lectura");
+
+      liberarLectura2();
+      const [res2, res3] = await Promise.all([p2, p3]);
+      t.cierto(res2.ok && res3.ok, "los dos terminan bien");
+      t.igual(orden.join(","), "2:leyendo,2:leyó,2:escribiendo,2:escribió,3:leyendo,3:escribiendo,3:escribió",
+        "el tercero espera a que el segundo termine de punta a punta, no solo a que empiece: " + orden.join(","));
+
+      const historial = await api.vglCarpetaLeerHistorial("900000001", fsInstant());
+      t.igual(historial.controles.length, 3, "no se pierde ninguna de las tres instantáneas de P");
     });
 
     t.caso("_mtrInstantaneaAlMenosTanRica: qué cuenta como «no perder nada»", () => {
@@ -709,9 +819,61 @@ module.exports = {
       t.igual(v.diaria.faltan, 16, "y cuántas faltan para la meta");
       t.igual(v.semanal.atendidas, 5, "la semana suma lunes y miércoles");
       t.igual(v.semanal.dias, 2, "dos días trabajados: el martes sin ninguna atendida NO cuenta");
-      t.igual(v.semanal.meta, 36, "así que la meta de la semana son 2 × 18, no 3 × 18");
+      // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura): «¿CÓMO ASÍ QUE 23/36? ¿NO DEBERÍA
+      // MÁS BIEN MOSTRAR CUÁNTOS PACIENTES HE VISTO DE LOS QUE TENGO QUE VER A LA SEMANA?».
+      // El denominador pasa de «la meta de los días ya trabajados» a la meta COMPLETA del
+      // periodo. Esta semana (17 al 23-ago), con hoy = miércoles 19:
+      //   · lunes 17: FESTIVO en Colombia (Asunción, trasladado) -> no pone meta. El médico
+      //     lo confirmó por escrito el 1-sep: «YO NO TRABAJO NI DOMINGOS NI FESTIVOS», así
+      //     que un festivo nunca debe pedirle 18 pacientes.
+      //   · sus 3 atendidas de ese día SÍ se cuentan igual. No porque se espere que trabaje
+      //     un festivo, sino porque el numerador no puede depender de que nuestra tabla de
+      //     festivos esté bien: ya tuvo un 2024-11-18 equivocado (ver esFestivo), y un error
+      //     de esa tabla jamás puede borrarle pacientes que sí atendió.
+      //   · martes 18: pasado y sin ninguna atendida -> no cuenta en contra (regla vieja,
+      //     que se conserva: no reprochar un día que no le tocaba);
+      //   · miércoles 19 (hoy) + jueves 20 + viernes 21 -> 3 × 18 = 54;
+      //   · sábado 22: futuro Y ES DE LOS SUYOS. v18.0.66: el médico fijó el turno —«LOS
+      //     SÁBADOS DE TRABAJO SON CADA 2 SEMANAS, ME TOCA ESTE SÁBADO NUEVAMENTE
+      //     5/09/2026»—, y contando de dos en dos desde ese ancla, el 22-ago le toca (su
+      //     propia telemetría lo confirma: trabajó el 22 y no el 29). Un sábado suyo son 24.
+      t.igual(v.semanal.meta, 78, "3 × 18 de lunes a viernes + 24 del sábado que le toca");
+      t.igual(v.semanal.faltan, 73, "y dice cuántos pacientes le quedan para cumplirla");
+      t.igual(v.semanal.metaHastaHoy, 18, "el ritmo se mide contra lo que YA debería estar hecho");
+      t.igual(v.semanal.ritmo, 27.8, "5 de 18 al día de hoy — este es el número que decide el color");
+      t.igual(v.semanal.diasPorDelante, 3, "jueves, viernes y el sábado que sí le toca");
+      // v18.0.66 — el turno de sábado, contra su historia real: el 22-ago trabajó (1.534
+      // eventos en el tablero) y el 29-ago no (ni uno). El ancla que él dio reproduce las
+      // dos cosas sin que nadie se lo diga al banco.
+      t.cierto(api._prodEsSabadoDelMedico("2026-08-22"), "el 22-ago le tocaba, y trabajó");
+      t.falso(api._prodEsSabadoDelMedico("2026-08-29"), "el 29-ago no le tocaba, y no trabajó");
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-05"), "el 5-sep le toca — es el ancla que él fijó");
+      t.falso(api._prodEsSabadoDelMedico("2026-09-04"), "un viernes no es sábado de nadie");
       t.cierto(v.mensual.atendidas >= 5, "el mes acumula desde el día 1");
       t.igual(api.mtrProductividadVistas({}, "no es fecha"), null, "sin fecha no hay vistas");
+    });
+
+    // v18.0.68 — CORRECCIÓN DEL PROPIO MÉDICO SOBRE SU PEDIDO ANTERIOR: «no es lo mismo para
+    // todos los médicos, toca indagar médico por médico cuál de todos los sábados le toca
+    // laborar, pero el ancla de 5 septiembre me sirve a mí, a maría edineth pino, a sinai
+    // mijares». El ancla no puede vivir como constante del script: cada médico la pone en
+    // Ajustes (S.sabadoAncla), y el 5-sep queda solo como el valor predeterminado.
+    t.caso("v18.0.68: el ancla de sábado es por médico, no una constante del script", () => {
+      // Otro médico con turno desfasado una semana respecto al 5-sep.
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-12", "2026-09-12"), "su propio ancla, sí");
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", "2026-09-12"), "el 5-sep no es suyo");
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-26", "2026-09-12"), "dos semanas después, sí");
+
+      // Un médico que no trabaja sábados: ancla vacía, nunca cuenta ninguno.
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", ""), "ancla vacía = no trabaja sábados");
+      t.falso(api._prodEsSabadoDelMedico("2026-08-22", ""), "ningún sábado, sea cual sea");
+
+      // Un ancla mal escrita (no cae en sábado) no se adivina: se ignora.
+      t.falso(api._prodEsSabadoDelMedico("2026-09-05", "2026-09-08"), "el 8-sep es martes, no un ancla válida");
+
+      // Sin argumento, cae al ajuste guardado (S.sabadoAncla) y, si tampoco existe, al
+      // predeterminado del médico que pidió esta regla.
+      t.cierto(api._prodEsSabadoDelMedico("2026-09-05"), "sin argumento, usa S.sabadoAncla o su default");
     });
 
     t.caso("mtrProductividadHtml: las tres filas, con el porcentaje y qué falta", () => {
@@ -846,6 +1008,65 @@ module.exports = {
       const r4 = await api.vglCarpetaGuardarInstantanea("124", { fecha: "2026-08-21" }, fsVacio);
       t.cierto(r4.ok, "el paciente sin archivo previo estrena el suyo");
       t.igual(await api.vglCarpetaLeerHistorial("123", fsRoto), null, "y la lectura rota no lanza");
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 21): la carpeta se escribió antes de la canonicalización
+    // de v17.48.0 y puede tener «0000111111.json». La lectura por nombre exacto no lo veía (el
+    // Panel no mostraba los controles previos) y la siguiente instantánea creaba «111111.json»
+    // al lado: dos archivos del mismo paciente, el viejo huérfano en silencio.
+    await t.casoAsync("02-sep: un historial archivado con ceros de relleno se encuentra y se sigue escribiendo AHÍ, no en un archivo nuevo", async () => {
+      const disco = { "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01", metas: { ldlActual: 150 } }] }) };
+      const fs = { leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) };
+      const h = await api.vglCarpetaLeerHistorial("111111", fs);
+      t.cierto(!!h && h.controles.length === 1, "la cédula canónica encuentra el archivo viejo con ceros");
+      const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fs);
+      t.cierto(r.ok, "se guarda");
+      t.igual(r.archivo, "0000111111.json", "y la instantánea nueva se escribe en ESE archivo, no en uno nuevo");
+      t.igual(Object.keys(disco).length, 1, "un solo archivo para el paciente");
+      t.igual(JSON.parse(disco["0000111111.json"]).controles.length, 2, "con los dos controles juntos");
+      // Sin archivo viejo, el nombre es el canónico aunque la cédula llegue con ceros.
+      const disco2 = {};
+      const fs2 = { leer: async (n) => disco2[n] || null, escribir: async (n, txt) => { disco2[n] = txt; return true; }, listar: async () => Object.keys(disco2) };
+      const r2 = await api.vglCarpetaGuardarInstantanea("0000222222", { fecha: "2026-09-02" }, fs2);
+      t.igual(r2.archivo, "222222.json", "un paciente nuevo estrena el nombre canónico");
+      // Un fs sin `listar` (el de las pruebas de siempre) se comporta exactamente como antes.
+      t.igual(await api.vglCarpetaLeerHistorial("111111", { leer: async (n) => disco[n] || null }), null, "sin listar no hay tolerancia: nombre exacto y no está");
+    });
+
+    // v18.0.104 — refutador de v18.0.99 (fila 21): (a) un mutante que resolvía al PRIMER archivo
+    // numérico cruzaba historiales de OTRO paciente con el banco verde; (b) `listar()` real
+    // (entries()) no tenía cobertura; (c) canónico + legado coexistiendo (escisión previa) o dos
+    // legados dejaban controles huérfanos según el orden del listado.
+    await t.casoAsync("v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones, y listar() real funciona", async () => {
+      const fsDe = (disco) => ({ leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) });
+      // (a) Solo hay un archivo de OTRA cédula: no se lee ni se escribe encima.
+      const otro = { "0000222222.json": JSON.stringify({ v: 1, doc: "0000222222", controles: [{ fecha: "2026-03-01" }] }) };
+      t.igual(await api.vglCarpetaLeerHistorial("111111", fsDe(otro)), null, "el historial de otra cédula NO se lee");
+      const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(otro));
+      t.igual(r.archivo, "111111.json", "y se escribe en el canónico propio");
+      t.igual(JSON.parse(otro["0000222222.json"]).controles.length, 1, "el del otro paciente queda intacto");
+      // (c) Escisión previa: canónico + legado → se leen fusionados y el canónico se lleva todo.
+      const esc = { "111111.json": JSON.stringify({ v: 1, doc: "111111", controles: [{ fecha: "2026-08-30" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
+      const h = await api.vglCarpetaLeerHistorial("111111", fsDe(esc));
+      t.igual(h.controles.map((x) => x.fecha).join(","), "2026-03-01,2026-08-30", "los dos controles, ordenados, aunque estén en dos archivos");
+      const r2 = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(esc));
+      t.igual(r2.archivo, "111111.json", "se escribe en el canónico");
+      t.igual(JSON.parse(esc["111111.json"]).controles.length, 3, "y ya lleva los tres controles: el legado dejó de ser huérfano");
+      // Dos legados: fusión determinista, sin depender del orden del listado.
+      const dos = { "00111111.json": JSON.stringify({ v: 1, doc: "00111111", controles: [{ fecha: "2026-05-01" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
+      const h2 = await api.vglCarpetaLeerHistorial("111111", fsDe(dos));
+      t.igual(h2.controles.map((x) => x.fecha).join(","), "2026-03-01,2026-05-01", "dos legados: los dos controles");
+      // (b) La implementación real: listar() recorre entries() del handle.
+      const c = cargar({ silencioso: true });
+      const archivos = { "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }), "otro.txt": "x" };
+      c.api.__setCarpetaHandleParaTest({
+        entries: async function* () { for (const n of Object.keys(archivos)) yield [n, { kind: "file" }]; },
+        getFileHandle: async (n, o) => { if (!(n in archivos) && !(o && o.create)) { const e = new Error("no such file"); e.name = "NotFoundError"; throw e; } return { getFile: async () => ({ text: async () => archivos[n] }), createWritable: async () => ({ write: async (t) => { archivos[n] = t; }, close: async () => {} }) }; },
+      });
+      const io = c.api._vglCarpetaFsReal();
+      t.igual((await io.listar()).join(","), "0000111111.json,otro.txt", "listar() real devuelve los nombres de la carpeta");
+      const hReal = await c.api.vglCarpetaLeerHistorial("111111");
+      t.cierto(!!hReal && hReal.controles.length === 1, "y con la carpeta real el legado con ceros se encuentra");
     });
 
     t.caso("mtrHistorialAgregar y mtrNombreArchivoPaciente: las piezas sueltas", () => {
@@ -1015,5 +1236,24 @@ module.exports = {
       t.cierto(r.bloqueadoDeadman, "el llenado en Everest queda bloqueado");
       t.cierto(/no escribe en la historia/.test(c.api.mtrMensajeLlenado(r)), "con su explicación al médico");
     });
+
+    // v18.0.108 — S+ robustez (B5): Ajustes prometía «Todo se queda en su equipo» sin advertir
+    // sobre carpetas sincronizadas (OneDrive/Drive/Dropbox), y decía que al cerrar Chrome había
+    // que volver a elegirla (falso desde v17.0.1).
+    await t.casoAsync("v18.0.108 (S+ B5): una carpeta que parece sincronizada con la nube se acepta pero queda marcada y se avisa; el texto de Ajustes ya no promete lo que el navegador no cumple", async () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(c.api._vglCarpetaPareceSincronizada("OneDrive - IPS") && c.api._vglCarpetaPareceSincronizada("Google Drive") && c.api._vglCarpetaPareceSincronizada("Dropbox"), "OneDrive / Google Drive / Dropbox se reconocen por el nombre");
+      t.falso(c.api._vglCarpetaPareceSincronizada("Historias") || c.api._vglCarpetaPareceSincronizada("Documentos"), "una carpeta local no");
+      c.env.win.showDirectoryPicker = async () => ({ name: "OneDrive - IPS" });
+      const r = await c.api.vglCarpetaElegir();
+      t.cierto(!!r && r.ok === true && r.sincronizada === true, "la elección se acepta (el médico manda) pero queda marcada: " + JSON.stringify(r));
+      c.env.win.showDirectoryPicker = async () => ({ name: "Historias" });
+      const r2 = await c.api.vglCarpetaElegir();
+      t.cierto(!!r2 && r2.ok === true && r2.sincronizada === false, "una carpeta local, sin marca");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/Evite carpetas sincronizadas/.test(src) && !/si cierra Chrome habrá que volver a elegirla/.test(src), "Ajustes advierte sobre carpetas sincronizadas y ya no dice que hay que volver a elegirla al cerrar Chrome");
+      t.cierto(/showToast\("AMBAR", "Carpeta sincronizada con la nube"/.test(src), "y el aviso ámbar existe en la elección");
+    });
+
   },
 };

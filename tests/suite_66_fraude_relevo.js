@@ -18,7 +18,8 @@
 
 module.exports = {
   nombre: "Relevo de pestaña: la vigilancia de fraude sobrevive (auditoría #7)",
-  cubre: ["_fraudeCompartidoGuardar", "_fraudeCompartidoFusionar", "apptKey", "_apptKeysLegado", "_apptMarcada", "_apptMarcar", "colorAndAlert"],
+  cubre: ["_fraudeCompartidoGuardar", "_fraudeCompartidoFusionar", "apptKey", "_apptKeysLegado", "_apptMarcada", "_apptMarcar", "colorAndAlert",
+    "_apptNombreIdentifica", "_apptPuedeAcusar"],
 
   async pruebas(t, api, env, cargar) {
     const CLAVE = "vgl_fraude_dia2";   // v17.1.0 — la clave lleva sufijo de esquema: apptKey cambió de forma
@@ -74,6 +75,53 @@ module.exports = {
       A.colorAndAlert(enSala, _tt("11:24"));
       t.igual(A.colorAndAlert(enSala, _tt("11:24")).color, "VERDE",
         "el arreglo no puede convertir en tarde a quien llegó a tiempo");
+    });
+
+    // =================================================================================
+    //  v18.0.39 — «PACIENTE EVEREST» NO ES UN NOMBRE (hallazgo L11731)
+    //  Es el relleno que pone extractAgenda cuando la tarjeta de Everest no deja leer
+    //  ninguno. Usarlo como identidad convierte a TODAS las citas sin nombre legible de una
+    //  misma hora en una sola cita para el script, y una marca de inasistencia contagia a
+    //  otro paciente — con su fila en el CSV con el que el médico reclama.
+    // =================================================================================
+    t.caso("v18.0.39: dos citas ilegibles de la misma hora NO colapsan en una sola identidad", () => {
+      const A = { nombre: "Paciente Everest", doc_id: "", hora_texto: "08:00", index: 0 };
+      const B = { nombre: "Paciente Everest", doc_id: "", hora_texto: "08:00", index: 1 };
+      t.falso(api.apptKey(A) === api.apptKey(B),
+        "dos pacientes distintos no pueden compartir clave (antes las dos eran «Paciente Everest@m480»)");
+      const marcados = new Set();
+      api._apptMarcar(marcados, A, api.apptKey(A));
+      t.falso(api._apptMarcada(marcados, B, api.apptKey(B)),
+        "marcar a uno por inasistencia NO marca al otro");
+      t.falso([...marcados].some((k) => /Paciente Everest/i.test(k)),
+        "y el genérico no se escribe como clave por ninguna de las tres puertas");
+    });
+
+    t.caso("v18.0.39: el genérico tampoco contagia a un paciente que SÍ tiene cédula", () => {
+      // La variante peor de las medidas: A es ilegible y B tiene su documento. Antes, la
+      // marca de A entraba como «Paciente Everest@m480» y _apptKeysLegado consultaba la
+      // forma por nombre, así que B salía ROJO con sonido por algo que hizo A.
+      const A = { nombre: "Paciente Everest", doc_id: "", hora_texto: "08:00", index: 0 };
+      const B = { nombre: "Paciente Everest", doc_id: "1111111", hora_texto: "08:00", index: 1 };
+      const marcados = new Set();
+      api._apptMarcar(marcados, A, api.apptKey(A));
+      t.falso(api._apptMarcada(marcados, B, api.apptKey(B)),
+        "el paciente con cédula propia no hereda la marca del que no se pudo leer");
+      t.falso(api._apptKeysLegado(A).some((k) => /Paciente Everest/i.test(k)),
+        "las formas viejas por nombre no se emiten para el genérico");
+    });
+
+    t.caso("v18.0.39: sin documento y sin nombre propio, no se puede acusar a nadie", () => {
+      t.falso(api._apptPuedeAcusar({ nombre: "Paciente Everest", doc_id: "", hora_texto: "08:00" }),
+        "una acusación que no se puede atribuir tampoco se puede reclamar");
+      t.cierto(api._apptPuedeAcusar({ nombre: "Paciente Everest", doc_id: "1111111", hora_texto: "08:00" }),
+        "con cédula sí");
+      t.cierto(api._apptPuedeAcusar({ nombre: "MARIA", doc_id: "", hora_texto: "08:00" }),
+        "con un nombre propio también");
+      t.falso(api._apptNombreIdentifica("  PACIENTE   EVEREST "),
+        "el genérico no identifica ni con espacios de más ni en mayúsculas");
+      t.falso(api._apptNombreIdentifica(""), "ni una cadena vacía");
+      t.cierto(api._apptNombreIdentifica("MARIA"), "un nombre real sí");
     });
 
     t.caso("v17.56.0: _apptKeysLegado ofrece las formas viejas SOLO para leer", () => {

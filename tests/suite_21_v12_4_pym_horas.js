@@ -75,6 +75,25 @@ module.exports = {
       t.igual(api._parseFechaHoraLike(null), null);
     });
 
+    // v18.0.74 — HALLAZGO DE ENJAMBRE #26. El rango 1-31/1-12 (siempre existió) no basta:
+    // "31/04/2026" está DENTRO de ese rango y aun así abril no tiene 31. Antes, ese ISO
+    // fabricado llegaba entero a injectLabsIntoCronicos, que lo escribía en un <input
+    // type="date">; el navegador la rechaza y la casilla queda vacía SIN que nada lo
+    // note — un dato mal tecleado en el LIS es un caso real de entrada de datos.
+    t.caso("REGRESIÓN — _parseFechaHoraLike rechaza un día que el mes no tiene, en las dos formas (hallazgo #26)", () => {
+      t.igual(api._parseFechaHoraLike("2026-04-31"), null, "abril tiene 30 días, no 31 (ISO)");
+      t.igual(api._parseFechaHoraLike("31/04/2026"), null, "lo mismo en dd/mm/aaaa");
+      t.igual(api._parseFechaHoraLike("2026-02-30"), null, "febrero no llega a 30 (ISO)");
+      t.igual(api._parseFechaHoraLike("30/02/2026"), null, "lo mismo en dd/mm/aaaa");
+      t.igual(api._parseFechaHoraLike("2025-02-29"), null, "2025 no es bisiesto: no hay 29 de febrero (ISO)");
+      t.igual(api._parseFechaHoraLike("29/02/2025"), null, "lo mismo en dd/mm/aaaa");
+      t.igual(api._parseFechaHoraLike("2024-02-29"), { iso: "2024-02-29", hora: null }, "pero 2024 SÍ es bisiesto: el 29 de febrero de ese año es real");
+      t.igual(api._parseFechaHoraLike("29/02/2024"), { iso: "2024-02-29", hora: null }, "lo mismo en dd/mm/aaaa");
+      // Con hora pegada, la fecha imposible sigue rechazando el valor ENTERO — no se
+      // rescata solo la hora de un dato que no se puede fechar.
+      t.igual(api._parseFechaHoraLike("2026-04-31T07:35:00"), null, "fecha imposible con hora: se rechaza entero");
+    });
+
     // ---------- la hora fluye por _extractAtheneaFecha ----------
     t.caso("_extractAtheneaFecha: devuelve la hora cuando el campo del analito la trae", () => {
       const r = api._extractAtheneaFecha({ Fecha: "2026-08-11T07:35:00", Resultado: "1.2" });

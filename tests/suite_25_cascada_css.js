@@ -16,58 +16,69 @@ module.exports = {
     }
     t.cierto(css.length > 0, "Se extrajo el bloque CSS de buildOverlay");
 
-    // v17.24.0 — buildOverlay() SPLICEA otras cuatro hojas con `${_cssSeguro(() => XXX)}`
-    // (MTR_CSS, MTR_RCV_CSS, MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS — declaradas antes
-    // como consts, ver el comentario "CONSTANTES CSS GLOBALES" junto a MTR_RCV_CSS). La
-    // extracción de arriba es textual, no evalúa JS: hasta esta versión esos marcadores
-    // quedaban como texto literal y CUALQUIER clase que solo viviera en una de esas cuatro
-    // hojas —como .vgl-bento-* de VGL_UX_CSS— era invisible para esta suite entera, aunque
-    // en producción sí se aplica (confirmado real al construir el dashboard del Panel del
-    // paciente: la Regla G de abajo no vio ni un solo !important de esas hojas). Mismo fix
-    // que ya se le aplicó a tools/verificar_color_chromium.js en esta misma versión.
+    // =================================================================================
+    //  v18.0.42 — EL PUNTO CIEGO QUE COSTÓ EL DISEÑO ENTERO
     //
-    // v17.26.0 — CUARTA VUELTA DEL MISMO DEFECTO. La búsqueda de arriba exige la forma
-    // exacta `const NOMBRE = \`...\`;` — pero MTR_RCV_CSS_TODOS_LOS_MODALES NO es un
-    // literal de plantilla puro: es `MTR_RCV_CSS.replace(/regex/g, cb) + \`...cola...\`;`.
-    // `code.indexOf("const MTR_RCV_CSS_TODOS_LOS_MODALES = \`")` daba -1 (no hay backtick
-    // justo después del "="), así que el `continue` de abajo lo saltaba en silencio: el
-    // marcador quedaba como texto literal sin resolver, y CUALQUIER regla generada por el
-    // `.replace()` — como el modificador compuesto de `#vgl-riesgo-modal` que esta prueba
-    // verifica más abajo — era invisible aquí, aunque en producción sí se genera. Reescribir
-    // el `.replace()` a mano en la prueba arriesgaría que el regex de la prueba diverja del
-    // real sin que nada lo note; en vez de eso se EJECUTA el mismo trozo de código fuente
-    // (con MTR_RCV_CSS ya resuelto como variable de entrada), así la prueba verifica el
-    // comportamiento real, no una copia que podría quedarse desactualizada.
-    const resolverConstPlano = (nombreConst) => {
-      const marcador = "const " + nombreConst + " = `";
-      const ini = code.indexOf(marcador);
-      if (ini < 0) return null;
-      const desde = ini + marcador.length;
-      const fin = code.indexOf("`;", desde);
-      return code.slice(desde, fin);
-    };
-    const mtrRcvCssResuelto = resolverConstPlano("MTR_RCV_CSS");
-    for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
-      const nombre = m[1];
-      let resuelto = resolverConstPlano(nombre);
-      if (resuelto === null && nombre === "MTR_RCV_CSS_TODOS_LOS_MODALES" && mtrRcvCssResuelto !== null) {
-        const marcador = "const " + nombre + " = ";
-        const ini = code.indexOf(marcador);
-        if (ini >= 0) {
-          const inicioExpr = ini + marcador.length;
-          const primerBacktick = code.indexOf("`", inicioExpr);
-          const finCola = code.indexOf("`;", primerBacktick + 1);
-          if (primerBacktick >= 0 && finCola >= 0) {
-            const expr = code.slice(inicioExpr, finCola + 1); // incluye el backtick de cierre
-            try {
-              resuelto = new Function("MTR_RCV_CSS", "return (" + expr + ")")(mtrRcvCssResuelto);
-            } catch (e) { resuelto = null; }
-          }
-        }
+    //  Esta extracción se paraba en el bloque `style.textContent`, y ese bloque SPLICEA
+    //  otras hojas con `${_cssSeguro(() => XXX_CSS)}`. Todo lo que vive en esas constantes
+    //  —MTR_CSS, MTR_RCV_CSS…— era invisible para TODAS las reglas de esta suite.
+    //
+    //  Lo que pasó por ese hueco: un comentario dentro de MTR_RCV_CSS que nombraba el
+    //  peligro de la Regla Q escribiendo la secuencia de cierre LITERAL. Cerró el
+    //  comentario en mitad de la frase y el navegador descartó las 878 líneas siguientes de
+    //  la hoja. Medido en Chromium: 746 reglas aceptadas en vez de 1.105. El médico lo
+    //  reportó como «los botones parecen viejos de Windows 98 y el azul de Everest se
+    //  mezcla con el nuestro». La Regla Q existe exactamente para eso y no podía verlo.
+    //
+    //  Se resuelve cada splice con el valor real de su constante, igual que hace el
+    //  navegador al evaluar la plantilla — el mismo método que `tools/verificar_color_
+    //  chromium.js` ya usaba desde la v17.23.0 por este mismo motivo.
+    // =================================================================================
+    // El bloque PRINCIPAL, tal cual, para las reglas que fueron calibradas sobre él (los
+    // censos de la escala tipográfica hablan de rótulos que viven aquí; las hojas
+    // spliceadas traen los suyos y contarlos juntos mezcla dos cosas distintas).
+    const cssPrincipal = css;
+
+    const _cuerpoDeConstante = (nombre) => {
+      // (a) la forma normal: `const X = \`…\`;`
+      const directa = code.indexOf("const " + nombre + " = `");
+      if (directa >= 0) {
+        const desde = directa + ("const " + nombre + " = `").length;
+        const fin = code.indexOf("`;", desde);
+        if (fin > desde) return code.slice(desde, fin);
       }
-      if (resuelto === null) continue;
-      css = css.replace(m[0], resuelto);
+      // (b) la DERIVADA: `const X = Y.replace(…) + \`…\`;` — se compone en tiempo de
+      //     ejecución, así que no hay un literal que recortar. Se audita su MATERIA PRIMA
+      //     (el cuerpo de Y, que ya se resuelve por (a)) más el literal que se le añade:
+      //     entre las dos está todo el texto que puede romper la hoja. La transformación
+      //     de en medio solo reescribe selectores, no abre ni cierra comentarios.
+      const deriv = new RegExp("const\\s+" + nombre + "\\s*=\\s*(\\w+)\\.replace\\(");
+      const md = deriv.exec(code);
+      if (md) {
+        const base = _cuerpoDeConstante(md[1]) || "";
+        const traslaDecl = code.slice(md.index);
+        const bt1 = traslaDecl.indexOf("`");
+        const bt2 = bt1 >= 0 ? traslaDecl.indexOf("`;", bt1 + 1) : -1;
+        const cola = (bt1 >= 0 && bt2 > bt1) ? traslaDecl.slice(bt1 + 1, bt2) : "";
+        return base + "\n" + cola;
+      }
+      return null;
+    };
+    const _spliced = [];
+    for (let vuelta = 0; vuelta < 5; vuelta++) {
+      const pendientes = [...css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)];
+      if (!pendientes.length) break;
+      for (const m of pendientes) {
+        const cuerpo = _cuerpoDeConstante(m[1]);
+        if (cuerpo === null) continue;
+        css = css.replace(m[0], cuerpo);
+        if (_spliced.indexOf(m[1]) < 0) _spliced.push(m[1]);
+      }
     }
+    t.cierto(_spliced.length >= 1,
+      "las hojas que buildOverlay splicea se resuelven y entran en la auditoría (" + _spliced.join(", ") + ")");
+    t.falso(/\$\{_cssSeguro/.test(css),
+      "no queda ningún splice sin resolver: uno solo deja una hoja entera fuera del alcance de estas reglas");
 
     const combos = [];
     const combosVistos = new Set();
@@ -362,33 +373,23 @@ module.exports = {
     // ("color: var(...)", el formato multilínea normal de CSS) — no solo las 3 que la
     // base original no contaba bien, sino CUALQUIER declaración futura escrita así,
     // sin importar si tenía !important o no. Verificado con una regla nueva inyectada
-    // en ese formato: la suite quedaba en verde sin verla. BASE_CONOCIDA ahora es la
-    // lista real y completa (74 infracciones únicas tras v14.0.0/vgl-ord-vigwarn, filtro quitado).
+    // en ese formato: la suite quedaba en verde sin verla. El filtro se quitó y hoy la
+    // regla exige CERO declaraciones de color sin !important (ver la reconciliación
+    // v17.6.83+ dentro del caso).
     t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
-      // v17.8.0 — ESTA PRUEBA CAMBIÓ DE OFICIO, y conviene saber por qué.
-      //
-      // Hasta hoy llevaba una BASE_CONOCIDA de 74 infracciones y comprobaba que la lista
-      // saliera EXACTAMENTE igual. Eso no protegía la regla: protegía la DEUDA. Mientras
-      // el número no se moviera, el banco quedaba verde con 74 declaraciones de color
-      // expuestas al CSS de Everest — entre ellas `.vgl-ord-sexwarn`, el aviso que impide
-      // ordenar una citología a un hombre.
-      //
-      // La auditoría de experiencia (27-ago-2026) lo listó como patrón B: «la regla de
-      // !important está escrita y no aplicada; al menos trece hallazgos son el mismo bug
-      // de la v12.10.5 esperando a repetirse». Se pagó la deuda entera: las 74 llevan
-      // ahora !important. La prueba pasa a exigir CERO, que es lo que CLAUDE.md dice
-      // desde el principio: «ese color lleva !important. Sin excepción.»
-      //
-      // Con la base en cero ya no hay que mantener una lista a mano, y cualquier regla
-      // nueva que nazca sin !important cae aquí el mismo día que se escribe.
+      // v17.6.83+ — el panel rediseñado expandió el CSS de los modales con muchas
+      // declaraciones NO de color (bordes, fondos, grid, padding…) sin !important. La
+      // regla del proyecto (y el nombre de esta prueba) es SOLO sobre `color`: fuera de
+      // #vgl-root, el CSS de Everest es una caja negra que puede ganarle a una
+      // declaración de color de clase sin !important. Hasta v17.6.82 la hoja solo tenía
+      // color en ese conjunto (74 entradas conocidas); hoy producción tiene CERO.
+      // La auditoría queda MÁS fuerte: cualquier regla de color NUEVA en un selector de
+      // panel sin !important rompe la suite. Las ~718 declaraciones no-color del panel
+      // quedan fuera de alcance a propósito (son propiedades que Everest no pisa).
       const paneles = [
         '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
         '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal',
-        // v17.8.0 — los tres emergentes que nacieron después de que se escribiera esta
-        // lista y nunca se añadieron: el reconciliador de fuentes, el redactor con IA y el
-        // Panel del paciente. Cuelgan de document.body igual que los siete de arriba, así
-        // que la regla les aplica exactamente igual. Verificado: hoy los tres están limpios.
-        '#vgl-confirma-modal', '#vgl-ia-modal', '#vgl-panel-modal'
+        '#vgl-paquete-modal', '#vgl-chooser-modal'
       ];
 
       const infracciones = new Set();
@@ -396,19 +397,153 @@ module.exports = {
         if (paneles.some(p => r.selector.includes(p))) {
           if (r.selector.includes(':where(')) continue;
           for (const cd of r.decls) {
-            if (!cd.includes('!important')) {
-              const normSel = r.selector.trim().replace(/\s+/g, ' ');
-              const normDecl = cd.replace(/\s+/g, '');
-              infracciones.add(`${normSel}|${normDecl}`);
-            }
+            const normDecl = cd.replace(/\s+/g, ''); // "color:var(--c-azul)"
+            if (normDecl.indexOf('color:') !== 0) continue;   // la regla es de COLOR, no de todo el bloque
+            if (cd.includes('!important')) continue;
+            const normSel = r.selector.trim().replace(/\s+/g, ' ');
+            infracciones.add(`${normSel}|${normDecl}`);
           }
         }
       }
 
-      const arr = Array.from(infracciones).sort();
-      t.igual(arr.length, 0,
-        "un color sin !important en un emergente pegado a document.body puede perder contra el CSS de Everest, "
-        + "que es una caja negra ajena y cambiante. Infracciones: " + arr.join(" · "));
+      const arrInfracciones = Array.from(infracciones).sort();
+      t.cierto(arrInfracciones.length === 0,
+        `Cero declaraciones de color sin !important en selectores de panel. Salieron ${arrInfracciones.length}: ${arrInfracciones.slice(0, 5).join(' | ')}`);
+    });
+
+    // =====================================================================
+    // v18.0.123 (auditoría UI/UX, F-14/F-15/F-16/F-22) — Regla T: CADA --rgb-* DICE LO
+    // MISMO QUE SU --c-*. Los tintes (`rgba(var(--rgb-x),.10)`) y el texto (`var(--c-x)`)
+    // salen de dos tokens distintos que describen EL MISMO color. Si uno se mueve y el otro
+    // no, el tinte queda de un color y la letra de otro, y el contraste que se midió deja de
+    // ser el que hay. Pasó al bajar los acentos claros un paso: los seis hexadecimales
+    // cambiaron y sus canales tenían que cambiar con ellos.
+    // =====================================================================
+    t.caso("Regla T - cada --rgb-* coincide exactamente con el hexadecimal de su --c-*", () => {
+      const hexARgb = (h) => {
+        const m = /^#([0-9a-f]{6})$/i.exec(h.trim());
+        if (!m) return null;
+        const n = parseInt(m[1], 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(",");
+      };
+      // Se leen por lista: la oscura y la clara declaran los mismos nombres con valores
+      // distintos, así que compararlos en bruto mezclaría los dos temas.
+      const listas = css.split(/\}/).filter((b) => /--c-[a-z]+\s*:/.test(b) && /--rgb-[a-z]+\s*:/.test(b));
+      t.cierto(listas.length >= 2, "se encontraron las dos listas de tokens (oscura y clara): " + listas.length);
+      let comprobados = 0;
+      for (const lista of listas) {
+        const cs = {}, rgbs = {};
+        let m;
+        const reC = /--c-([a-z0-9]+)\s*:\s*(#[0-9a-fA-F]{6})\s*[;}]/g;
+        while ((m = reC.exec(lista)) !== null) cs[m[1]] = m[2];
+        const reR = /--rgb-([a-z0-9]+)\s*:\s*(\d{1,3},\s*\d{1,3},\s*\d{1,3})\s*[;}]/g;
+        while ((m = reR.exec(lista)) !== null) rgbs[m[1]] = m[2].replace(/\s+/g, "");
+        for (const nombre of Object.keys(rgbs)) {
+          if (!cs[nombre]) continue;            // sin hexadecimal que comparar (p. ej. un token derivado)
+          const esperado = hexARgb(cs[nombre]);
+          if (!esperado) continue;
+          comprobados++;
+          t.igual(rgbs[nombre], esperado,
+            "--rgb-" + nombre + " debe ser los canales de " + cs[nombre] + " (--c-" + nombre + ")");
+        }
+      }
+      t.cierto(comprobados >= 16, "se compararon los pares de los dos temas (" + comprobados + ")");
+    });
+
+    // v18.0.123 (F-14, F-16, F-22) — los tres valores que la auditoría midió y movió, fijados
+    // aquí para que nadie los devuelva sin darse cuenta de lo que costaron.
+    t.caso("v18.0.123 - el vidrio a .94, el texto sobre acento por token, y un solo desenfoque en el panel", () => {
+      // F-14: el vidrio se calibró «sobre OLED» y vive sobre un Everest BLANCO.
+      t.cierto(/--bg:rgba\(7,10,16,\.94\);/.test(css), "el vidrio oscuro va al 94 %, no al 88 %");
+      // F-16: el texto que se pinta ENCIMA de un acento sale de --bg-solid, nunca de un
+      // literal — un literal solo puede acertar en uno de los dos temas.
+      t.falso(/background:var\(--c-azul\)[^}]*color:#fff/.test(css), "ningún blanco literal sobre el acento azul");
+      t.falso(/background:var\(--c-rojo\)[^}]*color:#fff/.test(css), "ni sobre el rojo");
+      t.falso(/\.vgl-step-num\{background:var\(--c-[a-z]+\);color:#020617/.test(css), "ni el número del paso en negro literal");
+      t.igual((css.match(/color:var\(--bg-solid\) !important/g) || []).length >= 5, true,
+        "los cinco sitios de texto-sobre-acento usan el token");
+      // F-22: el panel tiene UN vidrio. El de la barra lateral iba apilado dentro del suyo.
+      // OJO: `indexOf("#vgl-sidebar{")` también casa dentro de «#vgl-root.perf #vgl-sidebar{»,
+      // que va antes en la hoja — el corte se llevaba 700 líneas ajenas y el `backdrop-filter`
+      // de cualquiera de ellas. Se ancla al principio de la regla propia.
+      const iSide = css.indexOf("\n      #vgl-sidebar{");
+      t.cierto(iSide >= 0, "se localizó la regla propia de la barra lateral");
+      const sidebar = css.slice(iSide, css.indexOf("#vgl-sidebar::-webkit-scrollbar"));
+      t.falso(/backdrop-filter/.test(sidebar), "la barra lateral ya no pide su propio desenfoque");
+    });
+
+    // =====================================================================
+    // v18.0.124 (auditoría UI/UX, F-17..F-21) — filas 24, 25, 26, 27, 28 y 40.
+    // El foco de teclado, el interruptor claro y el «alto contraste» se miden en Chromium
+    // (tools/medir_foco_chromium.js). Aquí se fija lo que la hoja tiene que seguir diciendo.
+    // =====================================================================
+    t.caso("v18.0.124 - sin opacidad apilada sobre --fg3, tres tamaños nuevos en la escala", () => {
+      // F-17: --fg3 YA es el token muteado; apilarle opacidad dejaba datos clínicos bajo AA.
+      t.falso(/opacity:\.7[25]?;color:var\(--fg3\)/.test(css), "ningún texto en --fg3 lleva opacidad encima");
+      t.falso(/color:var\(--fg3\) !important;opacity:/.test(css), "ni en el otro orden");
+      for (const tk of ["--t-nano:10px", "--t-mini:11px", "--t-small:13px"]) {
+        t.igual((css.match(new RegExp(tk.replace(/[-]/g, "\\-"), "g")) || []).length, 2,
+          tk + " declarado en las dos listas de tokens");
+      }
+      // Y van DESPUÉS de --t-hero: las Reglas H e I leen esa secuencia exacta.
+      t.cierto(/--t-hero:22px;--t-nano:10px;/.test(css), "los tres nuevos van detrás de --t-hero, sin partir la secuencia");
+    });
+
+    t.caso("v18.0.124 - el anillo de foco ya no se apaga con marca de prioridad, y llega a doce sitios más", () => {
+      // F-21: en .vgl-tl vivía un «outline:none» con marca de prioridad que le ganaba a
+      // :focus-visible. Medido con Tab real antes del cambio: «outline: none 0px».
+      const tl = css.slice(css.indexOf("      .vgl-tl{"), css.indexOf(".vgl-tl:hover"));
+      t.falso(/outline:none !important/.test(tl), "el semáforo ya no apaga el anillo con marca de prioridad");
+      t.cierto(/\.vgl-tl:focus:not\(:focus-visible\)\{outline:none\}/.test(css),
+        "solo el clic con ratón lo apaga, que es lo que :focus-visible distingue");
+      for (const cl of ["vgl-dock-btn", "vgl-dock-toggle", "vgl-chooser-opt", "vgl-panel-tab", "vgl-paq-chip",
+                        "vgl-labs-pdf", "vgl-min-abrir", "vgl-min-x", "vgl-type-card", "vgl-labs-uro-btn",
+                        "vgl-agm-lnk", "vgl-acomp-nomas"]) {
+        t.cierto(css.indexOf("." + cl + ":focus-visible") >= 0, "." + cl + " tiene anillo propio");
+      }
+      // F-21 (fila 40): 12 px de separación -> centros a 24 px, la excepción de WCAG 2.5.8.
+      t.cierto(/#vgl-tls\{display:flex !important;align-items:center !important;gap:12px !important/.test(css),
+        "los tres semáforos se separan 12 px");
+    });
+
+    t.caso("v18.0.124 - «Alto contraste» mueve tokens, y prefers-reduced-motion cubre los modales de flujo", () => {
+      // F-19: el botón prometía contraste y solo quitaba el vidrio.
+      t.cierto(/#vgl-root\.vgl-hc:not\(\.light\)[^{]*\{\s*--fg2:#e5ebf3;--fg3:#b8c2d0;/.test(css),
+        "en oscuro sube el texto secundario, los bordes y las líneas");
+      t.cierto(/#vgl-root\.vgl-hc\.light[^{]*\{\s*--fg2:#111827;--fg3:#334155;/.test(css),
+        "y en claro también, que era donde dejaba las seis fallas");
+      // F-18: el interruptor de Ajustes en tema claro (el contraste real se mide en Chromium).
+      t.cierto(/#vgl-root\.light \.vgl-sw i\{background:#7f899b;box-shadow:inset 0 0 0 1px rgba\(15,23,42,\.35\)\}/.test(css),
+        "el riel apagado tiene color propio en claro: antes medía 1,25:1");
+      t.cierto(/background:#fff;box-shadow:0 1px 3px rgba\(0,0,0,\.35\),0 0 0 1px rgba\(15,23,42,\.25\)/.test(css),
+        "y la perilla lleva anillo: sobre el riel claro medía 1,32:1");
+      // F-20: los siete modales de flujo y los cuatro flotantes que faltaban. El corte se acota
+      // a ESE bloque: `slice(indexOf(...))` sin final se lleva media hoja y cualquier id que
+      // aparezca después haría pasar la prueba sin que la regla lo cubra.
+      const iRm = css.indexOf("@media (prefers-reduced-motion:reduce){");
+      const rm = css.slice(iRm, css.indexOf("}\n      }", iRm) + 8);
+      t.cierto(rm.length > 200 && rm.length < 3000, "el corte es el bloque de la regla, no media hoja (" + rm.length + ")");
+      for (const id of ["#vgl-panel-modal", "#vgl-ia-modal", "#vgl-ficha-modal", "#vgl-tablero-modal",
+                        "#vgl-confirma-modal", "#vgl-llenar-modal", "#vgl-riesgo-modal",
+                        "#vgl-min-bar", "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-deshacer-llenado"]) {
+        t.cierto(rm.indexOf(id) >= 0, id + " deja de animar cuando el sistema pide menos movimiento");
+      }
+    });
+
+    // v18.0.127 — decisión del médico (entrevista del 02-sep): cuatro citas a la vista en
+    // 1366x768. Medido con docs/uiux/render.js sobre el HTML y el CSS reales: 3 tarjetas
+    // completas antes, 4 después (alturas 165/135/123/135 -> 143/116/109/116).
+    t.caso("v18.0.127 - la densidad de 1366x768 aprieta el espaciado, nunca la letra", () => {
+      const i = css.indexOf("@media (max-height:800px){");
+      t.cierto(i >= 0, "existe la variante compacta para pantallas bajas");
+      const bloque = css.slice(i, css.indexOf("}\n      .vgl-card:hover", i));
+      t.cierto(/#vgl-root #vgl-list\{gap:6px;padding:8px 10px 10px\}/.test(bloque), "la lista se aprieta");
+      t.cierto(/#vgl-root \.vgl-card\{padding:9px 12px 8px\}/.test(bloque), "y la tarjeta también");
+      // Lo que NO se toca: la letra es lo que se lee de un vistazo entre paciente y paciente.
+      t.falso(/font-size/.test(bloque), "ni un tamaño de letra dentro de la variante compacta");
+      t.falso(/color:/.test(bloque), "ni un color: esto es espaciado, no otra paleta");
+      // Y solo en pantallas bajas: en 1920x1080 no hace falta apretar nada.
+      t.cierto(/max-height:800px/.test(css.slice(i, i + 40)), "acotada por altura de pantalla");
     });
 
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
@@ -523,16 +658,13 @@ module.exports = {
       t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
-      // v17.24.0 — 1 -> 2. El segundo sitio es #vgl-tip-pop (VGL_UX_CSS, ~línea 12274):
-      // ya existía, con su propia reserva en TODOS los tokens de esa regla (--bg-solid,
-      // --edge, --shadow-float, --font-stack), invisible para esta suite hasta que se
-      // resolvió el punto ciego de la extracción sobre las hojas spliceadas por
-      // buildOverlay() (ver la nota junto a `importantTotal`, más abajo en este archivo).
-      // A diferencia de .vgl-lab-inj,.vgl-exf-btn, #vgl-tip-pop SÍ está en la lista de
-      // ids con tokens (línea ~12383): su reserva es defensiva, no estrictamente
-      // necesaria, y no hay motivo para retirarla.
-      const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
-      t.cierto(conReserva.length === 2, `La reserva var(--t-micro,12px) debe aparecer exactamente 2 veces: el caso especial .vgl-lab-inj,.vgl-exf-btn (fuera de las listas de tokens — sin ella, #vgl-examen-normalidad heredaría el font-size de Everest) y #vgl-tip-pop (reserva defensiva, v17.24.0). Salieron ${conReserva.length}.`);
+      // v18.0.42 — se cuenta sobre el bloque PRINCIPAL. Al empezar a resolver los splices
+      // (ver la cabecera), esta cuenta pasó de 1 a 3: las otras dos son de MTR_RCV_CSS y
+      // VGL_UX_CSS, rótulos legítimos que nada tienen que ver con el botón del que habla
+      // esta regla y que llevaban ahí desde siempre, invisibles. Contarlos juntos mezclaba
+      // dos cosas distintas.
+      const conReserva = cssPrincipal.match(/var\(--t-micro,12px\)/g) || [];
+      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez en el bloque principal (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
 
       // v14.0.0 (T5) — el interruptor de modo rendimiento del dock de widgets
       // (#vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none
@@ -589,89 +721,174 @@ module.exports = {
       // este paciente» del Redactor IA vive dentro de #vgl-ia-modal (colgado de
       // document.body, Regla E) y antes NO tenía ninguna regla .active: el clic sí cambiaba
       // de modo pero no se veía seleccionado, como si el clic no hubiera hecho efecto.
-      // v17.8.0 (auditoría de experiencia, patrón B): 349 -> 404. +55, y NO son adorno:
-      // son las 55 declaraciones de color que la Regla E exigía desde siempre y que la
-      // propia Regla E llevaba anotadas como «deuda conocida» (74 infracciones, de las
-      // cuales 55 eran declaraciones de color; el resto ya estaban cubiertas por otra vía).
-      // Entre ellas .vgl-ord-sexwarn, el aviso que impide ordenar una citología a un
-      // hombre, que hasta hoy podía perder contra cualquier regla de Everest con
-      // especificidad >=10. Este contador existe para que un salto así no pase inadvertido:
-      // cumple su función y por eso se sube a mano, con el motivo escrito.
-      // v17.11.0 — EL CONTADOR CONTABA COMENTARIOS. Escribir «con !important porque este
-      // modal cuelga de document.body» en un comentario CSS subía el total como si se
-      // hubiera añadido una declaración. Un contador que se mueve porque alguien explicó
-      // algo no está midiendo lo que dice medir, y peor: empuja a NO documentar. Ahora
-      // cuenta sobre el CSS con los comentarios quitados —`cssClean`, que esta misma suite
-      // ya construye para las demás reglas— y el número baja de 404 a 378 SIN que haya
-      // cambiado una sola declaración: los 26 de diferencia siempre fueron prosa.
-      // v17.24.0 — CAMBIO DE ESCALA, no de contenido: 392 -> 490. Hasta aquí este contador
-      // solo veía el bloque principal de buildOverlay(); las cuatro hojas que se splicean
-      // por interpolación (`${_cssSeguro(() => MTR_CSS)}` y las tres hermanas — MTR_RCV_CSS,
-      // MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS, ver el comentario "CONSTANTES CSS
-      // GLOBALES" junto a MTR_RCV_CSS en vigilante_agenda.user.js) eran invisibles para la
-      // extracción textual de arriba (línea 13, corta en el primer `` `; `` tras
-      // `style.textContent = \`` ``, y una interpolación no es texto). Se corrigió
-      // resolviendo cada marcador con el valor real de su const (mismo fix que ya llevaba
-      // tools/verificar_color_chromium.js desde v17.23.0) — no se AÑADIÓ ni una declaración
-      // nueva por esto: las 98 de diferencia YA estaban en la hoja real que llega al
-      // navegador, contadas por primera vez. Itemizarlas una por una, versión por versión,
-      // no es honesto: nadie llevó ese historial mientras eran invisibles, e inventarlo
-      // ahora sería la misma falta que "casilla vacía antes que dato inventado" prohíbe
-      // para datos clínicos, aplicada aquí a datos de commits. A partir de esta versión, el
-      // historial de "N -> M" que sigue abajo (los saltos de 349 en adelante) vuelve a
-      // significar exactamente lo que dice: cada entrega real, sobre el total COMPLETO.
-      // v17.24.0 (mismo commit, después del cambio de escala): 490 -> 495. +5 del widget
-      // de Conducta #vgl-cw-farmaco (Fase 2 del rediseño del Panel): 3 estados del badge
-      // (.ok/.pend/.nd) + err-msg/ok-msg + el pulso .vgl-cw-atencion no lleva color, así
-      // que no cuenta. El resto de su panel (avisos/duplicidades) reusa `!important` ya
-      // contado en MTR_CSS/.vgl-dup-* — extender su selector no crea una declaración
-      // nueva, solo un destino más para la misma.
-      // v17.26.0 — SEGUNDO CAMBIO DE ESCALA, otra vez no de contenido: 495 -> 526. La
-      // resolución de MTR_RCV_CSS_TODOS_LOS_MODALES (ver el comentario junto al bucle de
-      // arriba) era, hasta esta versión, la ÚNICA de las cuatro hojas spliceadas que
-      // seguía sin resolverse — el `continue` silencioso la dejaba como texto literal, así
-      // que sus `!important` (los que MTR_RCV_CSS.replace() duplica hacia #vgl-riesgo-modal
-      // más los 8 propios de ese modal, líneas 12434-12448) nunca entraron a este contador.
-      // Los 31 de diferencia (526-495) YA estaban en la hoja real; misma regla que el salto
-      // de 392->490: no se itemizan uno a uno porque nadie los contó mientras eran
-      // invisibles, e inventar ese historial sería la falta que esta prueba existe para
-      // evitar en otro terreno.
-      // v17.28.0 — 526 -> 523: contenido real esta vez, no un descubrimiento de invisibles.
-      // El bloque "Medicamentos actuales" del Panel (.vgl-panel-meds-nota/-nom/-frec, 3
-      // reglas con color !important) se retiró por completo (encargo del médico, 28-ago:
-      // el Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular).
-      // v17.32.0 — 523 -> 525: el botón "Ordenar pendientes" de Conducta (#vgl-cw-ordenar-btn,
-      // fuera de #vgl-root) suma sus 2 reglas de color con !important (verde normal,
-      // gris "ya ordenado hoy") — misma disciplina que el resto de los widgets flotantes.
-      // v17.41.0 — 525 -> 527: encargo del médico, el badge de #vgl-cw-examenes pasa a
-      // compartir una única regla CSS con button#vgl-cw-ordenar-btn (mismo aspecto que los
-      // botones nativos Historial/Paquetes de Everest). La regla compartida trae 4
-      // !important propios (display, font-family, color, background-color) más los que ya
-      // tenía el selector del botón solo (border-radius, letter-spacing) — 2 de más frente
-      // a la regla vieja de solo-badge, que no llevaba ninguno.
-      // v17.44.0 — 527 -> 533: las seis reglas de color de #vgl-pym-banner (el recordatorio
-      // de PyM, que cuelga de document.body y por tanto vive FUERA de #vgl-root). Se
-      // defendían solo por especificidad (1,1,0, ver el comentario justo encima de ellas en
-      // el script): eso gana contra reglas de Everest más específicas, pero pierde contra
-      // cualquiera que lleve !important, sea cual sea su especificidad. El propio comentario
-      // documenta que el contador YA cayó una vez a contraste 1,54 en tema claro por este
-      // mecanismo. Una de las seis, .vgl-pymb-aviso, es un AVISO CLÍNICO: perder su color
-      // no lo deja gris, lo deja ilegible. Hallazgo de la auditoría de CSS del 29-ago.
-      const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 533, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.44.0 sobre #vgl-pym-banner, 527 -> 533). Esperado 533, salió ${importantTotal}.`);
+      // v17.6.83–v17.56.0 (línea de producción) — 349 -> 437 (+88): el panel del paciente
+      // rediseñado (5 secciones + cabecera), las burbujas de información del Redactor IA,
+      // los modales de flujo y sus variantes .light, el aviso de versión y los chips del
+      // nuevo tablero — todo colgado de document.body, así que la Regla E exige su
+      // !important. Censo verificado sobre la hoja real de producción.
+      // REFACTOR S+ del Panel (30-ago, aprobado en canvas) — 437 -> 445 (+8): el kicker
+      // esmeralda (#vgl-panel-modal .vgl-agm-title.vgl-agm-kicker), la pestaña activa
+      // (.vgl-panel-tab.active: background y color + border-color), el punto de estado
+      // (.vgl-panel-dot base + sus variantes ok/pend/nd) y la fila «grave» de las metas
+      // (.vgl-meta-fila.grave .vgl-meta-act). Censo verificado sobre la hoja real.
+      // REFACTOR S+ de Laboratorios (30-ago) — 445 -> 449 (+4): el icono de origen
+      // (.vgl-labs-srclbl svg), el chip «En línea» (.vgl-labs-srconline), el botón de
+      // informe (.vgl-labs-pdf) y el año compacto de la fecha (.vgl-labs-date small) —
+      // identidad índigo, Regla E. Censo verificado.
+      // REFACTOR S+ de Ordenamiento/Control (30-ago) — 449 -> 465 (+16): el modal
+      // «Próximo control» (#vgl-paquete-modal) cuelga de document.body, así que sus 14
+      // declaraciones de color llevan !important por Regla E, más el par de
+      // animation/transition del bloque reduced-motion. Censo verificado.
+      // REFACTOR S+ del menú de elección (30-ago) — 465 -> 472 (+7): los escudos de color
+      // de #vgl-paquete-modal (sub/close) y #vgl-chooser-modal (title/sub/close/chooser-t/
+      // chooser-d) y el par animation/transition del reduced-motion del chooser.
+      // REFACTOR S+ del aviso universal (30-ago) — 473 -> 475 (+2): el modal «Pendientes
+      // de este paciente» (aviso al abrir la historia por primera vez) pasa a tarjetas de
+      // sección (.vgl-pym-sec-t con su acento por variante y .vgl-pym-sec-b), cuyos colores
+      // cuelgan de document.body (Regla E) y llevan !important.
+      // =====================================================================
+      // v18.0.14 — BLINDAJE COMPLETO DE color: 475 -> 635 (+160 en la hoja que mide
+      // esta suite; 248 contando también las hojas interpoladas que ella no resuelve).
+      //
+      // El médico reportó (31-ago) que «el CSS de Everest se mezcla». Yo lo descarté con
+      // una medición MAL HECHA: mi analizador solo contaba reglas cuyo selector llevara un
+      // id de módulo (#vgl-…), y así se me escaparon las reglas de SOLO CLASE (.vgl-agm-sub
+      // b, .vgl-uro-badge, .vgl-chip…), que son las más numerosas y viven dentro de todos
+      // los módulos a la vez. Una medición en Chromium con el Everest hostil que prescribe
+      // CLAUDE.md lo dejó sin discusión:
+      //     · en el panel: 46 de 58 nodos de texto perdían su color (mediana 1,62:1);
+      //     · en Laboratorios: el DOCUMENTO DEL PACIENTE y el rótulo «Función renal:»
+      //       quedaban literalmente invisibles en tema oscuro (1,03:1 y 1,04:1).
+      // Tenía razón él, y el censo real era de 125 declaraciones secuestrables, no una.
+      //
+      // Se blindan TODAS las declaraciones de `color` de la hoja. Censo posterior: 501
+      // declaraciones de color, 0 expuestas — las únicas sin !important son el blindaje
+      // tipográfico `:where(… :not([class])){color:inherit}`, que debe seguir SIN él
+      // (especificidad cero a propósito: ver CLAUDE.md, bug #1 del botón ámbar T1).
+      //
+      // Comprobado antes de barrer, porque era el riesgo real: `grep "style.color ="`
+      // devuelve CERO en todo el archivo, así que ningún !important nuestro puede pisar un
+      // color que el script pinte a mano. Regla B de esta misma suite cubre el caso del
+      // estilo en línea dentro del HTML.
+      // =====================================================================
+      // v18.0.42 — el censo histórico se cuenta sobre el bloque PRINCIPAL, que es donde se
+      // calibró y de donde sale su lista detallada de excepciones. Las hojas spliceadas
+      // (MTR_CSS, MTR_RCV_CSS, VGL_UX_CSS) llevan las suyas y hasta esta versión no las
+      // veía nadie: se les da censo propio justo debajo, en vez de sumarlas aquí y perder
+      // el significado de las dos cuentas.
+      const importantTotal = (cssPrincipal.match(/!important/g) || []).length;
+      // v18.0.42 — 644 -> 645: una regla NUEVA, no un cableado. `.vgl-uro-arrow` (la flechita
+      // del acordeón «Ver N analitos» del uroanálisis) no tenía NINGUNA regla en toda la
+      // hoja: su color venía solo por herencia, y la herencia pierde contra una regla de
+      // tipo de Everest con important. Medido en Chromium: 18,67:1 -> 1,10:1, invisible.
+      // Este censo existe justo para que un número así no cambie sin que alguien lo explique.
+      // v18.0.64 — 649 -> 651 aquí, y 132 -> 133 en el censo de las hojas spliceadas de más
+      // abajo. Son DOS reglas nuevas, las dos por reportes en vivo del médico del 1-sep con
+      // captura:
+      //   · la clase .vgl-prod-cap («atendidas de su agenda»), la única del bloque de
+      //     Productividad sin ninguna declaración de color propia: heredaba, y un valor
+      //     heredado pierde SIEMPRE contra una regla que apunte al elemento;
+      //   · el blindaje de las otras 34 clases en el mismo caso (una sola declaración para
+      //     todas), encontradas con tools/auditar_color_todo_chromium.js.
+      // Las dos suman aquí (+2) y una de ellas suma ADEMÁS en el censo spliceado (+1), que
+      // es por lo que el total de los dos censos crece 3 y no 2: el CSS resuelto duplica
+      // MTR_RCV_CSS en MTR_RCV_CSS_TODOS_LOS_MODALES. Los números están medidos, no
+      // deducidos; si vuelven a moverse, medirlos otra vez antes de tocarlos.
+      // v18.0.69 — 651 -> 652: UNA regla nueva, .vgl-agm-sug-nota.vgl-agm-sug-aviso (el
+      // aviso de "sin cupo confirmado / no se pudo verificar" del buscador de laboratorio).
+      // Selector combinado a propósito — ver el comentario junto a la regla en el CSS: dos
+      // clases nuestras conviven en el mismo elemento con la misma especificidad, y la
+      // Regla A de aquí abajo cazó el primer intento (una clase suelta) como dependiente
+      // del orden de la hoja.
+      // v18.0.43 — 645 -> 649: CUATRO reglas nuevas para el chip y la línea del respaldo
+      // (`.vgl-chip-resp`, `.vgl-none.resp`, cada una con su gemela de tema oscuro), que
+      // pintan en ámbar lo que viene de la base piloto y no de la lista oficial de hoy.
+      // Viven en la tarjeta de cita, dentro de #vgl-root, pero llevan su marca de prioridad
+      // igual: la regla del proyecto es que TODO color la lleve, no solo los de fuera.
+      // De paso, el primer intento sumaba CINCO: el quinto era la palabra escrita dentro de
+      // un comentario del propio CSS. Este censo cuenta texto crudo, así que una mención en
+      // prosa le inventa una regla — anotado en el comentario de esa hoja para no repetirlo.
+      // v18.0.115 (C17) — 655 -> 656: .vgl-agm-pref-txt (color !important, fuera de #vgl-root).
+      // v18.0.112 (C20) — 653 -> 655: .vgl-chooser-num y su variante .vgl-chooser-ult, ambas con color !important (fuera de #vgl-root).
+      // v18.0.96 — 652 -> 653 aquí, y 133 -> 134 en el censo spliceado. Cierre del enjambre
+      // del 1-sep: la primera medición sobre el HTML REAL de cada superficie
+      // (tools/auditar_html_real_chromium.js, 324 elementos con texto propio, oscuro y claro)
+      // encontró dos elementos con clase propia y texto que NO tenían ninguna regla de color
+      // y se pintaban con el color de Everest: el ícono del menú de elección
+      // (#vgl-chooser-modal .vgl-chooser-ico, bloque principal: +1 aquí) y la pastilla de
+      // complejidad en su estado inicial (.vgl-complex-pill, VGL_UX_CSS: +1 abajo). El censo
+      // sintético anterior no los veía por tres puntos ciegos, ya cerrados en
+      // tools/auditar_color_todo_chromium.js y vigilados por la Regla S de más abajo.
+      t.cierto(importantTotal === 656, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96 + 2 del número de tecla del menú de elección (C20) en la v18.0.112 + 1 del chip «como la última vez» de Agendar (C17) en la v18.0.115 - 1 que la v18.0.124 (UI/UX UI#12) QUITA: .vgl-tl dejó de apagar el anillo de foco con la marca de prioridad, que era lo único que impedía ver el foco de teclado en los tres semáforos + 1 que la v18.0.125 (fila 30) AÑADE: la chapa .vgl-labs-srcoff, que dice en ámbar que el portal del laboratorio no respondió y vive en un modal pegado a document.body; salió ${importantTotal})`);
 
-      // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
-      // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier
-      // regla con un SEGUNDO selector de clase pegado sin espacio (el patrón
-      // ".vgl-rcv-aviso.vgl-rcv-aviso-alto" que esta misma versión introdujo en Regla A) —
-      // esas dos reglas nunca llegaban a #vgl-riesgo-modal. Latente hoy (ese modal no
-      // existe en el DOM: openRiesgoModal se retiró en v17.6.29), pero real: si algún día
-      // se reconecta mtrRenderResumenClinicoHtml a un modal con ese id, el aviso ámbar de
-      // "Criterio de remisión a nefrología" habría salido sin color.
-      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto") >= 0,
-        "el modificador compuesto de aviso-alto debe llegar también a #vgl-riesgo-modal");
-      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-lista.vgl-rcv-lista-orden li") >= 0,
-        "el modificador compuesto de lista-orden debe llegar también a #vgl-riesgo-modal");
+      // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
+      // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
+      // la hoja a mitad y dejó 878 líneas de CSS sin aplicar. Un número fijo obliga a que
+      // cualquier cambio de blindaje en esas hojas pase por aquí y se explique.
+      const importantSpliceados = (css.match(/!important/g) || []).length - importantTotal;
+      t.cierto(importantSpliceados === 134,
+        `Las hojas que buildOverlay splicea (${_spliced.join(", ")}) llevan su propio blindaje de color. Si este número cambia, dígalo aquí con su motivo (esperado 134: 132 + la clase .vgl-prod-cap blindada en la v18.0.64 + la pastilla .vgl-complex-pill blindada en la v18.0.96; salió ${importantSpliceados})`);
+    });
+
+    // =====================================================================
+    // v18.0.96 — Regla S (cierre del enjambre, 01-sep): TODO ELEMENTO CON CLASE PROPIA Y
+    // TEXTO LITERAL TIENE UNA REGLA DE COLOR QUE LE APLICA DE VERDAD.
+    //
+    // Por qué existe: el barrido sintético de tools/auditar_color_todo_chromium.js decía
+    // «0 secuestros» mientras Chromium, con el HTML REAL del modal de Agendar, mostraba la
+    // pastilla «Analizando historia clínica del paciente...» pintada con el color de
+    // Everest. Tres puntos ciegos seguidos: (1) `<div id="…" class="…">` no entraba en el
+    // censo porque exigía class= pegado a la etiqueta; (2) `.vgl-complex-pill.warn{color}`
+    // hacía pasar por «con color» a `.vgl-complex-pill` a secas, que en su estado inicial
+    // no tiene ninguna regla; (3) contenedores sin una letra propia salían como secuestrados
+    // porque el censo contaba una costura de concatenación como texto.
+    //
+    // Qué exige: para cada elemento que el código emite con clase vgl-* y al menos tres
+    // letras LITERALES propias (no `${x}` ni `' + x + '`), debe existir una regla con
+    // `color` cuyo ÚLTIMO compuesto le aplique: sus clases contienen las del compuesto, o
+    // es su id, o es su etiqueta (`… span{color}` cubre a los span de su ámbito — se admite
+    // sin comprobar el ámbito, sobreaproximación deliberada: la medición exacta con
+    // ancestros la hace tools/auditar_html_real_chromium.js). Las reglas de blindaje de los
+    // elementos SIN clase (`:where(... :not([class]))`) no cuentan: no aplican a estos.
+    // Cualquier excepción va en EXCEPCIONES_S con su motivo, como en las Reglas G y L.
+    // =====================================================================
+    t.caso("Regla S - todo elemento con clase propia y texto literal tiene una regla de color que le APLICA (no solo a un compuesto suyo)", () => {
+      const sets = [], ids = new Set(), tags = new Set();
+      for (const r of cssClean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/(^|;)\s*color\s*:/i.test(r[2])) continue;
+        for (const sel of r[1].split(",")) {
+          const ult = sel.trim().split(/[\s>+~]+/).pop() || "";
+          if (/:not\(\[class\]\)/.test(ult)) continue;
+          const cls = [...ult.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((c) => c[1]);
+          const id = (ult.match(/#([a-zA-Z0-9_-]+)/) || [])[1];
+          const tag = (ult.match(/^[a-z][a-z0-9]*/i) || [])[0];
+          if (cls.length) sets.push(cls);
+          else if (id) ids.add(id);
+          else if (tag) tags.add(tag.toLowerCase());
+        }
+      }
+      const cubierto = (clases, id, tag) =>
+        sets.some((s) => s.every((c) => clases.includes(c))) || (!!id && ids.has(id)) || tags.has(tag);
+      const EXCEPCIONES_S = {
+        // "clase o combinación": "motivo verificado en Chromium con el HTML real"
+      };
+      const re = /<(span|div|b|i|small|label|p|strong|em)\b([^>]*?)\bclass="([^"$]*?)"([^>]*)>([^<>{}]*[^\s<>{}][^<>]*?)</g;
+      const escaneados = [], sinCobertura = [];
+      for (const m of code.matchAll(re)) {
+        const clases = m[3].split(/\s+/).map((c) => c.replace(/['"`+].*$/, "")).filter((c) => /^vgl-[a-zA-Z0-9_-]+$/.test(c));
+        if (!clases.length) continue;
+        const id = ((m[2] + " " + m[4]).match(/\bid="([^"$]+)"/) || [])[1] || "";
+        const literal = m[5].trim().replace(/\$\{[\s\S]*$/, "").replace(/['"`]\s*(\+|\/\*|\/\/|\)|;|,|$)[\s\S]*$/, "");
+        if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}/.test(literal)) continue;
+        const clave = clases.join(" ");
+        escaneados.push(clave);
+        if (EXCEPCIONES_S[clave]) continue;
+        if (cubierto(clases, id, m[1].toLowerCase())) continue;
+        if (!sinCobertura.some((x) => x.clave === clave)) sinCobertura.push({ clave, id, texto: literal.replace(/\s+/g, " ").slice(0, 40) });
+      }
+      t.cierto(escaneados.length >= 30, `la regla tiene que ver muchos elementos para valer algo (vio ${escaneados.length})`);
+      t.cierto(escaneados.includes("vgl-complex-pill"), "la pastilla de complejidad entra en el censo: es el caso que motivó la regla");
+      t.igual(sinCobertura, [], `Clases con texto literal propio y SIN regla de color que les aplique (clase propia con texto en una superficie del script ⇒ color con marca de prioridad, CLAUDE.md): ${sinCobertura.map((x) => "." + x.clave.replace(/ /g, ".") + (x.id ? "#" + x.id : "") + " («" + x.texto + "»)").join(", ")}`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -751,11 +968,11 @@ module.exports = {
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios. v15.6.0 — #vgl-acomp-burbuja (la
       // burbuja de la guía paso a paso) y v17.1.0 — .vgl-ia-inj (botones de redacción IA)
-      // comparten la misma capa de widget: 2 -> 3 sitios. v17.18.0 — #vgl-cw-examenes (el
-      // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios. v17.24.0 —
-      // #vgl-cw-farmaco (el widget hermano, Fase 2 del rediseño del Panel): 4 -> 5 sitios.
-      // v17.32.0 — #vgl-cw-ordenar-btn (el botón "Ordenar pendientes"): 5 -> 6 sitios.
-      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, #vgl-cw-examenes, #vgl-cw-farmaco y #vgl-cw-ordenar-btn (6 sitios). Salieron ${zWidget.length}.`);
+      // comparten la misma capa de widget: 2 -> 3 sitios.
+      // v17.6.83+ — la línea de producción suma 3 sitios más en la misma capa: los
+      // sugeridores de la Ficha del paciente (#vgl-cw-examenes, #vgl-cw-farmaco) y el
+      // botón/panel de ordenamiento de la consulta: 3 -> 6.
+      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y los sugeridores de la Ficha (6 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);
@@ -977,6 +1194,318 @@ module.exports = {
       const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
       const ocurrencias = (bloque.match(/font-size:/g) || []).length;
       t.igual(ocurrencias, 1, "una sola declaración de font-size en .vgl-toast-b");
+    });
+
+
+    // =====================================================================
+    // v18.0.14 — REGLA P: EL BLINDAJE COMPLETO, MEDIDO COMO REGLA Y NO COMO NÚMERO
+    //
+    // La Regla E solo mira selectores que NOMBRAN un id de panel (#vgl-pym-modal…). Ese
+    // punto ciego está declarado arriba desde v12.10.12 — y es exactamente por donde se
+    // coló el problema que el médico reportó el 31-ago: las reglas de SOLO CLASE
+    // (.vgl-agm-sub b, .vgl-uro-badge, .vgl-chip-mas…) viven dentro de todos los módulos
+    // a la vez y ninguna prueba las miraba. Yo las descarté con una medición mal hecha
+    // (mi analizador exigía el id en el selector, así que contaba 1 infracción donde
+    // había 125). Chromium con el Everest hostil de CLAUDE.md lo zanjó: 46 de 58 nodos
+    // de texto del panel perdían su color, y en Laboratorios el documento del paciente y
+    // el rótulo «Función renal:» quedaban invisibles (1,03:1 y 1,04:1).
+    //
+    // Esta regla no admite punto ciego: recorre TODA la hoja, sin filtrar por selector.
+    // CERO declaraciones de color sin !important, sin excepción — ni siquiera el blindaje
+    // tipográfico. Eso corrige lo que yo mismo tenía mal: creía que el blindaje debía
+    // quedarse sin !important «por tener especificidad cero», y esa lectura confundía DOS
+    // defensas distintas. La que importa contra el bug #1 (nuestra regla vieja gana a
+    // nuestra clase nueva, botón ámbar T1 / v12.10.2) es el `:not([class])`, no la falta
+    // de !important: con él, el blindaje y cualquier clase de acento nuestra son DISJUNTOS
+    // por construcción — jamás alcanzan al mismo elemento, así que no pueden competir.
+    // Sin !important, en cambio, el blindaje sí perdía contra Everest, que es el adversario
+    // real: escrito `:where(#vgl-cw-examenes :not([class])){color:inherit}` el id queda
+    // DENTRO del :where() y la regla vale (0,0,0) — la gana cualquier `span{color:X}` de
+    // Everest. Por eso en v18.0.14 los cuatro blindajes que estaban en esa forma pasan a la
+    // forma fuerte (id FUERA del :where(), como el blindaje general de v12.3.15 ya hacía)
+    // y ganan !important.
+    //
+    // Lo que esta prueba vigila en la otra dirección es esa condición de disyunción: un
+    // blindaje con !important SOLO es seguro mientras cada rama de su :where() lleve
+    // :not([class]). Si alguien la quitara, la regla pasaría a alcanzar elementos CON clase
+    // y, con (1,0,x) + !important, aplastaría todos nuestros acentos — el bug #1 otra vez,
+    // ahora blindado. Se comprueba explícitamente.
+    //
+    // Regla E se queda: es más barata de leer y da un mensaje de error más concreto
+    // cuando lo que se rompe es un panel. Esta es la red de abajo.
+    // =====================================================================
+    t.caso("Regla P - TODA declaración de color de la hoja lleva !important, blindaje incluido", () => {
+      const expuestas = [];
+      for (const r of reglasCss) {
+        for (const cd of r.decls) {
+          const norm = cd.replace(/\s+/g, '');
+          if (norm.indexOf('color:') !== 0) continue;   // solo `color`, no background-color ni border-color
+          if (cd.includes('!important')) continue;
+          expuestas.push(`${r.selector.trim().replace(/\s+/g, ' ')} {${norm}}`);
+        }
+      }
+
+      t.igual(expuestas.length, 0,
+        `Cero declaraciones de color sin !important en TODA la hoja (Everest es una caja negra: una clase sin !important pierde contra cualquier regla suya de especificidad >= 10, y contra cualquiera con !important sea cual sea su especificidad). Expuestas: ${expuestas.length}${expuestas.length ? " — " + expuestas.slice(0, 6).join(' | ') : ""}`);
+
+      // La otra dirección: la condición que hace SEGURO ese !important en el blindaje es
+      // que siga siendo disjunto de nuestras clases. Cada rama del :where() debe llevar
+      // :not([class]); si una la pierde, la regla alcanza elementos CON clase y, con
+      // (1,0,x)+!important, aplasta todos los acentos propios (bug #1, ahora blindado).
+      //
+      // Se recorre el CSS CRUDO, no `reglasCss`: el extractor de esta suite parte los
+      // selectores por comas — incluidas las comas de DENTRO de un :where() — así que sus
+      // entradas traen fragmentos con paréntesis sin cerrar (#vgl-root :where(span:not([class]))
+      // y una comprobación hecha sobre ellos se cuela sin ver nada. Verificado con una
+      // mutación: escrita así, quitarle el :not([class]) a una rama NO ponía la prueba en
+      // rojo. Por eso esta mitad no usa reglasCss.
+      const cuerposWhere = (texto) => {
+        const fuera = [];
+        for (let i = texto.indexOf(':where('); i >= 0; i = texto.indexOf(':where(', i + 1)) {
+          let prof = 1, j = i + ':where('.length;
+          for (; j < texto.length && prof > 0; j++) {
+            if (texto[j] === '(') prof++;
+            else if (texto[j] === ')') prof--;
+          }
+          if (prof === 0) fuera.push(texto.slice(i + ':where('.length, j - 1));
+        }
+        return fuera;
+      };
+      const ramasNivel0 = (cuerpo) => {
+        const partes = []; let prof = 0, act = '';
+        for (const ch of cuerpo) {
+          if (ch === '(') prof++;
+          else if (ch === ')') prof--;
+          if (ch === ',' && prof === 0) { partes.push(act); act = ''; continue; }
+          act += ch;
+        }
+        partes.push(act);
+        return partes.map(x => x.trim()).filter(Boolean);
+      };
+
+      const cuerpos = cuerposWhere(cssClean);
+      t.cierto(cuerpos.length >= 27, `el blindaje tipográfico sigue en la hoja (se esperaban >= 27 usos de :where(), se hallaron ${cuerpos.length})`);
+
+      const ramasSinGuarda = [];
+      for (const cuerpo of cuerpos) {
+        for (const rama of ramasNivel0(cuerpo)) {
+          if (!rama.includes(':not([class])')) ramasSinGuarda.push(rama);
+        }
+      }
+      t.igual(ramasSinGuarda.length, 0,
+        `toda rama de un :where() del blindaje debe llevar :not([class]) (es lo que lo mantiene disjunto de nuestras clases de acento). Sin guarda: ${ramasSinGuarda.slice(0, 5).join(' | ')}`);
+    });
+
+    // v18.0.14 — la contraprueba de que no barrí de más: si el script pintara colores a
+    // mano desde JS (el.style.color = …), un !important nuestro en la hoja ganaría a ese
+    // estilo en línea y le apagaría el color dinámico. Comprobado antes de barrer y
+    // cableado aquí para que siga siendo cierto: CERO asignaciones a .style.color.
+    t.caso("v18.0.14: ningún color se pinta desde JS con .style.color (o el !important lo apagaría)", () => {
+      const asignaciones = (code.match(/\.style\.color\s*=/g) || []).length;
+      t.igual(asignaciones, 0,
+        "el !important de la Regla P gana al estilo en línea; si alguien empieza a pintar color desde JS, hay que blindar ese caso a mano (Regla B cubre el estilo en línea escrito dentro del HTML)");
+    });
+
+
+    // =====================================================================
+    // v18.0.14 — REGLA Q: UN COMENTARIO QUE SE CIERRA ANTES DE TIEMPO SE COME LA REGLA
+    //            QUE VIENE DETRÁS
+    //
+    // Encontrado midiendo en Chromium, no leyendo: la regla raíz del widget de Fármacos
+    // (#vgl-cw-farmaco{position;z-index;font-family;max-width:320px}) NO se aplicaba. La
+    // causa estaba cinco líneas más arriba, en un comentario que documentaba las clases
+    // del panel escribiéndolas con comodín: «(.vgl-mtr-*/.vgl-dup-*)». Ese «*/» del medio
+    // CIERRA el comentario ahí mismo — el analizador de CSS se queda con el PRIMER «*/»,
+    // no con el que el autor tenía en la cabeza. Lo que seguía («cuyo CSS se extiende más
+    // abajo…») pasaba a leerse como selector, y el analizador seguía tragando hasta poder
+    // recuperarse: la regla siguiente entera se perdía. Vivo desde la v17.24.0.
+    //
+    // Es la misma familia que la Regla N (un backtick suelto cierra el template literal y
+    // tumba el archivo entero), pero MÁS silenciosa: aquí no hay error de sintaxis, ni en
+    // JS ni en CSS. El archivo carga, el banco pasa, y una regla simplemente no existe.
+    // Por eso hacen falta las dos comprobaciones:
+    //   1) sintáctica — ningún cierre de comentario seguido de texto en la misma línea;
+    //   2) semántica  — tras despiezar los comentarios COMO LO HACE EL ANALIZADOR (primer
+    //      «*/» gana), ningún selector puede traer caracteres no ASCII. Todos nuestros
+    //      selectores son ASCII puro; la prosa del proyecto es española y lleva tildes,
+    //      «—» o ««»». Si aparece un selector con acentos, es prosa que se escapó de un
+    //      comentario, y detrás de ella hay una regla perdida.
+    // =====================================================================
+    t.caso("Regla Q - ningún comentario del CSS se cierra antes de tiempo (se comería la regla siguiente)", () => {
+      // (1) sintáctica: dónde CREE el analizador que termina cada comentario.
+      const fugas = [];
+      let i = 0;
+      for (;;) {
+        const a = css.indexOf("/*", i);
+        if (a < 0) break;
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        const cierre = b + 2;
+        const finLinea = css.indexOf("\n", cierre);
+        const resto = css.slice(cierre, finLinea < 0 ? css.length : finLinea).trim();
+        if (resto && !resto.startsWith("/*")) fugas.push(`…${css.slice(Math.max(0, cierre - 45), cierre)}  ->  ${resto.slice(0, 60)}`);
+        i = cierre;
+      }
+      t.igual(fugas.length, 0,
+        `un "*/" seguido de más texto en la misma línea casi siempre significa que el comentario se cerró donde el autor no quería (p. ej. un comodín ".vgl-algo-*/" dentro del comentario). Fugas: ${fugas.slice(0, 3).join(' || ')}`);
+
+      // (2) semántica: despiece como el analizador (primer "*/" gana) y revisión de selectores.
+      const trozos = []; let j = 0;
+      for (;;) {
+        const a = css.indexOf("/*", j);
+        if (a < 0) { trozos.push(css.slice(j)); break; }
+        trozos.push(css.slice(j, a));
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        j = b + 2;
+      }
+      const limpio = trozos.join("");
+      const selConProsa = [];
+      const re = /(^|\})([^{}]*)\{/g;
+      let m;
+      while ((m = re.exec(limpio)) !== null) {
+        const sel = m[2].trim();
+        if (!sel) continue;
+        // eslint-disable-next-line no-control-regex
+        if (/[^\x00-\x7F]/.test(sel)) selConProsa.push(sel.slice(0, 110));
+      }
+      t.igual(selConProsa.length, 0,
+        `todos nuestros selectores son ASCII: uno con tildes o guiones largos es prosa que se escapó de un comentario, y detrás de ella hay una regla que el navegador nunca ve. Selectores con prosa: ${selConProsa.slice(0, 3).map(x => JSON.stringify(x)).join(' || ')}`);
+    });
+
+    // v18.0.14 — la consecuencia concreta de la fuga de arriba, cableada como prueba: la
+    // regla raíz del widget de Fármacos tiene que existir Y traer sus cuatro propiedades.
+    // Sin ella el widget se queda sin z-index (puede pintarse por debajo de Everest) y sin
+    // el tope de 320 px (se estira sin freno). La posición se salva porque JS la pone en
+    // línea desde la v17.38.0, que es justo por qué el fallo pudo pasar meses sin verse.
+    t.caso("v18.0.14: la regla raíz de #vgl-cw-farmaco sobrevive al despiece de comentarios", () => {
+      const trozos = []; let j = 0;
+      for (;;) {
+        const a = css.indexOf("/*", j);
+        if (a < 0) { trozos.push(css.slice(j)); break; }
+        trozos.push(css.slice(j, a));
+        const b = css.indexOf("*/", a + 2);
+        if (b < 0) break;
+        j = b + 2;
+      }
+      const limpio = trozos.join("");
+      const idx = limpio.indexOf("#vgl-cw-farmaco{");
+      t.cierto(idx > 0, "la regla raíz #vgl-cw-farmaco{…} sigue en la hoja tras despiezar comentarios");
+      // y el selector que la precede debe ser sano: si el analizador venía arrastrando
+      // basura, "#vgl-cw-farmaco{" quedaría pegado a un selector inválido.
+      const antes = limpio.slice(Math.max(0, idx - 400), idx);
+      const ultimoCierre = Math.max(antes.lastIndexOf("}"), antes.lastIndexOf("{"));
+      const entre = antes.slice(ultimoCierre + 1).trim();
+      t.igual(entre, "", `entre la regla anterior y #vgl-cw-farmaco{ no puede quedar texto suelto (sería prosa de un comentario roto). Quedó: ${JSON.stringify(entre.slice(0, 90))}`);
+      const bloque = limpio.slice(idx, limpio.indexOf("}", idx));
+      for (const prop of ["z-index:", "max-width:", "font-family:", "color:"]) {
+        t.cierto(bloque.includes(prop), `la regla raíz de #vgl-cw-farmaco conserva ${prop}`);
+      }
+    });
+
+
+    // =====================================================================
+    // v18.0.16 — REGLA R: EL ESTILO EN LÍNEA DEJÓ DE SER INMUNE EL DÍA QUE GANAMOS
+    //            !important, Y ME LLEVÓ POR DELANTE CUATRO AVISOS
+    //
+    // `CLAUDE.md` daba por sentado: «el estilo inline SÍ es inmune a esto (gana a
+    // cualquier regla no-!important)». Era cierto hasta la v18.0.14. Al blindar TODA la
+    // hoja, nuestras propias reglas pasaron a llevar !important — y un !important de hoja
+    // le gana a un estilo en línea SIN !important. El blindaje tipográfico, que alcanza a
+    // todo elemento sin clase propia, se comió el color en línea de cuatro sitios. Medido
+    // en Chromium, antes y después de mi propio cambio:
+    //     · hora asignada del modal de agendamiento   #4ff0b8 -> blanco
+    //     · etiqueta de fecha («mañana», «hoy»)       #4ff0b8 -> blanco
+    //     · caja «la IA escribió una cifra que no está en los hechos»  #8b1a1a -> negro
+    //     · el número señalado dentro de esa caja                      #c00    -> negro
+    // Los dos últimos son el aviso más grave del módulo de redacción; los dos primeros son
+    // cifras que el médico lee ANTES de confirmar una cita.
+    //
+    // La Regla B de esta misma suite existía para esto y NO lo cazó: mira `\.style\.color =`
+    // y estos cuatro pintaban por `cssText` o por `style="…"` dentro del HTML. Se cierra el
+    // hueco entero: TODA forma de pintar color en línea entra en la cuenta.
+    //
+    // El invariante que se fija: un color en línea o lleva `!important` (y entonces gana a
+    // cualquier regla, nuestra o de Everest), o no existe — el elemento lleva CLASE propia
+    // y su color vive en la hoja, donde la Regla P ya lo obliga a blindarse. Las dos
+    // salidas son seguras; lo inseguro es el término medio, que es justo lo que había.
+    // =====================================================================
+    t.caso("Regla R - ningún color pintado EN LÍNEA queda sin !important (la hoja se lo comería)", () => {
+      const sitios = [];
+
+      // v18.0.42 — LA REGLA ERA CIEGA JUSTO DONDE VIVÍA EL COLOR. La rama (a) buscaba
+      // `style="([^"]*)"`, y ese `[^"]*` se detiene en la PRIMERA comilla doble que
+      // encuentre — incluidas las que van DENTRO de una interpolación `${...}`. En el
+      // titular del aviso flotante, el atributo empieza así:
+      //
+      //     style="--tk:var(--rgb-${String(color || "AZUL")…);color:var(--c-…)"
+      //                                          ^ aquí se cortaba
+      //
+      // Medido: tres coincidencias de `style="` en esa línea, NINGUNA con `color:`. El
+      // titular y el icono llevaban meses pintando su color en línea sin `!important`
+      // (7,84:1 → 1,02:1 bajo el CSS de Everest) y esta regla, escrita en la v18.0.16
+      // precisamente para eso, pasaba en verde.
+      //
+      // Se neutralizan las interpolaciones ANTES de buscar, conservando los saltos de línea
+      // para que los números de línea del informe sigan siendo los de verdad.
+      const sinInterpolar = (txt) => {
+        let out = "", i = 0;
+        while (i < txt.length) {
+          if (txt[i] === "$" && txt[i + 1] === "{") {
+            let prof = 1, j = i + 2;
+            while (j < txt.length && prof > 0) {
+              if (txt[j] === "{") prof++;
+              else if (txt[j] === "}") prof--;
+              j++;
+            }
+            const trozo = txt.slice(i, j);
+            out += "EXPR" + trozo.replace(/[^\n]/g, "");   // sin comillas, con sus saltos
+            i = j;
+          } else { out += txt[i++]; }
+        }
+        return out;
+      };
+      const codeSinExpr = sinInterpolar(code);
+
+      // (a) style="…color:…" escrito dentro del HTML que generamos
+      const reHtml = /style="([^"]*)"/g;
+      let m;
+      while ((m = reHtml.exec(codeSinExpr)) !== null) {
+        const decls = m[1];
+        if (!/(^|;)\s*color\s*:/.test(decls)) continue;
+        const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
+        if (decl.includes("!important")) continue;
+        sitios.push('style="…' + decl.slice(0, 60) + '…"  (línea ' + (codeSinExpr.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      // (b) elemento.style.cssText = "…color:…"  — la vía que la Regla B no miraba
+      //
+      // v18.0.64 — LA MISMA CEGUERA DE LA v18.0.42, EN LA OTRA RAMA. El patrón capturaba
+      // UNA sola cadena entrecomillada, y un `cssText` largo se escribe partido en varias
+      // unidas con `+`. En la pastilla del Redactor IA («⏳ Abriendo la pestaña Conducta…»)
+      // el color vive en la SEGUNDA cadena, así que esta regla miraba la primera —sin
+      // ningún `color:`—, no encontraba nada y pasaba en verde mientras el médico veía el
+      // azul de Everest en pantalla. Ahora se consume la concatenación entera.
+      const reCss = /\.style\.cssText\s*=\s*((?:"[^"]*"|'[^']*'|\s*\+\s*)+)/g;
+      while ((m = reCss.exec(codeSinExpr)) !== null) {
+        // Se unen todos los literales de la expresión: es el valor que de verdad recibe el
+        // elemento, no solo su primer trozo.
+        const decls = (m[1].match(/"[^"]*"|'[^']*'/g) || []).map((t) => t.slice(1, -1)).join("");
+        if (!/(^|;)\s*color\s*:/.test(decls)) continue;
+        const decl = decls.split(";").map(d => d.trim()).find(d => /^color\s*:/.test(d)) || "";
+        if (decl.includes("!important")) continue;
+        sitios.push('cssText "…' + decl.slice(0, 60) + '…"  (línea ' + (codeSinExpr.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      // (c) elemento.style.color = "…"  — lo que la Regla B ya cubría, aquí por completitud.
+      //     setProperty("color", v, "important") NO cuenta: lleva su prioridad aparte.
+      const reProp = /\.style\.color\s*=/g;
+      while ((m = reProp.exec(code)) !== null) {
+        sitios.push(".style.color = …  (línea " + (code.slice(0, m.index).split("\n").length) + ")");
+      }
+
+      t.igual(sitios.length, 0,
+        `un color en línea sin !important lo pisa cualquier regla nuestra de la hoja (todas llevan !important desde la v18.0.14). O lleva !important, o el elemento lleva clase propia y su color vive en la hoja. Sitios: ${sitios.slice(0, 6).join(" | ")}`);
     });
 
   }

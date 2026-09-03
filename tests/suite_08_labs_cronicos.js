@@ -7,7 +7,7 @@ module.exports = {
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_resumenClinicoUro", "_esUroComponenteAlterado",
     "_ultimaFechaPorAnalito", "_nuevoReemplazaCandidato", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
-    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
+    "_vigenciaDiasParaAnalito", "_vigenciaNormaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
     "mtrAvisoTablaLabsHtml", "atheneaLecturaIncompleta",   // v17.7.1
@@ -66,6 +66,35 @@ module.exports = {
       t.igual(depuracion, null);
       const creatininaSuero = testApi._matchLabInWhitelist({ nombre: "CREATININA" });
       t.cierto(!!creatininaSuero && creatininaSuero.key === "CREATININA");
+    });
+
+    // v18.0.31 — GUARDA DEL HEMOGRAMA. Medido con el arnés antes de tocar nada: SEIS
+    // nombres del hemograma casaban con la casilla de hemoglobina SÉRICA, y cuál ganaba lo
+    // decidía el orden en que Athenea devolviera las filas (los tres del panel son
+    // numéricos y de la misma fecha, así que _nuevoReemplazaCandidato empata). Una anemia
+    // de 9.8 podía quedar escrita como 30.2 (el HCM, en pg), y una A1c de 7.2 como una
+    // anemia severa que el paciente no tiene.
+    t.caso("_matchLabInWhitelist (v18.0.31): los índices del hemograma NO se llevan la casilla de hemoglobina sérica", () => {
+      const roban = [
+        "HEMOGLOBINA CORPUSCULAR MEDIA",                   // HCM, en pg
+        "CONCENTRACION DE HEMOGLOBINA CORPUSCULAR MEDIA",  // CHCM, en g/dL
+        "HEMOGLOBINA GLOBULAR MEDIA",
+        "HEMOGLOBINA A1C",                                 // glicosilada, en %
+        "HEMOGLOBINA FETAL",
+      ];
+      roban.forEach((n) => {
+        const m = testApi._matchLabInWhitelist({ nombre: n, NombreParametroPadre: "HEMOGRAMA IV (AUTOMATIZADO)" });
+        t.igual(m, null, n + " no puede caer en la casilla de hemoglobina: casilla vacía antes que dato inventado");
+      });
+      // Y la contrapartida, para que la guarda no se pueda «arreglar» excluyéndolo todo:
+      const hb = testApi._matchLabInWhitelist({ nombre: "HEMOGLOBINA" });
+      t.cierto(!!hb && hb.key === "HEMOGLOBINA", "la hemoglobina de verdad sigue casando");
+      // El CUPS exacto manda sobre el nombre y no lo toca ninguna exclusión.
+      const porCups = testApi._matchLabInWhitelist({ codigo: "902207", nombre: "HEMOGLOBINA CORPUSCULAR MEDIA" });
+      t.cierto(!!porCups && porCups.key === "HEMOGLOBINA", "el CUPS 902207 sigue mandando sobre el nombre");
+      // Y la glicosilada sigue yendo a SU casilla, no a la de hemoglobina ni a ninguna.
+      const glico = testApi._matchLabInWhitelist({ nombre: "HEMOGLOBINA GLICOSILADA" });
+      t.cierto(!!glico && glico.key === "HBA1C", "la glicosilada sigue yendo a HbA1c");
     });
 
     t.caso("_matchLabInWhitelist: Triglicéridos CUPS 903868 no se confunde con RAC (Incidente v12.0.5)", () => {
@@ -278,6 +307,97 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/if \(actual === ""\) \{ setNgValue\(el, r\.resultVal\); escritas\+\+; \}/.test(src), "ya no debe contar sin comprobar el retorno de setNgValue");
       t.cierto(/if \(actual === "" && setNgValue\(el, r\.resultVal\)\) escritas\+\+;/.test(src), "debe exigir que setNgValue haya devuelto true");
+    });
+
+    // v18.0.74 — HALLAZGO DE ENJAMBRE #26. A diferencia del VALOR (protegido desde
+    // v17.6.45, prueba de arriba), la escritura de FECHA no comprobaba el retorno de
+    // setNgValue: un <input type="date"> que el navegador rechaza queda vacío en silencio,
+    // pero _fechasYaUsadas la marcaba «reclamada» igual — vacía Y bloqueada para que otro
+    // analito la use de respaldo.
+    t.caso("v18.0.74: injectLabsIntoCronicos no reclama una casilla de fecha que el navegador rechazó", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => {
+        if (id === "resultadoColesterolTotal") {
+          return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return mockDOM[id].value; }, set value(v) { mockDOM[id].value = v; } };
+        }
+        if (id === "fechaResultColesterolTotal") {
+          // Casilla de fecha que rechaza CUALQUIER valor (simula el <input type="date">
+          // real rechazando una fecha de calendario imposible): tras asignarla, value
+          // sigue vacío — lo que setNgValue mide para devolver false.
+          return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return ""; }, set value(v) { /* el navegador rechaza */ } };
+        }
+        return null;
+      };
+      // 02-sep — CIERRE ADVERSARIAL (fila 30): esta prueba solo miraba el VALOR y el conteo, y
+      // pasaba igual con el defecto original puesto de vuelta (la casilla rechazada seguía
+      // «reclamada» en silencio). El arreglo tiene un efecto observable: la rama del rechazo
+      // avisa por consola en vez de reclamar la casilla — y las dos ramas son excluyentes.
+      const avisos = [];
+      const warnAntes = c.ctx.console.warn;
+      c.ctx.console.warn = (...a) => { avisos.push(a.map(String).join(" ")); };
+      try {
+        const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(mockDOM["resultadoColesterolTotal"].value, "180", "el valor sí se escribe: es una casilla distinta");
+        t.igual(res.count, 1, "y sí cuenta como diligenciado — la fecha es un dato aparte");
+        t.cierto(avisos.some((w) => /rechazada por el navegador/.test(w) && /COLESTEROL/.test(w)),
+          "y la fecha rechazada se avisa en vez de reclamarse en silencio (la otra rama, la que la marca como usada, NO corrió): " + JSON.stringify(avisos));
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+        c.ctx.console.warn = warnAntes;
+      }
+    });
+
+    // v18.0.106 — refutador de v18.0.100 (fila 30, prueba hueca): la conductual de arriba miraba
+    // el CANAL (el texto de console.warn), no el EFECTO — el defecto entero con el aviso
+    // conservado pasaba en verde. El efecto observable: dos analitos cuya casilla de fecha
+    // resuelve al MISMO nodo que rechaza; si la casilla rechazada quedara «reclamada», el
+    // segundo analito recibiría «ya la ocupó otro analito».
+    t.caso("v18.0.106: una casilla de fecha rechazada NO queda reclamada — el segundo analito que cae en ella no recibe «ya la ocupó otro analito»", () => {
+      mockDOM = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      const fechaRechaza = { id: "fechaResultColesterolTotal", tagName: "INPUT", dispatchEvent: () => {}, get value() { return ""; }, set value(v) { /* el navegador rechaza */ } };
+      c.env.doc.getElementById = (id) => {
+        if (mockDOM[id]) return { id, tagName: "INPUT", dispatchEvent: () => {}, get value() { return mockDOM[id].value; }, set value(v) { mockDOM[id].value = v; } };
+        if (id === "fechaResultColesterolTotal" || id === "fechaResultTrigliceridos") return fechaRechaza;
+        return null;
+      };
+      const avisos = [];
+      const warnAntes = c.ctx.console.warn;
+      c.ctx.console.warn = (...a) => { avisos.push(a.map(String).join(" ")); };
+      try {
+        const labs = [
+          { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" },
+          { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: "2026-08-01" },
+        ];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(res.count, 2, "los dos valores se escriben: la fecha es un dato aparte");
+        t.igual(mockDOM.resultadoTrigliceridos.value, "150", "el segundo valor también");
+        t.igual(avisos.filter((w) => /ya la ocup/.test(w)).length, 0, "la casilla rechazada NO quedó reclamada (defecto de v18.0.74 con aviso conservado: 1): " + JSON.stringify(avisos));
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+        c.ctx.console.warn = warnAntes;
+      }
+    });
+
+    t.caso("v18.0.74: las tres escrituras de fecha de injectLabsIntoCronicos comprueban el retorno de setNgValue", () => {
+      // Las tres rutas (whitelist principal, reintento de uroanálisis, y la de «sin
+      // casilla de resultado pero sí de fecha») deben condicionar su efecto (marcar
+      // _fechasYaUsadas, sacar de sinCasilla) al ÉXITO real de la escritura.
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/setNgValue\(dateInput, resultDate\);\s*\n\s*try \{ _fechasYaUsadas\.add\(dateInput\); \} catch/.test(src),
+        "ya no debe marcar _fechasYaUsadas sin comprobar el retorno de setNgValue");
+      t.cierto(/if \(setNgValue\(dateInput, resultDate\)\) \{\s*\n\s*try \{ _fechasYaUsadas\.add\(dateInput\); \} catch/.test(src),
+        "debe exigir que setNgValue haya devuelto true antes de reclamar la casilla");
+      t.cierto(/if \(setNgValue\(soloFecha, resultDate\)\) \{/.test(src),
+        "y la ruta 'sin casilla de resultado' también comprueba el retorno antes de sacarla de sinCasilla");
+      t.cierto(/let fechaEscrita = false;\s*\n\s*if \(dateInput && resultDate && fechaVacia\) fechaEscrita = setNgValue\(dateInput, resultDate\);/.test(src),
+        "y el reintento de uroanálisis guarda si la escritura de verdad quedó, en vez de darla por hecha");
+      t.cierto(/\} else if \(!fechaEscrita\) \{\s*\n\s*console\.warn\("\[Vigilante\] uroanálisis: la fecha/.test(src),
+        "y avisa cuando el navegador la rechazó — la cuarta razón que antes faltaba en el diagnóstico");
     });
 
     t.caso("_parseFechaLike: reconoce ISO, dd/mm/aaaa y fecha .NET /Date(ms)/, y descarta lo que no es fecha", () => {
@@ -1147,6 +1267,46 @@ module.exports = {
       t.cierto(testApi._nuevoReemplazaCandidato(viejoCualitativo, nuevoNumerico), "más reciente y numérico: gana, como antes");
     });
 
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta.
+    //
+    //  Un RAC de 0 de HOY (paciente sin albuminuria, valor real) PERDÍA contra un RAC de
+    //  45 de hace meses, y Auto-Labs escribía en la historia el 45 —albuminuria franca,
+    //  vencida— diciendo «✓ casillas escritas» en verde. Ni salía en `sinCasilla` ni en
+    //  `implausibles`: el médico veía y firmaba un dato falso.
+    //
+    //  La causa estaba a un nivel de distancia: `_labNumerico` rechaza el 0 A PROPÓSITO
+    //  («nunca 0, que en una creatinina sería catastrófico»), pero esa exclusión es GLOBAL
+    //  para los 13 analitos y este desempate la reutilizaba como «no es un número».
+    //
+    //  La contención importa tanto como el arreglo: en los otros once analitos un 0 sigue
+    //  siendo un dato roto y tiene que seguir perdiendo.
+    // =================================================================
+    t.caso("_nuevoReemplazaCandidato: un RAC de 0 de HOY le gana a un RAC de 45 de hace meses", () => {
+      const rac = (v, d) => ({ matched: { key: "RAC" }, resultVal: v, resultDate: d });
+      t.cierto(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0", "2026-08-30")),
+        "el 0 de agosto (paciente sin albuminuria) reemplaza al 45 de enero");
+      t.falso(testApi._nuevoReemplazaCandidato(rac("0", "2026-08-30"), rac("45", "2026-01-15")),
+        "y en el orden contrario el 45 viejo NO vuelve a desplazarlo: el resultado no depende del orden de llegada");
+      t.cierto(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0,00", "2026-08-30")),
+        "«0,00» con coma decimal es el mismo cero");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: el cero SIGUE siendo veneno donde un 0 no es un paciente sano", () => {
+      const cre = (v, d) => ({ matched: { key: "CREATININA" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(cre("1.2", "2026-01-15"), cre("0", "2026-08-30")),
+        "una creatinina de 0 es una lectura corrupta, no un riñón perfecto: no desplaza a la real");
+      const hb = (v, d) => ({ matched: { key: "HEMOGLOBINA" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(hb("13.5", "2026-01-15"), hb("0", "2026-08-30")),
+        "ni una hemoglobina de 0");
+      // Y dentro del propio RAC, solo un cero LIMPIO cuenta: un rango o un texto no.
+      const rac = (v, d) => ({ matched: { key: "RAC" }, resultVal: v, resultDate: d });
+      t.falso(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("0-2", "2026-08-30")),
+        "«0-2» es un rango, no un cero");
+      t.falso(testApi._nuevoReemplazaCandidato(rac("45", "2026-01-15"), rac("NEGATIVO", "2026-08-30")),
+        "y «NEGATIVO» sigue sin ser un número");
+    });
+
     t.caso("_ultimaFechaPorAnalito (integración end-to-end): el componente de orina de AGOSTO gana sobre el de ENERO, en cualquier orden de llegada (bug real reportado en consultorio)", () => {
       const enOrden = testApi._ultimaFechaPorAnalito([
         { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
@@ -1316,6 +1476,85 @@ module.exports = {
       for (const key of ["PTH", "HEMOGLOBINA", "FOSFORO", "ALBUMINA"]) {
         t.falso(faltantes.some((f) => f.key === key), key + " no debe entrar nunca en el aviso de vigencia RCV");
       }
+    });
+
+    // =====================================================================
+    // v18.0.120 — REPORTE EN VIVO DEL MÉDICO (02-sep): «me aparece ese mensaje de un
+    // analito que todavía está vigente, está fuera de metas... el script no debe dar por
+    // hecho que está vencido un examen que aún no cumple sus días de vigencia y que tiene
+    // un resultado fuera de metas».
+    //
+    // Reproducido: LDL de 160 mg/dL (meta < 100 en riesgo alto) tomado hace 100 días, con
+    // 180 de vigencia normativa. La regla del 50 % partía el plazo a 90, y el aviso de
+    // entrada lo listaba bajo «Laboratorios RCV sin resultado vigente» — afirmando que
+    // había vencido un examen al que le quedaban 80 días. VENCIDO y FUERA DE METAS son dos
+    // hechos distintos: el primero es una fecha, el segundo un resultado.
+    // =====================================================================
+    const _OPTS_LDL_FUERA = {
+      programa: "DM2", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62,
+      egfrCkdEpi: 88,   // TFG normal: la guarda KDIGO de D11 no interviene aquí
+      aplicar50: true,
+    };
+    const _LABS_LDL_FUERA = [
+      { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "160", Fecha: "2026-05-03" },  // 100 días
+    ];
+
+    t.caso("v18.0.120 (reporte en vivo): un LDL fuera de metas y DENTRO de su vigencia NO se marca como vencido", () => {
+      const f = testApi._analitosRcvVencidos(_LABS_LDL_FUERA, "2026-08-11", _OPTS_LDL_FUERA);
+      const ldl = f.find((x) => x.key === "COLESTEROL_LDL");
+      t.cierto(!!ldl, "sigue apareciendo: el médico tiene que poder verlo y decidir");
+      t.igual(ldl.vencido, false, "pero NO está vencido — es lo que el médico reportó en vivo");
+      t.igual(ldl.vigenciaNormaDias, 180, "su vigencia normativa son 180 días");
+      t.igual(ldl.vigenciaDias, 90, "el adelanto del 50 % existe y se ve, pero no es un vencimiento");
+      t.igual(ldl.dias, 100, "lleva 100 días");
+      t.igual(ldl.diasRestantes, 80, "le quedan 80 días de vigencia: decir «vencido» era falso");
+      t.igual(ldl.vence, "2026-10-30", "y se puede decir hasta cuándo sigue sirviendo");
+    });
+
+    t.caso("v18.0.120: un LDL que SÍ pasó su vigencia normativa sigue marcándose vencido", () => {
+      // 2026-08-11 - 2026-01-01 = 222 días, por encima de los 180. La corrección no puede
+      // convertirse en una excusa para dejar de avisar lo que de verdad venció.
+      const labs = [{ codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "160", Fecha: "2026-01-01" }];
+      const ldl = testApi._analitosRcvVencidos(labs, "2026-08-11", _OPTS_LDL_FUERA).find((x) => x.key === "COLESTEROL_LDL");
+      t.cierto(!!ldl, "un LDL de 222 días sigue en la lista");
+      t.igual(ldl.vencido, true, "y este sí está vencido de verdad");
+      t.igual(ldl.diasRestantes, null, "un vencido no tiene días restantes que ofrecer");
+    });
+
+    t.caso("v18.0.120: un analito que nunca se tomó cuenta como vencido (no hay vigencia que cumplir)", () => {
+      const f = testApi._analitosRcvVencidos([], "2026-08-11", _OPTS_LDL_FUERA);
+      t.cierto(f.length > 0, "sin ningún resultado, faltan todos");
+      t.cierto(f.every((x) => x.vencido === true), "ninguno puede presumir vigencia: no hay fecha con que defenderse");
+    });
+
+    t.caso("v18.0.120: _vigenciaNormaDiasParaAnalito es la vigencia de la tabla, SIN el adelanto del 50 %", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 90, "con el adelanto: la mitad");
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 180, "sin él: la de la tabla");
+      // Y no es una tabla nueva: apagar `aplicar50` a mano da exactamente lo mismo (D4 —
+      // una sola tabla de vigencias en todo el producto).
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA),
+        testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", Object.assign({}, _OPTS_LDL_FUERA, { aplicar50: false })));
+      // El recorte del RAC≥30 NO es «fuera de metas»: es la vigencia que la norma le da a
+      // un paciente con albuminuria franca, y por eso SÍ vive en la vigencia normativa.
+      t.igual(testApi._vigenciaNormaDiasParaAnalito("RAC", "350", { programa: "DM2", aplicar50: true }), 90,
+        "la albuminuria franca sigue acortando la vigencia NORMATIVA, no es un adelanto opcional");
+    });
+
+    t.caso("v18.0.120: la respuesta del médico («no, en su vigencia normal») manda también en este camino", () => {
+      // v18.0.67: «si la respuesta es no se repiten en su vigencia normal sin adelantar».
+      // El motor del panel ya lo obedecía; el aviso de entrada seguía adelantando por su
+      // cuenta y le contradecía sobre el mismo paciente.
+      const conNo = Object.assign({}, _OPTS_LDL_FUERA, { repetirFueraMeta: false });
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", conNo), 180,
+        "dijo que no: la vigencia se respeta entera");
+      const f = testApi._analitosRcvVencidos(_LABS_LDL_FUERA, "2026-08-11", conNo);
+      t.falso(f.some((x) => x.key === "COLESTEROL_LDL"),
+        "y entonces ni siquiera aparece: no hay nada que sugerirle sobre algo que ya respondió");
+      // Un «sí» explícito, y el silencio (todavía no ha contestado), siguen adelantando:
+      // el script nunca relaja una vigencia por su cuenta.
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", Object.assign({}, _OPTS_LDL_FUERA, { repetirFueraMeta: true })), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_LDL", "160", _OPTS_LDL_FUERA), 90,
+        "sin respuesta suya se mantiene la conducta conservadora de siempre");
     });
 
     // =====================================================================
@@ -2101,6 +2340,60 @@ module.exports = {
       t.cierto(api._esUroComponenteAlterado({ nombre: "CELULAS TUBULO RENALES", resultado: "1" }),
         "una sola célula tubular renal ya es hallazgo: es daño de túbulo");
       t.falso(api._esUroComponenteAlterado({ nombre: "COLOR", resultado: "AMARILLO" }), "el color normal no alarma");
+    });
+
+
+    // =====================================================================
+    // v18.0.20 — UN FALLO DE RED SE LE MOSTRABA AL MÉDICO COMO UN HECHO DEL PACIENTE
+    //
+    // Cuando Athenea contesta 5 de 8 solicitudes, el lector devuelve lo que sí llegó pero
+    // MARCADO: `__vglIncompleto = 3`, puesto con Object.defineProperty({enumerable:false})
+    // para que no ensucie las iteraciones sobre el array. Y JSON.stringify NO serializa
+    // propiedades no enumerables: al persistir la pre-consulta, la marca desaparecía.
+    //
+    // Aguas abajo: _preconHidratar mete ese array en _labsPrefetch, checkAvisoUniversal
+    // calcula labsListos = true, y _analitosRcvVencidos declara VENCIDOS los analitos que
+    // venían en las solicitudes ilegibles. El aviso de entrada los lista como «Laboratorios
+    // RCV sin resultado vigente» y avisoMarcarVisto lo silencia el resto de la jornada. Al
+    // médico se le afirma «a este paciente le faltan estos exámenes» cuando lo que hubo fue
+    // un fallo de red — justo lo que «casilla vacía antes que dato inventado» impide.
+    // =====================================================================
+    t.caso("v18.0.20: la marca de lectura incompleta de Athenea sobrevive a la persistencia", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];
+      Object.defineProperty(labs, "__vglIncompleto", { value: 3, enumerable: false, configurable: true });
+
+      t.cierto(c.api.atheneaLecturaIncompleta(labs), "control del caso: recién leída consta como incompleta");
+
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.cierto(!!e && Array.isArray(e.labs), "la pre-consulta se recupera");
+      t.cierto(c.api.atheneaLecturaIncompleta(e.labs),
+        "y sigue constando incompleta: si se pierde, 3 solicitudes ilegibles se convierten en «exámenes que le faltan al paciente»");
+      t.igual(e.labs.__vglIncompleto, 3, "con el número exacto de solicitudes que no se dejaron leer");
+    });
+
+    t.caso("v18.0.20: la marca repuesta NO se cuela como un resultado más del array", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];
+      Object.defineProperty(labs, "__vglIncompleto", { value: 2, enumerable: false, configurable: true });
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.igual(e.labs.length, 1, "el array sigue teniendo UN resultado");
+      t.igual(Object.keys(e.labs).length, 1,
+        "y la marca se repone como NO enumerable: ninguna iteración la verá como un laboratorio");
+    });
+
+    t.caso("v18.0.20: una lectura COMPLETA no se marca por error", () => {
+      const c = cargar({ silencioso: true });
+      const DOC = "5150076";
+      const labs = [{ nombre: "CREATININA EN SUERO", Resultado: "1.0" }];   // sin marca: llegó entera
+      c.api._preconGuardar(DOC, labs);
+      const e = c.api._preconDe(DOC);
+      t.falso(c.api.atheneaLecturaIncompleta(e.labs),
+        "no se puede sobre-corregir: una lectura completa debe seguir contando como completa");
     });
 
   }

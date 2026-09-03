@@ -450,6 +450,61 @@ module.exports = {
       t.noLanza(() => api.pymPaqueteHechoEnAthenea(psa, [{}, null, "basura"], _HOY99), "ni con basura dentro");
     });
 
+    // =================================================================================
+    //  v18.0.38 — UN EXAMEN NO ES UN PAQUETE (hallazgo L25747)
+    //  La función devolvía «hecho» en cuanto UNA fila casara. Con eso el modal deshabilita
+    //  la casilla y escribe en pantalla «se realizó hace N días; por ser tan reciente no la
+    //  marcamos»: una afirmación falsa sobre una tamización que nadie hizo.
+    // =================================================================================
+    t.caso("v18.0.38: un paquete de 7 CUPS NO se da por hecho con un solo examen suelto", () => {
+      const z108 = _pkg("Z108");
+      t.cierto(!!z108 && z108.cups.length >= 7, "Z108 declara los siete componentes (" + (z108 && z108.cups.length) + ")");
+      const soloCreatinina = _lab("903895", "CREATININA EN SUERO", "2026-06-01", "1.1");
+      t.igual(api.pymPaqueteHechoEnAthenea(z108, soloCreatinina, _HOY99), null,
+        "con una creatinina suelta no se afirma que el tamizaje cardiometabólico esté hecho");
+
+      // Seis de siete tampoco: la cobertura es completa o no es.
+      const seis = z108.cups.slice(0, 6).reduce((acc, c) => acc.concat(_lab(c.codigo, c.desc || "X", "2026-08-01", "1")), []);
+      t.igual(api.pymPaqueteHechoEnAthenea(z108, seis, _HOY99), null, "seis de siete sigue siendo incompleto");
+
+      // Y los siete sí.
+      const siete = z108.cups.reduce((acc, c) => acc.concat(_lab(c.codigo, c.desc || "X", "2026-08-01", "1")), []);
+      const hecho = api.pymPaqueteHechoEnAthenea(z108, siete, _HOY99);
+      t.cierto(!!hecho, "con los siete componentes sí está hecho");
+      t.igual(hecho.componentes, 7, "y se dice cuántos se cubrieron");
+    });
+
+    t.caso("v18.0.38: un paquete es tan VIEJO como su componente más viejo", () => {
+      // El tercer defecto, encontrado al reproducir los otros dos: con el paquete completo
+      // pero fechas dispares la función devolvía la MÁS RECIENTE. Un perfil lipídico de hace
+      // seis meses se daba por actual porque los triglicéridos se repitieron la semana
+      // pasada — y esa fecha es justo la que decide si el paquete sigue vigente.
+      const z108 = _pkg("Z108");
+      const dispares = z108.cups.reduce((acc, c, i) =>
+        acc.concat(_lab(c.codigo, c.desc || "X", i === z108.cups.length - 1 ? "2026-08-28" : "2026-03-01", "1")), []);
+      const hecho = api.pymPaqueteHechoEnAthenea(z108, dispares, _HOY99);
+      t.cierto(!!hecho, "el paquete está completo");
+      t.igual(hecho.iso, "2026-03-01", "la fecha es la del componente MÁS ANTIGUO, no la del último que se repitió");
+      t.cierto(hecho.dias > 150, "y son meses, no días (" + hecho.dias + ")");
+    });
+
+    t.caso("v18.0.38: una palabra clave no cubre un CUPS — la HbA1c no hace un «Hemoglobina y Hematocrito»", () => {
+      // «hemoglobina» casaba por SUBCADENA con «HEMOGLOBINA GLICOSILADA», que no pertenece
+      // al paquete. Misma familia que el defecto de la v18.0.31, donde seis nombres del
+      // hemograma se llevaban la casilla de la hemoglobina sérica.
+      const z103 = _pkg("Z103");
+      t.cierto(!!z103 && z103.keywords.indexOf("hemoglobina") >= 0,
+        "Z103 sigue declarando «hemoglobina» como palabra clave (que es de donde venía el problema)");
+      const hba1c = _lab("903843", "HEMOGLOBINA GLICOSILADA", "2026-08-25", "7.2");
+      t.igual(api.pymPaqueteHechoEnAthenea(z103, hba1c, _HOY99), null,
+        "un examen que NO es del paquete no lo da por hecho, aunque su nombre contenga la palabra clave");
+      // Y con sus dos CUPS de verdad, sí.
+      const propios = z103.cups.reduce((acc, c) => acc.concat(_lab(c.codigo, c.desc || "X", "2026-08-25", "14")), []);
+      const hecho = api.pymPaqueteHechoEnAthenea(z103, propios, _HOY99);
+      t.cierto(!!hecho && hecho.componentes === z103.cups.length,
+        "con los CUPS del paquete completos sí está hecho (" + (hecho && hecho.componentes) + " de " + z103.cups.length + ")");
+    });
+
     t.caso("v17.6.99: se queda con el resultado MÁS RECIENTE cuando hay varios", () => {
       const psa = _pkg("Z125");
       const varios = _LAB_PSA("2024-01-15").concat(_LAB_PSA("2026-08-21")).concat(_LAB_PSA("2025-03-02"));
@@ -572,7 +627,27 @@ module.exports = {
       t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", o), 90, "fuera de meta: la mitad");
       const oErc = _op96(true, "ERC", "G4");
       t.igual(api._vigenciaDiasParaAnalito("HBA1C", "6.5", oErc), 120, "ERC G4 en meta: 120, no 180");
-      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 60, "ERC G4 fuera de meta: 60");
+      // v18.0.120 — antes esta línea esperaba 60 (la mitad a pelo de 120). El motor del panel
+      // no daba 60 sino 90: `mtrAcortarPorFueraDeMeta` respeta el piso de recontrol de la
+      // HbA1c (MTR_RECONTROL.hba1c.pisoDias, decisión del médico del 26-ago: en ERC G4 la
+      // vida del eritrocito ya está acortada y repetirla a los 60 días no es interpretable).
+      // Este camino —el del aviso de entrada y el antiduplicado de PyM— partía la vigencia a
+      // mano y por eso daba 30 días menos que el panel sobre el MISMO paciente. Ahora los dos
+      // llaman a la misma función: una regla, un número.
+      // v18.0.130 — DECISIÓN DEL MÉDICO (02-sep): el 50 % no se apila sobre una vigencia que la
+      // norma YA acortó por estadio renal. En ERC G4 la HbA1c baja de 180 a 120 por el estadio,
+      // así que ese es el plazo y no se vuelve a partir: 120, no 90.
+      //
+      // Esto SUSTITUYE su decisión del 26-ago (piso de 90 d para la HbA1c en G4), y él la
+      // sustituyó a sabiendas cuando se le puso el choque delante: prefiere una sola regla para
+      // todos los analitos a una excepción que haya que recordar. El piso de recontrol sigue
+      // existiendo y sigue protegiendo donde el 50 % SÍ se aplica.
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 120,
+        "ERC G4: manda la vigencia que el estadio ya fijó — el 50 % no se apila encima");
+      t.cierto(api.mtrNormaYaAcortadaPorEstadio("HBA1C", { programa: "ERC", estadioAdministrativo: "G4", esDm2: true, edad: 62 }),
+        "y la guarda dice por qué: el estadio ya acortó");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "HBA1C"), 90,
+        "la función de acortar no cambia: sigue respetando su piso donde de verdad se la llama");
     });
 
     t.caso("v17.6.96 PUNTA A PUNTA: el paquete RCV deja de declararse cubierto con la HbA1c vencida", () => {

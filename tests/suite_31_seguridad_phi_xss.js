@@ -85,6 +85,24 @@ module.exports = {
       t.igual(c.api.scrubPII("Teléfono (310) 987 6543"), "Teléfono [TEL_CENSURADO]");
       t.igual(c.api.scrubPII("Contacto 3022813246"), "Contacto [TEL_CENSURADO]");
       t.igual(c.api.scrubPII("Celular 320 456 7890 registrado"), "Celular [TEL_CENSURADO] registrado");
+      // 02-sep — CIERRE ADVERSARIAL (fila 41): la forma de teléfono no tenía límite de dígito y
+      // casaba DENTRO de un número más largo no relacionado: «930012345678» → «9[TEL_CENSURADO]8»
+      // en la hoja de hechos (mtrHcValorLimpio → scrubPII), el mismo daño del hallazgo #38.
+      t.igual(c.api.scrubPII("Se registra el numero de orden 930012345678 en el sistema."), "Se registra el numero de orden 930012345678 en el sistema.",
+        "un número de 12 dígitos no es un celular ni contiene uno: no se parte");
+      t.igual(c.api.scrubPII("orden 930012345678 y cel 3001234567."), "orden 930012345678 y cel [TEL_CENSURADO].",
+        "y el celular de verdad, al lado, sí se tacha");
+      const hechos = c.api.mtrHechosDesdeHcEverest({ antecedentePatologicos: { hta: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "Se registra el numero de orden 930012345678 en el sistema.", datosUsuario: { nombre: "PRUEBA", primer_Apellido: "SINTETICO", celular: "3001234567" } });
+      t.falso(/TEL_CENSURADO/.test(String(hechos.textos.ultimaEnfermedad)), "de punta a punta (la hoja de hechos) el número de orden llega entero: " + hechos.textos.ultimaEnfermedad);
+      // v18.0.103 — refutador de v18.0.101 (fila 41): con el límite de dígito, el indicativo
+      // pegado y sin «+» («573001234567», formato WhatsApp) dejaba el celular ENTERO sin
+      // tachar (antes salía al menos «57[TEL_CENSURADO]»). Cada límite con su propia cadena.
+      t.igual(c.api.scrubPII("whatsapp 573001234567 fin"), "whatsapp [TEL_CENSURADO] fin", "indicativo 57 pegado, sin «+»: se tacha entero");
+      t.igual(c.api.scrubPII("cel 0573001234567 fin"), "cel [TEL_CENSURADO] fin", "con el 0 de marcación también");
+      t.igual(c.api.scrubPII("orden 300123456789 fin"), "orden 300123456789 fin", "un dígito de más al final: no es un celular (límite derecho)");
+      t.igual(c.api.scrubPII("orden 123001234567 fin"), "orden 123001234567 fin", "dígitos ajenos delante: no es un celular (límite izquierdo)");
+      const ws = c.api.mtrHechosDesdeHcEverest({ antecedentePatologicos: { hta: true }, examenFisico: { peso: 70 }, ultimaEnfermedad: "Se contacta por whatsapp al 573001234567 para control.", datosUsuario: { nombre: "PRUEBA", primer_Apellido: "SINTETICO", celular: "3001234567" } });
+      t.falso(/3001234567/.test(String(ws.textos.ultimaEnfermedad)), "de punta a punta, el celular en formato WhatsApp no llega a la hoja de hechos: " + ws.textos.ultimaEnfermedad);
     });
 
     t.caso("scrubPII: censura correos electrónicos", () => {
@@ -171,6 +189,50 @@ module.exports = {
       t.igual(c.api.mtrSanearTextoLibreAI("¿Cuál fue la última creatinina de Don Pedro?"), "¿Cuál fue la última creatinina de Don [NOMBRE_CENSURADO]?");
     });
 
+    // =================================================================
+    //  v18.0.52 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  EL APELLIDO REAL PODÍA LLEGAR INTACTO A GEMINI.
+    //
+    //  En texto EN MAYÚSCULAS SOSTENIDAS —el estilo real de Everest— la defensa por
+    //  TOKENS es la única capaz de tachar el nombre: la de honoríficos exige mayúscula
+    //  inicial + minúsculas y no puede actuar. Y tenía dos huecos:
+    //    (1) `t.length >= 3` descartaba apellidos de dos letras (Li, Wu, Ng, Ho, Vo);
+    //    (2) sin normalizar tildes, «Muñoz» no casaba con «MUNOZ» — y ese desajuste es la
+    //        norma en cualquier sistema que pase el texto a ASCII.
+    //
+    //  Viola directamente la regla no negociable de CLAUDE.md: cero PHI.
+    //  (Todos los nombres de esta prueba son ficticios.)
+    // =================================================================
+    t.caso("v18.0.52 PHI — un apellido de dos letras en MAYÚSCULAS también se tacha", () => {
+      const c = cargar({ silencioso: true });
+      const s = c.api.mtrSanearTextoLibreAI(
+        "PACIENTE REFIERE QUE SEGUN LO CONVERSADO CON LA FAMILIA LI EN CASA, TOMA BIEN LOS MEDICAMENTOS.", "Li");
+      t.falso(/\bLI\b/.test(s), "el apellido de dos letras NO puede quedar en el texto que va a Gemini: " + s);
+      t.cierto(/\[NOMBRE_CENSURADO\]/.test(s), "y en su lugar queda la marca de censura");
+      t.cierto(/TOMA BIEN LOS MEDICAMENTOS/.test(s), "lo clínico se conserva entero");
+    });
+
+    t.caso("v18.0.52 PHI — la tilde no puede ser un escondite, en las DOS direcciones", () => {
+      const c = cargar({ silencioso: true });
+      const sinTilde = c.api.mtrSanearTextoLibreAI("PACIENTE MUNOZ REFIERE ADHERENCIA COMPLETA.", "Muñoz");
+      t.falso(/MUNOZ/.test(sinTilde), "nombre CON tilde, texto SIN tilde: se tacha igual — " + sinTilde);
+      const conTilde = c.api.mtrSanearTextoLibreAI("PACIENTE MUÑOZ REFIERE ADHERENCIA COMPLETA.", "Munoz");
+      t.falso(/MUÑOZ/.test(conTilde), "y al revés también — " + conTilde);
+    });
+
+    t.caso("v18.0.52 PHI — las partículas del apellido compuesto NO se censuran: destrozarían la nota", () => {
+      // El hallazgo proponía bajar el filtro a 1 letra o quitarlo. Eso censuraría cada
+      // «de» y cada «la» del texto clínico y lo dejaría ilegible — el defecto que ya costó
+      // la v18.0.25 («la tachadura de nombres destrozaba el texto clínico»). Mínimo DOS
+      // letras, menos las partículas, que no identifican a nadie por sí solas.
+      const c = cargar({ silencioso: true });
+      const s = c.api.mtrSanearTextoLibreAI(
+        "PACIENTE DE LA CRUZ REFIERE DOLOR DE CABEZA DE LA MANANA.", "Pedro De La Cruz");
+      t.falso(/\bCRUZ\b/.test(s), "el apellido que identifica sí se tacha: " + s);
+      t.cierto(/DOLOR DE CABEZA DE LA MANANA/.test(s),
+        "y el texto clínico queda entero: ni un «de» ni un «la» censurado — " + s);
+    });
+
     t.caso("mtrClasificarEstadioTfg: devuelve vacío ante NaN, 0, números negativos o entradas inválidas", () => {
       const c = cargar({ silencioso: true });
 
@@ -190,7 +252,47 @@ module.exports = {
       t.igual(c.api.mtrClasificarEstadioTfg(10), "G5");
     });
 
-    t.caso("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
+    // =================================================================
+    //  v18.0.45 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  FUGA DE PHI EN EL ARCHIVO QUE SE LLAMA "SANITIZADO".
+    //
+    //  `san()` (dentro de downloadDiagnostic) tacha con "···" todo el TEXTO visible de la
+    //  tarjeta —y esta misma suite ya lo comprobaba—, pero de los atributos solo vaciaba
+    //  los `data-*`: los cinco de KEEP (class, role, routerlink, type, name) se conservaban
+    //  con su VALOR ORIGINAL. Angular escribe rutas como `[routerLink]="['/paciente',
+    //  doc.cedula]"`, así que la cédula podía viajar CRUDA en un archivo que el médico
+    //  descarga creyéndolo sanitizado y que puede salir de la clínica.
+    //
+    //  Todos los identificadores de esta prueba son SINTÉTICOS.
+    // =================================================================
+    t.caso("el diagnóstico «sanitizado» no deja pasar una cédula dentro de un atributo conservado", () => {
+      const f = api._diagValorAtributoSeguro;
+      // Lo que motivó el hallazgo: la ruta de Angular con el documento dentro.
+      t.igual(f("/Paciente/1122334455"), "/Paciente/···",
+        "la corrida de dígitos se va y la FORMA de la ruta se queda: eso es lo que hace útil el diagnóstico");
+      t.igual(f("paciente_987654321"), "paciente_···", "y también en el atributo name");
+      t.igual(f("/hc/1122334455/lab/98765"), "/hc/···/lab/···", "todas las corridas, no solo la primera");
+      // Lo que NO se puede romper: el diagnóstico existe para ver la estructura del DOM.
+      t.igual(f("card patient-link"), "card patient-link", "las clases no se tocan");
+      t.igual(f("col-6"), "col-6", "ni los números cortos de una rejilla CSS");
+      t.igual(f(null), "", "sin valor, cadena vacía — nunca «null» en el archivo");
+      t.igual(f(undefined), "", "ni «undefined»");
+    });
+
+    t.caso("y ningún atributo conservado se escribe de vuelta sin pasar por ese saneador", () => {
+      // Comprobación ESTRUCTURAL, y se dice que lo es: el DOM del banco no tiene cloneNode
+      // ni atributos iterables, así que `san()` entera no se puede ejecutar aquí — que es
+      // exactamente por lo que este camino nunca se había probado. Lo que sí se puede fijar
+      // es que la rama que devuelve un atributo de KEEP a su elemento pase por el saneador,
+      // que es la línea que el hallazgo pedía.
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const m = src.match(/if \(!KEEP\.has\(a\.name\)[\s\S]{0,400}?\}\);/);
+      t.cierto(!!m, "se encontró la rama de atributos de san()");
+      t.cierto(/else x\.setAttribute\(a\.name, _diagValorAtributoSeguro\(a\.value\)\);/.test(m[0]),
+        "el atributo conservado se reescribe saneado, no con su valor original: " + m[0].slice(-160));
+    });
+
+    await t.casoAsync("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
       const c = cargar({ silencioso: true });
       const apt = {
         doc_id: '123456" onclick="alert(1)',
@@ -240,20 +342,28 @@ module.exports = {
     });
 
     // ===================================================================
-    //  3. GOBERNANZA DE TELEMETRÍA: DEFAULT-OFF (R1.8)
+    //  3. GOBERNANZA DE TELEMETRÍA (v17.58.2 — política del dueño)
     // ===================================================================
 
-    t.caso("Telemetría: invariante Default-Off garantizado sin configuración previa", () => {
+    t.caso("Telemetría: nace ENCENDIDA por política del dueño (v17.58.2); el forzado gana a una config guardada con false", () => {
+      // v17.58.2 — decisión del dueño (29-ago): la telemetría es el precio de usar el
+      // script gratis. Nace encendida y NO se puede desactivar: aunque un equipo tenga
+      // vgl_cfg con `false` guardado, S la fuerza a true en cada arranque.
       const c = cargar({ silencioso: true, defaultOff: true });
+      t.cierto(c.api.__S.reporte, "DEFAULTS.reporte = true (v17.58.2: telemetría obligatoria)");
+      t.cierto(c.api.__S.uxTelemetria, "DEFAULTS.uxTelemetria = true (idem)");
+      t.cierto(c.api.repOn(), "repOn() resuelve true por defecto");
 
-      t.falso(c.api.__S.reporte, "DEFAULTS.reporte debe ser false de fábrica");
-      t.falso(c.api.__S.uxTelemetria, "DEFAULTS.uxTelemetria debe ser false de fábrica");
-      t.falso(c.api.repOn(), "repOn() debe resolver false por defecto");
+      const conFalse = cargar({ silencioso: true, defaultOff: true, almacen: { vgl_cfg: JSON.stringify({ reporte: false, uxTelemetria: false }) } });
+      t.cierto(conFalse.api.__S.reporte, "el forzado gana a una config guardada con reporte=false");
+      t.cierto(conFalse.api.__S.uxTelemetria, "el forzado gana a una config guardada con uxTelemetria=false");
 
-      // uxTrack con Default-Off no debe escribir en localStorage
+      // La telemetría registra (obligatoria), pero lo que registra sigue siendo el conteo
+      // anónimo de una acción de nuestro catálogo — el saneo PHI no depende del interruptor.
       c.api.uxTrack("accion.prueba");
       c.api._uxVolcarBuffer();
-      t.igual(c.env.storage.getItem("vgl_ux"), null, "No debe registrar métricas con telemetría apagada");
+      const ux = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(!!ux && !!ux.acciones && !!ux.acciones["accion.prueba"], "la métrica anónima se registra (telemetría obligatoria)");
     });
 
     // ===================================================================
@@ -329,6 +439,144 @@ module.exports = {
       diagnosticos: [{ codigo: "I10X", descripcion: "HIPERTENSION ESENCIAL", nombreBusqueda: "NOMBREPRUEBA I10X", id: 4471 }],
       motivo: "Control de hipertensión",
       ultimaEnfermedad: "Paciente NOMBREPRUEBA APELLIDOUNO, CC 80123456, tel 3001234567, refiere cefalea.",
+    });
+
+    // =================================================================
+    //  v18.0.48 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  LA HISTORIA SE ARCHIVABA BAJO EL PACIENTE QUE ESTUVIERA ABIERTO AL LLEGAR LA
+    //  RESPUESTA, NO AQUEL PARA EL QUE SE PIDIÓ.
+    //
+    //  `mirar()` leía `extractPacienteAbierto()` en el momento de la LLEGADA. Entre la
+    //  petición y la respuesta hay segundos de red, y Everest recarga la página al abrir
+    //  un paciente: si el médico cambia de historia en ese lapso, los antecedentes,
+    //  hábitos y examen físico del paciente ANTERIOR quedaban archivados bajo la cédula
+    //  del NUEVO — y de ahí salen a alimentar al Redactor y al Panel.
+    //
+    //  Mismo defecto que v14.1.5 (laboratorios), v18.0.33 (Panel) y v18.0.34
+    //  (agendamiento): se cierra con la misma guarda, `_pacienteSigueAbierto`.
+    //  (Cédulas sintéticas.)
+    // =================================================================
+    const _domPaciente = (c, doc) => {
+      const nodo = { textContent: "C.C. " + doc, closest: () => null };
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [nodo] : []);
+    };
+
+    await t.casoAsync("v18.0.48 CRUCE — una historia que llega después de cambiar de paciente NO se archiva", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      // El fetch de la red devuelve la historia; el enganche la lee sobre un CLON.
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domPaciente(c, "111111");
+      t.igual(c.api.extractPacienteAbierto(), "111111", "montaje: el paciente A está abierto");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+
+      // Se pide la historia con A abierto…
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      // …y ANTES de que la respuesta se procese, el médico abre al paciente B.
+      _domPaciente(c, "222222");
+      await p;
+      await new Promise((r) => setTimeout(r, 0));   // que corra el .then del clone
+
+      t.igual(c.api.mtrHcLeer("222222"), null, "la historia de A NO queda archivada bajo B");
+      t.igual(c.api.mtrHcLeer("111111"), null, "y tampoco se archiva bajo A a ciegas: no se pudo confirmar que siguiera abierto");
+    });
+
+    await t.casoAsync("v18.0.48 CRUCE — sin cambio de paciente, la historia SÍ se archiva (la otra dirección)", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      // v18.0.97 — el paciente abierto es el MISMO que declara el paquete (datosUsuario.
+      // identificacion = 80123456): desde el cierre del enjambre la cédula del paquete
+      // decide, y un paquete de otra cédula que la del paciente abierto se descarta.
+      // Antes este montaje abría a «111111» con un paquete de «80123456» — dos personas.
+      _domPaciente(c, "80123456");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      await c.env.win.fetch("/api/HistoriaClinica", {});
+      await new Promise((r) => setTimeout(r, 0));
+
+      const guardado = c.api.mtrHcLeer("80123456");
+      t.cierto(!!guardado, "con el mismo paciente abierto de punta a punta, la historia sí entra");
+      t.cierto(!!(guardado && guardado.secciones && guardado.secciones.antecedentePatologicos),
+        "y trae las secciones clínicas");
+    });
+
+    // v18.0.97 — CIERRE DEL ENJAMBRE (02-sep): la guarda de v18.0.48 tenía un hueco que un
+    // auditor adversarial reprodujo: `idAlPedir && …` se cortocircuitaba cuando la cédula NO
+    // se pudo leer al PEDIR (cabecera sin renderizar, justo la petición que Everest hace al
+    // abrir el paciente) y la historia se archivaba bajo quien estuviera abierto AL LLEGAR.
+    const _domSinCedula = (c) => {
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = () => [];
+    };
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir + paquete de otra persona: NO se archiva bajo quien esté abierto al llegar", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());   // el paquete es de 80123456
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.igual(c.api.extractPacienteAbierto(), "", "montaje: al pedir, la cédula no se puede leer");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");                            // al llegar hay OTRO paciente abierto
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "la historia de 80123456 NO queda archivada bajo 222222 — antes sí (el defecto original, de vuelta)");
+      t.igual(c.api.mtrHcLeer("80123456"), null, "y tampoco bajo el suyo a ciegas: no estaba abierto");
+    });
+    // v18.0.104 — refutador de v18.0.97 (fila 8): desde que la cédula del paquete decide antes,
+    // ninguna prueba llegaba a la guarda de v18.0.48 (`_pacienteSigueAbierto(idAlPedir)`): un
+    // mutante que la borraba dejaba suite_31 en verde. Aquí el paquete NO trae cédula, la de
+    // pantalla era legible al pedir y el paciente cambia antes de que llegue.
+    await t.casoAsync("v18.0.104 CRUCE — paquete SIN cédula, legible al pedir y cambio de paciente al llegar: NO se archiva (la guarda de v18.0.48 sigue en pie)", async () => {
+      const p = _hcEverestFalso(); delete p.datosUsuario;
+      const cuerpo = JSON.stringify(p);
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domPaciente(c, "111111");
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const pr = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");                            // cambió de paciente antes de que llegara
+      await pr; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "no se archiva bajo el que está abierto al llegar");
+      t.igual(c.api.mtrHcLeer("111111"), null, "ni bajo el pedido a ciegas: ya no está abierto");
+    });
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir, pero el paquete trae la del paciente abierto: SÍ se archiva (la captura «al abrir» sigue viva)", async () => {
+      const cuerpo = JSON.stringify(_hcEverestFalso());
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "80123456");                          // la cabecera ya se renderizó: es él
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.cierto(!!c.api.mtrHcLeer("80123456"), "el paquete dice de quién es y coincide con el abierto: se archiva");
+    });
+    await t.casoAsync("v18.0.97 CRUCE — cédula ILEGIBLE al pedir y paquete SIN cédula: no se archiva (no se sabe de quién es)", async () => {
+      const sinId = _hcEverestFalso(); delete sinId.datosUsuario;
+      const cuerpo = JSON.stringify(sinId);
+      const c = cargar({ silencioso: true, fetch: async () => ({ clone: () => ({ text: async () => cuerpo }) }) });
+      _domSinCedula(c);
+      t.cierto(c.api.mtrHcEnganchar(), "el enganche se instala");
+      const p = c.env.win.fetch("/api/HistoriaClinica", {});
+      _domPaciente(c, "222222");
+      await p; await new Promise((r) => setTimeout(r, 0));
+      t.igual(c.api.mtrHcLeer("222222"), null, "sin cédula legible al pedir y sin cédula en el paquete, no se escribe — nunca se asume que es él");
+    });
+
+    t.caso("v18.0.97 PHI — un apellido que es palabra funcional del español (Ha, Su, Lo, Le, No) NO destroza la nota; uno que no lo es (Li) sí se tacha", () => {
+      const c = cargar({ silencioso: true });
+      const T = "PACIENTE HA TENIDO BUENA ADHERENCIA. NO HA PRESENTADO DOLOR. SE LE INDICA CONTINUAR SU TRATAMIENTO. LO REFIERE SIN CAMBIOS.";
+      for (const n of ["Kim Ha", "Wang Su", "Chen Lo", "Nguyen Le", "Park No"]) {
+        t.igual(c.api.mtrSanearTextoLibreAI(T, n), T, "con apellido «" + n.split(" ")[1] + "» el texto clínico queda entero (antes: «NO [NOMBRE_CENSURADO] PRESENTADO DOLOR»)");
+      }
+      const s = c.api.mtrSanearTextoLibreAI("LA FAMILIA LI EN CASA. " + T, "Ana Li");
+      t.falso(/\bLI\b/.test(s), "«Li» no es palabra de la lengua: se tacha — " + s.slice(0, 40));
+      t.cierto(s.indexOf(T) >= 0, "y el resto del texto queda entero");
+    });
+
+    t.caso("v18.0.97 PHI — el canal del paquete de Everest (mtrHcTachar) tolera tildes en las DOS direcciones, igual que el del texto libre", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrHcTachar("PACIENTE MUNOZ REFIERE. Munoz sin cambios.", ["MUÑOZ"]),
+        "PACIENTE [CENSURADO] REFIERE. [CENSURADO] sin cambios.", "«MUÑOZ» registrado tacha «MUNOZ» escrito");
+      t.igual(c.api.mtrHcTachar("PACIENTE MUÑOZ REFIERE.", ["MUNOZ"]), "PACIENTE [CENSURADO] REFIERE.", "y al revés");
+      t.igual(c.api.mtrHcTachar("ANASARCA y ANA", ["ANA"]), "ANASARCA y [CENSURADO]", "el límite de palabra de la v18.0.25 sigue intacto");
+      t.igual(c.api.mtrHcTachar("cel 3001234567 orden 930012345678", ["3001234567"]), "cel [CENSURADO] orden 930012345678", "y el límite de dígito de la v18.0.86 también");
     });
 
     t.caso("v17.9.0 BARRERA — nada que identifique al paciente sale del paquete de Everest", () => {
@@ -515,7 +763,10 @@ module.exports = {
       });
       t.cierto(!!hoja.hcEverest, "el bloque viaja en la hoja aunque solo traiga la cosecha en vivo");
       const txt = api.mtrHojaDeHechosTexto(hoja);
-      t.cierto(/escrito en la historia de HOY/.test(txt), "y se marca como lo escrito HOY, no como historia vieja");
+      // A7 (S+, 02-sep): el rótulo ya no afirma «de HOY» — la cosecha se acumula entre
+      // pestañas, no se borra sola y Everest pre-llena campos de consultas anteriores.
+      t.cierto(/escrito en la historia de Everest/.test(txt), "y se marca como lo escrito en la historia de Everest");
+      t.falso(/escrito en la historia de HOY/.test(txt), "pero ya no lo rotula como de HOY: puede venir pre-llenado de antes y no hay fecha por campo");
       t.cierto(/retinopatiaDiabetica: sí/.test(txt), "lo marcado llega al modelo");
       t.cierto(/infartoMiocardio: no/.test(txt), "y lo descartado también");
       t.cierto(/perimetroAbdominal: 98/.test(txt), "con sus números");
@@ -563,10 +814,17 @@ module.exports = {
       const fs = require("fs"), path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       // El bloque entero de la escucha: la ventana tiene que abarcar los dos enganches
-      // (XHR y fetch), no solo el primero — con 3000 caracteres se quedaba corta y la
-      // prueba fallaba sin que el código estuviera mal.
+      // (XHR y fetch), no solo el primero.
+      // v18.0.48 — la ventana era `iEng + 6000`, un número mágico, y se rompió sola en
+      // cuanto la función creció por un comentario: la prueba se puso roja sin que el
+      // código estuviera mal, que es la peor forma de fallar (la siguiente persona sube el
+      // número y no mira más). Ahora se corta por un ANCLA REAL —el bloque de comentario
+      // que sigue a la función— y se comprueba que el ancla exista, para que un renombre
+      // ponga la prueba en rojo por el motivo correcto en vez de medir un trozo cualquiera.
       const iEng = src.indexOf("function mtrHcEnganchar");
-      const bloque = src.slice(iEng, iEng + 6000);
+      const iFin = src.indexOf("v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE", iEng);
+      t.cierto(iEng >= 0 && iFin > iEng, "el ancla que cierra la ventana sigue existiendo");
+      const bloque = src.slice(iEng, iFin);
       t.cierto(/resp\.clone\(\)\.text\(\)/.test(bloque),
         "la respuesta se lee sobre un clon: sin esto Everest se queda sin su propio cuerpo");
       t.cierto(/return XHRsend\.apply\(this, arguments\)/.test(bloque),
@@ -576,9 +834,12 @@ module.exports = {
         "si Everest pidió otro tipo de respuesta, no se toca: leer responseText ahí lanzaría");
       // Y que la respuesta del XHR se LEA de verdad. Sin esta aserción, borrar la línea
       // dejaba la escucha de carga muerta y el banco seguía verde.
-      t.cierto(/mirar\(xhr\.responseText, "carga"\)/.test(bloque),
-        "la respuesta del XHR se pasa al detector: es la mitad de la escucha de carga");
-      t.cierto(/mirar\(t, "carga"\)/.test(bloque), "y la de fetch, la otra mitad");
+      // v18.0.48 — las dos llamadas asíncronas tienen que llevar AHORA la cédula que
+      // estaba abierta al PEDIR la historia (ver el cruce de pacientes, más abajo). Se
+      // exige el argumento: sin él vuelve a archivarse bajo quien esté abierto al llegar.
+      t.cierto(/mirar\(xhr\.responseText, "carga", idAlPedir\)/.test(bloque),
+        "la respuesta del XHR se pasa al detector CON el paciente para el que se pidió");
+      t.cierto(/mirar\(t, "carga", idAlPedir\)/.test(bloque), "y la de fetch, igual");
     });
 
     t.caso("v17.12.0 — la carga se reconoce con el MISMO detector que el guardado", () => {
@@ -779,6 +1040,18 @@ module.exports = {
       t.igual(api.mtrHcTachar("hola (JUAN) adios", ["(JUAN)"]), "hola [CENSURADO] adios",
         "los paréntesis del nombre se escapan en vez de reventar la expresión regular");
 
+      // v18.0.86 — HALLAZGO DE ENJAMBRE #38. El límite de PALABRA (letras españolas) que
+      // v18.0.25 fijó para nombres no protege a las tachaduras NUMÉRICAS de la adyacencia
+      // de OTROS dígitos: un celular que aparece como subcadena dentro de un número más
+      // largo (una orden, un código de barras) se tachaba igual, partiéndolo en dos.
+      const conOrdenClinica = "Se registra el numero de orden 930012345678 en el sistema de laboratorio para seguimiento.";
+      t.igual(api.mtrHcTachar(conOrdenClinica, ["3001234567"]), conOrdenClinica,
+        "un número clínico NO relacionado que contiene el celular como subcadena sobrevive intacto — antes quedaba partido con [CENSURADO] en medio");
+      // Pero el celular SÍ se sigue tachando cuando aparece de verdad, como token propio.
+      t.igual(api.mtrHcTachar("Contactar al celular 3001234567 para confirmar.", ["3001234567"]),
+        "Contactar al celular [CENSURADO] para confirmar.",
+        "el celular real, no pegado a otro número, se sigue tachando igual que siempre");
+
       // Sin identidad no se inventa una tachadura, y el texto pasa igual.
       t.igual(api.mtrHcTachaduras({}), [], "sin datosUsuario, ninguna tachadura");
       t.igual(api.mtrHcTachar("texto intacto", []), "texto intacto", "y sin tachaduras el texto no se toca");
@@ -831,6 +1104,74 @@ module.exports = {
         "con otra historia abierta no se deshace nada");
       t.igual(cajaOtro.value, "TEXTO NUEVO",
         "y la casilla queda intacta: nunca se le escribe a un paciente el texto de otro");
+
+      // =================================================================
+      //  v18.0.59 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+      //  «DESHACER» REVERTÍA UNA CASILLA DISTINTA DE LA QUE EL MÉDICO CREÍA.
+      //
+      //  El aviso de arriba («ya no se puede deshacer X») solo se daba cuando la etiqueta
+      //  CAMBIABA. Pulsando el MISMO botón dos veces —Athenea respondió distinto, o solo
+      //  se reintentó— la etiqueta es idéntica: no había aviso y el primer lote se perdía
+      //  igual. El médico pulsa «↩ Deshacer» creyendo que revierte la casilla mala del
+      //  primer clic, ve el toast verde «volvió exactamente a como estaba», y ese dato
+      //  sigue escrito en la historia sin forma de deshacerlo.
+      // =================================================================
+      const cDos = cargar({ silencioso: true });
+      const nodoDoc = { textContent: "C.C. 111111", closest: () => null };
+      cDos.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);
+      cDos.env.doc.querySelector = () => null;
+      cDos.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [nodoDoc] : []);
+      const cas = (v) => ({ value: v, type: "text", isConnected: true, dispatchEvent: () => true, setAttribute: () => {}, getAttribute: () => null });
+
+      const cA = cas(""), cB = cas("");
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cA, prev: "" }], "Exámenes");
+      cA.value = "120";                                   // lo que escribió el clic 1
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cB, prev: "" }], "Exámenes");
+      cB.value = "80";                                    // lo que escribió el clic 2
+      t.igual(cDos.api._vglEjecutarDeshacer(), 2,
+        "el MISMO botón dos veces acumula: deshacer revierte LAS DOS casillas, no solo la última");
+      t.igual(cA.value, "", "la del primer clic vuelve — antes se quedaba escrita sin remedio");
+      t.igual(cB.value, "", "y la del segundo también");
+
+      // El detalle que decide la corrección: si la MISMA casilla se escribe dos veces, se
+      // conserva el valor MÁS VIEJO. Deshacer devuelve la casilla a como estaba antes de la
+      // PRIMERA escritura automática, no a como la dejó el clic anterior (que también era
+      // nuestro).
+      const cC = cas("lo que el médico tenía");
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cC, prev: "lo que el médico tenía" }], "Otro botón");
+      cC.value = "primera escritura";
+      cDos.api._vglGuardarDeshacer("111111", [{ el: cC, prev: "primera escritura" }], "Otro botón");
+      cC.value = "segunda escritura";
+      cDos.api._vglEjecutarDeshacer();
+      t.igual(cC.value, "lo que el médico tenía",
+        "vuelve al valor ANTERIOR A TODO lo automático, no a un valor que también escribimos nosotros");
+
+      // 02-sep — CIERRE ADVERSARIAL (fila 20): la acumulación de arriba exige el MISMO paciente,
+      // y «el mismo» solo se puede afirmar con cédula. Con la cabecera ilegible (docId "" en las
+      // dos llamadas) dos historias distintas se acumulaban en un lote, y «Deshacer» en el
+      // segundo paciente restauraba la casilla del primero — incluida una que el médico ya
+      // había escrito a mano. Sin cédula, el lote se sustituye (con su aviso), como antes.
+      const cSin = cargar({ silencioso: true });
+      const X = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: X, prev: "" }], "Examen normal");
+      X.value = "TEXTO QUE EL MÉDICO ESCRIBIÓ A MANO EN OTRA HISTORIA";
+      const Y = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: Y, prev: "" }], "Examen normal");
+      Y.value = "Normal";
+      t.igual(cSin.api._vglEjecutarDeshacer(), 1, "sin cédula NO se acumula: el lote se sustituye y Deshacer solo toca el último");
+      t.igual(X.value, "TEXTO QUE EL MÉDICO ESCRIBIÓ A MANO EN OTRA HISTORIA", "la casilla del otro paciente, escrita a mano, queda intacta");
+      t.igual(Y.value, "", "y la del lote vigente sí vuelve");
+      // v18.0.104 — refutador de v18.0.99 (fila 20, residuo): con el lote SIN cédula no había
+      // forma de comprobar el paciente al deshacer; dentro de los 5 min, ya con otra historia
+      // abierta (cédula legible ahora), se restauraba un nodo que Angular pudo reutilizar.
+      const Z = cas("");
+      cSin.api._vglGuardarDeshacer("", [{ el: Z, prev: "" }], "Examen normal");
+      Z.value = "Normal";
+      cSin.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : null);   // hay historia abierta…
+      cSin.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "C.C. 111111", closest: () => null }] : []);   // …y ahora con cédula legible
+      t.igual(cSin.api.extractPacienteAbierto(), "111111", "montaje: la cédula se lee ahora");
+      t.igual(cSin.api._vglEjecutarDeshacer(), 0, "ahora sí se lee una cédula y el lote no la tenía: no se puede confirmar el paciente → no se deshace");
+      t.igual(Z.value, "Normal", "la casilla queda como está");
 
       // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
       const c2 = cargar({ silencioso: true });

@@ -220,6 +220,78 @@ module.exports = {
       t.cierto(!!api.mtrEstatinaAltaIntensidad([{ nombre: "atorvastatina 40 mg" }]), "acepta objeto con .nombre");
     });
 
+    // =================================================================
+    //  v18.0.49 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  EN UNA COMBINACIÓN DE DOSIS FIJA SE LEÍA LA DOSIS DEL OTRO PRINCIPIO ACTIVO.
+    //
+    //  «Amlodipino/Atorvastatina 5/40mg» es una presentación real y común en HTA +
+    //  dislipidemia. Se tomaba el PRIMER número tras el nombre buscado, y después de
+    //  «atorvastatina» lo primero que aparece es el 5 del amlodipino. Resultado medido:
+    //  el script le decía al médico «LDL en falla SIN estatina de alta intensidad: revise
+    //  intensidad» de un paciente que YA está en atorvastatina 40 mg. Una afirmación
+    //  clínicamente falsa que empuja a subir una dosis que ya está bien.
+    // =================================================================
+    t.caso("dosis fija combinada: cada dosis se empareja con SU principio, no con el primer número", () => {
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg tableta, 1 cada noche", "atorvastatina"), 40,
+        "la atorvastatina es 40, no el 5 del amlodipino");
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5/40mg tableta", "amlodipino"), 5,
+        "y el amlodipino sigue siendo 5: se emparejan por posición, no se invierte el error");
+      t.igual(api.mtrDosisDeTexto("Losartan/Hidroclorotiazida 50/12,5 mg", "hidroclorotiazida"), 12.5,
+        "con coma decimal, como lo escribe el laboratorio");
+
+      // La consecuencia clínica, que es lo que el médico veía:
+      const combo = ["Amlodipino/Atorvastatina 5/40mg tableta, 1 cada noche"];
+      const r = api.mtrInerciaEstatina(true, combo);
+      t.falso(r.inercia, "con atorvastatina 40 en un combo NO se declara inercia");
+      t.igual(r.estatina.dosis, 40, "y se reconoce la dosis real");
+    });
+
+    t.caso("dosis fija combinada: si no se puede emparejar, se devuelve VACÍO en vez de adivinar", () => {
+      // Un combo con un solo número es ambiguo: ese 5 puede ser de cualquiera de los dos.
+      // Antes se devolvía 5 como si fuera de la atorvastatina. Casilla vacía antes que dato
+      // inventado — y aquí el dato inventado es la dosis de OTRO fármaco.
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null,
+        "un combo sin bloque de dosis emparejable no da número");
+      // Y lo que NO es un combo sigue leyéndose exactamente igual que siempre.
+      t.igual(api.mtrDosisDeTexto("Atorvastatina 80 mg noche", "atorvastatina"), 80, "un solo principio: sin cambios");
+      t.igual(api.mtrDosisDeTexto("Rosuvastatina 20 mg", "rosuvastatina"), 20, "tampoco aquí");
+    });
+
+    // v18.0.97 — CIERRE DEL ENJAMBRE (02-sep): el emparejamiento por posición solo se
+    // activaba con «/». El catálogo INVIMA/CUM nombra las combinaciones con «+» y a veces
+    // con «-»; con esos separadores se caía a la lectura vieja y volvía a leer la dosis del
+    // OTRO principio — y mtrInerciaEstatina volvía a acusar «sin estatina de alta
+    // intensidad» a un paciente en atorvastatina 40.
+    // v18.0.103 — refutador de v18.0.97 (fila 9): admitir «-»/«+» como separador de nombres
+    // convertía un guion que NO es de combinación en «combo sin dosis emparejable» → null en
+    // vez de la lectura de siempre → «sin estatina de alta intensidad» sobre un paciente en
+    // atorvastatina 40. Solo la barra afirma «combinación».
+    t.caso("v18.0.103: un guion o «+» que no es de combinación (sal, laboratorio, forma) no anula la dosis", () => {
+      const d = (txt, p) => api.mtrDosisDeTexto(txt, p);
+      t.igual(d("ATORVASTATINA-CALCICA 40 MG", "atorvastatina"), 40, "sal pegada con guion");
+      t.igual(d("ROSUVASTATINA-CALCICA 20 MG TABLETA", "rosuvastatina"), 20);
+      t.igual(d("ATORVASTATINA-GENFAR 40 MG", "atorvastatina"), 40, "laboratorio pegado con guion");
+      t.igual(d("ATORVASTATINA - TABLETA RECUBIERTA 40 MG", "atorvastatina"), 40, "guion suelto antes de la forma");
+      t.igual(d("ATORVASTATINA+CALCIO 40 MG", "atorvastatina"), 40, "«+» que no es de combinación");
+      t.falso(api.mtrInerciaEstatina(true, ["ATORVASTATINA-CALCICA 40 MG"]).inercia, "y la inercia ya no se declara en falso");
+      // La barra sigue siendo la afirmación de combinación: sin dosis emparejable, null (no se adivina).
+      t.igual(d("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null, "combo por barra con un solo número: sigue sin adivinarse");
+      t.igual(d("Amlodipino + Atorvastatina 5/40 mg", "atorvastatina"), 40, "y el «+» de combinación real sigue emparejando (v18.0.97)");
+    });
+
+    t.caso("v18.0.97: las combinaciones con «+» y «-», y las dosis «5 mg + 40 mg» / «5mg/40mg», emparejan por posición igual que con «/»", () => {
+      t.igual(api.mtrDosisDeTexto("Amlodipino + Atorvastatina 5/40 mg", "atorvastatina"), 40, "«+» entre nombres — antes 5");
+      t.igual(api.mtrDosisDeTexto("AMLODIPINO + ATORVASTATINA 5 MG + 40 MG", "atorvastatina"), 40, "«+» entre nombres y entre dosis con unidad — antes 5");
+      t.igual(api.mtrDosisDeTexto("Ezetimiba + Rosuvastatina 10/20 mg", "rosuvastatina"), 20, "otra pareja real — antes 10");
+      t.igual(api.mtrDosisDeTexto("Amlodipino-Atorvastatina 5/40 mg", "atorvastatina"), 40, "«-» entre nombres — antes 5");
+      t.igual(api.mtrDosisDeTexto("AMLODIPINO/ATORVASTATINA 5MG/40MG TABLETA", "atorvastatina"), 40, "unidad pegada a cada dosis — antes null");
+      t.igual(api.mtrDosisDeTexto("Amlodipino + Atorvastatina 5/40 mg", "amlodipino"), 5, "y el primero de la pareja sigue leyendo el suyo");
+      t.igual(api.mtrDosisDeTexto("Losartan 50 mg + Hidroclorotiazida 12.5 mg", "losartan"), 50, "dos principios con su dosis cada uno no son un combo: lectura de siempre");
+      t.igual(api.mtrDosisDeTexto("Amlodipino/Atorvastatina 5 mg", "atorvastatina"), null, "y lo ambiguo sigue siendo null, no la dosis del otro");
+      t.falso(api.mtrInerciaEstatina(true, ["Amlodipino + Atorvastatina 5/40 mg"]).inercia,
+        "el médico ya NO recibe «LDL en falla sin estatina de alta intensidad» por un paciente en atorvastatina 40");
+    });
+
     t.caso("inercia: una falla de LDL sin estatina de alta intensidad la marca", () => {
       const conInercia = api.mtrInerciaEstatina(true, ["Atorvastatina 20 mg"]);
       t.cierto(conInercia.inercia, "dosis corta con falla = inercia");
@@ -455,6 +527,199 @@ module.exports = {
       const html = api.mtrRenderResumenClinicoHtml(resumenReal());
       t.cierto(/Falla terap.utica/.test(html), "sale el bloque de falla");
       t.cierto(/intensidad y adherencia/i.test(html), "y el aviso de inercia de la estatina");
+    });
+
+    // =====================================================================
+    //  D11 (KDIGO) — CON TFG < 60 EL PERFIL LIPÍDICO NO SE REPITE AL 50 %
+    //
+    //  Decisión del médico, verbatim (entrevista del 29-ago): «en pacientes con ckd epi
+    //  2021 menor a 60 tfg no repitamos perfil lipídico al 50% por falla terapéutica como
+    //  lo dicen las guías kdigo». Punto 9 de su orden de ejecución.
+    //
+    //  Lo que estas pruebas fijan, y por qué cada una:
+    //   · La guarda frena SOLO el adelanto. NO apaga la falla terapéutica: el LDL sigue
+    //     estando fuera de meta y el panel lo sigue diciendo. Confundir las dos cosas
+    //     dejaría a un paciente sin tratar creyendo que está bien.
+    //   · La TFG es la de CKD-EPI 2021, NUNCA Cockcroft-Gault (aquí solo administrativa).
+    //   · SIN TFG no se supone nada: manda la regla del 50 %, que es lo conservador
+    //     (repetir antes, no después).
+    //   · La guarda vive en los DOS caminos que parten la vigencia (el motor del panel y
+    //     la vara del aviso de entrada / antiduplicado de PyM). Con una sola, el panel
+    //     diría 180 y el aviso seguiría reclamándolo a los 90 sobre el mismo paciente.
+    //   · Y no rompe CERO VENCIDOS: solo puede ALARGAR, así que la fecha de toma no se
+    //     adelanta ni deja vencer nada. Se comprueba de punta a punta.
+    // =====================================================================
+    const _ctxKdigo = (tfg) => ({
+      hoyIso: "2026-08-31", programa: "DM2", esDm2: true, categoriaRiesgo: "alto", edad: 62,
+      estadioAdministrativo: null, rac: 12, egfrCkdEpi: tfg,
+      ultimos: {
+        COLESTEROL_LDL: { fecha: "2026-07-10", valor: 110 },
+        GLUCOSA: { fecha: "2026-07-10", valor: 165 },
+        HBA1C: { fecha: "2026-07-10", valor: 8.2 },
+        COLESTEROL_TOTAL: { fecha: "2026-07-10", valor: 190 },
+        COLESTEROL_HDL: { fecha: "2026-07-10", valor: 42 },
+        TRIGLICERIDOS: { fecha: "2026-07-10", valor: 180 },
+        CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+        RAC: { fecha: "2026-08-01", valor: 12 },
+        UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+      },
+    });
+    const _claves = (lista) => (lista || []).map((a) => a.clave);
+
+    t.caso("D11: la guarda solo mira los cuatro lípidos, y solo por debajo de 60", () => {
+      for (const k of ["COLESTEROL_LDL", "COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.cierto(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 59.9 }), k + " con TFG 59,9 sí la frena");
+        t.falso(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 60 }), k + " con TFG 60 exactos NO: la guía dice MENOR de 60");
+      }
+      for (const k of ["HBA1C", "GLUCOSA", "CREATININA", "RAC"]) {
+        t.falso(api.mtrKdigoNoRepiteLipidos(k, { egfrCkdEpi: 30 }), k + " no es un lípido: KDIGO no lo cubre");
+      }
+    });
+
+    t.caso("D11: sin TFG no se supone nada — manda la regla del 50 %", () => {
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", {}), "sin dato");
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { egfrCkdEpi: null }), "TFG nula");
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { egfrCkdEpi: "" }), "TFG vacía");
+      t.cierto(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { egfr: 45 } }), "y la lee del resumen si viene ahí");
+    });
+
+    t.caso("D11: la TFG es la de CKD-EPI 2021, nunca la de Cockcroft-Gault", () => {
+      // erc.crcl es Cockcroft-Gault y en este proyecto es solo administrativa/dosificación.
+      // Un crcl bajo NO puede activar la guarda por su cuenta.
+      t.falso(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { crcl: 30, egfr: 90 } }),
+        "con CKD-EPI 90 no se frena, aunque Cockcroft-Gault diga 30");
+      t.cierto(api.mtrKdigoNoRepiteLipidos("COLESTEROL_LDL", { erc: { crcl: 90, egfr: 45 } }),
+        "y con CKD-EPI 45 sí se frena, aunque Cockcroft-Gault diga 90");
+    });
+
+    // =====================================================================
+    // v18.0.67 — REGLA DEL MÉDICO (01-sep): EL 50 % LO DECIDE ÉL
+    // «Cuando un paciente se encuentra fuera de metas … se le debe preguntar al médico que si
+    // en ese paciente desea repetir los exámenes fuera de metas sí o no. Si la respuesta es sí
+    // se repiten al 50 % de la vigencia original, si la respuesta es no se repiten en su
+    // vigencia normal sin adelantar. Los únicos exámenes que se repiten sí o sí es la
+    // creatinina en suero si la TFG por C-G es menor a 60 y la RAC si el resultado es mayor a
+    // 30 mg/gr.»
+    // Ver docs/REGLAS_MEDICO_20260901.md.
+    // =====================================================================
+    t.caso("v18.0.67: creatinina obligatoria con TFG por COCKCROFT-GAULT < 60 (no CKD-EPI)", () => {
+      t.cierto(api.mtrRepeticionObligatoria("CREATININA", { crclCockcroftGault: 59.9 }),
+        "59,9 por C-G: se repite sí o sí");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", { crclCockcroftGault: 60 }),
+        "60 exactos no: él dijo MENOR a 60");
+      // La distinción con KDIGO es deliberada y el médico la confirmó: son fórmulas
+      // distintas y un paciente puede quedar a un lado u otro del 60 según cuál se mire.
+      t.cierto(api.mtrRepeticionObligatoria("CREATININA", { erc: { crcl: 40, egfr: 90 } }),
+        "manda Cockcroft-Gault, aunque CKD-EPI diga 90");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", { erc: { crcl: 90, egfr: 40 } }),
+        "y no al revés: CKD-EPI bajo no la vuelve obligatoria");
+      t.falso(api.mtrRepeticionObligatoria("CREATININA", {}),
+        "sin el dato no se afirma nada: la decisión vuelve a ser del médico");
+    });
+
+    t.caso("v18.0.67: RAC obligatoria por encima de 30 mg/g", () => {
+      t.cierto(api.mtrRepeticionObligatoria("RAC", {}, 30.1), "31 mg/g: se repite sí o sí");
+      t.falso(api.mtrRepeticionObligatoria("RAC", {}, 30), "30 exactos no: él dijo MAYOR a 30");
+      t.falso(api.mtrRepeticionObligatoria("RAC", {}, null), "sin valor no se afirma nada");
+      t.falso(api.mtrRepeticionObligatoria("HBA1C", { crclCockcroftGault: 20 }, 300),
+        "la obligatoriedad es SOLO de esos dos exámenes, no de todos los del paciente renal");
+    });
+
+    t.caso("v18.0.67: sin respuesta manda la conducta de siempre; el NO del médico la relaja", () => {
+      // Todavía no ha respondido: se adelanta, que es lo conservador y lo que ya hacía.
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", {}, 9),
+        "el script no cambia nada por su cuenta: hace falta un «no» explícito");
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", { repetirFueraMeta: true }, 9), "y con el sí, igual");
+      t.falso(api.mtrPuedeAdelantarPorFueraDeMeta("HBA1C", { repetirFueraMeta: false }, 9),
+        "con el NO se repite en su vigencia normal, sin adelantar");
+      // Pero su «no» no puede desactivar los dos obligatorios.
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("CREATININA", { repetirFueraMeta: false, crclCockcroftGault: 40 }, 1.6),
+        "la creatinina con C-G < 60 se repite igual: no depende de la respuesta");
+      t.cierto(api.mtrPuedeAdelantarPorFueraDeMeta("RAC", { repetirFueraMeta: false }, 45),
+        "y la RAC > 30, también");
+    });
+
+    t.caso("v18.0.67: la pregunta es UNA por paciente y dice qué queda fuera de ella", () => {
+      const plan = { drivers: [
+        { clave: "HBA1C", fueraMeta: true, valor: 9 },
+        { clave: "COLESTEROL_LDL", fueraMeta: true, valor: 160 },
+        { clave: "CREATININA", fueraMeta: true, valor: 1.6 },
+        { clave: "RAC", fueraMeta: true, valor: 45 },
+        { clave: "GLUCOSA", fueraMeta: false, valor: 100 },
+      ] };
+      const r = api.mtrExamenesParaPreguntaFueraMeta(plan, { crclCockcroftGault: 40, egfrCkdEpi: 45 });
+      t.igual(_claves(r.dentro).join(","), "HBA1C", "solo la HbA1c entra en la pregunta");
+      t.igual(_claves(r.obligatorios).sort().join(","), "CREATININA,RAC", "los dos obligatorios salen aparte");
+      t.igual(_claves(r.frenadosKdigo).join(","), "COLESTEROL_LDL",
+        "y el lípido lo frena KDIGO: con TFG < 60 no se adelanta aunque él diga que sí (decisión suya)");
+      t.falso(_claves(r.dentro).indexOf("GLUCOSA") >= 0, "lo que está en meta no se pregunta");
+
+      const q = api.mtrPreguntaFueraMeta(r);
+      t.igual(q.clave, "repetirFueraMeta");
+      t.igual(q.vigenciaDias, 1, "vale solo para esta consulta");
+      t.igual(q.severidad, "media", "se ofrece, no retiene el flujo: él manda");
+      t.cierto(/Hemoglobina glicosilada/.test(JSON.stringify(q.afirman)), "la lista va delante, con nombre clínico");
+      t.cierto(/no dependen de esta respuesta/.test(JSON.stringify(q.niegan)),
+        "y se DICE por qué los obligatorios no están en la pregunta: callarlo la volvería una caja negra");
+    });
+
+    t.caso("v18.0.67: sin nada fuera de meta que dependa de él, no se pregunta", () => {
+      const vacio = api.mtrExamenesParaPreguntaFueraMeta({ drivers: [{ clave: "HBA1C", fueraMeta: false }] }, {});
+      t.falso(api.mtrDebePreguntarFueraMeta(vacio, null), "no hay nada que preguntar");
+      const conUno = api.mtrExamenesParaPreguntaFueraMeta({ drivers: [{ clave: "HBA1C", fueraMeta: true, valor: 9 }] }, {});
+      t.cierto(api.mtrDebePreguntarFueraMeta(conUno, null), "con uno dentro, sí");
+      t.falso(api.mtrDebePreguntarFueraMeta(conUno, { v: true, ts: Date.now() }),
+        "y si ya respondió en esta consulta, no se le vuelve a preguntar");
+    });
+
+    t.caso("D11: la falla terapéutica NO se apaga — el LDL sigue estando fuera de meta", () => {
+      const ctx = _ctxKdigo(52);
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 110, ctx), true,
+        "110 sigue por encima de la meta de 70 del riesgo alto: eso no lo toca KDIGO");
+      const a = api.mtrEstadoAnalito("COLESTEROL_LDL", ctx.ultimos.COLESTEROL_LDL, ctx);
+      t.cierto(a.fueraDeMeta === true, "y el analito lo sigue publicando");
+      t.cierto(a.kdigoSinAcortar === true, "marcando aparte que la guarda renal frenó el adelanto");
+      t.igual(a.vigenciaDias, 180, "la vigencia se respeta entera");
+      t.cierto(/KDIGO/.test(a.motivo) && /no se repite antes/.test(a.motivo),
+        "y el porqué se dice: un examen que no se pide sin explicación parece un olvido · " + a.motivo);
+    });
+
+    t.caso("D11 PUNTA A PUNTA: con TFG < 60 el perfil lipídico entero sale de la toma", () => {
+      const sano = api.mtrPlanParaclinicos(_ctxKdigo(88));
+      const renal = api.mtrPlanParaclinicos(_ctxKdigo(52));
+
+      t.cierto(_claves(sano.ordenar).indexOf("COLESTEROL_LDL") >= 0, "con TFG 88 el LDL se ordena (regla del 50 %)");
+      for (const k of ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.cierto(_claves(sano.ordenar).indexOf(k) >= 0, k + " lo arrastra el grupo lipídico");
+      }
+      for (const k of ["COLESTEROL_LDL", "COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS"]) {
+        t.falso(_claves(renal.ordenar).indexOf(k) >= 0, k + " NO se ordena con TFG 52");
+        t.cierto(_claves(renal.diferidos).indexOf(k) >= 0, k + " queda diferido a su vencimiento natural");
+      }
+      // Y lo que sí debe seguir pidiéndose se sigue pidiendo: KDIGO es sobre lípidos.
+      t.cierto(_claves(renal.ordenar).indexOf("GLUCOSA") >= 0, "la glicemia fuera de meta sigue entrando");
+      t.cierto(_claves(renal.ordenar).indexOf("HBA1C") >= 0, "y la HbA1c también");
+    });
+
+    t.caso("D11 y CERO VENCIDOS: la guarda solo ALARGA — la fecha de toma no se adelanta ni deja vencer nada", () => {
+      const sano = api.mtrPlanParaclinicos(_ctxKdigo(88));
+      const renal = api.mtrPlanParaclinicos(_ctxKdigo(52));
+      t.cierto(renal.ftl >= sano.ftl, "la toma nunca se adelanta por esta guarda");
+      // CERO VENCIDOS: ningún examen ordenado o diferido puede vencer ANTES de la toma.
+      for (const a of (renal.ordenar || []).concat(renal.diferidos || [])) {
+        if (!a.vence) continue;
+        t.cierto(a.vence >= renal.ftl, a.nombre + " no vence antes de la toma (" + a.vence + " vs " + renal.ftl + ")");
+      }
+    });
+
+    t.caso("D11: la guarda vive TAMBIÉN en la vara del aviso de entrada y del antiduplicado de PyM", () => {
+      // Si viviera solo en el motor del panel, el panel diría 180 y el aviso de entrada
+      // seguiría reclamando el LDL a los 90 sobre el MISMO paciente: dos varas para una regla.
+      const base = { programa: "DM2", esDm2: true, esDM2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true };
+      const sinRenal = api._vigenciaDiasParaAnalito("COLESTEROL_LDL", 110, Object.assign({}, base, { egfrCkdEpi: 88 }));
+      const conRenal = api._vigenciaDiasParaAnalito("COLESTEROL_LDL", 110, Object.assign({}, base, { egfrCkdEpi: 52 }));
+      t.cierto(conRenal > sinRenal, "con TFG < 60 la vigencia de este camino tampoco se parte (" + sinRenal + " -> " + conRenal + ")");
+      t.igual(conRenal * 1, sinRenal * 2, "y es exactamente el doble: es la mitad que ya no se aplica");
     });
   },
 };

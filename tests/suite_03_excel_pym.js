@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Excel, caché y SharePoint",
-  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
+  cubre: ["applyPymIdx", "packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy", "mtrLibroNoParecePym"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
@@ -53,12 +53,170 @@ module.exports = {
       const c = cargar();
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
+      // v18.0.7 — ahora la 2ª regla exige que el archivo esté SUELTO EN LA CARPETA
+      // PRINCIPAL (ver el blindaje en pickTodaysFile), así que la ruta forma parte del caso.
+      const RAIZ = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
       const files = [
-        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z" }
+        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z", ServerRelativeUrl: RAIZ + "/ArchivoRandom.xlsx" }
       ];
       const selected = c.api.pickTodaysFile(files);
       t.cierto(selected !== null);
       t.igual(selected.Name, "ArchivoRandom.xlsx");
+    });
+
+    // =====================================================================
+    //  v18.0.7 — EL LIBRO EQUIVOCADO NO PUEDE VOLVER A PRESENTARSE COMO EL PyM DEL DÍA
+    //
+    //  REPORTE EN VIVO (31-ago): a varios médicos dejó de salirles el aviso de PyM y de
+    //  abandono de RCV al abrir la historia. El diagnóstico del equipo del médico:
+    //      Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
+    //      Pacientes con pendientes: 0 · Documentos totales en la hoja: 1396
+    //  El listado no es de UNA carpeta: fetchSpFilesMultiFolder junta las tres de
+    //  CONFIG.SP.folders, y una es «…/ESTRATEGIAS POR SEDE 2026/SEDE BELLO». Ese libro de
+    //  productividad no lleva fecha en el nombre y alguien lo edita a diario, así que la 2ª
+    //  regla lo tomaba por «el PyM de hoy».
+    //
+    //  Y el daño era doble: además de dejar el índice vacío (y con él, mudos los dos
+    //  avisos), al dar por encontrado el de hoy NUNCA se caía al respaldo de la base
+    //  piloto ni se seguía buscando el CMB real — desactivando la regla que el médico dejó
+    //  escrita: «mientras no esté subido el CMB del día se usa la base piloto, y cada X
+    //  minutos se rectifica si ya subieron el oficial».
+    // =====================================================================
+    const RAIZ_PYM = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
+
+    t.caso("v18.0.7: un libro de una SUBCARPETA no puede pasar por «el PyM de hoy»", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
+      ];
+      t.igual(c.api.pickTodaysFile(files), null,
+        "sin candidato válido se devuelve null, que es lo que hace caer al respaldo de la base piloto y seguir buscando el CMB");
+    });
+
+    t.caso("v18.0.7: entre el libro de la subcarpeta y el suelto en la raíz, gana el de la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
+        { Name: "Agenda del dia.xlsx", TimeLastModified: "2026-08-10T09:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/Agenda del dia.xlsx" },
+      ];
+      const sel = c.api.pickTodaysFile(files);
+      t.cierto(!!sel && sel.Name === "Agenda del dia.xlsx", "se elige el suelto en la raíz");
+    });
+
+    // =====================================================================
+    // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
+    // no lo tumbaron. La guarda «no cola de otro número» (nameHasToken) SOLO se aplicaba a
+    // los tokens con mes en LETRAS; los numéricos usaban `n.includes(t)` a pelo, sin
+    // ninguna protección de borde. Un consecutivo/factura de 6-8 dígitos que por
+    // casualidad trae la fecha de hoy EMPOTRADA, en CUALQUIER subcarpeta que
+    // fetchSpFilesMultiFolder junte, se tomaba como el PyM de hoy. Hoy 1-sep (día y mes de
+    // un solo dígito) es el peor caso: el token corto ("192026", 6 dígitos) es el que más
+    // fácil se empotra.
+    // =====================================================================
+    t.caso("v18.0.71: fuera de la raíz, un consecutivo que trae la fecha EMPOTRADA con un dígito PEGADO se rechaza", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // Los dos casos REALMENTE peligrosos de la reproducción del hallazgo: el token
+      // "192026" vive con OTRO DÍGITO pegado justo antes ("45" / "00") — es la cola de
+      // otro número que la guarda existe para evitar, sea cual sea su tipo de token.
+      const casos = ["Reporte_45192026_Final.xlsx", "Factura_00192026.xlsx"];
+      for (const nombre of casos) {
+        const files = [{ Name: nombre, TimeLastModified: "2026-08-20T08:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/" + nombre }];
+        t.igual(c.api.pickTodaysFile(files), null,
+          "«" + nombre + "» en una subcarpeta ajena ya no se toma como el PyM de hoy");
+      }
+    });
+
+    t.caso("v18.0.71: y la contrapartida — un token con LETRAS a los dos lados sigue aceptándose, fuera de la raíz o no", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // "Consolidado_192026_v2.xlsx": el "2" de "v2" viene DESPUÉS del token, pero
+      // separado por una LETRA ("v"), no pegado. Mismo patrón de confianza que el caso
+      // real ya conocido "Agenda_v2_20260806.xlsx" (letra antes de la fecha) — el código
+      // no puede distinguir "antes" de "después" de forma justa, así que trata los dos
+      // igual: letras a ambos lados = token aislado de verdad, se acepta.
+      const files = [{ Name: "Consolidado_192026_v2.xlsx", TimeLastModified: "2026-08-20T08:00:00Z",
+        ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Consolidado_192026_v2.xlsx" }];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel && sel.Name, "Consolidado_192026_v2.xlsx",
+        "sigue aceptándose: no es cola de otro número, solo comparte vecindario con una letra");
+    });
+
+    t.caso("v18.0.71: el caso real YA conocido sigue intacto — Agenda_v2_20260806.xlsx en la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-06T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-06T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      // Dentro de la raíz, el dígito pegado a la izquierda (la "2" de "v2") sigue
+      // aceptándose: es el caso real que el comentario de nameHasToken documenta, y esta
+      // versión no puede romperlo.
+      const files = [{ Name: "Agenda_v2_20260806.xlsx", TimeLastModified: "2026-08-06T08:00:00Z",
+        ServerRelativeUrl: RAIZ_PYM + "/Agenda_v2_20260806.xlsx" }];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel && sel.Name, "Agenda_v2_20260806.xlsx", "sigue eligiéndose: la raíz conserva la coincidencia simple de siempre");
+    });
+
+    t.caso("v18.0.71: nameHasToken con el borde completo exige que NO haya dígito ni antes ni después", () => {
+      t.cierto(api.nameHasToken("reporte45192026final", "192026", true) === false,
+        "192026 con 45 antes: se rechaza con el borde completo");
+      t.cierto(api.nameHasToken("consolidado192026v2", "192026", true) === true,
+        "192026 con v2 después: la letra 'v' separa, el dígito no está PEGADO — sigue aceptándose");
+      t.cierto(api.nameHasToken("consolidado1920264", "192026", true) === false,
+        "pero 192026 seguido DIRECTO por otro dígito (prefijo de un número más largo) sí se rechaza — el espejo del caso de la izquierda");
+      t.cierto(api.nameHasToken("agendadiacmb20260810xlsx", "20260810", true) === true,
+        "un token real con letras a los dos lados SÍ pasa el borde completo");
+      // El comportamiento SIN el tercer argumento no cambia ni un bit: solo mira la
+      // izquierda, como siempre.
+      t.igual(api.nameHasToken("agenda6deagosto", "6deagosto"), true);
+      t.igual(api.nameHasToken("agenda26deagosto", "6deagosto"), false);
+    });
+
+    t.caso("v18.0.71: esNombreDeHoy con fueraDeLaRaiz — mismo nombre, veredicto distinto según de dónde venga", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx"), "sin el argumento (comportamiento de siempre): sigue aceptando — es el bug que se cierra, pero solo fuera de la raíz");
+      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx", false), "fueraDeLaRaiz=false (archivo en la raíz): igual, sigue aceptando");
+      t.falso(c.api.esNombreDeHoy("Factura_00192026.xlsx", true), "fueraDeLaRaiz=true: ahora sí lo rechaza — el dígito pegado a la izquierda lo delata");
+      t.cierto(c.api.esNombreDeHoy("Consolidado_192026_v2.xlsx", true), "pero un token con letras a los dos lados sigue aceptándose, aunque sea fuera de la raíz");
+      // Y un token con mes en LETRAS no cambia con ninguno de los dos: ya estaba protegido.
+      t.cierto(c.api.esNombreDeHoy("Informe del 1 de septiembre.xlsx", true));
+      t.falso(c.api.esNombreDeHoy("Informe del 21 de septiembre.xlsx", true));
+    });
+
+    t.caso("v18.0.7: el nombre CON la fecha de hoy sigue mandando sobre todo lo demás", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        { Name: "OtroCualquiera.xlsx", TimeLastModified: "2026-08-10T11:00:00Z", ServerRelativeUrl: RAIZ_PYM + "/OtroCualquiera.xlsx" },
+        { Name: "Agenda_Dia_CMB_20260810.xlsx", TimeLastModified: "2026-08-09T06:00:00Z",
+          ServerRelativeUrl: RAIZ_PYM + "/CITAS DIA EBS/Agenda_Dia_CMB_20260810.xlsx" },
+      ];
+      const sel = c.api.pickTodaysFile(files);
+      t.igual(sel.Name, "Agenda_Dia_CMB_20260810.xlsx",
+        "la 1ª regla (fecha en el nombre) no se toca: vale aunque esté en una subcarpeta");
+    });
+
+    t.caso("v18.0.7: mtrLibroNoParecePym — muchos documentos y CERO pendientes es OTRO libro", () => {
+      const mapa = (n) => { const m = new Map(); for (let i = 0; i < n; i++) m.set("d" + i, ["x"]); return m; };
+      const docs = (n) => { const s2 = new Set(); for (let i = 0; i < n; i++) s2.add("d" + i); return s2; };
+      t.cierto(api.mtrLibroNoParecePym({ todos: docs(1396), map: new Map() }),
+        "el caso real del 31-ago: 1.396 documentos, 0 pacientes con pendientes");
+      t.falso(api.mtrLibroNoParecePym({ todos: docs(1396), map: mapa(1) }),
+        "con UN solo paciente pendiente ya es un PyM plausible: no se rechaza");
+      t.falso(api.mtrLibroNoParecePym({ todos: docs(10), map: new Map() }),
+        "una hoja pequeña y de verdad al día NO se rechaza — el corte es alto a propósito");
+      t.falso(api.mtrLibroNoParecePym(null), "sin índice no se afirma nada");
     });
 
     t.caso("pickTodaysFile descarta archivos temporales", () => {
@@ -96,6 +254,28 @@ module.exports = {
         { Name: "Agenda_20260810.xls" }
       ];
       t.cierto(c.api.xlsViejoDeHoy(files) !== null);
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 27): pickTodaysFile recibió en v18.0.71 la guarda de
+    // borde completo fuera de la raíz, pero su gemelo xlsViejoDeHoy seguía llamando a
+    // esNombreDeHoy sin el flag sobre las MISMAS filas: un .xls ajeno en una subcarpeta con la
+    // fecha de hoy empotrada en un consecutivo se tomaba por «el PyM de hoy en formato
+    // antiguo» y disparaba el aviso AMBAR una vez al día.
+    t.caso("02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const raiz = c.api.__CONFIG.SP.folder;
+      const ajeno = { Name: "Reporte_45192026_Final.xls", ServerRelativeUrl: raiz + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Reporte_45192026_Final.xls" };
+      t.igual(c.api.pickTodaysFile([Object.assign({}, ajeno, { Name: "Reporte_45192026_Final.xlsx", ServerRelativeUrl: ajeno.ServerRelativeUrl + "x" })]), null, "control: la regla 1 ya lo rechaza para el .xlsx");
+      t.igual(c.api.xlsViejoDeHoy([ajeno]), null, "y el .xls con el MISMO nombre en la subcarpeta tampoco es «el PyM de hoy en formato antiguo»");
+      const real = { Name: "Agenda_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_20260901.xls" };
+      t.cierto(c.api.xlsViejoDeHoy([ajeno, real]) === real, "el .xls de verdad, suelto en la raíz con la fecha de hoy, sí se detecta");
+      // v18.0.106 — refutador de v18.0.100 (fila 27, prueba hueca): la mitad «en la raíz se
+      // conserva la coincidencia laxa» no la fijaba nadie — un mutante «siempre estricto»
+      // pasaba en verde y dejaba de ver el caso real Agenda_v2_<hoy>.xls.
+      const v2 = { Name: "Agenda_v2_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_v2_20260901.xls" };
+      t.cierto(c.api.xlsViejoDeHoy([v2]) === v2, "en la raíz, «Agenda_v2_<hoy>.xls» sigue siendo el PyM de hoy en formato antiguo (mutante siempre estricto: null)");
     });
 
     // ---------- esLibroValido / esXlsxCifrado ----------
@@ -287,5 +467,63 @@ module.exports = {
       t.igual(fetchCalls.length, 1, "Debería parar en la primera carpeta porque halló el archivo de hoy");
     });
 
+
+    // =====================================================================
+    //  v18.0.11 — LA GUARDA EN applyPymIdx, Y EL «NO SÉ POR QUÉ» DEL MÉDICO
+    //
+    //  (1) La v18.0.7 puso la guarda del libro equivocado en la descarga automática y en el
+    //      captador de SharePoint. Pero a `applyPymIdx` se llega TAMBIÉN desde la base
+    //      piloto y desde el selector manual de archivo — y es ahí donde se hace el daño de
+    //      verdad: `afterPymLoaded` sella el día, con lo que `debeBuscarPymDiario()` pasa a
+    //      decir «ya está» y el reloj de 10 minutos DEJA DE BUSCAR la lista real hasta
+    //      medianoche; y `savePymCache` persiste el índice malo, que se readmite en cada
+    //      recarga. Un libro equivocado por cualquiera de esas dos puertas apagaba el aviso
+    //      la jornada entera.
+    //
+    //  (2) Los tres mensajes que explicaban el fallo vivían dentro de `if (!silent)` y las
+    //      TRES llamadas de producción pasan `silent = true`: el diagnóstico se calculaba y
+    //      se tiraba en cada vuelta, y al médico le quedaba un «PyM sin cargar» mudo. Sus
+    //      palabras: «no sé por qué». Ahora la razón se guarda y se enseña donde él ya mira.
+    // =====================================================================
+    t.caso("v18.0.11: applyPymIdx RECHAZA un libro que no parece PyM — venga por donde venga", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
+      const antesFile = c.api.__state.pymFile;
+      const ok = c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() },
+        "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", "", "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", true);
+      t.igual(ok, false, "no se instala");
+      t.igual(c.api.__state.pymFile, antesFile, "y NO sella el día: el reloj de 10 min sigue buscando la lista real");
+      t.cierto(!c.env.storage.getItem("vgl_pym_dia"), "ni deja la marca de «ya tengo la de hoy»");
+    });
+
+    t.caso("v18.0.11: un libro que SÍ es PyM se instala igual que siempre", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
+      const map = new Map([["5150076", ["Citología"]]]);
+      t.igual(c.api.applyPymIdx({ map, todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true), true,
+        "con actividades pendientes se instala");
+      t.igual(c.api.__state.pym.size, 1, "y la lista queda cargada");
+      t.igual(c.env.storage.getItem("vgl_pym_dia"), c.api.todayStamp(), "sellando el día, como siempre");
+    });
+
+    t.caso("v18.0.11: el motivo del fallo queda GUARDADO y deja de perderse en cada vuelta", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
+      t.igual(c.api.__state.pymUltimoFallo, "", "al arrancar no hay motivo que contar");
+      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
+      const motivo = c.api.__state.pymUltimoFallo;
+      t.cierto(/OTRO\.xlsx/.test(motivo), "el motivo nombra el archivo · " + motivo);
+      t.cierto(/200 documentos/.test(motivo), "y da la cifra que lo delata");
+      t.cierto(/ninguna actividad/.test(motivo), "dicho en lo que significa, no en jerga");
+    });
+
+    t.caso("v18.0.11: al cargar bien, el motivo anterior se OLVIDA — no se queda colgado del día", () => {
+      const c = cargar({ silencioso: true });
+      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
+      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
+      t.cierto(!!c.api.__state.pymUltimoFallo, "hay motivo (control del caso)");
+      c.api.applyPymIdx({ map: new Map([["5150076", ["Citología"]]]), todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true);
+      t.igual(c.api.__state.pymUltimoFallo, "", "cargó bien: enseñar un motivo viejo sería mentir sobre el estado actual");
+    });
   }
 };

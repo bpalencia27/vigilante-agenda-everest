@@ -8,23 +8,13 @@
 //  paciente había que abrir las dos y compararlas de memoria.
 //
 //  Lo que hay que defender aquí:
-//   · que las cuatro secciones existan y que cambiar de una a otra no
+//   · que las cinco secciones existan (la pestaña Medicamentos fue
+//     restaurada en el REFACTOR S+) y que cambiar de una a otra no
 //     pida NADA por red (una sola lectura alimenta el módulo entero);
 //   · que los dos puntos de entrada viejos aterricen donde el médico
 //     espera, sin romperle el camino a los llamadores internos;
 //   · que la sección de tendencias no invente una línea con un solo
 //     punto ni llame «cambio» al ruido del laboratorio.
-//
-//  v17.24.0 — «medicamentos» dejó de ser una pestaña (decisión del médico, entrevista
-//  S+ del 28-ago): el juicio farmacológico se muda al widget de Conducta. Resumen gana
-//  un dashboard de 3 tarjetas de estado — MISMO criterio que cada pestaña detallada,
-//  nunca una copia simplificada. mtrPanelMedicamentosHtml sigue viva y probada de frente
-//  (línea ~182): la lógica de avisos/duplicidades que arma se reutilizará en la Fase 2
-//  (el widget), solo que ya no la llama el Panel.
-//  v17.28.0 — la lista pasiva "Medicamentos actuales" que esa misma entrega le agregó al
-//  Resumen SE RETIRA (encargo del médico, 28-ago): duplicaba, sin aportar nada, la fila
-//  "Medicamentos del programa cardiovascular" de la Ficha (esa sí filtrada a RCV). El
-//  Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular.
 // =====================================================================
 
 const RESUMEN_DEMO = {
@@ -60,35 +50,35 @@ module.exports = {
   cubre: [
     "mtrPanelSeccionValida", "mtrPanelNavHtml", "mtrPanelResumenHtml", "mtrPanelRiesgoRenalHtml",
     "mtrPanelExamenesHtml", "mtrPanelTendenciasHtml", "mtrPanelMedicamentosHtml",
-    "mtrPanelResumenBentoDatos", "mtrPanelResumenBentoHtml",
     "openPanelPacienteModal", "mtrSeriesPorAnalito", "mtrTendenciaDe", "_mtrTendUmbralGrave",
     "mtrMetaHba1cGeneral", "mtrHojaEducativaHtml",
   ],
 
   async pruebas(t, api, env, cargar) {
     // ---------------- Navegación ----------------
-    t.caso("mtrPanelSeccionValida: acepta las cuatro secciones y cae en Resumen ante cualquier cosa rara", () => {
-      ["resumen", "renal", "examenes", "tendencias"].forEach((s) => {
+    // v17.28.0 — la sección «Medicamentos» salió del panel; el REFACTOR S+ (30-ago,
+    // aprobado en canvas) la RESTAURA: mtrPanelMedicamentosHtml quedó construida,
+    // probada y huérfana desde v17.28.0, y el médico la pidió de vuelta como quinta
+    // pestaña. MTR_PANEL_SECCIONES quedó con CINCO: resumen, renal, exámenes,
+    // tendencias y medicamentos, con rótulos acortados a lenguaje de consultorio.
+    t.caso("mtrPanelSeccionValida: acepta las cinco secciones y cae en Resumen ante cualquier cosa rara", () => {
+      ["resumen", "renal", "examenes", "tendencias", "medicamentos"].forEach((s) => {
         t.igual(api.mtrPanelSeccionValida(s), s, "sección válida: " + s);
       });
-      // v17.24.0 — "medicamentos" ya no es una sección del Panel: un llamador viejo con
-      // esa cadena debe caer a "resumen" como cualquier id desconocido, no romperse.
-      t.igual(api.mtrPanelSeccionValida("medicamentos"), "resumen", "medicamentos ya no es una sección: cae a Resumen");
       t.igual(api.mtrPanelSeccionValida("inventada"), "resumen", "una sección que no existe no deja el panel en blanco");
       t.igual(api.mtrPanelSeccionValida(null), "resumen", "null tampoco");
       t.igual(api.mtrPanelSeccionValida(undefined), "resumen", "ni undefined");
     });
 
-    t.caso("mtrPanelNavHtml: las cuatro secciones, con la activa marcada para el lector de pantalla", () => {
+    t.caso("mtrPanelNavHtml: las cinco secciones, con la activa marcada para el lector de pantalla", () => {
       const html = api.mtrPanelNavHtml("tendencias");
-      ["Resumen", "Riesgo y función renal", "Exámenes y vigencias", "Tendencias"].forEach((r) => {
+      ["Resumen", "Riesgo y renal", "Exámenes", "Tendencias", "Medicamentos"].forEach((r) => {
         t.cierto(html.indexOf(r) >= 0, "está la sección: " + r);
       });
-      t.falso(html.indexOf("Medicamentos") >= 0, "v17.24.0 — Medicamentos ya no es una pestaña de navegación");
       t.cierto(html.indexOf('data-panel-sec="tendencias"') >= 0, "cada chip sabe a qué sección lleva");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="tendencias"/.test(html), "la pedida sale activa");
       t.igual((html.match(/aria-selected="true"/g) || []).length, 1, "solo UNA está seleccionada");
-      t.igual((html.match(/role="tab"/g) || []).length, 4, "las cuatro son pestañas de verdad para accesibilidad");
+      t.igual((html.match(/role="tab"/g) || []).length, 5, "las cinco son pestañas de verdad para accesibilidad");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="resumen"/.test(api.mtrPanelNavHtml("cualquiera")),
         "una sección inválida no deja la navegación sin activa");
     });
@@ -96,102 +86,13 @@ module.exports = {
     // ---------------- Sección 1: resumen ----------------
     t.caso("mtrPanelResumenHtml: muestra lo leído CON su fuente y cuenta lo que falta", () => {
       const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
-      t.cierto(html.indexOf("Órdenes de Everest") >= 0, "cada dato declara de dónde salió");
+      t.cierto(html.indexOf("Órdenes de la plataforma") >= 0, "cada dato declara de dónde salió");
       t.cierto(html.indexOf("LOSARTAN 50MG") >= 0, "los medicamentos leídos se listan");
       t.cierto(html.indexOf("lo LEÍDO, nunca lo supuesto") >= 0, "y el pie recuerda la regla de la casa");
       const vacio = api.mtrPanelResumenHtml({});
       t.cierto(vacio.indexOf("sin dato") >= 0, "sin datos se dice «sin dato», jamás se inventa un valor");
       t.cierto(api.mtrPanelResumenHtml(null).indexOf("No se pudo leer al paciente") >= 0,
         "y sin resumen se explica, en vez de dejar la sección en blanco");
-    });
-
-    // v17.24.0 — Dashboard "de un vistazo": 3 tarjetas, MISMO criterio que la pestaña
-    // detallada. La prueba fija el criterio contra los campos reales de mtrTableroClinico,
-    // no contra un número mágico — si algún día el criterio de la tarjeta diverge del de
-    // su pestaña, es aquí donde tiene que caer roja.
-    t.caso("mtrPanelResumenBentoDatos: riesgo alto/muy alto o alerta renal → «pend»; bajo/moderado sin alerta → «ok»; sin categoría → «nd»", () => {
-      const dSinCat = api.mtrTableroClinico({});
-      const cSinCat = api.mtrPanelResumenBentoDatos({}, dSinCat).find((c) => c.id === "renal");
-      t.igual(cSinCat.estado, "nd", "sin categoría de riesgo, no se opina");
-
-      const dBajo = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: {} });
-      t.igual(api.mtrPanelResumenBentoDatos({}, dBajo).find((c) => c.id === "renal").estado, "ok", "riesgo bajo, sin alertas renales: al día");
-
-      const dAlto = api.mtrTableroClinico({ riesgo: { categoria: "alto" }, erc: {} });
-      t.igual(api.mtrPanelResumenBentoDatos({}, dAlto).find((c) => c.id === "renal").estado, "pend", "riesgo alto: siempre a revisar, aunque el riñón esté callado");
-
-      // Riesgo bajo pero con sospecha de injuria renal: la tarjeta SÍ debe alertar —
-      // el criterio no es solo la categoría, es el mismo conjunto de alertas que ya
-      // pinta mtrPanelRiesgoRenalHtml.
-      const dIra = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: { sospechaIra: true } });
-      const cIra = api.mtrPanelResumenBentoDatos({}, dIra).find((c) => c.id === "renal");
-      t.igual(cIra.estado, "pend", "sospecha de injuria renal pesa aunque la categoría sea baja");
-      t.cierto(cIra.sub.indexOf("injuria renal") >= 0, "y el motivo se nombra, no solo el color");
-    });
-
-    t.caso("mtrPanelResumenBentoDatos: exámenes — sin programa identificado → «nd»; con pendientes → «pend»; al día → «ok»", () => {
-      const dSinPrograma = api.mtrTableroClinico({ plan: { ordenar: [], drivers: [], pasajeros: [] } });
-      t.igual(api.mtrPanelResumenBentoDatos({}, dSinPrograma).find((c) => c.id === "examenes").estado, "nd",
-        "sin programa rector, no se evaluó nada — no puede decir 'al día'");
-
-      const dPendiente = api.mtrTableroClinico({
-        programa: "HTA", factores: { hta: true },
-        plan: { ordenar: [{ clave: "creatinina", nombre: "CREATININA", estado: "D", subestado: "vencido", vence: "2026-08-01" }], drivers: [], pasajeros: [] },
-      });
-      const cPend = api.mtrPanelResumenBentoDatos({}, dPendiente).find((c) => c.id === "examenes");
-      t.igual(cPend.estado, "pend");
-      t.igual(cPend.dato, "1 examen");
-
-      const dAlDia = api.mtrTableroClinico({ programa: "HTA", factores: { hta: true }, plan: { ordenar: [], drivers: [], pasajeros: [] } });
-      t.igual(api.mtrPanelResumenBentoDatos({}, dAlDia).find((c) => c.id === "examenes").estado, "ok", "programa identificado, nada por ordenar: al día");
-    });
-
-    t.caso("mtrPanelResumenBentoDatos: tendencias — sin serie de 2+ puntos → «nd»; con analito que empeora/grave → «pend»; el resto → «ok»", () => {
-      const dCualquiera = api.mtrTableroClinico({});
-      t.igual(api.mtrPanelResumenBentoDatos({}, dCualquiera).find((c) => c.id === "tendencias").estado, "nd", "sin _series, sin tendencia que mostrar");
-
-      const conUnSolo = { _series: { CREATININA: [{ fecha: "2026-08-01", valor: 1.1 }] } };
-      t.igual(api.mtrPanelResumenBentoDatos(conUnSolo, dCualquiera).find((c) => c.id === "tendencias").estado, "nd",
-        "un solo control no es tendencia todavía, igual que en la pestaña detallada");
-
-      // v17.55.0 — el rojo por valor empieza en la meta (decisión del médico), así que una
-      // HbA1c de 7,1 ya está en rojo aunque venga bajando de 9,4. Para seguir probando el
-      // caso «mejorando y sin nada grave» hace falta un valor que además esté EN meta — que
-      // es lo que la tarjeta quiere decir con «al día».
-      const conMejora = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 6.6 }] } };
-      t.igual(api.mtrPanelResumenBentoDatos(conMejora, dCualquiera).find((c) => c.id === "tendencias").estado, "ok", "mejorando y en meta: al día");
-      const bajandoPeroFuera = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 7.1 }] } };
-      t.igual(api.mtrPanelResumenBentoDatos(bajandoPeroFuera, dCualquiera).find((c) => c.id === "tendencias").estado, "pend",
-        "bajando pero todavía por encima de la meta: no es «al día»");
-
-      const conEmpeora = { _series: { COLESTEROL_LDL: [{ fecha: "2026-02-01", valor: 100 }, { fecha: "2026-08-01", valor: 130 }] } };
-      t.igual(api.mtrPanelResumenBentoDatos(conEmpeora, dCualquiera).find((c) => c.id === "tendencias").estado, "pend", "empeorar 30% es justo lo que la pestaña de tendencias marca en rojo");
-    });
-
-    t.caso("mtrPanelResumenBentoHtml: cada tarjeta lleva data-panel-sec para saltar a SU pestaña — mismo mecanismo de swap, sin pedir nada por red", () => {
-      const cards = api.mtrPanelResumenBentoDatos(RESUMEN_DEMO, api.mtrTableroClinico(RESUMEN_DEMO));
-      const html = api.mtrPanelResumenBentoHtml(cards);
-      ["renal", "examenes", "tendencias"].forEach((id) => {
-        t.cierto(html.indexOf('data-panel-sec="' + id + '"') >= 0, "la tarjeta de " + id + " sabe a qué pestaña salta");
-      });
-      t.cierto(/role="button"/.test(html), "es accionable para el lector de pantalla");
-      t.igual(api.mtrPanelResumenBentoHtml([]), "", "sin tarjetas, no se pinta una cuadrícula vacía");
-    });
-
-    // v17.28.0 — "Medicamentos actuales" (archivo pasivo, v17.24.0) SE RETIRA del Resumen
-    // por encargo del médico (28-ago): el Panel solo debe mostrar medicamentos con foco de
-    // riesgo cardiovascular, y esa lista completa duplicaba, sin aportar nada, la fila
-    // "Medicamentos del programa cardiovascular" ya existente en la Ficha (filtrada a
-    // RCV). Este caso reemplaza al que probaba mtrPanelResumenMedsHtml (retirada por
-    // completo) — ahora fija la AUSENCIA, para que no vuelva a colarse sin decisión.
-    t.caso("v17.28.0 — mtrPanelResumenHtml ya NO repite la lista completa de medicamentos: solo la Ficha (RCV) la tiene", () => {
-      const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
-      const iDashboard = html.indexOf("vgl-bento-grid");
-      const iFicha = html.indexOf("Órdenes de Everest");
-      t.cierto(iDashboard >= 0 && iFicha > iDashboard, "dashboard, luego la ficha detallada, sin nada entre medio");
-      t.falso(html.indexOf("Medicamentos actuales") >= 0,
-        "el rótulo de la lista pasiva ya no aparece en el Resumen");
-      t.falso(/vgl-panel-meds-/.test(html), "y ninguna de sus clases CSS queda huérfana en el HTML");
     });
 
     // ---------------- Sección 2: riesgo y renal ----------------
@@ -222,39 +123,6 @@ module.exports = {
       t.cierto(html.indexOf("Lo que sigue vigente") >= 0, "lo que no");
       t.cierto(html.indexOf("Programa que rige las vigencias") >= 0, "y con qué regla se decidió");
       t.cierto(api.mtrPanelExamenesHtml(null).indexOf("Sin datos suficientes") >= 0, "sin datos, se dice");
-    });
-
-    // v17.29.0 — REPORTE EN VIVO (28-ago): pantallazo real donde la LDL vencida salía
-    // roja ("vgl-tab-venc") y una RAC≥30 TAMBIÉN vencida salía en el color de "por
-    // pedir" ("vgl-tab-pedir") — pese a estar igual de vencida, o más urgente
-    // (albuminuria = vigilancia estrecha). Causa: la RAC vencida se reclasifica a
-    // estado "R"/subestado "albuminuria", y el chequeo de color solo miraba
-    // subestado==="vencido", que nunca es cierto para ella.
-    t.caso("v17.29.0 — un RAC≥30 vencido se pinta en rojo (vencido), igual que cualquier otro examen vencido", () => {
-      // mtrTableroClinico lee `resumen.plan` YA CALCULADO (no invoca mtrPlanParaclinicos
-      // por su cuenta) — se construye con la API real, como lo haría el resto del script,
-      // en vez de fabricar un plan a mano que podría no reflejar la forma real de los datos.
-      const plan = api.mtrPlanParaclinicos({
-        hoyIso: "2026-08-28", programa: "HTA", esDm2: true, edad: 66, rac: 45,
-        categoriaRiesgo: "alto",
-        ultimos: {
-          RAC: { valor: 45, fecha: "2025-01-01" },            // vencido hace mucho, ≥30: albuminuria
-          COLESTEROL_LDL: { valor: 130, fecha: "2025-01-01" }, // vencido, para comparar
-        },
-      });
-      const resumen = { programa: "HTA", factores: { edad: 66, sexo: "F" }, erc: {}, riesgo: { categoria: "alto" }, plan: plan };
-      const d = api.mtrTableroClinico(resumen);
-      const rac = d.ordenar.find((x) => x.clave === "RAC");
-      t.cierto(!!rac, "la RAC aparece en qué ordenar");
-      t.cierto(rac.vencidoBase, "y mtrTableroClinico expone que de verdad está vencida (no solo en vigilancia estrecha)");
-      const html = api.mtrPanelExamenesHtml(d);
-      const iRac = html.indexOf("Relación albúmina/creatinina");
-      const iLdl = html.indexOf("Colesterol LDL");
-      t.cierto(iRac >= 0 && iLdl >= 0, "las dos filas están en el HTML");
-      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iRac - 60), iRac + 20)),
-        "la fila de la RAC lleva la clase de vencido (roja), no la de 'por pedir' (ámbar)");
-      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iLdl - 60), iLdl + 20)),
-        "la LDL, vencida por la vía normal, sigue roja como siempre (control del escenario)");
     });
 
     // v17.0.3 — REPORTE DE CAMPO (pantallazo): "MIRA QUE SALE SIN EXAMENES VIGENTES
@@ -405,6 +273,10 @@ module.exports = {
     // El médico lo esperaba y nunca salía: `sentido` era binario y el CSS solo tenía
     // .mejora y .empeora. Decisión suya del 21-ago: rojo si el salto es ≥25 % en el
     // sentido malo O si el valor queda fuera de meta grave — cualquiera de las dos.
+    // v17.55.0 (29-ago) — el rojo por VALOR empieza EN la meta: el factor +30 %
+    // desapareció (decisión tomada con la medición delante, 130 de 137 vectores con
+    // LDL quedan en rojo). La «falla grave» de la Parte B se separó y la decide solo
+    // la regla renal; esta línea es SOLO el color de las tendencias.
     t.caso("#123 rojo por SALTO: empeorar 25 % o más en un solo control es grave", () => {
       const justo = api.mtrTendenciaDe([{ fecha: "2026-01-01", valor: 100 }, { fecha: "2026-06-01", valor: 120 }], "COLESTEROL_TOTAL");
       t.igual(justo.sentido, "empeora");
@@ -419,20 +291,17 @@ module.exports = {
 
     t.caso("#123 rojo por VALOR: fuera de meta grave, aunque no se haya movido", () => {
       const serie = [{ fecha: "2026-01-01", valor: 130 }, { fecha: "2026-06-01", valor: 131 }];
-      // Riesgo ALTO -> meta de LDL 70; grave a partir de 70 + 30 % = 91.
+      // Riesgo ALTO -> meta de LDL 70; el rojo empieza EN la meta (v17.55.0, factor 1).
       const conRiesgo = api.mtrTendenciaDe(serie, "COLESTEROL_LDL", { categoriaRiesgo: "alto" });
       t.igual(conRiesgo.direccion, "estable", "no se movió");
       t.igual(conRiesgo.gravedad, "grave", "pero 131 con meta 70 es falla grave, se haya movido o no");
       t.cierto(/meta de 70/.test(conRiesgo.motivoGrave), conRiesgo.motivoGrave);
-      // v17.55.0 — el rojo empieza en la meta, no en meta+30 %. Lo que esta prueba defiende
-      // sigue intacto —que la meta es DEL PACIENTE, no del analito— pero hay que elegir una
-      // cifra que lo demuestre con el corte nuevo: 100 está por encima de la meta de «alto»
-      // (70) y por debajo de la de «bajo» (116).
-      const serie100 = [{ fecha: "2026-01-01", valor: 99 }, { fecha: "2026-06-01", valor: 100 }];
-      t.igual(api.mtrTendenciaDe(serie100, "COLESTEROL_LDL", { categoriaRiesgo: "alto" }).gravedad, "grave",
-        "100 con meta 70: rojo");
-      t.igual(api.mtrTendenciaDe(serie100, "COLESTEROL_LDL", { categoriaRiesgo: "bajo" }).gravedad, null,
-        "la misma cifra no es grave en un paciente de riesgo bajo: la meta es del paciente, no del analito");
+      // Y con riesgo BAJO la meta es 116: 131 también la sobrepasa. La v17.55.0 retiró el
+      // +30 % (antes el corte era 116+30 % = 150,8 y 131 no llegaba): la meta es del
+      // paciente, no del analito — y el rojo ahora es «sobre la meta», sin colchón.
+      const conBajo = api.mtrTendenciaDe(serie, "COLESTEROL_LDL", { categoriaRiesgo: "bajo" });
+      t.igual(conBajo.gravedad, "grave", "131 con meta 116 ya está sobre la meta: rojo en riesgo bajo también");
+      t.cierto(/meta de 116/.test(conBajo.motivoGrave), conBajo.motivoGrave);
     });
 
     t.caso("#123: SIN contexto no hay rojo por valor — no se inventa una meta", () => {
@@ -452,14 +321,12 @@ module.exports = {
 
     t.caso("#123: HbA1c usa la meta del paciente cuando la hay, y 7,0 cuando no", () => {
       const serie = [{ fecha: "2026-01-01", valor: 9.0 }, { fecha: "2026-06-01", valor: 9.2 }];
-      // v17.55.0 — el corte es la meta misma. La regla que esta prueba defiende no cambia
-      // (la meta individual del médico manda sobre la general); cambian las cifras que la
-      // demuestran: 7,5 pasa la meta general de 7,0 y no la individual de 8,0.
-      t.igual(api.mtrTendenciaDe(serie, "HBA1C").gravedad, "grave", "9,2 con meta 7,0");
-      const serie75 = [{ fecha: "2026-01-01", valor: 7.4 }, { fecha: "2026-06-01", valor: 7.5 }];
-      t.igual(api.mtrTendenciaDe(serie75, "HBA1C").gravedad, "grave", "7,5 pasa la meta general de 7,0");
-      t.igual(api.mtrTendenciaDe(serie75, "HBA1C", { metaHba1c: 8.0 }).gravedad, null,
-        "con la meta individualizada de 8,0 que el médico le fijó, 7,5 NO es rojo");
+      t.igual(api.mtrTendenciaDe(serie, "HBA1C").gravedad, "grave", "9,2 con meta 7,0 (rojo sobre la meta)");
+      // v17.55.0 — el corte ya NO sube con el +30 % (antes: 8,0+30 % = 10,4 y 9,2 no
+      // llegaba). La meta individual es el tope: 9,2 sobre 8,0 es rojo.
+      const conMeta = api.mtrTendenciaDe(serie, "HBA1C", { metaHba1c: 8.0 });
+      t.igual(conMeta.gravedad, "grave", "9,2 con meta individual de 8,0 está sobre ella: rojo");
+      t.cierto(/meta de 8/.test(conMeta.motivoGrave), conMeta.motivoGrave);
     });
 
     // v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta GENERAL
@@ -488,17 +355,12 @@ module.exports = {
       }, { nombre: "PACIENTE DE PRUEBA", hoyIso: "2026-08-17" });
       t.cierto(/Signos de alarma/.test(hoja), "riesgo muy alto → sección de signos de alarma");
       t.cierto(/Alimentación/.test(hoja) && /Actividad física/.test(hoja), "programa RCV (DM2) → dieta y actividad");
-      // v17.8.0 — esta aserción exigía que en el papel apareciera literalmente «RAC», la
-      // sigla del catálogo. Lo que protege de verdad es que los exámenes pendientes SE
-      // LISTEN, y eso sigue valiendo; lo que ya no vale es exigir la jerga: el paciente se
-      // lleva ese papel a su casa y «RAC» no le dice nada. Ahora lee «Relación
-      // albúmina/creatinina». La sigla clínica que sí es de uso corriente («LDL») se
-      // respeta tal cual — mtrNombreLegibleAnalito no toca lo que no lleva guion bajo.
-      t.cierto(/LDL/.test(hoja), "el LDL vencido se lista, y su sigla se respeta");
-      t.cierto(/Relación albúmina\/creatinina/.test(hoja),
-        "y el RAC faltante también, con el nombre que el paciente puede entender");
-      t.falso(/COLESTEROL_|_LDL|UROANALISIS|HBA1C/.test(hoja),
-        "en el papel que se entrega al paciente no puede quedar ni una clave del catálogo");
+      // v17.8.0 — los pendientes viajan por mtrNombreLegibleAnalito: la clave interna
+      // «RAC» sale como «Relación albúmina/creatinina» (el paciente no se lleva a casa
+      // un papel con una sigla de base de datos). «LDL», por ser sigla clínica de uso
+      // diario, se conserva tal cual.
+      t.cierto(/LDL/.test(hoja) && /Relación albúmina\/creatinina/.test(hoja),
+        "los exámenes vencidos y faltantes se listan, con el nombre que el paciente entiende");
       t.cierto(/Su meta de hemoglobina glicosilada/.test(hoja) && /7\s*%/.test(hoja), "la meta de HbA1c del paciente aparece con su valor");
       t.cierto(/MUY ALTO/.test(hoja), "la categoría de riesgo viaja en mayúsculas");
       t.cierto(/PACIENTE DE PRUEBA/.test(hoja), "el nombre va en el encabezado (impresión local, no PHI en el código)");
@@ -545,18 +407,8 @@ module.exports = {
       ], "FOSFORO").gravedad, null, "un rango degenerado (0–0) no es un rango");
     });
 
-    // v17.29.0 — ENCARGO DEL MÉDICO (28-ago): "vamos a repetir los triglicéridos mayor a
-    // 400, ya no en 200" — la meta base sube de 150 a 400; con el mismo +30% que ya usa
-    // el resto del motor, el corte "grave" queda en 520 (150*1,3=195≈200 antes).
-    t.caso("v17.29.0 — meta de triglicéridos sube a 400 (antes 150): el corte grave queda cerca de 520, no de 200", () => {
-      const u = api._mtrTendUmbralGrave("TRIGLICERIDOS", {});
-      t.igual(u.meta, 400, "la meta base es 400, no 150");
-      // v17.55.0 — el corte deja de llevar el +30 %: el rojo empieza en la meta.
-      t.igual(u.tope, 400, "el corte es la meta misma, no meta+30%");
-    });
-
     t.caso("_mtrTendUmbralGrave: solo conoce los cinco analitos con umbral propio", () => {
-      t.cierto(!!api._mtrTendUmbralGrave("TRIGLICERIDOS", {}), "triglicéridos: meta fija (v17.29.0: 400)");
+      t.cierto(!!api._mtrTendUmbralGrave("TRIGLICERIDOS", {}), "triglicéridos: meta 150 fija");
       t.cierto(!!api._mtrTendUmbralGrave("HBA1C", {}), "HbA1c: 7,0 por defecto");
       t.cierto(!!api._mtrTendUmbralGrave("RAC", {}), "RAC: corte 300");
       t.cierto(!!api._mtrTendUmbralGrave("COLESTEROL_LDL", { categoriaRiesgo: "alto" }), "LDL: según riesgo");
@@ -594,7 +446,7 @@ module.exports = {
     });
 
     // ---------------- El módulo entero ----------------
-    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cuatro secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
+    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cinco secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
       const c = await cargar({ silencioso: true });
       // El DOM del arnés devuelve null en querySelector: se le presta uno memoizado por
       // selector, igual que hacen las suites de los otros modales.
@@ -614,7 +466,7 @@ module.exports = {
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-panel-modal");
       t.cierto(!!modal, "el módulo unificado abre");
       const nav = String((modal.querySelector("#vgl-panel-nav-slot") || {}).innerHTML || "");
-      t.igual((nav.match(/data-panel-sec=/g) || []).length, 4, "con sus cuatro secciones");
+      t.igual((nav.match(/data-panel-sec=/g) || []).length, 5, "con sus cinco secciones (Medicamentos restaurada en el REFACTOR S+)");
       t.cierto(/data-panel-sec="tendencias"[^>]*aria-selected="true"|active" data-panel-sec="tendencias"/.test(nav),
         "y aterriza en la sección pedida");
       const cuerpo = String((modal.querySelector("#vgl-panel-cuerpo") || {}).innerHTML || "");
@@ -820,5 +672,250 @@ module.exports = {
       await c.api.openPanelPacienteModal(null);
       t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-panel-modal"), "no se abre y se dice por qué");
     });
+
+    // ===== INJERTADO EN LA FUSIÓN main<-rama (v18.0.6): casos que solo
+    // existían en la rama de trabajo y que main había perdido. =====
+    t.caso("mtrPanelResumenBentoDatos: riesgo alto/muy alto o alerta renal → «pend»; bajo/moderado sin alerta → «ok»; sin categoría → «nd»", () => {
+      const dSinCat = api.mtrTableroClinico({});
+      const cSinCat = api.mtrPanelResumenBentoDatos({}, dSinCat).find((c) => c.id === "renal");
+      t.igual(cSinCat.estado, "nd", "sin categoría de riesgo, no se opina");
+
+      const dBajo = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: {} });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dBajo).find((c) => c.id === "renal").estado, "ok", "riesgo bajo, sin alertas renales: al día");
+
+      const dAlto = api.mtrTableroClinico({ riesgo: { categoria: "alto" }, erc: {} });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dAlto).find((c) => c.id === "renal").estado, "pend", "riesgo alto: siempre a revisar, aunque el riñón esté callado");
+
+      // Riesgo bajo pero con sospecha de injuria renal: la tarjeta SÍ debe alertar —
+      // el criterio no es solo la categoría, es el mismo conjunto de alertas que ya
+      // pinta mtrPanelRiesgoRenalHtml.
+      const dIra = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: { sospechaIra: true } });
+      const cIra = api.mtrPanelResumenBentoDatos({}, dIra).find((c) => c.id === "renal");
+      t.igual(cIra.estado, "pend", "sospecha de injuria renal pesa aunque la categoría sea baja");
+      t.cierto(cIra.sub.indexOf("injuria renal") >= 0, "y el motivo se nombra, no solo el color");
+    });
+
+    t.caso("mtrPanelResumenBentoDatos: exámenes — sin programa identificado → «nd»; con pendientes → «pend»; al día → «ok»", () => {
+      const dSinPrograma = api.mtrTableroClinico({ plan: { ordenar: [], drivers: [], pasajeros: [] } });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dSinPrograma).find((c) => c.id === "examenes").estado, "nd",
+        "sin programa rector, no se evaluó nada — no puede decir 'al día'");
+
+      const dPendiente = api.mtrTableroClinico({
+        programa: "HTA", factores: { hta: true },
+        plan: { ordenar: [{ clave: "creatinina", nombre: "CREATININA", estado: "D", subestado: "vencido", vence: "2026-08-01" }], drivers: [], pasajeros: [] },
+      });
+      const cPend = api.mtrPanelResumenBentoDatos({}, dPendiente).find((c) => c.id === "examenes");
+      t.igual(cPend.estado, "pend");
+      t.igual(cPend.dato, "1 examen");
+
+      const dAlDia = api.mtrTableroClinico({ programa: "HTA", factores: { hta: true }, plan: { ordenar: [], drivers: [], pasajeros: [] } });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dAlDia).find((c) => c.id === "examenes").estado, "ok", "programa identificado, nada por ordenar: al día");
+    });
+
+    t.caso("mtrPanelResumenBentoDatos: tendencias — sin serie de 2+ puntos → «nd»; con analito que empeora/grave → «pend»; el resto → «ok»", () => {
+      const dCualquiera = api.mtrTableroClinico({});
+      t.igual(api.mtrPanelResumenBentoDatos({}, dCualquiera).find((c) => c.id === "tendencias").estado, "nd", "sin _series, sin tendencia que mostrar");
+
+      const conUnSolo = { _series: { CREATININA: [{ fecha: "2026-08-01", valor: 1.1 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conUnSolo, dCualquiera).find((c) => c.id === "tendencias").estado, "nd",
+        "un solo control no es tendencia todavía, igual que en la pestaña detallada");
+
+      // v17.55.0 — el rojo por valor empieza en la meta (decisión del médico), así que una
+      // HbA1c de 7,1 ya está en rojo aunque venga bajando de 9,4. Para seguir probando el
+      // caso «mejorando y sin nada grave» hace falta un valor que además esté EN meta — que
+      // es lo que la tarjeta quiere decir con «al día».
+      const conMejora = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 6.6 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conMejora, dCualquiera).find((c) => c.id === "tendencias").estado, "ok", "mejorando y en meta: al día");
+      const bajandoPeroFuera = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 7.1 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(bajandoPeroFuera, dCualquiera).find((c) => c.id === "tendencias").estado, "pend",
+        "bajando pero todavía por encima de la meta: no es «al día»");
+
+      const conEmpeora = { _series: { COLESTEROL_LDL: [{ fecha: "2026-02-01", valor: 100 }, { fecha: "2026-08-01", valor: 130 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conEmpeora, dCualquiera).find((c) => c.id === "tendencias").estado, "pend", "empeorar 30% es justo lo que la pestaña de tendencias marca en rojo");
+    });
+
+    t.caso("mtrPanelResumenBentoHtml: cada tarjeta lleva data-panel-sec para saltar a SU pestaña — mismo mecanismo de swap, sin pedir nada por red", () => {
+      const cards = api.mtrPanelResumenBentoDatos(RESUMEN_DEMO, api.mtrTableroClinico(RESUMEN_DEMO));
+      const html = api.mtrPanelResumenBentoHtml(cards);
+      ["renal", "examenes", "tendencias"].forEach((id) => {
+        t.cierto(html.indexOf('data-panel-sec="' + id + '"') >= 0, "la tarjeta de " + id + " sabe a qué pestaña salta");
+      });
+      t.cierto(/role="button"/.test(html), "es accionable para el lector de pantalla");
+      t.igual(api.mtrPanelResumenBentoHtml([]), "", "sin tarjetas, no se pinta una cuadrícula vacía");
+    });
+
+    t.caso("v17.28.0 — mtrPanelResumenHtml ya NO repite la lista completa de medicamentos: solo la Ficha (RCV) la tiene", () => {
+      const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
+      const iDashboard = html.indexOf("vgl-bento-grid");
+      // v18.0.x — el rótulo de la fuente dejó de nombrar al proveedor: "Órdenes de
+      // Everest" pasó a "Órdenes de la plataforma" (userscript, const F_ORD en
+      // mtrFichaVivaFilas). Cambio de rótulo; el ancla de la ficha detallada es la misma.
+      const iFicha = html.indexOf("Órdenes de la plataforma");
+      t.cierto(iDashboard >= 0 && iFicha > iDashboard, "dashboard, luego la ficha detallada, sin nada entre medio");
+      t.falso(html.indexOf("Medicamentos actuales") >= 0,
+        "el rótulo de la lista pasiva ya no aparece en el Resumen");
+      t.falso(/vgl-panel-meds-/.test(html), "y ninguna de sus clases CSS queda huérfana en el HTML");
+    });
+
+    t.caso("v17.29.0 — un RAC≥30 vencido se pinta en rojo (vencido), igual que cualquier otro examen vencido", () => {
+      // mtrTableroClinico lee `resumen.plan` YA CALCULADO (no invoca mtrPlanParaclinicos
+      // por su cuenta) — se construye con la API real, como lo haría el resto del script,
+      // en vez de fabricar un plan a mano que podría no reflejar la forma real de los datos.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-28", programa: "HTA", esDm2: true, edad: 66, rac: 45,
+        categoriaRiesgo: "alto",
+        ultimos: {
+          RAC: { valor: 45, fecha: "2025-01-01" },            // vencido hace mucho, ≥30: albuminuria
+          COLESTEROL_LDL: { valor: 130, fecha: "2025-01-01" }, // vencido, para comparar
+        },
+      });
+      const resumen = { programa: "HTA", factores: { edad: 66, sexo: "F" }, erc: {}, riesgo: { categoria: "alto" }, plan: plan };
+      const d = api.mtrTableroClinico(resumen);
+      const rac = d.ordenar.find((x) => x.clave === "RAC");
+      t.cierto(!!rac, "la RAC aparece en qué ordenar");
+      t.cierto(rac.vencidoBase, "y mtrTableroClinico expone que de verdad está vencida (no solo en vigilancia estrecha)");
+      const html = api.mtrPanelExamenesHtml(d);
+      const iRac = html.indexOf("Relación albúmina/creatinina");
+      const iLdl = html.indexOf("Colesterol LDL");
+      t.cierto(iRac >= 0 && iLdl >= 0, "las dos filas están en el HTML");
+      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iRac - 60), iRac + 20)),
+        "la fila de la RAC lleva la clase de vencido (roja), no la de 'por pedir' (ámbar)");
+      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iLdl - 60), iLdl + 20)),
+        "la LDL, vencida por la vía normal, sigue roja como siempre (control del escenario)");
+    });
+
+    t.caso("v17.29.0 — meta de triglicéridos sube a 400 (antes 150): el corte grave queda cerca de 520, no de 200", () => {
+      const u = api._mtrTendUmbralGrave("TRIGLICERIDOS", {});
+      t.igual(u.meta, 400, "la meta base es 400, no 150");
+      // v17.55.0 — el corte deja de llevar el +30 %: el rojo empieza en la meta.
+      t.igual(u.tope, 400, "el corte es la meta misma, no meta+30%");
+    });
+
+    // v18.0.6 — aquí vivían, DUPLICADOS por el injerto de la fusión, los tres casos de la
+    // meta individual de HbA1c ("fijar la meta…", "los bordes EXACTOS 5 % y 12 %…", "el
+    // editor arranca en ESE valor…"). Son byte a byte los mismos que ya están más arriba
+    // en este archivo (líneas ~484, ~549 y ~596), con su comentario de cabecera. Se retiran
+    // los ejemplares repetidos: no aportaban una sola aserción nueva y falseaban el conteo.
+
+    // =====================================================================
+    // v18.0.23 — EL PUNTO VERDE «AL DÍA» SOBRE AVISOS CRÍTICOS DE SEGURIDAD
+    //
+    // El punto de la pestaña «Medicamentos» del Panel del paciente se calculaba como
+    // «¿hay lista de medicamentos? -> ok»: la mera EXISTENCIA de fármacos lo pintaba de
+    // verde. Reproducido con el arnés —enalapril + losartán + espironolactona + ibuprofeno,
+    // TFG 45 y potasio 5,4— el motor devuelve 2 avisos CRITICAL («DOBLE BLOQUEO SRAA …
+    // Contraindicado», «Espironolactona: CONTRAINDICADA con potasio 5,4») y 2 HIGH, y el
+    // punto salía "ok". El médico que recorre la tira de pestañas veía verde en
+    // Medicamentos y no tenía ningún motivo para abrirla.
+    //
+    // El estado "pend" (ámbar, «revisar») ya existía y estaba declarado en la hoja; aquí
+    // nadie lo usaba. El cálculo se extrajo a mtrEstadoPuntoMedicamentos para que el banco
+    // pueda ejercitarlo —dentro del cierre del render no había forma— y para que use el
+    // MISMO contexto que arma la pestaña, y no puedan discrepar.
+    // =====================================================================
+    t.caso("v18.0.23: el punto de Medicamentos avisa cuando hay avisos CRÍTICOS, no se queda verde", () => {
+      const c = cargar({ silencioso: true });
+      const resumen = {
+        medicamentos: ["ENALAPRIL 20 MG", "LOSARTAN 50 MG", "ESPIRONOLACTONA 25 MG", "IBUPROFENO 400 MG"],
+        erc: { egfr: 45, crcl: 42 },
+        _ultimos: { POTASIO: { valor: 5.4 } },
+      };
+      // Control del caso: el motor de verdad tiene algo grave que decir de este paciente.
+      const r = c.api.mtrAvisosFarmacologicos({
+        medicamentos: c.api.mtrMedicamentosUnicos(resumen.medicamentos),
+        tfgCkdEpi: 45, tfgCockcroftGault: 42, potasio: 5.4,
+      });
+      const todos = [].concat(r.avisos || [], r.interacciones || []);
+      t.cierto(todos.some((x) => String((x && (x.severidad || x.severity || x.nivel)) || "").toUpperCase() === "CRITICAL"),
+        "control: este paciente tiene al menos un aviso CRITICAL");
+
+      t.igual(c.api.mtrEstadoPuntoMedicamentos(resumen), "pend",
+        "el punto tiene que mandar a revisar: verde sobre un «Contraindicado» es peor que no tener punto");
+    });
+
+    t.caso("v18.0.23: y no se sobre-corrige — una revisión limpia sigue en verde", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({
+        medicamentos: ["ACETAMINOFEN 500 MG"], erc: { egfr: 90, crcl: 95 }, _ultimos: {},
+      }), "ok", "un fármaco sin nada que señalar sigue pintando verde");
+    });
+
+    t.caso("v18.0.23: lo que no se pudo revisar NO se afirma «al día»", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({ medicamentos: null, erc: { egfr: 80 } }), "nd",
+        "«no se pudo leer la lista» no es «está al día» — casilla vacía antes que dato inventado");
+      t.igual(c.api.mtrEstadoPuntoMedicamentos({ medicamentos: [], erc: { egfr: 80 } }), "nd",
+        "y «Everest no reporta medicamentos» tampoco es una revisión limpia");
+    });
+
+    // v18.0.23 — «OTROS MEDICAMENTOS» INVENTABA FÁRMACOS QUE EL PACIENTE NO TOMA.
+    // La cifra salía de restar dos listas deduplicadas con claves DISTINTAS:
+    // mtrMedicamentosUnicos conserva la dosis y mtrMedicamentosRcv la ignora desde la
+    // v17.6.74 —a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus
+    // longitudes atribuye ese agrupamiento a «medicamentos que no son del programa».
+    // v18.0.23 — «OTROS MEDICAMENTOS» INVENTABA FÁRMACOS QUE EL PACIENTE NO TOMA.
+    // La cifra salía de restar dos listas deduplicadas con claves DISTINTAS:
+    // mtrMedicamentosUnicos conserva la dosis y mtrMedicamentosRcv la ignora desde la
+    // v17.6.74 —a propósito, para agrupar ROSUVASTATINA 40 con la de 20—. Restar sus
+    // longitudes atribuye ese agrupamiento a «medicamentos que no son del programa».
+    //
+    // OJO AL MÉTODO: la primera versión de esta prueba era HUECA y lo destapó su mutación.
+    // Calculaba la cuenta buena EN LA PROPIA PRUEBA (`unicos.filter(...)`) en vez de
+    // ejercitar la línea de producción, así que al revertir el arreglo seguía verde. Ahora
+    // se llama a mtrFichaVivaFilas, que es quien arma de verdad ese renglón, y se lee lo
+    // que el médico vería en pantalla.
+    const otrosDeLaFicha = (c, meds) => {
+      const txt = JSON.stringify(c.api.mtrFichaVivaFilas({ medicamentos: meds, erc: { egfr: 80 } }));
+      const prog = /Medicamentos del programa cardiovascular \((\d+)\)/.exec(txt);
+      const otros = /(\d+) \(no son del programa/.exec(txt);
+      return { programa: prog ? Number(prog[1]) : null, otros: otros ? Number(otros[1]) : 0 };
+    };
+
+    t.caso("v18.0.23: «Otros medicamentos» no inventa fármacos al agrupar dosis distintas", () => {
+      const c = cargar({ silencioso: true });
+      // 5 renglones, 3 fármacos, TODOS cardiovasculares.
+      const meds = ["LOSARTAN 100 MG", "LOSARTAN 50 MG", "METFORMINA 850 MG",
+                    "ATORVASTATINA 40 MG", "ATORVASTATINA 20 MG"];
+
+      // Control del caso: la resta de longitudes SÍ daría 2 aunque no sobre ningún fármaco.
+      const unicos = c.api.mtrMedicamentosUnicos(meds);
+      const rcv = c.api.mtrMedicamentosRcv(unicos);
+      t.igual(unicos.length - rcv.length, 2,
+        "control: por la resta vieja saldrían 2 «otros» — dos fármacos que el paciente no toma");
+
+      const r = otrosDeLaFicha(c, meds);
+      t.igual(r.programa, 3, "los tres fármacos del programa se cuentan bien");
+      t.igual(r.otros, 0,
+        "y NO se afirma que haya otros: los tres son cardiovasculares, lo que sobraba era el agrupamiento de dosis");
+    });
+
+    t.caso("v18.0.23: y sí cuenta los que de verdad no son del programa", () => {
+      const c = cargar({ silencioso: true });
+      const r = otrosDeLaFicha(c, ["LOSARTAN 50 MG", "ACETAMINOFEN 500 MG", "OMEPRAZOL 20 MG"]);
+      t.igual(r.programa, 1, "solo el losartán es del programa cardiovascular");
+      t.igual(r.otros, 2,
+        "acetaminofén y omeprazol sí quedan fuera, y se dicen: no se sobre-corrigió hasta callarlo todo");
+    });
+
+    // v18.0.23 — SE AÑADÍA UNA CLASE QUE LA HOJA NO DECLARA. El chip del sábado que el
+    // médico SÍ trabaja recibía `vgl-agm-pbtn-sabado-mio`, y la regla existe con otro
+    // nombre («…-suyo»). Los dos sábados salían idénticos en pantalla y la única diferencia
+    // era el `title`, que obliga a pasar el ratón chip por chip.
+    // Regresión de código fuente: lo que hay que fijar es que las dos mitades —quien añade
+    // la clase y quien la declara— usen el mismo nombre.
+    t.caso("v18.0.23: la clase del sábado propio existe en la hoja de estilos", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const anadidas = (src.match(/classList\.add\("(vgl-agm-pbtn-sabado-[\w-]+)"\)/g) || [])
+        .map((m) => /"([^"]+)"/.exec(m)[1]);
+      t.cierto(anadidas.length > 0, "sigue habiendo un chip de sábado con clase propia");
+      for (const cls of anadidas) {
+        t.cierto(src.includes("." + cls + "{"),
+          `la clase «${cls}» se añade desde JS pero la hoja no la declara: el realce no se pinta nunca`);
+      }
+    });
+
   },
 };

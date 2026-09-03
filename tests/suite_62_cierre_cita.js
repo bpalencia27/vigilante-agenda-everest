@@ -77,6 +77,18 @@ module.exports = {
       t.cierto(av.texto.includes("Creatinina sérica"), "el texto lo dice en lenguaje de consultorio");
       t.cierto(av.texto.includes("llegaría vencido"), "…y explica la consecuencia");
       t.falso(av.texto.includes("driver") || av.texto.includes("estado"), "cero jerga interna");
+
+      // v18.0.65 — ORDEN DEL MÉDICO (01-sep): «SOLO QUIERO SIMPLIFICAR LO MÁS POSIBLE EL
+      // MÓDULO YA QUE MUY POCO LO USAN Y SI LO ABARROTAMOS DE TEXTO MENOS LO USARÍAN». El
+      // aviso decía en tres frases lo que cabe en una, y repetía la fecha de la toma que el
+      // recuadro de arriba ya mostraba — el médico lo leyó como dos textos contradictorios.
+      t.falso(av.texto.includes("Con esa fecha"),
+        "ya no abre repitiendo la fecha que el recuadro de arriba acaba de decir");
+      t.falso(av.texto.includes("toma de laboratorios quedaría"),
+        "ni repite la fecha de la toma: era la mitad de la contradicción que él reportó");
+      t.cierto(av.texto.length <= 160,
+        "y cabe en una línea: " + av.texto.length + " caracteres — " + av.texto);
+      t.cierto(av.texto.includes("20 día"), "sin perder el dato que le sirve para decidir: cuántos días de más");
     });
 
     t.caso("aviso: sin plan, sin fecha o sin exámenes vigilados NO se inventa nada", () => {
@@ -125,7 +137,13 @@ module.exports = {
       t.cierto(a.mtrLabsPrimeroVencimientoInevitable(planGlicemia, lp.pisoNormalIso),
         "inevitable EN EL PISO NORMAL: Glicemia ya venció 11 días antes de esa fecha");
       t.cierto(lp.pisoRelajado, "y por eso el piso cede");
-      t.igual(lp.labMinIso, "2026-08-24", "la toma se adelanta al vencimiento mismo");
+      // v18.0.130 — decisión del médico (reporte en vivo del 02-sep): el piso urgente nunca baja
+      // de 7 días calendario, porque «por lo general en esos casos no hay citas de exámenes».
+      // Antes esto era "2026-08-24" —el vencimiento mismo, a 3 días—; ahora es el día 7. Lo que
+      // se pierde es real y él lo decidió sabiéndolo: una fecha sin cupo no salva ningún examen.
+      t.igual(lp.labMinIso, "2026-08-28", "la toma se adelanta hasta donde la deja el piso de 7 días, no más");
+      const _d = Math.round((new Date(lp.labMinIso + "T00:00:00") - new Date("2026-08-21T00:00:00")) / 86400000);
+      t.cierto(_d >= 7 && _d <= 14, "y cae dentro de la ventana urgente [7,14]: " + _d + " d");
       // La propiedad de monotonía en la que se apoya el arreglo: TODA fecha dentro de la
       // ventana (no solo el techo) sigue mostrando el aviso — nunca "se arregla sola".
       for (const d of ["2026-09-05", "2026-09-08", lp.labMaxIso]) {
@@ -556,6 +574,53 @@ module.exports = {
       t.falso(r, "devuelve false: sin radicado no hay anulación que confirmar");
     });
 
+    // =====================================================================
+    // v18.0.131 (barrido por recorridos, hallazgo 12) — REPORTE DEL BARRIDO: si el panel
+    // post-cita se quedaba abierto (reabierto con «🖨 Recordatorio») y cruzaba la medianoche,
+    // «Cancelar esta cita» no llamaba a Everest y el aviso mentía sobre por qué («versión
+    // anterior del asistente»). Causa: _anularCitaAsignadaReal buscaba citaId/pacienteId en
+    // getProcessedToday() EN EL INSTANTE DEL CLIC, y esa función reinicia `citasDetalle`
+    // entero en cuanto cambia el día. abrirRecordatorioCita YA tenía esos datos en su propio
+    // `det` al abrir el recordatorio; ahora los pasa explícitos como `opciones`, que
+    // _anularCitaAsignadaReal prefiere sobre lo que diga el almacén en ese momento.
+    // =====================================================================
+    await t.casoAsync("v18.0.131 (hallazgo 12): citaId/pacienteId explícitos permiten cancelar aunque getProcessedToday() ya no los tenga (cruce de medianoche)", async () => {
+      let cuerpoEnviado = "";
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url, opts) => {
+          if (!/CancelarCita/.test(String(url))) return { ok: true, status: 200, headers: { get: () => null }, text: async () => "{}", json: async () => ({}), clone() { return this; } };
+          cuerpoEnviado = String((opts && opts.body) || "");
+          return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ isError: false, mensaje: "Cancelado Correctamente" }), json: async () => ({ isError: false }), clone() { return this; } };
+        },
+      });
+      c.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+      // getProcessedToday() no conoce esta cita — el mismo estado que deja un cruce de
+      // medianoche entre abrir el recordatorio y pulsar «Cancelar».
+      t.igual(c.api.citaAgendadaFechaHoy("999"), null, "control: sin marca local para este documento");
+      const ok = await c.api._anularCitaAsignadaReal({ doc_id: "999" }, { citaId: "7813686", pacienteId: "5150" });
+      t.cierto(ok, "SÍ se anula: los datos que trajo el llamador bastan, sin depender de getProcessedToday()");
+      t.cierto(/7813686/.test(cuerpoEnviado), "el radicado que viajó a Everest es el que se pasó explícitamente: " + cuerpoEnviado);
+      // Y _cancelarCitaConPregunta (la que llama el botón) reenvía esos `opciones` tal cual.
+      const c2 = cargar({
+        silencioso: true,
+        fetch: async (url, opts) => {
+          if (!/CancelarCita/.test(String(url))) return { ok: true, status: 200, headers: { get: () => null }, text: async () => "{}", json: async () => ({}), clone() { return this; } };
+          cuerpoEnviado = String((opts && opts.body) || "");
+          return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ isError: false, mensaje: "Cancelado Correctamente" }), json: async () => ({ isError: false }), clone() { return this; } };
+        },
+      });
+      c2.api.__state.activeDoctor = { id: 707, name: "MEDICO PRUEBA" };
+      const ok2 = await c2.api._cancelarCitaConPregunta({ doc_id: "999" }, { citaId: "8000000", pacienteId: "6000" });
+      t.cierto(ok2, "_cancelarCitaConPregunta también anula con los `opciones` que le pasen");
+      t.cierto(/8000000/.test(cuerpoEnviado), "y los reenvía tal cual a _anularCitaAsignadaReal");
+      // Y el punto de origen (abrirRecordatorioCita) de verdad los pasa, en vez de dejar que
+      // se busquen otra vez en getProcessedToday() al momento del clic.
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/onCancelar: \(\) => _cancelarCitaConPregunta\(apt \|\| \{ doc_id: docId \}, \{ citaId: det\.citaId, pacienteId: det\.pacienteId \}\)/.test(src),
+        "abrirRecordatorioCita pasa det.citaId/det.pacienteId (capturados AL ABRIR el recordatorio) como opciones");
+    });
+
     // v17.6.3 — BUG 3 (reporte del médico): la lista «toma quedó» del banner de
     // agendamiento salía DUPLICADA o EN DESORDEN. Cada clic en un chip de día de toma
     // hacía `innerHTML +=` sin quitar la nota anterior: el segundo clic apilaba otra
@@ -586,6 +651,154 @@ module.exports = {
     t.caso("v17.6.3 — la sede del laboratorio tiene UNA sola fuente (mtrSedeIdLab, 378 de fábrica)", () => {
       t.igual(a.mtrSedeIdLab(), 378, "la sede de instalación es 378");
       t.igual(typeof a.mtrSedeIdLab(), "number", "y es un número usable en las URLs de AppCita");
+    });
+
+    // =====================================================================
+    // v18.0.69 — BÚSQUEDA DE CUPO DE LABORATORIO, LAS 4 REGLAS DEL MÉDICO (01-sep)
+    // Reporte con fecha real: «hoy 01/09 me está sugiriendo un examen para mañana 02/09
+    // porque X examen ya está vencido, pero para mañana ya no hay citas de laboratorio».
+    // Ver docs/REGLAS_MEDICO_20260901.md.
+    // =====================================================================
+    const _disp = (mapa) => async (iso) => (Object.prototype.hasOwnProperty.call(mapa, iso) ? mapa[iso] : null);
+
+    await t.casoAsync("v18.0.69: la fecha ideal SÍ tiene cupo — ni se mueve ni se pregunta nada más", async () => {
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": true }));
+      t.cierto(r.encontrada, "se encuentra");
+      t.igual(r.iso, "2026-09-10");
+      t.cierto(r.esIdeal, "es la propia fecha ideal — no se movió nada");
+      t.igual(r.desplazadaDias, 0);
+    });
+
+    await t.casoAsync("v18.0.69: sin cupo en la ideal, se busca hacia ATRÁS — nunca después (regla 1)", async () => {
+      // 2026-09-10 es jueves. Sin cupo; miércoles 9 sí tiene.
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": false, "2026-09-09": true, "2026-09-11": true }));
+      t.igual(r.iso, "2026-09-09", "se prefiere el día ANTERIOR con cupo");
+      t.igual(r.desplazadaDias, -1, "desplazada hacia atrás, no hacia adelante");
+      t.falso(r.esIdeal);
+    });
+
+    await t.casoAsync("v18.0.69 — EL REPORTE EXACTO DEL MÉDICO: mañana es el piso (examen vencido) y no tiene cupo", async () => {
+      // Hoy 01-sep, examen vencido -> ideal = piso = mañana 02-sep (martes). Sin cupo.
+      // No hay ningún día ANTES de mañana que probar (es el piso absoluto: no se agenda
+      // en el pasado ni el mismo día). La regla 1 no tiene dónde aplicarse.
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return iso === "2026-09-02" ? false : null; };
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-02", "2026-09-02", "2026-09-21", 5, disp);
+      t.igual(consultados.join(","), "2026-09-02",
+        "SOLO se consulta el piso: no hay ningún día anterior que probar, y NO se inventa un permiso para buscar después");
+      t.falso(r.encontrada, "no se decide solo");
+      t.igual(r.motivo, "sin_cupo_en_margen", "AppCita respondió que no — es un hecho, no una duda");
+    });
+
+    await t.casoAsync("v18.0.69: agotado el margen de 5 días hábiles hacia atrás, se detiene y pregunta (regla 2)", async () => {
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return false; };
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-08-01", "2026-09-21", 5, disp);
+      t.falso(r.encontrada, "sin cupo en los 5 días hábiles: el módulo no sigue decidiendo solo");
+      t.igual(r.motivo, "sin_cupo_en_margen");
+      // Ideal + 5 hacia atrás = 6 días consultados (jueves 10, y los 5 hábiles anteriores;
+      // sept 7 es lunes, sept 6/5 fin de semana no cuentan como hábiles).
+      t.igual(consultados.length, 6, "ideal + 5 días hábiles hacia atrás, ni uno más: " + consultados.join(","));
+      t.falso(consultados.some((d) => d > "2026-09-10"), "ninguna consulta cruza al lado de 'después'");
+      t.cierto(r.probados.length === 6, "y el detalle de lo consultado queda para mostrárselo al médico");
+    });
+
+    await t.casoAsync("v18.0.69: nunca cruza el piso ni el techo, aunque el margen alcanzaría para hacerlo", async () => {
+      const consultados = [];
+      const disp = async (iso) => { consultados.push(iso); return false; };
+      // Piso a solo 2 días hábiles antes de la ideal: el margen de 5 se corta ahí.
+      await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-08", "2026-09-21", 5, disp);
+      t.falso(consultados.some((d) => d < "2026-09-08"), "nunca antes del piso: " + consultados.join(","));
+    });
+
+    await t.casoAsync("v18.0.69: AppCita no responde — se avisa que no se pudo verificar, nunca se inventa disponibilidad (regla 4)", async () => {
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5, async () => null);
+      t.falso(r.encontrada);
+      t.igual(r.motivo, "sin_verificar", "distinto de 'sin_cupo_en_margen': aquí no se sabe, no se afirma que no haya");
+    });
+
+    await t.casoAsync("v18.0.69: una mezcla de 'no' reales y 'no se pudo verificar' se cuenta como SÍ hubo respuesta real", async () => {
+      // Si AppCita respondió aunque sea una vez con un NO real, el motivo es el hecho
+      // (sin cupo), no la falta de verificación — no se puede decir "no se sabe" cuando
+      // sí se sabe de al menos un día.
+      const r = await a.mtrBuscarCupoLaboratorio("2026-09-10", "2026-09-01", "2026-09-21", 5,
+        _disp({ "2026-09-10": false, "2026-09-09": null, "2026-09-08": false }));
+      t.igual(r.motivo, "sin_cupo_en_margen");
+    });
+
+    // =====================================================================
+    // v18.0.69 — mtrVerificarCupoLab: el verificador REAL, y por qué reemplaza a la
+    // extracción vieja de `_afinarLabsPrimeroConCupos` (`r.turnos || r.data || r`, luego
+    // `Array.isArray(...)`). Esa extracción solo reconocía la lista si vivía en
+    // `r.turnos` o `r.data` como ARRAY — cualquier otra forma real de envolverla (las que
+    // `extractAgendasList` sí reconoce, porque se observaron en otros endpoints de esta
+    // misma API: `dtCitasDisponibles`, `agendas`, `citas`, `Table`, `Table1`) hacía que
+    // `turnos = r` (el objeto entero, no un array), `Array.isArray(turnos)` saliera
+    // `false`, y ese día se leyera SIEMPRE como «sin cupo» aunque sí lo tuviera. Con
+    // `mtrSedeIdLab()` real (378) y `gmxhr` mockeado, se reproduce con el arnés.
+    // =====================================================================
+    const _gmxhrLab = (mapaPorFecha) => (o) => {
+      const m = /fechaBuscar=([\d-]+)/.exec(String(o.url) || "");
+      const iso = m ? m[1] : null;
+      const cuerpo = (iso && Object.prototype.hasOwnProperty.call(mapaPorFecha, iso)) ? mapaPorFecha[iso] : { turnos: [] };
+      if (o.onload) o.onload({ status: 200, responseText: JSON.stringify(cuerpo) });
+    };
+
+    await t.casoAsync("v18.0.69: mtrVerificarCupoLab reconoce las formas reales de AppCita (dtCitasDisponibles, agendas, Table…)", async () => {
+      const formas = {
+        "directo (array)": [{ hora: "08:00" }],
+        "envuelto en turnos": { turnos: [{ hora: "08:00" }] },
+        "envuelto en data": { data: [{ hora: "08:00" }] },
+        "dtCitasDisponibles (forma real de otro endpoint de esta API)": { dtCitasDisponibles: [{ hora: "08:00" }] },
+        "agendas": { agendas: [{ hora: "08:00" }] },
+        "Table (SQL crudo)": { Table: [{ hora: "08:00" }] },
+      };
+      for (const [nombre, cuerpo] of Object.entries(formas)) {
+        const c = cargar({ silencioso: true, gmxhr: (o) => { if (o.onload) o.onload({ status: 200, responseText: JSON.stringify(cuerpo) }); } });
+        const r = await c.api.mtrVerificarCupoLab("2026-09-10");
+        t.cierto(r === true, "forma «" + nombre + "»: debe verse como CON cupo, salió " + JSON.stringify(r));
+      }
+    });
+
+    await t.casoAsync("v18.0.69: día sin turnos reales — false, no null", async () => {
+      const c = cargar({ silencioso: true, gmxhr: _gmxhrLab({ "2026-09-10": { turnos: [] } }) });
+      t.igual(await c.api.mtrVerificarCupoLab("2026-09-10"), false, "AppCita respondió y la lista viene vacía: SÍ se sabe, es un NO");
+    });
+
+    await t.casoAsync("v18.0.69: sin red o con error del servidor — null, nunca se afirma disponibilidad ni su ausencia", async () => {
+      const cSinRed = cargar({ silencioso: true, gmxhr: (o) => { if (o.onerror) o.onerror("sin red simulada"); } });
+      t.igual(await cSinRed.api.mtrVerificarCupoLab("2026-09-10"), null, "sin red: no se sabe");
+      const c500 = cargar({ silencioso: true, gmxhr: (o) => { if (o.onload) o.onload({ status: 500, responseText: "error interno" }); } });
+      t.igual(await c500.api.mtrVerificarCupoLab("2026-09-10"), null, "un 500 del servidor no es lo mismo que 'cero turnos reales'");
+    });
+
+    t.caso("v18.0.69: mtrDiasParaSondearCupo ordena ideal primero y luego alterna hacia atrás — nunca repite un día", () => {
+      const dias = a.mtrDiasParaSondearCupo("2026-09-10", "2026-09-01", "2026-09-21", 3);
+      t.igual(dias[0], "2026-09-10", "la ideal siempre va primero");
+      t.igual(new Set(dias).size, dias.length, "sin días repetidos");
+      t.cierto(dias.every((d) => d >= "2026-09-01" && d <= "2026-09-21"), "todos dentro de [piso, techo]");
+      t.cierto(dias.slice(1).every((d) => d < "2026-09-10"), "todo lo que sigue a la ideal es ANTERIOR a ella");
+    });
+
+    t.caso("v18.0.117 (UI/UX #3): el panel post-cita dice el desenlace del SMS de la TOMA, y calla si no lo sabe", () => {
+      const c = cargar({ silencioso: true });
+      const conSms = () => {
+        c.env.doc.body.children.length = 0;
+        c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE SINTETICO", "", { cita: { fechaLegible: "01/10/2026" }, lab: { fechaIso: "2026-09-10", fechaLegible: "10/09/2026", hora: "06:20 AM", sms: "enviado al 3001112233" } });
+        return c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      };
+      const panel = conSms();
+      t.cierto(/SMS de la toma: enviado al 3001112233/.test(panel.innerHTML), "con desenlace, lo dice: " + (panel.innerHTML.match(/SMS de la toma[^<]*/) || [""])[0]);
+      c.env.doc.body.children.length = 0;
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE SINTETICO", "", { cita: { fechaLegible: "01/10/2026" }, lab: { fechaIso: "2026-09-10", fechaLegible: "10/09/2026", hora: "06:20 AM" } });
+      const sinSms = c.env.doc.body.children.filter((n) => n.id === "vgl-postcita-panel").pop();
+      t.cierto(/Toma de laboratorio/.test(sinSms.innerHTML), "el bloque de la toma sigue ahí");
+      t.falso(/SMS de la toma/.test(sinSms.innerHTML), "sin dato NO se pinta ninguna línea (casilla vacía antes que dato inventado)");
+      const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/sms: \(labOk && labOk\.smsEnviado\)\s*\n\s*\? "enviado al "/.test(src), "Agendar rellena el desenlace desde smsEnviado, que la API ya devolvía");
+      t.cierto(/sms: "no se envió: este cuadro no maneja celular"/.test(src), "y el cuadro de la toma sola dice la verdad: no maneja celular");
     });
 
   },

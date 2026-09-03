@@ -411,7 +411,13 @@ module.exports = {
       t.falso(res.sound, "AMBAR no emite sonido");
     });
 
-    t.caso("R2.5: Transición Sin presentarse -> Atendido (salto de sala) dispara ROJO sin sonido (v16.2.8)", () => {
+    // v18.0.12 — este caso afirmaba la conducta de v16.2.8, cuya PREMISA el médico corrigió
+    // el 31-ago: en Everest la cita siempre pasa por «En Sala» (ahí él llama al paciente)
+    // antes de «Atendido», y además es él quien decide si atiende a quien llega tarde. El
+    // salto directo no ocurre: cuando el script lo ve, es que se perdió una lectura. Ver el
+    // bloque largo en suite_04. Aquí se conserva el caso —la rama sigue siendo alcanzable y
+    // hay que fijar su conducta— con lo que ahora debe pasar.
+    t.caso("R2.5 (v18.0.12): el salto Sin presentarse -> Atendido NO se firma como fraude", () => {
       const c = cargar();
       c.api.__state.leader = true;
       const key = "1098765432@m420"; // apptKey v17.x: doc_id@m+minutos
@@ -420,18 +426,14 @@ module.exports = {
       const appt = { doc_id: "1098765432", hora_texto: "07:00 AM", estado: "Atendido", index: 0 };
       const now = Date.now();
 
-      // v16.2.8 — decisión del médico (20-ago, con pantallazo): «para sin presentarse a
-      // atendido no es necesario generar ninguna notificación». El ROJO se CONSERVA (el
-      // panel lo pinta y la auditoría lo registra: la evidencia para reclamaciones), pero
-      // sound se queda en false, que es lo único que dispara tono/notificación/cartel.
       const res1 = c.api.colorAndAlert(appt, now);
-      t.igual(res1.color, "ROJO");
-      t.falso(res1.sound, "v16.2.8: Atendido ya no notifica — el paciente lleva rato en el consultorio");
-      t.cierto(c.api.__state.alertedFraud.has(key), "debe quedar en alertedFraud");
+      t.falso(res1.color === "ROJO", "no se afirma una confirmación extemporánea que nadie observó");
+      t.falso(res1.sound, "y sigue sin notificar, como el médico pidió en agosto");
+      t.falso(c.api.__state.alertedFraud.has(key), "ni queda marcado como fraude avisado");
 
-      // Segundo tick: sigue ROJO (el color persiste para el panel y la auditoría).
+      // Segundo tick: estable, y sin repetir la fila del hueco.
       const res2 = c.api.colorAndAlert(appt, now);
-      t.igual(res2.color, "ROJO");
+      t.igual(res2.color, res1.color, "la conducta es estable entre vueltas");
       t.falso(res2.sound);
     });
 
@@ -681,6 +683,63 @@ module.exports = {
       t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
     });
 
+    // =================================================================
+    //  v18.0.60 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+    //  LA MEMORIA CLÍNICA DEL PACIENTE SE ORFANIZABA EN SILENCIO.
+    //
+    //  `_vglCosechaGuardar` escribía SIEMPRE bajo el docId crudo. Pero un registro
+    //  archivado antes de la canonicalización de v17.48.0 vive bajo la clave con ceros de
+    //  relleno («0000111111»), y `extractPacienteAbierto()` entrega hoy la canónica
+    //  («111111»). La primera cosecha del día —basta con entrar a Antecedentes o Hábitos—
+    //  creaba una clave NUEVA y vacía, y el almacén quedaba con DOS entradas del mismo
+    //  paciente. La tolerancia de lectura no salva: `_vglBuscarPorDoc` devuelve la
+    //  coincidencia EXACTA antes de buscar la canónica, así que a partir de ahí gana la
+    //  vacía.
+    //
+    //  Lo que desaparece sin un solo aviso: la confirmación de embarazo (severidad alta),
+    //  la de adherencia, los programas de Ruta Crónicos y los factores de riesgo ya
+    //  documentados. La compuerta vuelve a preguntar lo ya respondido y el clasificador de
+    //  riesgo se queda sin comorbilidades. (Cédula sintética.)
+    // =================================================================
+    t.caso("v18.0.60 — una cosecha nueva no orfaniza la memoria archivada bajo la clave vieja", () => {
+      const c = cargar({ silencioso: true });
+      // Lo que quedó archivado ANTES de la canonicalización: cédula con ceros de relleno.
+      c.env.storage.setItem("vgl_cosecha", JSON.stringify({
+        "0000111111": {
+          confirmaciones: { embarazo: { v: false, ts: 1 } },
+          programas: { diabetes: true, hta: true },
+          factores: { hta: { v: true, ts: 1 } },
+          ts: 1,
+        },
+      }));
+      // Hoy el paciente se abre con la forma canónica y el médico entra a Hábitos.
+      c.api._vglCosechaGuardar("111111", { factores: { tabaquismo: { v: false, ts: 2 } } });
+
+      const todo = JSON.parse(c.env.storage.getItem("vgl_cosecha"));
+      t.igual(Object.keys(todo).length, 1, "UNA sola entrada para el paciente, no dos");
+      const reg = c.api._vglCosechaLeer("111111");
+      t.cierto(!!(reg && reg.programas && reg.programas.diabetes),
+        "los programas de Ruta Crónicos siguen ahí — antes desaparecían en silencio");
+      t.cierto(!!(reg && reg.confirmaciones && reg.confirmaciones.embarazo),
+        "y la confirmación de embarazo, que es de severidad alta y vigencia 30 días");
+      t.cierto(!!(reg && reg.factores && reg.factores.tabaquismo), "con lo nuevo de hoy encima");
+      // PRECISIÓN, comprobada al escribir esta prueba y anotada para no exagerar el daño:
+      // `factores` NO era lo que se perdía. `_vglCosecharFactoresVisibles` relee el archivo
+      // con `_vglCosechaLeer` (que sí es tolerante con la forma de la cédula) y entrega el
+      // mapa YA fusionado, así que los factores se rescataban solos por esa vía. Lo que se
+      // perdía eran las claves de primer nivel que nadie prefusiona: `programas`,
+      // `confirmaciones`, y cualquier otra que se añada mañana — exactamente las de arriba.
+    });
+
+    t.caso("v18.0.60 — y un paciente NUEVO se sigue archivando con su forma canónica de hoy", () => {
+      // La contención: resolver la clave existente no puede convertirse en «reutilizar
+      // cualquier clave parecida». Sin registro previo, se crea con la cédula de hoy.
+      const c = cargar({ silencioso: true });
+      c.api._vglCosechaGuardar("222222", { factores: { hta: { v: true, ts: 1 } } });
+      const todo = JSON.parse(c.env.storage.getItem("vgl_cosecha"));
+      t.igual(Object.keys(todo), ["222222"], "clave canónica, tal cual llegó");
+    });
+
     // v17.46.0 — PÉRDIDA SILENCIOSA POR CUOTA. Hallazgo de auditoría de persistencia.
     // `_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un
     // `try/catch` que devuelve null: con el almacén del navegador lleno, el
@@ -723,6 +782,141 @@ module.exports = {
       t.cierto(leido && leido.factores && leido.factores.diabetes && leido.factores.diabetes.v === true,
         "lo aprendido en esta consulta SÍ quedó guardado — antes se perdía sin avisar");
       t.cierto(leido.factores.hta && leido.factores.hta.v === true, "y lo que ya venía sigue ahí");
+    });
+
+    // =====================================================================
+    // v18.0.18 — LA GUARDA DE ESCRITURA CEGABA UN SELLO QUE SÍ ES CONTENIDO
+    //
+    // La guarda de v18.0.4 ("no escribir si nada cambió") comparaba firmas con un replacer
+    // que borraba TODA clave llamada `ts` a cualquier profundidad. Entre ellas,
+    // `confirmaciones[clave].ts` — que no es ruido de reloj: es lo único que decide si la
+    // respuesta del médico sigue viva (_vglConfirmacionVigente).
+    //
+    // Consecuencia, reproducida con el arnés antes de arreglar: el médico responde una
+    // confirmación que caduca —«¿está embarazada?», 30 días, severidad ALTA, FRENA el Panel
+    // del paciente—, pasan 31 días, se le vuelve a preguntar y contesta LO MISMO. La firma
+    // nueva salía idéntica a la vieja y no se escribía nada: el sello seguía siendo el de
+    // hace 31 días, la confirmación seguía caducada, y la misma pregunta bloqueante volvía
+    // cada vez que se abre el Panel, indefinidamente. Su respuesta se descartaba en
+    // silencio, sin toast y sin registro.
+    // =====================================================================
+    t.caso("v18.0.18: re-responder lo mismo tras la caducidad SÍ renueva la vigencia", () => {
+      const c = cargar();
+      const ID = "5150076", CLAVE = "embarazo";
+      const HOY = Date.now(), HACE31 = HOY - 31 * 86400000;
+
+      c.api._vglCosechaGuardar(ID, { confirmaciones: { [CLAVE]: { v: false, ts: HACE31 } } });
+      t.igual(c.api._vglConfirmacionVigente(ID, CLAVE, 30, HOY), null,
+        "a los 31 días con 30 de vigencia está caducada: se vuelve a preguntar (control del caso)");
+
+      // El médico contesta EXACTAMENTE lo mismo que la vez anterior.
+      c.api._vglConfirmacionGuardar(ID, CLAVE, false);
+
+      const reg = (c.api._vglConfirmacionesLeer(ID) || {})[CLAVE];
+      t.cierto(!!reg, "la confirmación sigue archivada");
+      t.cierto((HOY - Number(reg.ts)) / 86400000 < 1,
+        "y su sello se renovó: el valor no cambió, pero la RESPUESTA sí es nueva");
+      t.cierto(c.api._vglConfirmacionVigente(ID, CLAVE, 30, HOY) !== null,
+        "así que vuelve a estar vigente y la pregunta bloqueante deja de reaparecer");
+    });
+
+    // Y la otra dirección, que es lo que la guarda existe para conseguir: el ruido de reloj
+    // NO debe escribir. Si esta prueba se rompe, es que el arreglo de arriba se pasó de
+    // frenada y reabrió las escrituras síncronas que la v18.0.4 cerró.
+    //
+    // OJO AL MÉTODO, porque la primera versión de estas dos pruebas era HUECA y la mutación
+    // lo destapó: simulaban a mano la línea de producción (`if (!n["Antecedentes"]) …`) en
+    // vez de ejecutarla, así que comprobaban su propia lógica local. Al revertir el arreglo
+    // en el script, seguían verdes. Ahora se llama a `_vglCosecharDePantalla`, que es la
+    // función que contiene de verdad esas líneas, con la barra de pestañas de Everest
+    // simulada como ya hace suite_64.
+    const barraDeEverest = (c, idActivo, textoActivo) => {
+      const activa = { id: idActivo, textContent: textoActivo };
+      const qsOrig = c.ctx.document.querySelector.bind(c.ctx.document);
+      c.ctx.document.querySelector = (sel) => {
+        const s = String(sel);
+        if (s.indexOf("active") >= 0 || s.indexOf('aria-selected="true"') >= 0) return activa;
+        return qsOrig(sel);
+      };
+    };
+
+    t.caso("v18.0.18: quedarse parado en una pestaña ya anotada no reescribe el almacén", () => {
+      const c = cargar();
+      const ID = "5150076";
+      barraDeEverest(c, "antecedente", "Antecedentes");
+      t.cierto(c.api._vglEnPestana("antecedentes") === true, "control del caso: el arnés ve la pestaña abierta");
+
+      let escrituras = 0;
+      const orig = c.env.storage.setItem.bind(c.env.storage);
+      c.env.storage.setItem = (k, v) => { if (k === "vgl_cosecha") escrituras++; return orig(k, v); };
+
+      c.api._vglCosecharDePantalla(ID);        // primera vuelta: anota la pestaña, escribe
+      const trasPrimera = escrituras;
+      t.cierto(trasPrimera >= 1, "la primera vuelta sí escribe: hay algo nuevo que archivar");
+
+      for (let i = 0; i < 5; i++) c.api._vglCosecharDePantalla(ID);   // el médico no toca nada
+      t.igual(escrituras - trasPrimera, 0,
+        "cinco vueltas más del reloj sin un solo cambio real no pueden reescribir el almacén entero (~1 MB con 80 pacientes)");
+    });
+
+    t.caso("v18.0.18: el sello de la pestaña ya anotada no se renueva en cada vuelta", () => {
+      const c = cargar();
+      const ID = "5150076";
+      barraDeEverest(c, "antecedente", "Antecedentes");
+
+      c.api._vglCosecharDePantalla(ID);
+      const sello1 = ((c.api._vglCosechaLeer(ID) || {}).pestanasVistas || {})["Antecedentes"];
+      t.cierto(!!sello1, "la pestaña queda anotada — que es para lo que sirve la lista");
+
+      for (let i = 0; i < 5; i++) c.api._vglCosecharDePantalla(ID);
+      const sello2 = ((c.api._vglCosechaLeer(ID) || {}).pestanasVistas || {})["Antecedentes"];
+      t.igual(sello2, sello1,
+        "y su sello NO se renueva: viaja bajo la clave «Antecedentes», que la guarda de escritura no ignora, así que renovarlo reescribía el almacén cada 2–5 s");
+    });
+
+
+    // =====================================================================
+    // v18.0.26 — SE ESCRIBÍA EN UNA CASILLA DESHABILITADA, SIN CONTARLO NI PODER DESHACERLO
+    //
+    // Everest presenta el par Sí/No deshabilitado en varios casos (historia cerrada, solo
+    // lectura, permisos), y `mtrCamposLlenables` los ofrece igual —solo mira que sean
+    // radios, no `disabled`—, así que el emergente preguntaba por ellos. Al responder,
+    // `_vglMarcarRadio` hacía `el.click()`, `el.checked = true` y despachaba un `change`
+    // hacia Angular ANTES de llegar a su `if (el.disabled === true) return false`.
+    //
+    // Devolvía false, el llamador hacía `pares.pop()`, y salía el peor de los tres mundos:
+    //   · la casilla quedaba MARCADA en pantalla, con su evento ya emitido;
+    //   · fuera de la foto de «Deshacer», así que no había forma de revertirla;
+    //   · `escritas` seguía en 0 y el toast decía «No había ninguna casilla que llenar».
+    // Se escribía en la historia del paciente sin contarlo, sin avisarlo y sin poder
+    // deshacerlo — las tres cosas que la regla de la casilla existe para impedir.
+    // =====================================================================
+    t.caso("v18.0.26: una casilla deshabilitada no se toca — ni click, ni checked, ni evento", () => {
+      const c = cargar({ silencioso: true });
+      let clicks = 0, eventos = 0;
+      const radio = {
+        name: "factor1", type: "radio", disabled: true, checked: false,
+        click() { clicks++; this.checked = true; },
+        dispatchEvent() { eventos++; return true; },
+      };
+      t.falso(c.api._vglMarcarRadio(radio), "devuelve false, como antes");
+      t.igual(clicks, 0, "pero NO hizo click: en la pantalla del médico no queda nada marcado");
+      t.igual(eventos, 0, "ni despachó un change hacia Angular, que es lo que Everest sí escucha");
+      t.falso(radio.checked, "y la casilla sigue vacía");
+    });
+
+    t.caso("v18.0.26: el camino normal no cambió — una casilla habilitada sí se marca", () => {
+      const c = cargar({ silencioso: true });
+      let clicks = 0, eventos = 0;
+      const radio = {
+        name: "factor1", type: "radio", disabled: false, checked: false,
+        click() { clicks++; this.checked = true; },
+        dispatchEvent() { eventos++; return true; },
+      };
+      t.cierto(c.api._vglMarcarRadio(radio), "se marca y se confirma");
+      t.igual(clicks, 1, "un solo click");
+      t.igual(eventos, 1, "y un solo change: Everest se entera una vez");
+      t.cierto(radio.checked);
     });
 
   }

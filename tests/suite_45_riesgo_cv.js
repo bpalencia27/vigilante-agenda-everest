@@ -208,20 +208,43 @@ module.exports = {
       t.falso(api.mtrDmLargaDuracion({ diabetes: false, dmAnios: 40 }), "sin diabetes, no hay diabetes de larga evolución");
     });
 
-    t.caso("v17.6.94: CON el dato manda el consenso, y el piso se aparta", () => {
+    // ============================================================================
+    // v18.0.6 — AVISO: v18.0.5 REVIRTIÓ v17.6.94, Y ESTA SUITE LO DEJA POR ESCRITO.
+    //
+    // v17.6.94 había refinado el piso por diabetes: el piso solo intervenía cuando NO se
+    // sabía el tiempo de evolución; sabiéndolo, mandaba el consenso y un diabético de 5 o
+    // 12 años sin otros factores podía quedar MODERADO. La build 18.0.5 (31-ago, editada
+    // fuera de este banco) volvió al piso plano de v16.2.9: TODO diabético entra en ALTO,
+    // se sepa o no el tiempo de evolución (vigilante_agenda.user.js:33660).
+    //
+    // NO SE REVIERTE AQUÍ: es la conducta que el médico tiene instalada y corriendo en
+    // consulta, y una regla clínica no se cambia desde el banco de pruebas. Lo que sí se
+    // hace es no dejarla sin prueba, y decir su CONSECUENCIA, que no es pequeña: al pasar
+    // de MODERADO a ALTO, la meta de LDL baja de 100 a 70 (MTR_METAS_LIPIDICAS). Con
+    // MTR_FALLA_UMBRAL = 0 (estricto, decisión D9 del 29-ago), un LDL de 110 que antes
+    // estaba EN meta pasa a estar FUERA, su vigencia se parte a la mitad (regla del 50 %),
+    // y el arrastre del grupo lipídico (mtrPlanParaclinicos, regla 1.15) se lleva colesterol
+    // total, HDL y triglicéridos al mismo viaje. Es decir: este cambio, solo, multiplica las
+    // repeticiones de perfil lipídico. Pendiente de que el médico confirme o revierta.
+    // ============================================================================
+    t.caso("v18.0.5 (revierte v17.6.94): el piso por diabetes vuelve a ser plano — con dato o sin él", () => {
       const base = { edad: 60, sexo: "M", egfrCkdepi: 75, hta: true, enAntihipertensivos: true,
         ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85, diabetes: true };
       const sinDato = api.mtrClasificarRiesgoCv(Object.assign({}, base));
-      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso provisional");
+      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso");
+      t.cierto(sinDato.dmAniosRequerido === true, "y se sigue pidiendo el dato que falta");
+      t.cierto(sinDato.criterios.some((c) => /sin tiempo de evolución/i.test(c)),
+        "y la pantalla dice que el piso es provisional por ese dato que falta");
 
       const cinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 5 }));
-      t.cierto(!cinco.pisoPorDiabetes, "con 5 años el piso ya no interviene");
-      t.cierto(cinco.dmAniosRequerido !== true, "ni queda pidiendo el dato que ya tiene");
+      t.igual(cinco.categoria, "alto", "v18.0.5: con 5 años TAMBIÉN entra por el piso");
+      t.cierto(cinco.pisoPorDiabetes === true, "el piso ya no se aparta al conocer el dato");
+      t.cierto(cinco.dmAniosRequerido !== true, "pero ya no pide un dato que sí tiene");
+      t.cierto(cinco.criterios.some((c) => /todo diabético/i.test(c)),
+        "y el porqué se dice en pantalla, sin fingir que lo decidió el consenso");
 
       const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
-      t.igual(doce.categoria, "alto", "12 años + al menos un factor: ALTO por el paso 2");
-      t.igual(doce.paso, 2, "y por el paso 2, no por un piso");
-      t.cierto(doce.criterios.some((c) => /10 años/.test(c)), "citando la regla del consenso");
+      t.igual(doce.categoria, "alto", "12 años: ALTO");
 
       const veinticinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 25 }));
       t.igual(veinticinco.categoria, "muy alto", "25 años es larga evolución: MUY ALTO por el paso 1");
@@ -246,11 +269,18 @@ module.exports = {
         t.cierto(n >= previo, "a los " + a + " años bajó de categoría respecto al tramo anterior · " + detalle.join(" "));
         previo = n;
       }
-      // Y en concreto: el caso que estaba roto.
+      // Y en concreto: el caso que estaba roto en v68 (salía BAJO). Sigue sin caer a BAJO;
+      // desde v18.0.5 sale ALTO en vez de MODERADO, por el piso plano por diabetes — ver el
+      // aviso largo unas líneas más arriba, y su coste en repeticiones de perfil lipídico.
       const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
-      t.igual(doce.categoria, "moderado", "el diabético de 12 años sin otros factores ya no cae a BAJO");
-      t.cierto(doce.criterios.some((c) => /sin otros factores de riesgo mayores/.test(c)),
-        "y el porqué se dice sin el techo de años");
+      t.igual(doce.categoria, "alto", "el diabético de 12 años sin otros factores no cae a BAJO");
+      t.cierto(doce.pisoPorDiabetes === true, "y consta que fue el piso quien lo puso ahí");
+      // v18.0.6 — antes salía por el paso 3 y el criterio citaba «sin otros factores de
+      // riesgo mayores». Ahora sale por el piso plano por diabetes, así que el criterio que
+      // ve el médico es el del piso. Lo que la prueba protege sigue siendo lo mismo: que la
+      // pantalla diga POR QUÉ quedó en esa categoría, nunca una categoría a secas.
+      t.cierto(doce.criterios.some((c) => /todo diabético entra como riesgo ALTO/i.test(c)),
+        "y el porqué se dice: fue el piso por diabetes, no una escala");
     });
 
     // =====================================================================
@@ -480,6 +510,26 @@ module.exports = {
       const c2 = api.mtrCriteriosPaso2(paciente, fr.conteo);
       t.cierto(c2.length >= 2, "el paso 2 sí: 3 FR y ERC 30-60");
       t.cierto(c2.some((c) => /ERC eGFR 30-60/.test(c)), "y uno de ellos debía ser la ERC");
+    });
+
+    // v18.0.95 — hallazgo #47 del enjambre: el potenciador "diabetes sin otros factores
+    // de riesgo mayores" (v17.6.94) era código muerto — el piso incondicional por
+    // diabetes de mtrClasificarRiesgoCv (v18.0.5) intercepta a TODO diabético antes de
+    // que la función llegue a invocar mtrContarPotenciadores. Retirado por
+    // mantenimiento, sin cambio de comportamiento real: ningún diabético podía alcanzar
+    // esta rama de todos modos.
+    t.caso("REGRESIÓN — mtrContarPotenciadores ya no tiene la rama de diabetes muerta (hallazgo #47)", () => {
+      const diabeticoSinOtrosFR = { diabetes: true, edad: 30, sexo: "M", egfrCkdepi: 95 };
+      const pot = api.mtrContarPotenciadores(diabeticoSinOtrosFR, 0);
+      t.falso(pot.lista.includes("diabetes sin otros factores de riesgo mayores"),
+        "la rama se retiró: nunca fue alcanzable desde mtrClasificarRiesgoCv");
+      t.igual(pot.conteo, 0, "sin ningún otro potenciador, la cuenta queda en cero");
+
+      // Y el comportamiento REAL (a través de mtrClasificarRiesgoCv, el único llamador
+      // real) no cambió: el piso incondicional por diabetes lo sigue clasificando ALTO.
+      const clasificado = api.mtrClasificarRiesgoCv(diabeticoSinOtrosFR);
+      t.igual(clasificado.categoria, "alto");
+      t.cierto(clasificado.pisoPorDiabetes, "sigue entrando por el piso, nunca por el potenciador retirado");
     });
 
     // ================= LA ESCALA ASCVD =================
@@ -766,6 +816,32 @@ module.exports = {
       t.igual(api._isoAMs(""), null, "ni vacío");
     });
 
+    // v18.0.73 — HALLAZGO DE ENJAMBRE #21. Antes, `_isoAMs` solo validaba el formato con una
+    // regexp de 3 grupos de dígitos y dejaba que `new Date(y, m-1, d)` hiciera el rollover
+    // silencioso de JS: «2026-04-31» pasaba a ser 1-mayo sin ningún aviso, y ese timestamp
+    // fabricado entraba en mtrLdlBasalDeSerie/mtrPenultimaCreatinina como si fuera una lectura
+    // real — justo lo que «casilla vacía antes que dato inventado» prohíbe. mtrFechaDesdeIso,
+    // en este mismo archivo y para el mismo propósito, ya hacía este round-trip.
+    t.caso("REGRESIÓN — _isoAMs rechaza fechas que el calendario no tiene, igual que mtrFechaDesdeIso (hallazgo #21)", () => {
+      t.igual(api._isoAMs("2026-04-31"), null, "30 de abril no tiene un día 31: antes rodaba en silencio a 1-mayo");
+      t.igual(api._isoAMs("2026-02-30"), null, "febrero no tiene 30");
+      t.igual(api._isoAMs("2025-02-29"), null, "2025 no es bisiesto: no hay 29 de febrero");
+      t.cierto(typeof api._isoAMs("2024-02-29") === "number", "pero 2024 SÍ es bisiesto: el 29 de febrero de ese año es real");
+      t.igual(api._isoAMs("2026-13-01"), null, "mes 13 tampoco existe");
+      t.igual(api._isoAMs("2026-08-21"), api._isoAMs("2026-08-21"), "una fecha real sigue dando el mismo milisegundo de siempre");
+    });
+
+    t.caso("REGRESIÓN — mtrLdlBasalDeSerie no acepta un basal con fecha de calendario imposible (hallazgo #21)", () => {
+      // Antes: con «2026-04-31» _isoAMs devolvía un timestamp válido (1-may), la ventana de
+      // días lo dejaba pasar, y el LDL de una fecha que no existe se usaba como basal real.
+      const serie = [
+        { fecha: "2026-04-31", valor: 210 },
+        { fecha: "2026-08-01", valor: 70 },
+      ];
+      const b = api.mtrLdlBasalDeSerie(serie, "2026-08-21", 365);
+      t.igual(b, null, "sin ningún control previo con fecha usable, no hay basal que calcular — antes daba 210");
+    });
+
     t.caso("mtrLdlBasalDeSerie: un solo control no tiene «antes» — no evaluable, que no es «no ha reducido»", () => {
       t.igual(api.mtrLdlBasalDeSerie([{ fecha: "2026-08-01", valor: 70 }], "2026-08-21", 365), null);
       t.igual(api.mtrLdlBasalDeSerie([], "2026-08-21", 365), null, "sin serie tampoco");
@@ -863,6 +939,44 @@ module.exports = {
       t.falso(conF.sexoAusente, "con sexo real, sexoAusente debe ser false");
     });
 
+    // 02-sep — CIERRE ADVERSARIAL (fila 22): v18.0.61 cerró «falta el peso» sobre un peso
+    // implausible en la vía legacy (_renderEstadioRenalHtml), pero el motor nuevo devolvía
+    // `crcl:null, faltan:[]` con 15 kg registrados, y la ficha viva decía «para Cockcroft-Gault
+    // falta algún dato»: el dato SÍ está en Everest, es implausible, y nadie mostraba el 15.
+    t.caso("02-sep: un peso registrado pero implausible no se anuncia como ausente en mtrEvaluarErc ni en la ficha viva", () => {
+      const erc = api.mtrEvaluarErc({ edad: 70, pesoKg: 15, creatinina: 1.0, sexo: "F" });
+      t.igual(erc.crcl, null, "sin Cockcroft-Gault: el peso no sirve (control del caso)");
+      t.igual(erc.faltan.length, 1, "pero `faltan` ya no está vacío");
+      t.cierto(/peso/.test(erc.faltan[0]) && /15/.test(erc.faltan[0]) && /20/.test(erc.faltan[0]), "dice que es el peso, el valor registrado y el rango: " + erc.faltan[0]);
+      t.falso(erc.faltan.includes("peso"), "y NO dice «peso» a secas, que significa «ausente» para quien lo lee (pesoFaltaParaEstadio)");
+      const filas = JSON.stringify(api.mtrFichaVivaFilas({ erc, riesgo: {}, meta: {}, programa: "HTA", plan: {}, factores: { edad: 70, sexo: "F" } }));
+      const fila = /Filtrado \(CKD-EPI[^"]*/.exec(filas);
+      t.cierto(!!fila && /15/.test(fila[0]) && !/algún dato/.test(fila[0]), "la ficha viva muestra el 15 para corregirlo, no «falta algún dato»: " + (fila && fila[0]));
+      const bien = api.mtrEvaluarErc({ edad: 70, pesoKg: 70, creatinina: 1.0, sexo: "F" });
+      t.igual(bien.faltan.length, 0, "con datos plausibles, `faltan` sigue vacío");
+    });
+
+    // v18.0.106 — refutador de v18.0.100 (fila 22, sitios hermanos): `pesoFaltaParaEstadio`
+    // buscaba «peso» exacto, así que con 15 kg registrados el plan de ERC caía en «no hay ningún
+    // examen que vigilar con este programa y estadio» — la frase que v17.6.51 llamó mentira —
+    // mientras con peso ausente sí decía «falta el peso». Y la hoja de hechos para la IA llevaba
+    // «peso 15 kg» sin marca, como si fuera cierto.
+    t.caso("v18.0.106: con un peso implausible el plan de ERC dice que el peso es implausible (no «no hay nada que vigilar») y la hoja de hechos lo marca", () => {
+      const hoy = "2026-09-02";
+      const base = { hoyIso: hoy, edad: 70, sexo: "F", creatinina: 1.0, factores: { enfermedadRenalDocumentada: true, hta: true }, ultimos: {} };
+      const r = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: 15 }));
+      const motivo = String(r.plan && r.plan.motivoFtl);
+      t.cierto(/implausible/.test(motivo) && /15/.test(motivo), "el motivo dice que es implausible y muestra el 15 para corregirlo: " + motivo);
+      t.falso(/no hay ningún examen que vigilar/.test(motivo), "y no la frase que v17.6.51 llamó mentira");
+      const sinPeso = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: null }));
+      t.cierto(/falta el peso/.test(String(sinPeso.plan && sinPeso.plan.motivoFtl)), "sin peso, el motivo de siempre: " + (sinPeso.plan && sinPeso.plan.motivoFtl));
+      const linea = String(api.mtrHojaDeHechosTexto(api.mtrHojaDeHechos(r))).split("\n").find((l) => /^Signos vitales:/.test(l)) || "";
+      t.cierto(/peso 15 kg \(valor implausible/.test(linea), "la hoja de hechos marca el peso implausible: " + linea);
+      const bien = api.mtrResumenClinico(Object.assign({}, base, { pesoKg: 70 }));
+      const lineaBien = String(api.mtrHojaDeHechosTexto(api.mtrHojaDeHechos(bien))).split("\n").find((l) => /^Signos vitales:/.test(l)) || "";
+      t.cierto(/peso 70 kg/.test(lineaBien) && !/implausible/.test(lineaBien), "con 70 kg no hay marca: " + lineaBien);
+    });
+
     t.caso("cuando el estadio clínico es PEOR que el administrativo, las dosis lo siguen a él", () => {
       // Peso alto infla el Cockcroft-Gault: administrativo mejor que el clínico.
       const r = api.mtrEvaluarErc({ edad: 70, sexo: "M", pesoKg: 120, creatinina: 1.9 });
@@ -870,6 +984,23 @@ module.exports = {
       const pClin = api.mtrPosEstadio(r.estadioClinico);
       t.cierto(pClin >= pAdmin, "con peso 120 el clínico debía ser igual o peor que el administrativo");
       t.igual(r.estadioParaDosis, r.estadioClinico, "las dosis siguen al peor de los dos");
+    });
+
+    // v18.0.82 — HALLAZGO DE ENJAMBRE #34. El `||` de repliegue anterior solo cubría el caso
+    // de arriba (clínico peor): `(posClinico > posAdmin && posClinico >= 0) ? estadioClinico
+    // : (estadioClinico || estadioAdmin)` — en CUALQUIER otro caso, incluido el
+    // administrativo peor, devolvía estadioClinico (el MEJOR) porque es el primer operando
+    // truthy del `||`. Es justo el caso real que el propio mensaje de discordancia cita como
+    // ejemplo ("Suele pasar con peso muy alto o muy bajo"): con peso muy BAJO (sarcopenia),
+    // Cockcroft-Gault (administrativo) sale más grave que CKD-EPI (clínico).
+    t.caso("REGRESIÓN — cuando el estadio ADMINISTRATIVO es PEOR que el clínico, las dosis también lo siguen a él (hallazgo #34)", () => {
+      // Peso muy bajo (sarcopenia) infla el estadio de Cockcroft-Gault: administrativo peor.
+      const r = api.mtrEvaluarErc({ edad: 60, sexo: "F", pesoKg: 30, creatinina: 1.2 });
+      const pAdmin = api.mtrPosEstadio(r.estadioAdministrativo);
+      const pClin = api.mtrPosEstadio(r.estadioClinico);
+      t.cierto(pAdmin > pClin, "con peso 30 el administrativo debía ser peor que el clínico — si no, la prueba no está probando este caso");
+      t.igual(r.estadioParaDosis, r.estadioAdministrativo,
+        "las dosis siguen al peor de los dos, sea cual sea — antes devolvía el MEJOR (el clínico) en este caso exacto");
     });
 
     t.caso("remisión a nefrología por los tres criterios de la norma", () => {
@@ -989,6 +1120,118 @@ module.exports = {
         "y si falta hace cuántos años tiene diabetes, se dice que el ALTO es provisional");
       t.igual(api.mtrSolicitudV68({ riesgo: {} }), "",
         "sin nada que pedir, cadena vacía: nunca una solicitud vacía que el modelo copie");
+    });
+
+
+    // =====================================================================
+    //  v18.0.8 — «TODO DIABÉTICO ENTRA EN ALTO, PERO PUEDE SUBIR A MUY ALTO»
+    //
+    //  Precisión del médico (31-ago, textual): «todo diabético entra en alto riesgo pero se
+    //  sigue clasificando con el método de 4 pasos del consenso colombiano de dislipidemias,
+    //  es decir que los diabéticos aún pueden subir a muy alto».
+    //
+    //  Se comprobó sobre el corpus dorado ANTES de tocar nada, y NO hizo falta cambiar el
+    //  código: de los 125 vectores diabéticos, 102 salen MUY ALTO y 23 ALTO — ninguno por
+    //  debajo. La razón es estructural y conviene dejarla fijada: «muy alto» lo produce
+    //  ÚNICAMENTE el paso 1, que corre ANTES del piso por diabetes. Los pasos 3 y 4 solo
+    //  pueden dar alto/moderado/bajo, así que el `return` del piso no puede tapar ningún
+    //  MUY ALTO por mucho que corte la escalera.
+    //
+    //  Estas dos pruebas existen para que ese razonamiento no se pierda: si alguien mueve el
+    //  piso por diabetes ANTES del paso 1, o hace que el paso 3/4 pueda producir «muy alto»,
+    //  la propiedad clínica se rompe en silencio y aquí salta.
+    // =====================================================================
+    t.caso("v18.0.8: en TODO el corpus dorado, ningún diabético queda por debajo de ALTO — y la mayoría sube a MUY ALTO", () => {
+      const d = JSON.parse(fs.readFileSync(GOLD, "utf8"));
+      const vs = d.vectores || d;
+      let dm = 0, muyAlto = 0, alto = 0;
+      const flojos = [];
+      for (const v of vs) {
+        const e = v.entrada || v.input || v;
+        const x = {};
+        for (const k in MAPA_ENTRADA) if (e[k] !== undefined) x[MAPA_ENTRADA[k]] = e[k];
+        for (const k in e) if (!(k in MAPA_ENTRADA)) x[k] = e[k];
+        if (!x.diabetes) continue;
+        dm++;
+        const r = api.mtrClasificarRiesgoCv(x);
+        if (r.categoria === "muy alto") muyAlto++;
+        else if (r.categoria === "alto") alto++;
+        else flojos.push(r.categoria);
+      }
+      t.cierto(dm >= 100, "el corpus trae suficientes diabéticos para que esto pruebe algo (" + dm + ")");
+      t.igual(flojos.length, 0, "ni uno por debajo de ALTO · encontrados: " + flojos.join(", "));
+      t.cierto(muyAlto > 0, "y el paso 1 sigue subiendo diabéticos a MUY ALTO (" + muyAlto + " de " + dm + ")");
+      t.igual(muyAlto + alto, dm, "la suma cuadra: solo hay estas dos categorías entre los diabéticos");
+    });
+
+    t.caso("v18.0.8: «muy alto» solo puede salir del paso 1 — que es lo que hace inofensivo al piso por diabetes", () => {
+      // El piso corta la escalera con un `return` en el paso 2. Eso es seguro SOLO mientras
+      // ningún paso posterior pueda producir «muy alto». Si alguien lo añadiera al paso 3 o
+      // al 4, el piso empezaría a tapar categorías sin que nadie se enterase.
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ini = src.indexOf("function mtrClasificarRiesgoCv");
+      t.cierto(ini > 0, "se localiza el clasificador");
+      const cuerpo = src.slice(ini, ini + 12000);
+      const conMuyAlto = cuerpo.split("\n").filter((l) => /categoria\s*[:=]\s*"muy alto"/.test(l));
+      t.cierto(conMuyAlto.length > 0, "hay al menos una vía a «muy alto»");
+      conMuyAlto.forEach((l) => {
+        t.cierto(/paso:\s*1\b/.test(l),
+          "toda vía a «muy alto» sale del paso 1, que corre ANTES del piso por diabetes · " + l.trim().slice(0, 110));
+      });
+    });
+
+    // =====================================================================
+    // v18.0.26 — «NO EVALUABLE» SE CONVERTÍA EN «FALLA PARCIAL», Y ESO ACABA FIRMADO
+    //
+    // El comentario de `mtrEvaluarMetaLdl` ya lo decía —«devuelve un objeto explícito en vez
+    // de un booleano, porque no evaluable por falta de LDL basal no es lo mismo que no está
+    // en meta»— y el código NO lo cumplía: `cumpleReduccion` colapsaba `reduccion === null`
+    // a false, igual que una reducción medida e insuficiente.
+    //
+    // El caso es el del PACIENTE NUEVO, que es lo normal: `mtrLdlBasalDeSerie` devuelve null
+    // cuando la serie tiene menos de dos puntos. Un paciente de riesgo MUY ALTO con LDL 45
+    // (meta < 55) y sin LDL previo salía "meta_parcial" y `enMeta` false, y mtrStatusV68 lo
+    // traduce a «FALLA PARCIAL». Ese texto viaja al JSON que alimenta la nota clínica de la
+    // IA y al registro permanente: la historia que el médico FIRMA decía falla terapéutica
+    // parcial de alguien que está en meta, y lo único que faltaba era el laboratorio previo.
+    //
+    // Otro comentario que prometía una red que no existía — el mismo patrón que costó dos
+    // defectos en la v18.0.13 y uno en la v18.0.19.
+    // =====================================================================
+    t.caso("v18.0.26: sin LDL previo, un paciente bajo meta NO se declara en falla", () => {
+      const r = api.mtrEvaluarMetaLdl("muy alto", 45, null, null);
+      t.igual(r.estado, "en_meta_reduccion_no_evaluable",
+        "LDL 45 con meta <55 y sin basal: está en meta, y la reducción no se pudo evaluar");
+      t.cierto(r.enMeta, "enMeta es cierto: el LDL bajo meta es un hecho medido");
+      t.falso(r.reduccionEvaluable, "y se dice aparte que la reducción no era evaluable");
+      const txt = api.mtrStatusV68({ riesgo: { categoria: "muy alto", datosCompletos: true }, meta: r });
+      t.falso(/FALLA/.test(txt), `el texto que se firma no puede afirmar falla (salió: ${txt})`);
+      t.cierto(/EN META/.test(txt), "dice que está en meta");
+      t.cierto(/no evaluable/i.test(txt), "y declara lo que no se pudo evaluar, en vez de callarlo");
+    });
+
+    t.caso("v18.0.26: y la falla REAL sigue diciendo falla — no se sobre-corrigió", () => {
+      // Reducción medida y de verdad insuficiente: 60 -> 45 son 25 %, y se exige 50 %.
+      const r = api.mtrEvaluarMetaLdl("muy alto", 45, 60, null);
+      t.igual(r.estado, "meta_parcial", "con basal medido y reducción corta, sigue siendo falla parcial");
+      t.falso(r.enMeta, "y no está en meta");
+      t.cierto(r.reduccionEvaluable, "porque aquí SÍ se pudo evaluar");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "muy alto", datosCompletos: true }, meta: r }), "FALLA PARCIAL");
+    });
+
+    t.caso("v18.0.26: fuera de meta sigue siendo fuera de meta, haya basal o no", () => {
+      const sin = api.mtrEvaluarMetaLdl("muy alto", 90, null, null);
+      t.igual(sin.estado, "fuera_de_meta", "LDL 90 con meta <55 está fuera, y eso no depende del basal");
+      t.falso(sin.enMeta);
+      const con = api.mtrEvaluarMetaLdl("muy alto", 90, 200, null);
+      t.igual(con.estado, "en_meta_reduccion_no_evaluable" === con.estado ? con.estado : "meta_parcial",
+        "con basal 200 la reducción sí llega al 55 %, así que es parcial, no «fuera»");
+    });
+
+    t.caso("v18.0.26: donde la norma NO exige reducción, nada cambia", () => {
+      const r = api.mtrEvaluarMetaLdl("moderado", 90, null, null);
+      t.igual(r.estado, "en_meta", "moderado no exige reducción: bajo meta es «en meta», sin matices");
+      t.cierto(r.reduccionEvaluable, "y se considera evaluable porque no se exige");
     });
 
   },

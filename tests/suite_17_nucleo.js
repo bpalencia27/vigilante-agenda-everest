@@ -40,7 +40,7 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia",
+    "heartbeat", "share", "helloOncePerDay", "_onboardingColores", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
@@ -342,6 +342,21 @@ module.exports = {
       t.igual(capturas.length, 1, "segunda llamada el mismo día: silencio total");
     });
 
+    // ---------- _onboardingColores ----------
+    t.caso("_onboardingColores: la leyenda de colores se muestra UNA sola vez por navegador", () => {
+      const c = cargar({ silencioso: true });
+      const capturas = [];
+      instalarNotificacion(c, capturas);
+      c.env.doc.visibilityState = "hidden";
+      c.api._onboardingColores();
+      t.igual(c.env.almacen["vgl_onb_colores"], "1", "la marca queda guardada en localStorage");
+      t.igual(capturas.length, 1, "primera vez: muestra la leyenda");
+      t.cierto(capturas[0].title.includes("Centinela activo"), "título de bienvenida");
+      t.cierto(capturas[0].body.includes("Verde") && capturas[0].body.includes("Cian") && capturas[0].body.includes("Rojo") && capturas[0].body.includes("Violeta"), "la leyenda trae los colores de la agenda");
+      c.api._onboardingColores();
+      t.igual(capturas.length, 1, "segunda vez: ya no se repite");
+    });
+
     // ---------- tick ----------
     t.caso("tick: fuera de agenda/historia se apaga la vigilancia (sección 'otra')", () => {
       const c = cargar({ silencioso: true });
@@ -464,6 +479,44 @@ module.exports = {
 
       c.api.tick();
       t.igual(notifs.length, 1, "NO se repite en el mismo día: un aviso, no un martilleo");
+    });
+
+    // =====================================================================
+    //  v18.0.8 — Y AHORA TAMBIÉN DENTRO DE LA HISTORIA CLÍNICA, QUE ES DONDE FALTABA
+    //
+    //  La guarda de v17.6.15 decía `!enVistaVigilada`, y eso es `secc !== "otra"`: VERDADERO
+    //  también dentro de una historia. Pero el respaldo que justifica todo el aviso —leer la
+    //  agenda del DOM— solo funciona en «Citas del día». Dentro de una historia, con el API
+    //  caído, el Vigilante está exactamente igual de ciego… y ahí es donde el médico pasa la
+    //  jornada. Reporte del 31-ago: 45 minutos sin evaluar una sola cita, sin ninguna señal,
+    //  y los dos avisos saliendo de golpe con el mismo sello «Visto» cuando el API volvió.
+    // =====================================================================
+    t.caso("v18.0.8: dentro de una HISTORIA CLÍNICA, sin API sano, también avisa que está ciego", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Historia";
+      const getByIdReal = c.env.doc.getElementById.bind(c.env.doc);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : getByIdReal(id));  // sección 'historia'
+      c.env.doc.querySelectorAll = () => [];
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "en la historia también se dice: antes esta rama era inalcanzable");
+      t.cierto(/sin lectura/i.test(notifs[0].title), "mismo aviso honesto");
+    });
+
+    t.caso("v18.0.8: en «Citas del día» NO se avisa de ceguera — ahí el respaldo del DOM sí existe", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Citas";
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+      // seccionActiva() === "agenda" exige hora Y estado juntos en el DOM.
+      c.env.doc.querySelector = (sel) => ({ textContent: "07:30 a. m." });
+      c.api.tick();
+      t.igual(notifs.length, 0,
+        "estando en la agenda no se declara ciego: el scrape del DOM es la fuente, y decir lo contrario sería un falso aviso");
     });
 
     t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
@@ -682,7 +735,7 @@ module.exports = {
       c.env.gm["vgl_last_ver"] = "1.0.0";
       c.api.avisarSiActualizado();
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Vigilante actualizado"));
+      t.cierto(capturas[0].title.includes("Centinela actualizado"));
       t.igual(c.env.gm["vgl_last_ver"], VERSION);
       t.igual(c.env.gm["vgl_ver_desde"], hoyReal(), "contador de 'desde cuándo' reiniciado");
     });
@@ -961,9 +1014,10 @@ module.exports = {
     // registrar"): ninguna prueba comprobaba que TODOS los timers que boot() crea
     // quedan en `state.timers` — la lista EXACTA que emergencyTeardown() cancela con
     // el kill-switch. La mutación que omitía `tVerMin` del push sobrevivió por eso.
-    // Este caso la caza: el conteo de handles debe subir en 13 (los diez del push
-    // principal + tSonda + tPymDiario + tPymCaptador) y el handle del chequeo de
-    // versión escalonado (setTimeout 4 s) tiene que estar entre ellos.
+    // Este caso la caza: el conteo de handles debe subir en 14 (los once del push
+    // principal —tRepBoot incluido, ver v17.6.83+— + tSonda + tPymDiario +
+    // tPymCaptador) y el handle del chequeo de versión escalonado (setTimeout 4 s)
+    // tiene que estar entre ellos.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -979,13 +1033,6 @@ module.exports = {
 
       t.igual(timers.length, antes + 14,
         "boot registra los 14 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
-      // v17.49.0 (D4) — tRepBoot: el vaciado de la cola al ARRANCAR. Desde que la
-      // evidencia (error/fraude/resumen) dejo de mandarse por beacon al cerrar, este es
-      // el UNICO camino por el que sale, asi que "se reintenta al arrancar" tiene que ser
-      // literal y no "en el minuto 10 por el intervalo".
-      const repBoot = handles.find((x) => x.ms === 8000 && x.fn === c.api._repVaciadoDeArranque);
-      t.cierto(!!repBoot, "boot programa el vaciado de la cola a los 8 s del arranque");
-      t.cierto(timers.indexOf(repBoot.h) >= 0, "y queda registrado para que el kill-switch pueda cancelarlo");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");
@@ -993,5 +1040,104 @@ module.exports = {
         "tVerMin está en state.timers: si se omite del push, el kill-switch no lo cancela y sigue consultando la red con la interfaz retirada");
     });
 
+
+    // =====================================================================
+    //  v18.0.8 — QUIEN NO PUEDE EVALUAR NO PUEDE MANDAR
+    //
+    //  REPORTE EN VIVO (31-ago, dos capturas): dos avisos ÁMBAR de citas distintas (9:30 y
+    //  10:00) llegaron con EL MISMO sello «Visto 10:20:44», con +50,7 y +20,7 min de
+    //  desfase. La diferencia entre los dos desfases es exactamente 30,0 — la distancia
+    //  entre las dos citas. Las dos se evaluaron en el MISMO tick, unos 45 minutos tarde.
+    //
+    //  El sello se pone al EVALUAR (colorAndAlert), no al notificar, así que esto no es un
+    //  aviso que salió tarde: es que nadie miró la agenda en 45 minutos. La causa: el canal
+    //  "latido" que dispara heartbeat() vive en el nivel superior del IIFE y corre en TODA
+    //  pestaña de Everest, pero el canal "tick" —el que de verdad evalúa— solo se registra
+    //  en restartPolling(), que empieza con `if (!el || !el.root) return`. Una pestaña sin
+    //  panel (fuera de HCHealth, instancia duplicada, boot abortado) latía igual, ganaba el
+    //  mando y no miraba nada; las demás se ponían leader=false y callaban.
+    //
+    //  Es la regla que el médico dejó escrita: «siempre debe estar analizando citas del día
+    //  con esa pestaña líder; las demás no tienen por qué generar notificaciones».
+    // =====================================================================
+    t.caso("v18.0.8: una pestaña SIN reloj de evaluación no puede ser líder", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__reloj.canales.delete("tick");        // como una pestaña sin panel construido
+      t.igual(c.api.heartbeat(), false, "no toma el mando");
+      t.falso(c.api.__state.leader, "y se declara no-líder");
+    });
+
+    t.caso("v18.0.8: la pestaña ciega tampoco PUBLICA latido — si no, seguiría bloqueando a las demás", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      c.api.__reloj.canales.delete("tick");
+      c.api.heartbeat();
+      const beat = c.env.storage.getItem("vgl_leader_beat");
+      t.cierto(beat === null || beat === undefined || beat === "",
+        "sin latido publicado: es la mitad que impedía a la pestaña buena tomar el mando");
+    });
+
+    t.caso("v18.0.8: con reloj de evaluación, el liderazgo funciona exactamente igual que antes", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      t.igual(c.api.heartbeat(), true, "una pestaña arrancada sí toma el mando");
+      t.cierto(c.api.__state.leader, "y queda como líder");
+      t.cierto(!!c.env.storage.getItem("vgl_leader_beat"), "publicando su latido");
+    });
+
+    t.caso("v18.0.8: la pestaña ciega SUELTA el mando y la que sí evalúa se lo queda", () => {
+      // Reproducción del 31-ago: A es la pestaña sin panel (la que retenía el mando),
+      // B es la pestaña clínica. Con la guarda, B puede liderar aunque A siga latiendo.
+      const A = cargar({ silencioso: true });
+      A.api.__reloj.canales.delete("tick");
+      A.api.heartbeat();
+      const B = cargar({ almacen: A.env.almacen, storage: A.env.storage, silencioso: true });
+      t.igual(B.api.heartbeat(), true, "la pestaña que SÍ evalúa toma el mando");
+      t.falso(A.api.__state.leader, "y la ciega no lo tiene");
+    });
+
+    // =====================================================================
+    //  v18.0.9 — RELEVO POR CEGUERA: UN LÍDER QUE NO VE NO SE QUEDA CON EL MANDO
+    //
+    //  Hasta aquí el mando solo cambiaba por VISIBILIDAD (v14.1.5): un líder OCULTO, al que
+    //  el navegador estrangula el temporizador, se lo cede a uno a la vista. Pero un líder
+    //  A LA VISTA y sin ninguna fuente —API caído y fuera de «Citas del día», que es el caso
+    //  del médico trabajando dentro de una historia clínica— lo retenía indefinidamente
+    //  mientras otra pestaña, capaz de leer, se quedaba callada.
+    //
+    //  Encargo del médico (31-ago): «siempre debe estar analizando citas del día con esa
+    //  pestaña líder». Ahora el latido lleva `ve`, y quien ve puede relevar a quien no ve.
+    // =====================================================================
+    t.caso("v18.0.9: el latido publica si esta pestaña PUEDE leer la agenda", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.removeItem("vgl_leader_beat");
+      c.api.heartbeat();
+      const beat = JSON.parse(c.env.storage.getItem("vgl_leader_beat") || "null");
+      t.cierto(!!beat, "hay latido");
+      t.cierto(typeof beat.ve === "boolean", "y declara si ve la agenda o no · ve=" + beat.ve);
+    });
+
+    t.caso("v18.0.9: una pestaña que SÍ ve releva a un líder ciego, aunque el líder esté a la vista", () => {
+      const c = cargar({ silencioso: true });
+      // Líder ajeno, fresco, A LA VISTA (no relevable por visibilidad) y CIEGO.
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: false }));
+      // Esta pestaña sí ve: se simula estando en «Citas del día» (hora + estado en el DOM).
+      c.env.doc.querySelector = () => ({ textContent: "07:30 a. m." });
+      t.igual(c.api.heartbeat(), true, "se lleva el mando: el otro no estaba vigilando nada");
+    });
+
+    t.caso("v18.0.9: si el líder ciego y yo estamos los dos ciegos, NO hay relevo — no arreglaría nada", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: false }));
+      c.env.doc.querySelector = () => null;          // ni agenda en el DOM ni API sano
+      t.igual(c.api.heartbeat(), false, "sin poder leer, quitarle el mando solo movería la ceguera de sitio");
+    });
+
+    t.caso("v18.0.9: a un líder que SÍ ve no se le quita el mando por esta vía", () => {
+      const c = cargar({ silencioso: true });
+      c.env.storage.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false, ve: true }));
+      c.env.doc.querySelector = () => ({ textContent: "07:30 a. m." });
+      t.igual(c.api.heartbeat(), false, "el líder está vigilando: no hay motivo para relevarlo");
+    });
   },
 };

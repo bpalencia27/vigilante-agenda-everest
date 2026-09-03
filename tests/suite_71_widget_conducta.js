@@ -130,7 +130,7 @@ module.exports = {
     "mtrBotonOrdenarConducta", "mtrWidgetExamenesDatos", "mtrWidgetConductaTick", "_cwEstadoParaTest", "_cwResetParaTest",
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
     "mtrItemsOrdenarConducta", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
-    "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
+    "mtrWidgetOrdenarConductaTick", "mtrOcultarBotonOrdenarPendientes", "mtrOcultarWidgetsConducta", "_cwoEstadoParaTest", "_cwoResetParaTest",
     "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
     "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
   ],
@@ -884,6 +884,7 @@ module.exports = {
     // ---------- mtrWidgetOrdenarConductaTick ----------
     t.caso("mtrWidgetOrdenarConductaTick: apagado por S.conductaWidgets=false, no pinta ni deja el botón visible", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = false;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
@@ -898,6 +899,7 @@ module.exports = {
     // que `left` en el estilo ES el punto medio, no el borde izquierdo del botón.
     t.caso("mtrWidgetOrdenarConductaTick: encendido, con pendientes — botón visible, CENTRADO entre Historial y Paquetes, debajo de los dos", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       const btnHistorial = botonHistorial();
       const btnPaquetes = boton("Paquetes");
       cablearHistoriaConducta(c.env, "1098765432", [btnHistorial, btnPaquetes]);
@@ -919,6 +921,7 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: sin nada pendiente, el botón se oculta (no invita a ordenar la nada)", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_AL_DIA);
@@ -929,6 +932,7 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: sin botón 'Paquetes' visible, el botón nuevo también se oculta — mismo ancla, misma regla", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial()]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
@@ -942,6 +946,7 @@ module.exports = {
     // botón se oculta en vez de adivinar dónde ponerse.
     t.caso("mtrWidgetOrdenarConductaTick: 'Paquetes' sin su 'Historial' en el mismo renglón, se oculta — nunca ancla a un botón de otra sección", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       const historialDeOtroRenglon = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: 10, top: 500, width: 70, height: 30, right: 80 }) };
       cablearHistoriaConducta(c.env, "1098765432", [historialDeOtroRenglon, boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
@@ -953,6 +958,7 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: ya ordenado hoy — botón deshabilitado, dice «Agregado hoy», sigue visible (no desaparece sin más)", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
@@ -966,6 +972,7 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: cambiar de paciente reinicia el estado interno", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
@@ -991,6 +998,7 @@ module.exports = {
     // el `boton()` normal de esta suite (sin `rect`/`alClick` especiales).
     await t.casoAsync("Integración: un clic en el botón agrega de verdad en la tabla de Conducta y lo deja marcado — solo búsquedas individuales, nunca dispara Paquetes", async () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       const tabla = mockTabla([]);
       const botones = [botonHistorial(), boton("Paquetes")];
       const liPth = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => {
@@ -1022,6 +1030,7 @@ module.exports = {
     // devolver sin tocar nada mientras el primero sigue en vuelo.
     await t.casoAsync("Integración: dos clics antes de que termine el primero solo disparan UNA vez la búsqueda real", async () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       const tabla = mockTabla([]);
       const botones = [botonHistorial(), boton("Paquetes")];
       const liPth = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => {
@@ -1046,6 +1055,7 @@ module.exports = {
 
     await t.casoAsync("Integración: si no se encuentra nada que clickear, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       // Sin ningún <li> de los exámenes individuales: el gesto real no encuentra nada que
       // hacer, tal como pasaría si Everest cambiara su pantalla.
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")], [], { tabla: mockTabla([]), lis: [] });
@@ -1069,6 +1079,7 @@ module.exports = {
     // =====================================================================
     t.caso("mtrWidgetOrdenarConductaTick: con la página desplazada, la posición usa coordenadas absolutas — no solo lo visible", () => {
       const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();   // v18.0.7 — el botón «Ordenar pendientes» quedó oculto al usuario final (encargo del médico, 31-ago): vive tras el modo programador.
       c.env.win.pageXOffset = 50;
       c.env.win.pageYOffset = 300;
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
@@ -1122,6 +1133,117 @@ module.exports = {
       // evitar: el botón "Ordenar pendientes" no sirve de nada si solo vive en el banco.
       t.cierto(enganchado("mtrWidgetOrdenarConductaTick"),
         "mtrWidgetOrdenarConductaTick debe engancharse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
+    });
+
+    // =====================================================================
+    //  v18.0.7 — EL BOTÓN «ORDENAR PENDIENTES» SE COLABA EN «CITAS DEL DÍA»
+    //
+    //  REPORTE EN VIVO (31-ago, captura): el botón aparecía flotando sobre la lista de
+    //  citas del día, debajo de «Consentimientos», con las coordenadas de la pantalla
+    //  anterior. Causa: se pinta en document.body con position:absolute y coordenadas de
+    //  PÁGINA, y el ÚNICO que lo escondía era su propio tick — que solo corre en la pestaña
+    //  Conducta. Al navegar la SPA fuera de la historia, nadie lo retiraba.
+    //
+    //  Encargo del médico, textual: «oculta ese botón para el usuario final mientras
+    //  logramos hacerlo funcionar». No se borra: queda tras el modo programador, que es el
+    //  mecanismo que este proyecto ya usa para lo que no debe verse en consulta pero sí
+    //  tiene que poder probarse. Y su regla de alcance, también textual: «el Centinela solo
+    //  vive en HCHealth y en las historias abiertas de los pacientes, nada más».
+    // =====================================================================
+    t.caso("v18.0.7: con el modo programador APAGADO el botón no se pinta — es lo que ve el médico en consulta", () => {
+      const c = cargar({ silencioso: true });
+      // Sin _vglAlternarModoProg(): así arranca toda pestaña real.
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!el || el.style.display === "none",
+        "ni existe ni queda visible: el usuario final no lo ve hasta que el médico diga otra cosa");
+    });
+
+    t.caso("v18.0.7: aunque el modo programador esté encendido, FUERA de una historia abierta el botón se esconde", () => {
+      const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!!el && el.style.display !== "none", "dentro de la historia sí está (control del caso)");
+      // Ahora la SPA navega a «Citas del día»: ya no hay #anamesis.
+      const getByIdConAnamesis = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? null : getByIdConAnamesis(id));
+      c.api.mtrWidgetOrdenarConductaTick();
+      t.igual(el.style.display, "none", "al salir de la historia, el candado de ruta lo retira");
+    });
+
+    t.caso("v18.0.7: mtrOcultarBotonOrdenarPendientes retira el botón desde CUALQUIER pantalla", () => {
+      const c = cargar({ silencioso: true });
+      c.api._vglAlternarModoProg();
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!!el && el.style.display !== "none", "está pintado (control del caso)");
+      // Esta es la mitad que faltaba: el tick GENERAL puede retirarlo sin saber nada del
+      // widget ni de la pestaña Conducta. Sin ella el botón quedaba huérfano en pantalla.
+      c.api.mtrOcultarBotonOrdenarPendientes();
+      t.igual(el.style.display, "none", "retirado sin depender del tick del widget");
+      t.noLanza(() => { c.env.doc.getElementById("vgl-cw-ordenar-btn").remove(); c.api.mtrOcultarBotonOrdenarPendientes(); },
+        "y no revienta si el botón ni siquiera existe");
+    });
+
+    // =================================================================
+    //  v18.0.51 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, y la otra
+    //  mitad del reporte en vivo del médico:
+    //
+    //  «EL BOTON DE "ORDENAR PENDIENTES" ESTÁ ACTIVO Y YO LO MANDÉ A DESACTIVAR. LO PEOR
+    //   ES QUE SALE EN TODAS LAS PESTAÑAS ENFRENTE DE TODO»
+    //
+    //  La v18.0.7 arregló esto para UNO de los tres widgets flotantes y dejó a los otros
+    //  dos. Los tres se pintan en `document.body` con coordenadas de PÁGINA y solo se
+    //  esconden dentro de SU PROPIO tick, que corre únicamente con `secc === "historia"`.
+    //  Al navegar a «Citas del día» la pastilla 🧪 de exámenes y la 💊 de alertas
+    //  farmacológicas se quedaban flotando sobre la lista de citas **con el juicio clínico
+    //  del PACIENTE ANTERIOR**: no es estorbo, es un dato clínico de una persona encima de
+    //  la pantalla de otra.
+    // =================================================================
+    t.caso("v18.0.51: el apagador retira LOS TRES widgets flotantes, no solo uno", () => {
+      const c = cargar({ silencioso: true });
+      const falsos = {
+        "vgl-cw-ordenar-btn": { style: { display: "" } },
+        "vgl-cw-examenes": { style: { display: "" } },
+        "vgl-cw-farmaco": { style: { display: "" } },
+      };
+      c.env.doc.getElementById = (id) => falsos[id] || null;
+
+      // El apagador de la v18.0.7 solo tocaba el primero: los otros dos se quedaban.
+      c.api.mtrOcultarBotonOrdenarPendientes();
+      t.igual(falsos["vgl-cw-ordenar-btn"].style.display, "none", "el de siempre se retira");
+      t.igual(falsos["vgl-cw-examenes"].style.display, "", "y los otros dos NO — así estaba el defecto");
+      t.igual(falsos["vgl-cw-farmaco"].style.display, "", "el de fármacos tampoco");
+
+      c.api.mtrOcultarWidgetsConducta();
+      t.igual(falsos["vgl-cw-examenes"].style.display, "none",
+        "la pastilla de exámenes ya no se queda flotando con el juicio del paciente anterior");
+      t.igual(falsos["vgl-cw-farmaco"].style.display, "none", "ni la de alertas farmacológicas");
+      t.igual(falsos["vgl-cw-ordenar-btn"].style.display, "none", "y el botón sigue retirándose igual");
+
+      t.noLanza(() => { c.env.doc.getElementById = () => null; c.api.mtrOcultarWidgetsConducta(); },
+        "y no revienta si ninguno existe");
+    });
+
+    t.caso("v18.0.51: el tick general los retira al salir de la historia Y al apagar el interruptor", () => {
+      // Comprobación de ALCANCE, no solo de la función: el defecto no era que el apagador
+      // no supiera apagar, era que nadie lo llamaba en las dos situaciones que importan.
+      // Se fija sobre el fuente porque el tick general es la función más grande del
+      // archivo y no se puede ejecutar entera en el banco; se declara que es estructural.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/if \(secc !== "historia" \|\| !S\.conductaWidgets\) \{ try \{ mtrOcultarWidgetsConducta\(\); \} catch \(e\) \{\} \}/.test(src),
+        "el tick general los retira fuera de la historia Y con el interruptor apagado");
     });
   },
 };

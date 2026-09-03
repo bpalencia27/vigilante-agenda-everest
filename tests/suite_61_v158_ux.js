@@ -342,6 +342,67 @@ module.exports = {
       t.igual(String(st.textContent), "", "normal deja la hoja vacía: cero rastro");
     });
 
+    // v18.0.88 — HALLAZGO DE ENJAMBRE #40. Alto Contraste fijaba el zoom del panel en un
+    // 1.12 sin mirar la letra que el médico ya eligió en Ajustes: con «letra muy grande»
+    // (1.28) activo, encender Alto Contraste ENCOGÍA el panel a 1.12, mientras las demás
+    // superficies del script (que sí siguen la hoja de S.tamanoLetra) se quedaban en 1.28
+    // — dos tamaños de letra distintos a la vista en el mismo asistente, y justo lo
+    // opuesto de lo que ambas opciones de accesibilidad prometen.
+    t.caso("REGRESIÓN — _vglAlternarAltoContraste nunca reduce la letra que el médico ya eligió en Ajustes (hallazgo #40)", () => {
+      const raiz = c.env.doc.createElement("div");
+      raiz.id = "vgl-root";
+      const getByIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-root" ? raiz : getByIdOriginal(id));
+      try {
+        a.__S.tamanoLetra = "muygrande";   // 1.28, elegido en Ajustes
+        a._vglAlternarAltoContraste();      // enciende Alto Contraste
+        t.igual(raiz.style.zoom, "1.28",
+          "con letra muy grande ya elegida, Alto Contraste NUNCA la encoge — antes quedaba fijo en 1.12");
+        a._vglAlternarAltoContraste();      // apaga
+        t.igual(raiz.style.zoom, "", "al apagar, vuelve a mandar la hoja de S.tamanoLetra (sin estilo inline)");
+
+        a.__S.tamanoLetra = "normal";       // sin escala propia
+        a._vglAlternarAltoContraste();
+        t.igual(raiz.style.zoom, "1.12", "con letra normal, Alto Contraste sigue dando su 1.12 de siempre");
+        a._vglAlternarAltoContraste();      // se deja apagado para no ensuciar otras pruebas
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
+    // 02-sep — CIERRE ADVERSARIAL (fila 43): el arreglo de arriba solo miraba S.tamanoLetra en
+    // el instante del clic. En el orden inverso —Alto Contraste YA encendido con letra normal
+    // (inline 1.12) y después «letra muy grande» en Ajustes— aplicarTamanoLetra escribía la hoja
+    // de 1.28 pero el inline 1.12 seguía ganando: el panel en 1.12 y el resto en 1.28, el mismo
+    // síntoma del hallazgo #40 por el otro camino, hasta apagar y volver a encender.
+    t.caso("02-sep: cambiar la letra en Ajustes con Alto Contraste YA encendido actualiza el zoom del panel (fila 43)", () => {
+      const raiz = c.env.doc.createElement("div");
+      raiz.id = "vgl-root";
+      const getByIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-root" ? raiz : getByIdOriginal(id));
+      try {
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+        a._vglAlternarAltoContraste();      // enciende con letra normal
+        t.igual(raiz.style.zoom, "1.12", "punto de partida: contraste encendido con letra normal");
+        a.__S.tamanoLetra = "muygrande";    // el médico elige letra muy grande DESPUÉS
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "1.28", "el panel sigue a la letra nueva — antes se quedaba en 1.12 mientras el resto pasaba a 1.28");
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "1.12", "y vuelve al 1.12 del contraste al volver a letra normal");
+        a._vglAlternarAltoContraste();      // apaga
+        t.igual(raiz.style.zoom, "", "apagado: sin inline, manda la hoja");
+        a.__S.tamanoLetra = "muygrande";
+        a.aplicarTamanoLetra();
+        t.igual(raiz.style.zoom, "", "con el contraste apagado, aplicarTamanoLetra no toca el inline");
+        a.__S.tamanoLetra = "normal";
+        a.aplicarTamanoLetra();
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
     // ============ N2 · semáforo de salud ============
 
     t.caso("_saludEstado: sin señales es «nd», con fallo fresco sigue «ok», y solo el fallo sostenido alarma", () => {
@@ -372,7 +433,7 @@ module.exports = {
       t.cierto(html.includes("Estado del asistente"), "título");
       t.cierto(html.includes("Agenda del día"), "renglón de agenda");
       t.cierto(html.includes("Historia clínica"), "renglón de historia");
-      t.cierto(html.includes("Laboratorios (Athenea)"), "renglón de laboratorios");
+      t.cierto(html.includes("Laboratorios"), "renglón de laboratorios");
       t.cierto(html.includes("Lista de prevención (PyM)"), "renglón de prevención");
       t.cierto(html.includes("⚠") && html.includes("avise al administrador"), "el caído se señala y se dice qué hacer");
       t.cierto(html.includes("puede seguir su consulta normal"), "…sin alarmar la consulta");
