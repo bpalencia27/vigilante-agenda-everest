@@ -2781,7 +2781,12 @@ module.exports = {
       // el clic en un chip de día y el calendario manual de la toma.
       const zonaChip = src.slice(src.indexOf("_labFechaTomaElegidaManual = true;   // v17.6.53 (1.9)"), src.indexOf("_labFechaTomaElegidaManual = true;   // v17.6.53 (1.9)") + 300);
       t.cierto(/_tomaControlAfinarToken\+\+;/.test(zonaChip), "el clic en un chip de toma invalida el afinado en vuelo");
-      t.cierto(/lInp\.addEventListener\("change", \(\) => \{[\s\S]{0,300}_tomaControlAfinarToken\+\+;[\s\S]{0,100}renderLabDayChips\(v\);/.test(src),
+      // v18.0.133 (recorrido R6) — el manejador del calendario manual de la toma creció:
+      // además de invalidar el afinado en vuelo, registra la fecha escrita como elección
+      // manual y suelta la fecha del chip clicado ANTES de renderizar (si no, el render
+      // re-centraba los chips en el chip viejo). La ventana se amplía para el comentario
+      // explicativo y el anclaje se refuerza con las dos fijaciones nuevas.
+      t.cierto(/lInp\.addEventListener\("change", \(\) => \{[\s\S]{0,300}_tomaControlAfinarToken\+\+;[\s\S]{0,900}_labFechaTomaElegidaManual = true;[\s\S]{0,60}selectedLabDateInfo = null;[\s\S]{0,60}renderLabDayChips\(v\);/.test(src),
         "y el calendario manual de la toma también");
     });
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.131
+// @version      18.0.133
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.132";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.133";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -27586,7 +27586,21 @@
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < todayStamp()) return;
         try { uxTrack("fn.agendar.lab_manual"); } catch (e) {}
         _tomaControlAfinarToken++;   // v18.0.78 — no dejar que un afinado en vuelo pise esta elección
+        // v18.0.133 (recorrido R6) — la fecha manual ES una elección manual: se registra como tal
+        // y se suelta la fecha del chip clicado antes de renderizar. Antes solo se llamaba a
+        // renderLabDayChips(v), pero con un chip de toma ya clicado el centro recalculado prefería
+        // la fecha del chip viejo y los chips seguían centrados en el chip anterior aunque el
+        // médico acabara de escribir otra; además el render no toca la etiqueta visible, que
+        // seguía anunciando la fecha anterior. Tras el render, la propia función vuelve a fijar
+        // selectedLabDateInfo con el chip central del rango de la fecha escrita, así que la
+        // etiqueta queda anunciando la fecha correcta.
+        _labFechaTomaElegidaManual = true;
+        selectedLabDateInfo = null;
         renderLabDayChips(v);
+        try {
+          const labLbl = modal.querySelector("#vgl-lab-date-lbl");
+          if (labLbl && selectedLabDateInfo) labLbl.textContent = `${selectedLabDateInfo.fmt} (${selectedLabDateInfo.lbl})`;
+        } catch (e) {}
       });
     }
     // v15.7.0 — modo manual: calendario nativo, sin sugerencias, ±7 días hábiles.

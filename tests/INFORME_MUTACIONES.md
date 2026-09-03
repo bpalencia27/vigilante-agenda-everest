@@ -12423,3 +12423,43 @@ prefiere sobre lo que diga el almacén en ese momento.
 | 464 | `_anularCitaAsignadaReal` deja de preferir `opciones.citaId`/`opciones.pacienteId` sobre `det` | *suite_62: hallazgo 12 — cruce de medianoche* | Sí |
 
 Banco completo: **3.116 comprobaciones pasan, 0 fallan.**
+
+## v18.0.133 — la suite de recorridos: la marca única, verificada por donde el médico camina
+
+El barrido de v18.0.131 dejó un pendiente propio: la suite que CAMINA las secuencias reales
+del modal de agendamiento en lugar de mirar pantallas sueltas. `suite_73_recorridos` recorre
+nueve caminos (R1–R8): abrir con el plazo por defecto, cambiar de plazo, la fecha manual de
+control y su «volver», el salto automático cuando el centro no tiene agenda propia, el sondeo
+que tacha un día sin agenda, el cambio de especialidad, el turno elegido al cambiar de día, la
+fecha manual de la TOMA, cerrar con ✕ y reabrir, y el stepper con su resumen. En cada parada,
+la misma invariante: **a lo sumo UNA marca activa** (día, plazo, especialidad, tipo, turno,
+chip de toma) y nunca una marca activa y bloqueada a la vez.
+
+**Dos rojos que no eran de producción.** R2 y R7 abrieron en rojo con asertos mal planteados:
+exigían «cero marcas» donde el diseño marca una (y solo una) a propósito. Tras «volver» del
+modo manual, v15.8.0 re-marca el plazo que explica el rango restaurado; y al reabrir, la
+preselección ⭐ de v15.4.0 marca el turno sugerido por el auto-análisis sobre el resumen clínico
+cacheado. Ambos asertos se reformularon a la invariante real — «sin estados dobles»: a lo sumo
+una marca, y si existe, debe ser LA correcta (el plazo cuya `calcBusinessTargetDate` explica el
+centro restaurado; el slot con clase `vgl-agm-sbtn-sugerido`, no un turno heredado).
+
+**Un rojo que sí era de producción (R6).** Escribir la fecha manual de la toma con un chip de
+día ya clicado no re-centraba los chips: `renderLabDayChips` prefería el `selectedLabDateInfo`
+viejo — el del chip clicado — y la cabecera `#vgl-lab-date-lbl` seguía anunciando la fecha que
+el médico ya había descartado. El manejador `change` del calendario manual ahora registra la
+fecha escrita como elección manual (`_labFechaTomaElegidaManual = true;`), suelta el chip
+(`selectedLabDateInfo = null;`) ANTES de renderizar, y repinta la etiqueta tras el render.
+
+**Una víctima colateral del comentario explicativo.** El comentario de 9 líneas del fix R6
+creció el código entre `_tomaControlAfinarToken++;` y `renderLabDayChips(v);` y rompió la
+ventana `{0,100}` de una comprobación de fuente preexistente de suite_15. Siguiendo el idiom
+del proyecto (v18.0.118 ya amplió ventanas cuando el código crece), la ventana pasó a `{0,900}`
+y el anclaje se REFUERZÓ con las dos fijaciones nuevas — el guardián ahora también muerde si
+alguien quita el fix completo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 465 | en el `change` del calendario manual de la toma, `_labFechaTomaElegidaManual = true;` y `selectedLabDateInfo = null;` vueltos no-ops (el render vuelve a preferir el chip clicado) | *suite_73: R6 — la fecha manual de toma re-centra los chips y sobrevive al cambio de día* | Sí |
+| 466 | quitados `selectedLabDateInfo = null;` y su `renderLabDayChips(v);` del manejador de la fecha manual | *suite_15: REGRESIÓN — el afinado de cargarHoras respeta labs-primero… «y el calendario manual de la toma también»* | Sí |
+
+Banco completo: **3.125 comprobaciones pasan, 0 fallan.**
