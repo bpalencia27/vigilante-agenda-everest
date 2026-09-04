@@ -31,6 +31,38 @@ module.exports = {
   nombre: "Llamadas a Everest y clínicas",
   cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "_apiCorteEstadoParaTest", "_apiCorteResetParaTest", "_apiCorteAbierto", "_apiMarcarResultado", "_saludEstado", "_saludMarca", "_saludRegParaTest", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "fetchAtheneaLabs"],
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B4 (Misión B, capa c): las ESCRITURAS (AgendarCita, EnviarSMS…)
+    // re-comprueban el perfil justo antes de salir a la red, y una identidad
+    // fuera del padrón resuelve a PÚBLICO, que no puede agendar ni disparar SMS.
+    // Estas pruebas ejercitan escrituras «como el dueño del perfil»: se siembra
+    // en TODOS los contextos la lista `vgl_acceso_lista` (uid 777 en COMPLETO —
+    // el médico de esta suite — más el 707 por defecto, como la dejaría el fetch
+    // de B2) y una identidad por defecto; un caso que fije SU doctor después de
+    // cargar sigue mandando (la asignación posterior pisa este default).
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-05.acceso-b4",
+          perfiles: {
+            COMPLETO: [
+              { uid: 777, nombre: "Carlos Palencia" },
+              { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+            ],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
+
     await t.casoAsync("apiOrdenamientoGuardar construye payload correctamente y llama al endpoint", async () => {
       let fetchUrl, fetchOpts;
       const c = cargar({
@@ -97,8 +129,16 @@ module.exports = {
       const c = cargar({
         silencioso: true,
         fetch: async (url) => { fetchUrl = url; return respuesta({ id: "ok" }); },
+        // v18.1.0 (B1) — el forzado swIsPyM/SwProgramaEspecial ya no sale de una lista
+        // embebida: este médico está en el padrón `vgl_acceso_lista` como COMPLETO
+        // (uid 777), que es hoy lo que activa esMedicoRCVActivo().
+        almacen: { vgl_acceso_lista: JSON.stringify({
+          version: "test-05.1",
+          perfiles: { COMPLETO: [{ uid: 777, nombre: "Carlos Palencia" }], LABORATORIOS: [] },
+          blocklist: [],
+        }) },
       });
-      c.api.__state.activeDoctor = { id: 777, name: "CARLOS PALENCIA" }; // médico de RCV
+      c.api.__state.activeDoctor = { id: 777, name: "CARLOS PALENCIA" }; // médico del padrón (COMPLETO)
 
       await c.api.apiAccesoAsignarTurno("turnoId", "pac123", "2026-08-10", "obs");
       t.cierto(!!fetchUrl, "la cita sí sale a la red cuando hay médico identificado");

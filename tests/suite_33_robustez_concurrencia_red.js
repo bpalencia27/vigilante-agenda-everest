@@ -31,6 +31,33 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B4 (Misión B, capa c): el camino de agendado de v18.0.27 ESCRIBE
+    // en AppCita (AgendarCita → agendar_labs) por el embudo GM, que re-comprueba
+    // el perfil justo antes de salir a la red; sin padrón ni identidad resuelve a
+    // PÚBLICO y la cita no se crea. Se siembra en TODOS los contextos la lista
+    // `vgl_acceso_lista` (uid 707 en COMPLETO, como la dejaría el fetch de B2) y
+    // una identidad por defecto; un caso que fije SU doctor después de cargar
+    // sigue mandando (la asignación posterior pisa este default).
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-33.acceso-b4",
+          perfiles: {
+            COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
     const c = cargar({ silencioso: true });
     const A = c.api;
     const S = A.__S;

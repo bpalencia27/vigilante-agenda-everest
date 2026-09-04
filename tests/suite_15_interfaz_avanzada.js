@@ -82,6 +82,36 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B3.3 (Misión B, capa b): el guard de apertura de los open* exige
+    // perfil; un contexto sin padrón resuelve a PÚBLICO y el modal nunca se monta.
+    // Se reenvuelve `cargar` para sembrar en TODOS los contextos la lista
+    // `vgl_acceso_lista` (uid 707 en COMPLETO, como la dejaría el fetch de B2) y
+    // una identidad por defecto. Un caso que siembre SU identidad después de
+    // cargar sigue mandando: la asignación posterior pisa este default.
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-15.acceso",
+          perfiles: {
+            COMPLETO: [
+              { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+              { uid: 102, nombre: "Eliseth Estrada" },
+              { uid: 103, nombre: "María Edineth Pino" },
+            ],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
     // ---- Instancia principal con el panel montado ----
     const cv = cargar({ silencioso: true });
     enriquecerDom(cv);
@@ -1648,6 +1678,23 @@ module.exports = {
     // T4 sacó de la tarjeta. Usa _enModuloHCHealth() (alcance amplio, por ruta) en vez de
     // seccionActiva()==="historia" (alcance angosto, por #anamesis): el encargo pide que el
     // widget viva sobre TODA la Historia Clínica, no solo la pestaña con ese marcador.
+    // v18.1.0 (Misión B / B1) — el padrón autorizado ya no vive en el userscript: sale de
+    // `vgl_acceso_lista` (la dejaría ahí el fetch del arreglo B2). mockPacienteDock simula
+    // al médico COMPLETO de estos casos (uid 707), así que siembra la lista en el storage
+    // vivo del arnés para restaurar la semántica previa al desacople.
+    const LISTA_ACCESO_15 = {
+      version: "test-15.1",
+      perfiles: {
+        COMPLETO: [
+          { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+          { uid: 102, nombre: "Eliseth Estrada" },
+          { uid: 103, nombre: "María Edineth Pino" },
+        ],
+        LABORATORIOS: [],
+      },
+      blocklist: [],
+    };
+    const almacenAcceso15 = () => ({ vgl_acceso_lista: JSON.stringify(LISTA_ACCESO_15) });
     function mockPacienteDock(c, doc) {
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
       c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
@@ -1659,6 +1706,7 @@ module.exports = {
       c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
       c.api.__S.iaRedaccion = true;
       c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
     }
 
     t.caso("createAccionesDockUI: fuera del módulo HCHealth no crea el widget", () => {
@@ -2581,7 +2629,9 @@ module.exports = {
     // como un control editable. Ahora se muestra marcado y deshabilitado para ellos, con
     // una nota explicando por qué. Ver CHANGELOG.
     t.caso("openAgendamientoModal: para un médico de la lista RCV, el checkbox sale marcado y deshabilitado (honesto)", () => {
-      const cRcv = cargar({ silencioso: true });
+      // v18.1.0 (B1): el uid 707 del padrón se siembra en vgl_acceso_lista; el nombre en
+      // pantalla puede estar incompleto ("BRANDON PALENCIA") porque el uid manda.
+      const cRcv = cargar({ silencioso: true, almacen: almacenAcceso15() });
       enriquecerDom(cRcv);
       cRcv.api.__state.activeDoctor.id = 707;
       cRcv.api.__state.activeDoctor.name = "BRANDON PALENCIA";
@@ -2597,40 +2647,49 @@ module.exports = {
       t.cierto(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "explica por qué está bloqueado");
     });
 
-    t.caso("openAgendamientoModal: para un médico fuera de la lista RCV, el checkbox sigue siendo una elección real", () => {
+    // v18.1.0 (Misión B / B3) — RE-ESCRITURA del caso. Bajo el modelo de capacidades ya no
+    // existe «médico fuera de la lista RCV con el modal abierto»: `agendar_control` es de
+    // COMPLETO y COMPLETO ⇒ rcv, así que el checkbox de quien abre el modal siempre sale
+    // marcado y deshabilitado (caso anterior). Para un médico fuera del padrón (uid y
+    // nombre sin match) la apertura corta en seco (capa b): la elección real ya no está
+    // en el checkbox, está en el modal mismo. La aserción vieja («checked editable»)
+    // describía el comparador por nombre de v14.2.0, retirado en B1.
+    t.caso("openAgendamientoModal: para un médico fuera del padrón no hay checkbox que elegir — el modal ni se abre (capa b)", () => {
       const cNoRcv = cargar({ silencioso: true });
       enriquecerDom(cNoRcv);
-      cNoRcv.api.__state.activeDoctor.id = 707;
-      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
+      cNoRcv.api.__state.activeDoctor.id = 999; // uid fuera del padrón sembrado por el wrapper
+      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ"; // el respaldo por nombre tampoco coincide
       cNoRcv.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
       const modal = cNoRcv.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
-      t.cierto(
-        modal.innerHTML.includes('id="vgl-agm-pym-chk" checked>'),
-        "sale marcado por defecto pero editable: para este médico el checkbox sí decide"
-      );
-      t.falso(modal.innerHTML.includes('id="vgl-agm-pym-chk" checked disabled>'), "no debe salir deshabilitado");
-      t.falso(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "sin la nota de bloqueo");
+      t.cierto(!modal, "el guard de apertura corta en seco: sin modal no hay checkbox «editable» que mentir");
     });
 
-    t.caso("esMedicoRCVActivo: invocación directa — coincide por token completo, sin distinguir mayúsculas ni tildes", () => {
-      const cH = cargar({ silencioso: true });
-      cH.api.__state.activeDoctor.name = "dr. ánGEL estrada";
-      t.cierto(cH.api.esMedicoRCVActivo(), "ESTRADA está en RCV_DOCTORS, sin importar tilde/caja");
+    // v18.1.0 (Misión B / B1) — esMedicoRCVActivo ya no compara contra tokens embebidos:
+    // es accesoCap("rcv") sobre el padrón remoto (`vgl_acceso_lista`). El respaldo por
+    // NOMBRE exige nombre COMPLETO normalizado (mayúsculas, sin tildes, espacios
+    // colapsados); un prefijo o un fragmento NO matchea.
+    t.caso("esMedicoRCVActivo: invocación directa — coincide por nombre COMPLETO del padrón, sin distinguir mayúsculas ni tildes", () => {
+      const cH = cargar({ silencioso: true, almacen: almacenAcceso15() });
+      cH.api.__state.activeDoctor.id = 0; // sin uid: el respaldo es por nombre completo
+      cH.api.__state.activeDoctor.name = "  eliSeth   esTRAda ";
+      t.cierto(cH.api.esMedicoRCVActivo(), "Eliseth Estrada está en el padrón COMPLETO, sin importar tilde/caja/espacios");
       cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
-      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en la lista");
+      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en el padrón");
     });
 
-    // [auditoría 25-ago, hallazgo 1.2] "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" —
-    // con match por sub-cadena estos dos médicos, ajenos al programa RCV, quedaban forzados
-    // a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Debe comparar por token.
-    t.caso("esMedicoRCVActivo: un apellido que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado", () => {
-      const cSub = cargar({ silencioso: true });
+    // [auditoría 25-ago, hallazgo 1.2 — adaptado a B1] "PINO" es sub-cadena de "OSPINO" y
+    // de "ESPINOSA": con match por sub-cadena esos médicos, ajenos al padrón, quedaban
+    // forzados a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Desde B1 la
+    // comparación por nombre exige el nombre COMPLETO normalizado del padrón.
+    t.caso("esMedicoRCVActivo: un nombre que CONTIENE a un médico del padrón como sub-cadena no debe activar el forzado", () => {
+      const cSub = cargar({ silencioso: true, almacen: almacenAcceso15() });
+      cSub.api.__state.activeDoctor.id = 0;
       cSub.api.__state.activeDoctor.name = "JORGE OSPINO";
-      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
       cSub.api.__state.activeDoctor.name = "LAURA ESPINOSA";
-      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
-      cSub.api.__state.activeDoctor.name = "DR. PINO";
-      t.cierto(cSub.api.esMedicoRCVActivo(), "PINO como apellido propio (token exacto) sí debe seguir activando el forzado");
+      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
+      cSub.api.__state.activeDoctor.name = "MARÍA EDINETH PINO";
+      t.cierto(cSub.api.esMedicoRCVActivo(), "María Edineth Pino como nombre COMPLETO del padrón (caja/tilde distintas) sí activa el forzado");
     });
 
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {

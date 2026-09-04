@@ -1039,7 +1039,18 @@ module.exports = {
     // un médico AUTORIZADO, que es la ruta "normal" que sigue vigente. El gating para no
     // autorizados se prueba aparte.
     const AUTHORIZED = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
-    function autorizar(c) { c.api.__state.activeDoctor = AUTHORIZED; }
+    // v18.1.0 (Misión B / B1) — el padrón autorizado ya NO vive en el userscript (7A):
+    // sale de `vgl_acceso_lista`. Se siembra aquí la lista, como la dejaría el fetch del
+    // arreglo B2, para que el uid 707 de AUTHORIZED resuelva COMPLETO igual que antes.
+    const LISTA_ACCESO_04 = {
+      version: "test-04.1",
+      perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
+      blocklist: [],
+    };
+    function autorizar(c) {
+      c.api.__state.activeDoctor = AUTHORIZED;
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_04));
+    }
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).

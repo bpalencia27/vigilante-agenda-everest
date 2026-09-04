@@ -500,8 +500,16 @@ module.exports = {
       return creados;
     }
 
+    // v18.1.0 (Misión B / B1) — el padrón autorizado ya no vive en el userscript: el
+    // médico COMPLETO de estas pruebas (uid 707) se siembra en `vgl_acceso_lista`,
+    // como la dejaría el fetch del arreglo B2.
+    const ALMACEN_ACCESO_64 = { vgl_acceso_lista: JSON.stringify({
+      version: "test-64.1",
+      perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
+      blocklist: [],
+    }) };
     t.caso("createIaInjectorUI: médico autorizado con redacción activada pinta los dos inyectores cuando las casillas están en pantalla", () => {
-      const c = cargar({ silencioso: true });
+      const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64 });
       const a = c.api;
       a.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
       a.__S.iaRedaccion = true;
@@ -524,7 +532,7 @@ module.exports = {
     });
 
     t.caso("createIaInjectorUI: médico autorizado sin clave Gemini no pinta los inyectores", () => {
-      const c = cargar({ silencioso: true });
+      const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64 });
       const a = c.api;
       a.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
       a.__S.iaRedaccion = true;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.143
+// @version      18.1.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.143";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.1.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2007,6 +2007,10 @@
   // vuelo: al resolverse, una repetición legítima (reintento, sondeo) pasa normal.
   const _gmEnVuelo = new Map();
   function _gmReq(opts) {
+    // v18.1.0 — B4 CAPA c: misma forma de fallar que una caída de red,
+    // para que los .catch de los llamadores (SMS de laboratorio, correo)
+    // la traguen sin romper el flujo visible.
+    if (!accesoEscribirUrl(opts && opts.url)) return Promise.reject(new Error("NetErr (compuerta de escritura)"));
     let clave = "";
     try {
       clave = String(opts.method || "GET") + "|" + String(opts.url || "") + "|" +
@@ -8073,6 +8077,10 @@
       // el conteo del primer tick y se queda ahí toda la consulta, aunque el médico ordene los
       // exámenes o Athenea termine de responder.
       "PN" + _nPendientesDock,
+      // v18.1.0 — B5: el contador de pacientes nuevos también entra en la firma:
+      // sin esto, la pastilla «👤 Nuevos» no aparecería hasta que OTRO factor
+      // moviera la firma y el médico se perdería el aviso de la mañana.
+      "PACN" + ((state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0),
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
@@ -8309,6 +8317,32 @@
         } catch (e3) {}
       });
       btns.appendChild(bPend);
+    }
+
+    // v18.1.0 — B5: pastilla «👤 Nuevos (N)». SOLO un número, sin PHI: cuántos
+    // pacientes de la agenda de hoy no constaban en la memoria de este médico.
+    // Los toasts ya los anunciaron al aparecer (máx. 3/hora, ver avisoPacEval);
+    // este conteo es la memoria del día entero, incluidos los que no alcanzaron
+    // toast. El clic solo recuerda A QUÉ HORAS llegaron, jamás nombres ni cédulas.
+    const _nPacNuevosDock = (state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0;
+    if (_nPacNuevosDock > 0) {
+      const bPn = document.createElement("button");
+      bPn.className = "vgl-dock-btn";
+      bPn.setAttribute("data-accion", "pacientes-nuevos");
+      bPn.setAttribute("aria-label", _nPacNuevosDock + " pacientes nuevos en la agenda de hoy");
+      bPn.title = "\uD83D\uDC64 Pacientes de hoy que no constaban en la memoria de este médico. Clic para recordar a qué horas llegaron.";
+      _vglDockRotulo(bPn, "\uD83D\uDC64", "Nuevos (" + _nPacNuevosDock + ")");
+      bPn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try {
+          const _r = readJSON(avisoPacDiaKey(todayStamp()), null);
+          const _horas = (_r && Array.isArray(_r.nuevos) ? _r.nuevos : []).map((x) => x && x.hora).filter(Boolean);
+          showToast("VERDE", "Pacientes nuevos de hoy",
+            _nPacNuevosDock + " paciente(s) que no constaban en la memoria de este médico" +
+            (_horas.length ? ": " + _horas.join(", ") + "." : "."), false, "avisoPacDock|" + todayStamp());
+        } catch (e2) {}
+      });
+      btns.appendChild(bPn);
     }
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
@@ -9403,7 +9437,15 @@
       }
     }
   } catch (e) {}
-  function saveSettings() { const ok = writeJSON(SETTINGS_KEY, S); applySettings(); return ok; }
+  function saveSettings() {
+    const ok = writeJSON(SETTINGS_KEY, S);
+    applySettings();
+    // v18.1.0 B2: al guardar Ajustes, refresco forzado de la lista de acceso
+    // (el dueño edita la hoja "acceso" y quiere ver el efecto YA). Fire-and-
+    // forget con catch: un fallo de red JAMÁS bloquea ni ensucia el guardado.
+    try { accesoRefrescarLista(true); } catch (e) {}
+    return ok;
+  }
   // --- PREVENCIÓN DE DUPLICADOS EN CITAS Y ÓRDENES (diario, resetea a medianoche) ---
   const PROC_KEY = "vgl_proc_today";
   // NOTA (auditoría v14.2.0): se probó memoizar (1 s) para ahorrar los 3 parseos por tick del
@@ -10440,34 +10482,387 @@
   function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
   function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
   // =====================================================================
-  //  v17.x.x — REFACTOR S+ (30-ago): CONTROL DE ACCESO POR MÉDICO.
+  //  CONTROL DE ACCESO POR MÉDICO — núcleo ACCESO (Misión B, arreglo B1).
   //  ------------------------------------------------------------------
-  //  Lista FIJA de los médicos con acceso completo. Se compara el NOMBRE COMPLETO
-  //  normalizado (sin tildes, sin mayúsculas, sin espacios dobles) contra
-  //  `state.activeDoctor.name`. Los demás médicos ven solo el panel del Centinela,
-  //  agendamiento de laboratorios, Psicología/Odontología, laboratorios y PyM.
-  //  Restringido para los demás: agendamiento de citas médicas, Panel del paciente,
-  //  Redactor IA y Ordenamiento de exámenes (Control).
+  //  UNA sola fuente de verdad: la lista de acceso (el arreglo B2 la trae del
+  //  tablero remoto y la cachea en `vgl_acceso_lista`). Este bloque ya NO
+  //  embebe nombres (entrevista 7A): el padrón lo edita solo el dueño.
+  //  Identidad = UsuarioId de la sesión (state.activeDoctor.id) con respaldo
+  //  por nombre normalizado. La blocklist gana SIEMPRE y en silencio (6A).
+  //  Sin identidad detectada se honra 12 h el último perfil confirmado
+  //  (gracia); agotada, PÚBLICO. Las capacidades públicas (psic_odonto, pym
+  //  — entrevista 1C/2B) se montan para todo médico NO bloqueado, incluido
+  //  el que aún no tiene identidad. Esto es un control OPERATIVO de un
+  //  userscript, no un mecanismo de seguridad: quien puede desinstalar la
+  //  extensión puede saltárselo.
   // =====================================================================
-  const MTR_MEDICOS_AUTORIZADOS = [
-    "ELISETH MARGARITA ESTRADA MORENO",
-    "BRANDON JESUS PALENCIA MARTINEZ",
-    "MARIA EDINETH PINO",
-    "SINAI MIJARES",
-  ];
+  const ACCESO_CAPS_PUBLICAS = ["psic_odonto", "pym"];
+  const ACCESO_CAPS_LABORATORIOS = ["centinela", "notificaciones", "agendar_labs", "laboratorios", "widget_examen_normal", "widget_examenes_autolabs", "aviso_paciente_nuevo"];
+  const ACCESO_GRACIA_MS = 12 * 60 * 60 * 1000;
   function mtrNormalizarNombre(n) {
     return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
   }
-  // Pura y cacheable: devuelve true si el médico activo está en la lista autorizada.
-  // Sin nombre detectado todavía -> false (máxima restricción: ante la duda, ocultar).
-  function mtrEsMedicoAutorizado() {
+  // Pura: la lista sirve solo si viene COMPLETA y bien tipada — version no
+  // vacía, COMPLETO/LABORATORIOS/blocklist como arreglos de {uid>0, nombre}.
+  // Una lista a medias NO se aplica parcialmente: se ignora entera (D3).
+  function accesoListaValida(lista) {
     try {
-      const nombre = (state && state.activeDoctor && state.activeDoctor.name) || "";
-      const n = mtrNormalizarNombre(nombre);
-      if (!n) return false;
-      return MTR_MEDICOS_AUTORIZADOS.some((x) => mtrNormalizarNombre(x) === n);
+      if (!lista || typeof lista !== "object") return false;
+      if (typeof lista.version !== "string" || !lista.version) return false;
+      const perfiles = lista.perfiles;
+      if (!perfiles || typeof perfiles !== "object") return false;
+      const entradaOk = (e) => e && typeof e === "object" && Number.isInteger(e.uid) && e.uid > 0 && typeof e.nombre === "string" && mtrNormalizarNombre(e.nombre) !== "";
+      const arregloOk = (a) => Array.isArray(a) && a.every(entradaOk);
+      return arregloOk(perfiles.COMPLETO) && arregloOk(perfiles.LABORATORIOS) && arregloOk(lista.blocklist);
     } catch (e) { return false; }
   }
+  // La lista cacheada (o null si no hay o no sirve). Jamás lanza.
+  function accesoLeerLista() {
+    try {
+      const crudo = localStorage.getItem("vgl_acceso_lista");
+      if (!crudo) return null;
+      const lista = JSON.parse(crudo);
+      return accesoListaValida(lista) ? lista : null;
+    } catch (e) { return null; }
+  }
+  // ---------------------------------------------------------------------
+  //  v18.1.0 — B2: LISTA REMOTA (una sola fuente de verdad). La caché
+  //  `vgl_acceso_lista` MANDA; este refresco la actualiza desde el tablero
+  //  cada 4 h y al guardar Ajustes, SIN poder tumbar nada: si la respuesta
+  //  no sirve o la red falla, la caché anterior sigue en pie (misma regla D3
+  //  — nada se aplica a medias). `vgl_acceso_fetch` es solo diagnóstico de la
+  //  última tentativa; JAMÁS autoriza nada por sí mismo.
+  // ---------------------------------------------------------------------
+  const ACCESO_REFRESCO_MS = 4 * 60 * 60 * 1000;
+  function _accesoRefrescoFresco() {
+    try {
+      const sello = JSON.parse(localStorage.getItem("vgl_acceso_fetch") || "null");
+      return !!(sello && sello.ok && typeof sello.ts === "number" && Date.now() - sello.ts < ACCESO_REFRESCO_MS);
+    } catch (e) { return false; }
+  }
+  async function accesoRefrescarLista(forzado) {
+    if (!forzado && _accesoRefrescoFresco()) return null; // ya refrescado hace <4 h
+    const _sellar = (ok) => {
+      try { localStorage.setItem("vgl_acceso_fetch", JSON.stringify({ ts: Date.now(), ok: !!ok })); } catch (e) {}
+    };
+    _sellar(false); // pesimista: solo pasa a ok si la respuesta sirve de verdad
+    if (typeof GM_xmlhttpRequest === "undefined") return null; // sin red de userscript: la caché manda
+    try {
+      const r = await gmJson(repUrl() + "?accion=listaAcceso&token=" + encodeURIComponent(TABLERO.token));
+      const sirve = !!(r && r.ok && r.perfiles);
+      if (!sirve) { _sellar(false); return null; }
+      const lista = {
+        version: String(r.version || ""),
+        perfiles: r.perfiles,
+        blocklist: Array.isArray(r.blocklist) ? r.blocklist : []
+      };
+      if (!accesoListaValida(lista)) { _sellar(false); return null; }
+      const previa = accesoLeerLista();
+      const cambio = !previa || previa.version !== lista.version;
+      if (cambio) { try { localStorage.setItem("vgl_acceso_lista", JSON.stringify(lista)); } catch (e) {} }
+      _sellar(true);
+      return { version: lista.version, cambio };
+    } catch (e) {
+      _sellar(false);
+      return null;
+    }
+  }
+  // Anota el último perfil confirmado CON identidad (arranque de la gracia en
+  // esta máquina). Solo perfiles privilegiados; PÚBLICO/BLOQUEADO no anotan.
+  function _accesoAnotarOk(perfil) {
+    try {
+      const actual = JSON.parse(localStorage.getItem("vgl_acceso_ultimo_ok") || "null");
+      if (actual && actual.perfil === perfil && typeof actual.ts === "number" && Date.now() - actual.ts < 60000) return perfil;
+      localStorage.setItem("vgl_acceso_ultimo_ok", JSON.stringify({ perfil: perfil, ts: Date.now() }));
+    } catch (e) {}
+    return perfil;
+  }
+  function _accesoGracia() {
+    try {
+      const ultimo = JSON.parse(localStorage.getItem("vgl_acceso_ultimo_ok") || "null");
+      if (ultimo && (ultimo.perfil === "COMPLETO" || ultimo.perfil === "LABORATORIOS") && typeof ultimo.ts === "number" && Date.now() - ultimo.ts < ACCESO_GRACIA_MS) return ultimo.perfil;
+    } catch (e) {}
+    return null;
+  }
+  // Orden de resolución (el primero que aplique, gana):
+  //   1. blocklist por uid o por nombre — gana SIEMPRE, en silencio.
+  //   2. uid en COMPLETO / LABORATORIOS (el uid MANDA sobre el nombre, D1).
+  //   3. nombre normalizado en COMPLETO / LABORATORIOS (respaldo D1).
+  //   4. sin identidad (uid 0 y sin nombre): gracia fresca → último perfil
+  //      confirmado; vencida o sin anoto → PÚBLICO. Con identidad que no
+  //      está en el padrón → PÚBLICO (la gracia NO se hereda, D2).
+  //   Sin lista aplicable (caché ausente o inservible, p.ej. B1 sin B2):
+  //   todos resuelven por la regla 4 — padrón vacío = PÚBLICO.
+  function accesoPerfil() {
+    try {
+      const lista = accesoLeerLista();
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      const nombre = mtrNormalizarNombre((state && state.activeDoctor && state.activeDoctor.name) || "");
+      if (lista) {
+        const porUid = (e) => Number(e.uid) === uid;
+        const porNombre = (e) => mtrNormalizarNombre(e.nombre) === nombre;
+        if ((uid && lista.blocklist.some(porUid)) || (nombre && lista.blocklist.some(porNombre))) return "BLOQUEADO";
+        if (uid && lista.perfiles.COMPLETO.some(porUid)) return _accesoAnotarOk("COMPLETO");
+        if (uid && lista.perfiles.LABORATORIOS.some(porUid)) return _accesoAnotarOk("LABORATORIOS");
+        if (nombre && lista.perfiles.COMPLETO.some(porNombre)) return _accesoAnotarOk("COMPLETO");
+        if (nombre && lista.perfiles.LABORATORIOS.some(porNombre)) return _accesoAnotarOk("LABORATORIOS");
+      }
+      if (!uid && !nombre) {
+        const g = _accesoGracia();
+        if (g) return g;
+      }
+      return "PUBLICO";
+    } catch (e) { return "PUBLICO"; }
+  }
+  // Las TRES capas de compuerta usan esto: (a) no construir la UI, (b) no
+  // abrir el modal, (c) re-comprobar justo antes de escribir. BLOQUEADO no
+  // ve NADA; las públicas valen para todos los no bloqueados; COMPLETO ve
+  // todo; LABORATORIOS solo sus siete capacidades.
+  function accesoCap(cap) {
+    const perfil = accesoPerfil();
+    if (perfil === "BLOQUEADO") return false;
+    if (ACCESO_CAPS_PUBLICAS.includes(cap)) return true;
+    if (perfil === "COMPLETO") return true;
+    if (perfil === "LABORATORIOS") return ACCESO_CAPS_LABORATORIOS.includes(cap);
+    return false;
+  }
+  // v18.1.0 — B4 CAPA c: re-comprobación JUSTO antes de escribir. La capa
+  // b decide qué se puede ABRIR; esta decide qué puede SALIR a la red. El
+  // mapa familia → capacidad vive en UNA sola tabla (URL de escritura →
+  // capacidad) y los cuatro embudos de red del script la consultan; una
+  // URL que no está en la tabla es una LECTURA y pasa siempre (telemetría,
+  // consultas de la página, SharePoint). BLOQUEADO no escribe NADA, ni
+  // siquiera las capacidades públicas.
+  function accesoEscribir(cap) {
+    try {
+      if (!accesoCap(cap)) { _accesoDenegAnota(cap); return false; }
+      return true;
+    } catch (e) { return false; }
+  }
+  // ---------------------------------------------------------------------
+  //  v18.1.0 — B6: TELEMETRÍA DE DENEGACIÓN DE ESCRITURA (capa c, sin
+  //  PHI). Contar cuántas veces la compuerta dijo NO justo antes de
+  //  escribir es lo único que distingue «nadie usó la función» de
+  //  «alguien trató de guardar y el candado aguantó». Solo cuenta la
+  //  capa c: las capas a/b se disparan solas en cada tick para todo
+  //  perfil recortado (un PÚBLICO sin UI de laboratorios es el estado
+  //  NORMAL, no un incidente) y su volumen no dice nada del usuario;
+  //  la capa c, en cambio, solo suena con intención real de escribir.
+  //  Los contadores viven en MEMORIA (accesoEscribir es caliente),
+  //  bajan a disco en el barrido de 30 min —clave datada, solo el día
+  //  en curso— y viajan al tablero UNA vez al día si hubo denegaciones,
+  //  agregadas por capacidad: cadenas FIJAS del script, sin cédulas,
+  //  sin nombres de pacientes, sin URLs, sin contenido clínico.
+  // ---------------------------------------------------------------------
+  let _accesoDenegN = {};
+  function _accesoDenegReset() { _accesoDenegN = {}; } // gancho del banco: el contador es de memoria, no de disco
+  function _accesoDenegAnota(cap) {
+    try {
+      const k = String(cap || "?");
+      _accesoDenegN[k] = (_accesoDenegN[k] || 0) + 1;
+      if (Object.keys(_accesoDenegN).length > 32) _accesoDenegN = {}; // tormenta: mejor perder la cuenta que ahogarse
+    } catch (e) {}
+  }
+  // Suma memoria→disco en la clave del día, PODA los días viejos y
+  // devuelve el acumulado {dia, cuentas}. Jamás lanza.
+  function _accesoDenegDia() {
+    try {
+      const dia = todayStamp();
+      const k = "vgl_acceso_deneg_" + dia;
+      let acum = {};
+      try { acum = JSON.parse(localStorage.getItem(k) || "{}") || {}; } catch (e) {}
+      Object.keys(_accesoDenegN).forEach((x) => { acum[x] = (acum[x] || 0) + _accesoDenegN[x]; });
+      try { localStorage.setItem(k, JSON.stringify(acum)); } catch (e) {}
+      _accesoDenegN = {};
+      const viejos = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const kk = localStorage.key(i);
+        if (kk && kk.indexOf("vgl_acceso_deneg_") === 0 && kk !== k) viejos.push(kk);
+      }
+      viejos.forEach((kk) => { try { localStorage.removeItem(kk); } catch (e) {} });
+      return { dia: dia, cuentas: acum };
+    } catch (e) { return null; }
+  }
+  // Barrido de 30 min (mismo timer que repAccesoDiario): siempre baja a
+  // disco; reporta UNA vez por día y solo si el acumulado trae algo.
+  function _accesoDenegFlush() {
+    try {
+      const dia = _accesoDenegDia();
+      if (!repOn()) return;
+      const cuentas = (dia && dia.cuentas) || {};
+      if (!Object.keys(cuentas).length) return;
+      const k = "vgl_rep_acceso_deneg";
+      if (localStorage.getItem(k) === dia.dia) return; // ya viajó hoy
+      try { localStorage.setItem(k, dia.dia); } catch (e) {}
+      reportar("acceso_deneg", {
+        uid: Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0,
+        perfil: accesoPerfil(),
+        cuentas: cuentas
+      });
+    } catch (e) {}
+  }
+  const ACCESO_ESCRITURA_URLS = [
+    // agendar_labs (LABORATORIOS + COMPLETO): AppCita Viva 1A.
+    { re: /apiLaboratorioV2\/api\/Agendamiento\/AgendarCita/i, cap: "agendar_labs" },
+    { re: /\/API\/EnviarMensajeTextoLaboratorio/i, cap: "agendar_labs" },
+    // agendar_control (COMPLETO): Everest.
+    { re: /APIAcceso\/api\/Acceso\/AsignarTurno/i, cap: "agendar_control" },
+    { re: /\/CancelarCita|\/AnularCita|\/CancelarTurno/i, cap: "agendar_control" },
+    { re: /APIAcceso\/api\/SMS\/EnviarSMS/i, cap: "agendar_control" },
+    // pym (pública): ordenamientos.
+    { re: /APIOrdenamientoHealth\/api\/ordenamiento\/GuardarOrdenamiento/i, cap: "pym" },
+    { re: /APIEnvioCorreo\/api\/EnvioCorreo\/EnviarEmailOrdenamiento/i, cap: "pym" },
+  ];
+  // Devuelve false SOLO si la URL es una escritura catalogada y el perfil
+  // no tiene esa capacidad. Cualquier error interno deja pasar (lectura):
+  // esta compuerta es control operativo, no un mecanismo de seguridad.
+  function accesoEscribirUrl(url) {
+    try {
+      const u = String(url || "");
+      for (let i = 0; i < ACCESO_ESCRITURA_URLS.length; i++) {
+        const e = ACCESO_ESCRITURA_URLS[i];
+        if (e.re.test(u)) return accesoEscribir(e.cap);
+      }
+      return true;
+    } catch (err) { return true; }
+  }
+  // Envoltorio histórico: mismo nombre que consumía el módulo MTR, ahora
+  // alimentado por el núcleo ACCESO.
+  function mtrEsMedicoAutorizado() {
+    return accesoPerfil() === "COMPLETO";
+  }
+
+  // =====================================================================
+  //  v18.1.0 — B5: AVISO DE PACIENTE NUEVO (capacidad `aviso_paciente_nuevo`)
+  //  ------------------------------------------------------------------
+  //  Everest NO marca «nuevo» en ninguna fila de la agenda, así que «nuevo»
+  //  se define por MEMORIA PROPIA: una cédula que no consta en el histórico
+  //  de ESTE médico (clave por uid: la memoria no se comparte entre médicos
+  //  que usan el mismo navegador). Se evalúa al llegar cada lectura del API
+  //  de agenda (tickApi), sin red adicional y sin capa c: esto no escribe
+  //  nada en Everest, solo observa.
+  //
+  //  LAS REGLAS QUE HACEN QUE ESTO NO MOLESTE:
+  //   · CAPA a: sin accesoCap("aviso_paciente_nuevo") no se evalúa NADA ni
+  //     se aprende NADA — el histórico solo crece para quien puede usarlo.
+  //   · BOOTSTRAP SILENCIOSO: con el histórico vacío (médico nuevo, o primer
+  //     día del feature) solo APRENDE y no avisa — el primer día no puede
+  //     mentir diciendo que todos los pacientes de años son nuevos.
+  //   · MÁX 3 TOASTS POR HORA CORRIDA: una agenda que se llene de golpe no
+  //     ametralla al médico; los que no alcanzaron toast quedan contados.
+  //   · DEDUP doble: por cita (cédula@hora) dentro del día, y entre
+  //     pestañas por el registro vgl_vistos (_avisoUnaVezPorNavegador).
+  //   · CERO PHI INNECESARIA EN DISCO: el registro del día guarda cédula y
+  //     hora (lo mínimo para la memoria), NUNCA nombres; el nombre solo
+  //     vive en el toast, que se borra solo. Cero red, cero telemetría.
+  //   · El contador del dock («👤 Nuevos (N)») es SOLO un número.
+  // =====================================================================
+  const AVISO_PAC_HIST_MAX = 2000;    // sobre esto, se poda
+  const AVISO_PAC_HIST_KEEP = 1500;   // a esto se reduce al podar
+  const AVISO_PAC_TOASTS_HORA = 3;    // presupuesto de toasts por hora corrida
+
+  function avisoPacHistKey(uid) { return "vgl_aviso_hist_" + (Number(uid) || 0); }
+  function avisoPacDiaKey(dia) { return "vgl_aviso_pacientes_" + (dia || todayStamp()); }
+  function avisoPacCitaId(doc, hora) { return String(doc || "") + "@" + String(hora || ""); }
+
+  // Puro: de una lista de ts de toasts, los que caen en la última hora corrida.
+  function avisoPacToastsRecientes(ts, ahora) {
+    const corte = (ahora || Date.now()) - 60 * 60 * 1000;
+    return (Array.isArray(ts) ? ts : []).filter(function (x) { return Number(x) > corte; });
+  }
+
+  // Puro: sobre el máximo de conocidos, conserva los más recientes. Devuelve
+  // null si no había nada que podar (el llamador no toca el disco entonces).
+  function avisoPacHistPodar(docs) {
+    const d = docs || {};
+    const llaves = Object.keys(d);
+    if (llaves.length <= AVISO_PAC_HIST_MAX) return null;
+    llaves.sort(function (a, b) { return (d[b] || 0) - (d[a] || 0); });
+    const out = {};
+    for (let i = 0; i < AVISO_PAC_HIST_KEEP; i++) out[llaves[i]] = d[llaves[i]];
+    return out;
+  }
+
+  // Limpieza de claves datadas de días pasados: corre UNA vez al día (cuando
+  // el registro del día cambia), no en cada tick. Mismo patrón que la poda
+  // B8 de las marcas vgl_n_*: quien solo lee, también barre lo viejo.
+  function _avisoPacLimpiarDiasViejos(dia) {
+    try {
+      const hoy = dia || todayStamp();
+      const PREF = "vgl_aviso_pacientes_";
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf(PREF) === 0 && k.slice(PREF.length) !== hoy) localStorage.removeItem(k);
+      }
+    } catch (e) {}
+  }
+
+  // Núcleo B5. Recibe las filas ya parseadas de state.apiCitas ({doc_id,
+  // nombre, hora_texto}) y devuelve {nuevos, toasts, bootstrap} — o null si
+  // la capa a cortó o no había nada que evaluar. `opts` es del banco:
+  // {ahora, toast} fijan el reloj y graban los avisos sin depender del DOM.
+  function avisoPacEval(citas, opts) {
+    try {
+      if (!accesoCap("aviso_paciente_nuevo")) return null;          // capa a
+      if (!Array.isArray(citas) || !citas.length) return null;
+      const o = opts || {};
+      const ahora = o.ahora || Date.now();
+      const toast = o.toast || showToast;
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      // Memoria a largo plazo del médico (por uid, no compartida).
+      let hist = readJSON(avisoPacHistKey(uid), null);
+      const bootstrap = !hist || !hist.docs || typeof hist.docs !== "object" || !Object.keys(hist.docs).length;
+      if (bootstrap) hist = { docs: {} };
+      // Registro del día: dedup por cita, presupuesto de toasts y contador.
+      const dia = todayStamp();
+      let reg = readJSON(avisoPacDiaKey(dia), null);
+      if (!reg || reg.dia !== dia) {
+        reg = { dia: dia, avisados: {}, toasts: [], nuevos: [] };
+        _avisoPacLimpiarDiasViejos(dia);
+      }
+      let presupuesto = Math.max(0, AVISO_PAC_TOASTS_HORA - avisoPacToastsRecientes(reg.toasts, ahora).length);
+      const llegaron = [];   // los nuevos de ESTA pasada, para sus toasts
+      let cambio = false;
+      for (let i = 0; i < citas.length; i++) {
+        const a = citas[i] || {};
+        const doc = String(a.doc_id || "").trim();
+        if (!doc) continue;                    // sin cédula no hay memoria posible
+        const hora = String(a.hora_texto || "");
+        const esNuevo = !hist.docs[doc];
+        hist.docs[doc] = ahora;                // aprende SIEMPRE (la memoria no olvida)
+        if (esNuevo) {
+          cambio = true;
+          const cid = avisoPacCitaId(doc, hora);
+          if (!bootstrap && !reg.avisados[cid]) {
+            reg.avisados[cid] = ahora;
+            reg.nuevos.push({ doc: doc, hora: hora, ts: ahora });   // sin nombre: PHI mínima
+            llegaron.push({ nombre: String(a.nombre || ""), hora: hora, cid: cid });
+          }
+        }
+      }
+      // Toasts: mejor esfuerzo dentro del presupuesto; dedup entre pestañas.
+      let dados = 0;
+      for (let j = 0; j < llegaron.length && presupuesto > 0; j++) {
+        const p = llegaron[j];
+        if (!_avisoUnaVezPorNavegador("avisoPac|" + p.cid)) continue;
+        try {
+          toast("VERDE", "Paciente nuevo en la agenda",
+            (p.nombre || "Sin nombre") + (p.hora ? " — " + p.hora : "") +
+            ". No constaba en la memoria de este médico.", false, p.cid);
+        } catch (eT) {}
+        reg.toasts.push(ahora); dados++; presupuesto--; cambio = true;
+      }
+      if (cambio) {
+        const poda = avisoPacHistPodar(hist.docs);
+        if (poda) hist.docs = poda;
+        writeJSON(avisoPacHistKey(uid), hist);
+        writeJSON(avisoPacDiaKey(dia), reg);
+      }
+      try { state.avisoPacNuevos = reg.nuevos.length; } catch (eS) {}
+      return { nuevos: reg.nuevos.length, toasts: dados, bootstrap: bootstrap };
+    } catch (e) { return null; }
+  }
+
   function isExcludedActivity(header, label) {
     const hay = stripAccents((header + " " + label).toLowerCase());
     if (hay.includes("vih")) return false; // VIH siempre se conserva
@@ -11903,6 +12298,31 @@
         nav, so, zona,
         pantalla: (screen && screen.width ? screen.width + "x" + screen.height : ""),
         gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : ""
+      });
+    } catch (e) {}
+  }
+
+  // v18.1.0 — B2: DESCUBRIMIENTO DE UIDS, una vez al día. La hoja "acceso" del
+  // tablero nace con los uids VACÍOS (nunca se inventan: el uid manda sobre el
+  // nombre y uno fabricado podría coincidir con otro médico). Cada equipo
+  // reporta aquí su identidad ACTUAL —uid + nombre + perfil resuelto— a la hoja
+  // "acceso_uid", y el dueño copia uid↔nombre a la hoja "acceso". Es dato de
+  // PERSONAL (el nombre de un médico que ya trabaja aquí), no PHI de pacientes.
+  // Sin uid detectado no hay nada que descubrir: Everest solo revela el
+  // UsuarioId cuando el médico ya abrió su agenda, por eso el arranque lo
+  // reintenta cada 30 min (el candado diario hace el resto).
+  function repAccesoDiario() {
+    if (!repOn()) return;
+    try {
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      if (!uid) return;
+      const k = "vgl_rep_acceso";
+      if (localStorage.getItem(k) === todayStamp()) return;
+      localStorage.setItem(k, todayStamp());
+      reportar("acceso", {
+        uid,
+        nombre: String((state && state.activeDoctor && state.activeDoctor.name) || "").slice(0, 100),
+        perfil: accesoPerfil()
       });
     } catch (e) {}
   }
@@ -16157,6 +16577,9 @@
     API.medicoId = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
   } catch (e) {}
   function apiRecordar(url) {
+    // v18.1.0 — B4 CAPA c: un médico BLOQUEADO tampoco deja huella de la
+    // URL del API en el equipo (vgl_api_url / vgl_api_medico).
+    if (!accesoEscribir("pym")) return;
     try {
       if (!url || !API_RE.test(url)) return;
       const abs = url.indexOf("http") === 0 ? url : (location.origin + (url[0] === "/" ? "" : "/") + url);
@@ -16530,6 +16953,9 @@
     apiLeerAgenda().then((citas) => {
       if (currentEpoch !== state.sessionEpoch) return; // KR-02: Descartes de datos de ayer
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
+      // v18.1.0 — B5: el aviso de paciente nuevo se evalúa con la MISMA lectura
+      // que ya llegó (cero red extra). Fallo del eval jamás rompe el tick.
+      if (citas) { try { avisoPacEval(citas); } catch (eA) {} }
     });
   }
   // v12.3.8 — BOMBA DE VENTANA CRÍTICA. Dos huecos que ningún umbral de apiCadencia()
@@ -20885,6 +21311,11 @@
   // siempre — exactamente el defecto que v18.0.47 cerró en el núcleo y que aquí seguía vivo.
   // Si el llamador ya trae su propia señal, se respeta; sin AbortController, se llama igual.
   function _fetchConTope(f, url, init, topeMs) {
+    // v18.1.0 — B4 CAPA c: embudo COMÚN de fetch crudo. Un rechazo aquí
+    // respeta el contrato de fallo de cada llamador (EnviarSMS → «sin
+    // conexión», _apiPostConDetalle → {ok:false,red:true},
+    // reenviarSmsRecordatorio → {ok:false,motivo:«sin red»}).
+    if (!accesoEscribirUrl(url)) return Promise.reject(new Error("VGL_ACCESO_ESCRITURA"));
     const ms = (typeof topeMs === "number" && topeMs > 0) ? topeMs : PAGE_FETCH_TIMEOUT_MS;
     if (typeof AbortController === "undefined" || (init && init.signal)) return f(url, init);
     const abortar = new AbortController();
@@ -21099,6 +21530,11 @@
 
   // Wrapper reactivo con GHOST (Deduplicación de Promesas / Promise Pooling)
   async function pageFetchJson(url, options) {
+    // v18.1.0 — B4 CAPA c: la escritura se re-comprueba JUSTO antes de
+    // salir. null es el contrato de fallo normal de pageFetchJson: los
+    // llamadores (AsignarTurno, GuardarOrdenamiento) ya lo tratan como
+    // «no se pudo» y muestran su aviso sin crear nada.
+    if (!accesoEscribirUrl(url)) return null;
     const key = url + "|" + (options ? JSON.stringify(options) : "");
     if (GHOST.promises.has(key)) return GHOST.promises.get(key);
 
@@ -21308,6 +21744,10 @@
   // puntos del script.
   const gmPostJsonEx = async (url, data = {}) => {
     return new Promise((resolve) => {
+      // v18.1.0 — B4 CAPA c: sin la capacidad, la cita de laboratorio NO
+      // se agenda. Se resuelve con el MISMO contrato de «sin red» que ya
+      // entienden los llamadores (status 0 = nunca salió).
+      if (!accesoEscribirUrl(url)) { resolve({ ok: false, status: 0, data: null }); return; }
       if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, status: 0, data: null }); return; }
       GM_xmlhttpRequest({
         method: "POST", url, headers: { "Content-Type": "application/json" },
@@ -22443,26 +22883,16 @@
     } catch (e) {}
   }
 
-  // [v14.2.0 — auditoría pre-producción 2026-08-18] Médicos para quienes TODA cita se
-  // considera del programa RCV/Prevención, sin excepción (encargo del consultorio). Antes
-  // esta lista y el forzado vivían SOLO dentro de apiAccesoAsignarTurno: el checkbox del
-  // modal de agendamiento (#vgl-agm-pym-chk) seguía mostrándose como una elección real para
-  // estos médicos, aunque su valor se descartara siempre aquí abajo. Se saca a función
-  // compartida para que el modal (openAgendamientoModal) pueda usarla también y mostrar el
-  // checkbox marcado y deshabilitado —honesto sobre que no hay elección— en vez de un
-  // control que no hace nada. Ver CHANGELOG.
-  const RCV_DOCTORS = ["PALENCIA", "BPALENCIA", "PINO", "MPINO", "ESTRADA", "EESTRADA", "MIJARES", "SMIJARES"];
-  // v17.6.47 — auditoría 25-ago (1.2): `docName.includes(p)` hacía match por SUB-CADENA.
-  // "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" (verificado carácter por carácter) —
-  // un médico ajeno al programa con ese apellido quedaba forzado a swIsPyM/swProgramaEspecial
-  // = true en el POST real que crea la cita en Athenea. Se compara por TOKEN completo
-  // (separado por cualquier carácter que no sea letra/dígito: espacios, puntos, comas),
-  // no por sub-cadena — conserva el match de "BPALENCIA"/"EESTRADA" como token propio
-  // (así aparecen en Everest cuando el nombre trae la inicial pegada al apellido).
+  // [v18.1.0 — núcleo ACCESO, Misión B] RCV/Prevención ya no se decide por
+  // apellidos embebidos en el código (RCV_DOCTORS, retirado en esta versión):
+  // es la capacidad "rcv" de la lista de acceso. La tienen los del perfil
+  // COMPLETO (los mismos cuatro del padrón que antes resolvían por token) y
+  // nadie más — ni LABORATORIOS ni PÚBLICO ni BLOQUEADO. La historia completa
+  // (v14.2.0 forzado por médico con el checkbox del modal deshabilitado;
+  // v17.6.47 match por token para no atrapar sub-cadenas tipo "OSPINO" o
+  // "ESPINOSA") quedó en el CHANGELOG y en ACCESO/02_DISENO_ACCESO.md.
   function esMedicoRCVActivo() {
-    const docName = stripAccents(String((state.activeDoctor && state.activeDoctor.name) || "").toUpperCase());
-    const tokens = docName.split(/[^A-Z0-9]+/).filter(Boolean);
-    return RCV_DOCTORS.some((p) => tokens.includes(p));
+    return accesoCap("rcv");
   }
 
   // v15.8.0 (N4) — VISTA PREVIA DEL SMS. Pura: recibe la plantilla (el texto real
@@ -24157,6 +24587,9 @@
   }
 
   async function openLaboratoriosModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): compuerta de acceso. `laboratorios` es capacidad
+    // privada; sin ella la apertura corta en seco, antes de leer nada del paciente.
+    if (!accesoCap("laboratorios")) return;
     const _lo = opts || {};   // v18.0.115 (C11): { nuevos: true } fuerza la consulta en vivo
     let _labsDePrecargaSeg = null;   // segundos de antigüedad si se sirvió la precarga
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -24866,6 +25299,10 @@
   // de siempre (la primera casilla del registro que esté visible), que es lo que usa el
   // botón del dock. Los dos botones nuevos, en cambio, SABEN a qué casilla pertenecen.
   async function abrirRedactorTextoLibre(apt, opts) {
+    // v18.1.0 — B3 (capa b): `redactor_ia` es de COMPLETO. La puerta del dock
+    // corta en seco, antes de leer datos clínicos; mtrAbrirPanelRedaccion
+    // re-comprueba al montar (defense-in-depth).
+    if (!accesoCap("redactor_ia")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     if (!(typeof S !== "undefined" && S.iaRedaccion === true) || !mtrLeerClaveGemini()) {
       showToast("AMBAR", "Redactar con IA", "La redacción con IA aún no está activada en este computador. Pida al administrador del asistente activarla — es un paso único por equipo.", false);
@@ -25883,6 +26320,9 @@
   // vigila la historia igual que hacía «Riesgo y exámenes» (cada 20 s) y
   // reclasifica solo si el médico escribió algo nuevo.
   async function openPanelPacienteModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): `panel_paciente` es de COMPLETO; sin la capacidad
+    // la apertura corta en seco, antes de leer nada del paciente.
+    if (!accesoCap("panel_paciente")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     const origen = (opts && opts.origen) || "panel";
     try { uxTrack("fn.panel.open", { origen: origen }); } catch (e) {}
@@ -26805,6 +27245,9 @@
     } catch (e) { return false; }
   }
   function openAgendamientoModal(apt) {
+    // v18.1.0 — B3 (capa b): `agendar_control` es de COMPLETO. Sin la capacidad
+    // la apertura corta en seco (LABORATORIOS agenda la toma por openLabSoloModal).
+    if (!accesoCap("agendar_control")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
     // v15.3.0 — Restituido tras adoptar el rediseño de 3 pasos: la version nueva del modal
@@ -29279,6 +29722,9 @@
   // rango de "5 días hábiles antes" ±3 días que ya usa el flujo completo — nunca vuelve
   // a preguntar nada de la cita principal, que ya existe y no se toca.
   async function openLabSoloModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): `agendar_labs` (toma de muestras) es de LABORATORIOS
+    // y COMPLETO; PÚBLICO y BLOQUEADO no abren. Corta en seco, antes de leer nada.
+    if (!accesoCap("agendar_labs")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
 
     // v14.2.0 — MODO LIBRE (encargo del médico): también se puede agendar SOLO la toma de
@@ -35560,8 +36006,17 @@
     // Crónicos, y si el oyente llega después, esa carga ya pasó y nos la perdimos.
     try { _instalarOyenteTablaOficial(); } catch (e) {}
     const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    // v18.1.0 — B2: lista de acceso remota + descubrimiento de uids. El primer
+    // refresco sale a los 9 s (mismo respeto por el arranque que entorno y
+    // flush; la caché local ya manda desde el instante 0) y luego cada 4 h.
+    // La identidad se sondea cada 30 min — Everest revela el UsuarioId solo
+    // cuando el médico abre su agenda, y el candado vgl_rep_acceso lo deja
+    // en una fila por equipo y por día.
+    const tAccesoBoot = setTimeout(() => { try { accesoRefrescarLista(); } catch (e) {} }, 9000);
+    const tAccesoLoop = setInterval(() => { try { accesoRefrescarLista(); } catch (e) {} }, ACCESO_REFRESCO_MS);
+    const tAccesoUid = setInterval(() => { try { repAccesoDiario(); } catch (e) {} try { _accesoDenegFlush(); } catch (e) {} }, 1800000);
     if (Array.isArray(state.timers)) {
-      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tAccesoBoot, tAccesoLoop, tAccesoUid);
       // v15.x — Sin esto, emergencyTeardown() NO podia cancelarlos: el kill-switch retiraba
       // la interfaz y anunciaba "Pausa de seguridad remota activa" mientras la pestaña seguia
       // consultando SharePoint y desempacando el libro de PyM cada 10 min, indefinidamente.
@@ -45362,6 +45817,10 @@
     ayuda: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
   };
   function mtrAbrirPanelRedaccion(resumen, opts) {
+    // v18.1.0 — B3 (capa b): segunda puerta de `redactor_ia`. abrirRedactorTextoLibre
+    // ya filtra la entrada del dock; este montaje re-comprueba para cualquier otro
+    // llamador. Defense-in-depth: sin la capacidad no se monta el panel de IA.
+    if (!accesoCap("redactor_ia")) return;
     try {
       if (!resumen) { setSummary("No hay resumen clínico para redactar.", "warn"); return; }
       try { uxTrack("fn.ia.open"); } catch (e) {}
