@@ -12629,3 +12629,48 @@ banco deba fijar.
 | 496 | `VGL_DISCO_DEBOUNCE_MS` de 4000 a 9000: la ventana de calma se estira al doble — SOBREVIVIÓ, el harness recorta retardos a 1 ms y la suite mide la semántica, no la duración | *suite_75: 48 pasan, 0 fallan (mutante vivo, aceptado)* | Sí |
 
 Banco completo: **3.211 comprobaciones pasan, 0 fallan.**
+
+## v18.0.137 — 3-sep — el disco hostil del consultorio: el reintento acotado
+
+Nueva suite_76 (El disco hostil del consultorio, 15 comprobaciones) para lo que el
+consultorio le hace de verdad al disco: dos pestañas a la vez (pacientes distintos, el
+mismo paciente y la carrera exacta por el mismo .md), el permiso revocado entre guardados,
+OneDrive reteniendo el `close`, la carpeta borrada o cambiada a mitad de mes, fallos
+transitorios de `createWritable` —sueltos, en cascada y junto a la cuota llena— y el
+paciente que reabre días después. Con el código de la 136, cuatro caían: A3 (el rebote de
+la segunda pestaña perdía su escritura), B2 (el `close` retenido enterraba la fusión), D1
+(un `createWritable` transitorio mataba la historia) y D3 (fallo transitorio JUNTO a la
+cuota llena dejaba sin rescate). La 136 ya no perdía nada por la cuota: perdía por el
+rebote.
+
+**El arreglo.** `_vglDiscoEscribirArchivo` ahora reintenta ACOTADO (`VGL_DISCO_REINTENTOS
+= 3`, espera progresiva `VGL_DISCO_REINTENTO_MS * intento`) y DENTRO de la tarea serial:
+ningún reintento se encola detrás de otra escritura del mismo archivo y la exclusión mutua
+se conserva. Cada intento rehace TODO el recorrido —carpeta, handle y writable— porque la
+retención puede morir en cualquiera de los tres pasos; si el último también fracasa, el
+error sube igual que antes y la próxima guarda del médico reprograma el espejo con lo
+completo.
+
+**Un desvío de diagnóstico que quedó de lección.** En la primera pasada pre-arreglo caían
+siete, no cuatro: A2, C2 y D2 eran artefactos del propio test, que llamaba
+`_vglCosechaGuardar` con un mapa parcial de confirmaciones violando su contrato documentado
+de fusión PLANA (`datos.confirmaciones` REEMPLAZA a las previas; la producción nunca la
+llama así — los segundos guardados van por `_vglConfirmacionGuardar`). Corregida la vía,
+la pre-arreglo quedó limpia en 11/4: solo las caídas genuinas de la 136.
+
+**Un mutante que sobrevivió y la prueba que dejó más fuerte (#498).** Anulada la
+invalidación de la caché de directorios al cambiar de carpeta (`false &&` en la
+comparación del handle), la suite quedó en 15/15: C2 solo ESCRIBÍA tras el cambio y la
+escritura (`crear: true`) rehace el recorrido y sobrescribe la entrada de caché. El hueco
+era real — una LECTURA por la vía del script justo tras el cambio devolvía el
+`vgl_cosecha.json` de la carpeta VIEJA. C2 ganó esa lectura (espera `null`: la raíz nueva
+está vacía) y el mutante cayó con la podredumbre a la vista: devolvió la Memoria ajena.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 497 | `VGL_DISCO_REINTENTOS` de 3 a 1: la escritura vuelve a rendirse al primer rebote — pestaña concurrente, `close` retenido por OneDrive, `createWritable` transitorio, fallo junto a cuota llena | *suite_76: 11 pasan, 4 fallan* (A3, B2, D1, D3 — las cuatro de v18.0.137) | Sí |
+| 498 | la caché de directorios nunca se invalida al cambiar de carpeta: una lectura tras el cambio cae en la carpeta vieja — SOBREVIVIÓ la primera pasada (C2 solo escribía tras el cambio); reforzado C2 con la lectura por la vía del script, ahí cayó | *suite_76: 14 pasan, 1 falla* (C2, ya reforzado) | Sí |
+| 499 | el nombre del .md con el reloj de hoy (`Date.now()`) en vez del sello del registro: la historia atrasada se archiva en el día equivocado | *suite_76: CUELGA en A3* — la trampa del rebote está armada sobre el archivo del día 3 y ese archivo jamás se toca: `await rebote` no resuelve y el ejecutor sale rojo por promesa sin resolver (E2 y E3, detrás, ni llegaron a correr) | Sí |
+| 500 | el espejo diferido desprogramado (fuera `vglDiscoMemoriaProgramar()` y `vglDiscoHistoriaProgramar(id)` de la guarda exitosa): guardar en el navegador ya no baja historia ni Memoria al disco | *suite_76: 8 pasan, 7 fallan* (A1, A2, B1, B2, C2, D2, E1) | Sí |
+
+Banco completo: **3.226 comprobaciones pasan, 0 fallan.**

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.136
+// @version      18.0.137
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.136";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.137";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32007,6 +32007,11 @@
   const VGL_DISCO_MEMORIA = "Memoria";
   const VGL_DISCO_ARCHIVO_MEMORIA = "vgl_cosecha.json";
   const VGL_DISCO_DEBOUNCE_MS = 4000;      // el espejo continuo espera 4 s de calma antes de escribir
+  // v18.0.137 — reintento acotado de la escritura en disco: si Chrome retiene el
+  // handle o el close un instante (OneDrive, antivirus, doble pestaña), la escritura
+  // NO se pierde: se rehace hasta este tope de intentos con espera progresiva.
+  const VGL_DISCO_REINTENTOS = 3;
+  const VGL_DISCO_REINTENTO_MS = 600;
   const VGL_DISCO_MIGRADO_KEY = "vgl_disco_migrado";
   const VGL_DISCO_BANNER_KEY = "vgl_disco_banner";   // sessionStorage: «off» calla el banner SOLO esta sesión
 
@@ -32143,15 +32148,39 @@
     return corrida;
   }
 
+  function _vglDiscoDormir(ms) {
+    return new Promise(function (ok) { setTimeout(ok, ms); });
+  }
+
+  // v18.0.137 — la escritura reintenta ACOTADA y DENTRO de la tarea serial:
+  // así ningún reintento se encola detrás de otra escritura del mismo archivo
+  // y la exclusión mutua se conserva. Cada intento rehace TODO el recorrido —
+  // carpeta, handle y writable — porque la retención puede morir en cualquiera
+  // de los tres pasos. Si el último intento también fracasa, el error sube
+  // igual que antes: el disparo con retardo ya lo traga sin tumbar el proceso
+  // y la próxima guarda del médico reprograma el espejo con lo completo.
   async function _vglDiscoEscribirArchivo(dirRuta, nombre, texto) {
     return _vglDiscoEscribirSerial(dirRuta.join("/") + "/" + nombre, async () => {
-      const dir = await _vglDiscoDir(dirRuta, true);
-      if (!dir) throw new Error("sin carpeta activa");
-      const fh = await dir.getFileHandle(nombre, { create: true });
-      const w = await fh.createWritable();
-      await w.write(texto);
-      await w.close();
-      return true;
+      let ultimoError = null;
+      for (let intento = 1; intento <= VGL_DISCO_REINTENTOS; intento++) {
+        try {
+          const dir = await _vglDiscoDir(dirRuta, true);
+          if (!dir) throw new Error("sin carpeta activa");
+          const fh = await dir.getFileHandle(nombre, { create: true });
+          const w = await fh.createWritable();
+          await w.write(texto);
+          await w.close();
+          return true;
+        } catch (e) {
+          ultimoError = e;
+          // Espera progresiva antes del próximo intento; que el propio
+          // temporizador no enmascare jamás al error de disco original.
+          if (intento < VGL_DISCO_REINTENTOS) {
+            try { await _vglDiscoDormir(VGL_DISCO_REINTENTO_MS * intento); } catch (e2) {}
+          }
+        }
+      }
+      throw ultimoError;
     });
   }
 

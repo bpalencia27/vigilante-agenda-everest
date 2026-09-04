@@ -856,7 +856,7 @@ module.exports = {
       const fila = red.cuerpos()[0];
       t.igual(fila.evento, "prueba");
       t.igual(fila.dia, FECHA, "día del reloj congelado");
-      t.igual(fila.ver, "18.0.136", "versión viva");
+      t.igual(fila.ver, "18.0.137", "versión viva");
       t.igual(fila.cosa, 1, "extra mergeado");
       t.cierto(typeof fila.token === "string" && fila.token.length > 0, "token del tablero");
       t.cierto(/-/.test(String(fila.lote)), "lote trazable");
