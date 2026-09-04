@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.142
+// @version      18.0.143
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.142";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.143";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -23919,9 +23919,10 @@
     if (x.subestado === "vencido" || x.vencidoBase) return "vencido";
     if (x.subestado === "sin_historial") return "sin_historial";
     if (x.subestado === "sin_fecha") return "sin_fecha";
-    // v18.0.135 — falla terapéutica: el plazo del 50 % venció, la norma no. Estado propio
-    // para que la tarjeta no lo pinte rojo de "vencido" ni verde de "al día": se pide ya.
-    if (x.subestado === "recontrol_falla") return "recontrol_falla";
+    // v18.0.143 — falla_natural: la ventana del 50 % venció pero la norma sigue viva y
+    // NO se pide ya (04-sep) — rige la vigencia natural, así que la tarjeta lo pinta
+    // como "vence", que es lo que de verdad hace.
+    if (x.subestado === "falla_natural") return "vence";
     if (x.vence) return "vence";
     return "al_dia";
   }
@@ -23947,9 +23948,9 @@
       sin_historial: { rotulo: "Sin tomas", clase: "vgl-paq-sinhist" },
       sin_fecha: { rotulo: "Sin fecha", clase: "vgl-paq-sinfecha" },
       al_dia: { rotulo: "Al día", clase: "vgl-paq-aldia" },
-      // v18.0.135 — falla terapéutica: ámbar (la clase de "vence"), rótulo propio. No es
-      // rojo porque la norma sigue vigente; no es verde porque se repite YA.
-      recontrol_falla: { rotulo: "Repetir", clase: "vgl-paq-vence" },
+      // v18.0.143 — el rótulo "Repetir" desaparece: la falla terapéutica gastada ya no
+      // es un estado de paquete propio, rige la vigencia natural y mtrPaqueteEstadoDe
+      // la reporta como "vence" (ámbar).
     };
 
     const filaOrden = ordenar.map((a) => {
@@ -24377,7 +24378,20 @@
         if (!vivo()) return;
         try {
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
-          try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
+          // v18.0.143 — reporte del 04-sep («aparece que nunca se los ha realizado y
+          // resulta que sí»): si la lectura del portal falló o quedó incompleta, el
+          // resumen NO se guarda — un tablero vacío sellado como «recién leído» es lo
+          // que hizo que los pintores narraran «nunca se le ha tomado» en una paciente
+          // con laboratorios hechos. Se marca `_lecturaAtheneaFallo` (en el resumen y en
+          // su plan) para que quien pinte diga la verdad sobre el SISTEMA, y la caché
+          // conserva la última lectura buena.
+          const _lecturaFal = (_labsAtheneaCrudos === null) || (_labsSolicitudesNoLeidas > 0);
+          if (_lecturaFal && resumenClinico) {
+            resumenClinico._lecturaAtheneaFallo = true;
+            if (resumenClinico.plan) resumenClinico.plan._lecturaAtheneaFallo = true;
+          } else {
+            try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
+          }
           // Dedup del recuadro: "recuadro.*" se emite UNA vez por paciente por día.
           // Recalcular el resumen (reabrir el modal, refresco interno, re-render) no
           // debe volver a contar "recuadro.mostrado" ni inflar las métricas.
@@ -24639,7 +24653,11 @@
       } else {
         labsArr = await getAtheneaLabsAuto(apt.doc_id);
         if (labsArr) _labsPrefetch = { docId: apt.doc_id, labs: labsArr, ts: Date.now() };
-        else if (o.fresco) atheneaPrincipalFallo = true;
+        // v18.0.143 — reporte del 04-sep: el fallo del portal se registra SIEMPRE, no
+        // solo con lectura fresca. La distinción null/[ ] de v18.0.131 vale para
+        // cualquier lectura: un resumen vacío sellado como leído es lo que hizo leer
+        // «nunca se le ha tomado» en una paciente con laboratorios hechos.
+        else atheneaPrincipalFallo = true;
       }
       // A4 (S+, 02-sep) — se conserva la lectura cruda de Athenea para reponer su marca de
       // lectura incompleta en el consolidado compartido (_labsConsolidadoGuardar).
@@ -24675,12 +24693,16 @@
     try { if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") await mtrRefrescarMedicamentos(pacienteIdLabs); } catch (e) {}
     if (!sigueVivo()) return null;
     const resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
-    // v18.0.131 (barrido por recorridos, hallazgo 4) — si el médico pidió una lectura fresca
-    // (o.fresco) y el portal principal no respondió, NO se guarda: la caché compartida
-    // (que alimenta Agendar, Ordenar, Conducta y el Redactor IA) conserva la última lectura
-    // BUENA con su antigüedad real, en vez de un resumen vacío sellado como «recién leído».
-    if (o.fresco && atheneaPrincipalFallo) {
+    // v18.0.143 (reporte del 04-sep) — si el portal principal no respondió (fresco o no),
+    // NO se guarda: la caché compartida (que alimenta Agendar, Ordenar, Conducta y el
+    // Redactor IA) conserva la última lectura BUENA con su antigüedad real, en vez de un
+    // resumen vacío sellado como «recién leído» — que es exactamente lo que pintaba
+    // «nunca se le ha tomado» en pacientes con exámenes hechos (v18.0.131 solo cubría
+    // o.fresco; ahora cualquier lectura fallida). La marca baja al plan para que los
+    // pintores lo digan con honestidad.
+    if (atheneaPrincipalFallo) {
       resumen._lecturaAtheneaFallo = true;
+      if (resumen && resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
     } else {
       try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
     }
@@ -35980,8 +36002,14 @@
         const resto = lista.length - 4;
         return " " + etiqueta + ": " + vistos + (resto > 0 ? " y " + resto + " más" : "") + ".";
       };
+      // v18.0.143 — reporte del 04-sep: con la lectura del portal fallida, los faltantes
+      // no se narran como «nunca se le ha tomado» (afirmación sobre el paciente) sino
+      // como «no consta tomado (no se pudo leer el laboratorio)» (verdad del sistema).
+      const _noLeido = plan && plan._lecturaAtheneaFallo ? true : false;
       const detalle = nombrar(venc, venc.length === 1 ? "Vencido" : "Vencidos")
-        + nombrar(falt, falt.length === 1 ? "Nunca se le ha tomado" : "Nunca se le han tomado");
+        + nombrar(falt, falt.length === 1
+          ? (_noLeido ? "No consta tomado (no se pudo leer el laboratorio)" : "Nunca se le ha tomado")
+          : (_noLeido ? "No constan tomados (no se pudo leer el laboratorio)" : "Nunca se le han tomado"));
       return { iso: C, ftl: F, ajustada: true, analito: primero ? primero.nombre : null,
         vencidosNombres: venc, faltantesNombres: falt,
         motivo: "Hay exámenes pendientes" + progTxt + "." + detalle +
@@ -36103,7 +36131,12 @@
       adelantoDias: (typeof a.adelantoDias === "number") ? a.adelantoDias : null,
     });
     const ordenar = (plan.ordenar || []).map((a) => {
-      if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
+      // v18.0.143 — reporte del 03-sep: «aparece que nunca se los ha realizado y resulta
+      // que sí se los hizo». Con la lectura de Athenea fallida, esta fila decía "Nunca
+      // se le ha tomado" de laboratorios que sí constan en el portal. Ahora dice la
+      // verdad del sistema, no una afirmación falsa sobre el paciente.
+      if (a.subestado === "sin_historial") return fila(a, plan._lecturaAtheneaFallo
+        ? "No consta tomado (no se pudo leer el laboratorio)" : "Nunca se le ha tomado");
       // v17.6.87 — hay resultado pero sin fecha. Antes caía en la rama de arriba y se le
       // decía al médico "Nunca se le ha tomado" de un examen que SÍ está hecho y cuyo
       // resultado puede ser crítico. Se muestra el valor para que lo vea, y se dice por qué
@@ -36112,15 +36145,10 @@
         return fila(a, "Hay un resultado (" + (a.valor != null ? a.valor : "sin valor legible")
           + ") pero sin fecha: no se puede saber si sigue vigente");
       }
-      // v18.0.135 — falla terapéutica NO es vencimiento (entrevista del 02-sep): el 50 %
-      // venció pero la norma sigue dando vida. Se pide YA, con el texto que distingue las
-      // dos fechas — así el médico deja de leer "vencido" en un examen que la norma
-      // considera vigente (el reporte original era exactamente eso: glucosa de mayo
-      // marcada "vencida" con 180 d aún corriendo).
-      if (a.subestado === "recontrol_falla") {
-        return fila(a, "Falla terapéutica: se repite ya (el 50 % venció el " + mtrFechaLegible(a.vence)
-          + "); por norma sigue vigente hasta el " + mtrFechaLegible(a.venceNorma));
-      }
+      // v18.0.143 — el subestado de falla gastada se ELIMINA del pintor: pasada la ventana
+      // del 50 % las fallas terapéuticas rigen por la vigencia natural (reporte del
+      // 03-sep), así que el analito cae en las ramas de vigente de abajo con vence =
+      // fecha de la norma. Ya nadie se ordena "ya" por falla terapéutica en el tablero.
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
       // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
       // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
@@ -36163,7 +36191,14 @@
     const enOrdenar = new Set(ordenar.map((x) => x.clave));
     const vigentes = [].concat(plan.drivers || [], plan.pasajeros || [])
       .filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !enOrdenar.has(a.clave))
-      .map((a) => fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence)))
+      // v18.0.143 — falla_natural (ventana del 50 % vencida, norma viva) se cuenta aquí
+      // porque VIGENTE es lo que es, pero con el texto que cuenta las dos fechas: la
+      // falla terapéutica no adelanta la orden (04-sep); rige la vigencia natural.
+      .map((a) => a.subestado === "falla_natural"
+        ? fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence) + " · " + (a.clave === "GLUCOSA" ? "HbA1c " : "")
+          + "fuera de meta: la ventana del 50 % venció el " + mtrFechaLegible(a.venceFalla)
+          + " — rige la vigencia natural")
+        : fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence)))
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0));
 
     const bloqueados = (plan.bloqueados || []).map((a) => ({ nombre: a.nombre, motivo: a.motivo || "" }));
@@ -41754,12 +41789,12 @@
       : null;
     // v18.0.135 — entrevista del 02-sep, verbatim: «una cosa es estar en falla terapéutica
     // y por eso se repite al 50 % de su vigencia y otra muy diferente estar vencida».
-    // VENCIDO solo al agotar la vigencia NORMATIVA. Si lo que se agotó fue el plazo del
-    // 50 % pero la norma todavía le da vida, el examen se pide (estado A: entra en la
-    // lista de ordenar) con el subestado "recontrol_falla": es falla terapéutica que
-    // amerita repetir YA, no un examen vencido. Solo puede ocurrir cuando el 50 % se
-    // aplicó de verdad (kdigoFrena/medicoFrena/estadioFrena dejan vigencia === norma y
-    // entonces las dos fechas coinciden, sin zona intermedia).
+    // VENCIDO solo al agotar la vigencia NORMATIVA. v18.0.143 (ordenanza del 04-sep)
+    // completó la regla: agotada la ventana del 50 % con la norma todavía viva, tampoco
+    // se repite YA — rigen las vigencias naturales de cada analito (estado "D",
+    // subestado "falla_natural"). Solo puede ocurrir cuando el 50 % se aplicó de verdad
+    // (kdigoFrena/medicoFrena/estadioFrena dejan vigencia === norma y entonces las dos
+    // fechas coinciden, sin zona intermedia).
     const venceNorma = mtrSumarDias(fecha, vigenciaNorma);
     const diasParaVencerNorma = (hoy && venceNorma)
       ? Math.round((mtrFechaDesdeIso(venceNorma).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
@@ -41767,11 +41802,19 @@
 
     let estado = "D";
     let subestado = "vigente";
-    if (diasParaVencer !== null && diasParaVencer < 0) {
+    // v18.0.143 — ordenanza del 04-sep, verbatim: «LAS FALLAS TERAPÉUTICAS NO SE TIENEN
+    // EN CUENTA COMO VENCIMIENTO, EN CASO DE QUE YA HAYA PASADO LA VENTANA DEL 50 % PUES
+    // SE UTILIZAN ENTONCES LAS VIGENCIAS NATURALES DE CADA ANALITO». La ventana del 50 %
+    // quemada con la norma viva ya NO dispara repetición YA: el examen queda vigente
+    // ("D") gobernado por su fecha natural, con subestado "falla_natural" para que la
+    // pantalla cuente la historia completa. VENCIDO solo al agotar la NORMA.
+    const fallaNatural = (diasParaVencer !== null && diasParaVencer < 0
+      && diasParaVencerNorma !== null && diasParaVencerNorma >= 0);
+    if (fallaNatural) {
+      subestado = "falla_natural";
+    } else if (diasParaVencer !== null && diasParaVencer < 0) {
       estado = "A";
-      subestado = (diasParaVencerNorma !== null && diasParaVencerNorma >= 0)
-        ? "recontrol_falla"
-        : "vencido";
+      subestado = "vencido";
     }
     const racNum = mtrFloat(c.rac);
     // v17.6.75 — auditoría 25-ago (1.17): antes el guard `estado !== "A"` bloqueaba la
@@ -41784,18 +41827,27 @@
     // de un Estado A normal (piso 14/techo 21, en la lista de vencidos, excluido del
     // cálculo de "próximo vencimiento futuro") — nunca se relaja CERO VENCIDOS solo por
     // reetiquetarlo a R.
-    // v18.0.135 — "estado A" ya no equivale a vencido: con recontrol_falla el examen se
-    // pide por falla terapéutica pero NO está vencido. vencidoBase queda atado al
-    // subestado "vencido" (norma agotada) para que `mtrPlanParaclinicos` siga dando al
-    // vencido real su urgencia de piso 14/techo 21 sin arrastrar al de falla.
+    // v18.0.143 — vencidoBase queda atado al subestado "vencido" (norma agotada) para que
+    // `mtrPlanParaclinicos` le dé su urgencia de piso 14/techo 21 SOLO al vencido real;
+    // la falla con la ventana del 50 % gastada es un vigente más (estado "D").
     const vencidoBase = estado === "A" && subestado === "vencido";
     if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
       estado = "R"; subestado = "albuminuria";
     }
+    // v18.0.143 — con la falla gastada se publica la fecha NATURAL (venceNorma), no la de
+    // la ventana del 50 %: publicar la fecha quemada era lo que arrastraba la toma de
+    // septiembre en el reporte del 04-sep. La fecha de la ventana viaja aparte, en
+    // venceFalla/diasParaVencerFalla (null en todos los demás casos), para que la
+    // pantalla pueda contar la historia completa sin volver a mandar sobre la fecha.
+    const vencePublicado = fallaNatural ? venceNorma : vence;
+    const diasPublicado = fallaNatural ? diasParaVencerNorma : diasParaVencer;
     return {
       clave: clave, nombre: nombre, estado: estado, subestado: subestado,
-      vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
-      diasParaVencer: diasParaVencer,
+      vigenciaDias: (fallaNatural ? vigenciaNorma : vigencia), fecha: fecha, valor: valor,
+      vence: vencePublicado,
+      diasParaVencer: diasPublicado,
+      venceFalla: (fallaNatural ? vence : null),
+      diasParaVencerFalla: (fallaNatural ? diasParaVencer : null),
       // v18.0.135 — la fecha y los días que faltan según la NORMA (sin el recorte del
       // 50 %). Solo difieren de vence/diasParaVencer cuando el acortamiento aplicó.
       venceNorma: venceNorma,
@@ -41831,13 +41883,13 @@
         // El sufijo es de la promoción a R, así que se ata a ella y no a estar vencido.
         ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha
             + (estado === "R" && subestado === "albuminuria" ? " · albuminuria: vigilancia estrecha" : ""))
-        : (subestado === "recontrol_falla"
-          // v18.0.135 — ni vencido ni "vigente hasta": la ventana del 50 % se agotó pero la
-          // norma sigue dando vida. Se DICE la diferencia, con las dos fechas, para que
-          // nadie lea "vencido" donde solo hay falla terapéutica — y para que el médico
-          // sepa hasta cuándo estaba cubierto de haber estado en meta.
-          ? ("falla terapéutica: la repetición al 50 % (" + vigencia + " d) venció el " + vence
-              + " — según la norma (" + vigenciaNorma + " d) sigue vigente hasta el " + venceNorma)
+        : (subestado === "falla_natural"
+          // v18.0.143 — reporte del 03-sep: LAS FALLAS TERAPÉUTICAS NO SE TIENEN EN CUENTA
+          // COMO VENCIMIENTO. Pasada la ventana del 50 % rigen las vigencias naturales de
+          // cada analito: la fecha publicada es la de la norma y este examen YA NO empuja
+          // la toma de septiembre. El motivo nombra las dos fechas para que nadie lea
+          // "vencido" donde solo hay falla terapéutica gastada.
+          ? ("vigente hasta el " + venceNorma + " · " + (clave === "GLUCOSA" ? "HbA1c " : "") + "fuera de meta: la ventana del 50 % (" + vigencia + " d) venció el " + vence + " — rige la vigencia natural")
           : ("vigente hasta el " + vence)))
         + (kdigoFrena === true
             // v18.0.7 — se DICE por qué no se adelanta. La entrevista lo dejó por escrito:
@@ -41845,12 +41897,12 @@
             // script". Aquí el examen está fuera de meta y aun así no se repite antes, que es
             // exactamente el caso en que callarse parecería un fallo.
             ? " · fuera de meta, pero KDIGO: con TFG < 60 por CKD-EPI 2021 el perfil lipídico no se repite antes (se respetan los " + vigenciaNorma + " d)"
-            : ((fueraMeta === true && (subestado !== "recontrol_falla" || clave === "GLUCOSA"))
-              // v18.0.135 — dos ajustes: (1) en recontrol_falla el motivo principal YA dice
-              // "se repite al 50 %", así que el sufijo sobra — salvo en la glucosa, donde
-              // sí aporta el motor del adelanto; (2) en la glucosa el que está fuera de
-              // meta es la HBA1C, no la glicemia: decir solo "fuera de meta" haría leer
-              // que el valor de glucosa disparó el adelanto, y ya no funciona así.
+            : ((fueraMeta === true && subestado !== "falla_natural")
+              // v18.0.143 — el sufijo "se repite a la mitad" ya no aplica a la falla
+              // gastada: no se repite YA (rige la vigencia natural) y el motivo principal
+              // de falla_natural YA nombra quién está fuera de meta — en la glucosa, la
+              // HbA1c, no el valor suelto de esa mañana. En los vigentes con ventana por
+              // delante, el sufijo sigue igual que siempre.
               ? " · " + (clave === "GLUCOSA"
                   ? "HbA1c fuera de meta: la glucosa se repite a la mitad"
                   : "fuera de meta: se repite a la mitad")
@@ -42275,15 +42327,16 @@
     // ---- QUÉ SE ORDENA ----
     // Todo lo que falta o venció + lo cosechado + los pasajeros que no estén
     // bloqueados (se enganchan a la FTL sin fijarla y sin piso de 14 días).
-    // v18.0.135 — y también los de recontrol_falla: la ventana del 50 % venció (hay que
-    // repetir YA, entrevista del 02-sep) pero la NORMA sigue vigente — NO van en
-    // `vencidos` (ese es el recuadro rojo de "Ya vencidos") sino aquí, en la orden. El
-    // estado "A" ya los arrastra al piso/techo 14-21 vía hayEstadoA; esta línea solo
-    // asegura que aparezcan en la lista de lo que se pide.
+    // v18.0.143 — la falla terapéutica con la ventana del 50 % VENCIDA ya no se ordena
+    // por su cuenta (ordenanza del 04-sep): «las fallas terapéuticas no se tienen en
+    // cuenta como vencimiento; en caso de que ya haya pasado la ventana del 50 % se
+    // utilizan entonces las vigencias naturales de cada analito». Esos exámenes nacen
+    // en estado "D" con subestado "falla_natural", siguen vivos en `diferidos` y solo
+    // entran a la orden cuando su vigencia natural los traiga (vencimiento o cosecha),
+    // como cualquier otro analito del programa.
     const ordenar = []
       .concat(faltantes.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
       .concat(vencidos.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
-      .concat(todos.filter((a) => a.estado === "A" && a.subestado === "recontrol_falla"))
       .concat(cosechados)
       .concat(pasajeros.filter((a) => a.estado === "A"));
     // Sin repetidos, conservando el orden.

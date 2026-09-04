@@ -181,7 +181,11 @@ module.exports = {
       // caso unitario de más arriba, así que no se pierde cobertura de esa frase.
       //
       // ERC G3b: la creatinina vence el 19-oct (dentro de la ventana de 60 días) y los
-      // lípidos vencidos fuerzan la toma al 9-sep. Antes: creatinina DIFERIDA, dos viajes.
+      // lípidos, en falla terapéutica gastada, ponen la toma en su vencimiento natural
+      // (28-sep). Antes: creatinina DIFERIDA, dos viajes.
+      // v18.0.143 — la fecha pasó de 9-sep (empujón de la falla del 50 %) a 28-sep
+      // (vigencia natural, reporte del 04-sep). Lo que esta prueba protege no cambia:
+      // el ANR agrupa y la pantalla lo dice.
       const plan = api.mtrPlanParaclinicos({
         hoyIso: "2026-08-26", programa: "ERC", estadioAdministrativo: "G3b",
         categoriaRiesgo: "alto", esDm2: false, edad: 68, rac: 12,
@@ -202,7 +206,7 @@ module.exports = {
         "la creatinina SÍ entra en esta toma: es el viaje que el ANR existe para evitar");
       t.falso((plan.diferidos || []).some((x) => x.clave === "CREATININA"),
         "y no queda diferida a un segundo viaje");
-      t.igual(plan.ftl, "2026-09-09", "la FECHA DE TOMA no se mueve: se añade un examen, no se cambia el día");
+      t.igual(plan.ftl, "2026-09-28", "la FECHA DE TOMA es la vigencia natural de los lípidos: la falla gastada ya no la adelanta");
 
       const html = api.mtrRenderResumenClinicoHtml({
         factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G3b" }, plan: plan, meta: {},

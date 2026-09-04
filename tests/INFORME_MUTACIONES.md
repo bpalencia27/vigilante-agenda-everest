@@ -12945,3 +12945,81 @@ aborto; apagar un lector completo exige anclar en la FIRMA de la función, no
 en una guarda que otras funciones comparten.
 
 Banco completo: **3.253 comprobaciones pasan, 0 fallan.**
+
+## v18.0.143 — 4-sep — la falla terapéutica con la ventana gastada rige por vigencia natural, y la lectura que no se pudo hacer deja de ser «nunca tomado»
+
+Dos reportes del médico en la misma noche. El tercero: «EN ESTE CASO NO
+DEBERÍA SUGERIR CONTROL EL 25 DE SEPTIEMBRE Y EXÁMENES EL 18, SI NO HAY
+CRITERIO PARA ESO. LA HEMOGLOBINA ES UN PASAJERO Y LAS FALLAS TERAPEUTICAS NO
+SE TIENEN EN CUENTA COMO VENCIMIENTO, EN CASO DE QUE YA HAYA PASADO LA
+VENTANA DEL 50% PUES SE UTILIZAN ENTONCES LAS VIGENCIAS NATURALES DE CADA
+ANALITO». Su paciente HTA tenía el LDL en falla terapéutica con la ventana
+del 50 % vencida el 31-ago y la norma viva hasta el 29-nov: el motor la
+contaba como vencida, activaba el piso de 14 días («hay exámenes por pedir»)
+y arrastraba el panel entero a una toma de septiembre que nadie ordenó. El
+segundo: «APARECE QUE NUNCA SE LOS HA REALIZADO Y RESULTA QUE SÍ SE LOS HIZO»
+— cuando Athenea fallaba al leer, el tablero afirmaba «Nunca se le ha tomado»
+de laboratorios que sí constan en el portal.
+
+El fix A (motor): ventana del 50 % vencida + norma viva ya no es «vencido».
+Estado D con subestado nuevo `falla_natural`: se publica la fecha NATURAL
+(`vencePublicado`/`diasPublicado`/`vigenciaDias` de la norma) y la fecha de la
+falla se conserva en `venceFalla`/`diasParaVencerFalla` — null en todos los
+demás casos — para que la pantalla cuente la historia completa sin volver a
+mandar sobre la fecha. Antes de la ventana, la regla del 02-sep no cambia (se
+repite YA, Estado A intacto); con la norma agotada sigue siendo vencido de
+verdad (`vencidoBase`, piso 14/techo 21). El motivo del motor y el pintor de
+vigentes cuentan ambas fechas y la regla: «…la ventana del 50 % venció el
+31-ago — rige la vigencia natural». El badge de paquetes lo pinta como VENCE.
+Y el bloque de recontrol que empujaba la ftl DEJÓ DE EXISTIR: `recontrol_falla`
+no aparece ni una vez en el fuente (asertado por suite_24 y suite_77).
+
+El fix B (lectura): la marca `atheneaPrincipalFallo` ya no exige `o.fresco` —
+cualquier lectura fallida estampa `resumen._lecturaAtheneaFallo` y la baja al
+plan; con ella NO se cachea el resumen vacío (el guard de la v18.0.131,
+ampliado). Los pintores (tablero y sugerencia de plazo) dicen la verdad del
+sistema — «No consta tomado (no se pudo leer el laboratorio)» — en lugar de
+«Nunca se le ha tomado», y solo cuando hay evidencia de fallo.
+
+**Pruebas nuevas (suite_77, 7 casos; banco 3.253 → 3.260).** La paciente del
+reporte reconstruida (LDL 160 del 02-jun, panel al día): LDL en D
+`falla_natural` venciendo 2026-11-29 con `venceFalla` 2026-08-31 y −4 días; ni
+en vencidos ni en ordenar, esperando en diferidos; la hemoglobina viajando
+sola en la orden SIN fijar la fecha; ftl 2026-11-28 (el 29 es domingo) con
+motivo «en el vencimiento más próximo» — ya no «hay exámenes por pedir». El
+mismo LDL con el resto del panel fresco de septiembre: la toma sigue siendo la
+natural. Antes de la ventana: se repite YA, intacto. Norma agotada: vencido
+real con `vencidoBase`. Lectura fallida: tablero y sugerencia cambian el texto
+SOLO con el flag. Y el cableado de fuente: ni rastro del subestado viejo, la
+fecha de la falla en su campo propio, el guard sin `o.fresco`, el `else` que
+marca la lectura no fresca fallida y el texto de los pintores. Actualizadas
+por la regla nueva: suite_24 (un analito `falla_natural` cuya vigencia natural
+COINCIDE con la ftl va en ordenar, no en diferidos — no es regresión, es su
+fecha propia), suite_46 y suite_47 (lípidos de abril con ventana gastada: la
+ftl pasa de 2026-09-09 a 2026-09-28, la vigencia natural), suite_75 (fila.ver
+143) y suite_15 (la regex del guard ampliado).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 529 | el motor deja de estampar `falla_natural` (lo deja «vigente»): la ventana gastada vuelve a leerse como vigencia partida | *suite_77: 3* (subestado, vence natural, motivo del tablero) + *suite_24: 2* + *suite_46: 1* — 6 en total | Sí |
+| 530 | `vencePublicado` ignora la norma y publica la fecha del 50 % vencida | *suite_77: 2* (vence 2026-11-29 / venceFalla 2026-08-31) + *suite_24: 2* + *suite_46: 2* + *suite_47: 1* — 7 en total | Sí |
+| 531 | el motivo del motor pierde «— rige la vigencia natural» | *suite_77: 1* (la historia completa en una línea) + *suite_24: 1* | Sí |
+| 532 | el guard del Panel apagado (`if (false)`): la lectura fallida volvería a cachearse como leída | *suite_15: 1* (regex del guard ampliado) + *suite_77: 1* (chequeo de fuente) | Sí |
+| 533 | el pintor sin_historial pierde la rama del fallo: volvería a decir «Nunca se le ha tomado» de labs que existen | *suite_77: 1* («No consta tomado (no se pudo leer el laboratorio)») | Sí |
+| 534 | `_noLeido = false`: la sugerencia de plazo afirmaría «nunca» de una lectura que falló | *suite_77: 1* (el motivo de mtrSugerenciaPorPlazo) | Sí |
+| 535 | el `else` que marca la lectura NO fresca fallida escribe `false` | *suite_15: 1* + *suite_77: 1* (chequeo de fuente: «no solo el clic de 🔄 Buscar») | Sí |
+| 536 | el badge pintaría `falla_natural` como AL DÍA | *suite_77: 1* («esperaba vence y obtuvo al_dia») | Sí |
+
+**Las lecciones de la 143.** Primera: el fix A se protege por TRES capas
+independientes — el subestado (529), la fecha publicada (530) y el texto que
+cuenta la historia (531) — porque cada una puede romperse sin arrastrar a las
+otras. Segunda: los fixes del guard (532/535) viven en el DOM y no tienen
+pathway conductual directo en el banco; mueren por la regex de suite_15 y por
+los chequeos de fuente de suite_77, dos testigos independientes del mismo
+cableado — si uno se renombra en silencio, el otro sigue dando fe. Tercera:
+536 parecía enmascarado por el respaldo `if (x.vence) return "vence"` — no lo
+estaba: el `return` mutado devuelve «al_dia» sin caer al respaldo, y la
+aserción lo cazó a la primera. La disciplina es correr el mutante y ver, no
+razonar si va a caer.
+
+Banco completo: **3.260 comprobaciones pasan, 0 fallan.**

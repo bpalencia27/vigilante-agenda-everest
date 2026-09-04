@@ -1465,8 +1465,12 @@ module.exports = {
       const cuerpoFn = src.slice(iFn, src.indexOf("\n  }", src.indexOf("return resumen;", iFn)));
       t.cierto(/atheneaPrincipalFallo = true/.test(cuerpoFn),
         "marca cuándo Athenea NO respondió — distinto de «no tiene laboratorios»");
-      t.cierto(/if \(o\.fresco && atheneaPrincipalFallo\) \{/.test(cuerpoFn),
-        "y si la lectura pedida EN VIVO falló, NO se sobrescribe la caché compartida con un resumen vacío");
+      // v18.0.143 (reporte del 04-sep) — el guard se AMPLIÓ: ya no es solo o.fresco, es
+      // cualquier lectura fallida de Athenea la que no se cachea (y las buenas van al
+      // else). Era exactamente el vector del reporte: lectura fallida pintada como
+      // «nunca se le ha tomado» en paciente con exámenes hechos.
+      t.cierto(/if \(atheneaPrincipalFallo\) \{/.test(cuerpoFn),
+        "y si la lectura de Athenea falló (viva o no), NO se sobrescribe la caché compartida con un resumen vacío");
     });
 
     // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba en cada
