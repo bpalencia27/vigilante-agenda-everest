@@ -1,0 +1,206 @@
+
+[36m════════════════════════════════════════════════════════════════[0m
+[36m  PRUEBAS DEL VIGILANTE DE AGENDA[0m
+[36m════════════════════════════════════════════════════════════════[0m
+  funciones alcanzables: 1153 de 1268
+
+[32m✓[0m Texto y datos del paciente                [90m54 ok[0m
+[Vigilante] hora no interpretable: invalido
+[Vigilante] La tabla de festivos caducó, hay que actualizarla.
+[32m✓[0m Tiempo y fechas                           [90m33 ok[0m
+[32m✓[0m Excel, caché y SharePoint                 [90m33 ok[0m
+[32m✓[0m Colores y notificaciones de la agenda     [90m106 ok[0m
+[Vigilante Athenea] latido de sesión falló: Error: NetErr
+    at Object.onerror (vigilante_agenda.user.js:2017:96)
+    at Timeout._onTimeout (/workspace/vigilante-agenda-everest/tests/harness.js:201:66)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+[32m✓[0m Llamadas a Everest y clínicas             [90m34 ok[0m
+[32m✓[0m Panel, ajustes, modales                   [90m11 ok[0m
+[32m✓[0m Lector de Excel (ZIP/XLSX)                [90m14 ok[0m
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2023-01-02
+[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles: [ 'codigo', 'nombre', 'Resultado' ]
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA
+[Vigilante] Auto-Labs: COLESTEROL_TOTAL = 1,2 no quedó escrito en la casilla (rechazado por el navegador).
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = 2023-01-01
+[Vigilante] diagnóstico fecha — TRIGLICERIDOS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultColesterolTotal", valor actual ""], resultDate = 2026-08-01
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] repetición del mismo analito, se conserva el candidato vigente: UROANALISIS
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: no se escribió la fecha porque NO se encontró su casilla (ni como hermana input[type=date] del .input-group, ni por el id fechaResultUroanalisis).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultUroanalisis", valor actual ""], resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] repetición del mismo analito, se conserva el candidato vigente: GLUCOSA
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+[Vigilante] diagnóstico fecha — RAC: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[Vigilante] RAC vacía, restaurando valor del robot (1/2). Si la borra otra vez, se respeta.
+[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.
+[Vigilante] diagnóstico fecha — CREATININA: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.
+[Vigilante] RAC vacía, restaurando valor del robot (1/2). Si la borra otra vez, se respeta.
+[Vigilante] RAC vacía, restaurando valor del robot (2/2). Si la borra otra vez, se respeta.
+[Vigilante] RAC: la casilla se vació de nuevo tras 2 restauraciones. Se deja como el médico la dejó y no se vuelve a tocar.
+[32m✓[0m Laboratorios Crónicos (Suite 08)          [90m148 ok[0m
+[32m✓[0m Ajustes y almacén local (Suite 09)        [90m36 ok[0m
+[32m✓[0m Estadísticas, eventos y auditoría         [90m30 ok[0m
+[32m✓[0m Cola de reportes al remoto (Suite 11)     [90m29 ok[0m
+[32m✓[0m SharePoint y caché del piloto (Suite 12)  [90m47 ok[0m
+[32m✓[0m Lectura directa del API de agenda         [90m64 ok[0m
+[32m✓[0m Extracción del DOM de Everest (Suite 14)  [90m30 ok[0m
+[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa): TypeError: resp.blob is not a function
+    at vigilante_agenda.user.js:23032:33
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at listOnTimeout (node:internal/timers:549:9)
+    at process.processTimers (node:internal/timers:523:7)
+[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa): TypeError: resp.blob is not a function
+    at vigilante_agenda.user.js:23032:33
+[32m✓[0m Interfaz: ventana, hojas y modales        [90m262 ok[0m
+[32m✓[0m Lectura en flujo del Excel PyM            [90m26 ok[0m
+[32m✓[0m Núcleo: bucles, latidos y utilidades GM   [90m52 ok[0m
+[32m✓[0m Puente Athenea y credenciales (Suite 18)  [90m82 ok[0m
+[32m✓[0m Identidad de API por médico y blindaje de cuota[90m29 ok[0m
+[32m✓[0m Correo de órdenes al paciente (Suite 20)  [90m8 ok[0m
+[32m✓[0m Comparador de fuentes                     [90m1 ok[0m
+[32m✓[0m v12.4: horas, panel PyM y tabla CUPS      [90m48 ok[0m
+[Vigilante Athenea] latido de sesión falló: Error: NetErr
+    at Object.onerror (vigilante_agenda.user.js:2017:96)
+    at Timeout._onTimeout (/workspace/vigilante-agenda-everest/tests/harness.js:201:66)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+[32m✓[0m Utilidades Puras                          [90m10 ok[0m
+[32m✓[0m Telemetría de uso del panel (v12.5)       [90m109 ok[0m
+[32m✓[0m Motor de perfil (D3-bis)                  [90m53 ok[0m
+[32m✓[0m Cascada CSS                               [90m32 ok[0m
+[32m✓[0m El banco se ejecuta de verdad             [90m10 ok[0m
+[32m✓[0m Función renal (R1)                        [90m12 ok[0m
+[32m✓[0m Vigencias por estadio renal (R2, sombra)  [90m63 ok[0m
+[32m✓[0m Estadio renal (R1b, plomería)             [90m43 ok[0m
+[32m✓[0m Red de seguridad remota, Kill-Switch y Canario (R5.1, R5.3)[90m11 ok[0m
+[32m✓[0m Rangos oficiales de Everest (v14.1.8)     [90m32 ok[0m
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] Auto-Labs NO escribió CREATININA = 88: fuera del rango que la IPS declara (0.2–20 mg/dL).
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2026-08-12
+[32m✓[0m Auto-Labs contra rangos oficiales (v14.1.8)[90m20 ok[0m
+[32m✓[0m Seguridad, PHI, XSS e Integridad (M1)     [90m52 ok[0m
+[32m✓[0m Corrección Clínica, Frontera DOM y Límites (M2)[90m45 ok[0m
+[32m✓[0m Robustez, Concurrencia, Estado y Red (M3) [90m23 ok[0m
+[32m✓[0m Cobertura de Riesgo ALTO y Resistencia a Mutantes (M4)[90m16 ok[0m
+[32m✓[0m Interfaz y Accesibilidad Médica (M5)      [90m24 ok[0m
+[Vigilante] Se detectó otra instancia activa de Vigilante de Agenda (v14.0.0). Esta instancia (v18.0.137) aborta su inicio para evitar duplicidad.
+[Vigilante] Se detectó instancia duplicada por marcador en DOM (v13.5.0). Abortando inicio.
+[32m✓[0m Entrega, Runbook y Detección Duplicada (M6/R5.8)[90m17 ok[0m
+[32m✓[0m Invariantes críticos (mutación olvidada)  [90m25 ok[0m
+[32m✓[0m Motor portado: fechas y CERO VENCIDOS     [90m37 ok[0m
+[32m✓[0m Seguridad de dosis renal (motor portado)  [90m48 ok[0m
+[32m✓[0m Interacciones farmacológicas (motor portado)[90m21 ok[0m
+[32m✓[0m Vista de avisos farmacológicos            [90m18 ok[0m
+[32m✓[0m Canales de aviso (los 28 que nadie probaba)[90m59 ok[0m
+[32m✓[0m Conformidad cruzada con el Copiloto       [90m40 ok[0m
+[32m✓[0m El grounding no filtra PHI                [90m6 ok[0m
+[32m✓[0m Riesgo CV (4 pasos) y función renal unificada[90m73 ok[0m
+[32m✓[0m Vigencias corregidas, FTL, sábados del médico y lectura del DOM[90m86 ok[0m
+[32m✓[0m Recuadro clínico (reemplazo del banner de PyM)[90m35 ok[0m
+[32m✓[0m Uroanálisis, foco clínico, educación y triglicéridos[90m56 ok[0m
+[32m✓[0m Falla terapéutica, recontrol, MTT y telemetría[90m48 ok[0m
+[32m✓[0m Puente entre modales (caché, fecha sugerida y prioridad PyM)[90m12 ok[0m
+[32m✓[0m Uroanálisis de Athenea y adición a Conducta[90m22 ok[0m
+[32m✓[0m Agendamiento sin terminar y sonda de anclaje del examen físico[90m17 ok[0m
+[32m✓[0m Aviso de actualización y permanencia del retiro (clic-en-Conducta)[90m7 ok[0m
+[32m✓[0m Motor farmacológico ampliado (RCV: pares mortales y graves)[90m29 ok[0m
+[32m✓[0m Framingham oficial predicho, FINDRISC, cobertura del motor y sonda[90m19 ok[0m
+[32m✓[0m Hoja de hechos desidentificada (barrera de PHI hacia la IA)[90m16 ok[0m
+[32m✓[0m Redacción IA: prompts, parser, conector y estilo[90m174 ok[0m
+[32m✓[0m Inserción de la nota IA en la historia (solo casilla vacía, por ancla)[90m5 ok[0m
+[32m✓[0m Burbujas de información (rediseño UX de los 4 módulos)[90m12 ok[0m
+[32m✓[0m Reloj de segundo plano (Web Worker, v14.2.12)[90m22 ok[0m
+[32m✓[0m v15.8.0 — vigencias×plazo, primer cupo, semáforo, SMS y letra[90m27 ok[0m
+[32m✓[0m v15.9.0 — cierre de cita (imprimir/correo/toma) y aviso de vencimiento[90m59 ok[0m
+[32m✓[0m v16.0.0 — módulo Riesgo y exámenes (clasificación, TFG y vigencias)[90m61 ok[0m
+[32m✓[0m v16.1.0 — botones por pestaña, Deshacer efímero y Regla E en los módulos[90m39 ok[0m
+[32m✓[0m Minimizar módulos sin perder lo llenado (v16.7.0)[90m26 ok[0m
+[32m✓[0m Relevo de pestaña: la vigilancia de fraude sobrevive (auditoría #7)[90m12 ok[0m
+[32m✓[0m Panel del paciente: la fusión de Ficha y Riesgo (v16.8.0)[90m45 ok[0m
+[32m✓[0m v17.0.0 — la cola completa: IRA, metas, duplicidades, productividad, carpeta, prellenado, llenado y dead-man[90m76 ok[0m
+[32m✓[0m Catálogo farmacológico RCV (interacciones y renales con fuente citada)[90m38 ok[0m
+[32m✓[0m Enjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles[90m8 ok[0m
+[32m✓[0m Widget de Conducta: exámenes a ordenar en el próximo control[90m85 ok[0m
+[32m✓[0m Tanda 0 — lint de pantalla (banderas y jerga)[90m24 ok[0m
+[32m✓[0m Suite 73 · Recorridos del modal Agendar   [90m9 ok[0m
+[32m✓[0m Auditoría P1+P2+P3 (2026-09-03)           [90m18 ok[0m
+[32m✓[0m Memoria en disco del médico (Suite 75)    [90m48 ok[0m
+[32m✓[0m El disco hostil del consultorio (Suite 76)[90m15 ok[0m
+
+[36m────────────────────────────────────────────────────────────────[0m
+  comprobaciones : [32m3226 pasan[0m
+  funciones cubiertas: 912 / 1153 públicas  (79.1%)  ·  115 anidadas se prueban a través de sus dueñas
+
+[33m  sin cubrir (241):[0m
+    [90m_frGenNueva, _atheneaCredsMigrarDeClaro, atheneaAvisoSilencioso, _conTope, _diaValidoParaMes, _esNumeroParaDesempate[0m
+    [90m_esLdlDirecto, _labsPrefetchCoincide, _labsConsolidadoGuardar, _labsConsolidadoDe, _preconLeerTodo, _preconGuardar[0m
+    [90m_preconDe, _preconPriorizar, _preconHidratar, _preconEstadoDe, _preconTick, _vglNodoEsDelVigilante[0m
+    [90m_vglInstalarVigilanciaDom, _vglMismaCedula, _vglBuscarPorDoc, _vglClaveDeDoc, _vglListaTieneDoc, _vglDetectarClavesDuplicadas[0m
+    [90m_vglRevisarClavesDuplicadas, _vglConfirmacionesLeer, _vglProgramasDesdeCabecera, mtrTfgConfirmaErc, mtrDiscrepanciasDeFuentes, mtrDebePreguntarUroSintomas[0m
+    [90mmtrPreguntaUroSintomas, _uroSintomasConfirmados, mtrExamenesParaPreguntaFueraMeta, mtrDebePreguntarFueraMeta, mtrPreguntaFueraMeta, mtrReconciliarAhora[0m
+    [90m_vglPestanaDeCampo, _vglContextoEstado, _vglTextoContextoFaltante, _vglFactoresArchivados, _cwoClic, _cwfProgramarRefresco[0m
+    [90m_cwfInstalarEscucha, _cwCoordX, _cwCoordY, _mtrLabsRecientes, _vglAbrirAyudanteFaltan, _vglDockRotulo[0m
+    [90mautoCalcularResumenSiNecesario, _etiquetaCercanaCasilla, _excluirMamasGenitoPorTexto, _vglOfrecerDeshacer, _vglFeedbackBoton, _vglEspejoGuardar[0m
+    [90m_vglRestaurarDeEspejo, _procGuardar, _procEscrituraFallida, _enVueloClave, marcarEnVuelo, soltarEnVuelo[0m
+    [90menVueloAjeno, ordenCreadaHoyParaCie10, _puedoEvaluarLaAgenda, _puedoLeerLaAgenda, _vglDocCanon, mtrNormalizarNombre[0m
+    [90mmtrEsMedicoAutorizado, cargarRespaldoParaConsulta, isPanelHiddenActivity, panelActivities, rectificarStat, _repFilaLimpia[0m
+    [90m_repVaciadoDeArranque, _vglFechaHace, _pymSueltoEnLaRaiz, _pymAnotarFallo, _apptNombreClave, _apptMapaLeer[0m
+    [90m_apptMapaEscribir, _apptMapaBorrar, stampSalto, _vglCerrarConClicFuera, _pendientesUniversales, _avisoUnaVezPorNavegador[0m
+    [90m_avisoUidDeTexto, _vglSinCedulas, _pymMejorFechaPorNombre, _legendMarcaUnaVez, _cssSeguro, _fetchConTope[0m
+    [90m_labMotivoUltimoFallo, apiPacienteDetalladoCacheado, _smsTextoDesenlace, _smsPintarDesenlace, _smsAnotarDesenlace, _anularUltimoMotivoLeer[0m
+    [90m_cancelValorSospechoso, _cancelPapelDeClave, _cancelPartirUrl, _cancelPlantillaDesde, _cancelPlantillaGuardar, _cancelPlantillaLeer[0m
+    [90m_cancelPlantillaBorrar, _cancelPeticionDesdePlantilla, _cancelEnganchar, _cancelVariantes, _cancelVarianteRecordada, _cancelVarianteRecordar[0m
+    [90m_cancelDiagnostico, _apiPostConDetalle, _anulacionMensaje, _anulacionConfirmada, _anulacionYaNoVigente, _anulacionMotivo[0m
+    [90m_anularCitaAsignadaReal, _anularCitaAsignada, _labReferenciaDe, mtrPaqueteEstadoDe, mtrPaqueteProgramaHtml, openPaquetesModal[0m
+    [90mmtrCalcularResumenClinico, _triFactor, mtrFichaVivaFilas, abrirRedactorTextoLibre, mtrPanelResumenBentoDatos, mtrPanelResumenBentoHtml[0m
+    [90mmtrEstadoPuntoMedicamentos, _agmClaveDoc, _agmAgendarLabConCandado, _agmPrefLeer, _agmPrefGuardar, pymTituloClinico[0m
+    [90mpymTituloCorto, _conductaTablaOrdenamientos, _conductaCodigosEnTabla, _conductaEsperar, _conductaEsperarFilasNuevas, _conductaClicPaqueteHTA[0m
+    [90m_vglHcZoom, _vglAlternarAltoContraste, _prodEsSabadoDelMedico, _prodEsFestivoIso, _prodExtraPeriodo, exportarProductividadSemana[0m
+    [90m_vglCarpetaNombresDeDoc, _vglCarpetaResolverNombre, _vglCarpetaLeerFusionado, _vglCarpetaPareceSincronizada, _vglDiscoFechaCorta, _vglDiscoHoraCorta[0m
+    [90m_vglDiscoSanear, _vglDiscoValor, _vglDiscoCedula, _vglDiscoDir, _vglDiscoEscribirSerial, _vglDiscoDormir[0m
+    [90m_vglDiscoEscribirArchivo, _vglDiscoProgramar, _vglDiscoMemoriaEscribirAhora, _vglDiscoBannerEstilo, _ajustesSucio, _ajustesPonBorrador[0m
+    [90m_ajustesPintarBarra, _ajustesGuardar, _ajustesDescartar, _ajustesIntentarCerrar, _vglAlternarModoProg, _vglInstalarModoProg[0m
+    [90m_ajustesAthEstadoHtml, _ajustesPintarAthEstado, makeResizable, _vglGuardarAncho, countdownParts, _checklistCierreMsg[0m
+    [90m_noShowLeer, _noShowGuardar, _noShowPreviaEn, _noShowPrevia, _adhBadgeInfo, _reprogramarDeadline[0m
+    [90m_diagValorAtributoSeguro, _acompStoreLeer, _acompStoreGuardar, _acompMedId, _acompEstadoLeer, _acompEstadoGuardar[0m
+    [90m_acompActivo, _acompNotificarAccion, _acompSugerencia, _acompTick, _vglModoOcultoLeer, _vglModoOcultoAplicar[0m
+    [90m_vglAlternarOculto, _vglInstalarModoOculto, _festivosTablaAgregarParaTest, _festivosMensajeDiscrepancia, _festivosAvisarSiVencida, mtrDiasParaSondearCupo[0m
+    [90mmtrBuscarCupoLaboratorio, mtrNotaDisponibilidadLab, mtrVerificarCupoLab, mtrLeerFrecuenciasMedicamento, mtrEnriquecerAvisosConFrecuencia, mtrFrecuenciaTexto[0m
+    [90mmtrMapaFrecuenciasPorCodigo, mtrMapaFrecuenciasPorNombre, mtrPedirHistoricoMedicamentos, mtrSexoCanonico, mtrIrAPestanaPorNombre, mtrKdigoNoRepiteLipidos[0m
+    [90mmtrRepeticionObligatoria, mtrPuedeAdelantarPorFueraDeMeta, _mtrTokenDeNombreTachable, _mtrPatronConTildes, mtrIaGenerando, _vglTextoLibreCombinado[0m
+    [90m_vglNotarTextoLibre, _vglVigilarTextoLibre, mtrRotuloDeModo, mtrTextoDeOtrasCasillas, mtrRelativizarFechaIso, mtrIaClickDelegado[0m
+    [90m_mtrPrimerCampoNumerico, mtrDetectarDesacuerdos, mtrAnotarDesacuerdos, _ajustesDesacuerdosTexto, _mtrRotuloDeCampo, _mtrResolverAntropometria[0m
+    [90m_vglCarpetaEscribirInstantaneaSiAplica, _mtrNombreDelPaquete, _mtrNombreEfectivo, mtrHcGuardar, mtrHcEnganchar, imprimirHojaEducativa[0m
+    [90m_mtrDosisDeCombo, mtrCacheResumenMarcarDesactualizado, mtrCacheResumenDesactualizado, mtrCacheResumenRefrescarDesdePantalla, VGL_MODALES_CONSULTA, VGL_MODALES_ESCRITURA[0m
+    [90mVGL_ROTULOS[0m
+
+[33m  declaradas pero nunca nombradas (1):[0m
+    [90m_acompCerrar[0m
+
+[33m  declaradas en cubre pero JAMÁS invocadas vía api.·(...) (4):[0m
+    [90mInterfaz: ventana, hojas y modales → _activarAccesibilidadModal[0m
+    [90mInterfaz: ventana, hojas y modales → _acompCerrar[0m
+    [90mEnjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → muteFor[0m
+    [90mEnjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → unmute[0m
+[36m────────────────────────────────────────────────────────────────[0m
+
