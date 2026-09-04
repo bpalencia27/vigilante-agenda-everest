@@ -6061,6 +6061,93 @@ module.exports = {
       t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "«Sí, crear igual» sigue adelante: el médico manda");
     });
 
+    // =====================================================================
+    // v18.0.140 (c) — REPORTE DEL MÉDICO (04-sep): «le doy clic a "Pasar a la fecha
+    // sugerida" y no se cierra el modal una vez presionado el botón». AUDITORÍA del
+    // cableado completo del 🎯: se probó un parche explícito (cerrar el recuadro,
+    // limpiar vencOk, repintar) y la MUTACIÓN demostró que era código muerto —
+    // `renderDayChips` → `cargarHoras` ya hace las tres cosas (v17.6.13/v18.0.118/
+    // v15.9.0). Esta prueba sella el ciclo observable que el médico exige — 🎯
+    // recentra en la sugerida, el recuadro de decisión se cierra, el consentimiento
+    // NO se da por hecho, el vencimiento se reevalúa honesto con la fecha nueva y
+    // la reconfirmación SÍ crea la cita — y muere si `cargarHoras` deja de limpiar
+    // `vencOk` (mutación #508 del informe).
+    // =====================================================================
+    await t.casoAsync("v18.0.140 (c): «Pasar a la fecha sugerida» cierra el aviso de confirmación y después la cita SÍ se crea", async () => {
+      const urls = [];
+      const p2 = (n) => String(n).padStart(2, "0");
+      const sumarDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+      const seed = sumarDias(30);   // control sugerido a ~1 mes (plazo preseleccionado)
+      const vence = sumarDias(27);  // vence ANTES de la toma de la sugerida (≈ seed−7) pero DESPUÉS de la de una fecha tardía
+      const mk = () => {
+        const c = cargar({
+          silencioso: true,
+          fetch: async (url) => {
+            const u = String(url); urls.push(u);
+            if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+            if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+            if (u.includes("BuscarCitasDisponibles")) {
+              const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+              return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+            }
+            if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+            if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+            if (u.includes("AsignarTurno")) return respuestaJson({ error: false, data: { radicado: 4242, motivo: "Agendada Correctamente" } });
+            return respuestaJson({});
+          },
+          gmxhr: (o) => { if (o.onerror) o.onerror("sin AppCita en la prueba"); },
+        });
+        enriquecerDom(c);
+        c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+        return c;
+      };
+      const c = mk();
+      // Plan SIN ftl (nada que tomar primero): el control sugerido es el seed y la
+      // creatinina vence 3 días después de la toma que corresponde a la sugerida — la
+      // sugerida la salva, una fecha ~10 días más tardía no.
+      c.api.mtrCacheResumenGuardar("555111", {
+        programa: "HTA",
+        plan: { control: { fecha: seed }, ftl: null, vencidos: [], faltantes: [],
+          drivers: [{ clave: "CREATININA", nombre: "Creatinina sérica", estado: "D", vence: vence }], pasajeros: [] },
+      });
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const vencaviso = modal.querySelector("#vgl-agm-vencaviso");
+      t.cierto(vencaviso.classList.contains("vgl-d-none"), "al abrir, con la sugerida preseleccionada no hay nada que avisar");
+      // El médico se va al ÚLTIMO día sondeado (~7 hábiles después del centro): la toma
+      // (5 hábiles antes de esa fecha) cae después del vencimiento → el aviso aparece.
+      const chips = modal.querySelector("#vgl-day-chips");
+      disparar(chips.children[chips.children.length - 1], "click");
+      await esperar(80);
+      t.cierto(!vencaviso.classList.contains("vgl-d-none"), "al elegir una fecha tardía el aviso de vencimiento se ve");
+      t.cierto(/vgl-agm-venc-fix/.test(vencaviso.innerHTML), "con su botón «🎯 Pasar a la fecha sugerida»");
+      disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      const caja = modal.querySelector("#vgl-agm-confirm-aviso");
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(30);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 0, "Confirmar no crea nada todavía");
+      t.cierto(!caja.classList.contains("vgl-d-none") && /llegaría vencido/.test(caja.innerHTML), "el recuadro de decisión explica el bloqueo");
+      // 🎯: recentra en la sugerida, CIERRA el recuadro, limpia vencOk y repinta el
+      // vencimiento honesto con la fecha nueva (la sugerida lo resuelve → se oculta).
+      // El botón se pide desde la PROPIA caja del aviso: el DOM enriquecido memoiza el
+      // querySelector por nodo, así que «modal.querySelector("#vgl-agm-venc-fix")» sería
+      // un nodo fresco sin el listener que el script sí registró.
+      disparar(vencaviso.querySelector("#vgl-agm-venc-fix"), "click");
+      await esperar(80);
+      t.cierto(caja.classList.contains("vgl-d-none") && caja.innerHTML === "", "el recuadro de decisión se cierra (antes quedaba abierto y el modal no terminaba nunca)");
+      t.igual(confirmar.dataset.vencOk, "", "el consentimiento no se da por hecho: la fecha nueva se reevalúa");
+      t.cierto(vencaviso.classList.contains("vgl-d-none"), "y con la fecha sugerida el vencimiento queda resuelto: el aviso se autooculta");
+      // Re-elección de hora y Confirmar: la cita SÍ sale — el ciclo completa.
+      disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(120);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "la cita se crea: el modal ya no se queda abierto");
+    });
+
     t.caso("v18.0.118 (UI/UX #5): sin resumen calculado, el dock muestra «Panel del paciente · leyendo…» deshabilitado en vez de un hueco", () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);

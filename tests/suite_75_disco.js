@@ -738,6 +738,45 @@ module.exports = {
       t.igual(bannersVisibles(e.c), 0, "sin banner: el médico ya dijo que no");
     });
 
+    await t.casoAsync("J6: fuera de HCHealth no se pide NI se reactiva la carpeta (v18.0.140 j)", async () => {
+      // Orden del médico (4-sep): el aviso de elegir carpeta SOLO en
+      // .../viva/HCHealth/. En el resto del Everest ni el banner de primera vez
+      // ni el de reactivar — ni siquiera repintando a mano.
+      const e = escenario({});
+      const rutaOriginal = e.c.env.win.location.pathname;
+      try {
+        e.c.env.win.location.pathname = "/viva/EverHealth/AgendaHealth/";
+        t.falso(await e.c.api._vglDiscoArranque(), "arranque con almacén vacío: falso");
+        t.igual(bannersVisibles(e.c), 0, "sin banner de ELEGIR");
+        e.f._stores.handles.historias = handleDe(e.raiz, { query: "prompt" });
+        t.falso(await e.c.api._vglDiscoArranque(), "handle caído a «prompt»: falso");
+        t.igual(bannersVisibles(e.c), 0, "sin banner de REACTIVAR");
+        t.falso(e.c.api.vglDiscoBannerPintar("elegir"), "un repintado directo tampoco escapa");
+        t.igual(bannersVisibles(e.c), 0, "cero banners en toda la vuelta");
+      } finally {
+        e.c.env.win.location.pathname = rutaOriginal;
+      }
+    });
+
+    await t.casoAsync("J7: fuera de HCHealth el permiso vigente SIGUE reviviendo la carpeta", async () => {
+      // La reactivación silenciosa (granted) es GLOBAL a propósito: si el médico
+      // pasea por otras páginas del Everest, la carpeta no se le pierde — solo
+      // se le deja de MOLESTAR con banners fuera de HCHealth.
+      const almacen = {};
+      almacen["vgl_cosecha"] = JSON.stringify({ "1093800": { ts: MS_FIJA } });
+      const e = escenario({ almacen });
+      e.f._stores.handles.historias = handleDe(e.raiz, { query: "granted" });
+      const rutaOriginal = e.c.env.win.location.pathname;
+      try {
+        e.c.env.win.location.pathname = "/viva/EverHealth/AgendaHealth/";
+        t.cierto(await e.c.api._vglDiscoArranque(), "revivió y activó igual");
+        t.igual(bannersVisibles(e.c), 0, "sin banner");
+        t.cierto(!!memoriaDisco(e.raiz), "el espejo quedó escrito");
+      } finally {
+        e.c.env.win.location.pathname = rutaOriginal;
+      }
+    });
+
     // ================= BLOQUE K — banner: pintar, repintar y callar =================
     t.caso("K1: pintar «elegir» arma el aviso completo de primera vez", () => {
       const e = escenario({});
@@ -856,7 +895,7 @@ module.exports = {
       const fila = red.cuerpos()[0];
       t.igual(fila.evento, "prueba");
       t.igual(fila.dia, FECHA, "día del reloj congelado");
-      t.igual(fila.ver, "18.0.139", "versión viva");
+      t.igual(fila.ver, "18.0.140", "versión viva");
       t.igual(fila.cosa, 1, "extra mergeado");
       t.cierto(typeof fila.token === "string" && fila.token.length > 0, "token del tablero");
       t.cierto(/-/.test(String(fila.lote)), "lote trazable");

@@ -12756,3 +12756,62 @@ fue pura cascada). El cuerpo del caso quedó envuelto en `try { … } finally { 
 para que la vuelta a fábrica ocurra pase lo que pase.
 
 Banco completo: **3.229 comprobaciones pasan, 0 fallan.**
+
+## v18.0.140 — 4-sep — el sábado ajeno, el disco que solo pregunta en la historia y el fix que era código muerto
+
+Tres frentes del médico del 4-sep, y uno de ellos no era lo que parecía.
+
+**(f) El sábado que no era suyo.** Reporte: «me dice que escoja el sábado 21 pero ese
+día no trabajo». Los chips de fecha ya ofrecen los sábados «por confirmar» (se descartan
+a un clic, con su title), pero la 🎯 que alimenta «Pasar a la fecha sugerida» podía
+imponer como sugerencia automática un sábado de un grupo que NO consta fiable — la
+conducta permisiva de los chips, aplicada a un camino que es una orden de hecho. La
+140 añade `mtrSabadoSugerible` (grupo fiable Y constancia positiva de que ESE sábado lo
+trabaja él: ni conjetura, ni conflicto, ni 5º sábado) y el flag `sabadoSoloFiable` en
+`mtrFechaControlSugerida`, que en modo estricto SE SALTA en la espiral al sábado no
+sugerible en vez de ganárselo por cercanía. Default `false`: los demás llamadores
+(p. ej. `mtrControlDesdeLabs`) conservan la conducta permisiva histórica y no se les
+rompe nada.
+
+**(j) El disco solo pregunta donde hay historia.** Las cuatro guardas de
+`_vglDiscoArranque` (`enHC` en las ramas `prompt`/`sinhandle`) y la de
+`vglDiscoBannerPintar` impiden que el banner de ELEGIR carpeta asome fuera de
+`/viva/HCHealth/` — completan el silencio del subárbol que la 138 empezó con las
+notificaciones.
+
+**(c) El fix que era código muerto.** Reporte: «le doy clic a pasar a la fecha sugerida
+y no se cierra el modal». El parche original añadía tres líneas try/catch de reset tras
+`renderDayChips` en el listener de la 🎯 — y la auditoría de mutaciones reveló que eran
+CÓDIGO MUERTO: `cargarHoras` ya resetea `vencOk`, oculta el recuadro de decisión y
+repinta el vencimiento, y el click de turno repite los resets. Las tres líneas se
+retiraron y su lugar quedó un comentario honesto de auditoría; la prueba end-to-end de
+suite_15 se conserva porque sella el CABLEADO real (🎯 → reconfirmar → cita), y las
+mutaciones legítimas van contra los resets de verdad, no contra las líneas retiradas.
+
+**Pruebas nuevas (+1 caso, 4 aserciones; suite_15 queda en 264, suite_75 en 50,
+suite_46 en 90).** Suite_46 gana «EL MOTOR YA NO IMPONE ese sábado —
+mtrPlanParaclinicos cablea el modo estricto»: un RAC de 90 días (albuminuria) tomado el
+2026-06-07 vence exacto el sábado 2026-09-05, la toma cae en sábado como en el caso
+real, y con el `grupoSabado` en conflicto el control del motor NO puede caer en el
+sábado 12 (+7): la espiral lo salta y cae en el viernes 11. Es la prueba que faltaba:
+las de capacidad (`mtrSabadoSugerible` / `mtrFechaControlSugerida` con flag explícito)
+demostraban que el mecanismo SABÍA, no que el motor lo PIDIERA — la primera corrida de
+mutación sobrevivió con 89 en verde y esa fue la señal. La cadena de versión sube en
+`@version`, `VERSION`, `package.json`, la «versión viva» de suite_75 y el ancla del
+tablero (`TABLERO/VersionCheck.gs` → `57ee7184…a64b3`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 507 | (c-A) `_agmOcultarAvisoConfirmar()` fuera de `cargarHoras`: el recuadro de decisión queda vivo al recargar horas | *suite_15: 1 falla* («el recuadro de decisión se cierra… obtuvo false») | Sí |
+| 508 | (c-B) `confirmBtn.dataset.vencOk = ""` fuera de `cargarHoras` Y del click de turno: el consentimiento dado ya no se limpia | *suite_15: 1 falla* («el consentimiento no se da por hecho… esperaba "" y obtuvo undefined») | Sí |
+| 509 | (j) las cuatro guardas `enHC` de `_vglDiscoArranque` y la de `vglDiscoBannerPintar` fuera: el banner de ELEGIR asoma fuera de la historia | *suite_75: 1 falla* (J6: «sin banner de ELEGIR: esperaba 0 y obtuvo 1») | Sí |
+| 510 | (f) `sabadoSoloFiable: false` en la llamada del motor: `mtrFechaControlSugerida` conserva la capacidad pero el motor no la pide | *suite_46: 1 falla* («el +7 (sábado 12) es de un grupo que NO consta fiable… salió 2026-09-12»). SOLO cae tras añadir la prueba del motor: sin ella el mutante SOBREVIVÍA con las 89 de capacidad en verde | Sí |
+
+**Las dos lecciones de la 140.** Primera: una prueba que pasa igual SIN el fix no está
+probando el fix — el parche (c) original pasó el banco entero porque sus tres líneas no
+hacían nada; retirarlas y que todo siguiera en verde fue la confesión. Segunda: un
+mutante que sobrevive no es ruido, es un mapa — la 510 señalaba la costura exacta
+(capacidad probada, cableado no) y la prueba nueva se escribió sobre esa costura, no al
+azar.
+
+Banco completo: **3.236 comprobaciones pasan, 0 fallan.**
