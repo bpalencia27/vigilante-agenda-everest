@@ -192,6 +192,84 @@ module.exports = {
       t.igual(soloAcostado.pad, 86, "con sus dos cifras");
     });
 
+    // =================================================================
+    //  v18.0.142 — GROUNDING DE LA TENSIÓN (reporte del 04-sep: «PUSE
+    //  111/78… FALTÓ LA DIASTÓLICA»; notas generadas con 124/82 y 110/70
+    //  que nadie tomó). Tres causas encadenadas: la obligatoria «T.A:*»
+    //  no tenía lector por rótulo, «111/78» salía 11178 por _labNumerico,
+    //  y la sistólica sola dejaba el hueco para que OTRA medición lo
+    //  completara río abajo.
+    // =================================================================
+    t.caso("v18.0.142: «111/78» se lee COMPLETO desde el texto — jamás 11178", () => {
+      const ta = api._mtrTaDesdeTexto("111/78");
+      t.igual(ta.pas, 111, "la sistólica del texto");
+      t.igual(ta.pad, 78, "y la diastólica que antes se perdía");
+      const clinica = api._mtrTaDesdeTexto("165/70");
+      t.igual(clinica.pas, 165, "el otro par del reporte, completo");
+      t.igual(clinica.pad, 70);
+      t.igual(api._mtrTaDesdeTexto("11178"), null, "un solo grupo de 5 dígitos NO es una tensión");
+      t.igual(api._mtrTaDesdeTexto("95/120"), null, "par cruzado (pad > pas): lectura que no se entendió");
+      t.igual(api._mtrTaDesdeTexto("300/190"), null, "300/190: fuera del rango fisiológico, no es tensión");
+      t.igual(api._mtrTaDesdeTexto("999"), null, "una cifra imposible tampoco pasa como sistólica");
+      t.igual(api._mtrTaDesdeTexto("-110"), null, "negativo: basura, no tensión");
+      const sola = api._mtrTaDesdeTexto("111");
+      t.igual(sola.pas, 111, "una sola cifra legítima pasa como sistólica");
+      t.igual(sola.pad, null, "sin inventar la diastólica");
+    });
+
+    t.caso("v18.0.142: una casilla por NOMBRES que trae «111/78» entero gana y no se mezcla", () => {
+      const docCon = (mapa) => ({ querySelector: (sel) => {
+        for (const k of Object.keys(mapa)) if (sel.indexOf('"' + k + '"') >= 0 || sel === "#" + k) return { value: mapa[k] };
+        return null;
+      } });
+      const suyo = api.mtrLeerTensionDelDom(docCon({ sistolica: "111/78" }));
+      t.igual(suyo.pas, 111, "el par completo de UNA casilla");
+      t.igual(suyo.pad, 78, "antes _labNumerico lo convertía en 11178");
+      // La casilla cruzada (95/120) no se "corrige" intercambiando: es null.
+      t.igual(api.mtrLeerTensionDelDom(docCon({ sistolica: "95/120" })).pas, null, "par cruzado en una casilla: null");
+    });
+
+    t.caso("v18.0.142: «T.A:*» se lee por RÓTULO — con 1 y con 2 casillas", () => {
+      const nodo = (rotulo, valor) => ({ value: valor, getAttribute: (a) => (a === "aria-label" ? rotulo : null) });
+      const docR = (nodos) => ({
+        querySelector: () => null,
+        querySelectorAll: (sel) => (sel === "input, select, textarea" ? nodos : []),
+      });
+      // El caso del reporte: UNA casilla «T.A:*» con «111/78» y nada por nombres.
+      const suyo = api.mtrLeerTensionDelDom(docR([nodo("T.A:*", "111/78")]));
+      t.igual(suyo.pas, 111, "por el rótulo de la casilla obligatoria");
+      t.igual(suyo.pad, 78, "completo, aunque ningún name casara");
+      // Dos casillas «T.A:*» en orden DOM (sis, dia).
+      const dos = api.mtrLeerTensionDelDom(docR([nodo("T.A:*", "165"), nodo("T.A:*", "70")]));
+      t.igual(dos.pas, 165);
+      t.igual(dos.pad, 70);
+      // «Talla» NO es «T.A»: la frontera del rótulo lo deja fuera.
+      t.igual(api.mtrLeerTensionDelDom(docR([nodo("Talla (cm)", "165")])).pas, null, "«Talla (cm)» no casa la obligatoria");
+      // «T.A Acostado:» es OTRA medición: no contamina la obligatoria y se lee por SU rótulo.
+      const acostado = api.mtrLeerTensionDelDom(docR([nodo("T.A Acostado:", "138/86")]));
+      t.igual(acostado.pas, 138, "la acostado llega como respaldo, no como obligatoria");
+      t.igual(acostado.pad, 86);
+      // Par cruzado por rótulo: null, no se intercambia.
+      t.igual(api.mtrLeerTensionDelDom(docR([nodo("T.A:*", "95"), nodo("T.A:*", "120")])).pas, null, "cruzado por rótulo: null");
+      // La costura de la EXCLUSIÓN: «T.A:* acostado» casa el regex principal
+      // Y el de acostado; sin la exclusión le robaría el lugar a la
+      // obligatoria aunque venga PRIMERO en el DOM (mutante 523).
+      const ambiguo = api.mtrLeerTensionDelDom(docR([nodo("T.A:* acostado", "138/86"), nodo("T.A:*", "165/70")]));
+      t.igual(ambiguo.pas, 165, "rótulo ambiguo de acostado NO le roba el lugar a la obligatoria");
+      t.igual(ambiguo.pad, 70);
+    });
+
+    t.caso("v18.0.142: la lectura COMPLETA por rótulo le gana a la PARCIAL por nombres", () => {
+      const nodo = (rotulo, valor) => ({ value: valor, getAttribute: (a) => (a === "aria-label" ? rotulo : null) });
+      const doc = {
+        querySelector: (sel) => (sel.indexOf('"sistolica"') >= 0 ? { value: "111" } : null),
+        querySelectorAll: (sel) => (sel === "input, select, textarea" ? [nodo("T.A:*", "165/70")] : []),
+      };
+      const ta = api.mtrLeerTensionDelDom(doc);
+      t.igual(ta.pas, 165, "el par completo de la pantalla manda");
+      t.igual(ta.pad, 70, "sobre la media cifra del name afortunado (111 sin pad)");
+    });
+
     // ============ LECTURA DEL PESO (ancla real: id="peso", Examen físico) ============
     // v17.6.75 — REPORTE EN VIVO: "no aparece la TFG y me dice que falta el peso pero
     // yo ya lo consigné en su respectiva casilla de Everest". A diferencia de la

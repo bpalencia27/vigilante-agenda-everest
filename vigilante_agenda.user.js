@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.141
+// @version      18.0.142
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.141";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.142";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -42989,6 +42989,10 @@
     // mtrHcTextoParaHoja; si alguno se renombra allá, se renombra aquí (la coincidencia
     // exacta es el contrato, no un detalle de estilo).
     "- El examen físico y los signos vitales de la cosecha en vivo llegan separados por fecha: lo rotulado «digitado HOY en la pantalla de Everest» es lo que el médico acaba de escribir en ESTA consulta y es el ÚNICO válido para el examen físico y los signos vitales de la nota de hoy; lo rotulado «cosechado en una consulta ANTERIOR» es de un control previo y NO se usa como examen físico ni signos vitales actuales (solo puede mencionarse como hallazgo previo si es pertinente). Si un campo físico llega sin fecha («sin fecha por campo»), no afirmes que fue medido hoy.",
+    // v18.0.142 — la regla que faltaba tras «PUSE 111/78… FALTÓ LA
+    // DIASTÓLICA»: el hueco de una cifra se dejó completar río abajo con la
+    // medición de otro día y la nota salió con una tensión que nadie tomó.
+    "- Si un signo vital llega INCOMPLETO (p. ej. tensión arterial con la sistólica y sin la diastólica), se escribe tal cual está o se omite: está PROHIBIDO rellenar la cifra que falta con un valor típico, con la cifra de otra medición o con cualquier número que no venga en los bloques.",
     "- De los antecedentes negativos escribe SOLO los pertinentes al motivo de consulta y al cuadro de hoy. El resto se calla: esto es semiología, no un inventario de la base de datos.",
     "- Los identificadores de campo del sistema (sedentarismo, antecedentePatologicos, revisionSistema y similares) NUNCA se escriben: se traducen a lenguaje clínico.",
     "",
@@ -46079,6 +46083,156 @@
     return null;
   }
   // =====================================================================
+  //  v18.0.142 — GROUNDING DE LA TENSIÓN ARTERIAL. Reporte del consultorio
+  //  (04-sep): «PUSE 111/78… FALTÓ LA DIASTÓLICA» — la IA redactó notas con
+  //  cifras ajenas (pantalla: 165/70 y 111/78; notas generadas: 124/82 y
+  //  110/70). Tres causas, todas en ESTE camino de lectura:
+  //   (1) la casilla obligatoria «T.A:*» no tenía lector por RÓTULO: los
+  //       nombres de las listas de arriba NO están verificados contra el DOM
+  //       real, y cuando ninguno casa, la casilla que el médico SÍ llenó
+  //       queda sin leer y el triaje viejo de la API gana río abajo;
+  //   (2) «111/78» pasaba por _labNumerico y salía 11178 — una cifra que no
+  //       existe en ninguna pantalla;
+  //   (3) la lectura por roles hallaba la sistólica (name="sistolica" =
+  //       111) y dejaba la diastólica en null: río abajo el hueco se
+  //       completaba con la medición DE OTRO DÍA.
+  //  Lo que sigue NO toca la precedencia entre fuentes (eso manda
+  //  MTR_PRECEDENCIA_SYS): solo garantiza que lo que sale de aquí es la
+  //  medición COMPLETA tal como está en la casilla, o nada.
+  // =====================================================================
+  const MTR_TA_PAS_MIN = 60, MTR_TA_PAS_MAX = 260;
+  const MTR_TA_PAD_MIN = 30, MTR_TA_PAD_MAX = 150;
+  // «111/78» -> {pas:111, pad:78}. «11178» (un solo grupo de 5 dígitos) y
+  // «95/120» (diastólica mayor que la sistólica) -> null: mejor sin cifra
+  // que con una cifra que no está en la pantalla.
+  function _mtrTaDesdeTexto(v) {
+    const s = String(v == null ? "" : v).trim();
+    if (!/\d/.test(s) || s.indexOf("-") >= 0) return null;
+    const grupos = s.match(/\d+/g) || [];
+    const cifra = (g, min, max) => {
+      if (!g || g.length < 2 || g.length > 3) return null;
+      const n = Number(g);
+      return (n >= min && n <= max) ? n : null;
+    };
+    if (grupos.length === 1) {
+      const pas = cifra(grupos[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      return pas === null ? null : { pas: pas, pad: null };
+    }
+    if (grupos.length === 2) {
+      const pas = cifra(grupos[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      const pad = cifra(grupos[1], MTR_TA_PAD_MIN, MTR_TA_PAD_MAX);
+      if (pas === null || pad === null || pad > pas) return null;
+      return { pas: pas, pad: pad };
+    }
+    return null;
+  }
+  // Un campo de UNA cifra (solo sistólica o solo diastólica) JAMÁS pasa por
+  // _labNumerico si trae «/»: la lección de «111/78» -> 11178.
+  function _mtrTaNumeroDeTexto(v, min, max) {
+    const s = String(v == null ? "" : v).trim();
+    if (!s || s.indexOf("/") >= 0) return null;
+    const n = _labNumerico(s);
+    if (n === null || n < min || n > max) return null;
+    return n;
+  }
+  // El valor CRUDO (String) de una casilla, con el MISMO lookup name->id de
+  // mtrLeerCampoNumerico. Sin esto no se puede saber si una casilla trae el
+  // par completo «111/78» en una sola celda.
+  function _mtrTaValorCrudo(nombreCampo, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d) return "";
+    let nodo = null;
+    try {
+      if (typeof d.querySelector === "function") {
+        nodo = d.querySelector('input[name="' + String(nombreCampo).replace(/"/g, '\\"') + '"]')
+          || d.querySelector('#' + String(nombreCampo).replace(/[^\w-]/g, ""));
+      }
+    } catch (e) { return ""; }
+    if (!nodo || nodo.value == null) return "";
+    return String(nodo.value);
+  }
+  function _mtrPrimerValorCrudo(nombres, doc) {
+    for (const n of nombres) {
+      const v = _mtrTaValorCrudo(n, doc);
+      if (v && v.trim()) return v;
+    }
+    return null;
+  }
+  // Dos casillas por roles (sistólica / diastólica). Si UNA de ellas trae el
+  // par completo («111/78»), esa casilla GANA y la otra se ignora: nunca se
+  // mezclan dos casillas ni dos mediciones. Un par cruzado (pad > pas) es
+  // una lectura que no se entendió y se devuelve null.
+  function _mtrTaDesdeCampos(nombresSis, nombresDia, doc) {
+    const crudoSis = _mtrPrimerValorCrudo(nombresSis, doc);
+    const crudoDia = _mtrPrimerValorCrudo(nombresDia, doc);
+    if (crudoSis && crudoSis.indexOf("/") >= 0) return _mtrTaDesdeTexto(crudoSis);
+    if (crudoDia && crudoDia.indexOf("/") >= 0) return _mtrTaDesdeTexto(crudoDia);
+    const pas = crudoSis ? _mtrTaNumeroDeTexto(crudoSis, MTR_TA_PAS_MIN, MTR_TA_PAS_MAX) : null;
+    const pad = crudoDia ? _mtrTaNumeroDeTexto(crudoDia, MTR_TA_PAD_MIN, MTR_TA_PAD_MAX) : null;
+    if (pas !== null && pad !== null && pad > pas) return null;
+    if (pas === null && pad === null) return null;
+    return { pas: pas, pad: pad };
+  }
+  // Rótulos. «T.A:*» es la casilla obligatoria; «T.A Acostado:» es OTRA
+  // medición y no puede colarse en la familia obligatoria (por eso viaja
+  // como exclusión: un rótulo «T.A:* acostado» o «T.A. acostado» CASA el
+  // regex principal y solo la exclusión lo aparta). La clase media del
+  // regex de acostado traga separadores por eso: sin ella la exclusión
+  // sería un guardia fantasma que ningún rótulo real puede disparar.
+  // «Talla» no casa: la \b tras la A y el exigir separador o fin tras el
+  // rótulo dejan «TALLA» fuera.
+  const MTR_ROTULO_TA = /\bT[.\s\/]*A\b\s*(?:[.:*]|$)/i;
+  const MTR_ROTULO_TA_ACOSTADO = /T[.\s\/]*A[.\s:*]*acostado/i;
+  // La tensión leída por RÓTULO: enumera TODOS los campos del documento y se
+  // queda con los que cuelgan del rótulo buscado. 1 casilla -> se parsea su
+  // texto completo; 2 casillas -> DOM order (sis, dia) y las reglas de
+  // siempre; 0 o 3+ -> null (ambigüedad no se resuelve eligiendo). Si el
+  // documento no expone querySelectorAll (mocks de prueba), null sin ruido.
+  function _mtrTensionPorRotulo(doc, rotuloRe, excluirRe) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function" || !rotuloRe) return null;
+    let campos = [];
+    try {
+      campos = Array.prototype.slice.call(d.querySelectorAll("input, select, textarea"));
+      if (!campos.length) return null;
+    } catch (e) { return null; }
+    const propios = [];
+    for (let i = 0; i < campos.length; i++) {
+      const el = campos[i];
+      let rot = "";
+      try { rot = _mtrRotuloDeCampo(el, d); } catch (e) { rot = ""; }
+      if (!rot) continue;
+      if (!rotuloRe.test(rot)) continue;
+      if (excluirRe && excluirRe.test(rot)) continue;
+      propios.push(el && el.value != null ? String(el.value).trim() : "");
+    }
+    if (propios.length === 1) return _mtrTaDesdeTexto(propios[0]);
+    if (propios.length === 2) {
+      if (propios[0].indexOf("/") >= 0) return _mtrTaDesdeTexto(propios[0]);
+      if (propios[1].indexOf("/") >= 0) return _mtrTaDesdeTexto(propios[1]);
+      const pas = _mtrTaNumeroDeTexto(propios[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      const pad = _mtrTaNumeroDeTexto(propios[1], MTR_TA_PAD_MIN, MTR_TA_PAD_MAX);
+      if (pas !== null && pad !== null && pad > pas) return null;
+      if (pas === null && pad === null) return null;
+      return { pas: pas, pad: pad };
+    }
+    return null;
+  }
+  function _mtrTaEsCompleta(t) {
+    return !!t && t.pas != null && t.pad != null;
+  }
+  // UNA familia = UNA medición. Dentro de la familia: una lectura COMPLETA
+  // por rótulo le gana a una PARCIAL por nombres (la medición completa de la
+  // pantalla manda sobre media cifra por un name afortunado); en cualquier
+  // otro caso, los nombres verificados mandan y el rótulo queda de respaldo.
+  function _mtrTaFamilia(nombresSis, nombresDia, rotuloRe, excluirRe, doc) {
+    const porNombres = _mtrTaDesdeCampos(nombresSis, nombresDia, doc);
+    const porRotulo = _mtrTensionPorRotulo(doc, rotuloRe, excluirRe);
+    if (_mtrTaEsCompleta(porRotulo) && !_mtrTaEsCompleta(porNombres)) return porRotulo;
+    if (porNombres) return porNombres;
+    return porRotulo || null;
+  }
+  // =====================================================================
   //  v18.0.116 — «UN SOLO ESTADO DEL PACIENTE», PASO 1 (decisión del médico, 02-sep): antes de
   //  tocar ninguna precedencia, un DETECTOR PASIVO de desacuerdos entre módulos. Compara lo que
   //  cada fuente tiene en la mano en el mismo instante (registro histórico de la API vs casilla
@@ -46147,14 +46301,16 @@
     } catch (e) { return "no se pudo leer"; }
   }
   function mtrLeerTensionDelDom(doc) {
-    // Primero la tensión OBLIGATORIA («T.A:*»), que es la que el médico llena.
-    const pas = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS, doc);
-    const pad = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA, doc);
-    if (pas !== null || pad !== null) return { pas: pas, pad: pad };
-    // Y solo si esa está vacía, la de acostado — leyendo también LAS DOS cifras.
-    const pasA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS_ACOSTADO, doc);
-    const padA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA_ACOSTADO, doc);
-    if (pasA !== null || padA !== null) return { pas: pasA, pad: padA };
+    // v18.0.142 — Cada familia se lee por NOMBRES y por RÓTULO, y la
+    // medición COMPLETA manda dentro de la familia (ver _mtrTaFamilia). La
+    // OBLIGATORIA («T.A:*») sigue mandando sobre la de acostado: una acostado
+    // COMPLETA no le gana a una obligatoria parcial (v18.0.54), porque son
+    // DOS mediciones distintas y la que el médico llena siempre es la
+    // obligatoria.
+    const obligatoria = _mtrTaFamilia(MTR_CAMPOS_TA_SIS, MTR_CAMPOS_TA_DIA, MTR_ROTULO_TA, MTR_ROTULO_TA_ACOSTADO, doc);
+    if (obligatoria) return obligatoria;
+    const acostado = _mtrTaFamilia(MTR_CAMPOS_TA_SIS_ACOSTADO, MTR_CAMPOS_TA_DIA_ACOSTADO, MTR_ROTULO_TA_ACOSTADO, null, doc);
+    if (acostado) return acostado;
     return { pas: null, pad: null };
   }
 

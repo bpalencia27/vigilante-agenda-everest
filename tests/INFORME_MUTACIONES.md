@@ -12872,3 +12872,76 @@ rama está cubierta sería exactamente el tipo de verde que este informe existe 
 cazar.
 
 Banco completo: **3.247 comprobaciones pasan, 0 fallan.**
+
+## v18.0.142 — 4-sep — el grounding de la tensión arterial
+
+Reporte del consultorio: «PUSE 111/78… FALTÓ LA DIASTÓLICA». La pantalla
+mostraba 165/70 y 111/78, pero las notas salían redactadas con 124/82 y 110/70:
+cifras que nadie tomó ese día. La autopsia encontró TRES causas encadenadas:
+(1) la casilla obligatoria «T.A:*» NO tenía lector por rótulo — solo existía el
+lector por `name` (y el de acostado), así que una casilla cuyo rótulo no casa
+con ningún name era INVISIBLE; (2) cuando esa casilla traía el par completo
+«111/78», `_labNumerico` lo fundía en 11178 y el guard de rango lo mataba —
+con el par perdido y la sistólica suelta, el hueco quedaba abierto; (3) río
+abajo, OTRA medición de otro día llenaba la diastólica que faltaba, la IA
+redactaba «111/78» con la cifra ajena, y la hoja imprimía «111/null».
+
+El fix de la 142: una familia de helpers DEDICADA a la tensión, sin tocar la
+precedencia entre fuentes (eso sigue mandando MTR_PRECEDENCIA_SYS) ni los
+lectores de peso y cintura. `_mtrTaDesdeTexto` (grupos `\d+` de 2-3 dígitos:
+1 grupo → {pas, pad:null}; 2 grupos → ambos en rango fisiológico —sis 60-260,
+dia 30-150— y pad ≤ pas; «-» o 3+ grupos → null: mejor sin cifra que con una
+cifra que no está en la pantalla). `_mtrTaNumeroDeTexto` (un campo de UNA cifra
+jamás acepta «/»). `_mtrTaValorCrudo`/`_mtrPrimerValorCrudo` (el valor String
+con el MISMO lookup name→id de mtrLeerCampoNumerico: así se sabe si UNA casilla
+trae el par entero). `_mtrTaDesdeCampos` (la casilla que trae «111/78» GANA
+completa; cruzado → null, no se «corrige» intercambiando). `_mtrTensionPorRotulo`
+(enumera `input, select, textarea`, rótulo vía `_mtrRotuloDeCampo`, con
+exclusión: 1 casilla → su texto completo; 2 → orden DOM; 0 o 3+ → null — la
+ambigüedad no se resuelve eligiendo). `_mtrTaEsCompleta` y `_mtrTaFamilia`: la
+lectura COMPLETA por rótulo le gana a la PARCIAL por nombres.
+`mtrLeerTensionDelDom` lee las DOS familias con la obligatoria PRIMERO — y una
+obligatoria PARCIAL sigue mandando sobre la acostado COMPLETA (la lección de la
+v18.0.54, intacta). `MTR_ROTULO_TA_ACOSTADO` se ensancha a
+`/T[.\s\/]*A[.\s:*]*acostado/i` porque la versión anterior era un guardia
+fantasma: NINGÚN rótulo real («T.A:* acostado») disparaba la exclusión. La
+regla para la IA gana su línea explícita en los CINCO modos — si un signo vital
+llega incompleto está PROHIBIDO rellenar la cifra que falta con un valor típico,
+la cifra de otra medición o cualquier número que no venga en los bloques — y la
+hoja imprime «PA 111 mmHg» sin diagonal cuando no hay diastólica.
+
+**Pruebas nuevas (suite_55 y suite_57; banco 3.247 → 3.253).** El par «111/78»
+leído completo desde el texto (con los null de 11178, del cruzado 95/120, del
+negativo y —añadidas en caliente durante esta corrida de mutaciones— de las
+cifras fuera de rango 300/190 y 999); la casilla por NOMBRES que trae el par
+entero; «T.A:*» leído por RÓTULO con 1 y con 2 casillas (con «Talla (cm)»
+fuera, el acostado como respaldo y el rótulo ambiguo «T.A:* acostado» SIN
+robarle el puesto a la obligatoria); la COMPLETA por rótulo ganándole a la
+PARCIAL por nombres; los CINCO modos de la IA PROHIBIENDO rellenar la cifra que
+falta; y la hoja mostrando la sistólica que sí consta sin inventar la
+diastólica.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 520 | rangos fisiológicos de `cifra()` apagados (`return n;`): «300/190» pasaría como tensión | *suite_55: 1 falla* («111/78» se lee COMPLETO — aserciones «300/190» y «999»). SOLO cae tras añadir esas aserciones EN CALIENTE: en la primera corrida SOBREVIVÍA con el banco completo en verde | Sí |
+| 521 | hoisting del «/» de `_mtrTaDesdeCampos` eliminado (la casilla con el par entero ya no gana) | *suite_55: 1 falla* (una casilla por NOMBRES que trae «111/78» entero gana: esperaba 111 y obtuvo null) | Sí |
+| 522 | guard «/» de `_mtrTaNumeroDeTexto` eliminado | **SOBREVIVE el banco completo (3.253 en verde)** — capa de profundidad, no brecha: TODOS los llamadores interceptan «/» antes de llegar aquí (la capa que la precede cae con 521 y con las líneas «/» de `_mtrTensionPorRotulo`); se documenta, no se finge | Sí |
+| 523 | lector por rótulo APAGADO (`_mtrTensionPorRotulo` → null inmediato) | *suite_55: 2 fallan* («T.A:*» se lee por RÓTULO + la COMPLETA por rótulo le gana a la PARCIAL). En la primera corrida el arnés ABORTÓ: la ancla aparecía 2 veces; se re-ancló con la firma completa de la función | Sí |
+| 524 | exclusión del acostado eliminada del lector por rótulo | *suite_55: 1 falla* (rótulo ambiguo «T.A:* acostado» NO le roba el lugar a la obligatoria: esperaba 165 y obtuvo 138) | Sí |
+| 525 | regla de familia COMPLETA>PARCIAL apagada (`if (false)`) | *suite_55: 1 falla* (la COMPLETA por rótulo le gana a la PARCIAL por nombres: esperaba 165 y obtuvo 111) | Sí |
+| 526 | orden de familias INVERTIDO (la acostado lee primero) | *suite_55: 2 fallan* (v18.0.54 «manda la T.A, no la T.A Acostado»: esperaba 136 y obtuvo 120; y el rótulo ambiguo de la 142: esperaba 165 y obtuvo 138) | Sí |
+| 527 | línea PROHIBIDO retirada de los CINCO modos de la IA | *suite_57: 1 falla* (los CINCO modos PROHÍBEN rellenar la cifra que falta — la regla del hueco en enfermedad_actual) | Sí |
+| 528 | la hoja vuelve a imprimir «111/null» | *suite_57: 1 falla* (la hoja con SOLO la sistólica no completa la diastólica: «PUSE 111/78… FALTÓ LA DIASTÓLICA») | Sí |
+
+**Las lecciones de la 142.** Primera: #520 repite la familia de #514/#510 —
+la capacidad (rangos fisiológicos) EXISTÍA en el código pero NINGUNA aserción
+la fijaba; la corrida de mutaciones ANTES de publicar la descubrió y la prueba
+se escribió sobre la costura en caliente, con el mutante re-corrido hasta
+caer. Segunda: #522 se queda en la tabla sobreviviendo a propósito — es
+defensa en profundidad (las capas que la preceden ya están tumbadas por #521),
+fingir que es cobertura activa sería el verde falso que este informe existe
+para cazar. Tercera: #523 recuerda la disciplina del arnés — ancla única o
+aborto; apagar un lector completo exige anclar en la FIRMA de la función, no
+en una guarda que otras funciones comparten.
+
+Banco completo: **3.253 comprobaciones pasan, 0 fallan.**
