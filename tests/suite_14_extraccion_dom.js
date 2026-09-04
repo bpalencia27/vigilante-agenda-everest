@@ -186,6 +186,17 @@ module.exports = {
       t.falso(c.api._enModuloHCHealth());
     });
 
+    // v18.0.138 — orden del médico (4-sep): la pestaña principal/notificadora es
+    // /viva/HCHealth/; todo el subárbol /viva/EverHealth/ queda fuera del módulo.
+    // Esto revierte la aceptación de v17.6.3 de la forma /viva/EverHealth/HCHealth.
+    t.caso("v18.0.138: _enModuloHCHealth false en /viva/EverHealth/HCHealth (reversión de v17.6.3)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth";
+      t.falso(c.api._enModuloHCHealth());
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth/Ordenamiento";
+      t.falso(c.api._enModuloHCHealth());
+    });
+
     t.caso("_enModuloHCHealth: false sin coincidencia y ante una excepción del DOM", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/otra/ruta/cualquiera";
@@ -195,27 +206,37 @@ module.exports = {
     });
 
     // ---------- _enPaginaExcluidaDeAvisos ----------
-    // v17.6.75 — REPORTE EN VIVO (26-ago): el médico nombró tres pantallas puntuales
-    // donde NO quiere que le suene ni le llegue notificación de Windows, aunque el
-    // resto de Everest sí (v14.1.5, invariante que se mantiene en todo lo demás).
-    t.caso("_enPaginaExcluidaDeAvisos: true en las tres rutas que el médico nombró", () => {
+    // v18.0.138 — orden del médico (4-sep): ni Vigilante ni notificaciones en
+    // /viva/EverHealth/OrdenamientoHealth, /viva/EverHealth/Acceso ni
+    // /viva/EverHealth/HCHealth — las notificaciones viven SOLO en /viva/HCHealth/.
+    // v17.6.75 enumeraba tres pantallas sueltas; ahora TODO el subárbol /viva/EverHealth/
+    // queda silenciado (el prefijo absorbe portada, Acceso, OrdenamientoHealth y HCHealth).
+    t.caso("v18.0.138: _enPaginaExcluidaDeAvisos true en TODO el subárbol /viva/EverHealth/ y en /viva/Acceso", () => {
       const c = cargar({ silencioso: true });
-      c.env.win.location.pathname = "/viva/Acceso/";
-      t.cierto(c.api._enPaginaExcluidaDeAvisos());
       c.env.win.location.pathname = "/viva/EverHealth/OrdenamientoHealth";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/Acceso";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth/Ordenamiento";
       t.cierto(c.api._enPaginaExcluidaDeAvisos());
       c.env.win.location.pathname = "/viva/EverHealth/";
       t.cierto(c.api._enPaginaExcluidaDeAvisos());
       c.env.win.location.pathname = "/viva/EverHealth";   // sin barra final, mismo caso
       t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/OtraPantalla";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos(), "cualquier pantalla futura bajo el subárbol también queda silenciada");
+      c.env.win.location.pathname = "/viva/Acceso/";       // ruta de siempre, sin prefijo: se conserva
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
     });
 
-    t.caso("_enPaginaExcluidaDeAvisos: false en el módulo clínico y en EverHealth/HCHealth (no es la ruta exacta excluida)", () => {
+    t.caso("_enPaginaExcluidaDeAvisos: false en el módulo clínico /viva/HCHealth/ y en rutas ajenas", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/";
       t.falso(c.api._enPaginaExcluidaDeAvisos());
-      c.env.win.location.pathname = "/viva/EverHealth/HCHealth/";
-      t.falso(c.api._enPaginaExcluidaDeAvisos(), "EverHealth/HCHealth es el módulo clínico real, no la portada EverHealth sola");
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      t.falso(c.api._enPaginaExcluidaDeAvisos(), "las subrutas del módulo clínico siguen notificando");
       c.env.win.location.pathname = "/otra/ruta/cualquiera";
       t.falso(c.api._enPaginaExcluidaDeAvisos());
     });
