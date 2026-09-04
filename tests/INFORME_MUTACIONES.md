@@ -12713,3 +12713,46 @@ prefijo) y suite_04 amplía su caso de silencio de tres a cinco rutas.
 | 503 | `/viva/Acceso` (sin prefijo) fuera de la exclusión: la ruta administrativa de siempre vuelve a sonar | *suite_14: 1 falla* (la misma del subárbol, que termina verificando `/viva/Acceso/`) + *suite_04: 1 falla* (salta 1 notificación) | Sí |
 
 Banco completo: **3.227 comprobaciones pasan, 0 fallan.**
+
+## v18.0.139 — 4-sep — «se negó a mostrarme»: con el respaldo activo, el aviso dice QUÉ se miró
+
+Pregunta del médico (4-sep): «se supone que con la base de respaldo deberían aparecerme
+qué actividades tiene pendiente también, se negó a mostrarme, ¿por qué?». La respuesta
+técnica: no hubo negativa. Con `pymFallback` activo, `getActivities()` consulta JUSTO la
+base piloto/respaldo; el aviso salió porque ese paciente no arrojó actividades en ella.
+Pero el texto viejo («NO he podido mirar qué le corresponde a este paciente») decía lo
+contrario — que no se miró — y eso es lo que el médico leyó. La 18.0.139 parte la rama
+`esBasePiloto` de `pymMotivoSinActividades` usando `pacienteEnLista` para que el aviso
+sea direccional y honesto: `piloto_esta_sin_pendientes` (el paciente SÍ figura en el
+respaldo —la base activa ahora— y de ahí no salió nada para este módulo; cubre también
+actividades que el módulo no ofrece por sexo o exclusión del catálogo, el mismo matiz de
+`sin_pendientes`) y `piloto_no_esta` (su identificación no cruza en el respaldo, «ni en
+el respaldo lo puedo ver»). `pacienteEnLista` null/undefined conserva el motivo viejo
+`sin_lista` — la lista de verdad nunca cargó — así que ningún caso existente cambia de
+significado. El botón deshabilitado del modal acompaña a cada escenario: «Sin actividades
+para ordenar» para quien sí figura en la base activa, «No hay lista de prevención» para
+quien no cruza.
+
+**Pruebas nuevas (+2 casos, 14 aserciones).** Suite_72 gana «RESPALDO ACTIVO — «se
+negó a mostrarme» eran dos casos con una sola frase»: alimenta el motor con
+`esBasePiloto` en ambos sabores (`pacienteEnLista` true/false) y exige los motivos nuevos
+con sus textos, más la ausencia de la frase vieja. Suite_15 gana el casoAsync del modal
+que abre el ordenamiento con `pymFile="BASE PILOTO.xlsx"`, `pymFallback=true` y el
+paciente dentro (`pymTodos={"999"}`) y fuera (`pymTodos={"111"}`), verificando aviso,
+ausencia de «NO he podido mirar» y rótulo del botón en cada escenario. La cadena de
+versión sube en `@version`, `VERSION`, `package.json`, la «versión viva» de suite_75 y el
+ancla del tablero (`TABLERO/VersionCheck.gs` → `8f7f0e5a…77d33`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 504 | `pacienteEnLista` comparado contra un valor imposible: las dos ramas nuevas quedan inalcanzables y todos los escenarios caen al motivo viejo «sin_lista» | *suite_72: 1 falla* («esperaba "piloto_esta_sin_pendientes" y obtuvo "sin_lista"») + *suite_15: 1 falla* (el aviso del modal ya no dice «SÍ figura en la base de respaldo») | Sí |
+| 505 | guards de las ramas nuevas intercambiados: quien NO cruza en el respaldo también cae a «sin_lista» y pierde su dirección | *suite_15: 2 fallas* («NO figura en la base de respaldo… obtuvo "sin_lista"» y el botón que ya no remite a la lista) | Sí |
+| 506 | el botón deshabilitado deja de reconocer `piloto_esta_sin_pendientes` y muestra «No hay lista de prevención» para quien SÍ está en la base activa | *suite_15: 2 fallas* («y el botón ya no dice "No hay lista"…» + caída EN CASCADA del caso v16.2.0 «sin lista cargada se dice ESO… obtuvo false», por fuga de `pymFile="BASE PILOTO.xlsx"` tras el aborte) | Sí |
+
+**Lección de la 506, aplicada al propio banco:** el framework aborta el caso en la
+primera aserción fallida, así que el reset de estado del caso nuevo —al final del
+cuerpo— no corría al fallar y contaminaba casos posteriores (la segunda caída de la 506
+fue pura cascada). El cuerpo del caso quedó envuelto en `try { … } finally { reset }`
+para que la vuelta a fábrica ocurra pase lo que pase.
+
+Banco completo: **3.229 comprobaciones pasan, 0 fallan.**

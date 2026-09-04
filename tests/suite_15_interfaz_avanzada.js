@@ -4060,6 +4060,43 @@ module.exports = {
       t.igual(modalSinLista.innerHTML.split("vgl-ord-item").length - 1, 0, "tampoco aquí se ofrece ningún ítem");
     });
 
+    await t.casoAsync("openOrdenamientoModal: RESPALDO ACTIVO — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139)", async () => {
+      // Pedido del médico (4-sep): con la base de respaldo activa, el modal decía «NO he
+      // podido mirar qué le corresponde a este paciente»... aunque el respaldo ES la base
+      // que getActivities() consulta cuando pymFallback está en true. Eso se leyó como
+      // que "se negó a mostrar" los pendientes. Ahora: quien figura en la base sin
+      // actividades dice que figura; quien no cruza en la base dice que no cruza. Y el
+      // botón deshabilitado acompaña a cada caso.
+      const s = cOrd.api.__state;
+      // Lección de la mutación M3 de esta misma versión: el framework aborta el caso
+      // en la primera aserción fallida, así que un reset al final del cuerpo no corre
+      // y la fuga de estado (pymFile="BASE PILOTO.xlsx") contamina casos posteriores.
+      // try/finally garantiza la vuelta a fábrica pase lo que pase.
+      try {
+        s.pymFile = "BASE PILOTO.xlsx"; s.pymFallback = true;
+        s.pymDia = cOrd.api.todayStamp(); s.pymTodos = new Set(["999"]);
+        await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
+        let m = ultimoOrd();
+        t.cierto(m.innerHTML.includes("SÍ figura en la base de respaldo"),
+          "el paciente está en la base activa y el aviso lo dice: no fue una negativa");
+        t.falso(m.innerHTML.includes("NO he podido mirar"),
+          "la frase que se leyó como «se negó a mostrarme» ya no sale para quien sí se miró");
+        t.cierto(m.innerHTML.includes("Sin actividades para ordenar"),
+          "y el botón ya no dice «No hay lista» para quien sí está en la base activa");
+
+        s.pymTodos = new Set(["111"]);
+        await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
+        m = ultimoOrd();
+        t.cierto(m.innerHTML.includes("NO figura en la base de respaldo"),
+          "la ausencia sale con su dirección: no cruza en el respaldo");
+        t.cierto(m.innerHTML.includes("No hay lista de prevención"),
+          "y el botón remite a la lista, no a un «al día»");
+      } finally {
+        // Estado de fábrica de vuelta: nada de este caso debe filtrarse al resto.
+        s.pymFile = ""; s.pymTodos = null; s.pymFallback = false; s.pymDia = "";
+      }
+    });
+
     await t.casoAsync("openOrdenamientoModal: con coincidencia, la actividad de otro sexo se OCULTA (v17.26.0)", async () => {
       // v17.26.0 — REFACTOR APROBADO: el choque de sexo ya no se avisa en rojo: la
       // actividad simplemente no se muestra. Mujer con mamografía y PSA en su PyM: la

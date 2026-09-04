@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.138
+// @version      18.0.139
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.138";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.139";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11127,9 +11127,34 @@
     // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
     // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
     // situaciones distintas y el médico hace cosas distintas con cada una.
-    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio"];
+    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio",
+    // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
+    // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
+    // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
+    // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
+    // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
+    // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
+    // llena con ella) separa ahora los dos casos que antes compartían esa frase.
+    "piloto_esta_sin_pendientes", "piloto_no_esta"];
   function pymMotivoSinActividades(est) {
     const e = est || {};
+    // v18.0.139 — RESPALDO ACTIVO: primero lo que sí se sabe de esa base. Si el paciente
+    // figura en ella, el viejo "sin_lista" era literalmente falso (no es que no se miró:
+    // se miró y no salió nada, o sus únicas actividades quedaron fuera por sexo o por
+    // exclusión del catálogo — el mismo matiz que ya carga "sin_pendientes" con la
+    // oficial). Solo cuando no se puede comprobar la pertenencia se cae al "no lo sé".
+    if (e.esBasePiloto && e.pacienteEnLista === true) {
+      return {
+        motivo: "piloto_esta_sin_pendientes",
+        texto: "Este paciente SÍ figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—, pero de esa base no salió ninguna actividad para ofrecerle en este módulo (puede no tener nada anotado, o ser actividades que el módulo no ofrece por sexo o por exclusión del catálogo). Eso NO prueba que esté al día: el respaldo es una base de referencia, no la lista de hoy. Si quiere la respuesta de hoy, cargue la lista con «Abrir PyM»; si algo aplica, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    if (e.esBasePiloto && e.pacienteEnLista === false) {
+      return {
+        motivo: "piloto_no_esta",
+        texto: "Este paciente NO figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—: su identificación no cruza en esa base (puede ser nuevo, de otra sede, o una base desactualizada). Esto no dice que no tenga nada pendiente: dice que ni en el respaldo lo puedo ver. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
     if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
       return {
         motivo: "sin_lista",
@@ -30247,7 +30272,7 @@
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" || _pymSinAct.motivo === "piloto_esta_sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
         </div>
       </div>
     `;
