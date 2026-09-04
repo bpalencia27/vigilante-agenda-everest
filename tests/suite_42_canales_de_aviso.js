@@ -585,7 +585,9 @@ module.exports = {
       t.igual(os, 1, "el aviso salió por el sistema operativo");
       t.igual(wrap.children.length, 0, "y la pantalla ajena sigue limpia");
       // y dentro de HCHealth, con la pestaña visible, todo sigue igual (v15.4.0 intacto)
-      c.env.win.location.pathname = "/viva/EverHealth/HCHealth";
+      // v18.0.138 — la pestaña principal/notificadora es /viva/HCHealth/ (la forma
+      // /viva/EverHealth/HCHealth quedó fuera del módulo, reversión de v17.6.3).
+      c.env.win.location.pathname = "/viva/HCHealth/";
       // (persist: true — el arnés capa los temporizadores a 1 ms, así el autodescarte de
       // 9 s borraría el cartel antes de poder verlo pintado; persistente queda estable)
       c.api.notify("AZUL", "Cierre de consulta", "cuerpo de prueba 135b", true, "notify-hc-" + Math.random());
@@ -601,7 +603,7 @@ module.exports = {
       function FakeNotification() { os++; return { close() {}, onclick: null }; }
       FakeNotification.permission = "granted";
       c.env.win.Notification = FakeNotification;
-      // el pathname por defecto del arnés ya es /viva/EverHealth/HCHealth
+      // el pathname por defecto del arnés ya es /viva/HCHealth/ (v18.0.138)
       c.env.doc.visibilityState = "visible";
       c.env.doc.hasFocus = () => true;
       c.api.__state.muteUntil = 0;

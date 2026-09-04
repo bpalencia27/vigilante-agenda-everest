@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.137
+// @version      18.0.138
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.137";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.138";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13451,32 +13451,32 @@
   // =====================================================================
   function _enModuloHCHealth() {
     try {
-      // v17.6.3 — La URL REAL del módulo clínico en producción es
-      // https://neps.everestintelligent.com/viva/EverHealth/HCHealth (confirmado por el
-      // médico: ahí ejecuta el script), no la .../viva/HCHealth/ de la captura original.
-      // Se aceptan las DOS formas: el segmento final `HCHealth` del pathname identifica
-      // el módulo (Citas del día, Historia Clínica, Órdenes y RCV viven bajo él). Sin
-      // esto, tick() escondía el panel por completo en la página real (v16.2.2 lo oculta
-      // fuera del módulo) y el Vigilante no aparecía donde el médico trabaja.
-      return /\/viva\/(?:EverHealth\/)?HCHealth(\/|$)/i.test(location.pathname);
+      // v18.0.138 — Orden directa del médico (4-sep): la pestaña principal/notificadora
+      // es https://neps.everestintelligent.com/viva/HCHealth/ — el subárbol
+      // .../viva/EverHealth/ queda FUERA (ni panel ni notificaciones). Esto REVIERTE
+      // v17.6.3, que aceptaba ambas formas (/viva/HCHealth y /viva/EverHealth/HCHealth)
+      // tras confirmación del médico de aquel día; hoy el médico ordena lo contrario y
+      // manda la orden más reciente. Si el Vigilante desaparece de la página donde
+      // realmente trabaja, basta restaurar el regex de v17.6.3:
+      // /\/viva\/(?:EverHealth\/)?HCHealth(\/|$)/i
+      return /\/viva\/HCHealth(\/|$)/i.test(location.pathname);
     } catch (e) { return false; }
   }
 
-  // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió explícitamente que el sonido/
-  // notificación de Windows (v14.1.5: "suena esté el médico donde esté") NO le suene en
-  // tres pantallas puntuales que nombró — /viva/Acceso/ (login/administrativo),
-  // /viva/EverHealth/OrdenamientoHealth (Ordenamiento COMO MÓDULO PROPIO, no el que vive
-  // dentro de una historia — ese sigue en _enModuloHCHealth()) y /viva/EverHealth/ a
-  // secas (portada, sin módulo). Confirmado con el médico (dos preguntas, dos
-  // respuestas): el panel Y el sonido siguen igual de amplios que hoy en todo lo demás
-  // (incluida Historia+Ordenamiento-dentro-de-historia) — esto es una excepción puntual
-  // a esas tres pantallas nombradas, no un cambio del alcance general.
+  // v18.0.138 — REPORTE DEL MÉDICO (4-sep): en /viva/EverHealth/OrdenamientoHealth,
+  // /viva/EverHealth/Acceso y /viva/EverHealth/HCHealth NO debe aparecer el Vigilante
+  // ni ninguna notificación suya; las notificaciones viven SOLO en la pestaña
+  // principal /viva/HCHealth/. En lugar de enumerar pantallas sueltas (como hacía
+  // v17.6.75), se silencia TODO el subárbol /viva/EverHealth/ (portada, Acceso,
+  // OrdenamientoHealth y HCHealth incluidos) — el prefijo lo absorbe todo. Se
+  // conserva /viva/Acceso (sin prefijo) por compatibilidad con la ruta de siempre.
+  // Efecto: en página excluida ni tono ni Windows ni toast ni cartel; el aviso queda
+  // en cola (vgl_avisos_pendientes) y al volver al módulo se muestran los no caducados.
   function _enPaginaExcluidaDeAvisos() {
     try {
       const p = location.pathname;
-      return /\/viva\/Acceso(\/|$)/i.test(p)
-        || /\/viva\/EverHealth\/OrdenamientoHealth(\/|$)/i.test(p)
-        || /^\/viva\/EverHealth\/?$/i.test(p);
+      return /^\/viva\/EverHealth(\/|$)/i.test(p)
+        || /\/viva\/Acceso(\/|$)/i.test(p);
     } catch (e) { return false; }
   }
 

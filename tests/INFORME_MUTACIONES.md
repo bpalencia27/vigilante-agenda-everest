@@ -12674,3 +12674,42 @@ está vacía) y el mutante cayó con la podredumbre a la vista: devolvió la Mem
 | 500 | el espejo diferido desprogramado (fuera `vglDiscoMemoriaProgramar()` y `vglDiscoHistoriaProgramar(id)` de la guarda exitosa): guardar en el navegador ya no baja historia ni Memoria al disco | *suite_76: 8 pasan, 7 fallan* (A1, A2, B1, B2, C2, D2, E1) | Sí |
 
 Banco completo: **3.226 comprobaciones pasan, 0 fallan.**
+
+## v18.0.138 — 4-sep — el silencio del subárbol EverHealth: notificaciones solo en /viva/HCHealth/
+
+Orden directa del médico (4-sep): en `/viva/EverHealth/OrdenamientoHealth`,
+`/viva/EverHealth/Acceso` y `/viva/EverHealth/HCHealth` NO debe salir el Vigilante ni
+ninguna notificación suya; la única pestaña que notifica es la principal
+`https://neps.everestintelligent.com/viva/HCHealth/`.
+
+**El cambio toca las dos funciones puerta, nada más.** (1) `_enModuloHCHealth()` vuelve a
+reconocer SOLO `/viva/HCHealth(\/|$)` — esto REVIERTE v17.6.3 (22-ago), cuando el médico
+confirmó que ejecutaba el script en `/viva/EverHealth/HCHealth` y se aceptaron las dos
+formas; hoy el médico ordena lo contrario y manda la orden más reciente. Con la puerta
+cerrada, los 18 consumidores heredan el silencio solos: `tick()` oculta panel y pastilla,
+el dock se autodestruye, los labs se ocultan y `showToast`/`notify` se van temprano. El
+comentario del código deja escrito cómo restaurar el regex de v17.6.3 si el Vigilante
+desapareciera de la página donde el médico realmente trabaja. (2)
+`_enPaginaExcluidaDeAvisos()` deja de enumerar pantallas sueltas (v17.6.75 nombraba tres)
+y silencia TODO el subárbol `/^\/viva\/EverHealth(\/|$)/` — portada, Acceso,
+OrdenamientoHealth, HCHealth y cualquier pantalla futura bajo ese prefijo — conservando
+`/viva/Acceso` (sin prefijo) por compatibilidad. En página excluida ni tono ni Windows ni
+toast ni cartel: el aviso queda en cola (`vgl_avisos_pendientes`) y al volver a
+`/viva/HCHealth/` se muestran los no caducados (10 min).
+
+**Ajustes de acompañamiento.** El arnés (`tests/harness.js`) corría por defecto en
+`/viva/EverHealth/HCHealth`; con la puerta nueva eso habría tumbado medio banco, así que
+su `href`/`pathname` por defecto pasa a `/viva/HCHealth/`. `package.json` y la expectativa
+de "versión viva" de suite_75 suben a 18.0.138 junto al `@version` y al respaldo de
+`VERSION`. El ancla del tablero (`TABLERO/VersionCheck.gs`) se actualiza con la huella
+SHA-256 de la 138 (`41dc9a99…cd3dc`). Suite_14 gana dos casos nuevos (módulo false en
+`EverHealth/HCHealth`, excluida true en todo el subárbol más una ruta futura bajo el
+prefijo) y suite_04 amplía su caso de silencio de tres a cinco rutas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 501 | `_enModuloHCHealth()` devuelta al regex de v17.6.3 (`(?:EverHealth\/)?` opcional): `/viva/EverHealth/HCHealth` vuelve a ser módulo — el Vigilante reaparece justo donde el médico pidió silencio | *suite_14: 1 falla* («v18.0.138: _enModuloHCHealth false en /viva/EverHealth/HCHealth») + *suite_04: 1 falla* (salta 1 notificación de Windows de las 5 rutas) | Sí |
+| 502 | `_enPaginaExcluidaDeAvisos()` devuelta a la enumeración de v17.6.75 (portada exacta + OrdenamientoHealth, sin subárbol): `EverHealth/HCHealth` y `EverHealth/Acceso` vuelven a sonar | *suite_14: 1 falla* («true en TODO el subárbol») + *suite_04: 1 falla* (saltan 2 notificaciones de Windows) | Sí |
+| 503 | `/viva/Acceso` (sin prefijo) fuera de la exclusión: la ruta administrativa de siempre vuelve a sonar | *suite_14: 1 falla* (la misma del subárbol, que termina verificando `/viva/Acceso/`) + *suite_04: 1 falla* (salta 1 notificación) | Sí |
+
+Banco completo: **3.227 comprobaciones pasan, 0 fallan.**

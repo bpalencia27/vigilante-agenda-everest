@@ -951,27 +951,29 @@ module.exports = {
       t.cierto(cola[0].ts > 0, "y lleva la hora del hecho, para poder caducarlo si se vacía mucho después");
     });
 
-    // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió, nombrando las tres rutas
-    // exactas, que el aviso NO le suene ahí — a diferencia del resto de Everest, donde
-    // v14.1.5 sigue mandando (prueba anterior). El hecho se sigue contando y el cartel
-    // sigue esperando en cola para cuando vuelva a una pantalla clínica real.
-    t.caso("v17.6.75: en las tres pantallas que el médico nombró, el aviso NO suena — pero el hecho se cuenta y el cartel queda en cola", () => {
+    // v18.0.138 — orden del médico (4-sep): ni Vigilante ni notificaciones en
+    // /viva/EverHealth/OrdenamientoHealth, /viva/EverHealth/Acceso ni
+    // /viva/EverHealth/HCHealth — TODO el subárbol /viva/EverHealth/ queda
+    // silenciado (amplía v17.6.75, que enumeraba tres pantallas sueltas). El hecho
+    // se sigue contando y el cartel sigue esperando en cola para cuando el médico
+    // vuelva a la pestaña principal /viva/HCHealth/.
+    t.caso("v18.0.138: en todo el subárbol /viva/EverHealth/ el aviso NO suena — pero el hecho se cuenta y el cartel queda en cola", () => {
       const c = cargar();
       c.env.doc.visibilityState = "hidden";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";
-      const rutas = ["/viva/Acceso/", "/viva/EverHealth/OrdenamientoHealth", "/viva/EverHealth/"];
+      const rutas = ["/viva/Acceso/", "/viva/EverHealth/OrdenamientoHealth", "/viva/EverHealth/HCHealth", "/viva/EverHealth/Acceso", "/viva/EverHealth/"];
       rutas.forEach((ruta, i) => {
         c.env.win.location.pathname = ruta;
         const base = { hora_texto: "08:0" + i + " AM", doc_id: "d" + i, key: "d" + i + "@08:0" + i + " AM", nombre: "PRUEBA", elapsed: 1, reason: "" };
         c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });
         c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });
       });
-      t.igual(notifCount, 0, "ni una sola notificación de Windows en ninguna de las tres rutas nombradas");
-      t.igual(atiempoHoy(c), 3, "pero el hecho SÍ se cuenta en la auditoría — las tres llegadas quedan registradas");
+      t.igual(notifCount, 0, "ni una sola notificación de Windows en ninguna de las cinco rutas silenciadas");
+      t.igual(atiempoHoy(c), 5, "pero el hecho SÍ se cuenta en la auditoría — las cinco llegadas quedan registradas");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola.length, 3, "y el cartel de cada una queda en cola, esperando una pantalla clínica real donde pintarse");
+      t.igual(cola.length, 5, "y el cartel de cada una queda en cola, esperando la pestaña principal /viva/HCHealth/");
     });
 
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
