@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.139
+// @version      18.0.140
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.139";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.140";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28542,6 +28542,16 @@
         if (_labsPrimero && _labsPrimero.labIso) { try { renderLabDayChips(_labsPrimero.labIso); } catch (e) {} }
         else if (_sugeridaControl && _sugeridaControl.ftl) { try { renderLabDayChips(_sugeridaControl.ftl); } catch (e) {} }
         if (_sugeridaControl && _sugeridaControl.iso) renderDayChips(0, 0, _sugeridaControl.iso);
+        // v18.0.140 (c) — AUDITORÍA DEL CABLEADO DEL 🎯 (reporte del 04-sep: «no se
+        // cierra el modal»). Se probó a cerrar aquí a mano el recuadro de decisión,
+        // limpiar `vencOk` y repintar el vencimiento: la mutación demostró que era
+        // código MUERTO, porque `renderDayChips` → `cargarHoras` ya hace las tres
+        // cosas (v17.6.13 limpia dupOk/vencOk; v18.0.118 oculta el recuadro; v15.9.0
+        // repinta el vencimiento con la fecha nueva). El ciclo 🎯 → reconfirmar →
+        // cita creada queda sellado por la prueba end-to-end de suite_15, y la
+        // mutación que la mata es la del reset REAL: `cargarHoras` sin limpiar
+        // `vencOk`. Aquí no se añade nada redundante: si un día `cargarHoras`
+        // deja de reevaluar, esa prueba lo grita.
       });
       const okb = caja.querySelector("#vgl-agm-venc-ok");
       if (okb) okb.addEventListener("click", () => {
@@ -32420,17 +32430,24 @@
     try {
       if (!vglCarpetaDisponible()) return false;
       const crudo = await _vglCarpetaRecuperarCrudo();
+      // v18.0.140 (j) — los banners de pedir/reactivar carpeta solo se ofrecen en
+      // HCHealth (allí es donde se escriben historias); la reactivación silenciosa
+      // del handle (granted) sigue GLOBAL para no perder la carpeta al pasear por
+      // otras páginas del Everest.
+      const enHC = (typeof _enModuloHCHealth === "function") ? _enModuloHCHealth() : true;
       if (crudo.perm === "granted" && crudo.h) {
         _vglCarpetaHandle = crudo.h;
         await _vglDiscoActivar("arranque");
         return true;
       }
       if (crudo.perm === "prompt" && crudo.h) {
+        if (!enHC) return false;
         try { uxTrack("disco.banner", { motivo: "reactivar" }); } catch (e1) {}
         vglDiscoBannerPintar("reactivar");
         return false;
       }
       if (crudo.perm === "sinhandle") {
+        if (!enHC) return false;
         try { uxTrack("disco.banner", { motivo: "elegir" }); } catch (e1) {}
         vglDiscoBannerPintar("elegir");
         return false;
@@ -32465,6 +32482,11 @@
   function vglDiscoBannerPintar(modo) {
     try {
       if (typeof document === "undefined" || !document) return false;
+      // v18.0.140 (j) — el banner de elegir/reactivar carpeta SOLO tiene sentido en
+      // HCHealth; en el resto de páginas del Everest volvía a asomar tras cada repintado
+      // de fallo del botón aceptar. Doble guarda: esto tapa los repintados directos y
+      // `_vglDiscoArranque` condiciona además los uxTrack para no medir ruido.
+      if (typeof _enModuloHCHealth === "function" && !_enModuloHCHealth()) return false;
       try { if (sessionStorage.getItem(VGL_DISCO_BANNER_KEY) === "off") return false; } catch (e0) {}
       vglDiscoBannerQuitar();
       _vglDiscoBannerEstilo();
@@ -40966,6 +40988,18 @@
     return true;
   }
 
+  // v18.0.140 (f) — ¿este sábado concreto puede ser LA fecha sugerida por el motor?
+  // Regla más exigente que la de los chips: los sábados «por confirmar» (grupo en
+  // conjetura o conflicto) y el 5º sábado siguen OFRECIÉNDOSE a un clic con su title,
+  // pero la sugerencia automática ya no puede mandar al médico a un sábado que no es
+  // suyo. Se exige grupo fiable Y constancia positiva de que ese sábado lo trabaja él.
+  function mtrSabadoSugerible(iso, grupoSabado) {
+    if (!mtrSabadosHabilitados(grupoSabado)) return false;
+    const g = mtrGrupoSabadoFiable(grupoSabado);
+    if (g === null) return false;
+    return mtrMedicoTrabajaSabado(iso, g) === true;   // null (5º sábado) no es sugerible
+  }
+
   // Control tras la toma de laboratorios.
   //  · v16.9.0 — El objetivo es +7 DÍAS de la toma, en todos los caminos (decisión del
   //    médico del 20-ago). Si el día 7 no sirve (festivo, domingo, o sábado sin agenda
@@ -40983,6 +41017,16 @@
     const maxDias = Number.isFinite(Number(o.maxDias)) ? Number(o.maxDias) : MTR_DIAS_MAX_CONTROL;
     const objetivo = Number.isFinite(Number(o.objetivoDias)) ? Number(o.objetivoDias) : MTR_DIAS_CONTROL_OBJETIVO;
     const grupo = (o.grupoSabado !== undefined && o.grupoSabado !== null) ? o.grupoSabado : (o.sabadosHabilitados || null);
+    // v18.0.140 (f) — modo estricto de sugerencia: con `sabadoSoloFiable` los sábados
+    // no sugeribles (grupo no fiable, sábado de otro grupo, 5º sábado) se saltan en la
+    // espiral en vez de ganársela por cercanía. Default false: los demás llamadores
+    // (p. ej. mtrControlDesdeLabs) conservan la conducta permisiva histórica.
+    const sabadoSoloFiable = o.sabadoSoloFiable === true;
+    const diaValido = (cand) => {
+      if (!mtrDiaValidoParaControlConSabado(cand, grupo)) return false;
+      if (sabadoSoloFiable && mtrFechaDesdeIso(cand).getUTCDay() === 6 && !mtrSabadoSugerible(cand, grupo)) return false;
+      return true;
+    };
     // Orden de preferencia: el objetivo primero, y desde ahí en espiral.
     const rango = [];
     const vistos = new Set();
@@ -40992,7 +41036,7 @@
 
     for (const n of rango) {
       const cand = mtrSumarDias(isoFtl, n);
-      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+      if (diaValido(cand)) {
         return {
           fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
           motivo: n === objetivo
@@ -41007,7 +41051,7 @@
     // vez de devolver null y dejar al médico sin fecha.
     for (let n = maxDias + 1; n <= maxDias + 14; n++) {
       const cand = mtrSumarDias(isoFtl, n);
-      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+      if (diaValido(cand)) {
         return {
           fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
           motivo: "no había día válido dentro de los " + maxDias + " días; se corrió a la semana siguiente",
@@ -42119,6 +42163,10 @@
     // v16.9.0 — Sin `preferirTarde`: un solo objetivo (+7) en todos los caminos.
     const control = mtrFechaControlSugerida(ftl, {
       grupoSabado: (c.grupoSabado !== undefined && c.grupoSabado !== null) ? c.grupoSabado : (c.sabadosHabilitados || null),
+      // v18.0.140 (f) — la sugerencia automática (la 🎯 que alimenta el recuadro de
+      // «Pasar a la fecha sugerida») solo propone sábados de constancia fiable: jamás
+      // un sábado «por confirmar» ni uno de un grupo que no es el del médico.
+      sabadoSoloFiable: true,
     });
 
     return {
