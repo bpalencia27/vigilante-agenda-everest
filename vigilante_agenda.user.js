@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.135
+// @version      18.0.136
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.135";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.136";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5317,11 +5317,37 @@
       // el texto del disco ya no es el que el memo recuerda).
       _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
       if (!escrito) {
+        // v18.0.136 — BLINDAJE DE CUOTA LLENA (el síntoma de campo que motivó esta
+        // versión). El navegador rechazó la memoria del paciente, pero si hay carpeta
+        // autorizada el disco la rescata YA, sin retardo: el espejo vuela con la fusión
+        // recién calculada y esta consulta no pierde nada. El memo se rellena con el
+        // objeto FRESCO y el raw VIEJO del disco (la misma argucia del restaurador), así
+        // la sesión entera sirve los datos nuevos aunque localStorage siga sin poder.
+        if (vglCarpetaElegida()) {
+          _vglCosechaCacheTodo = todo;
+          _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
+          vglDiscoRescatarCosecha(id, fusion, todo).then((okDisco) => {
+            try {
+              showToast(okDisco ? "AMBAR" : "ROJO", "No se pudo guardar la memoria del paciente",
+                okDisco
+                  ? "El almacenamiento del navegador está lleno, así que la memoria del paciente quedó archivada en la carpeta «Vigilante de Agenda» de su computador; cada arranque la recupera de allá. Cuando pueda, libere espacio del navegador."
+                  : "El almacenamiento del navegador está lleno y la carpeta del computador tampoco pudo escribir esta vez. Avísele al programador.",
+                true, "cosecha|cuota");
+            } catch (e3) {}
+          }).catch(() => {});
+          return fusion;
+        }
         try {
           showToast("AMBAR", "No se pudo guardar la memoria del paciente",
-            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Avísele al programador.", true);
+            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Autorice la carpeta de historias en el panel de Ajustes para que la memoria se guarde en su computador; y avísele al programador.", true, "cosecha|cuota");
         } catch (e3) {}
         return null;
+      }
+      // v18.0.136 — espejo continuo: con la carpeta autorizada, cada guarda exitosa
+      // programa (con retardo de calma) el vuelco del almacén a Memoria/ y la historia
+      // .md del día de este paciente.
+      if (vglCarpetaElegida()) {
+        try { vglDiscoMemoriaProgramar(); vglDiscoHistoriaProgramar(id); } catch (e4) {}
       }
       return fusion;
     } catch (e) { return null; }
@@ -11677,7 +11703,11 @@
   }
 
   function reportar(evento, extra) {
-    if (!repOn()) return;
+    // v18.0.136 — devuelve true si el evento quedó ENCOLADO (repQSave no retorna nada y
+    // nadie usaba ese retorno). El resumen diario marca su candado solo cuando hay fila,
+    // porque con la cuota llena la cola no sobrevive en localStorage y el día quedaba
+    // marcado «reportado» sin haber salido jamás: la fila resumen silenciosa del tablero.
+    if (!repOn()) return false;
     repQLoad();
     repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
     repQSave();
@@ -11688,8 +11718,9 @@
     // repFlush (10 min) que ya existía — mismo reintento, sin la ráfaga.
     let errTs = 0;
     try { const e = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e && e.ts) errTs = new Date(e.ts).getTime(); } catch (e2) {}
-    if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return;
+    if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return true;
     repFlush();
+    return true;
   }
 
   // v12.6.9 — ENTORNO, una vez al día. Para leer un fallo reportado hace falta saber sobre
@@ -12335,9 +12366,15 @@
       const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
       const k = ayer.getFullYear() + "-" + String(ayer.getMonth() + 1).padStart(2, "0") + "-" + String(ayer.getDate()).padStart(2, "0");
       if (localStorage.getItem("vgl_rep_sum") === k) return;
-      localStorage.setItem("vgl_rep_sum", k);
+      // v18.0.136 — el candado se marca SOLO si hubo fila encolada. Antes se marcaba
+      // ANTES de comprobar si el día tuvo actividad y ANTES de saber si la cola pudo
+      // escribirse: con la cuota llena, un día con resumen quedaba «reportado» para
+      // siempre sin haber salido jamás — el tablero llevaba días sin fila resumen y
+      // nadie veía el hueco. Sin actividad ese día, ni fila ni candado: se reintenta
+      // en el próximo arranque.
       const st = (allStats() || {})[k]; if (!st) return; // sin actividad ese día: ni fila
-      reportar("resumen", { deDia: k, fraude: st.fraude || 0, inasistencia: st.inasistencia || 0, atiempo: st.atiempo || 0, ultima: st.ultima || 0 });
+      const encolado = reportar("resumen", { deDia: k, fraude: st.fraude || 0, inasistencia: st.inasistencia || 0, atiempo: st.atiempo || 0, ultima: st.ultima || 0 });
+      if (encolado) localStorage.setItem("vgl_rep_sum", k);
     } catch (e) {}
   }
   // Fraude en vivo: hora de la cita y minutos de retraso. SIN datos del paciente.
@@ -31717,28 +31754,10 @@
   }
 
   async function _vglCarpetaRecuperarHandle() {
-    try {
-      const db = await _vglCarpetaDb();
-      if (!db) return null;
-      const h = await new Promise((resolve) => {
-        try {
-          const tx = db.transaction(VGL_CARPETA_STORE, "readonly");
-          const r = tx.objectStore(VGL_CARPETA_STORE).get(VGL_CARPETA_ID);
-          r.onsuccess = () => resolve(r.result || null);
-          r.onerror = () => resolve(null);
-        } catch (e) { resolve(null); }
-      });
-      if (!h) return null;
-      // El permiso puede haber caducado. Se consulta sin abrir ningún diálogo: pedirlo
-      // requiere un gesto del médico y no se le va a robar uno al arrancar la página.
-      try {
-        if (typeof h.queryPermission === "function") {
-          const est = await h.queryPermission({ mode: "readwrite" });
-          if (est !== "granted") return null;
-        }
-      } catch (e) { return null; }
-      return h;
-    } catch (e) { return null; }
+    // v18.0.136 — delega en el diagnóstico crudo: solo revive el handle si el permiso
+    // sigue concedido; los demás estados los atiende el banner de arranque del disco.
+    const crudo = await _vglCarpetaRecuperarCrudo();
+    return (crudo && crudo.perm === "granted" && crudo.h) ? crudo.h : null;
   }
 
   // Se llama en el arranque: si la carpeta sigue autorizada, la función revive sola.
@@ -31957,6 +31976,515 @@
     try {
       return await _vglCarpetaLeerFusionado(io, docId);   // 02-sep — tolera ceros de relleno; v18.0.104 — fusiona escisiones
     } catch (e) { return null; }
+  }
+
+  // =====================================================================
+  //  v18.0.136 — MEMORIA EN EL DISCO DEL MÉDICO (blinda la cuota llena)
+  //
+  //  Pedido del médico tras ver en campo el aviso «No se pudo guardar la
+  //  memoria del paciente, el almacenamiento del navegador está lleno»: con
+  //  la cuota de localStorage agotada, la cosecha dejaba de persistir, los
+  //  conteos dejaban de escribirse y la cola de reportes moría en silencio —
+  //  tres síntomas, una sola causa, semanas de historia clínica evaporándose
+  //  sin rastro (el CSV del tablero llevaba días sin recibir un resumen).
+  //
+  //  DECISIÓN DE DISEÑO (delegada por el médico): carpeta POR CÉDULA y
+  //  formato MARKDOWN. «Historias/{cédula}/{cédula} AAAA-MM-DD.md» se
+  //  reescribe dentro del día: es legible a simple vista por el médico,
+  //  ordenable por nombre en el explorador, y una IA (o un colega) lo lee sin
+  //  saber de JSON. La memoria completa del asistente viaja aparte, como
+  //  respaldo maquinable, en «Memoria/vgl_cosecha.json». Los {cédula}.json
+  //  de siempre, en la raíz de la carpeta, NO se tocan.
+  //
+  //  La autorización se pide AL ARRANCAR (banner abajo a la derecha, una vez
+  //  por sesión) y queda PERMANENTE en el equipo: el handle vive en
+  //  IndexedDB y Chrome/Edge lo recuerdan entre sesiones; si el navegador la
+  //  desautoriza tras una actualización, el banner ofrece REACTIVARLA con un
+  //  clic — sin volver a buscar la carpeta.
+  // =====================================================================
+  const VGL_DISCO_RAIZ = "Vigilante de Agenda";
+  const VGL_DISCO_HISTORIAS = "Historias";
+  const VGL_DISCO_MEMORIA = "Memoria";
+  const VGL_DISCO_ARCHIVO_MEMORIA = "vgl_cosecha.json";
+  const VGL_DISCO_DEBOUNCE_MS = 4000;      // el espejo continuo espera 4 s de calma antes de escribir
+  const VGL_DISCO_MIGRADO_KEY = "vgl_disco_migrado";
+  const VGL_DISCO_BANNER_KEY = "vgl_disco_banner";   // sessionStorage: «off» calla el banner SOLO esta sesión
+
+  function _vglDiscoFechaCorta(ms) {
+    const d = new Date(ms || Date.now());
+    if (isNaN(d.getTime())) return "";
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function _vglDiscoHoraCorta(ms) {
+    const d = new Date(ms || Date.now());
+    if (isNaN(d.getTime())) return "--:--";
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  // Saneo para Markdown: sin caracteres de control, espacios normales, longitud acotada.
+  function _vglDiscoSanear(t, tope) {
+    return String(t == null ? "" : t)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, tope || 300);
+  }
+  function _vglDiscoValor(v, tope) {
+    if (v === true) return "Sí";
+    if (v === false) return "No";
+    if (v == null) return "";
+    if (typeof v === "number") return String(v);
+    if (typeof v === "object") { try { return _vglDiscoSanear(JSON.stringify(v), tope || 2000); } catch (e) { return ""; } }
+    return _vglDiscoSanear(v, tope || 2000);
+  }
+  // La cédula que nombra carpetas y archivos: la CANÓNICA de siempre (normalizeKey), la
+  // misma que indexa el almacén local desde v17.48.0 y los {cédula}.json de la carpeta.
+  function _vglDiscoCedula(docId) {
+    try {
+      const d = normalizeKey(docId);
+      return d ? String(d).slice(0, 20) : "";
+    } catch (e) { return ""; }
+  }
+
+  // Renderer PURO de la historia .md de un paciente (sin disco, sin red): por diseño se
+  // puede ejercer desde el banco sin carpeta alguna. Ordena las claves para que dos
+  // corridas con los mismos datos produzcan el MISMO archivo (diff limpio entre controles).
+  function vglDiscoHistoriaMarkdown(docId, registro) {
+    const ced = _vglDiscoCedula(docId) || _vglDiscoSanear(docId, 20) || "sin-cedula";
+    const reg = (registro && typeof registro === "object" && !Array.isArray(registro)) ? registro : {};
+    const L = [];
+    L.push("# Historia del paciente " + ced);
+    L.push("");
+    const ts = reg.ts || Date.now();
+    L.push("_Memoria del Vigilante de Agenda. Actualizada el " + _vglDiscoFechaCorta(ts) + " a las " + _vglDiscoHoraCorta(ts) + "._");
+    L.push("");
+    const confirmaciones = (reg.confirmaciones && typeof reg.confirmaciones === "object" && !Array.isArray(reg.confirmaciones)) ? reg.confirmaciones : {};
+    const confLineas = [];
+    Object.keys(confirmaciones).sort().forEach((k) => {
+      const c = confirmaciones[k];
+      if (!c || typeof c !== "object" || (c.v !== true && c.v !== false)) return;
+      confLineas.push("- " + (c.v === true ? "Sí" : "No") + " — " + _vglDiscoSanear(k, 140) + (c.ts ? " _(respondido el " + _vglDiscoFechaCorta(c.ts) + ")_" : ""));
+    });
+    if (confLineas.length) { L.push("## Confirmaciones del médico"); L.push(""); confLineas.forEach((x) => L.push(x)); L.push(""); }
+    const factores = (reg.factores && typeof reg.factores === "object" && !Array.isArray(reg.factores)) ? reg.factores : {};
+    const facLineas = [];
+    Object.keys(factores).sort().forEach((k) => {
+      const f = factores[k];
+      if (!f || typeof f !== "object") { const v0 = _vglDiscoValor(f, 400); if (v0) facLineas.push("- **" + _vglDiscoSanear(k, 140) + ":** " + v0); return; }
+      const v = _vglDiscoValor(f.v, 400);
+      if (!v) return;
+      facLineas.push("- **" + _vglDiscoSanear(k, 140) + ":** " + v + (f.ts ? " _(" + _vglDiscoFechaCorta(f.ts) + ")_" : ""));
+    });
+    if (facLineas.length) { L.push("## Factores y hallazgos"); L.push(""); facLineas.forEach((x) => L.push(x)); L.push(""); }
+    const hc = (reg.hcEverest && typeof reg.hcEverest === "object" && !Array.isArray(reg.hcEverest)) ? reg.hcEverest : {};
+    const hcPares = Object.keys(hc).filter((k) => k !== "ts").sort()
+      .map((k) => ({ k: _vglDiscoSanear(k, 140), v: _vglDiscoValor(hc[k], 2000) }))
+      .filter((p) => p.v);
+    if (hcPares.length) {
+      L.push("## Lo leído en Everest (antecedentes y pantallas de la historia)");
+      L.push("");
+      hcPares.forEach((p) => L.push("- **" + p.k + ":** " + p.v));
+      L.push("");
+    }
+    const reservadas = { ts: 1, confirmaciones: 1, factores: 1, hcEverest: 1 };
+    const otrosPares = Object.keys(reg).filter((k) => !reservadas[k]).sort()
+      .map((k) => ({ k: _vglDiscoSanear(k, 140), v: _vglDiscoValor(reg[k], 2000) }))
+      .filter((p) => p.v);
+    if (otrosPares.length) {
+      L.push("## Otros datos de la memoria");
+      L.push("");
+      otrosPares.forEach((p) => L.push("- **" + p.k + ":** " + p.v));
+      L.push("");
+    }
+    L.push("---");
+    L.push("");
+    L.push("_Archivo generado automáticamente por el Vigilante de Agenda a partir de lo leído en Everest y de las respuestas del médico. No sustituye la historia clínica oficial._");
+    return L.join("\n");
+  }
+
+  // ---- E/S de archivos, sobre la MISMA carpeta elegida de la v17 (handle compartido) ----
+  const _vglDiscoDirs = new Map();
+  let _vglDiscoDirsHandle = null;   // identidad del handle que llenó la caché: si el médico cambia de carpeta, la caché de directorios se invalida entera
+  async function _vglDiscoDir(ruta, crear) {
+    // Directorios bajo la carpeta elegida. Los ya resueltos se cachean (y un fallo de
+    // lectura se cachea como null para no repetirlo); con `crear` se materializan.
+    if (!_vglCarpetaHandle) return null;
+    if (_vglDiscoDirsHandle !== _vglCarpetaHandle) {
+      try { _vglDiscoDirs.clear(); } catch (e0) {}
+      _vglDiscoDirsHandle = _vglCarpetaHandle;
+    }
+    const clave = ruta.join("/");
+    if (!crear && _vglDiscoDirs.has(clave)) return _vglDiscoDirs.get(clave) || null;
+    try {
+      let d = _vglCarpetaHandle;
+      for (const parte of ruta) d = await d.getDirectoryHandle(parte, { create: !!crear });
+      _vglDiscoDirs.set(clave, d);
+      return d;
+    } catch (e) {
+      if (!crear) { try { _vglDiscoDirs.set(clave, null); } catch (e2) {} }
+      return null;
+    }
+  }
+
+  const _vglDiscoCola = new Map();
+  function _vglDiscoEscribirSerial(clave, tarea) {
+    // Una escritura a la vez POR ARCHIVO (misma técnica de _vglCarpetaCola): dos
+    // createWritable abiertos sobre el mismo archivo hacen que Chrome lance
+    // NoModificationAllowedError y la escritura se pierda. La clave propia sale del Map
+    // ANTES de la poda anti-evicción, así esta cola nunca descuelga su propio
+    // encadenamiento (mismo hallazgo que v18.0.72 corrigió allá).
+    let previo = _vglDiscoCola.get(clave);
+    if (previo !== undefined) _vglDiscoCola.delete(clave);
+    if (_vglDiscoCola.size > 100) {
+      try { const k = _vglDiscoCola.keys().next(); if (!k.done) _vglDiscoCola.delete(k.value); } catch (e) {}
+    }
+    if (previo === undefined) previo = Promise.resolve();
+    const corrida = previo.then(tarea, tarea);
+    _vglDiscoCola.set(clave, corrida.catch(() => {}));
+    return corrida;
+  }
+
+  async function _vglDiscoEscribirArchivo(dirRuta, nombre, texto) {
+    return _vglDiscoEscribirSerial(dirRuta.join("/") + "/" + nombre, async () => {
+      const dir = await _vglDiscoDir(dirRuta, true);
+      if (!dir) throw new Error("sin carpeta activa");
+      const fh = await dir.getFileHandle(nombre, { create: true });
+      const w = await fh.createWritable();
+      await w.write(texto);
+      await w.close();
+      return true;
+    });
+  }
+
+  async function _vglDiscoLeerArchivo(dirRuta, nombre) {
+    try {
+      const dir = await _vglDiscoDir(dirRuta, false);
+      if (!dir) return null;
+      const fh = await dir.getFileHandle(nombre, { create: false });
+      const f = await fh.getFile();
+      return await f.text();
+    } catch (e) { return null; }
+  }
+
+  async function _vglDiscoEscribirMdAhora(docId, registro) {
+    const ced = _vglDiscoCedula(docId);
+    if (!ced) return false;
+    const reg = (registro && typeof registro === "object") ? registro : _vglCosechaLeer(docId);
+    if (!reg || typeof reg !== "object") return false;
+    // Un archivo por cédula Y POR DÍA: dentro del día se REESCRIBE (la historia del día
+    // crece con la consulta); al día siguiente nace un archivo nuevo. La fecha sale del
+    // sello del registro, no de un reloj aparte, así el archivo casa con la consulta.
+    const nombre = ced + " " + _vglDiscoFechaCorta(reg.ts || Date.now()) + ".md";
+    await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_HISTORIAS, ced], nombre, vglDiscoHistoriaMarkdown(ced, reg));
+    return true;
+  }
+
+  // ---- Espejo continuo con retardo: se programa aquí, se lee el estado AL DISPARAR ----
+  const _vglDiscoTimers = new Map();
+  function _vglDiscoProgramar(clave, accion) {
+    try {
+      const previo = _vglDiscoTimers.get(clave);
+      if (previo) clearTimeout(previo);
+      const t = setTimeout(() => {
+        try { _vglDiscoTimers.delete(clave); } catch (e) {}
+        try { accion(); } catch (e) {}
+      }, VGL_DISCO_DEBOUNCE_MS);
+      _vglDiscoTimers.set(clave, t);
+    } catch (e) {}
+  }
+  function vglDiscoMemoriaProgramar() {
+    _vglDiscoProgramar("memoria", () => {
+      if (!vglCarpetaElegida()) return;
+      _vglDiscoMemoriaEscribirAhora().catch(() => {});
+    });
+  }
+  function vglDiscoHistoriaProgramar(docId) {
+    const clave = "hist|" + String(docId || "");
+    if (clave === "hist|") return;
+    _vglDiscoProgramar(clave, () => {
+      if (!vglCarpetaElegida()) return;
+      _vglDiscoEscribirMdAhora(docId, null).catch(() => {});
+    });
+  }
+
+  async function _vglDiscoMemoriaEscribirAhora() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      const texto = JSON.stringify({ v: 1, ts: Date.now(), cosecha: _vglCosechaTodo() });
+      await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA, texto);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // RESCATE DE CUOTA: el navegador acaba de RECHAZAR la memoria del paciente, así que
+  // esto corre YA, sin retardo. Escribe el almacén completo (con la fusión recién
+  // calculada) y la historia .md del día. Devuelve true si el espejo quedó en el disco.
+  async function vglDiscoRescatarCosecha(id, fusion, todo) {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      let todoFinal = todo;
+      if (!todoFinal || typeof todoFinal !== "object") {
+        todoFinal = Object.assign({}, _vglCosechaTodo());
+        if (id && fusion) todoFinal[id] = fusion;
+      }
+      await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA,
+        JSON.stringify({ v: 1, ts: Date.now(), cosecha: todoFinal }));
+      if (id && fusion) { try { await _vglDiscoEscribirMdAhora(id, fusion); } catch (e2) {} }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Recuperación al arrancar (o al activar la carpeta): fusión POR REGISTRO, gana el
+  // sello más reciente de cada lado. Un navegador purgado por cuota recupera lo perdido;
+  // un disco atrasado jamás pisa memoria más fresca del navegador.
+  async function _vglDiscoMemoriaRestaurar() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      const texto = await _vglDiscoLeerArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA);
+      if (!texto || !String(texto).trim()) return false;
+      let disco = null;
+      try { disco = JSON.parse(texto); } catch (e) { return false; }
+      const remota = (disco && disco.cosecha && typeof disco.cosecha === "object" && !Array.isArray(disco.cosecha)) ? disco.cosecha : null;
+      if (!remota) return false;
+      const mezcla = Object.assign({}, _vglCosechaTodo());
+      let fusiono = false;
+      for (const k of Object.keys(remota)) {
+        const r = remota[k];
+        if (!r || typeof r !== "object" || Array.isArray(r)) continue;
+        const a = mezcla[k];
+        if (!a || typeof a !== "object") { mezcla[k] = r; fusiono = true; continue; }
+        if ((r.ts || 0) > (a.ts || 0)) { mezcla[k] = r; fusiono = true; }
+      }
+      if (!fusiono) return false;
+      const escribio = safeWriteJSON(VGL_COSECHA_KEY, mezcla);
+      if (escribio) {
+        _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
+        try {
+          showToast("VERDE", "Memoria de pacientes recuperada",
+            "El navegador había perdido parte de la memoria de sus pacientes (espacio lleno); se recuperó desde la carpeta de su computador. Si este aviso se repite, conviene liberar espacio del navegador.",
+            true, "disco-restaurada");
+        } catch (e2) {}
+        return true;
+      }
+      // El navegador SIGUE sin poder persistir: la fusión se sirve igual durante esta
+      // sesión por el memo (texto viejo del disco + objeto fresco), la misma argucia del
+      // rescate de cuota de _vglCosechaGuardar.
+      _vglCosechaCacheTodo = mezcla;
+      _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
+      try {
+        showToast("AMBAR", "Memoria de pacientes solo en esta sesión",
+          "El navegador sigue sin espacio para guardar la memoria de sus pacientes. Lo aprendido está a salvo en la carpeta de su computador y funciona durante esta consulta; cuando pueda, libere espacio del navegador.",
+          true, "disco|solo-sesion");
+      } catch (e2) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // MIGRACIÓN DE UNA SOLA VEZ: vuelca TODA la cosecha del navegador a la carpeta (una
+  // historia .md por paciente + el respaldo maquinable completo). El candado se marca
+  // ANTES de escribir para que un cierre a mitad no la repita en cada arranque; repetir
+  // la escritura es idempotente (los .md se reescriben con el mismo contenido).
+  async function vglDiscoMigrar() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      if (localStorage.getItem(VGL_DISCO_MIGRADO_KEY) === "1") return false;
+      try { localStorage.setItem(VGL_DISCO_MIGRADO_KEY, "1"); } catch (e0) {}
+      const todo = _vglCosechaTodo();
+      const claves = Object.keys(todo || {}).slice(0, VGL_COSECHA_MAX_PACIENTES);
+      let escritos = 0;
+      for (const k of claves) {
+        try { if (await _vglDiscoEscribirMdAhora(k, todo[k])) escritos++; } catch (e1) {}
+      }
+      try {
+        await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA,
+          JSON.stringify({ v: 1, ts: Date.now(), cosecha: todo }));
+      } catch (e1) {}
+      if (escritos > 0) {
+        try {
+          showToast("VERDE", "Historias guardadas en su computador",
+            "Se archivaron " + escritos + (escritos === 1 ? " historia de paciente" : " historias de pacientes") + " en la carpeta «Vigilante de Agenda» de su computador, junto con la memoria completa del asistente. Cada control actualiza su historia automáticamente.",
+            true, "disco|migrado");
+        } catch (e1) {}
+      }
+      try { uxTrack("disco.migrado", { pacientes: escritos }); } catch (e1) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Diagnóstico CRUDO del permiso de la carpeta guardada en el equipo: distingue
+  // «granted» (revive solo), «prompt» (el navegador necesita un gesto del médico para
+  // reactivar), «denied», «sinhandle» (nunca se eligió carpeta), «sinapi» (IndexedDB
+  // inutilizable) y «error». No abre ningún diálogo; es la base del arranque y del banner.
+  async function _vglCarpetaRecuperarCrudo() {
+    try {
+      const db = await _vglCarpetaDb();
+      if (!db) return { perm: "sinapi", h: null };
+      const h = await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(VGL_CARPETA_STORE, "readonly");
+          const r = tx.objectStore(VGL_CARPETA_STORE).get(VGL_CARPETA_ID);
+          r.onsuccess = () => resolve(r.result || null);
+          r.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+      if (!h) return { perm: "sinhandle", h: null };
+      try {
+        if (typeof h.queryPermission === "function") {
+          const est = await h.queryPermission({ mode: "readwrite" });
+          if (est === "denied") return { perm: "denied", h: h };
+          if (est !== "granted") return { perm: "prompt", h: h };
+        }
+      } catch (e) { return { perm: "error", h: h }; }
+      return { perm: "granted", h: h };
+    } catch (e) { return { perm: "error", h: null }; }
+  }
+
+  // Carpeta lista (arranque con permiso vigente, botón del banner o Ajustes): restaura
+  // la memoria que el disco tenga más fresca, migra la cosecha la primera vez y deja el
+  // espejo continuo escribiendo desde ya.
+  async function _vglDiscoActivar(origen) {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      try { uxTrack("disco.activado", { desde: String(origen || "arranque") }); } catch (e1) {}
+      try {
+        showToast("VERDE", "Carpeta del Vigilante lista",
+          "Las historias de sus pacientes y la memoria del asistente se guardan en la carpeta «Vigilante de Agenda» de este computador; ya no dependen del espacio del navegador.",
+          false, "disco|activado");
+      } catch (e1) {}
+      try { await _vglDiscoMemoriaRestaurar(); } catch (e1) {}
+      try { await vglDiscoMigrar(); } catch (e1) {}
+      try { await _vglDiscoMemoriaEscribirAhora(); } catch (e1) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Orquestador del arranque, llamado por el boot justo después de vglCarpetaRestaurar:
+  // sin FS API no hay nada que hacer; permiso vigente → revive el handle y activa;
+  // «prompt» (el navegador bajó el permiso tras una actualización) → banner de
+  // REACTIVACIÓN de un clic, sin volver a buscar la carpeta; sin handle guardado →
+  // banner para elegirla la primera vez; el resto → silencio (desde Ajustes se reactiva).
+  async function _vglDiscoArranque() {
+    try {
+      if (!vglCarpetaDisponible()) return false;
+      const crudo = await _vglCarpetaRecuperarCrudo();
+      if (crudo.perm === "granted" && crudo.h) {
+        _vglCarpetaHandle = crudo.h;
+        await _vglDiscoActivar("arranque");
+        return true;
+      }
+      if (crudo.perm === "prompt" && crudo.h) {
+        try { uxTrack("disco.banner", { motivo: "reactivar" }); } catch (e1) {}
+        vglDiscoBannerPintar("reactivar");
+        return false;
+      }
+      if (crudo.perm === "sinhandle") {
+        try { uxTrack("disco.banner", { motivo: "elegir" }); } catch (e1) {}
+        vglDiscoBannerPintar("elegir");
+        return false;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  // ---- Banner de autorización (abajo a la derecha, una vez por sesión como máximo) ----
+  function _vglDiscoBannerEstilo() {
+    try {
+      if (typeof document === "undefined" || !document) return;
+      if (document.getElementById("vgl-disco-banner-css")) return;
+      const css = document.createElement("style");
+      css.id = "vgl-disco-banner-css";
+      css.textContent = [
+        "#vgl-disco-banner{position:fixed;right:16px;bottom:16px;z-index:2147482000;max-width:340px;background:#101418;color:#f2f5f7;border:1px solid #2a3340;border-radius:12px;padding:14px 16px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45)}",
+        "#vgl-disco-banner h3{margin:0 0 6px;font-size:14px;color:#7fd1a8}",
+        "#vgl-disco-banner p{margin:0 0 10px}",
+        "#vgl-disco-banner .vgl-disco-botones{display:flex;gap:8px;flex-wrap:wrap}",
+        "#vgl-disco-banner button{cursor:pointer;border:0;border-radius:8px;padding:7px 12px;font:600 12.5px system-ui,sans-serif}",
+        "#vgl-disco-banner .vgl-disco-ok{background:#1f8a5f;color:#fff}",
+        "#vgl-disco-banner .vgl-disco-no{background:#2a3340;color:#c9d4de}"
+      ].join("\n");
+      const ancla = document.head || document.documentElement;
+      if (ancla && ancla.appendChild) ancla.appendChild(css);
+    } catch (e) {}
+  }
+
+  // Pinta el banner («elegir» primera vez, «reactivar» permiso caído). «Ahora no» o un
+  // error lo callan SOLO por esta sesión; al día siguiente vuelve a ofrecerse.
+  function vglDiscoBannerPintar(modo) {
+    try {
+      if (typeof document === "undefined" || !document) return false;
+      try { if (sessionStorage.getItem(VGL_DISCO_BANNER_KEY) === "off") return false; } catch (e0) {}
+      vglDiscoBannerQuitar();
+      _vglDiscoBannerEstilo();
+      const reactivar = modo === "reactivar";
+      const div = document.createElement("div");
+      div.id = "vgl-disco-banner";
+      const titulo = reactivar ? "Reactivar la carpeta del Vigilante" : "Guardar historias en este computador";
+      const cuerpo = reactivar
+        ? "Su navegador pidió de nuevo el permiso para escribir en la carpeta donde están las historias de sus pacientes. Con el botón verde se reactiva con un clic; no hace falta volver a buscar la carpeta."
+        : "Para que las historias de sus pacientes queden guardadas en este computador (y no dependan del espacio del navegador), autorice una carpeta. Se elige una sola vez y este equipo la recuerda.";
+      div.innerHTML = "<h3>" + titulo + "</h3><p>" + cuerpo + "</p>" +
+        "<div class='vgl-disco-botones'>" +
+        "<button class='vgl-disco-ok' id='vgl-disco-ok'>" + (reactivar ? "Reactivar carpeta" : "Elegir carpeta…") + "</button>" +
+        "<button class='vgl-disco-no' id='vgl-disco-no'>Ahora no</button>" +
+        "</div>";
+      const ancla = document.body || document.documentElement;
+      if (!ancla || !ancla.appendChild) return false;
+      ancla.appendChild(div);
+      const ok = document.getElementById("vgl-disco-ok");
+      const no = document.getElementById("vgl-disco-no");
+      if (ok && ok.addEventListener) ok.addEventListener("click", _vglDiscoBannerAceptar);
+      if (no && no.addEventListener) no.addEventListener("click", _vglDiscoBannerRechazar);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function vglDiscoBannerQuitar() {
+    try {
+      if (typeof document === "undefined" || !document) return;
+      const div = document.getElementById("vgl-disco-banner");
+      if (div && div.parentNode && div.parentNode.removeChild) div.parentNode.removeChild(div);
+    } catch (e) {}
+  }
+
+  async function _vglDiscoBannerAceptar() {
+    try {
+      vglDiscoBannerQuitar();
+      // Reactivación: el handle ya vive en este equipo; solo falta el gesto del médico
+      // para que el navegador lo reautorice — sin volver a buscar la carpeta.
+      const crudo = await _vglCarpetaRecuperarCrudo();
+      if (crudo.h && crudo.perm !== "sinhandle" && typeof crudo.h.requestPermission === "function") {
+        try {
+          const est = await crudo.h.requestPermission({ mode: "readwrite" });
+          if (est === "granted") {
+            _vglCarpetaHandle = crudo.h;
+            await _vglDiscoActivar("banner");
+            return true;
+          }
+          vglDiscoBannerPintar("reactivar");
+          return false;
+        } catch (e1) { vglDiscoBannerPintar("reactivar"); return false; }
+      }
+      // Primera vez (sin handle guardado): diálogo del sistema para ELEGIR la carpeta.
+      const r = await vglCarpetaElegir();
+      if (r && r.ok) {
+        await _vglDiscoActivar("banner");
+        return true;
+      }
+      const motivo = String((r && r.motivo) || "");
+      if (motivo && !/cancel/i.test(motivo)) {
+        try { showToast("ROJO", "No se pudo activar la carpeta", motivo, true, "disco|banner-fallo"); } catch (e2) {}
+      }
+      // Cancelar el diálogo NO silencia el banner: la decisión debe tomarla el médico.
+      vglDiscoBannerPintar("elegir");
+      return false;
+    } catch (e) { return false; }
+  }
+
+  function _vglDiscoBannerRechazar() {
+    vglDiscoBannerQuitar();
+    // «Ahora no» calla el banner SOLO por esta sesión; al día siguiente vuelve a
+    // ofrecerse, porque la memoria en disco es justamente el blindaje de la cuota llena.
+    try { sessionStorage.setItem(VGL_DISCO_BANNER_KEY, "off"); } catch (e) {}
+    try { uxTrack("disco.banner_rechazado"); } catch (e) {}
   }
 
   function renderResumen() {
@@ -32235,8 +32763,8 @@
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO. Decisión suya (20-ago): un .json por cédula
              con el historial completo de lo que el asistente vio en cada control. Vive en SU
              computador; nada de esto viaja por red. -->
-        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
-        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: se guarda una instantánea por control." : "Sin carpeta elegida: el historial solo vive en este navegador."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
+        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. Además respalda la memoria del asistente en <b>Vigilante de Agenda/Memoria/</b> y una historia legible por día en <b>Vigilante de Agenda/Historias/&lt;cédula&gt;/</b>: si el navegador se queda sin espacio, lo aprendido se recupera desde su computador. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
+        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: instantánea por control, historia diaria en «Historias/» y memoria respaldada en «Memoria/»." : "Sin carpeta elegida: el historial y la memoria solo viven en este navegador (vulnerables al espacio lleno)."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
         <!-- v15.8.0 (N4) — texto REAL de los SMS, capturado por el administrador. Vacío = la
              vista previa describe el contenido sin inventar redacción. -->
         <div class="vgl-fld"><label>Texto real del SMS de cita<span class="vgl-hint">Péguelo tal cual llegó a un celular de prueba, cambiando los datos concretos por <b>{fecha} {hora} {sede} {profesional}</b>. La vista previa del agendamiento lo mostrará exacto. (Cómo capturarlo: guía CAPTURAR_MENSAJES de la entrega.)</span></label><textarea id="c-sms-plantilla" rows="3" placeholder="(sin capturar aún)">${escapeHtml(S.smsPlantillaCita || "")}</textarea></div>
@@ -32423,10 +32951,13 @@
       }
       const r = await vglCarpetaElegir();
       if (est) est.textContent = r.ok
-        ? "Carpeta «" + r.nombre + "» activa: desde ahora se guarda una instantánea por control."
+        ? "Carpeta «" + r.nombre + "» activa: instantánea por control, historias diarias y memoria respaldadas en su computador."
         : r.motivo;
       if (n) n.textContent = r.ok ? "✓" : "—";
       if (r.ok) carpBtn.textContent = "Cambiar carpeta";
+      // v18.0.136 — al quedar la carpeta lista desde Ajustes también se restauran/migran
+      // la memoria y las historias al disco (mismo camino que el banner de arranque).
+      if (r.ok) { try { _vglDiscoActivar("ajustes"); } catch (e2) {} }
     });
     const exportBtn = q("#c-export-logs"); if (exportBtn) exportBtn.addEventListener("click", () => vglExportLogs());
     const testBtn = q("#c-test"); if (testBtn) testBtn.addEventListener("click", testNotifications);
@@ -34737,6 +35268,7 @@
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
+    try { _vglDiscoArranque(); } catch (e) {}    // v18.0.136 — memoria en disco: revive, restaura, migra o pide autorizar la carpeta
     applySettings();   // aplica tus ajustes guardados (tolerancia, refresco, tema, sonido…) y arranca el reloj
     avisarSiActualizado();
     const tAutoUpd = setTimeout(chequearAutoUpdateLento, 6000);

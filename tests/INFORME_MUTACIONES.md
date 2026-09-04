@@ -12592,3 +12592,40 @@ actualizado el tablero (`EXPECTED_SHA256` / `EXPECTED_SHA_VERSION`), el banco vo
 | 489 | la regla S-bis `.vgl-tc-ico, .vgl-sb-txt { color: inherit }` quitada de la cascada: las letras de «Alertas» y «Silenciar» vuelven al azul de Everest | *suite_25: 31 pasan, 1 falla* | Sí |
 
 Banco completo: **3.163 comprobaciones pasan, 0 fallan.**
+
+## v18.0.136 — 3-sep — disco del médico, rescate por cuota y candado del resumen
+
+Nueva suite_75 (Memoria en disco del médico, 48 comprobaciones) para el módulo de FS Access
+API: carpeta por cédula en Markdown, espejo de Memoria con debounce, migración del pozo de
+localStorage, banner de permiso permanente por equipo y rescate cuando la cuota del navegador
+está llena. Además, suite_11 gana el caso del candado del resumen diario (fila «resumen» con
+stats reales, candado solo si hubo fila) y suite_75 trae la fusión plana de la cosecha
+(confirmaciones nuevas sustituyen, el «pozo» documentado de v17.46).
+
+**Qué se blindó en esta tanda.** (1) El candado `vgl_rep_sum` ya no se pone sin haber enviado
+la fila «resumen»: antes, un día sin stats quedaba marcado como reportado y el resumen se
+perdía en silencio. (2) Con la cuota llena, la memoria del paciente baja intacta al disco
+(`vglDiscoRescatarCosecha`) en vez de morir con «almacenamiento lleno». (3) La ruta de
+historias es por cédula canónica: `Historias/{cédula}/{cédula} YYYY-MM-DD.md`. (4) El
+Markdown siempre lleva las confirmaciones del día. (5) La primera vez en el equipo sale el
+banner para elegir carpeta (una sola vez en la vida). (6) La migración inicial baja todas
+las historias y pone su candado.
+
+**Un mutante sobreviviente, aceptado a conciencia (#496).** `VGL_DISCO_DEBOUNCE_MS` de 4000
+a 9000 no tumbó nada: el banco recorta los retardos a 1 ms (`Math.min(ms || 0, 1)` en el
+harness), así que suite_75 mide la semántica del debounce — «nada síncrono, se escribe una
+sola vez tras la calma» — y no la duración exacta de la ventana. La ventana de 4 s es una
+decisión de producto (no martillar el disco en consultas seguidas), no una garantía que el
+banco deba fijar.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 490 | el candado `vgl_rep_sum` puesto antes de mirar stats: un día sin actividad queda marcado como reportado sin haber mandado fila | *suite_11: 28 pasan, 1 falla* («sin actividad ayer no manda fila NI candado; con stats sí») | Sí |
+| 491 | el rescate por disco con cuota llena desactivado (`Promise.resolve(false)` en vez de `vglDiscoRescatarCosecha`): la memoria del paciente vuelve a morir con «almacenamiento lleno» | *suite_75: 46 pasan, 2 fallan* (C2 y C3) | Sí |
+| 492 | la ruta de Historias sin la carpeta de la cédula (`[raíz, Historias]` sin `ced`): todos los .md amontonados en la misma carpeta | *suite_75: 42 pasan, 6 fallan* (C2, D1, E2, F2, H3, I2) | Sí |
+| 493 | el renderer de Markdown sin líneas de confirmaciones: la historia pierde lo confirmado en la consulta y hasta revienta (`split`/`indexOf` sobre undefined) | *suite_75: 42 pasan, 6 fallan* (A1, A2, A3, C2, D1, E2) | Sí |
+| 494 | el banner de «elegir carpeta» del arranque quitado: la primera vez en el equipo transcurre en silencio y nadie activa el disco | *suite_75: 47 pasan, 1 falla* (J4) | Sí |
+| 495 | `vglDiscoMigrar` vuelta no-op: las historias del pozo de localStorage nunca bajan al disco ni queda candado de migración | *suite_75: 43 pasan, 5 fallan* (H3, H4, I2, J2, L1) | Sí |
+| 496 | `VGL_DISCO_DEBOUNCE_MS` de 4000 a 9000: la ventana de calma se estira al doble — SOBREVIVIÓ, el harness recorta retardos a 1 ms y la suite mide la semántica, no la duración | *suite_75: 48 pasan, 0 fallan (mutante vivo, aceptado)* | Sí |
+
+Banco completo: **3.211 comprobaciones pasan, 0 fallan.**
