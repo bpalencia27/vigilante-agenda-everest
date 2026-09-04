@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.134
+// @version      18.1.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.134";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.1.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2007,6 +2007,10 @@
   // vuelo: al resolverse, una repetición legítima (reintento, sondeo) pasa normal.
   const _gmEnVuelo = new Map();
   function _gmReq(opts) {
+    // v18.1.0 — B4 CAPA c: misma forma de fallar que una caída de red,
+    // para que los .catch de los llamadores (SMS de laboratorio, correo)
+    // la traguen sin romper el flujo visible.
+    if (!accesoEscribirUrl(opts && opts.url)) return Promise.reject(new Error("NetErr (compuerta de escritura)"));
     let clave = "";
     try {
       clave = String(opts.method || "GET") + "|" + String(opts.url || "") + "|" +
@@ -2099,6 +2103,11 @@
   // captura de pantalla. Si el texto en español y el Numero DISCREPAN, se descarta la
   // fecha entera en vez de adivinar cuál de las dos tiene razón.
   let _diagFechaSolicitudHtmlLogged = 0; // contador (hasta 2 muestras), no booleano
+  // v18.0.141 — contadores one-shot de los nuevos diagnósticos de lectura (mismo
+  // patrón: hasta 2 muestras por sesión, nunca booleano, para ver si un problema se
+  // repite entre pacientes sin inundar la consola).
+  let _vglDiagSolicitudesLogged = 0;
+  let _vglWarnIdPacienteDup = 0;
   const MESES_ES_ABR = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, oct: 10, nov: 11, dic: 12 };
   function _parseFechaEspanolLike(texto) {
     const out = [];
@@ -2149,7 +2158,12 @@
   }
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
-    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
+    // v18.0.141 — action tolerante a query-string/hash: el regex estricto
+    // exigía action="/Resultados/Reporte" EXACTO entre comillas; un action con
+    // parámetros ("/Resultados/Reporte?id=846567") dejaba la tarjeta fuera del
+    // barrido completo y el paciente terminaba con "no tiene exámenes" pese a
+    // tenerlos (reporte del 04-sep: exámenes de mayo que el botón 🧪 negaba).
+    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte(?:[?#][^"']*)?["'][^>]*>/gi;
     // v12.5.5 — BLOQUEANTE de la revisión adversarial (confirmado 8/9 tarjetas en un repro
     // con 9 solicitudes reales, como las de la captura de pantalla del consultorio): antes
     // se procesaba tarjeta por tarjeta con `while (re.exec(html))` y CADA una recortaba su
@@ -2212,7 +2226,11 @@
     for (let idx = 0; idx < matches.length; idx++) {
       const m = matches[idx];
       const tag = m[0];
-      const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
+      // v18.0.141 — sufijo alfabético opcional en el id: en el DOM real de Athenea ya
+      // se habían visto ids como "1112026LAB" (el mismo consecutivo que usa el ancla
+      // #collapse1112026LAB). El regex estricto moría en la comilla y DESCARTABA la
+      // tarjeta completa — de nuevo: exámenes existentes leídos como inexistentes.
+      const idM = /\bid=["'](\d+)(20\d{2})[A-Za-z]*["']/.exec(tag);
       if (!idM) continue;
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
       let fechaIso = null;
@@ -2323,8 +2341,35 @@
         if (hM) hash = hM[1];
         if (tM) token = tM[1];
       } catch (e) {}
-      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt, hash, token });
+      // v18.0.141 — el módulo se NORMALIZA A MAYÚSCULAS en el origen. La captura de
+      // data-modulo usa /i (indiferente a caja), pero el consumidor de abajo comparaba
+      // EXACTO contra "LAB": un data-modulo="lab"/"Lab"/"LABORATORIO" del DOM real
+      // pasaba la extracción y moría después en el filtro, con todo el paciente
+      // cayendo a "no tiene exámenes" (el reporte del 04-sep). Normalizar aquí
+      // garantiza que TODO consumidor posterior vea la misma caja.
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: (modM ? String(modM[1]).trim().toUpperCase() : "") || "LAB", fechaIso, horaTxt, hash, token });
     }
+    // v18.0.141 — Telemetría de interpretación, adjunta al arreglo de salida como
+    // propiedad NO ENUMERABLE (invisible para JSON.stringify, t.igual del banco y
+    // cualquier recorrido). Solo CONTEOS: ni cédula, ni fechas, ni ids — la regla de
+    // PHI de v14.2.0 sigue mandando. Con ella el núcleo de labs distingue un []
+    // limpio ("el paciente de verdad no tiene solicitudes") de un [] sospechoso
+    // ("había N formularios y NINGUNO se dejó interpretar").
+    try {
+      const modulos = {};
+      out.forEach((s) => { const k = String(s.modulo || "?"); modulos[k] = (modulos[k] || 0) + 1; });
+      const meta = { formularios: matches.length, interpretadas: out.length, descartadas: matches.length - out.length, modulos };
+      const insinuaTarjetas = /data-modulo|Ver\s+(?:Resumen|Informe)|SOLICITUD/i.test(html);
+      if (_vglDiagSolicitudesLogged < 2 && (out.length < matches.length || (matches.length === 0 && insinuaTarjetas))) {
+        _vglDiagSolicitudesLogged++;
+        console.warn("[Vigilante Athenea] diagnóstico de solicitudes #" + _vglDiagSolicitudesLogged +
+          " — formularios de /Resultados/Reporte detectados: " + matches.length +
+          ", interpretados: " + out.length +
+          (matches.length === 0 && insinuaTarjetas ? ", pero el HTML insinúa tarjetas de solicitud (¿cambió el formato del portal?)" : "") +
+          ". Módulos leídos: " + (Object.keys(modulos).length ? Object.entries(modulos).map(([k, v]) => k + "×" + v).join(", ") : "ninguno"));
+      }
+      Object.defineProperty(out, "__vglMeta", { value: meta, enumerable: false, configurable: true });
+    } catch (e) {}
     return out;
   }
 
@@ -2598,6 +2643,19 @@
       // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
       const idPaciente = _atheneaIdPaciente(r2.responseText);
       const token2 = _atheneaToken(r2.responseText);
+      // v18.0.141 — Si la respuesta trae MÁS DE UN input IdPaciente, Athenea devolvió
+      // una lista de coincidencias y _atheneaIdPaciente se queda con el PRIMERO. Puede
+      // ser el correcto o no: la verificación cruzada del paso 3 (cédula de la
+      // respuesta vs buscada) sigue siendo la que decide; esto solo deja el rastro en
+      // consola — sin volcar identificador alguno — para diagnosticar pacientes "con
+      // exámenes que el script no ve" cuya cédula esté duplicada en el portal.
+      try {
+        const nIdPac = ((r2.responseText || "").match(/<input\b[^>]*\bname=["']IdPaciente["']/gi) || []).length;
+        if (nIdPac > 1 && _vglWarnIdPacienteDup < 2) {
+          _vglWarnIdPacienteDup++;
+          console.warn("[Vigilante Athenea] paso 2 devolvió " + nIdPac + " campos IdPaciente en una misma respuesta (¿cédula duplicada en el portal?): se toma el primero y la verificación del paso 3 es la que decide si sirve.");
+        }
+      } catch (e) {}
       // v18.0.134 (auditoría 2026-09-03, B2) — JSON.stringify(idPaciente) volcaba el id tal
       // cual en consola; basta decir si llegó o no. Mismo mensaje, sin identificador.
       if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente: " + (idPaciente ? "presente" : "no") + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
@@ -2672,12 +2730,63 @@
     return salida;
   }
 
+  // v18.0.141 — ¿Es esta solicitud del módulo laboratorio? El DOM real de Athenea ha
+  // llegado a pintar el atributo en otra caja o con el nombre largo ("lab", "Lab",
+  // "LABORATORIO") mientras el filtro antiguo comparaba EXACTO contra "LAB": esas
+  // solicitudes pasaban la extracción y morían en el filtro, y el paciente quedaba
+  // con "no tiene exámenes" pese a tenerlos (reporte del 04-sep: exámenes de mayo
+  // que el botón 🧪 negaba). Se normaliza y compara por PREFIJO. Función aparte,
+  // de nivel superior, para que el arnés de pruebas la exponga solo.
+  function _vglEsModuloLab(s) {
+    return String((s && s.modulo) || "").trim().toUpperCase().indexOf("LAB") === 0;
+  }
+
+  // v18.0.141 — Marcador NO ENUMERABLE de desenlace de lectura, para un [] que ya no
+  // se puede afirmar como "el paciente no tiene laboratorios". NO se reutiliza
+  // __vglIncompleto a propósito: ese marcador es NUMÉRICO desde v17.7.1 (cantidad de
+  // solicitudes que no se dejaron leer), con varios lectores que lo comparan con > 0
+  // y además viaja serializado en _preconGuardar — un objeto ahí rompería contratos
+  // establecidos. Este marcador queda al margen: no enumerable, no serializado, y
+  // solo lo leen las ramas de presentación del botón 🧪.
+  function _vglMarcarLectura(arr, info) {
+    const lista = Array.isArray(arr) ? arr : [];
+    try {
+      Object.defineProperty(lista, "__vglLectura", { value: Object.assign({}, info || {}), enumerable: false, configurable: true });
+    } catch (e) {}
+    return lista;
+  }
+
   async function _getAtheneaLabsAutoNucleo(docId) {
     const resuelto = await getAtheneaSolicitudesAuto(docId);
     // No pude leer el portal: eso NO es "no tiene laboratorios".
     if (!resuelto) return null;
-    if (!resuelto.solicitudes.length) return [];
-    const porLab = resuelto.solicitudes.filter((s) => s.modulo === "LAB");
+    // v18.0.141 — Cero solicitudes interpretadas PERO el HTML traía formularios de
+    // /Resultados/Reporte (__vglMeta, adjunto por _atheneaExtraerSolicitudes): la
+    // lectura NO se puede afirmar como "no tiene exámenes". Es el caso exacto del
+    // reporte del consultorio — tarjetas presentes (las de mayo) que el intérprete
+    // no supo leer: id fuera de patrón, action con query-string, formato cambiado.
+    // Se devuelve [] MARCADO para que el botón 🧪 hable con honestidad en vez de
+    // negar exámenes existentes.
+    if (!resuelto.solicitudes.length) {
+      let metaN = null;
+      try { metaN = resuelto.solicitudes.__vglMeta || null; } catch (e) { metaN = null; }
+      if (metaN && metaN.formularios > 0) {
+        return _vglMarcarLectura([], { estado: "formularios_no_interpretados", formularios: metaN.formularios });
+      }
+      return [];
+    }
+    const porLab = resuelto.solicitudes.filter(_vglEsModuloLab);
+    // v18.0.141 — El portal respondió con solicitudes pero NINGUNA resultó del módulo
+    // laboratorio. Antes este caso caía en silencio hacia "no tiene laboratorios";
+    // bastaba un data-modulo="lab" en el DOM real para vaciar la lista completa (la
+    // normalización en origen ya resuelve la caja; este guardia cubre el resto —
+    // módulos genuinamente otros: PAT, IMG... — y deja rastro de qué módulos llegó a
+    // ver, solo nombres de módulo, sin PHI).
+    if (!porLab.length) {
+      const modulosVistos = [...new Set(resuelto.solicitudes.map((s) => String((s && s.modulo) || "?")))];
+      console.warn("[Vigilante Athenea] " + resuelto.solicitudes.length + " solicitud(es) leídas para el paciente, pero NINGUNA resultó del módulo laboratorio (módulos vistos: " + modulosVistos.join(", ") + ").");
+      return _vglMarcarLectura([], { estado: "sin_lab", solicitudes: resuelto.solicitudes.length, modulos: modulosVistos });
+    }
     // v12.3.35 — cada analito hereda la fecha de SU PROPIA solicitud (raspada de la
     // tarjeta del portal, ver _atheneaExtraerSolicitudes): es la única fuente de fecha
     // que existe, confirmado en campo. No pisa una fecha que fetchAtheneaLabs ya hubiera
@@ -4623,9 +4732,22 @@
       const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });
       const extra = (opts && Array.isArray(opts.clavesExtra)) ? opts.clavesExtra : [];
       const claves = RCV_VIGENCIA_KEYS.concat(extra.filter((k) => RCV_VIGENCIA_KEYS.indexOf(k) < 0));
+      // v18.0.135 — regla glucosa/HbA1c (entrevista 02-sep): la glucosa SOLO se repite al
+      // 50 % si la HbA1c está fuera de metas, y mtrFueraDeMeta lee ese valor del ctx.
+      // Quienes llaman aquí (aviso de entrada y antiduplicado PyM) no lo traen, pero los
+      // labs del propio paciente sí pueden tener la HbA1c: se copia UNA vez, aquí, y las
+      // dos lecturas de vigencia (la del 50 % y la normativa) la reciben ambas — sin esto
+      // la glucosa volvería a partirse sola por su valor y el aviso volvería a mentir.
+      const _optsVig = Object.assign({}, opts || {});
+      if (_optsVig.valorHba1c === null || _optsVig.valorHba1c === undefined) {
+          const hba1cCand = candidatos.get("HBA1C");
+          const hba1cVal = (hba1cCand && hba1cCand.resultVal !== null && hba1cCand.resultVal !== undefined)
+              ? hba1cCand.resultVal : null;
+          if (hba1cVal !== null) _optsVig.valorHba1c = hba1cVal;
+      }
       const faltantes = [];
       for (const key of claves) {
-          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, opts);
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, _optsVig);
           // v17.6.96 — BLOQ: la norma PROHIBE pedir este analito a este paciente (bloqueo
           // KDIGO, o HbA1c en quien no consta diabetes). No es "vencido": es que no se pide.
           // Reportarlo como faltante seria pedir un examen que la norma niega, y tratarlo
@@ -4645,7 +4767,7 @@
           // vencido un examen al que le quedaban 80 días. Ahora se comparan las DOS varas: la
           // normativa dice si está vencido, y el adelanto solo dice si conviene repetirlo
           // antes. Quien pinta decide qué decir de cada uno; nadie llama vencido a lo vigente.
-          const vigenciaNorma = _vigenciaNormaDiasParaAnalito(key, c.resultVal, opts);
+          const vigenciaNorma = _vigenciaNormaDiasParaAnalito(key, c.resultVal, _optsVig);
           const normaNum = (typeof vigenciaNorma === "number" && isFinite(vigenciaNorma)) ? vigenciaNorma : null;
           const vencido = (normaNum === null) ? true : (dias > normaNum);
           faltantes.push({
@@ -5304,11 +5426,37 @@
       // el texto del disco ya no es el que el memo recuerda).
       _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
       if (!escrito) {
+        // v18.0.136 — BLINDAJE DE CUOTA LLENA (el síntoma de campo que motivó esta
+        // versión). El navegador rechazó la memoria del paciente, pero si hay carpeta
+        // autorizada el disco la rescata YA, sin retardo: el espejo vuela con la fusión
+        // recién calculada y esta consulta no pierde nada. El memo se rellena con el
+        // objeto FRESCO y el raw VIEJO del disco (la misma argucia del restaurador), así
+        // la sesión entera sirve los datos nuevos aunque localStorage siga sin poder.
+        if (vglCarpetaElegida()) {
+          _vglCosechaCacheTodo = todo;
+          _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
+          vglDiscoRescatarCosecha(id, fusion, todo).then((okDisco) => {
+            try {
+              showToast(okDisco ? "AMBAR" : "ROJO", "No se pudo guardar la memoria del paciente",
+                okDisco
+                  ? "El almacenamiento del navegador está lleno, así que la memoria del paciente quedó archivada en la carpeta «Vigilante de Agenda» de su computador; cada arranque la recupera de allá. Cuando pueda, libere espacio del navegador."
+                  : "El almacenamiento del navegador está lleno y la carpeta del computador tampoco pudo escribir esta vez. Avísele al programador.",
+                true, "cosecha|cuota");
+            } catch (e3) {}
+          }).catch(() => {});
+          return fusion;
+        }
         try {
           showToast("AMBAR", "No se pudo guardar la memoria del paciente",
-            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Avísele al programador.", true);
+            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Autorice la carpeta de historias en el panel de Ajustes para que la memoria se guarde en su computador; y avísele al programador.", true, "cosecha|cuota");
         } catch (e3) {}
         return null;
+      }
+      // v18.0.136 — espejo continuo: con la carpeta autorizada, cada guarda exitosa
+      // programa (con retardo de calma) el vuelco del almacén a Memoria/ y la historia
+      // .md del día de este paciente.
+      if (vglCarpetaElegida()) {
+        try { vglDiscoMemoriaProgramar(); vglDiscoHistoriaProgramar(id); } catch (e4) {}
       }
       return fusion;
     } catch (e) { return null; }
@@ -7651,7 +7799,20 @@
                               _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
                               showToast("AMBAR", "Exámenes", "Se inició sesión en el laboratorio, pero no se pudo leer el portal para la cédula " + docId + " (no es que no tenga laboratorios). Intente de nuevo.", false);
                           } else {
-                              _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                              // v18.0.141 — mismo criterio de la rama principal para el camino
+                              // de reintento tras auto-login: un [] MARCADO con __vglLectura no
+                              // se presenta como "no tiene exámenes".
+                              let _lecLabs2 = null;
+                              try { _lecLabs2 = (labs2 && labs2.__vglLectura) || null; } catch (e2) { _lecLabs2 = null; }
+                              if (_lecLabs2 && _lecLabs2.estado === "formularios_no_interpretados") {
+                                  _vglFeedbackBoton(btn, "El portal respondió pero sus solicitudes no se pudieron interpretar", "ambar", "🧪 Exámenes");
+                                  showToast("AMBAR", "Exámenes", "Se inició sesión y el portal respondió (" + (_lecLabs2.formularios || 1) + " solicitud(es) detectadas), pero NINGUNA se pudo interpretar: NO se afirma que el paciente no tenga exámenes. Verifique en el portal Athenea y avise al administrador.", false);
+                              } else if (_lecLabs2 && _lecLabs2.estado === "sin_lab") {
+                                  _vglFeedbackBoton(btn, "Solicitudes leídas pero ninguna de laboratorio", "ambar", "🧪 Exámenes");
+                                  showToast("AMBAR", "Exámenes", "El portal respondió con " + (_lecLabs2.solicitudes || 0) + " solicitud(es) de otros módulos (" + ((_lecLabs2.modulos || []).join(", ") || "?") + ") y ninguna de laboratorio. Si el paciente sí tiene exámenes, verifique directamente en el portal Athenea.", false);
+                              } else {
+                                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                              }
                           }
                       } else {
                           atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Exámenes",
@@ -7683,8 +7844,24 @@
                   // ambos casos no se diligenció nada y hay que revisar a mano.
                   // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
                   // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
-                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
-                  showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
+                  // v18.0.141 — ...salvo que el [] venga MARCADO con __vglLectura (v18.0.141,
+                  // _getAtheneaLabsAutoNucleo): "el portal respondió pero no se puede afirmar
+                  // que no tenga exámenes". Negar exámenes que existen (el reporte del 04-sep:
+                  // exámenes de mayo) es peor que admitir que la lectura falló.
+                  let _lecLabs = null;
+                  try { _lecLabs = (labs && labs.__vglLectura) || null; } catch (e2) { _lecLabs = null; }
+                  if (_lecLabs && _lecLabs.estado === "formularios_no_interpretados") {
+                      _vglFeedbackBoton(btn, "El portal respondió pero sus solicitudes no se pudieron interpretar", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El portal del laboratorio respondió (" + (_lecLabs.formularios || 1) + " solicitud(es) detectadas) pero NINGUNA se pudo interpretar: NO se afirma que el paciente no tenga exámenes. Verifique los resultados en el portal Athenea y avise al administrador del asistente (formato del portal posiblemente cambiado).", false);
+                      try { uxTrack("labs.lectura.formularios_no_interpretados", { formularios: _lecLabs.formularios || 1 }); } catch (e2) {}
+                  } else if (_lecLabs && _lecLabs.estado === "sin_lab") {
+                      _vglFeedbackBoton(btn, "Solicitudes leídas pero ninguna de laboratorio", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El portal respondió con " + (_lecLabs.solicitudes || 0) + " solicitud(es) de otros módulos (" + ((_lecLabs.modulos || []).join(", ") || "?") + ") y ninguna de laboratorio. Si el paciente sí tiene exámenes, verifique directamente en el portal Athenea.", false);
+                      try { uxTrack("labs.lectura.sin_lab", { solicitudes: _lecLabs.solicitudes || 0 }); } catch (e2) {}
+                  } else {
+                      _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
+                  }
               }
           } catch (e) {
               _vglFeedbackBoton(btn, "❌ El laboratorio no respondió", "ambar", "🧪 Exámenes");
@@ -7900,6 +8077,10 @@
       // el conteo del primer tick y se queda ahí toda la consulta, aunque el médico ordene los
       // exámenes o Athenea termine de responder.
       "PN" + _nPendientesDock,
+      // v18.1.0 — B5: el contador de pacientes nuevos también entra en la firma:
+      // sin esto, la pastilla «👤 Nuevos» no aparecería hasta que OTRO factor
+      // moviera la firma y el médico se perdería el aviso de la mañana.
+      "PACN" + ((state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0),
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
@@ -8136,6 +8317,32 @@
         } catch (e3) {}
       });
       btns.appendChild(bPend);
+    }
+
+    // v18.1.0 — B5: pastilla «👤 Nuevos (N)». SOLO un número, sin PHI: cuántos
+    // pacientes de la agenda de hoy no constaban en la memoria de este médico.
+    // Los toasts ya los anunciaron al aparecer (máx. 3/hora, ver avisoPacEval);
+    // este conteo es la memoria del día entero, incluidos los que no alcanzaron
+    // toast. El clic solo recuerda A QUÉ HORAS llegaron, jamás nombres ni cédulas.
+    const _nPacNuevosDock = (state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0;
+    if (_nPacNuevosDock > 0) {
+      const bPn = document.createElement("button");
+      bPn.className = "vgl-dock-btn";
+      bPn.setAttribute("data-accion", "pacientes-nuevos");
+      bPn.setAttribute("aria-label", _nPacNuevosDock + " pacientes nuevos en la agenda de hoy");
+      bPn.title = "\uD83D\uDC64 Pacientes de hoy que no constaban en la memoria de este médico. Clic para recordar a qué horas llegaron.";
+      _vglDockRotulo(bPn, "\uD83D\uDC64", "Nuevos (" + _nPacNuevosDock + ")");
+      bPn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try {
+          const _r = readJSON(avisoPacDiaKey(todayStamp()), null);
+          const _horas = (_r && Array.isArray(_r.nuevos) ? _r.nuevos : []).map((x) => x && x.hora).filter(Boolean);
+          showToast("VERDE", "Pacientes nuevos de hoy",
+            _nPacNuevosDock + " paciente(s) que no constaban en la memoria de este médico" +
+            (_horas.length ? ": " + _horas.join(", ") + "." : "."), false, "avisoPacDock|" + todayStamp());
+        } catch (e2) {}
+      });
+      btns.appendChild(bPn);
     }
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
@@ -9230,7 +9437,15 @@
       }
     }
   } catch (e) {}
-  function saveSettings() { const ok = writeJSON(SETTINGS_KEY, S); applySettings(); return ok; }
+  function saveSettings() {
+    const ok = writeJSON(SETTINGS_KEY, S);
+    applySettings();
+    // v18.1.0 B2: al guardar Ajustes, refresco forzado de la lista de acceso
+    // (el dueño edita la hoja "acceso" y quiere ver el efecto YA). Fire-and-
+    // forget con catch: un fallo de red JAMÁS bloquea ni ensucia el guardado.
+    try { accesoRefrescarLista(true); } catch (e) {}
+    return ok;
+  }
   // --- PREVENCIÓN DE DUPLICADOS EN CITAS Y ÓRDENES (diario, resetea a medianoche) ---
   const PROC_KEY = "vgl_proc_today";
   // NOTA (auditoría v14.2.0): se probó memoizar (1 s) para ahorrar los 3 parseos por tick del
@@ -10267,34 +10482,387 @@
   function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
   function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
   // =====================================================================
-  //  v17.x.x — REFACTOR S+ (30-ago): CONTROL DE ACCESO POR MÉDICO.
+  //  CONTROL DE ACCESO POR MÉDICO — núcleo ACCESO (Misión B, arreglo B1).
   //  ------------------------------------------------------------------
-  //  Lista FIJA de los médicos con acceso completo. Se compara el NOMBRE COMPLETO
-  //  normalizado (sin tildes, sin mayúsculas, sin espacios dobles) contra
-  //  `state.activeDoctor.name`. Los demás médicos ven solo el panel del Centinela,
-  //  agendamiento de laboratorios, Psicología/Odontología, laboratorios y PyM.
-  //  Restringido para los demás: agendamiento de citas médicas, Panel del paciente,
-  //  Redactor IA y Ordenamiento de exámenes (Control).
+  //  UNA sola fuente de verdad: la lista de acceso (el arreglo B2 la trae del
+  //  tablero remoto y la cachea en `vgl_acceso_lista`). Este bloque ya NO
+  //  embebe nombres (entrevista 7A): el padrón lo edita solo el dueño.
+  //  Identidad = UsuarioId de la sesión (state.activeDoctor.id) con respaldo
+  //  por nombre normalizado. La blocklist gana SIEMPRE y en silencio (6A).
+  //  Sin identidad detectada se honra 12 h el último perfil confirmado
+  //  (gracia); agotada, PÚBLICO. Las capacidades públicas (psic_odonto, pym
+  //  — entrevista 1C/2B) se montan para todo médico NO bloqueado, incluido
+  //  el que aún no tiene identidad. Esto es un control OPERATIVO de un
+  //  userscript, no un mecanismo de seguridad: quien puede desinstalar la
+  //  extensión puede saltárselo.
   // =====================================================================
-  const MTR_MEDICOS_AUTORIZADOS = [
-    "ELISETH MARGARITA ESTRADA MORENO",
-    "BRANDON JESUS PALENCIA MARTINEZ",
-    "MARIA EDINETH PINO",
-    "SINAI MIJARES",
-  ];
+  const ACCESO_CAPS_PUBLICAS = ["psic_odonto", "pym"];
+  const ACCESO_CAPS_LABORATORIOS = ["centinela", "notificaciones", "agendar_labs", "laboratorios", "widget_examen_normal", "widget_examenes_autolabs", "aviso_paciente_nuevo"];
+  const ACCESO_GRACIA_MS = 12 * 60 * 60 * 1000;
   function mtrNormalizarNombre(n) {
     return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
   }
-  // Pura y cacheable: devuelve true si el médico activo está en la lista autorizada.
-  // Sin nombre detectado todavía -> false (máxima restricción: ante la duda, ocultar).
-  function mtrEsMedicoAutorizado() {
+  // Pura: la lista sirve solo si viene COMPLETA y bien tipada — version no
+  // vacía, COMPLETO/LABORATORIOS/blocklist como arreglos de {uid>0, nombre}.
+  // Una lista a medias NO se aplica parcialmente: se ignora entera (D3).
+  function accesoListaValida(lista) {
     try {
-      const nombre = (state && state.activeDoctor && state.activeDoctor.name) || "";
-      const n = mtrNormalizarNombre(nombre);
-      if (!n) return false;
-      return MTR_MEDICOS_AUTORIZADOS.some((x) => mtrNormalizarNombre(x) === n);
+      if (!lista || typeof lista !== "object") return false;
+      if (typeof lista.version !== "string" || !lista.version) return false;
+      const perfiles = lista.perfiles;
+      if (!perfiles || typeof perfiles !== "object") return false;
+      const entradaOk = (e) => e && typeof e === "object" && Number.isInteger(e.uid) && e.uid > 0 && typeof e.nombre === "string" && mtrNormalizarNombre(e.nombre) !== "";
+      const arregloOk = (a) => Array.isArray(a) && a.every(entradaOk);
+      return arregloOk(perfiles.COMPLETO) && arregloOk(perfiles.LABORATORIOS) && arregloOk(lista.blocklist);
     } catch (e) { return false; }
   }
+  // La lista cacheada (o null si no hay o no sirve). Jamás lanza.
+  function accesoLeerLista() {
+    try {
+      const crudo = localStorage.getItem("vgl_acceso_lista");
+      if (!crudo) return null;
+      const lista = JSON.parse(crudo);
+      return accesoListaValida(lista) ? lista : null;
+    } catch (e) { return null; }
+  }
+  // ---------------------------------------------------------------------
+  //  v18.1.0 — B2: LISTA REMOTA (una sola fuente de verdad). La caché
+  //  `vgl_acceso_lista` MANDA; este refresco la actualiza desde el tablero
+  //  cada 4 h y al guardar Ajustes, SIN poder tumbar nada: si la respuesta
+  //  no sirve o la red falla, la caché anterior sigue en pie (misma regla D3
+  //  — nada se aplica a medias). `vgl_acceso_fetch` es solo diagnóstico de la
+  //  última tentativa; JAMÁS autoriza nada por sí mismo.
+  // ---------------------------------------------------------------------
+  const ACCESO_REFRESCO_MS = 4 * 60 * 60 * 1000;
+  function _accesoRefrescoFresco() {
+    try {
+      const sello = JSON.parse(localStorage.getItem("vgl_acceso_fetch") || "null");
+      return !!(sello && sello.ok && typeof sello.ts === "number" && Date.now() - sello.ts < ACCESO_REFRESCO_MS);
+    } catch (e) { return false; }
+  }
+  async function accesoRefrescarLista(forzado) {
+    if (!forzado && _accesoRefrescoFresco()) return null; // ya refrescado hace <4 h
+    const _sellar = (ok) => {
+      try { localStorage.setItem("vgl_acceso_fetch", JSON.stringify({ ts: Date.now(), ok: !!ok })); } catch (e) {}
+    };
+    _sellar(false); // pesimista: solo pasa a ok si la respuesta sirve de verdad
+    if (typeof GM_xmlhttpRequest === "undefined") return null; // sin red de userscript: la caché manda
+    try {
+      const r = await gmJson(repUrl() + "?accion=listaAcceso&token=" + encodeURIComponent(TABLERO.token));
+      const sirve = !!(r && r.ok && r.perfiles);
+      if (!sirve) { _sellar(false); return null; }
+      const lista = {
+        version: String(r.version || ""),
+        perfiles: r.perfiles,
+        blocklist: Array.isArray(r.blocklist) ? r.blocklist : []
+      };
+      if (!accesoListaValida(lista)) { _sellar(false); return null; }
+      const previa = accesoLeerLista();
+      const cambio = !previa || previa.version !== lista.version;
+      if (cambio) { try { localStorage.setItem("vgl_acceso_lista", JSON.stringify(lista)); } catch (e) {} }
+      _sellar(true);
+      return { version: lista.version, cambio };
+    } catch (e) {
+      _sellar(false);
+      return null;
+    }
+  }
+  // Anota el último perfil confirmado CON identidad (arranque de la gracia en
+  // esta máquina). Solo perfiles privilegiados; PÚBLICO/BLOQUEADO no anotan.
+  function _accesoAnotarOk(perfil) {
+    try {
+      const actual = JSON.parse(localStorage.getItem("vgl_acceso_ultimo_ok") || "null");
+      if (actual && actual.perfil === perfil && typeof actual.ts === "number" && Date.now() - actual.ts < 60000) return perfil;
+      localStorage.setItem("vgl_acceso_ultimo_ok", JSON.stringify({ perfil: perfil, ts: Date.now() }));
+    } catch (e) {}
+    return perfil;
+  }
+  function _accesoGracia() {
+    try {
+      const ultimo = JSON.parse(localStorage.getItem("vgl_acceso_ultimo_ok") || "null");
+      if (ultimo && (ultimo.perfil === "COMPLETO" || ultimo.perfil === "LABORATORIOS") && typeof ultimo.ts === "number" && Date.now() - ultimo.ts < ACCESO_GRACIA_MS) return ultimo.perfil;
+    } catch (e) {}
+    return null;
+  }
+  // Orden de resolución (el primero que aplique, gana):
+  //   1. blocklist por uid o por nombre — gana SIEMPRE, en silencio.
+  //   2. uid en COMPLETO / LABORATORIOS (el uid MANDA sobre el nombre, D1).
+  //   3. nombre normalizado en COMPLETO / LABORATORIOS (respaldo D1).
+  //   4. sin identidad (uid 0 y sin nombre): gracia fresca → último perfil
+  //      confirmado; vencida o sin anoto → PÚBLICO. Con identidad que no
+  //      está en el padrón → PÚBLICO (la gracia NO se hereda, D2).
+  //   Sin lista aplicable (caché ausente o inservible, p.ej. B1 sin B2):
+  //   todos resuelven por la regla 4 — padrón vacío = PÚBLICO.
+  function accesoPerfil() {
+    try {
+      const lista = accesoLeerLista();
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      const nombre = mtrNormalizarNombre((state && state.activeDoctor && state.activeDoctor.name) || "");
+      if (lista) {
+        const porUid = (e) => Number(e.uid) === uid;
+        const porNombre = (e) => mtrNormalizarNombre(e.nombre) === nombre;
+        if ((uid && lista.blocklist.some(porUid)) || (nombre && lista.blocklist.some(porNombre))) return "BLOQUEADO";
+        if (uid && lista.perfiles.COMPLETO.some(porUid)) return _accesoAnotarOk("COMPLETO");
+        if (uid && lista.perfiles.LABORATORIOS.some(porUid)) return _accesoAnotarOk("LABORATORIOS");
+        if (nombre && lista.perfiles.COMPLETO.some(porNombre)) return _accesoAnotarOk("COMPLETO");
+        if (nombre && lista.perfiles.LABORATORIOS.some(porNombre)) return _accesoAnotarOk("LABORATORIOS");
+      }
+      if (!uid && !nombre) {
+        const g = _accesoGracia();
+        if (g) return g;
+      }
+      return "PUBLICO";
+    } catch (e) { return "PUBLICO"; }
+  }
+  // Las TRES capas de compuerta usan esto: (a) no construir la UI, (b) no
+  // abrir el modal, (c) re-comprobar justo antes de escribir. BLOQUEADO no
+  // ve NADA; las públicas valen para todos los no bloqueados; COMPLETO ve
+  // todo; LABORATORIOS solo sus siete capacidades.
+  function accesoCap(cap) {
+    const perfil = accesoPerfil();
+    if (perfil === "BLOQUEADO") return false;
+    if (ACCESO_CAPS_PUBLICAS.includes(cap)) return true;
+    if (perfil === "COMPLETO") return true;
+    if (perfil === "LABORATORIOS") return ACCESO_CAPS_LABORATORIOS.includes(cap);
+    return false;
+  }
+  // v18.1.0 — B4 CAPA c: re-comprobación JUSTO antes de escribir. La capa
+  // b decide qué se puede ABRIR; esta decide qué puede SALIR a la red. El
+  // mapa familia → capacidad vive en UNA sola tabla (URL de escritura →
+  // capacidad) y los cuatro embudos de red del script la consultan; una
+  // URL que no está en la tabla es una LECTURA y pasa siempre (telemetría,
+  // consultas de la página, SharePoint). BLOQUEADO no escribe NADA, ni
+  // siquiera las capacidades públicas.
+  function accesoEscribir(cap) {
+    try {
+      if (!accesoCap(cap)) { _accesoDenegAnota(cap); return false; }
+      return true;
+    } catch (e) { return false; }
+  }
+  // ---------------------------------------------------------------------
+  //  v18.1.0 — B6: TELEMETRÍA DE DENEGACIÓN DE ESCRITURA (capa c, sin
+  //  PHI). Contar cuántas veces la compuerta dijo NO justo antes de
+  //  escribir es lo único que distingue «nadie usó la función» de
+  //  «alguien trató de guardar y el candado aguantó». Solo cuenta la
+  //  capa c: las capas a/b se disparan solas en cada tick para todo
+  //  perfil recortado (un PÚBLICO sin UI de laboratorios es el estado
+  //  NORMAL, no un incidente) y su volumen no dice nada del usuario;
+  //  la capa c, en cambio, solo suena con intención real de escribir.
+  //  Los contadores viven en MEMORIA (accesoEscribir es caliente),
+  //  bajan a disco en el barrido de 30 min —clave datada, solo el día
+  //  en curso— y viajan al tablero UNA vez al día si hubo denegaciones,
+  //  agregadas por capacidad: cadenas FIJAS del script, sin cédulas,
+  //  sin nombres de pacientes, sin URLs, sin contenido clínico.
+  // ---------------------------------------------------------------------
+  let _accesoDenegN = {};
+  function _accesoDenegReset() { _accesoDenegN = {}; } // gancho del banco: el contador es de memoria, no de disco
+  function _accesoDenegAnota(cap) {
+    try {
+      const k = String(cap || "?");
+      _accesoDenegN[k] = (_accesoDenegN[k] || 0) + 1;
+      if (Object.keys(_accesoDenegN).length > 32) _accesoDenegN = {}; // tormenta: mejor perder la cuenta que ahogarse
+    } catch (e) {}
+  }
+  // Suma memoria→disco en la clave del día, PODA los días viejos y
+  // devuelve el acumulado {dia, cuentas}. Jamás lanza.
+  function _accesoDenegDia() {
+    try {
+      const dia = todayStamp();
+      const k = "vgl_acceso_deneg_" + dia;
+      let acum = {};
+      try { acum = JSON.parse(localStorage.getItem(k) || "{}") || {}; } catch (e) {}
+      Object.keys(_accesoDenegN).forEach((x) => { acum[x] = (acum[x] || 0) + _accesoDenegN[x]; });
+      try { localStorage.setItem(k, JSON.stringify(acum)); } catch (e) {}
+      _accesoDenegN = {};
+      const viejos = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const kk = localStorage.key(i);
+        if (kk && kk.indexOf("vgl_acceso_deneg_") === 0 && kk !== k) viejos.push(kk);
+      }
+      viejos.forEach((kk) => { try { localStorage.removeItem(kk); } catch (e) {} });
+      return { dia: dia, cuentas: acum };
+    } catch (e) { return null; }
+  }
+  // Barrido de 30 min (mismo timer que repAccesoDiario): siempre baja a
+  // disco; reporta UNA vez por día y solo si el acumulado trae algo.
+  function _accesoDenegFlush() {
+    try {
+      const dia = _accesoDenegDia();
+      if (!repOn()) return;
+      const cuentas = (dia && dia.cuentas) || {};
+      if (!Object.keys(cuentas).length) return;
+      const k = "vgl_rep_acceso_deneg";
+      if (localStorage.getItem(k) === dia.dia) return; // ya viajó hoy
+      try { localStorage.setItem(k, dia.dia); } catch (e) {}
+      reportar("acceso_deneg", {
+        uid: Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0,
+        perfil: accesoPerfil(),
+        cuentas: cuentas
+      });
+    } catch (e) {}
+  }
+  const ACCESO_ESCRITURA_URLS = [
+    // agendar_labs (LABORATORIOS + COMPLETO): AppCita Viva 1A.
+    { re: /apiLaboratorioV2\/api\/Agendamiento\/AgendarCita/i, cap: "agendar_labs" },
+    { re: /\/API\/EnviarMensajeTextoLaboratorio/i, cap: "agendar_labs" },
+    // agendar_control (COMPLETO): Everest.
+    { re: /APIAcceso\/api\/Acceso\/AsignarTurno/i, cap: "agendar_control" },
+    { re: /\/CancelarCita|\/AnularCita|\/CancelarTurno/i, cap: "agendar_control" },
+    { re: /APIAcceso\/api\/SMS\/EnviarSMS/i, cap: "agendar_control" },
+    // pym (pública): ordenamientos.
+    { re: /APIOrdenamientoHealth\/api\/ordenamiento\/GuardarOrdenamiento/i, cap: "pym" },
+    { re: /APIEnvioCorreo\/api\/EnvioCorreo\/EnviarEmailOrdenamiento/i, cap: "pym" },
+  ];
+  // Devuelve false SOLO si la URL es una escritura catalogada y el perfil
+  // no tiene esa capacidad. Cualquier error interno deja pasar (lectura):
+  // esta compuerta es control operativo, no un mecanismo de seguridad.
+  function accesoEscribirUrl(url) {
+    try {
+      const u = String(url || "");
+      for (let i = 0; i < ACCESO_ESCRITURA_URLS.length; i++) {
+        const e = ACCESO_ESCRITURA_URLS[i];
+        if (e.re.test(u)) return accesoEscribir(e.cap);
+      }
+      return true;
+    } catch (err) { return true; }
+  }
+  // Envoltorio histórico: mismo nombre que consumía el módulo MTR, ahora
+  // alimentado por el núcleo ACCESO.
+  function mtrEsMedicoAutorizado() {
+    return accesoPerfil() === "COMPLETO";
+  }
+
+  // =====================================================================
+  //  v18.1.0 — B5: AVISO DE PACIENTE NUEVO (capacidad `aviso_paciente_nuevo`)
+  //  ------------------------------------------------------------------
+  //  Everest NO marca «nuevo» en ninguna fila de la agenda, así que «nuevo»
+  //  se define por MEMORIA PROPIA: una cédula que no consta en el histórico
+  //  de ESTE médico (clave por uid: la memoria no se comparte entre médicos
+  //  que usan el mismo navegador). Se evalúa al llegar cada lectura del API
+  //  de agenda (tickApi), sin red adicional y sin capa c: esto no escribe
+  //  nada en Everest, solo observa.
+  //
+  //  LAS REGLAS QUE HACEN QUE ESTO NO MOLESTE:
+  //   · CAPA a: sin accesoCap("aviso_paciente_nuevo") no se evalúa NADA ni
+  //     se aprende NADA — el histórico solo crece para quien puede usarlo.
+  //   · BOOTSTRAP SILENCIOSO: con el histórico vacío (médico nuevo, o primer
+  //     día del feature) solo APRENDE y no avisa — el primer día no puede
+  //     mentir diciendo que todos los pacientes de años son nuevos.
+  //   · MÁX 3 TOASTS POR HORA CORRIDA: una agenda que se llene de golpe no
+  //     ametralla al médico; los que no alcanzaron toast quedan contados.
+  //   · DEDUP doble: por cita (cédula@hora) dentro del día, y entre
+  //     pestañas por el registro vgl_vistos (_avisoUnaVezPorNavegador).
+  //   · CERO PHI INNECESARIA EN DISCO: el registro del día guarda cédula y
+  //     hora (lo mínimo para la memoria), NUNCA nombres; el nombre solo
+  //     vive en el toast, que se borra solo. Cero red, cero telemetría.
+  //   · El contador del dock («👤 Nuevos (N)») es SOLO un número.
+  // =====================================================================
+  const AVISO_PAC_HIST_MAX = 2000;    // sobre esto, se poda
+  const AVISO_PAC_HIST_KEEP = 1500;   // a esto se reduce al podar
+  const AVISO_PAC_TOASTS_HORA = 3;    // presupuesto de toasts por hora corrida
+
+  function avisoPacHistKey(uid) { return "vgl_aviso_hist_" + (Number(uid) || 0); }
+  function avisoPacDiaKey(dia) { return "vgl_aviso_pacientes_" + (dia || todayStamp()); }
+  function avisoPacCitaId(doc, hora) { return String(doc || "") + "@" + String(hora || ""); }
+
+  // Puro: de una lista de ts de toasts, los que caen en la última hora corrida.
+  function avisoPacToastsRecientes(ts, ahora) {
+    const corte = (ahora || Date.now()) - 60 * 60 * 1000;
+    return (Array.isArray(ts) ? ts : []).filter(function (x) { return Number(x) > corte; });
+  }
+
+  // Puro: sobre el máximo de conocidos, conserva los más recientes. Devuelve
+  // null si no había nada que podar (el llamador no toca el disco entonces).
+  function avisoPacHistPodar(docs) {
+    const d = docs || {};
+    const llaves = Object.keys(d);
+    if (llaves.length <= AVISO_PAC_HIST_MAX) return null;
+    llaves.sort(function (a, b) { return (d[b] || 0) - (d[a] || 0); });
+    const out = {};
+    for (let i = 0; i < AVISO_PAC_HIST_KEEP; i++) out[llaves[i]] = d[llaves[i]];
+    return out;
+  }
+
+  // Limpieza de claves datadas de días pasados: corre UNA vez al día (cuando
+  // el registro del día cambia), no en cada tick. Mismo patrón que la poda
+  // B8 de las marcas vgl_n_*: quien solo lee, también barre lo viejo.
+  function _avisoPacLimpiarDiasViejos(dia) {
+    try {
+      const hoy = dia || todayStamp();
+      const PREF = "vgl_aviso_pacientes_";
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf(PREF) === 0 && k.slice(PREF.length) !== hoy) localStorage.removeItem(k);
+      }
+    } catch (e) {}
+  }
+
+  // Núcleo B5. Recibe las filas ya parseadas de state.apiCitas ({doc_id,
+  // nombre, hora_texto}) y devuelve {nuevos, toasts, bootstrap} — o null si
+  // la capa a cortó o no había nada que evaluar. `opts` es del banco:
+  // {ahora, toast} fijan el reloj y graban los avisos sin depender del DOM.
+  function avisoPacEval(citas, opts) {
+    try {
+      if (!accesoCap("aviso_paciente_nuevo")) return null;          // capa a
+      if (!Array.isArray(citas) || !citas.length) return null;
+      const o = opts || {};
+      const ahora = o.ahora || Date.now();
+      const toast = o.toast || showToast;
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      // Memoria a largo plazo del médico (por uid, no compartida).
+      let hist = readJSON(avisoPacHistKey(uid), null);
+      const bootstrap = !hist || !hist.docs || typeof hist.docs !== "object" || !Object.keys(hist.docs).length;
+      if (bootstrap) hist = { docs: {} };
+      // Registro del día: dedup por cita, presupuesto de toasts y contador.
+      const dia = todayStamp();
+      let reg = readJSON(avisoPacDiaKey(dia), null);
+      if (!reg || reg.dia !== dia) {
+        reg = { dia: dia, avisados: {}, toasts: [], nuevos: [] };
+        _avisoPacLimpiarDiasViejos(dia);
+      }
+      let presupuesto = Math.max(0, AVISO_PAC_TOASTS_HORA - avisoPacToastsRecientes(reg.toasts, ahora).length);
+      const llegaron = [];   // los nuevos de ESTA pasada, para sus toasts
+      let cambio = false;
+      for (let i = 0; i < citas.length; i++) {
+        const a = citas[i] || {};
+        const doc = String(a.doc_id || "").trim();
+        if (!doc) continue;                    // sin cédula no hay memoria posible
+        const hora = String(a.hora_texto || "");
+        const esNuevo = !hist.docs[doc];
+        hist.docs[doc] = ahora;                // aprende SIEMPRE (la memoria no olvida)
+        if (esNuevo) {
+          cambio = true;
+          const cid = avisoPacCitaId(doc, hora);
+          if (!bootstrap && !reg.avisados[cid]) {
+            reg.avisados[cid] = ahora;
+            reg.nuevos.push({ doc: doc, hora: hora, ts: ahora });   // sin nombre: PHI mínima
+            llegaron.push({ nombre: String(a.nombre || ""), hora: hora, cid: cid });
+          }
+        }
+      }
+      // Toasts: mejor esfuerzo dentro del presupuesto; dedup entre pestañas.
+      let dados = 0;
+      for (let j = 0; j < llegaron.length && presupuesto > 0; j++) {
+        const p = llegaron[j];
+        if (!_avisoUnaVezPorNavegador("avisoPac|" + p.cid)) continue;
+        try {
+          toast("VERDE", "Paciente nuevo en la agenda",
+            (p.nombre || "Sin nombre") + (p.hora ? " — " + p.hora : "") +
+            ". No constaba en la memoria de este médico.", false, p.cid);
+        } catch (eT) {}
+        reg.toasts.push(ahora); dados++; presupuesto--; cambio = true;
+      }
+      if (cambio) {
+        const poda = avisoPacHistPodar(hist.docs);
+        if (poda) hist.docs = poda;
+        writeJSON(avisoPacHistKey(uid), hist);
+        writeJSON(avisoPacDiaKey(dia), reg);
+      }
+      try { state.avisoPacNuevos = reg.nuevos.length; } catch (eS) {}
+      return { nuevos: reg.nuevos.length, toasts: dados, bootstrap: bootstrap };
+    } catch (e) { return null; }
+  }
+
   function isExcludedActivity(header, label) {
     const hay = stripAccents((header + " " + label).toLowerCase());
     if (hay.includes("vih")) return false; // VIH siempre se conserva
@@ -11088,9 +11656,34 @@
     // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
     // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
     // situaciones distintas y el médico hace cosas distintas con cada una.
-    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio"];
+    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio",
+    // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
+    // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
+    // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
+    // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
+    // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
+    // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
+    // llena con ella) separa ahora los dos casos que antes compartían esa frase.
+    "piloto_esta_sin_pendientes", "piloto_no_esta"];
   function pymMotivoSinActividades(est) {
     const e = est || {};
+    // v18.0.139 — RESPALDO ACTIVO: primero lo que sí se sabe de esa base. Si el paciente
+    // figura en ella, el viejo "sin_lista" era literalmente falso (no es que no se miró:
+    // se miró y no salió nada, o sus únicas actividades quedaron fuera por sexo o por
+    // exclusión del catálogo — el mismo matiz que ya carga "sin_pendientes" con la
+    // oficial). Solo cuando no se puede comprobar la pertenencia se cae al "no lo sé".
+    if (e.esBasePiloto && e.pacienteEnLista === true) {
+      return {
+        motivo: "piloto_esta_sin_pendientes",
+        texto: "Este paciente SÍ figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—, pero de esa base no salió ninguna actividad para ofrecerle en este módulo (puede no tener nada anotado, o ser actividades que el módulo no ofrece por sexo o por exclusión del catálogo). Eso NO prueba que esté al día: el respaldo es una base de referencia, no la lista de hoy. Si quiere la respuesta de hoy, cargue la lista con «Abrir PyM»; si algo aplica, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    if (e.esBasePiloto && e.pacienteEnLista === false) {
+      return {
+        motivo: "piloto_no_esta",
+        texto: "Este paciente NO figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—: su identificación no cruza en esa base (puede ser nuevo, de otra sede, o una base desactualizada). Esto no dice que no tenga nada pendiente: dice que ni en el respaldo lo puedo ver. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
     if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
       return {
         motivo: "sin_lista",
@@ -11664,7 +12257,11 @@
   }
 
   function reportar(evento, extra) {
-    if (!repOn()) return;
+    // v18.0.136 — devuelve true si el evento quedó ENCOLADO (repQSave no retorna nada y
+    // nadie usaba ese retorno). El resumen diario marca su candado solo cuando hay fila,
+    // porque con la cuota llena la cola no sobrevive en localStorage y el día quedaba
+    // marcado «reportado» sin haber salido jamás: la fila resumen silenciosa del tablero.
+    if (!repOn()) return false;
     repQLoad();
     repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
     repQSave();
@@ -11675,8 +12272,9 @@
     // repFlush (10 min) que ya existía — mismo reintento, sin la ráfaga.
     let errTs = 0;
     try { const e = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e && e.ts) errTs = new Date(e.ts).getTime(); } catch (e2) {}
-    if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return;
+    if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return true;
     repFlush();
+    return true;
   }
 
   // v12.6.9 — ENTORNO, una vez al día. Para leer un fallo reportado hace falta saber sobre
@@ -11700,6 +12298,31 @@
         nav, so, zona,
         pantalla: (screen && screen.width ? screen.width + "x" + screen.height : ""),
         gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : ""
+      });
+    } catch (e) {}
+  }
+
+  // v18.1.0 — B2: DESCUBRIMIENTO DE UIDS, una vez al día. La hoja "acceso" del
+  // tablero nace con los uids VACÍOS (nunca se inventan: el uid manda sobre el
+  // nombre y uno fabricado podría coincidir con otro médico). Cada equipo
+  // reporta aquí su identidad ACTUAL —uid + nombre + perfil resuelto— a la hoja
+  // "acceso_uid", y el dueño copia uid↔nombre a la hoja "acceso". Es dato de
+  // PERSONAL (el nombre de un médico que ya trabaja aquí), no PHI de pacientes.
+  // Sin uid detectado no hay nada que descubrir: Everest solo revela el
+  // UsuarioId cuando el médico ya abrió su agenda, por eso el arranque lo
+  // reintenta cada 30 min (el candado diario hace el resto).
+  function repAccesoDiario() {
+    if (!repOn()) return;
+    try {
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      if (!uid) return;
+      const k = "vgl_rep_acceso";
+      if (localStorage.getItem(k) === todayStamp()) return;
+      localStorage.setItem(k, todayStamp());
+      reportar("acceso", {
+        uid,
+        nombre: String((state && state.activeDoctor && state.activeDoctor.name) || "").slice(0, 100),
+        perfil: accesoPerfil()
       });
     } catch (e) {}
   }
@@ -12322,9 +12945,15 @@
       const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
       const k = ayer.getFullYear() + "-" + String(ayer.getMonth() + 1).padStart(2, "0") + "-" + String(ayer.getDate()).padStart(2, "0");
       if (localStorage.getItem("vgl_rep_sum") === k) return;
-      localStorage.setItem("vgl_rep_sum", k);
+      // v18.0.136 — el candado se marca SOLO si hubo fila encolada. Antes se marcaba
+      // ANTES de comprobar si el día tuvo actividad y ANTES de saber si la cola pudo
+      // escribirse: con la cuota llena, un día con resumen quedaba «reportado» para
+      // siempre sin haber salido jamás — el tablero llevaba días sin fila resumen y
+      // nadie veía el hueco. Sin actividad ese día, ni fila ni candado: se reintenta
+      // en el próximo arranque.
       const st = (allStats() || {})[k]; if (!st) return; // sin actividad ese día: ni fila
-      reportar("resumen", { deDia: k, fraude: st.fraude || 0, inasistencia: st.inasistencia || 0, atiempo: st.atiempo || 0, ultima: st.ultima || 0 });
+      const encolado = reportar("resumen", { deDia: k, fraude: st.fraude || 0, inasistencia: st.inasistencia || 0, atiempo: st.atiempo || 0, ultima: st.ultima || 0 });
+      if (encolado) localStorage.setItem("vgl_rep_sum", k);
     } catch (e) {}
   }
   // Fraude en vivo: hora de la cita y minutos de retraso. SIN datos del paciente.
@@ -13401,32 +14030,32 @@
   // =====================================================================
   function _enModuloHCHealth() {
     try {
-      // v17.6.3 — La URL REAL del módulo clínico en producción es
-      // https://neps.everestintelligent.com/viva/EverHealth/HCHealth (confirmado por el
-      // médico: ahí ejecuta el script), no la .../viva/HCHealth/ de la captura original.
-      // Se aceptan las DOS formas: el segmento final `HCHealth` del pathname identifica
-      // el módulo (Citas del día, Historia Clínica, Órdenes y RCV viven bajo él). Sin
-      // esto, tick() escondía el panel por completo en la página real (v16.2.2 lo oculta
-      // fuera del módulo) y el Vigilante no aparecía donde el médico trabaja.
-      return /\/viva\/(?:EverHealth\/)?HCHealth(\/|$)/i.test(location.pathname);
+      // v18.0.138 — Orden directa del médico (4-sep): la pestaña principal/notificadora
+      // es https://neps.everestintelligent.com/viva/HCHealth/ — el subárbol
+      // .../viva/EverHealth/ queda FUERA (ni panel ni notificaciones). Esto REVIERTE
+      // v17.6.3, que aceptaba ambas formas (/viva/HCHealth y /viva/EverHealth/HCHealth)
+      // tras confirmación del médico de aquel día; hoy el médico ordena lo contrario y
+      // manda la orden más reciente. Si el Vigilante desaparece de la página donde
+      // realmente trabaja, basta restaurar el regex de v17.6.3:
+      // /\/viva\/(?:EverHealth\/)?HCHealth(\/|$)/i
+      return /\/viva\/HCHealth(\/|$)/i.test(location.pathname);
     } catch (e) { return false; }
   }
 
-  // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió explícitamente que el sonido/
-  // notificación de Windows (v14.1.5: "suena esté el médico donde esté") NO le suene en
-  // tres pantallas puntuales que nombró — /viva/Acceso/ (login/administrativo),
-  // /viva/EverHealth/OrdenamientoHealth (Ordenamiento COMO MÓDULO PROPIO, no el que vive
-  // dentro de una historia — ese sigue en _enModuloHCHealth()) y /viva/EverHealth/ a
-  // secas (portada, sin módulo). Confirmado con el médico (dos preguntas, dos
-  // respuestas): el panel Y el sonido siguen igual de amplios que hoy en todo lo demás
-  // (incluida Historia+Ordenamiento-dentro-de-historia) — esto es una excepción puntual
-  // a esas tres pantallas nombradas, no un cambio del alcance general.
+  // v18.0.138 — REPORTE DEL MÉDICO (4-sep): en /viva/EverHealth/OrdenamientoHealth,
+  // /viva/EverHealth/Acceso y /viva/EverHealth/HCHealth NO debe aparecer el Vigilante
+  // ni ninguna notificación suya; las notificaciones viven SOLO en la pestaña
+  // principal /viva/HCHealth/. En lugar de enumerar pantallas sueltas (como hacía
+  // v17.6.75), se silencia TODO el subárbol /viva/EverHealth/ (portada, Acceso,
+  // OrdenamientoHealth y HCHealth incluidos) — el prefijo lo absorbe todo. Se
+  // conserva /viva/Acceso (sin prefijo) por compatibilidad con la ruta de siempre.
+  // Efecto: en página excluida ni tono ni Windows ni toast ni cartel; el aviso queda
+  // en cola (vgl_avisos_pendientes) y al volver al módulo se muestran los no caducados.
   function _enPaginaExcluidaDeAvisos() {
     try {
       const p = location.pathname;
-      return /\/viva\/Acceso(\/|$)/i.test(p)
-        || /\/viva\/EverHealth\/OrdenamientoHealth(\/|$)/i.test(p)
-        || /^\/viva\/EverHealth\/?$/i.test(p);
+      return /^\/viva\/EverHealth(\/|$)/i.test(p)
+        || /\/viva\/Acceso(\/|$)/i.test(p);
     } catch (e) { return false; }
   }
 
@@ -14738,7 +15367,7 @@
       if (!doc) return vacio;
       const key = normalizeKey(doc); if (!key) return vacio;
       const abandono = !!(state.pymAbandono && state.pymAbandono.has(key));
-      const pym = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
+      const pymBase = (typeof pymPendientesRestantes === "function" ? (pymPendientesRestantes(doc) || []) : []);
       // A4 (S+, 02-sep) — la lista con la que se juzga es el CONSOLIDADO Athenea+Annar+Citi
       // cuando ya existe fresco (lo dejan el modal de Laboratorios y mtrCalcularResumenClinico);
       // solo si no hay consolidado se cae a la precarga de Athenea de siempre. Antes este aviso
@@ -14747,6 +15376,38 @@
       const labsCrudos = (typeof _labsConsolidadoDe === "function" && _labsConsolidadoDe(doc))
         || (_labsPrefetchCoincide(doc) ? _labsPrefetch.labs : null);
       const labsListos = !!(labsCrudos && !atheneaLecturaIncompleta(labsCrudos));
+      // v18.0.135 — SINCRONIZACIÓN DEL AVISO CON LOS RESULTADOS (reporte del médico,
+      // 03-sep): el aviso de entrada y la pastilla «🩺 Pendientes» del dock ofrecían
+      // actividades que el modal de Laboratorios ya mostraba HECHAS (SOMF del 14/08 con
+      // código propio del laboratorio, VIH vía Annar/Citi). `pymPendientesRestantes` solo
+      // resta lo ordenado HOY desde el panel; nunca miró resultados. Aquí se descuenta lo
+      // «ya hecho y detectado en los resultados» con la MISMA vara del modal de Ordenar
+      // (regla del médico del 03-sep): la orden vigente en Everest SIN resultado NO se
+      // descuenta — esa actividad se vuelve a ordenar, sigue siendo pendiente. Y solo se
+      // filtra con lectura COMPLETA de laboratorios: si Athenea no respondió o la lectura
+      // quedó incompleta, se muestra todo (D4: ante la duda, el aviso se muestra).
+      let pym = pymBase;
+      if (labsListos && pym.length) {
+        try {
+          const cubiertas = new Set();
+          const _hoyAviso = todayStamp();
+          const _pares = pymPaquetesDelPaciente(pym);
+          for (const _par of (_pares && _pares.pymPorPaquete) || []) {
+            const _pkg = _par[0], _etiquetas = _par[1];
+            if (!_pkg || _pkg.cie10 === "I10X") continue;              // RCV se juzga en `labs`, no aquí
+            if (PYM_MANDA_SHAREPOINT.indexOf(_pkg.cie10) >= 0) continue; // la lista de la sede manda (Z123)
+            let _bloq = false;
+            if (_pkg.vigenciaDias) {
+              _bloq = pymPaqueteCubiertoPorAthenea(_pkg, labsCrudos, _hoyAviso) === true;
+            } else {
+              const _h = pymPaqueteHechoEnAthenea(_pkg, labsCrudos, _hoyAviso);
+              _bloq = !!(_h && _h.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS);
+            }
+            if (_bloq) _etiquetas.forEach((e) => cubiertas.add(e));
+          }
+          if (cubiertas.size) pym = pym.filter((l) => !cubiertas.has(l));
+        } catch (e) { pym = pymBase; }
+      }
       const _resAviso = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(doc) : null;
       const _autorizado = mtrEsMedicoAutorizado();
       let _repetirFueraMeta;
@@ -15100,6 +15761,16 @@
     return out;
   }
   function showToast(color, title, body, persist, apptKey) {
+    // v18.0.135 (Avisos #4) — el toast es un canal DE LA PÁGINA, y la página del Vigilante
+    // es el módulo clínico HCHealth: fuera de él no se dibuja NADA. Era la fuga reportada
+    // por el médico («la misma notificación azul cian que está arriba me aparece la
+    // anaranjada en otras pestañas o ventanas de Everest»): cualquier pestaña ajena
+    // VISIBLE podía pintar el toast encima de una pantalla que no es la clínica. El TONO y
+    // la notificación del sistema NO pasan por aquí y siguen saliendo esté donde esté el
+    // médico (invariante v14.1.5). Este gate central cubre de una sola vez a todos los
+    // llamadores: notify(), los respaldos internos de osNotify, el deadman del asistente
+    // y los avisos de arranque.
+    if (!_enModuloHCHealth()) return;
     // v17.6.9 — regla 1: dedup del mismo aviso en el mismo flush.
     const clave = (apptKey || "") + "|" + String(title || "");
     if (toastQueue.some((t) => ((t.apptKey || "") + "|" + String(t.title || "")) === clave)) return;
@@ -15143,7 +15814,11 @@
     // mismo «PyM actualizado» no sale dos veces en el navegador, ni en dos pestañas.
     const uidReal = uid || _avisoUidDeTexto(title, body);
     if (!_avisoUnaVezPorNavegador("notify|" + uidReal)) return;
-    if (!_pestanaSinAtencion()) { showToast(color, title, body, persist); return; }
+    // v18.0.135 (Avisos #4) — misma política del gate de showToast: con la pestaña visible
+    // PERO fuera de HCHealth, el canal ya no es el toast de la página (pintaría sobre una
+    // pantalla ajena — la fuga reportada) sino la notificación del sistema. Dentro de
+    // HCHealth y visible todo sigue igual: un aviso = un canal, el de la página (v15.4.0).
+    if (!_pestanaSinAtencion() && _enModuloHCHealth()) { showToast(color, title, body, persist); return; }
     if (!_notificarSistema(color, title, body, persist, uidReal)) showToast(color, title, body, persist);
   }
   function _gmNotify(color, title, body, persist, uid) {
@@ -15308,16 +15983,24 @@
     // que el cartel pendiente se siga encolando para cuando el médico entre a la
     // historia, aunque el silencio ya haya vencido para entonces.
     if (muted()) return true;
-    if (_pestanaSinAtencion()) {
+    // v18.0.135 (Avisos #4) — LA FUGA REPORTADA: una pestaña ajena VISIBLE (Acceso, otra
+    // ventana de Everest) entraba por la rama «pestaña visible» de abajo y pintaba el
+    // toast sobre una pantalla que no es la clínica («la notificación azul cian/anaranjada
+    // me aparece en otras pestañas de Everest»). El canal DENTRO DE LA PÁGINA solo existe
+    // en HCHealth; fuera de él el aviso sale por el SISTEMA aunque la pestaña esté visible,
+    // y el respaldo in-page (si el sistema no puede) queda reservado a HCHealth. Lo que NO
+    // cambió: el TONO ya sonó arriba, antes de cualquier mirada al módulo (invariante
+    // v14.1.5 — el aviso suena esté donde esté el médico), y el parpadeo del título sigue
+    // siendo la señal de lo crítico en cualquier pestaña del navegador.
+    if (_pestanaSinAtencion() || !_enModuloHCHealth()) {
       if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
-        showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
+        if (_enModuloHCHealth()) showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
         if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
       }
     } else if (!p.sinToastPorCartel) {
-      // Pestaña visible: el canal es el de la página. Si quien llama va a pintar el cartel
-      // para este mismo aviso (lo dice con p.sinToastPorCartel), el toast no se duplica
-      // encima. La decisión de módulo vive en el llamador: este disparador NO mira el
-      // módulo (invariante v14.1.5 — el aviso suena esté donde esté el médico).
+      // Pestaña visible EN HCHealth: el canal es el de la página. Si quien llama va a
+      // pintar el cartel para este mismo aviso (lo dice con p.sinToastPorCartel), el
+      // toast no se duplica encima.
       showToast(p.color, p.title, p.body, p.persist, p.apptKey);
     }
     return true;
@@ -15549,6 +16232,34 @@
   // único que cambia es que no toca la casilla.
   const PYM_MANDA_SHAREPOINT = ["Z123"];
 
+  // v18.0.135 — la fecha del resultado MÁS RECIENTE cuyo nombre case con alguna palabra
+  // clave del paquete, como PALABRA COMPLETA (no subcadena: «colon» dentro de
+  // «colonoscopia» no es la SOMF hecha). Es el respaldo por nombre de
+  // pymPaqueteHechoEnAthenea para paquetes de UN solo CUPS: el resultado puede llegar con
+  // el código PROPIO del laboratorio —o por el consolidado Annar/Citi— y el CUPS oficial
+  // del paquete no aparecer nunca, con lo que el examen caía en «no hecho» y el modal
+  // volvía a ordenar un VIH que el paciente ya tenía. Regla del médico (03-sep-2026): no
+  // hace falta que coincida el CUPS; el nombre igual o similar basta para dar el examen
+  // por detectado.
+  function _pymMejorFechaPorNombre(palabras, labs, fechaUtilDe) {
+    try {
+      if (!Array.isArray(palabras) || !palabras.length || !Array.isArray(labs)) return null;
+      const res = palabras.map((k) => {
+        const esc = String(k).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        try { return new RegExp("(?:^|[^a-z0-9])" + esc + "(?:[^a-z0-9]|$)"); } catch (e) { return null; }
+      }).filter(Boolean);
+      let mejor = null;
+      for (const lab of labs) {
+        if (!lab || typeof lab !== "object") continue;
+        const name = stripAccents(String(lab.NombreParametro || lab.nombre || lab.examen || "")).toLowerCase();
+        if (!name || !res.some((re) => re.test(name))) continue;
+        const iso = fechaUtilDe(lab);
+        if (iso && (!mejor || iso > mejor)) mejor = iso;
+      }
+      return mejor;
+    } catch (e) { return null; }
+  }
+
   function pymPaqueteHechoEnAthenea(pkg, labs, hoyIso) {
     try {
       if (!pkg || !Array.isArray(labs) || !labs.length) return null;
@@ -15605,7 +16316,27 @@
           const prev = porCups.get(code);
           if (!prev || iso > prev) porCups.set(code, iso);
         }
-        if (porCups.size < codigos.size) return null;          // falta al menos un componente: no se afirma nada
+        // v18.0.135 — FALLBACK POR NOMBRE, SOLO para paquetes de UN componente (VIH, PSA,
+        // SOMF, mamografía). Hallazgo del médico (03-sep-2026): el resultado llega con el
+        // código PROPIO del laboratorio —o por el consolidado Annar/Citi— en lugar del CUPS
+        // oficial, y con el «falta al menos un componente» de antes el examen quedaba como
+        // «no hecho» y se volvía a ordenar. Regla del médico: NO es necesario que coincida
+        // el CUPS; el nombre igual o similar basta. Acotado a UN CUPS: en los multi-CUPS
+        // (Z108, Z103, Z124) un nombre suelto no puede cubrir el paquete entero (v18.0.38)
+        // y «hemoglobina» seguiría cazando «hemoglobina glicosilada», borde de palabra o no.
+        if (codigos.size === 1) {
+          const porNombre = _pymMejorFechaPorNombre(palabras, labs, _fechaUtilDe);
+          const fechaCups = porCups.size ? porCups.values().next().value : null;
+          // La bandera dice si el NOMBRE aportó algo que el CUPS no tenía (código propio
+          // del laboratorio, o una repetición externa más reciente) — no basta con que el
+          // nombre de la fila del CUPS también case, porque ahí quien manda es el CUPS.
+          const ganoNombre = !!(porNombre && (!fechaCups || porNombre > fechaCups));
+          const mejor = ganoNombre ? porNombre : fechaCups;
+          if (!mejor) return null;                              // ni por CUPS ni por nombre: no se afirma nada
+          const msMejor = new Date(mejor + "T00:00:00").getTime();
+          return { iso: mejor, dias: Math.round((hoyMs - msMejor) / 86400000), componentes: 1, porNombre: ganoNombre };
+        }
+        if (porCups.size < codigos.size) return null;          // multi-CUPS: falta al menos un componente, no se afirma nada
         let masAntiguo = null;
         porCups.forEach((iso) => { if (!masAntiguo || iso < masAntiguo) masAntiguo = iso; });
         const msAnt = new Date(masAntiguo + "T00:00:00").getTime();
@@ -15846,6 +16577,9 @@
     API.medicoId = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
   } catch (e) {}
   function apiRecordar(url) {
+    // v18.1.0 — B4 CAPA c: un médico BLOQUEADO tampoco deja huella de la
+    // URL del API en el equipo (vgl_api_url / vgl_api_medico).
+    if (!accesoEscribir("pym")) return;
     try {
       if (!url || !API_RE.test(url)) return;
       const abs = url.indexOf("http") === 0 ? url : (location.origin + (url[0] === "/" ? "" : "/") + url);
@@ -16219,6 +16953,9 @@
     apiLeerAgenda().then((citas) => {
       if (currentEpoch !== state.sessionEpoch) return; // KR-02: Descartes de datos de ayer
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
+      // v18.1.0 — B5: el aviso de paciente nuevo se evalúa con la MISMA lectura
+      // que ya llegó (cero red extra). Fallo del eval jamás rompe el tick.
+      if (citas) { try { avisoPacEval(citas); } catch (eA) {} }
     });
   }
   // v12.3.8 — BOMBA DE VENTANA CRÍTICA. Dos huecos que ningún umbral de apiCadencia()
@@ -17110,7 +17847,17 @@
       .vgl-tab-lista,.vgl-tend-serie,.vgl-llenar-btns,.vgl-prod-fila,.vgl-col,.vgl-bars,
       .vgl-empty-msg,.vgl-card-badges-wrap,.vgl-card-btm,.vgl-acomp-txt,.vgl-acomp-botones,
       .vgl-dup-bloque,.vgl-mtr-ico,.vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,.vgl-pym-sec-ambar,
-      .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico{color:inherit !important}
+      .vgl-pym-sec-ic,.vgl-pym-list,.vgl-pym-ic,.vgl-pym-headtxt,.vgl-pym-body,.vgl-tc-ico,
+      .vgl-sb-txt{color:inherit !important}
+      /* v18.0.135 — .vgl-sb-txt, el rótulo «Alertas»/«Silenciar» de la campana y del mudo
+         (v18.0.128, UI-21), es un span CON clase propia: el blindaje tipográfico
+         (:not([class])) no lo cubre y no tenía ninguna regla de color, así que heredaba del
+         botón y cualquier regla del CSS de Everest que apuntara al span se quedaba con él —
+         el médico lo reportó con captura (3-sep) viendo esos dos rótulos en azul dentro del
+         panel. Viaja en ESTA lista a propósito: es la declaración de herencia que ya resiste
+         a las reglas del host y de la que cuelgan sus vecinas. La Regla S de suite_25 no lo
+         cazó porque su sobreaproximación de etiqueta (span desnudo con color en la hoja) lo
+         daba por cubierto; la prueba estática Regla S-bis vigila esta línea exacta. */
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
          especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
@@ -20564,6 +21311,11 @@
   // siempre — exactamente el defecto que v18.0.47 cerró en el núcleo y que aquí seguía vivo.
   // Si el llamador ya trae su propia señal, se respeta; sin AbortController, se llama igual.
   function _fetchConTope(f, url, init, topeMs) {
+    // v18.1.0 — B4 CAPA c: embudo COMÚN de fetch crudo. Un rechazo aquí
+    // respeta el contrato de fallo de cada llamador (EnviarSMS → «sin
+    // conexión», _apiPostConDetalle → {ok:false,red:true},
+    // reenviarSmsRecordatorio → {ok:false,motivo:«sin red»}).
+    if (!accesoEscribirUrl(url)) return Promise.reject(new Error("VGL_ACCESO_ESCRITURA"));
     const ms = (typeof topeMs === "number" && topeMs > 0) ? topeMs : PAGE_FETCH_TIMEOUT_MS;
     if (typeof AbortController === "undefined" || (init && init.signal)) return f(url, init);
     const abortar = new AbortController();
@@ -20778,6 +21530,11 @@
 
   // Wrapper reactivo con GHOST (Deduplicación de Promesas / Promise Pooling)
   async function pageFetchJson(url, options) {
+    // v18.1.0 — B4 CAPA c: la escritura se re-comprueba JUSTO antes de
+    // salir. null es el contrato de fallo normal de pageFetchJson: los
+    // llamadores (AsignarTurno, GuardarOrdenamiento) ya lo tratan como
+    // «no se pudo» y muestran su aviso sin crear nada.
+    if (!accesoEscribirUrl(url)) return null;
     const key = url + "|" + (options ? JSON.stringify(options) : "");
     if (GHOST.promises.has(key)) return GHOST.promises.get(key);
 
@@ -20987,6 +21744,10 @@
   // puntos del script.
   const gmPostJsonEx = async (url, data = {}) => {
     return new Promise((resolve) => {
+      // v18.1.0 — B4 CAPA c: sin la capacidad, la cita de laboratorio NO
+      // se agenda. Se resuelve con el MISMO contrato de «sin red» que ya
+      // entienden los llamadores (status 0 = nunca salió).
+      if (!accesoEscribirUrl(url)) { resolve({ ok: false, status: 0, data: null }); return; }
       if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, status: 0, data: null }); return; }
       GM_xmlhttpRequest({
         method: "POST", url, headers: { "Content-Type": "application/json" },
@@ -22122,26 +22883,16 @@
     } catch (e) {}
   }
 
-  // [v14.2.0 — auditoría pre-producción 2026-08-18] Médicos para quienes TODA cita se
-  // considera del programa RCV/Prevención, sin excepción (encargo del consultorio). Antes
-  // esta lista y el forzado vivían SOLO dentro de apiAccesoAsignarTurno: el checkbox del
-  // modal de agendamiento (#vgl-agm-pym-chk) seguía mostrándose como una elección real para
-  // estos médicos, aunque su valor se descartara siempre aquí abajo. Se saca a función
-  // compartida para que el modal (openAgendamientoModal) pueda usarla también y mostrar el
-  // checkbox marcado y deshabilitado —honesto sobre que no hay elección— en vez de un
-  // control que no hace nada. Ver CHANGELOG.
-  const RCV_DOCTORS = ["PALENCIA", "BPALENCIA", "PINO", "MPINO", "ESTRADA", "EESTRADA", "MIJARES", "SMIJARES"];
-  // v17.6.47 — auditoría 25-ago (1.2): `docName.includes(p)` hacía match por SUB-CADENA.
-  // "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" (verificado carácter por carácter) —
-  // un médico ajeno al programa con ese apellido quedaba forzado a swIsPyM/swProgramaEspecial
-  // = true en el POST real que crea la cita en Athenea. Se compara por TOKEN completo
-  // (separado por cualquier carácter que no sea letra/dígito: espacios, puntos, comas),
-  // no por sub-cadena — conserva el match de "BPALENCIA"/"EESTRADA" como token propio
-  // (así aparecen en Everest cuando el nombre trae la inicial pegada al apellido).
+  // [v18.1.0 — núcleo ACCESO, Misión B] RCV/Prevención ya no se decide por
+  // apellidos embebidos en el código (RCV_DOCTORS, retirado en esta versión):
+  // es la capacidad "rcv" de la lista de acceso. La tienen los del perfil
+  // COMPLETO (los mismos cuatro del padrón que antes resolvían por token) y
+  // nadie más — ni LABORATORIOS ni PÚBLICO ni BLOQUEADO. La historia completa
+  // (v14.2.0 forzado por médico con el checkbox del modal deshabilitado;
+  // v17.6.47 match por token para no atrapar sub-cadenas tipo "OSPINO" o
+  // "ESPINOSA") quedó en el CHANGELOG y en ACCESO/02_DISENO_ACCESO.md.
   function esMedicoRCVActivo() {
-    const docName = stripAccents(String((state.activeDoctor && state.activeDoctor.name) || "").toUpperCase());
-    const tokens = docName.split(/[^A-Z0-9]+/).filter(Boolean);
-    return RCV_DOCTORS.some((p) => tokens.includes(p));
+    return accesoCap("rcv");
   }
 
   // v15.8.0 (N4) — VISTA PREVIA DEL SMS. Pura: recibe la plantilla (el texto real
@@ -23598,6 +24349,10 @@
     if (x.subestado === "vencido" || x.vencidoBase) return "vencido";
     if (x.subestado === "sin_historial") return "sin_historial";
     if (x.subestado === "sin_fecha") return "sin_fecha";
+    // v18.0.143 — falla_natural: la ventana del 50 % venció pero la norma sigue viva y
+    // NO se pide ya (04-sep) — rige la vigencia natural, así que la tarjeta lo pinta
+    // como "vence", que es lo que de verdad hace.
+    if (x.subestado === "falla_natural") return "vence";
     if (x.vence) return "vence";
     return "al_dia";
   }
@@ -23623,6 +24378,9 @@
       sin_historial: { rotulo: "Sin tomas", clase: "vgl-paq-sinhist" },
       sin_fecha: { rotulo: "Sin fecha", clase: "vgl-paq-sinfecha" },
       al_dia: { rotulo: "Al día", clase: "vgl-paq-aldia" },
+      // v18.0.143 — el rótulo "Repetir" desaparece: la falla terapéutica gastada ya no
+      // es un estado de paquete propio, rige la vigencia natural y mtrPaqueteEstadoDe
+      // la reporta como "vence" (ámbar).
     };
 
     const filaOrden = ordenar.map((a) => {
@@ -23829,6 +24587,9 @@
   }
 
   async function openLaboratoriosModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): compuerta de acceso. `laboratorios` es capacidad
+    // privada; sin ella la apertura corta en seco, antes de leer nada del paciente.
+    if (!accesoCap("laboratorios")) return;
     const _lo = opts || {};   // v18.0.115 (C11): { nuevos: true } fuerza la consulta en vivo
     let _labsDePrecargaSeg = null;   // segundos de antigüedad si se sirvió la precarga
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -24050,7 +24811,20 @@
         if (!vivo()) return;
         try {
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
-          try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
+          // v18.0.143 — reporte del 04-sep («aparece que nunca se los ha realizado y
+          // resulta que sí»): si la lectura del portal falló o quedó incompleta, el
+          // resumen NO se guarda — un tablero vacío sellado como «recién leído» es lo
+          // que hizo que los pintores narraran «nunca se le ha tomado» en una paciente
+          // con laboratorios hechos. Se marca `_lecturaAtheneaFallo` (en el resumen y en
+          // su plan) para que quien pinte diga la verdad sobre el SISTEMA, y la caché
+          // conserva la última lectura buena.
+          const _lecturaFal = (_labsAtheneaCrudos === null) || (_labsSolicitudesNoLeidas > 0);
+          if (_lecturaFal && resumenClinico) {
+            resumenClinico._lecturaAtheneaFallo = true;
+            if (resumenClinico.plan) resumenClinico.plan._lecturaAtheneaFallo = true;
+          } else {
+            try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
+          }
           // Dedup del recuadro: "recuadro.*" se emite UNA vez por paciente por día.
           // Recalcular el resumen (reabrir el modal, refresco interno, re-render) no
           // debe volver a contar "recuadro.mostrado" ni inflar las métricas.
@@ -24312,7 +25086,11 @@
       } else {
         labsArr = await getAtheneaLabsAuto(apt.doc_id);
         if (labsArr) _labsPrefetch = { docId: apt.doc_id, labs: labsArr, ts: Date.now() };
-        else if (o.fresco) atheneaPrincipalFallo = true;
+        // v18.0.143 — reporte del 04-sep: el fallo del portal se registra SIEMPRE, no
+        // solo con lectura fresca. La distinción null/[ ] de v18.0.131 vale para
+        // cualquier lectura: un resumen vacío sellado como leído es lo que hizo leer
+        // «nunca se le ha tomado» en una paciente con laboratorios hechos.
+        else atheneaPrincipalFallo = true;
       }
       // A4 (S+, 02-sep) — se conserva la lectura cruda de Athenea para reponer su marca de
       // lectura incompleta en el consolidado compartido (_labsConsolidadoGuardar).
@@ -24348,12 +25126,16 @@
     try { if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") await mtrRefrescarMedicamentos(pacienteIdLabs); } catch (e) {}
     if (!sigueVivo()) return null;
     const resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
-    // v18.0.131 (barrido por recorridos, hallazgo 4) — si el médico pidió una lectura fresca
-    // (o.fresco) y el portal principal no respondió, NO se guarda: la caché compartida
-    // (que alimenta Agendar, Ordenar, Conducta y el Redactor IA) conserva la última lectura
-    // BUENA con su antigüedad real, en vez de un resumen vacío sellado como «recién leído».
-    if (o.fresco && atheneaPrincipalFallo) {
+    // v18.0.143 (reporte del 04-sep) — si el portal principal no respondió (fresco o no),
+    // NO se guarda: la caché compartida (que alimenta Agendar, Ordenar, Conducta y el
+    // Redactor IA) conserva la última lectura BUENA con su antigüedad real, en vez de un
+    // resumen vacío sellado como «recién leído» — que es exactamente lo que pintaba
+    // «nunca se le ha tomado» en pacientes con exámenes hechos (v18.0.131 solo cubría
+    // o.fresco; ahora cualquier lectura fallida). La marca baja al plan para que los
+    // pintores lo digan con honestidad.
+    if (atheneaPrincipalFallo) {
       resumen._lecturaAtheneaFallo = true;
+      if (resumen && resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
     } else {
       try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
     }
@@ -24517,6 +25299,10 @@
   // de siempre (la primera casilla del registro que esté visible), que es lo que usa el
   // botón del dock. Los dos botones nuevos, en cambio, SABEN a qué casilla pertenecen.
   async function abrirRedactorTextoLibre(apt, opts) {
+    // v18.1.0 — B3 (capa b): `redactor_ia` es de COMPLETO. La puerta del dock
+    // corta en seco, antes de leer datos clínicos; mtrAbrirPanelRedaccion
+    // re-comprueba al montar (defense-in-depth).
+    if (!accesoCap("redactor_ia")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     if (!(typeof S !== "undefined" && S.iaRedaccion === true) || !mtrLeerClaveGemini()) {
       showToast("AMBAR", "Redactar con IA", "La redacción con IA aún no está activada en este computador. Pida al administrador del asistente activarla — es un paso único por equipo.", false);
@@ -25534,6 +26320,9 @@
   // vigila la historia igual que hacía «Riesgo y exámenes» (cada 20 s) y
   // reclasifica solo si el médico escribió algo nuevo.
   async function openPanelPacienteModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): `panel_paciente` es de COMPLETO; sin la capacidad
+    // la apertura corta en seco, antes de leer nada del paciente.
+    if (!accesoCap("panel_paciente")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     const origen = (opts && opts.origen) || "panel";
     try { uxTrack("fn.panel.open", { origen: origen }); } catch (e) {}
@@ -26456,6 +27245,9 @@
     } catch (e) { return false; }
   }
   function openAgendamientoModal(apt) {
+    // v18.1.0 — B3 (capa b): `agendar_control` es de COMPLETO. Sin la capacidad
+    // la apertura corta en seco (LABORATORIOS agenda la toma por openLabSoloModal).
+    if (!accesoCap("agendar_control")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
     // v15.3.0 — Restituido tras adoptar el rediseño de 3 pasos: la version nueva del modal
@@ -28349,6 +29141,16 @@
         if (_labsPrimero && _labsPrimero.labIso) { try { renderLabDayChips(_labsPrimero.labIso); } catch (e) {} }
         else if (_sugeridaControl && _sugeridaControl.ftl) { try { renderLabDayChips(_sugeridaControl.ftl); } catch (e) {} }
         if (_sugeridaControl && _sugeridaControl.iso) renderDayChips(0, 0, _sugeridaControl.iso);
+        // v18.0.140 (c) — AUDITORÍA DEL CABLEADO DEL 🎯 (reporte del 04-sep: «no se
+        // cierra el modal»). Se probó a cerrar aquí a mano el recuadro de decisión,
+        // limpiar `vencOk` y repintar el vencimiento: la mutación demostró que era
+        // código MUERTO, porque `renderDayChips` → `cargarHoras` ya hace las tres
+        // cosas (v17.6.13 limpia dupOk/vencOk; v18.0.118 oculta el recuadro; v15.9.0
+        // repinta el vencimiento con la fecha nueva). El ciclo 🎯 → reconfirmar →
+        // cita creada queda sellado por la prueba end-to-end de suite_15, y la
+        // mutación que la mata es la del reset REAL: `cargarHoras` sin limpiar
+        // `vencOk`. Aquí no se añade nada redundante: si un día `cargarHoras`
+        // deja de reevaluar, esa prueba lo grita.
       });
       const okb = caja.querySelector("#vgl-agm-venc-ok");
       if (okb) okb.addEventListener("click", () => {
@@ -28920,6 +29722,9 @@
   // rango de "5 días hábiles antes" ±3 días que ya usa el flujo completo — nunca vuelve
   // a preguntar nada de la cita principal, que ya existe y no se toca.
   async function openLabSoloModal(apt, opts) {
+    // v18.1.0 — B3 (capa b): `agendar_labs` (toma de muestras) es de LABORATORIOS
+    // y COMPLETO; PÚBLICO y BLOQUEADO no abren. Corta en seco, antes de leer nada.
+    if (!accesoCap("agendar_labs")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
 
     // v14.2.0 — MODO LIBRE (encargo del médico): también se puede agendar SOLO la toma de
@@ -30039,11 +30844,15 @@
               // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
               const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
               const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
-              // v17.26.0 — REFACTOR APROBADO: cuando ya hay una orden vigente, un resultado
-              // vigente en el laboratorio o un resultado reciente, la actividad queda
-              // BLOQUEADA (checkbox deshabilitado) con su aviso visible. La lista de la
-              // sede (mandaPym) sigue mandando: no se bloquea.
-              const bloqueada = !mandaPym && (yaVigente || yaHechoAthenea || hechoYReciente);
+              // v17.26.0/v18.0.135 — REGLA DEL MÉDICO (03-sep-2026): «se puede volver a
+              // reordenar en TODAS las actividades de PyM, a menos que ya se lo haya hecho
+              // y se haya detectado en los resultados de Athenea». La ORDEN VIGENTE EN
+              // EVEREST sale de la lista de bloqueos: una orden sin resultado en el
+              // laboratorio no cubre nada — se vuelve a ordenar y la casilla queda
+              // premarcada (la fórmula «marcar» de abajo ya lo hace sola). Siguen
+              // bloqueando un resultado vigente en Athenea y el resultado reciente sin
+              // vigencia confirmada. La lista de la sede (mandaPym) sigue mandando.
+              const bloqueada = !mandaPym && (yaHechoAthenea || hechoYReciente);
               // v18.0.63 — la marca LOCAL, sin red: este mismo script ya creó hoy la orden de
               // este paquete. No se BLOQUEA la casilla (el médico manda: puede haber un motivo
               // real para repetirla), pero no se premarca y se dice con todas las letras.
@@ -30060,7 +30869,7 @@
                     <div class="vgl-ord-title">${escapeHtml(pymTituloClinico(pkg))} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">Según la lista de prevención de la sede: <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaOrdenadaHoy ? `<div class="vgl-ord-vigwarn">Esta orden <b>ya se generó hoy</b> desde aquí para este paciente. No la dejamos marcada para no duplicarla; si de verdad debe repetirse, márquela usted.</div>` : ""}
-                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Ya existe una orden vigente en Everest para esta actividad. Si considera que debe repetirse, comuníquese con el servicio de órdenes.</div>` : ""}
+                    ${yaVigente ? `<div class="vgl-ord-vigwarn">Hay una orden vigente en Everest para esta actividad pero <b>sin resultado en el laboratorio</b>: se vuelve a ordenar, por eso la casilla queda marcada.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">Este examen ya se realizó y el resultado está vigente en el sistema de laboratorio. No es necesario repetirlo.</div>` : ""}
                     ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">${mandaPym ? "Se realizó hace poco, pero la lista de prevención de la sede la tiene pendiente; por eso la dejamos marcada." : (hechoYReciente ? `Se realizó hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}; por ser tan reciente no la marcamos. Si considera que debe repetirse, selecciónela manualmente.` : "El último resultado es de hace más de 2 años; la dejamos marcada para que pueda solicitarla de nuevo.")}</div>` : ""}
                     <div class="vgl-ord-cups">
@@ -30075,7 +30884,7 @@
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" || _pymSinAct.motivo === "piloto_esta_sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
         </div>
       </div>
     `;
@@ -31582,28 +32391,10 @@
   }
 
   async function _vglCarpetaRecuperarHandle() {
-    try {
-      const db = await _vglCarpetaDb();
-      if (!db) return null;
-      const h = await new Promise((resolve) => {
-        try {
-          const tx = db.transaction(VGL_CARPETA_STORE, "readonly");
-          const r = tx.objectStore(VGL_CARPETA_STORE).get(VGL_CARPETA_ID);
-          r.onsuccess = () => resolve(r.result || null);
-          r.onerror = () => resolve(null);
-        } catch (e) { resolve(null); }
-      });
-      if (!h) return null;
-      // El permiso puede haber caducado. Se consulta sin abrir ningún diálogo: pedirlo
-      // requiere un gesto del médico y no se le va a robar uno al arrancar la página.
-      try {
-        if (typeof h.queryPermission === "function") {
-          const est = await h.queryPermission({ mode: "readwrite" });
-          if (est !== "granted") return null;
-        }
-      } catch (e) { return null; }
-      return h;
-    } catch (e) { return null; }
+    // v18.0.136 — delega en el diagnóstico crudo: solo revive el handle si el permiso
+    // sigue concedido; los demás estados los atiende el banner de arranque del disco.
+    const crudo = await _vglCarpetaRecuperarCrudo();
+    return (crudo && crudo.perm === "granted" && crudo.h) ? crudo.h : null;
   }
 
   // Se llama en el arranque: si la carpeta sigue autorizada, la función revive sola.
@@ -31822,6 +32613,556 @@
     try {
       return await _vglCarpetaLeerFusionado(io, docId);   // 02-sep — tolera ceros de relleno; v18.0.104 — fusiona escisiones
     } catch (e) { return null; }
+  }
+
+  // =====================================================================
+  //  v18.0.136 — MEMORIA EN EL DISCO DEL MÉDICO (blinda la cuota llena)
+  //
+  //  Pedido del médico tras ver en campo el aviso «No se pudo guardar la
+  //  memoria del paciente, el almacenamiento del navegador está lleno»: con
+  //  la cuota de localStorage agotada, la cosecha dejaba de persistir, los
+  //  conteos dejaban de escribirse y la cola de reportes moría en silencio —
+  //  tres síntomas, una sola causa, semanas de historia clínica evaporándose
+  //  sin rastro (el CSV del tablero llevaba días sin recibir un resumen).
+  //
+  //  DECISIÓN DE DISEÑO (delegada por el médico): carpeta POR CÉDULA y
+  //  formato MARKDOWN. «Historias/{cédula}/{cédula} AAAA-MM-DD.md» se
+  //  reescribe dentro del día: es legible a simple vista por el médico,
+  //  ordenable por nombre en el explorador, y una IA (o un colega) lo lee sin
+  //  saber de JSON. La memoria completa del asistente viaja aparte, como
+  //  respaldo maquinable, en «Memoria/vgl_cosecha.json». Los {cédula}.json
+  //  de siempre, en la raíz de la carpeta, NO se tocan.
+  //
+  //  La autorización se pide AL ARRANCAR (banner abajo a la derecha, una vez
+  //  por sesión) y queda PERMANENTE en el equipo: el handle vive en
+  //  IndexedDB y Chrome/Edge lo recuerdan entre sesiones; si el navegador la
+  //  desautoriza tras una actualización, el banner ofrece REACTIVARLA con un
+  //  clic — sin volver a buscar la carpeta.
+  // =====================================================================
+  const VGL_DISCO_RAIZ = "Vigilante de Agenda";
+  const VGL_DISCO_HISTORIAS = "Historias";
+  const VGL_DISCO_MEMORIA = "Memoria";
+  const VGL_DISCO_ARCHIVO_MEMORIA = "vgl_cosecha.json";
+  const VGL_DISCO_DEBOUNCE_MS = 4000;      // el espejo continuo espera 4 s de calma antes de escribir
+  // v18.0.137 — reintento acotado de la escritura en disco: si Chrome retiene el
+  // handle o el close un instante (OneDrive, antivirus, doble pestaña), la escritura
+  // NO se pierde: se rehace hasta este tope de intentos con espera progresiva.
+  const VGL_DISCO_REINTENTOS = 3;
+  const VGL_DISCO_REINTENTO_MS = 600;
+  const VGL_DISCO_MIGRADO_KEY = "vgl_disco_migrado";
+  const VGL_DISCO_BANNER_KEY = "vgl_disco_banner";   // sessionStorage: «off» calla el banner SOLO esta sesión
+
+  function _vglDiscoFechaCorta(ms) {
+    const d = new Date(ms || Date.now());
+    if (isNaN(d.getTime())) return "";
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function _vglDiscoHoraCorta(ms) {
+    const d = new Date(ms || Date.now());
+    if (isNaN(d.getTime())) return "--:--";
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  // Saneo para Markdown: sin caracteres de control, espacios normales, longitud acotada.
+  function _vglDiscoSanear(t, tope) {
+    return String(t == null ? "" : t)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, tope || 300);
+  }
+  function _vglDiscoValor(v, tope) {
+    if (v === true) return "Sí";
+    if (v === false) return "No";
+    if (v == null) return "";
+    if (typeof v === "number") return String(v);
+    if (typeof v === "object") { try { return _vglDiscoSanear(JSON.stringify(v), tope || 2000); } catch (e) { return ""; } }
+    return _vglDiscoSanear(v, tope || 2000);
+  }
+  // La cédula que nombra carpetas y archivos: la CANÓNICA de siempre (normalizeKey), la
+  // misma que indexa el almacén local desde v17.48.0 y los {cédula}.json de la carpeta.
+  function _vglDiscoCedula(docId) {
+    try {
+      const d = normalizeKey(docId);
+      return d ? String(d).slice(0, 20) : "";
+    } catch (e) { return ""; }
+  }
+
+  // Renderer PURO de la historia .md de un paciente (sin disco, sin red): por diseño se
+  // puede ejercer desde el banco sin carpeta alguna. Ordena las claves para que dos
+  // corridas con los mismos datos produzcan el MISMO archivo (diff limpio entre controles).
+  function vglDiscoHistoriaMarkdown(docId, registro) {
+    const ced = _vglDiscoCedula(docId) || _vglDiscoSanear(docId, 20) || "sin-cedula";
+    const reg = (registro && typeof registro === "object" && !Array.isArray(registro)) ? registro : {};
+    const L = [];
+    L.push("# Historia del paciente " + ced);
+    L.push("");
+    const ts = reg.ts || Date.now();
+    L.push("_Memoria del Vigilante de Agenda. Actualizada el " + _vglDiscoFechaCorta(ts) + " a las " + _vglDiscoHoraCorta(ts) + "._");
+    L.push("");
+    const confirmaciones = (reg.confirmaciones && typeof reg.confirmaciones === "object" && !Array.isArray(reg.confirmaciones)) ? reg.confirmaciones : {};
+    const confLineas = [];
+    Object.keys(confirmaciones).sort().forEach((k) => {
+      const c = confirmaciones[k];
+      if (!c || typeof c !== "object" || (c.v !== true && c.v !== false)) return;
+      confLineas.push("- " + (c.v === true ? "Sí" : "No") + " — " + _vglDiscoSanear(k, 140) + (c.ts ? " _(respondido el " + _vglDiscoFechaCorta(c.ts) + ")_" : ""));
+    });
+    if (confLineas.length) { L.push("## Confirmaciones del médico"); L.push(""); confLineas.forEach((x) => L.push(x)); L.push(""); }
+    const factores = (reg.factores && typeof reg.factores === "object" && !Array.isArray(reg.factores)) ? reg.factores : {};
+    const facLineas = [];
+    Object.keys(factores).sort().forEach((k) => {
+      const f = factores[k];
+      if (!f || typeof f !== "object") { const v0 = _vglDiscoValor(f, 400); if (v0) facLineas.push("- **" + _vglDiscoSanear(k, 140) + ":** " + v0); return; }
+      const v = _vglDiscoValor(f.v, 400);
+      if (!v) return;
+      facLineas.push("- **" + _vglDiscoSanear(k, 140) + ":** " + v + (f.ts ? " _(" + _vglDiscoFechaCorta(f.ts) + ")_" : ""));
+    });
+    if (facLineas.length) { L.push("## Factores y hallazgos"); L.push(""); facLineas.forEach((x) => L.push(x)); L.push(""); }
+    const hc = (reg.hcEverest && typeof reg.hcEverest === "object" && !Array.isArray(reg.hcEverest)) ? reg.hcEverest : {};
+    const hcPares = Object.keys(hc).filter((k) => k !== "ts").sort()
+      .map((k) => ({ k: _vglDiscoSanear(k, 140), v: _vglDiscoValor(hc[k], 2000) }))
+      .filter((p) => p.v);
+    if (hcPares.length) {
+      L.push("## Lo leído en Everest (antecedentes y pantallas de la historia)");
+      L.push("");
+      hcPares.forEach((p) => L.push("- **" + p.k + ":** " + p.v));
+      L.push("");
+    }
+    const reservadas = { ts: 1, confirmaciones: 1, factores: 1, hcEverest: 1 };
+    const otrosPares = Object.keys(reg).filter((k) => !reservadas[k]).sort()
+      .map((k) => ({ k: _vglDiscoSanear(k, 140), v: _vglDiscoValor(reg[k], 2000) }))
+      .filter((p) => p.v);
+    if (otrosPares.length) {
+      L.push("## Otros datos de la memoria");
+      L.push("");
+      otrosPares.forEach((p) => L.push("- **" + p.k + ":** " + p.v));
+      L.push("");
+    }
+    L.push("---");
+    L.push("");
+    L.push("_Archivo generado automáticamente por el Vigilante de Agenda a partir de lo leído en Everest y de las respuestas del médico. No sustituye la historia clínica oficial._");
+    return L.join("\n");
+  }
+
+  // ---- E/S de archivos, sobre la MISMA carpeta elegida de la v17 (handle compartido) ----
+  const _vglDiscoDirs = new Map();
+  let _vglDiscoDirsHandle = null;   // identidad del handle que llenó la caché: si el médico cambia de carpeta, la caché de directorios se invalida entera
+  async function _vglDiscoDir(ruta, crear) {
+    // Directorios bajo la carpeta elegida. Los ya resueltos se cachean (y un fallo de
+    // lectura se cachea como null para no repetirlo); con `crear` se materializan.
+    if (!_vglCarpetaHandle) return null;
+    if (_vglDiscoDirsHandle !== _vglCarpetaHandle) {
+      try { _vglDiscoDirs.clear(); } catch (e0) {}
+      _vglDiscoDirsHandle = _vglCarpetaHandle;
+    }
+    const clave = ruta.join("/");
+    if (!crear && _vglDiscoDirs.has(clave)) return _vglDiscoDirs.get(clave) || null;
+    try {
+      let d = _vglCarpetaHandle;
+      for (const parte of ruta) d = await d.getDirectoryHandle(parte, { create: !!crear });
+      _vglDiscoDirs.set(clave, d);
+      return d;
+    } catch (e) {
+      if (!crear) { try { _vglDiscoDirs.set(clave, null); } catch (e2) {} }
+      return null;
+    }
+  }
+
+  const _vglDiscoCola = new Map();
+  function _vglDiscoEscribirSerial(clave, tarea) {
+    // Una escritura a la vez POR ARCHIVO (misma técnica de _vglCarpetaCola): dos
+    // createWritable abiertos sobre el mismo archivo hacen que Chrome lance
+    // NoModificationAllowedError y la escritura se pierda. La clave propia sale del Map
+    // ANTES de la poda anti-evicción, así esta cola nunca descuelga su propio
+    // encadenamiento (mismo hallazgo que v18.0.72 corrigió allá).
+    let previo = _vglDiscoCola.get(clave);
+    if (previo !== undefined) _vglDiscoCola.delete(clave);
+    if (_vglDiscoCola.size > 100) {
+      try { const k = _vglDiscoCola.keys().next(); if (!k.done) _vglDiscoCola.delete(k.value); } catch (e) {}
+    }
+    if (previo === undefined) previo = Promise.resolve();
+    const corrida = previo.then(tarea, tarea);
+    _vglDiscoCola.set(clave, corrida.catch(() => {}));
+    return corrida;
+  }
+
+  function _vglDiscoDormir(ms) {
+    return new Promise(function (ok) { setTimeout(ok, ms); });
+  }
+
+  // v18.0.137 — la escritura reintenta ACOTADA y DENTRO de la tarea serial:
+  // así ningún reintento se encola detrás de otra escritura del mismo archivo
+  // y la exclusión mutua se conserva. Cada intento rehace TODO el recorrido —
+  // carpeta, handle y writable — porque la retención puede morir en cualquiera
+  // de los tres pasos. Si el último intento también fracasa, el error sube
+  // igual que antes: el disparo con retardo ya lo traga sin tumbar el proceso
+  // y la próxima guarda del médico reprograma el espejo con lo completo.
+  async function _vglDiscoEscribirArchivo(dirRuta, nombre, texto) {
+    return _vglDiscoEscribirSerial(dirRuta.join("/") + "/" + nombre, async () => {
+      let ultimoError = null;
+      for (let intento = 1; intento <= VGL_DISCO_REINTENTOS; intento++) {
+        try {
+          const dir = await _vglDiscoDir(dirRuta, true);
+          if (!dir) throw new Error("sin carpeta activa");
+          const fh = await dir.getFileHandle(nombre, { create: true });
+          const w = await fh.createWritable();
+          await w.write(texto);
+          await w.close();
+          return true;
+        } catch (e) {
+          ultimoError = e;
+          // Espera progresiva antes del próximo intento; que el propio
+          // temporizador no enmascare jamás al error de disco original.
+          if (intento < VGL_DISCO_REINTENTOS) {
+            try { await _vglDiscoDormir(VGL_DISCO_REINTENTO_MS * intento); } catch (e2) {}
+          }
+        }
+      }
+      throw ultimoError;
+    });
+  }
+
+  async function _vglDiscoLeerArchivo(dirRuta, nombre) {
+    try {
+      const dir = await _vglDiscoDir(dirRuta, false);
+      if (!dir) return null;
+      const fh = await dir.getFileHandle(nombre, { create: false });
+      const f = await fh.getFile();
+      return await f.text();
+    } catch (e) { return null; }
+  }
+
+  async function _vglDiscoEscribirMdAhora(docId, registro) {
+    const ced = _vglDiscoCedula(docId);
+    if (!ced) return false;
+    const reg = (registro && typeof registro === "object") ? registro : _vglCosechaLeer(docId);
+    if (!reg || typeof reg !== "object") return false;
+    // Un archivo por cédula Y POR DÍA: dentro del día se REESCRIBE (la historia del día
+    // crece con la consulta); al día siguiente nace un archivo nuevo. La fecha sale del
+    // sello del registro, no de un reloj aparte, así el archivo casa con la consulta.
+    const nombre = ced + " " + _vglDiscoFechaCorta(reg.ts || Date.now()) + ".md";
+    await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_HISTORIAS, ced], nombre, vglDiscoHistoriaMarkdown(ced, reg));
+    return true;
+  }
+
+  // ---- Espejo continuo con retardo: se programa aquí, se lee el estado AL DISPARAR ----
+  const _vglDiscoTimers = new Map();
+  function _vglDiscoProgramar(clave, accion) {
+    try {
+      const previo = _vglDiscoTimers.get(clave);
+      if (previo) clearTimeout(previo);
+      const t = setTimeout(() => {
+        try { _vglDiscoTimers.delete(clave); } catch (e) {}
+        try { accion(); } catch (e) {}
+      }, VGL_DISCO_DEBOUNCE_MS);
+      _vglDiscoTimers.set(clave, t);
+    } catch (e) {}
+  }
+  function vglDiscoMemoriaProgramar() {
+    _vglDiscoProgramar("memoria", () => {
+      if (!vglCarpetaElegida()) return;
+      _vglDiscoMemoriaEscribirAhora().catch(() => {});
+    });
+  }
+  function vglDiscoHistoriaProgramar(docId) {
+    const clave = "hist|" + String(docId || "");
+    if (clave === "hist|") return;
+    _vglDiscoProgramar(clave, () => {
+      if (!vglCarpetaElegida()) return;
+      _vglDiscoEscribirMdAhora(docId, null).catch(() => {});
+    });
+  }
+
+  async function _vglDiscoMemoriaEscribirAhora() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      const texto = JSON.stringify({ v: 1, ts: Date.now(), cosecha: _vglCosechaTodo() });
+      await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA, texto);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // RESCATE DE CUOTA: el navegador acaba de RECHAZAR la memoria del paciente, así que
+  // esto corre YA, sin retardo. Escribe el almacén completo (con la fusión recién
+  // calculada) y la historia .md del día. Devuelve true si el espejo quedó en el disco.
+  async function vglDiscoRescatarCosecha(id, fusion, todo) {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      let todoFinal = todo;
+      if (!todoFinal || typeof todoFinal !== "object") {
+        todoFinal = Object.assign({}, _vglCosechaTodo());
+        if (id && fusion) todoFinal[id] = fusion;
+      }
+      await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA,
+        JSON.stringify({ v: 1, ts: Date.now(), cosecha: todoFinal }));
+      if (id && fusion) { try { await _vglDiscoEscribirMdAhora(id, fusion); } catch (e2) {} }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Recuperación al arrancar (o al activar la carpeta): fusión POR REGISTRO, gana el
+  // sello más reciente de cada lado. Un navegador purgado por cuota recupera lo perdido;
+  // un disco atrasado jamás pisa memoria más fresca del navegador.
+  async function _vglDiscoMemoriaRestaurar() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      const texto = await _vglDiscoLeerArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA);
+      if (!texto || !String(texto).trim()) return false;
+      let disco = null;
+      try { disco = JSON.parse(texto); } catch (e) { return false; }
+      const remota = (disco && disco.cosecha && typeof disco.cosecha === "object" && !Array.isArray(disco.cosecha)) ? disco.cosecha : null;
+      if (!remota) return false;
+      const mezcla = Object.assign({}, _vglCosechaTodo());
+      let fusiono = false;
+      for (const k of Object.keys(remota)) {
+        const r = remota[k];
+        if (!r || typeof r !== "object" || Array.isArray(r)) continue;
+        const a = mezcla[k];
+        if (!a || typeof a !== "object") { mezcla[k] = r; fusiono = true; continue; }
+        if ((r.ts || 0) > (a.ts || 0)) { mezcla[k] = r; fusiono = true; }
+      }
+      if (!fusiono) return false;
+      const escribio = safeWriteJSON(VGL_COSECHA_KEY, mezcla);
+      if (escribio) {
+        _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
+        try {
+          showToast("VERDE", "Memoria de pacientes recuperada",
+            "El navegador había perdido parte de la memoria de sus pacientes (espacio lleno); se recuperó desde la carpeta de su computador. Si este aviso se repite, conviene liberar espacio del navegador.",
+            true, "disco-restaurada");
+        } catch (e2) {}
+        return true;
+      }
+      // El navegador SIGUE sin poder persistir: la fusión se sirve igual durante esta
+      // sesión por el memo (texto viejo del disco + objeto fresco), la misma argucia del
+      // rescate de cuota de _vglCosechaGuardar.
+      _vglCosechaCacheTodo = mezcla;
+      _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
+      try {
+        showToast("AMBAR", "Memoria de pacientes solo en esta sesión",
+          "El navegador sigue sin espacio para guardar la memoria de sus pacientes. Lo aprendido está a salvo en la carpeta de su computador y funciona durante esta consulta; cuando pueda, libere espacio del navegador.",
+          true, "disco|solo-sesion");
+      } catch (e2) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // MIGRACIÓN DE UNA SOLA VEZ: vuelca TODA la cosecha del navegador a la carpeta (una
+  // historia .md por paciente + el respaldo maquinable completo). El candado se marca
+  // ANTES de escribir para que un cierre a mitad no la repita en cada arranque; repetir
+  // la escritura es idempotente (los .md se reescriben con el mismo contenido).
+  async function vglDiscoMigrar() {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      if (localStorage.getItem(VGL_DISCO_MIGRADO_KEY) === "1") return false;
+      try { localStorage.setItem(VGL_DISCO_MIGRADO_KEY, "1"); } catch (e0) {}
+      const todo = _vglCosechaTodo();
+      const claves = Object.keys(todo || {}).slice(0, VGL_COSECHA_MAX_PACIENTES);
+      let escritos = 0;
+      for (const k of claves) {
+        try { if (await _vglDiscoEscribirMdAhora(k, todo[k])) escritos++; } catch (e1) {}
+      }
+      try {
+        await _vglDiscoEscribirArchivo([VGL_DISCO_RAIZ, VGL_DISCO_MEMORIA], VGL_DISCO_ARCHIVO_MEMORIA,
+          JSON.stringify({ v: 1, ts: Date.now(), cosecha: todo }));
+      } catch (e1) {}
+      if (escritos > 0) {
+        try {
+          showToast("VERDE", "Historias guardadas en su computador",
+            "Se archivaron " + escritos + (escritos === 1 ? " historia de paciente" : " historias de pacientes") + " en la carpeta «Vigilante de Agenda» de su computador, junto con la memoria completa del asistente. Cada control actualiza su historia automáticamente.",
+            true, "disco|migrado");
+        } catch (e1) {}
+      }
+      try { uxTrack("disco.migrado", { pacientes: escritos }); } catch (e1) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Diagnóstico CRUDO del permiso de la carpeta guardada en el equipo: distingue
+  // «granted» (revive solo), «prompt» (el navegador necesita un gesto del médico para
+  // reactivar), «denied», «sinhandle» (nunca se eligió carpeta), «sinapi» (IndexedDB
+  // inutilizable) y «error». No abre ningún diálogo; es la base del arranque y del banner.
+  async function _vglCarpetaRecuperarCrudo() {
+    try {
+      const db = await _vglCarpetaDb();
+      if (!db) return { perm: "sinapi", h: null };
+      const h = await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(VGL_CARPETA_STORE, "readonly");
+          const r = tx.objectStore(VGL_CARPETA_STORE).get(VGL_CARPETA_ID);
+          r.onsuccess = () => resolve(r.result || null);
+          r.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+      if (!h) return { perm: "sinhandle", h: null };
+      try {
+        if (typeof h.queryPermission === "function") {
+          const est = await h.queryPermission({ mode: "readwrite" });
+          if (est === "denied") return { perm: "denied", h: h };
+          if (est !== "granted") return { perm: "prompt", h: h };
+        }
+      } catch (e) { return { perm: "error", h: h }; }
+      return { perm: "granted", h: h };
+    } catch (e) { return { perm: "error", h: null }; }
+  }
+
+  // Carpeta lista (arranque con permiso vigente, botón del banner o Ajustes): restaura
+  // la memoria que el disco tenga más fresca, migra la cosecha la primera vez y deja el
+  // espejo continuo escribiendo desde ya.
+  async function _vglDiscoActivar(origen) {
+    try {
+      if (!vglCarpetaElegida()) return false;
+      try { uxTrack("disco.activado", { desde: String(origen || "arranque") }); } catch (e1) {}
+      try {
+        showToast("VERDE", "Carpeta del Vigilante lista",
+          "Las historias de sus pacientes y la memoria del asistente se guardan en la carpeta «Vigilante de Agenda» de este computador; ya no dependen del espacio del navegador.",
+          false, "disco|activado");
+      } catch (e1) {}
+      try { await _vglDiscoMemoriaRestaurar(); } catch (e1) {}
+      try { await vglDiscoMigrar(); } catch (e1) {}
+      try { await _vglDiscoMemoriaEscribirAhora(); } catch (e1) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Orquestador del arranque, llamado por el boot justo después de vglCarpetaRestaurar:
+  // sin FS API no hay nada que hacer; permiso vigente → revive el handle y activa;
+  // «prompt» (el navegador bajó el permiso tras una actualización) → banner de
+  // REACTIVACIÓN de un clic, sin volver a buscar la carpeta; sin handle guardado →
+  // banner para elegirla la primera vez; el resto → silencio (desde Ajustes se reactiva).
+  async function _vglDiscoArranque() {
+    try {
+      if (!vglCarpetaDisponible()) return false;
+      const crudo = await _vglCarpetaRecuperarCrudo();
+      // v18.0.140 (j) — los banners de pedir/reactivar carpeta solo se ofrecen en
+      // HCHealth (allí es donde se escriben historias); la reactivación silenciosa
+      // del handle (granted) sigue GLOBAL para no perder la carpeta al pasear por
+      // otras páginas del Everest.
+      const enHC = (typeof _enModuloHCHealth === "function") ? _enModuloHCHealth() : true;
+      if (crudo.perm === "granted" && crudo.h) {
+        _vglCarpetaHandle = crudo.h;
+        await _vglDiscoActivar("arranque");
+        return true;
+      }
+      if (crudo.perm === "prompt" && crudo.h) {
+        if (!enHC) return false;
+        try { uxTrack("disco.banner", { motivo: "reactivar" }); } catch (e1) {}
+        vglDiscoBannerPintar("reactivar");
+        return false;
+      }
+      if (crudo.perm === "sinhandle") {
+        if (!enHC) return false;
+        try { uxTrack("disco.banner", { motivo: "elegir" }); } catch (e1) {}
+        vglDiscoBannerPintar("elegir");
+        return false;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  // ---- Banner de autorización (abajo a la derecha, una vez por sesión como máximo) ----
+  function _vglDiscoBannerEstilo() {
+    try {
+      if (typeof document === "undefined" || !document) return;
+      if (document.getElementById("vgl-disco-banner-css")) return;
+      const css = document.createElement("style");
+      css.id = "vgl-disco-banner-css";
+      css.textContent = [
+        "#vgl-disco-banner{position:fixed;right:16px;bottom:16px;z-index:2147482000;max-width:340px;background:#101418;color:#f2f5f7;border:1px solid #2a3340;border-radius:12px;padding:14px 16px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45)}",
+        "#vgl-disco-banner h3{margin:0 0 6px;font-size:14px;color:#7fd1a8}",
+        "#vgl-disco-banner p{margin:0 0 10px}",
+        "#vgl-disco-banner .vgl-disco-botones{display:flex;gap:8px;flex-wrap:wrap}",
+        "#vgl-disco-banner button{cursor:pointer;border:0;border-radius:8px;padding:7px 12px;font:600 12.5px system-ui,sans-serif}",
+        "#vgl-disco-banner .vgl-disco-ok{background:#1f8a5f;color:#fff}",
+        "#vgl-disco-banner .vgl-disco-no{background:#2a3340;color:#c9d4de}"
+      ].join("\n");
+      const ancla = document.head || document.documentElement;
+      if (ancla && ancla.appendChild) ancla.appendChild(css);
+    } catch (e) {}
+  }
+
+  // Pinta el banner («elegir» primera vez, «reactivar» permiso caído). «Ahora no» o un
+  // error lo callan SOLO por esta sesión; al día siguiente vuelve a ofrecerse.
+  function vglDiscoBannerPintar(modo) {
+    try {
+      if (typeof document === "undefined" || !document) return false;
+      // v18.0.140 (j) — el banner de elegir/reactivar carpeta SOLO tiene sentido en
+      // HCHealth; en el resto de páginas del Everest volvía a asomar tras cada repintado
+      // de fallo del botón aceptar. Doble guarda: esto tapa los repintados directos y
+      // `_vglDiscoArranque` condiciona además los uxTrack para no medir ruido.
+      if (typeof _enModuloHCHealth === "function" && !_enModuloHCHealth()) return false;
+      try { if (sessionStorage.getItem(VGL_DISCO_BANNER_KEY) === "off") return false; } catch (e0) {}
+      vglDiscoBannerQuitar();
+      _vglDiscoBannerEstilo();
+      const reactivar = modo === "reactivar";
+      const div = document.createElement("div");
+      div.id = "vgl-disco-banner";
+      const titulo = reactivar ? "Reactivar la carpeta del Vigilante" : "Guardar historias en este computador";
+      const cuerpo = reactivar
+        ? "Su navegador pidió de nuevo el permiso para escribir en la carpeta donde están las historias de sus pacientes. Con el botón verde se reactiva con un clic; no hace falta volver a buscar la carpeta."
+        : "Para que las historias de sus pacientes queden guardadas en este computador (y no dependan del espacio del navegador), autorice una carpeta. Se elige una sola vez y este equipo la recuerda.";
+      div.innerHTML = "<h3>" + titulo + "</h3><p>" + cuerpo + "</p>" +
+        "<div class='vgl-disco-botones'>" +
+        "<button class='vgl-disco-ok' id='vgl-disco-ok'>" + (reactivar ? "Reactivar carpeta" : "Elegir carpeta…") + "</button>" +
+        "<button class='vgl-disco-no' id='vgl-disco-no'>Ahora no</button>" +
+        "</div>";
+      const ancla = document.body || document.documentElement;
+      if (!ancla || !ancla.appendChild) return false;
+      ancla.appendChild(div);
+      const ok = document.getElementById("vgl-disco-ok");
+      const no = document.getElementById("vgl-disco-no");
+      if (ok && ok.addEventListener) ok.addEventListener("click", _vglDiscoBannerAceptar);
+      if (no && no.addEventListener) no.addEventListener("click", _vglDiscoBannerRechazar);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function vglDiscoBannerQuitar() {
+    try {
+      if (typeof document === "undefined" || !document) return;
+      const div = document.getElementById("vgl-disco-banner");
+      if (div && div.parentNode && div.parentNode.removeChild) div.parentNode.removeChild(div);
+    } catch (e) {}
+  }
+
+  async function _vglDiscoBannerAceptar() {
+    try {
+      vglDiscoBannerQuitar();
+      // Reactivación: el handle ya vive en este equipo; solo falta el gesto del médico
+      // para que el navegador lo reautorice — sin volver a buscar la carpeta.
+      const crudo = await _vglCarpetaRecuperarCrudo();
+      if (crudo.h && crudo.perm !== "sinhandle" && typeof crudo.h.requestPermission === "function") {
+        try {
+          const est = await crudo.h.requestPermission({ mode: "readwrite" });
+          if (est === "granted") {
+            _vglCarpetaHandle = crudo.h;
+            await _vglDiscoActivar("banner");
+            return true;
+          }
+          vglDiscoBannerPintar("reactivar");
+          return false;
+        } catch (e1) { vglDiscoBannerPintar("reactivar"); return false; }
+      }
+      // Primera vez (sin handle guardado): diálogo del sistema para ELEGIR la carpeta.
+      const r = await vglCarpetaElegir();
+      if (r && r.ok) {
+        await _vglDiscoActivar("banner");
+        return true;
+      }
+      const motivo = String((r && r.motivo) || "");
+      if (motivo && !/cancel/i.test(motivo)) {
+        try { showToast("ROJO", "No se pudo activar la carpeta", motivo, true, "disco|banner-fallo"); } catch (e2) {}
+      }
+      // Cancelar el diálogo NO silencia el banner: la decisión debe tomarla el médico.
+      vglDiscoBannerPintar("elegir");
+      return false;
+    } catch (e) { return false; }
+  }
+
+  function _vglDiscoBannerRechazar() {
+    vglDiscoBannerQuitar();
+    // «Ahora no» calla el banner SOLO por esta sesión; al día siguiente vuelve a
+    // ofrecerse, porque la memoria en disco es justamente el blindaje de la cuota llena.
+    try { sessionStorage.setItem(VGL_DISCO_BANNER_KEY, "off"); } catch (e) {}
+    try { uxTrack("disco.banner_rechazado"); } catch (e) {}
   }
 
   function renderResumen() {
@@ -32100,8 +33441,8 @@
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO. Decisión suya (20-ago): un .json por cédula
              con el historial completo de lo que el asistente vio en cada control. Vive en SU
              computador; nada de esto viaja por red. -->
-        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
-        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: se guarda una instantánea por control." : "Sin carpeta elegida: el historial solo vive en este navegador."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
+        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. Además respalda la memoria del asistente en <b>Vigilante de Agenda/Memoria/</b> y una historia legible por día en <b>Vigilante de Agenda/Historias/&lt;cédula&gt;/</b>: si el navegador se queda sin espacio, lo aprendido se recupera desde su computador. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
+        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: instantánea por control, historia diaria en «Historias/» y memoria respaldada en «Memoria/»." : "Sin carpeta elegida: el historial y la memoria solo viven en este navegador (vulnerables al espacio lleno)."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
         <!-- v15.8.0 (N4) — texto REAL de los SMS, capturado por el administrador. Vacío = la
              vista previa describe el contenido sin inventar redacción. -->
         <div class="vgl-fld"><label>Texto real del SMS de cita<span class="vgl-hint">Péguelo tal cual llegó a un celular de prueba, cambiando los datos concretos por <b>{fecha} {hora} {sede} {profesional}</b>. La vista previa del agendamiento lo mostrará exacto. (Cómo capturarlo: guía CAPTURAR_MENSAJES de la entrega.)</span></label><textarea id="c-sms-plantilla" rows="3" placeholder="(sin capturar aún)">${escapeHtml(S.smsPlantillaCita || "")}</textarea></div>
@@ -32288,10 +33629,13 @@
       }
       const r = await vglCarpetaElegir();
       if (est) est.textContent = r.ok
-        ? "Carpeta «" + r.nombre + "» activa: desde ahora se guarda una instantánea por control."
+        ? "Carpeta «" + r.nombre + "» activa: instantánea por control, historias diarias y memoria respaldadas en su computador."
         : r.motivo;
       if (n) n.textContent = r.ok ? "✓" : "—";
       if (r.ok) carpBtn.textContent = "Cambiar carpeta";
+      // v18.0.136 — al quedar la carpeta lista desde Ajustes también se restauran/migran
+      // la memoria y las historias al disco (mismo camino que el banner de arranque).
+      if (r.ok) { try { _vglDiscoActivar("ajustes"); } catch (e2) {} }
     });
     const exportBtn = q("#c-export-logs"); if (exportBtn) exportBtn.addEventListener("click", () => vglExportLogs());
     const testBtn = q("#c-test"); if (testBtn) testBtn.addEventListener("click", testNotifications);
@@ -34602,6 +35946,7 @@
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
+    try { _vglDiscoArranque(); } catch (e) {}    // v18.0.136 — memoria en disco: revive, restaura, migra o pide autorizar la carpeta
     applySettings();   // aplica tus ajustes guardados (tolerancia, refresco, tema, sonido…) y arranca el reloj
     avisarSiActualizado();
     const tAutoUpd = setTimeout(chequearAutoUpdateLento, 6000);
@@ -34661,8 +36006,17 @@
     // Crónicos, y si el oyente llega después, esa carga ya pasó y nos la perdimos.
     try { _instalarOyenteTablaOficial(); } catch (e) {}
     const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    // v18.1.0 — B2: lista de acceso remota + descubrimiento de uids. El primer
+    // refresco sale a los 9 s (mismo respeto por el arranque que entorno y
+    // flush; la caché local ya manda desde el instante 0) y luego cada 4 h.
+    // La identidad se sondea cada 30 min — Everest revela el UsuarioId solo
+    // cuando el médico abre su agenda, y el candado vgl_rep_acceso lo deja
+    // en una fila por equipo y por día.
+    const tAccesoBoot = setTimeout(() => { try { accesoRefrescarLista(); } catch (e) {} }, 9000);
+    const tAccesoLoop = setInterval(() => { try { accesoRefrescarLista(); } catch (e) {} }, ACCESO_REFRESCO_MS);
+    const tAccesoUid = setInterval(() => { try { repAccesoDiario(); } catch (e) {} try { _accesoDenegFlush(); } catch (e) {} }, 1800000);
     if (Array.isArray(state.timers)) {
-      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tAccesoBoot, tAccesoLoop, tAccesoUid);
       // v15.x — Sin esto, emergencyTeardown() NO podia cancelarlos: el kill-switch retiraba
       // la interfaz y anunciaba "Pausa de seguridad remota activa" mientras la pestaña seguia
       // consultando SharePoint y desempacando el libro de PyM cada 10 min, indefinidamente.
@@ -35103,8 +36457,14 @@
         const resto = lista.length - 4;
         return " " + etiqueta + ": " + vistos + (resto > 0 ? " y " + resto + " más" : "") + ".";
       };
+      // v18.0.143 — reporte del 04-sep: con la lectura del portal fallida, los faltantes
+      // no se narran como «nunca se le ha tomado» (afirmación sobre el paciente) sino
+      // como «no consta tomado (no se pudo leer el laboratorio)» (verdad del sistema).
+      const _noLeido = plan && plan._lecturaAtheneaFallo ? true : false;
       const detalle = nombrar(venc, venc.length === 1 ? "Vencido" : "Vencidos")
-        + nombrar(falt, falt.length === 1 ? "Nunca se le ha tomado" : "Nunca se le han tomado");
+        + nombrar(falt, falt.length === 1
+          ? (_noLeido ? "No consta tomado (no se pudo leer el laboratorio)" : "Nunca se le ha tomado")
+          : (_noLeido ? "No constan tomados (no se pudo leer el laboratorio)" : "Nunca se le han tomado"));
       return { iso: C, ftl: F, ajustada: true, analito: primero ? primero.nombre : null,
         vencidosNombres: venc, faltantesNombres: falt,
         motivo: "Hay exámenes pendientes" + progTxt + "." + detalle +
@@ -35226,7 +36586,12 @@
       adelantoDias: (typeof a.adelantoDias === "number") ? a.adelantoDias : null,
     });
     const ordenar = (plan.ordenar || []).map((a) => {
-      if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
+      // v18.0.143 — reporte del 03-sep: «aparece que nunca se los ha realizado y resulta
+      // que sí se los hizo». Con la lectura de Athenea fallida, esta fila decía "Nunca
+      // se le ha tomado" de laboratorios que sí constan en el portal. Ahora dice la
+      // verdad del sistema, no una afirmación falsa sobre el paciente.
+      if (a.subestado === "sin_historial") return fila(a, plan._lecturaAtheneaFallo
+        ? "No consta tomado (no se pudo leer el laboratorio)" : "Nunca se le ha tomado");
       // v17.6.87 — hay resultado pero sin fecha. Antes caía en la rama de arriba y se le
       // decía al médico "Nunca se le ha tomado" de un examen que SÍ está hecho y cuyo
       // resultado puede ser crítico. Se muestra el valor para que lo vea, y se dice por qué
@@ -35235,6 +36600,10 @@
         return fila(a, "Hay un resultado (" + (a.valor != null ? a.valor : "sin valor legible")
           + ") pero sin fecha: no se puede saber si sigue vigente");
       }
+      // v18.0.143 — el subestado de falla gastada se ELIMINA del pintor: pasada la ventana
+      // del 50 % las fallas terapéuticas rigen por la vigencia natural (reporte del
+      // 03-sep), así que el analito cae en las ramas de vigente de abajo con vence =
+      // fecha de la norma. Ya nadie se ordena "ya" por falla terapéutica en el tablero.
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
       // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
       // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
@@ -35277,7 +36646,14 @@
     const enOrdenar = new Set(ordenar.map((x) => x.clave));
     const vigentes = [].concat(plan.drivers || [], plan.pasajeros || [])
       .filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !enOrdenar.has(a.clave))
-      .map((a) => fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence)))
+      // v18.0.143 — falla_natural (ventana del 50 % vencida, norma viva) se cuenta aquí
+      // porque VIGENTE es lo que es, pero con el texto que cuenta las dos fechas: la
+      // falla terapéutica no adelanta la orden (04-sep); rige la vigencia natural.
+      .map((a) => a.subestado === "falla_natural"
+        ? fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence) + " · " + (a.clave === "GLUCOSA" ? "HbA1c " : "")
+          + "fuera de meta: la ventana del 50 % venció el " + mtrFechaLegible(a.venceFalla)
+          + " — rige la vigencia natural")
+        : fila(a, "Vigente hasta el " + mtrFechaLegible(a.vence)))
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0));
 
     const bloqueados = (plan.bloqueados || []).map((a) => ({ nombre: a.nombre, motivo: a.motivo || "" }));
@@ -40236,6 +41612,18 @@
     return true;
   }
 
+  // v18.0.140 (f) — ¿este sábado concreto puede ser LA fecha sugerida por el motor?
+  // Regla más exigente que la de los chips: los sábados «por confirmar» (grupo en
+  // conjetura o conflicto) y el 5º sábado siguen OFRECIÉNDOSE a un clic con su title,
+  // pero la sugerencia automática ya no puede mandar al médico a un sábado que no es
+  // suyo. Se exige grupo fiable Y constancia positiva de que ese sábado lo trabaja él.
+  function mtrSabadoSugerible(iso, grupoSabado) {
+    if (!mtrSabadosHabilitados(grupoSabado)) return false;
+    const g = mtrGrupoSabadoFiable(grupoSabado);
+    if (g === null) return false;
+    return mtrMedicoTrabajaSabado(iso, g) === true;   // null (5º sábado) no es sugerible
+  }
+
   // Control tras la toma de laboratorios.
   //  · v16.9.0 — El objetivo es +7 DÍAS de la toma, en todos los caminos (decisión del
   //    médico del 20-ago). Si el día 7 no sirve (festivo, domingo, o sábado sin agenda
@@ -40253,6 +41641,16 @@
     const maxDias = Number.isFinite(Number(o.maxDias)) ? Number(o.maxDias) : MTR_DIAS_MAX_CONTROL;
     const objetivo = Number.isFinite(Number(o.objetivoDias)) ? Number(o.objetivoDias) : MTR_DIAS_CONTROL_OBJETIVO;
     const grupo = (o.grupoSabado !== undefined && o.grupoSabado !== null) ? o.grupoSabado : (o.sabadosHabilitados || null);
+    // v18.0.140 (f) — modo estricto de sugerencia: con `sabadoSoloFiable` los sábados
+    // no sugeribles (grupo no fiable, sábado de otro grupo, 5º sábado) se saltan en la
+    // espiral en vez de ganársela por cercanía. Default false: los demás llamadores
+    // (p. ej. mtrControlDesdeLabs) conservan la conducta permisiva histórica.
+    const sabadoSoloFiable = o.sabadoSoloFiable === true;
+    const diaValido = (cand) => {
+      if (!mtrDiaValidoParaControlConSabado(cand, grupo)) return false;
+      if (sabadoSoloFiable && mtrFechaDesdeIso(cand).getUTCDay() === 6 && !mtrSabadoSugerible(cand, grupo)) return false;
+      return true;
+    };
     // Orden de preferencia: el objetivo primero, y desde ahí en espiral.
     const rango = [];
     const vistos = new Set();
@@ -40262,7 +41660,7 @@
 
     for (const n of rango) {
       const cand = mtrSumarDias(isoFtl, n);
-      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+      if (diaValido(cand)) {
         return {
           fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
           motivo: n === objetivo
@@ -40277,7 +41675,7 @@
     // vez de devolver null y dejar al médico sin fecha.
     for (let n = maxDias + 1; n <= maxDias + 14; n++) {
       const cand = mtrSumarDias(isoFtl, n);
-      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+      if (diaValido(cand)) {
         return {
           fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
           motivo: "no había día válido dentro de los " + maxDias + " días; se corrió a la semana siguiente",
@@ -40464,16 +41862,20 @@
       return v > meta * margen;
     }
 
-    // v17.28.0 — encargo del médico (28-ago): "glicemia >130" entra a la regla del 50%.
-    // Mismo criterio que HbA1c: solo tiene sentido contra una meta glicémica en un
-    // diabético — un hipertenso sin diabetes no tiene "glicemia fuera de meta". Reusa
-    // mtrMetaGlicemiaGeneral() (130 mg/dL), la misma meta que ya usa el eje de falla
-    // terapéutica desde v17.6.84 — un solo número, no dos que puedan divergir.
+    // v18.0.135 — entrevista del 02-sep, verbatim: «la glucosa no se repite por sí sola,
+    // se repite si la HbA1c está fuera de metas». El valor de la glicemia NO participa
+    // en el juicio: una glucosa de 300 con HbA1c en meta NO adelanta la toma, y una
+    // glucosa de 112 con HbA1c de 9.5 SÍ la adelanta — porque el que manda es el control
+    // crónico, no lo que comió esa mañana. Sin HbA1c conocida no se juzga: la glucosa
+    // conserva su vigencia normativa completa. La meta contra la que se mide es la MISMA
+    // de la rama HBA1C (c.metaHba1c o mtrMetaHba1cGeneral), no la meta glicémica.
     if (clave === "GLUCOSA") {
       if (!c.esDm2) return null;
-      const meta = (typeof mtrMetaGlicemiaGeneral === "function") ? mtrMetaGlicemiaGeneral() : null;
+      const hba1c = (c.valorHba1c !== null && c.valorHba1c !== undefined) ? mtrFloat(c.valorHba1c) : null;
+      if (hba1c === null) return null;
+      const meta = (c.metaHba1c !== null && c.metaHba1c !== undefined) ? mtrFloat(c.metaHba1c) : mtrMetaHba1cGeneral();
       if (meta === null) return null;
-      return v > meta * margen;
+      return hba1c > meta * margen;
     }
     return null;
   }
@@ -40636,10 +42038,12 @@
   // Para el LDL el piso equivalente (28 d) nunca se alcanza con estas vigencias, así que
   // esta guarda no le cambia nada.
   // Solo las claves que de verdad pueden acortarse: son las de MTR_CLAVES_CON_META. La
-  // glicemia NO está ahí (mtrFueraDeMeta devuelve null para GLUCOSA), así que no se lista
-  // aquí un piso que nunca se aplicaría — sería código que insinúa un comportamiento que no
-  // existe. Si algún día la glicemia entra en MTR_CLAVES_CON_META, su piso se añade aquí.
-  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl" };
+  // glicemia está ahí desde v17.28.0 y desde v18.0.135 sí se acorta (con la HbA1c fuera de
+  // metas, ver mtrFueraDeMeta): su piso es el de la fila "glicemia" de MTR_RECONTROL
+  // (14 d), el mismo de su fecha de recontrol por falla terapéutica — un solo número, el
+  // mismo que fija la cita. El comentario que había aquí decía que no estaba listada
+  // «porque no se acorta»; eso dejó de ser cierto hace versiones.
+  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl", GLUCOSA: "glicemia" };
   function mtrAcortarPorFueraDeMeta(vigencia, fuera, clave) {
     if (fuera !== true) return vigencia;
     if (typeof vigencia !== "number" || !isFinite(vigencia)) return vigencia;
@@ -40838,10 +42242,35 @@
     const diasParaVencer = (hoy && vence)
       ? Math.round((mtrFechaDesdeIso(vence).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
       : null;
+    // v18.0.135 — entrevista del 02-sep, verbatim: «una cosa es estar en falla terapéutica
+    // y por eso se repite al 50 % de su vigencia y otra muy diferente estar vencida».
+    // VENCIDO solo al agotar la vigencia NORMATIVA. v18.0.143 (ordenanza del 04-sep)
+    // completó la regla: agotada la ventana del 50 % con la norma todavía viva, tampoco
+    // se repite YA — rigen las vigencias naturales de cada analito (estado "D",
+    // subestado "falla_natural"). Solo puede ocurrir cuando el 50 % se aplicó de verdad
+    // (kdigoFrena/medicoFrena/estadioFrena dejan vigencia === norma y entonces las dos
+    // fechas coinciden, sin zona intermedia).
+    const venceNorma = mtrSumarDias(fecha, vigenciaNorma);
+    const diasParaVencerNorma = (hoy && venceNorma)
+      ? Math.round((mtrFechaDesdeIso(venceNorma).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
+      : null;
 
     let estado = "D";
     let subestado = "vigente";
-    if (diasParaVencer !== null && diasParaVencer < 0) { estado = "A"; subestado = "vencido"; }
+    // v18.0.143 — ordenanza del 04-sep, verbatim: «LAS FALLAS TERAPÉUTICAS NO SE TIENEN
+    // EN CUENTA COMO VENCIMIENTO, EN CASO DE QUE YA HAYA PASADO LA VENTANA DEL 50 % PUES
+    // SE UTILIZAN ENTONCES LAS VIGENCIAS NATURALES DE CADA ANALITO». La ventana del 50 %
+    // quemada con la norma viva ya NO dispara repetición YA: el examen queda vigente
+    // ("D") gobernado por su fecha natural, con subestado "falla_natural" para que la
+    // pantalla cuente la historia completa. VENCIDO solo al agotar la NORMA.
+    const fallaNatural = (diasParaVencer !== null && diasParaVencer < 0
+      && diasParaVencerNorma !== null && diasParaVencerNorma >= 0);
+    if (fallaNatural) {
+      subestado = "falla_natural";
+    } else if (diasParaVencer !== null && diasParaVencer < 0) {
+      estado = "A";
+      subestado = "vencido";
+    }
     const racNum = mtrFloat(c.rac);
     // v17.6.75 — auditoría 25-ago (1.17): antes el guard `estado !== "A"` bloqueaba la
     // promoción a Estado R cuando el RAC YA estaba vencido — se quedaba como "A" normal,
@@ -40853,14 +42282,31 @@
     // de un Estado A normal (piso 14/techo 21, en la lista de vencidos, excluido del
     // cálculo de "próximo vencimiento futuro") — nunca se relaja CERO VENCIDOS solo por
     // reetiquetarlo a R.
-    const vencidoBase = estado === "A";
+    // v18.0.143 — vencidoBase queda atado al subestado "vencido" (norma agotada) para que
+    // `mtrPlanParaclinicos` le dé su urgencia de piso 14/techo 21 SOLO al vencido real;
+    // la falla con la ventana del 50 % gastada es un vigente más (estado "D").
+    const vencidoBase = estado === "A" && subestado === "vencido";
     if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
       estado = "R"; subestado = "albuminuria";
     }
+    // v18.0.143 — con la falla gastada se publica la fecha NATURAL (venceNorma), no la de
+    // la ventana del 50 %: publicar la fecha quemada era lo que arrastraba la toma de
+    // septiembre en el reporte del 04-sep. La fecha de la ventana viaja aparte, en
+    // venceFalla/diasParaVencerFalla (null en todos los demás casos), para que la
+    // pantalla pueda contar la historia completa sin volver a mandar sobre la fecha.
+    const vencePublicado = fallaNatural ? venceNorma : vence;
+    const diasPublicado = fallaNatural ? diasParaVencerNorma : diasParaVencer;
     return {
       clave: clave, nombre: nombre, estado: estado, subestado: subestado,
-      vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
-      diasParaVencer: diasParaVencer,
+      vigenciaDias: (fallaNatural ? vigenciaNorma : vigencia), fecha: fecha, valor: valor,
+      vence: vencePublicado,
+      diasParaVencer: diasPublicado,
+      venceFalla: (fallaNatural ? vence : null),
+      diasParaVencerFalla: (fallaNatural ? diasParaVencer : null),
+      // v18.0.135 — la fecha y los días que faltan según la NORMA (sin el recorte del
+      // 50 %). Solo difieren de vence/diasParaVencer cuando el acortamiento aplicó.
+      venceNorma: venceNorma,
+      diasParaVencerNorma: diasParaVencerNorma,
       // v17.6.75 — ver el comentario grande arriba: verdad de terreno de "ya estaba
       // vencido", independiente de la relabeling a R por albuminuria.
       vencidoBase: vencidoBase,
@@ -40892,14 +42338,31 @@
         // El sufijo es de la promoción a R, así que se ata a ella y no a estar vencido.
         ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha
             + (estado === "R" && subestado === "albuminuria" ? " · albuminuria: vigilancia estrecha" : ""))
-        : ("vigente hasta el " + vence))
+        : (subestado === "falla_natural"
+          // v18.0.143 — reporte del 03-sep: LAS FALLAS TERAPÉUTICAS NO SE TIENEN EN CUENTA
+          // COMO VENCIMIENTO. Pasada la ventana del 50 % rigen las vigencias naturales de
+          // cada analito: la fecha publicada es la de la norma y este examen YA NO empuja
+          // la toma de septiembre. El motivo nombra las dos fechas para que nadie lea
+          // "vencido" donde solo hay falla terapéutica gastada.
+          ? ("vigente hasta el " + venceNorma + " · " + (clave === "GLUCOSA" ? "HbA1c " : "") + "fuera de meta: la ventana del 50 % (" + vigencia + " d) venció el " + vence + " — rige la vigencia natural")
+          : ("vigente hasta el " + vence)))
         + (kdigoFrena === true
             // v18.0.7 — se DICE por qué no se adelanta. La entrevista lo dejó por escrito:
             // "un examen que no se pide sin explicación es indistinguible de un olvido del
             // script". Aquí el examen está fuera de meta y aun así no se repite antes, que es
             // exactamente el caso en que callarse parecería un fallo.
             ? " · fuera de meta, pero KDIGO: con TFG < 60 por CKD-EPI 2021 el perfil lipídico no se repite antes (se respetan los " + vigenciaNorma + " d)"
-            : (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : "")),
+            : ((fueraMeta === true && subestado !== "falla_natural")
+              // v18.0.143 — el sufijo "se repite a la mitad" ya no aplica a la falla
+              // gastada: no se repite YA (rige la vigencia natural) y el motivo principal
+              // de falla_natural YA nombra quién está fuera de meta — en la glucosa, la
+              // HbA1c, no el valor suelto de esa mañana. En los vigentes con ventana por
+              // delante, el sufijo sigue igual que siempre.
+              ? " · " + (clave === "GLUCOSA"
+                  ? "HbA1c fuera de meta: la glucosa se repite a la mitad"
+                  : "fuera de meta: se repite a la mitad")
+                + " (" + vigencia + " d en vez de " + vigenciaNorma + ")"
+              : "")),
     };
   }
 
@@ -40919,10 +42382,20 @@
   // un día la pondría DESPUÉS del vencimiento, que es exactamente el fallo que
   // el Copiloto todavía tiene abierto en `ajustar_fecha_habil`.
   function mtrPlanParaclinicos(ctx) {
-    const c = ctx || {};
+    let c = ctx || {};
     const hoy = mtrFechaIso(c.hoyIso);
     if (!hoy) return null;
     const ultimos = c.ultimos || {};
+    // v18.0.135 — la glucosa ya no se juzga sola: se juzga contra la HbA1c (entrevista del
+    // 02-sep). Si quien llama no trae valorHba1c explícito pero los resultados del paciente
+    // SÍ tienen una HbA1c, se copia al ctx para que mtrEstadoAnalito->mtrFueraDeMeta la vea.
+    // Así TODOS los llamadores (panel, widget, resumen IA) heredan la regla sin repetir el
+    // cableado, y una HbA1c en los labs del propio paciente nunca pasa inadvertida.
+    if (c.valorHba1c === null || c.valorHba1c === undefined) {
+      const hba1cUlt = ultimos.HBA1C;
+      const hba1cVal = (hba1cUlt && hba1cUlt.valor !== null && hba1cUlt.valor !== undefined) ? mtrFloat(hba1cUlt.valor) : null;
+      if (hba1cVal !== null) c = Object.assign({}, c, { valorHba1c: hba1cVal });
+    }
 
     const evaluar = (claves) => claves
       .map((k) => mtrEstadoAnalito(k, ultimos[k], c))
@@ -41309,6 +42782,13 @@
     // ---- QUÉ SE ORDENA ----
     // Todo lo que falta o venció + lo cosechado + los pasajeros que no estén
     // bloqueados (se enganchan a la FTL sin fijarla y sin piso de 14 días).
+    // v18.0.143 — la falla terapéutica con la ventana del 50 % VENCIDA ya no se ordena
+    // por su cuenta (ordenanza del 04-sep): «las fallas terapéuticas no se tienen en
+    // cuenta como vencimiento; en caso de que ya haya pasado la ventana del 50 % se
+    // utilizan entonces las vigencias naturales de cada analito». Esos exámenes nacen
+    // en estado "D" con subestado "falla_natural", siguen vivos en `diferidos` y solo
+    // entran a la orden cuando su vigencia natural los traiga (vencimiento o cosecha),
+    // como cualquier otro analito del programa.
     const ordenar = []
       .concat(faltantes.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
       .concat(vencidos.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
@@ -41325,6 +42805,10 @@
     // v16.9.0 — Sin `preferirTarde`: un solo objetivo (+7) en todos los caminos.
     const control = mtrFechaControlSugerida(ftl, {
       grupoSabado: (c.grupoSabado !== undefined && c.grupoSabado !== null) ? c.grupoSabado : (c.sabadosHabilitados || null),
+      // v18.0.140 (f) — la sugerencia automática (la 🎯 que alimenta el recuadro de
+      // «Pasar a la fecha sugerida») solo propone sábados de constancia fiable: jamás
+      // un sábado «por confirmar» ni uno de un grupo que no es el del médico.
+      sabadoSoloFiable: true,
     });
 
     return {
@@ -41650,6 +43134,11 @@
       // el médico escribió de verdad, no la lectura parcial de la pestaña que estuviera
       // abierta. Ver mtrHechosDesdeHcEverest: llega ya desidentificado.
       hcEverest: (o.hcEverest && (o.hcEverest.secciones || o.hcEverest.dom)) ? o.hcEverest : null,
+      // v18.0.135 — el HOY con el que se separó lo físico digitado hoy de lo cosechado en
+      // consultas anteriores. Sin esta clave, mtrHojaDeHechosTexto le pasaría undefined a
+      // mtrHcTextoParaHoja y TODO el bloque caería al balde legado: la separación existiría
+      // pero nunca se ejecutaría donde importa (el prompt que lee la IA).
+      hoyIso: o.hoyIso || (typeof todayStamp === "function" ? todayStamp() : null),
       // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
       // toda esa información sirve de grounding para redactar una excelente nota clínica».
       // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
@@ -41800,7 +43289,9 @@
     // después de lo calculado por el motor para que, si algo hay que recortar por longitud,
     // se recorte esto y no las cifras que el modelo tiene prohibido inventar.
     if (h.hcEverest) {
-      const bloque = mtrHcTextoParaHoja(h.hcEverest);
+      // v18.0.135 — FRENTE 5: se pasa el HOY de la hoja para que la cosecha física se
+      // separe por fecha (digitado HOY vs cosechado antes) y no vuelva a mezclarse.
+      const bloque = mtrHcTextoParaHoja(h.hcEverest, h.hoyIso);
       if (bloque) L.push("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---\n" + bloque);
     }
     if (h.foco) L.push("Foco de la consulta: " + h.foco);
@@ -42001,6 +43492,15 @@
     "",
     "# CÓMO SE LEE LA HISTORIA DE EVEREST",
     "- Un campo en 'no' o 'false' ES UN HECHO: significa que el médico lo evaluó y lo descartó expresamente (p. ej. 'infarto de miocardio: no' = descartado). Un campo AUSENTE significa que no se preguntó. Son cosas distintas y jamás se tratan igual: de un campo ausente no se afirma ni que está ni que no está.",
+    // v18.0.135 — FRENTE 5 (03-sep): la cosecha en vivo ahora separa por FECHA el examen
+    // físico y los signos vitales. Los dos rótulos citados abajo son LITERALES de
+    // mtrHcTextoParaHoja; si alguno se renombra allá, se renombra aquí (la coincidencia
+    // exacta es el contrato, no un detalle de estilo).
+    "- El examen físico y los signos vitales de la cosecha en vivo llegan separados por fecha: lo rotulado «digitado HOY en la pantalla de Everest» es lo que el médico acaba de escribir en ESTA consulta y es el ÚNICO válido para el examen físico y los signos vitales de la nota de hoy; lo rotulado «cosechado en una consulta ANTERIOR» es de un control previo y NO se usa como examen físico ni signos vitales actuales (solo puede mencionarse como hallazgo previo si es pertinente). Si un campo físico llega sin fecha («sin fecha por campo»), no afirmes que fue medido hoy.",
+    // v18.0.142 — la regla que faltaba tras «PUSE 111/78… FALTÓ LA
+    // DIASTÓLICA»: el hueco de una cifra se dejó completar río abajo con la
+    // medición de otro día y la nota salió con una tensión que nadie tomó.
+    "- Si un signo vital llega INCOMPLETO (p. ej. tensión arterial con la sistólica y sin la diastólica), se escribe tal cual está o se omite: está PROHIBIDO rellenar la cifra que falta con un valor típico, con la cifra de otra medición o con cualquier número que no venga en los bloques.",
     "- De los antecedentes negativos escribe SOLO los pertinentes al motivo de consulta y al cuadro de hoy. El resto se calla: esto es semiología, no un inventario de la base de datos.",
     "- Los identificadores de campo del sistema (sedentarismo, antecedentePatologicos, revisionSistema y similares) NUNCA se escriben: se traducen a lenguaje clínico.",
     "",
@@ -44317,6 +45817,10 @@
     ayuda: '<svg class="vgl-ia-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
   };
   function mtrAbrirPanelRedaccion(resumen, opts) {
+    // v18.1.0 — B3 (capa b): segunda puerta de `redactor_ia`. abrirRedactorTextoLibre
+    // ya filtra la entrada del dock; este montaje re-comprueba para cualquier otro
+    // llamador. Defense-in-depth: sin la capacidad no se monta el panel de IA.
+    if (!accesoCap("redactor_ia")) return;
     try {
       if (!resumen) { setSummary("No hay resumen clínico para redactar.", "warn"); return; }
       try { uxTrack("fn.ia.open"); } catch (e) {}
@@ -45091,6 +46595,156 @@
     return null;
   }
   // =====================================================================
+  //  v18.0.142 — GROUNDING DE LA TENSIÓN ARTERIAL. Reporte del consultorio
+  //  (04-sep): «PUSE 111/78… FALTÓ LA DIASTÓLICA» — la IA redactó notas con
+  //  cifras ajenas (pantalla: 165/70 y 111/78; notas generadas: 124/82 y
+  //  110/70). Tres causas, todas en ESTE camino de lectura:
+  //   (1) la casilla obligatoria «T.A:*» no tenía lector por RÓTULO: los
+  //       nombres de las listas de arriba NO están verificados contra el DOM
+  //       real, y cuando ninguno casa, la casilla que el médico SÍ llenó
+  //       queda sin leer y el triaje viejo de la API gana río abajo;
+  //   (2) «111/78» pasaba por _labNumerico y salía 11178 — una cifra que no
+  //       existe en ninguna pantalla;
+  //   (3) la lectura por roles hallaba la sistólica (name="sistolica" =
+  //       111) y dejaba la diastólica en null: río abajo el hueco se
+  //       completaba con la medición DE OTRO DÍA.
+  //  Lo que sigue NO toca la precedencia entre fuentes (eso manda
+  //  MTR_PRECEDENCIA_SYS): solo garantiza que lo que sale de aquí es la
+  //  medición COMPLETA tal como está en la casilla, o nada.
+  // =====================================================================
+  const MTR_TA_PAS_MIN = 60, MTR_TA_PAS_MAX = 260;
+  const MTR_TA_PAD_MIN = 30, MTR_TA_PAD_MAX = 150;
+  // «111/78» -> {pas:111, pad:78}. «11178» (un solo grupo de 5 dígitos) y
+  // «95/120» (diastólica mayor que la sistólica) -> null: mejor sin cifra
+  // que con una cifra que no está en la pantalla.
+  function _mtrTaDesdeTexto(v) {
+    const s = String(v == null ? "" : v).trim();
+    if (!/\d/.test(s) || s.indexOf("-") >= 0) return null;
+    const grupos = s.match(/\d+/g) || [];
+    const cifra = (g, min, max) => {
+      if (!g || g.length < 2 || g.length > 3) return null;
+      const n = Number(g);
+      return (n >= min && n <= max) ? n : null;
+    };
+    if (grupos.length === 1) {
+      const pas = cifra(grupos[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      return pas === null ? null : { pas: pas, pad: null };
+    }
+    if (grupos.length === 2) {
+      const pas = cifra(grupos[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      const pad = cifra(grupos[1], MTR_TA_PAD_MIN, MTR_TA_PAD_MAX);
+      if (pas === null || pad === null || pad > pas) return null;
+      return { pas: pas, pad: pad };
+    }
+    return null;
+  }
+  // Un campo de UNA cifra (solo sistólica o solo diastólica) JAMÁS pasa por
+  // _labNumerico si trae «/»: la lección de «111/78» -> 11178.
+  function _mtrTaNumeroDeTexto(v, min, max) {
+    const s = String(v == null ? "" : v).trim();
+    if (!s || s.indexOf("/") >= 0) return null;
+    const n = _labNumerico(s);
+    if (n === null || n < min || n > max) return null;
+    return n;
+  }
+  // El valor CRUDO (String) de una casilla, con el MISMO lookup name->id de
+  // mtrLeerCampoNumerico. Sin esto no se puede saber si una casilla trae el
+  // par completo «111/78» en una sola celda.
+  function _mtrTaValorCrudo(nombreCampo, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d) return "";
+    let nodo = null;
+    try {
+      if (typeof d.querySelector === "function") {
+        nodo = d.querySelector('input[name="' + String(nombreCampo).replace(/"/g, '\\"') + '"]')
+          || d.querySelector('#' + String(nombreCampo).replace(/[^\w-]/g, ""));
+      }
+    } catch (e) { return ""; }
+    if (!nodo || nodo.value == null) return "";
+    return String(nodo.value);
+  }
+  function _mtrPrimerValorCrudo(nombres, doc) {
+    for (const n of nombres) {
+      const v = _mtrTaValorCrudo(n, doc);
+      if (v && v.trim()) return v;
+    }
+    return null;
+  }
+  // Dos casillas por roles (sistólica / diastólica). Si UNA de ellas trae el
+  // par completo («111/78»), esa casilla GANA y la otra se ignora: nunca se
+  // mezclan dos casillas ni dos mediciones. Un par cruzado (pad > pas) es
+  // una lectura que no se entendió y se devuelve null.
+  function _mtrTaDesdeCampos(nombresSis, nombresDia, doc) {
+    const crudoSis = _mtrPrimerValorCrudo(nombresSis, doc);
+    const crudoDia = _mtrPrimerValorCrudo(nombresDia, doc);
+    if (crudoSis && crudoSis.indexOf("/") >= 0) return _mtrTaDesdeTexto(crudoSis);
+    if (crudoDia && crudoDia.indexOf("/") >= 0) return _mtrTaDesdeTexto(crudoDia);
+    const pas = crudoSis ? _mtrTaNumeroDeTexto(crudoSis, MTR_TA_PAS_MIN, MTR_TA_PAS_MAX) : null;
+    const pad = crudoDia ? _mtrTaNumeroDeTexto(crudoDia, MTR_TA_PAD_MIN, MTR_TA_PAD_MAX) : null;
+    if (pas !== null && pad !== null && pad > pas) return null;
+    if (pas === null && pad === null) return null;
+    return { pas: pas, pad: pad };
+  }
+  // Rótulos. «T.A:*» es la casilla obligatoria; «T.A Acostado:» es OTRA
+  // medición y no puede colarse en la familia obligatoria (por eso viaja
+  // como exclusión: un rótulo «T.A:* acostado» o «T.A. acostado» CASA el
+  // regex principal y solo la exclusión lo aparta). La clase media del
+  // regex de acostado traga separadores por eso: sin ella la exclusión
+  // sería un guardia fantasma que ningún rótulo real puede disparar.
+  // «Talla» no casa: la \b tras la A y el exigir separador o fin tras el
+  // rótulo dejan «TALLA» fuera.
+  const MTR_ROTULO_TA = /\bT[.\s\/]*A\b\s*(?:[.:*]|$)/i;
+  const MTR_ROTULO_TA_ACOSTADO = /T[.\s\/]*A[.\s:*]*acostado/i;
+  // La tensión leída por RÓTULO: enumera TODOS los campos del documento y se
+  // queda con los que cuelgan del rótulo buscado. 1 casilla -> se parsea su
+  // texto completo; 2 casillas -> DOM order (sis, dia) y las reglas de
+  // siempre; 0 o 3+ -> null (ambigüedad no se resuelve eligiendo). Si el
+  // documento no expone querySelectorAll (mocks de prueba), null sin ruido.
+  function _mtrTensionPorRotulo(doc, rotuloRe, excluirRe) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function" || !rotuloRe) return null;
+    let campos = [];
+    try {
+      campos = Array.prototype.slice.call(d.querySelectorAll("input, select, textarea"));
+      if (!campos.length) return null;
+    } catch (e) { return null; }
+    const propios = [];
+    for (let i = 0; i < campos.length; i++) {
+      const el = campos[i];
+      let rot = "";
+      try { rot = _mtrRotuloDeCampo(el, d); } catch (e) { rot = ""; }
+      if (!rot) continue;
+      if (!rotuloRe.test(rot)) continue;
+      if (excluirRe && excluirRe.test(rot)) continue;
+      propios.push(el && el.value != null ? String(el.value).trim() : "");
+    }
+    if (propios.length === 1) return _mtrTaDesdeTexto(propios[0]);
+    if (propios.length === 2) {
+      if (propios[0].indexOf("/") >= 0) return _mtrTaDesdeTexto(propios[0]);
+      if (propios[1].indexOf("/") >= 0) return _mtrTaDesdeTexto(propios[1]);
+      const pas = _mtrTaNumeroDeTexto(propios[0], MTR_TA_PAS_MIN, MTR_TA_PAS_MAX);
+      const pad = _mtrTaNumeroDeTexto(propios[1], MTR_TA_PAD_MIN, MTR_TA_PAD_MAX);
+      if (pas !== null && pad !== null && pad > pas) return null;
+      if (pas === null && pad === null) return null;
+      return { pas: pas, pad: pad };
+    }
+    return null;
+  }
+  function _mtrTaEsCompleta(t) {
+    return !!t && t.pas != null && t.pad != null;
+  }
+  // UNA familia = UNA medición. Dentro de la familia: una lectura COMPLETA
+  // por rótulo le gana a una PARCIAL por nombres (la medición completa de la
+  // pantalla manda sobre media cifra por un name afortunado); en cualquier
+  // otro caso, los nombres verificados mandan y el rótulo queda de respaldo.
+  function _mtrTaFamilia(nombresSis, nombresDia, rotuloRe, excluirRe, doc) {
+    const porNombres = _mtrTaDesdeCampos(nombresSis, nombresDia, doc);
+    const porRotulo = _mtrTensionPorRotulo(doc, rotuloRe, excluirRe);
+    if (_mtrTaEsCompleta(porRotulo) && !_mtrTaEsCompleta(porNombres)) return porRotulo;
+    if (porNombres) return porNombres;
+    return porRotulo || null;
+  }
+  // =====================================================================
   //  v18.0.116 — «UN SOLO ESTADO DEL PACIENTE», PASO 1 (decisión del médico, 02-sep): antes de
   //  tocar ninguna precedencia, un DETECTOR PASIVO de desacuerdos entre módulos. Compara lo que
   //  cada fuente tiene en la mano en el mismo instante (registro histórico de la API vs casilla
@@ -45159,14 +46813,16 @@
     } catch (e) { return "no se pudo leer"; }
   }
   function mtrLeerTensionDelDom(doc) {
-    // Primero la tensión OBLIGATORIA («T.A:*»), que es la que el médico llena.
-    const pas = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS, doc);
-    const pad = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA, doc);
-    if (pas !== null || pad !== null) return { pas: pas, pad: pad };
-    // Y solo si esa está vacía, la de acostado — leyendo también LAS DOS cifras.
-    const pasA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_SIS_ACOSTADO, doc);
-    const padA = _mtrPrimerCampoNumerico(MTR_CAMPOS_TA_DIA_ACOSTADO, doc);
-    if (pasA !== null || padA !== null) return { pas: pasA, pad: padA };
+    // v18.0.142 — Cada familia se lee por NOMBRES y por RÓTULO, y la
+    // medición COMPLETA manda dentro de la familia (ver _mtrTaFamilia). La
+    // OBLIGATORIA («T.A:*») sigue mandando sobre la de acostado: una acostado
+    // COMPLETA no le gana a una obligatoria parcial (v18.0.54), porque son
+    // DOS mediciones distintas y la que el médico llena siempre es la
+    // obligatoria.
+    const obligatoria = _mtrTaFamilia(MTR_CAMPOS_TA_SIS, MTR_CAMPOS_TA_DIA, MTR_ROTULO_TA, MTR_ROTULO_TA_ACOSTADO, doc);
+    if (obligatoria) return obligatoria;
+    const acostado = _mtrTaFamilia(MTR_CAMPOS_TA_SIS_ACOSTADO, MTR_CAMPOS_TA_DIA_ACOSTADO, MTR_ROTULO_TA_ACOSTADO, null, doc);
+    if (acostado) return acostado;
     return { pas: null, pad: null };
   }
 
@@ -46421,28 +48077,61 @@
   }
 
   // Aplana lo anterior a texto etiquetado para la hoja de hechos. Solo lo que consta.
-  function mtrHcTextoParaHoja(hechos) {
+  // v18.0.135 — FRENTE 5: segundo parámetro `hoyIso` (retrocompatible; si falta se usa
+  // todayStamp). Con él, el examen físico y los signos vitales de la cosecha en vivo se
+  // separan en tres baldes por FECHA, porque esa era exactamente la vía por la que cifras
+  // de un control anterior llegaban al modelo rotuladas como de hoy.
+  function mtrHcTextoParaHoja(hechos, hoyIso) {
     if (!hechos) return "";
     const L = [];
     // v17.10.0 — lo cosechado EN VIVO de la pantalla, que es lo que el médico está
     // escribiendo ahora mismo. Va PRIMERO: es más fresco que lo capturado en el último
     // guardado, y cuando los dos hablan del mismo campo manda esto.
     if (hechos.dom && Object.keys(hechos.dom).length) {
-      const porSeccion = {};
+      const hoy = hoyIso || (typeof todayStamp === "function" ? todayStamp() : "");
+      // v18.0.135 — FRENTE 5 (03-sep). Las rutas se guardan con su caso ORIGINAL
+      // (p. ej. `signosVitales.peso`), así que el emparejamiento es case-insensitive.
+      // Solo el examen físico y los signos vitales llevan fecha propia (domFechas, del
+      // Edit 1): son lo que la IA redacta «de HOY» y donde una cifra vieja es un error
+      // clínico. El resto de secciones sigue con el rótulo A7 honesto.
+      const esFisico = (r) => /^(examenfisico|signosvitales)\./i.test(String(r));
+      const porSeccion = {};      // rótulo A7: resto de secciones + físico legado sin fecha
+      const seccionesHoy = {};    // digitado HOY en la pantalla de Everest
+      const seccionesAntes = {};  // cosechado en una consulta ANTERIOR
       for (const ruta of Object.keys(hechos.dom)) {
         const i = ruta.lastIndexOf(".");
         const sec = i > 0 ? ruta.slice(0, i) : "(sin sección)";
         const campo = i > 0 ? ruta.slice(i + 1) : ruta;
         const v = hechos.dom[ruta];
-        (porSeccion[sec] = porSeccion[sec] || []).push(campo + ": " + (v === true ? "sí" : v === false ? "no" : v));
+        const linea = campo + ": " + (v === true ? "sí" : v === false ? "no" : v);
+        const fecha = hechos.domFechas ? hechos.domFechas[ruta] : null;
+        if (esFisico(ruta) && fecha && hoy && String(fecha) === String(hoy)) {
+          (seccionesHoy[sec] = seccionesHoy[sec] || []).push(linea);
+          continue;
+        }
+        if (esFisico(ruta) && fecha && hoy && String(fecha) !== String(hoy)) {
+          (seccionesAntes[sec] = seccionesAntes[sec] || []).push(linea + " (cosechado " + fecha + ")");
+          continue;
+        }
+        (porSeccion[sec] = porSeccion[sec] || []).push(linea);
+      }
+      // Orden: HOY primero (es lo que manda), luego lo de consultas anteriores, y al final
+      // el resto con el rótulo A7 — igual criterio de «lo más fresco primero» de v17.10.0.
+      for (const sec of Object.keys(seccionesHoy).sort()) {
+        L.push(sec + " (digitado HOY en la pantalla de Everest — examen físico y signos vitales de ESTA consulta): " + seccionesHoy[sec].join(" · "));
+      }
+      for (const sec of Object.keys(seccionesAntes).sort()) {
+        L.push(sec + " (cosechado en una consulta ANTERIOR — NO usar como examen físico ni signos vitales de hoy): " + seccionesAntes[sec].join(" · "));
       }
       for (const sec of Object.keys(porSeccion).sort()) {
         // A7 (S+, 02-sep) — rótulo HONESTO de la cosecha en vivo. Decía «(escrito en la
         // historia de HOY)», pero esta cosecha se acumula entre pestañas (v17.10.0) y nunca
         // se borra sola, y Everest pre-llena campos de consultas anteriores: un «EDEMA
         // GRADO II» escrito hace 5 días llegaba al modelo rotulado como de hoy, junto a un
-        // «SIN EDEMA» de la vía de red. No hay fecha por campo, así que la etiqueta lo dice:
-        // es lo que está escrito en la historia (incluido lo pre-llenado), sin afirmar cuándo.
+        // «SIN EDEMA» de la vía de red. Desde v18.0.135 el examen físico y los signos
+        // vitales llevan fecha propia y se separan arriba; este rótulo queda para el resto
+        // (y para el físico cosechado ANTES de esta versión, que no trae fecha): es lo que
+        // está escrito en la historia (incluido lo pre-llenado), sin afirmar cuándo.
         L.push(sec + " (escrito en la historia de Everest, incluye lo pre-llenado — sin fecha por campo): " + porSeccion[sec].join(" · "));
       }
     }
@@ -46785,11 +48474,24 @@
       if (!id) return null;
       const ahora = mtrCosecharHcDelDom(doc);
       const nuevas = Object.keys(ahora).length;
-      const previo = (mtrHcLeer(id) || {}).dom || {};
+      const previoBloque = mtrHcLeer(id) || {};
+      const previo = previoBloque.dom || {};
       if (!nuevas && !Object.keys(previo).length) return null;
       const fusion = Object.assign({}, previo, ahora);
+      // v18.0.135 — FRENTE 5 (blindaje del examen físico, 03-sep): la cosecha acumulada no
+      // llevaba FECHA por campo y el rótulo A7 lo confesaba («sin fecha por campo»).
+      // Everest pre-llena PA/peso/IMC de consultas anteriores, la cosecha los atrapaba
+      // igual y la IA redactó el examen físico de HOY con cifras de la semana pasada
+      // (reportado dos veces: #8387512 y #34965201). Ahora cada ruta vista EN ESTA
+      // pantalla toma la fecha de hoy y las no vistas conservan la de la cosecha
+      // anterior: la fusión de VALORES no cambia, pero la hoja ya puede separar
+      // «digitado HOY» de «cosechado antes» sin adivinar. Viaja pegado a `dom` en el
+      // mismo bloque porque mtrHcLeer lo devuelve entero.
+      const hoy = todayStamp();
+      const fusionFechas = Object.assign({}, previoBloque.domFechas || {});
+      for (const ruta of Object.keys(ahora)) fusionFechas[ruta] = hoy;
       const c = _vglCosechaLeer(id) || {};
-      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, ts: Date.now() });
+      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, domFechas: fusionFechas, ts: Date.now() });
       _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: bloque });
       return { campos: Object.keys(fusion).length, nuevos: nuevas };
     } catch (e) { return null; }

@@ -12518,3 +12518,508 @@ el cierre de 2026 en `docs/SECRETOS_EXPUESTOS.md`.
 | 484 | sin `disconnect()` del observador en el apagado de emergencia: queda conectado tras el cierre | *suite_74: B10+B13: el apagado de emergencia suelta observador y registro* | Sí |
 
 Banco completo: **3.143 comprobaciones pasan, 0 fallan.**
+
+## v18.0.135 — los siete frentes del médico, uno por uno: el azul de Everest, la glucosa que no vence sola, el examen físico que la IA ya no inventa, el VIH por nombre, reordenar PyM, avisos solo en la historia y la sincronía aviso↔laboratorios
+
+Release dirigido por los hallazgos del médico en consulta (03-sep-2026). Siete frentes, todos
+cerrados contra pruebas y verificados por mutación:
+
+**1. El CSS azul de Everest en «Alertas» y «Silenciar».** La hoja de estilos de Everest
+filtraba sus azules corporativos dentro del panel del centinela y pintaba de azul las letras
+de los botones «Alertas» y «Silenciar» de la barra inferior. La cascada gana una regla S-bis:
+`.vgl-tc-ico, .vgl-sb-txt { color: inherit !important; }` — el texto de esos controles hereda
+del panel y ya no del host (suite_25, caso de la regla S-bis).
+
+**2. La glucosa no se repite sola ni vence sola.** Regla clínica del médico: la glucosa NO se
+considera vencida por el solo paso del tiempo y NO se repite por sí misma; solo se repite
+(al 50 % de su vigencia) cuando la HbA1c está fuera de metas. Una cosa es estar en falla
+terapéutica (y por eso repetir al 50 % de la vigencia) y otra muy distinta estar vencido. El
+motor de vigencias (`mtrFueraDeMeta`, rama GLUCOSA) ahora separa los dos conceptos y la misma
+lógica se aplicó al resto de analitos: la vigencia por programa (ERC G3b vs G2 vs HTA vs DM2)
+sigue mandando sobre qué examen amerita cada paciente (suite_24: 6 casos nuevos; refuerzos en
+suite_45 y suite_46).
+
+**3. Notificaciones solo en la pestaña de la historia (HCHealth).** El toast y el aviso
+sonoro se disparan únicamente en `https://neps.everestintelligent.com/viva/HCHealth/`; las
+demás pestañas o ventanas de Everest ya no duplican el aviso naranja/azul que el médico ya
+había mandado a blindar. El disparo (`_dispararAvisoAudible`) se apaga en `_pestanaSinAtencion()`
+o fuera del módulo HCHealth, sin perder el aviso en la pestaña correcta (suite_42, suite_37,
+suite_04).
+
+**4. El examen físico de la redacción de la IA, blindado.** La IA narraba presión arterial,
+peso e IMC que no coincidían con lo digitado en la cita: tomaba datos de consultas
+anteriores. Cuatro ediciones atan cada cifra de la evolución al valor exacto de la cita
+actual y el cableado ahora pasa `hoyIso` real a la redacción — el grounding es en tiempo
+real, no el del control previo. La sección «Seguridad del paciente» queda blindada de la
+misma forma (suite_57, caso «cableado» fortalecido; suite_31).
+
+**5. El VIH y «Ordenar»: el nombre también cuenta.** Para paquetes con CUPS declarados, la
+detección de «ya está hecho» exigía el código CUPS exacto: si el resultado llegaba con el
+código propio del laboratorio (o vía consolidado Annar/Citi), el VIH aparecía como «no hecho»
+y se volvía a ofrecer aunque ya tuviera resultado. Corregido por regla del médico: basta el
+CUPS exacto O un nombre igual o similar del examen. Además, la «orden vigente en Everest»
+pasa de bloqueo a simple aviso (suite_28: 4 casos).
+
+**6. Reordenar en PyM.** Nueva regla: en las actividades de promoción y mantenimiento (y
+pacientes susceptibles de las de cáncer) se puede volver a ordenar SIEMPRE, salvo que la
+actividad ya esté hecha Y detectada en los resultados de Athenea (suite_15).
+
+**7. Sincronía aviso ↔ laboratorios ↔ «Ordenar».** El aviso de pendientes al entrar a la
+historia, el modal de laboratorios y el módulo «Ordenar» leen la misma fuente en el mismo
+momento: si el resultado ya llegó (p. ej. sangre oculta en materia fecal del 14-ago), el
+aviso no lo ofrece como pendiente; si ya hay orden vigente, se informa sin volver a
+bloquear (suite_04).
+
+**Un mutante enmascarado, capturado a tiempo (#487).** La mutación del cableado de `hoyIso`
+(el parámetro ignorado y la redacción volviendo al reloj del sistema) SOBREVIVIÓ la primera
+tirada: la prueba usaba `api.todayStamp()` como `hoyIso`, así que ignorar el parámetro era
+invisible. El caso «cableado» de suite_57 se reescribió con fechas fijas ajenas al reloj
+(`2001-02-03` / `2001-01-20`): ahora el mutante cae («173 pasan, 1 falla») y la suite queda
+verde con 174.
+
+**Las anclas de versión salvaron el release.** El alza de versión quedó a medias: `const
+VERSION` y package.json decían 18.0.135 pero el `@version` del encabezado quedó en 18.0.134.
+El banco completo cayó con 3 fallos (v12.5.1, R5.1 y A1 — las tres anclas que exigen que
+`@version`, `const VERSION` y package.json vayan en paso). Corregido el encabezado y
+actualizado el tablero (`EXPECTED_SHA256` / `EXPECTED_SHA_VERSION`), el banco volvió a verde.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 485 | la compuerta de `_dispararAvisoAudible` vuelta no-op: el toast sonoro vuelve a sonar en cualquier pestaña de Everest, no solo en HCHealth | *suite_42: 54 pasan, 5 fallan* | Sí |
+| 486 | en la detección de «ya está hecho», el camino por nombre (`_pymMejorFechaPorNombre`) desactivado cuando el paquete tiene CUPS: el VIH con código del laboratorio propio vuelve a aparecer como no hecho | *suite_28: 59 pasan, 4 fallan* | Sí |
+| 487 | `hoy = hoyIso || todayStamp()`: el parámetro de la redacción ignorado, el grounding vuelve al reloj del sistema (datos de consultas anteriores) — enmascarado, capturado tras fortalecer la prueba con fechas fijas | *suite_57: 173 pasan, 1 falla (antes: 174 pasan, mutante vivo)* | Sí |
+| 488 | en `mtrFueraDeMeta` (rama GLUCOSA), la guarda de meta nula y la comparación contra la meta de HbA1c vueltas no-ops: la glucosa vuelve a vencerse sola o a repetirse sin falla terapéutica | *suite_24: 51 pasan, 2 fallan* | Sí |
+| 489 | la regla S-bis `.vgl-tc-ico, .vgl-sb-txt { color: inherit }` quitada de la cascada: las letras de «Alertas» y «Silenciar» vuelven al azul de Everest | *suite_25: 31 pasan, 1 falla* | Sí |
+
+Banco completo: **3.163 comprobaciones pasan, 0 fallan.**
+
+## v18.0.136 — 3-sep — disco del médico, rescate por cuota y candado del resumen
+
+Nueva suite_75 (Memoria en disco del médico, 48 comprobaciones) para el módulo de FS Access
+API: carpeta por cédula en Markdown, espejo de Memoria con debounce, migración del pozo de
+localStorage, banner de permiso permanente por equipo y rescate cuando la cuota del navegador
+está llena. Además, suite_11 gana el caso del candado del resumen diario (fila «resumen» con
+stats reales, candado solo si hubo fila) y suite_75 trae la fusión plana de la cosecha
+(confirmaciones nuevas sustituyen, el «pozo» documentado de v17.46).
+
+**Qué se blindó en esta tanda.** (1) El candado `vgl_rep_sum` ya no se pone sin haber enviado
+la fila «resumen»: antes, un día sin stats quedaba marcado como reportado y el resumen se
+perdía en silencio. (2) Con la cuota llena, la memoria del paciente baja intacta al disco
+(`vglDiscoRescatarCosecha`) en vez de morir con «almacenamiento lleno». (3) La ruta de
+historias es por cédula canónica: `Historias/{cédula}/{cédula} YYYY-MM-DD.md`. (4) El
+Markdown siempre lleva las confirmaciones del día. (5) La primera vez en el equipo sale el
+banner para elegir carpeta (una sola vez en la vida). (6) La migración inicial baja todas
+las historias y pone su candado.
+
+**Un mutante sobreviviente, aceptado a conciencia (#496).** `VGL_DISCO_DEBOUNCE_MS` de 4000
+a 9000 no tumbó nada: el banco recorta los retardos a 1 ms (`Math.min(ms || 0, 1)` en el
+harness), así que suite_75 mide la semántica del debounce — «nada síncrono, se escribe una
+sola vez tras la calma» — y no la duración exacta de la ventana. La ventana de 4 s es una
+decisión de producto (no martillar el disco en consultas seguidas), no una garantía que el
+banco deba fijar.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 490 | el candado `vgl_rep_sum` puesto antes de mirar stats: un día sin actividad queda marcado como reportado sin haber mandado fila | *suite_11: 28 pasan, 1 falla* («sin actividad ayer no manda fila NI candado; con stats sí») | Sí |
+| 491 | el rescate por disco con cuota llena desactivado (`Promise.resolve(false)` en vez de `vglDiscoRescatarCosecha`): la memoria del paciente vuelve a morir con «almacenamiento lleno» | *suite_75: 46 pasan, 2 fallan* (C2 y C3) | Sí |
+| 492 | la ruta de Historias sin la carpeta de la cédula (`[raíz, Historias]` sin `ced`): todos los .md amontonados en la misma carpeta | *suite_75: 42 pasan, 6 fallan* (C2, D1, E2, F2, H3, I2) | Sí |
+| 493 | el renderer de Markdown sin líneas de confirmaciones: la historia pierde lo confirmado en la consulta y hasta revienta (`split`/`indexOf` sobre undefined) | *suite_75: 42 pasan, 6 fallan* (A1, A2, A3, C2, D1, E2) | Sí |
+| 494 | el banner de «elegir carpeta» del arranque quitado: la primera vez en el equipo transcurre en silencio y nadie activa el disco | *suite_75: 47 pasan, 1 falla* (J4) | Sí |
+| 495 | `vglDiscoMigrar` vuelta no-op: las historias del pozo de localStorage nunca bajan al disco ni queda candado de migración | *suite_75: 43 pasan, 5 fallan* (H3, H4, I2, J2, L1) | Sí |
+| 496 | `VGL_DISCO_DEBOUNCE_MS` de 4000 a 9000: la ventana de calma se estira al doble — SOBREVIVIÓ, el harness recorta retardos a 1 ms y la suite mide la semántica, no la duración | *suite_75: 48 pasan, 0 fallan (mutante vivo, aceptado)* | Sí |
+
+Banco completo: **3.211 comprobaciones pasan, 0 fallan.**
+
+## v18.0.137 — 3-sep — el disco hostil del consultorio: el reintento acotado
+
+Nueva suite_76 (El disco hostil del consultorio, 15 comprobaciones) para lo que el
+consultorio le hace de verdad al disco: dos pestañas a la vez (pacientes distintos, el
+mismo paciente y la carrera exacta por el mismo .md), el permiso revocado entre guardados,
+OneDrive reteniendo el `close`, la carpeta borrada o cambiada a mitad de mes, fallos
+transitorios de `createWritable` —sueltos, en cascada y junto a la cuota llena— y el
+paciente que reabre días después. Con el código de la 136, cuatro caían: A3 (el rebote de
+la segunda pestaña perdía su escritura), B2 (el `close` retenido enterraba la fusión), D1
+(un `createWritable` transitorio mataba la historia) y D3 (fallo transitorio JUNTO a la
+cuota llena dejaba sin rescate). La 136 ya no perdía nada por la cuota: perdía por el
+rebote.
+
+**El arreglo.** `_vglDiscoEscribirArchivo` ahora reintenta ACOTADO (`VGL_DISCO_REINTENTOS
+= 3`, espera progresiva `VGL_DISCO_REINTENTO_MS * intento`) y DENTRO de la tarea serial:
+ningún reintento se encola detrás de otra escritura del mismo archivo y la exclusión mutua
+se conserva. Cada intento rehace TODO el recorrido —carpeta, handle y writable— porque la
+retención puede morir en cualquiera de los tres pasos; si el último también fracasa, el
+error sube igual que antes y la próxima guarda del médico reprograma el espejo con lo
+completo.
+
+**Un desvío de diagnóstico que quedó de lección.** En la primera pasada pre-arreglo caían
+siete, no cuatro: A2, C2 y D2 eran artefactos del propio test, que llamaba
+`_vglCosechaGuardar` con un mapa parcial de confirmaciones violando su contrato documentado
+de fusión PLANA (`datos.confirmaciones` REEMPLAZA a las previas; la producción nunca la
+llama así — los segundos guardados van por `_vglConfirmacionGuardar`). Corregida la vía,
+la pre-arreglo quedó limpia en 11/4: solo las caídas genuinas de la 136.
+
+**Un mutante que sobrevivió y la prueba que dejó más fuerte (#498).** Anulada la
+invalidación de la caché de directorios al cambiar de carpeta (`false &&` en la
+comparación del handle), la suite quedó en 15/15: C2 solo ESCRIBÍA tras el cambio y la
+escritura (`crear: true`) rehace el recorrido y sobrescribe la entrada de caché. El hueco
+era real — una LECTURA por la vía del script justo tras el cambio devolvía el
+`vgl_cosecha.json` de la carpeta VIEJA. C2 ganó esa lectura (espera `null`: la raíz nueva
+está vacía) y el mutante cayó con la podredumbre a la vista: devolvió la Memoria ajena.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 497 | `VGL_DISCO_REINTENTOS` de 3 a 1: la escritura vuelve a rendirse al primer rebote — pestaña concurrente, `close` retenido por OneDrive, `createWritable` transitorio, fallo junto a cuota llena | *suite_76: 11 pasan, 4 fallan* (A3, B2, D1, D3 — las cuatro de v18.0.137) | Sí |
+| 498 | la caché de directorios nunca se invalida al cambiar de carpeta: una lectura tras el cambio cae en la carpeta vieja — SOBREVIVIÓ la primera pasada (C2 solo escribía tras el cambio); reforzado C2 con la lectura por la vía del script, ahí cayó | *suite_76: 14 pasan, 1 falla* (C2, ya reforzado) | Sí |
+| 499 | el nombre del .md con el reloj de hoy (`Date.now()`) en vez del sello del registro: la historia atrasada se archiva en el día equivocado | *suite_76: CUELGA en A3* — la trampa del rebote está armada sobre el archivo del día 3 y ese archivo jamás se toca: `await rebote` no resuelve y el ejecutor sale rojo por promesa sin resolver (E2 y E3, detrás, ni llegaron a correr) | Sí |
+| 500 | el espejo diferido desprogramado (fuera `vglDiscoMemoriaProgramar()` y `vglDiscoHistoriaProgramar(id)` de la guarda exitosa): guardar en el navegador ya no baja historia ni Memoria al disco | *suite_76: 8 pasan, 7 fallan* (A1, A2, B1, B2, C2, D2, E1) | Sí |
+
+Banco completo: **3.226 comprobaciones pasan, 0 fallan.**
+
+## v18.0.138 — 4-sep — el silencio del subárbol EverHealth: notificaciones solo en /viva/HCHealth/
+
+Orden directa del médico (4-sep): en `/viva/EverHealth/OrdenamientoHealth`,
+`/viva/EverHealth/Acceso` y `/viva/EverHealth/HCHealth` NO debe salir el Vigilante ni
+ninguna notificación suya; la única pestaña que notifica es la principal
+`https://neps.everestintelligent.com/viva/HCHealth/`.
+
+**El cambio toca las dos funciones puerta, nada más.** (1) `_enModuloHCHealth()` vuelve a
+reconocer SOLO `/viva/HCHealth(\/|$)` — esto REVIERTE v17.6.3 (22-ago), cuando el médico
+confirmó que ejecutaba el script en `/viva/EverHealth/HCHealth` y se aceptaron las dos
+formas; hoy el médico ordena lo contrario y manda la orden más reciente. Con la puerta
+cerrada, los 18 consumidores heredan el silencio solos: `tick()` oculta panel y pastilla,
+el dock se autodestruye, los labs se ocultan y `showToast`/`notify` se van temprano. El
+comentario del código deja escrito cómo restaurar el regex de v17.6.3 si el Vigilante
+desapareciera de la página donde el médico realmente trabaja. (2)
+`_enPaginaExcluidaDeAvisos()` deja de enumerar pantallas sueltas (v17.6.75 nombraba tres)
+y silencia TODO el subárbol `/^\/viva\/EverHealth(\/|$)/` — portada, Acceso,
+OrdenamientoHealth, HCHealth y cualquier pantalla futura bajo ese prefijo — conservando
+`/viva/Acceso` (sin prefijo) por compatibilidad. En página excluida ni tono ni Windows ni
+toast ni cartel: el aviso queda en cola (`vgl_avisos_pendientes`) y al volver a
+`/viva/HCHealth/` se muestran los no caducados (10 min).
+
+**Ajustes de acompañamiento.** El arnés (`tests/harness.js`) corría por defecto en
+`/viva/EverHealth/HCHealth`; con la puerta nueva eso habría tumbado medio banco, así que
+su `href`/`pathname` por defecto pasa a `/viva/HCHealth/`. `package.json` y la expectativa
+de "versión viva" de suite_75 suben a 18.0.138 junto al `@version` y al respaldo de
+`VERSION`. El ancla del tablero (`TABLERO/VersionCheck.gs`) se actualiza con la huella
+SHA-256 de la 138 (`41dc9a99…cd3dc`). Suite_14 gana dos casos nuevos (módulo false en
+`EverHealth/HCHealth`, excluida true en todo el subárbol más una ruta futura bajo el
+prefijo) y suite_04 amplía su caso de silencio de tres a cinco rutas.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 501 | `_enModuloHCHealth()` devuelta al regex de v17.6.3 (`(?:EverHealth\/)?` opcional): `/viva/EverHealth/HCHealth` vuelve a ser módulo — el Vigilante reaparece justo donde el médico pidió silencio | *suite_14: 1 falla* («v18.0.138: _enModuloHCHealth false en /viva/EverHealth/HCHealth») + *suite_04: 1 falla* (salta 1 notificación de Windows de las 5 rutas) | Sí |
+| 502 | `_enPaginaExcluidaDeAvisos()` devuelta a la enumeración de v17.6.75 (portada exacta + OrdenamientoHealth, sin subárbol): `EverHealth/HCHealth` y `EverHealth/Acceso` vuelven a sonar | *suite_14: 1 falla* («true en TODO el subárbol») + *suite_04: 1 falla* (saltan 2 notificaciones de Windows) | Sí |
+| 503 | `/viva/Acceso` (sin prefijo) fuera de la exclusión: la ruta administrativa de siempre vuelve a sonar | *suite_14: 1 falla* (la misma del subárbol, que termina verificando `/viva/Acceso/`) + *suite_04: 1 falla* (salta 1 notificación) | Sí |
+
+Banco completo: **3.227 comprobaciones pasan, 0 fallan.**
+
+## v18.0.139 — 4-sep — «se negó a mostrarme»: con el respaldo activo, el aviso dice QUÉ se miró
+
+Pregunta del médico (4-sep): «se supone que con la base de respaldo deberían aparecerme
+qué actividades tiene pendiente también, se negó a mostrarme, ¿por qué?». La respuesta
+técnica: no hubo negativa. Con `pymFallback` activo, `getActivities()` consulta JUSTO la
+base piloto/respaldo; el aviso salió porque ese paciente no arrojó actividades en ella.
+Pero el texto viejo («NO he podido mirar qué le corresponde a este paciente») decía lo
+contrario — que no se miró — y eso es lo que el médico leyó. La 18.0.139 parte la rama
+`esBasePiloto` de `pymMotivoSinActividades` usando `pacienteEnLista` para que el aviso
+sea direccional y honesto: `piloto_esta_sin_pendientes` (el paciente SÍ figura en el
+respaldo —la base activa ahora— y de ahí no salió nada para este módulo; cubre también
+actividades que el módulo no ofrece por sexo o exclusión del catálogo, el mismo matiz de
+`sin_pendientes`) y `piloto_no_esta` (su identificación no cruza en el respaldo, «ni en
+el respaldo lo puedo ver»). `pacienteEnLista` null/undefined conserva el motivo viejo
+`sin_lista` — la lista de verdad nunca cargó — así que ningún caso existente cambia de
+significado. El botón deshabilitado del modal acompaña a cada escenario: «Sin actividades
+para ordenar» para quien sí figura en la base activa, «No hay lista de prevención» para
+quien no cruza.
+
+**Pruebas nuevas (+2 casos, 14 aserciones).** Suite_72 gana «RESPALDO ACTIVO — «se
+negó a mostrarme» eran dos casos con una sola frase»: alimenta el motor con
+`esBasePiloto` en ambos sabores (`pacienteEnLista` true/false) y exige los motivos nuevos
+con sus textos, más la ausencia de la frase vieja. Suite_15 gana el casoAsync del modal
+que abre el ordenamiento con `pymFile="BASE PILOTO.xlsx"`, `pymFallback=true` y el
+paciente dentro (`pymTodos={"999"}`) y fuera (`pymTodos={"111"}`), verificando aviso,
+ausencia de «NO he podido mirar» y rótulo del botón en cada escenario. La cadena de
+versión sube en `@version`, `VERSION`, `package.json`, la «versión viva» de suite_75 y el
+ancla del tablero (`TABLERO/VersionCheck.gs` → `8f7f0e5a…77d33`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 504 | `pacienteEnLista` comparado contra un valor imposible: las dos ramas nuevas quedan inalcanzables y todos los escenarios caen al motivo viejo «sin_lista» | *suite_72: 1 falla* («esperaba "piloto_esta_sin_pendientes" y obtuvo "sin_lista"») + *suite_15: 1 falla* (el aviso del modal ya no dice «SÍ figura en la base de respaldo») | Sí |
+| 505 | guards de las ramas nuevas intercambiados: quien NO cruza en el respaldo también cae a «sin_lista» y pierde su dirección | *suite_15: 2 fallas* («NO figura en la base de respaldo… obtuvo "sin_lista"» y el botón que ya no remite a la lista) | Sí |
+| 506 | el botón deshabilitado deja de reconocer `piloto_esta_sin_pendientes` y muestra «No hay lista de prevención» para quien SÍ está en la base activa | *suite_15: 2 fallas* («y el botón ya no dice "No hay lista"…» + caída EN CASCADA del caso v16.2.0 «sin lista cargada se dice ESO… obtuvo false», por fuga de `pymFile="BASE PILOTO.xlsx"` tras el aborte) | Sí |
+
+**Lección de la 506, aplicada al propio banco:** el framework aborta el caso en la
+primera aserción fallida, así que el reset de estado del caso nuevo —al final del
+cuerpo— no corría al fallar y contaminaba casos posteriores (la segunda caída de la 506
+fue pura cascada). El cuerpo del caso quedó envuelto en `try { … } finally { reset }`
+para que la vuelta a fábrica ocurra pase lo que pase.
+
+Banco completo: **3.229 comprobaciones pasan, 0 fallan.**
+
+## v18.0.140 — 4-sep — el sábado ajeno, el disco que solo pregunta en la historia y el fix que era código muerto
+
+Tres frentes del médico del 4-sep, y uno de ellos no era lo que parecía.
+
+**(f) El sábado que no era suyo.** Reporte: «me dice que escoja el sábado 21 pero ese
+día no trabajo». Los chips de fecha ya ofrecen los sábados «por confirmar» (se descartan
+a un clic, con su title), pero la 🎯 que alimenta «Pasar a la fecha sugerida» podía
+imponer como sugerencia automática un sábado de un grupo que NO consta fiable — la
+conducta permisiva de los chips, aplicada a un camino que es una orden de hecho. La
+140 añade `mtrSabadoSugerible` (grupo fiable Y constancia positiva de que ESE sábado lo
+trabaja él: ni conjetura, ni conflicto, ni 5º sábado) y el flag `sabadoSoloFiable` en
+`mtrFechaControlSugerida`, que en modo estricto SE SALTA en la espiral al sábado no
+sugerible en vez de ganárselo por cercanía. Default `false`: los demás llamadores
+(p. ej. `mtrControlDesdeLabs`) conservan la conducta permisiva histórica y no se les
+rompe nada.
+
+**(j) El disco solo pregunta donde hay historia.** Las cuatro guardas de
+`_vglDiscoArranque` (`enHC` en las ramas `prompt`/`sinhandle`) y la de
+`vglDiscoBannerPintar` impiden que el banner de ELEGIR carpeta asome fuera de
+`/viva/HCHealth/` — completan el silencio del subárbol que la 138 empezó con las
+notificaciones.
+
+**(c) El fix que era código muerto.** Reporte: «le doy clic a pasar a la fecha sugerida
+y no se cierra el modal». El parche original añadía tres líneas try/catch de reset tras
+`renderDayChips` en el listener de la 🎯 — y la auditoría de mutaciones reveló que eran
+CÓDIGO MUERTO: `cargarHoras` ya resetea `vencOk`, oculta el recuadro de decisión y
+repinta el vencimiento, y el click de turno repite los resets. Las tres líneas se
+retiraron y su lugar quedó un comentario honesto de auditoría; la prueba end-to-end de
+suite_15 se conserva porque sella el CABLEADO real (🎯 → reconfirmar → cita), y las
+mutaciones legítimas van contra los resets de verdad, no contra las líneas retiradas.
+
+**Pruebas nuevas (+1 caso, 4 aserciones; suite_15 queda en 264, suite_75 en 50,
+suite_46 en 90).** Suite_46 gana «EL MOTOR YA NO IMPONE ese sábado —
+mtrPlanParaclinicos cablea el modo estricto»: un RAC de 90 días (albuminuria) tomado el
+2026-06-07 vence exacto el sábado 2026-09-05, la toma cae en sábado como en el caso
+real, y con el `grupoSabado` en conflicto el control del motor NO puede caer en el
+sábado 12 (+7): la espiral lo salta y cae en el viernes 11. Es la prueba que faltaba:
+las de capacidad (`mtrSabadoSugerible` / `mtrFechaControlSugerida` con flag explícito)
+demostraban que el mecanismo SABÍA, no que el motor lo PIDIERA — la primera corrida de
+mutación sobrevivió con 89 en verde y esa fue la señal. La cadena de versión sube en
+`@version`, `VERSION`, `package.json`, la «versión viva» de suite_75 y el ancla del
+tablero (`TABLERO/VersionCheck.gs` → `57ee7184…a64b3`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 507 | (c-A) `_agmOcultarAvisoConfirmar()` fuera de `cargarHoras`: el recuadro de decisión queda vivo al recargar horas | *suite_15: 1 falla* («el recuadro de decisión se cierra… obtuvo false») | Sí |
+| 508 | (c-B) `confirmBtn.dataset.vencOk = ""` fuera de `cargarHoras` Y del click de turno: el consentimiento dado ya no se limpia | *suite_15: 1 falla* («el consentimiento no se da por hecho… esperaba "" y obtuvo undefined») | Sí |
+| 509 | (j) las cuatro guardas `enHC` de `_vglDiscoArranque` y la de `vglDiscoBannerPintar` fuera: el banner de ELEGIR asoma fuera de la historia | *suite_75: 1 falla* (J6: «sin banner de ELEGIR: esperaba 0 y obtuvo 1») | Sí |
+| 510 | (f) `sabadoSoloFiable: false` en la llamada del motor: `mtrFechaControlSugerida` conserva la capacidad pero el motor no la pide | *suite_46: 1 falla* («el +7 (sábado 12) es de un grupo que NO consta fiable… salió 2026-09-12»). SOLO cae tras añadir la prueba del motor: sin ella el mutante SOBREVIVÍA con las 89 de capacidad en verde | Sí |
+
+**Las dos lecciones de la 140.** Primera: una prueba que pasa igual SIN el fix no está
+probando el fix — el parche (c) original pasó el banco entero porque sus tres líneas no
+hacían nada; retirarlas y que todo siguiera en verde fue la confesión. Segunda: un
+mutante que sobrevive no es ruido, es un mapa — la 510 señalaba la costura exacta
+(capacidad probada, cableado no) y la prueba nueva se escribió sobre esa costura, no al
+azar.
+
+Banco completo: **3.236 comprobaciones pasan, 0 fallan.**
+
+## v18.0.141 — 4-sep — los exámenes de mayo que el botón 🧪 negaba
+
+Reporte del consultorio: «esta paciente tiene exámenes pero el script no me los está
+reconociendo de ninguna manera, me sale que no hay exámenes para esa cédula y sí los
+hay, pero de mayo». La autopsia del camino de lectura encontró TRES fallas
+encadenadas, cada una capaz de vaciar la lista completa: (1) el filtro del núcleo
+comparaba `modulo === "LAB"` EXACTO mientras la captura de `data-modulo` usa `/i` —
+un `data-modulo="lab"` (o `"Lab"`, o `"LABORATORIO"`) del DOM real pasaba la
+extracción y moría en el filtro; (2) el regex del `action` exigía
+`action="/Resultados/Reporte"` exacto entre comillas — un query-string dejaba la
+tarjeta FUERA del barrido; (3) el regex del id no toleraba sufijo alfabético — el DOM
+real ya había mostrado ids como `1112026LAB` (el consecutivo del ancla
+`#collapse1112026LAB`), y la comilla tras el año mataba la tarjeta entera.
+
+El fix de la 141: el módulo se normaliza A MAYÚSCULAS EN EL ORIGEN (el POST del
+detalle sigue llevando `modulo:"LAB"` fijo — contrato del servidor intacto), el filtro
+pasa a ser por PREFIJO (`_vglEsModuloLab`: "lab"/"Lab"/"LAB"/"LABORATORIO" sí),
+y los dos regexes ganan sus tolerancias. Para que un `[]` sospechoso deje de
+disfrazarse de «el paciente no tiene exámenes», `_atheneaExtraerSolicitudes` adjunta
+`__vglMeta` (conteos no enumerables, sin PHI) y el núcleo marca el `[]` con
+`__vglLectura` (`formularios_no_interpretados` / `sin_lab`) — marcador SEPARADO a
+propósito: `__vglIncompleto` sigue siendo NUMÉRICO desde v17.7.1 y sus lectores
+(`> 0`, serialización en `_preconGuardar`) no se tocan. El botón 🧪 lee el marcador
+y habla con honestidad; un warn one-shot adicional deja rastro si el paso 2 devuelve
+MÁS DE UN input `IdPaciente` (cédula duplicada en el portal).
+
+**Pruebas nuevas (suite_18 queda en 93, banco 3.236 → 3.247).** Unidades para las
+tolerancias de regex, la normalización, el prefijo, `_vglMarcarLectura` y `__vglMeta`;
+e2e de la REGRESIÓN EXACTA del reporte (tarjeta de mayo con `id="8465672026LAB"`,
+`data-modulo="lab"` y `action="…?origen=lista"`: los exámenes llegan de punta a
+punta); e2e de `formularios_no_interpretados`, de `sin_lab`, de lectura parcial
+(`__vglIncompleto` numérico, sin `__vglLectura`) y del `IdPaciente` duplicado.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 511 | (2) `action` SIN tolerancia a query-string (regex estricto de la 140) | *suite_18: 2 fallan* (unidad «action con query-string…» + e2e regresión del reporte) | Sí |
+| 512 | (3) `idM` SIN sufijo alfabético: `1112026LAB` muere en la comilla | *suite_18: 2 fallan* (unidad del sufijo + e2e regresión del reporte) | Sí |
+| 513 | (1) push SIN `toUpperCase`: el módulo viaja en la caja del DOM | *suite_18: 1 falla* («data-modulo en minúscula se NORMALIZA a LAB en el origen») | Sí |
+| 514 | (1) filtro del núcleo EXACTO `=== "LAB"` en vez del helper de prefijo | *suite_18: 1 falla* (e2e «data-modulo="LABORATORIO"… SÍ se lee»). SOLO cae tras añadir esa prueba: en la primera corrida el mutante SOBREVIVÍA con las 92 de entonces en verde | Sí |
+| 515 | rama `formularios_no_interpretados` ELIMINADA (`return []` mudo) | *suite_18: 1 falla* (e2e «formularios presentes pero NINGUNO interpretable»: el marcador y el warn desaparecen) | Sí |
+| 516 | marcador `sin_lab` ELIMINADO (`return []` sin `__vglLectura`) | *suite_18: 1 falla* (e2e «ninguna es del módulo LAB → [] MARCADO») | Sí |
+| 517 | `__vglMeta.formularios` contaba INTERPRETADAS en vez de MATCHES | *suite_18: 1 falla* (el guardia `formularios > 0` se apaga con el XYZ999 no interpretado y el e2e de #515 queda mudo) | Sí |
+| 518 | warn one-shot de `IdPaciente` duplicado ELIMINADO | *suite_18: 1 falla* (e2e «DOS inputs IdPaciente»: el warn no queda en consola) | Sí |
+| 519 | rama de presentación del botón 🧪 sin leer `__vglLectura` (mensaje genérico) | **SOBREVIVE el banco completo (3.247 en verde)** — brecha conocida y documentada, no cobertura fingida | Sí |
+
+**Las lecciones de la 141.** Primera: #514 repite la familia de la 510 — la capacidad
+(`_vglEsModuloLab` acepta "LABORATORIO") estaba probada por unidad, el CABLEADO (el
+núcleo pidiendo el helper) no; la diferencia con la 140 es que esta vez la corrida de
+mutaciones fue ANTES de publicar y la prueba se escribió sobre la costura en caliente.
+Segunda: #519 se deja escrito en la tabla aunque sobreviva — la rama del botón es
+presentación pura (sin ella el médico ve el mensaje genérico, no datos corruptos, y
+los warns de consola que SÍ están probados siguen dejando rastro); fingir que esa
+rama está cubierta sería exactamente el tipo de verde que este informe existe para
+cazar.
+
+Banco completo: **3.247 comprobaciones pasan, 0 fallan.**
+
+## v18.0.142 — 4-sep — el grounding de la tensión arterial
+
+Reporte del consultorio: «PUSE 111/78… FALTÓ LA DIASTÓLICA». La pantalla
+mostraba 165/70 y 111/78, pero las notas salían redactadas con 124/82 y 110/70:
+cifras que nadie tomó ese día. La autopsia encontró TRES causas encadenadas:
+(1) la casilla obligatoria «T.A:*» NO tenía lector por rótulo — solo existía el
+lector por `name` (y el de acostado), así que una casilla cuyo rótulo no casa
+con ningún name era INVISIBLE; (2) cuando esa casilla traía el par completo
+«111/78», `_labNumerico` lo fundía en 11178 y el guard de rango lo mataba —
+con el par perdido y la sistólica suelta, el hueco quedaba abierto; (3) río
+abajo, OTRA medición de otro día llenaba la diastólica que faltaba, la IA
+redactaba «111/78» con la cifra ajena, y la hoja imprimía «111/null».
+
+El fix de la 142: una familia de helpers DEDICADA a la tensión, sin tocar la
+precedencia entre fuentes (eso sigue mandando MTR_PRECEDENCIA_SYS) ni los
+lectores de peso y cintura. `_mtrTaDesdeTexto` (grupos `\d+` de 2-3 dígitos:
+1 grupo → {pas, pad:null}; 2 grupos → ambos en rango fisiológico —sis 60-260,
+dia 30-150— y pad ≤ pas; «-» o 3+ grupos → null: mejor sin cifra que con una
+cifra que no está en la pantalla). `_mtrTaNumeroDeTexto` (un campo de UNA cifra
+jamás acepta «/»). `_mtrTaValorCrudo`/`_mtrPrimerValorCrudo` (el valor String
+con el MISMO lookup name→id de mtrLeerCampoNumerico: así se sabe si UNA casilla
+trae el par entero). `_mtrTaDesdeCampos` (la casilla que trae «111/78» GANA
+completa; cruzado → null, no se «corrige» intercambiando). `_mtrTensionPorRotulo`
+(enumera `input, select, textarea`, rótulo vía `_mtrRotuloDeCampo`, con
+exclusión: 1 casilla → su texto completo; 2 → orden DOM; 0 o 3+ → null — la
+ambigüedad no se resuelve eligiendo). `_mtrTaEsCompleta` y `_mtrTaFamilia`: la
+lectura COMPLETA por rótulo le gana a la PARCIAL por nombres.
+`mtrLeerTensionDelDom` lee las DOS familias con la obligatoria PRIMERO — y una
+obligatoria PARCIAL sigue mandando sobre la acostado COMPLETA (la lección de la
+v18.0.54, intacta). `MTR_ROTULO_TA_ACOSTADO` se ensancha a
+`/T[.\s\/]*A[.\s:*]*acostado/i` porque la versión anterior era un guardia
+fantasma: NINGÚN rótulo real («T.A:* acostado») disparaba la exclusión. La
+regla para la IA gana su línea explícita en los CINCO modos — si un signo vital
+llega incompleto está PROHIBIDO rellenar la cifra que falta con un valor típico,
+la cifra de otra medición o cualquier número que no venga en los bloques — y la
+hoja imprime «PA 111 mmHg» sin diagonal cuando no hay diastólica.
+
+**Pruebas nuevas (suite_55 y suite_57; banco 3.247 → 3.253).** El par «111/78»
+leído completo desde el texto (con los null de 11178, del cruzado 95/120, del
+negativo y —añadidas en caliente durante esta corrida de mutaciones— de las
+cifras fuera de rango 300/190 y 999); la casilla por NOMBRES que trae el par
+entero; «T.A:*» leído por RÓTULO con 1 y con 2 casillas (con «Talla (cm)»
+fuera, el acostado como respaldo y el rótulo ambiguo «T.A:* acostado» SIN
+robarle el puesto a la obligatoria); la COMPLETA por rótulo ganándole a la
+PARCIAL por nombres; los CINCO modos de la IA PROHIBIENDO rellenar la cifra que
+falta; y la hoja mostrando la sistólica que sí consta sin inventar la
+diastólica.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 520 | rangos fisiológicos de `cifra()` apagados (`return n;`): «300/190» pasaría como tensión | *suite_55: 1 falla* («111/78» se lee COMPLETO — aserciones «300/190» y «999»). SOLO cae tras añadir esas aserciones EN CALIENTE: en la primera corrida SOBREVIVÍA con el banco completo en verde | Sí |
+| 521 | hoisting del «/» de `_mtrTaDesdeCampos` eliminado (la casilla con el par entero ya no gana) | *suite_55: 1 falla* (una casilla por NOMBRES que trae «111/78» entero gana: esperaba 111 y obtuvo null) | Sí |
+| 522 | guard «/» de `_mtrTaNumeroDeTexto` eliminado | **SOBREVIVE el banco completo (3.253 en verde)** — capa de profundidad, no brecha: TODOS los llamadores interceptan «/» antes de llegar aquí (la capa que la precede cae con 521 y con las líneas «/» de `_mtrTensionPorRotulo`); se documenta, no se finge | Sí |
+| 523 | lector por rótulo APAGADO (`_mtrTensionPorRotulo` → null inmediato) | *suite_55: 2 fallan* («T.A:*» se lee por RÓTULO + la COMPLETA por rótulo le gana a la PARCIAL). En la primera corrida el arnés ABORTÓ: la ancla aparecía 2 veces; se re-ancló con la firma completa de la función | Sí |
+| 524 | exclusión del acostado eliminada del lector por rótulo | *suite_55: 1 falla* (rótulo ambiguo «T.A:* acostado» NO le roba el lugar a la obligatoria: esperaba 165 y obtuvo 138) | Sí |
+| 525 | regla de familia COMPLETA>PARCIAL apagada (`if (false)`) | *suite_55: 1 falla* (la COMPLETA por rótulo le gana a la PARCIAL por nombres: esperaba 165 y obtuvo 111) | Sí |
+| 526 | orden de familias INVERTIDO (la acostado lee primero) | *suite_55: 2 fallan* (v18.0.54 «manda la T.A, no la T.A Acostado»: esperaba 136 y obtuvo 120; y el rótulo ambiguo de la 142: esperaba 165 y obtuvo 138) | Sí |
+| 527 | línea PROHIBIDO retirada de los CINCO modos de la IA | *suite_57: 1 falla* (los CINCO modos PROHÍBEN rellenar la cifra que falta — la regla del hueco en enfermedad_actual) | Sí |
+| 528 | la hoja vuelve a imprimir «111/null» | *suite_57: 1 falla* (la hoja con SOLO la sistólica no completa la diastólica: «PUSE 111/78… FALTÓ LA DIASTÓLICA») | Sí |
+
+**Las lecciones de la 142.** Primera: #520 repite la familia de #514/#510 —
+la capacidad (rangos fisiológicos) EXISTÍA en el código pero NINGUNA aserción
+la fijaba; la corrida de mutaciones ANTES de publicar la descubrió y la prueba
+se escribió sobre la costura en caliente, con el mutante re-corrido hasta
+caer. Segunda: #522 se queda en la tabla sobreviviendo a propósito — es
+defensa en profundidad (las capas que la preceden ya están tumbadas por #521),
+fingir que es cobertura activa sería el verde falso que este informe existe
+para cazar. Tercera: #523 recuerda la disciplina del arnés — ancla única o
+aborto; apagar un lector completo exige anclar en la FIRMA de la función, no
+en una guarda que otras funciones comparten.
+
+Banco completo: **3.253 comprobaciones pasan, 0 fallan.**
+
+## v18.0.143 — 4-sep — la falla terapéutica con la ventana gastada rige por vigencia natural, y la lectura que no se pudo hacer deja de ser «nunca tomado»
+
+Dos reportes del médico en la misma noche. El tercero: «EN ESTE CASO NO
+DEBERÍA SUGERIR CONTROL EL 25 DE SEPTIEMBRE Y EXÁMENES EL 18, SI NO HAY
+CRITERIO PARA ESO. LA HEMOGLOBINA ES UN PASAJERO Y LAS FALLAS TERAPEUTICAS NO
+SE TIENEN EN CUENTA COMO VENCIMIENTO, EN CASO DE QUE YA HAYA PASADO LA
+VENTANA DEL 50% PUES SE UTILIZAN ENTONCES LAS VIGENCIAS NATURALES DE CADA
+ANALITO». Su paciente HTA tenía el LDL en falla terapéutica con la ventana
+del 50 % vencida el 31-ago y la norma viva hasta el 29-nov: el motor la
+contaba como vencida, activaba el piso de 14 días («hay exámenes por pedir»)
+y arrastraba el panel entero a una toma de septiembre que nadie ordenó. El
+segundo: «APARECE QUE NUNCA SE LOS HA REALIZADO Y RESULTA QUE SÍ SE LOS HIZO»
+— cuando Athenea fallaba al leer, el tablero afirmaba «Nunca se le ha tomado»
+de laboratorios que sí constan en el portal.
+
+El fix A (motor): ventana del 50 % vencida + norma viva ya no es «vencido».
+Estado D con subestado nuevo `falla_natural`: se publica la fecha NATURAL
+(`vencePublicado`/`diasPublicado`/`vigenciaDias` de la norma) y la fecha de la
+falla se conserva en `venceFalla`/`diasParaVencerFalla` — null en todos los
+demás casos — para que la pantalla cuente la historia completa sin volver a
+mandar sobre la fecha. Antes de la ventana, la regla del 02-sep no cambia (se
+repite YA, Estado A intacto); con la norma agotada sigue siendo vencido de
+verdad (`vencidoBase`, piso 14/techo 21). El motivo del motor y el pintor de
+vigentes cuentan ambas fechas y la regla: «…la ventana del 50 % venció el
+31-ago — rige la vigencia natural». El badge de paquetes lo pinta como VENCE.
+Y el bloque de recontrol que empujaba la ftl DEJÓ DE EXISTIR: `recontrol_falla`
+no aparece ni una vez en el fuente (asertado por suite_24 y suite_77).
+
+El fix B (lectura): la marca `atheneaPrincipalFallo` ya no exige `o.fresco` —
+cualquier lectura fallida estampa `resumen._lecturaAtheneaFallo` y la baja al
+plan; con ella NO se cachea el resumen vacío (el guard de la v18.0.131,
+ampliado). Los pintores (tablero y sugerencia de plazo) dicen la verdad del
+sistema — «No consta tomado (no se pudo leer el laboratorio)» — en lugar de
+«Nunca se le ha tomado», y solo cuando hay evidencia de fallo.
+
+**Pruebas nuevas (suite_77, 7 casos; banco 3.253 → 3.260).** La paciente del
+reporte reconstruida (LDL 160 del 02-jun, panel al día): LDL en D
+`falla_natural` venciendo 2026-11-29 con `venceFalla` 2026-08-31 y −4 días; ni
+en vencidos ni en ordenar, esperando en diferidos; la hemoglobina viajando
+sola en la orden SIN fijar la fecha; ftl 2026-11-28 (el 29 es domingo) con
+motivo «en el vencimiento más próximo» — ya no «hay exámenes por pedir». El
+mismo LDL con el resto del panel fresco de septiembre: la toma sigue siendo la
+natural. Antes de la ventana: se repite YA, intacto. Norma agotada: vencido
+real con `vencidoBase`. Lectura fallida: tablero y sugerencia cambian el texto
+SOLO con el flag. Y el cableado de fuente: ni rastro del subestado viejo, la
+fecha de la falla en su campo propio, el guard sin `o.fresco`, el `else` que
+marca la lectura no fresca fallida y el texto de los pintores. Actualizadas
+por la regla nueva: suite_24 (un analito `falla_natural` cuya vigencia natural
+COINCIDE con la ftl va en ordenar, no en diferidos — no es regresión, es su
+fecha propia), suite_46 y suite_47 (lípidos de abril con ventana gastada: la
+ftl pasa de 2026-09-09 a 2026-09-28, la vigencia natural), suite_75 (fila.ver
+143) y suite_15 (la regex del guard ampliado).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 529 | el motor deja de estampar `falla_natural` (lo deja «vigente»): la ventana gastada vuelve a leerse como vigencia partida | *suite_77: 3* (subestado, vence natural, motivo del tablero) + *suite_24: 2* + *suite_46: 1* — 6 en total | Sí |
+| 530 | `vencePublicado` ignora la norma y publica la fecha del 50 % vencida | *suite_77: 2* (vence 2026-11-29 / venceFalla 2026-08-31) + *suite_24: 2* + *suite_46: 2* + *suite_47: 1* — 7 en total | Sí |
+| 531 | el motivo del motor pierde «— rige la vigencia natural» | *suite_77: 1* (la historia completa en una línea) + *suite_24: 1* | Sí |
+| 532 | el guard del Panel apagado (`if (false)`): la lectura fallida volvería a cachearse como leída | *suite_15: 1* (regex del guard ampliado) + *suite_77: 1* (chequeo de fuente) | Sí |
+| 533 | el pintor sin_historial pierde la rama del fallo: volvería a decir «Nunca se le ha tomado» de labs que existen | *suite_77: 1* («No consta tomado (no se pudo leer el laboratorio)») | Sí |
+| 534 | `_noLeido = false`: la sugerencia de plazo afirmaría «nunca» de una lectura que falló | *suite_77: 1* (el motivo de mtrSugerenciaPorPlazo) | Sí |
+| 535 | el `else` que marca la lectura NO fresca fallida escribe `false` | *suite_15: 1* + *suite_77: 1* (chequeo de fuente: «no solo el clic de 🔄 Buscar») | Sí |
+| 536 | el badge pintaría `falla_natural` como AL DÍA | *suite_77: 1* («esperaba vence y obtuvo al_dia») | Sí |
+
+**Las lecciones de la 143.** Primera: el fix A se protege por TRES capas
+independientes — el subestado (529), la fecha publicada (530) y el texto que
+cuenta la historia (531) — porque cada una puede romperse sin arrastrar a las
+otras. Segunda: los fixes del guard (532/535) viven en el DOM y no tienen
+pathway conductual directo en el banco; mueren por la regex de suite_15 y por
+los chequeos de fuente de suite_77, dos testigos independientes del mismo
+cableado — si uno se renombra en silencio, el otro sigue dando fe. Tercera:
+536 parecía enmascarado por el respaldo `if (x.vence) return "vence"` — no lo
+estaba: el `return` mutado devuelve «al_dia» sin caer al respaldo, y la
+aserción lo cazó a la primera. La disciplina es correr el mutante y ver, no
+razonar si va a caer.
+
+Banco completo: **3.260 comprobaciones pasan, 0 fallan.**

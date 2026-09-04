@@ -302,11 +302,26 @@ module.exports = {
       // toma un mes (del 30-sep al 29-ago). Comprobado midiendo el mismo caso con y sin el
       // margen. Lo que este caso protege es que no se cite DESPUÉS de que algo vigente se
       // eche a perder; los ya vencidos son justo lo que la cita viene a resolver.
-      const yaVencidos = new Set((plan.vencidos || []).map((a) => a.nombre));
-      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl && !yaVencidos.has(a.nombre));
+      // v18.0.135 — con la regla de la entrevista del 02-sep existe un TERCER destino
+      // además de «vigente» y «vencido»: la falla terapéutica. Aquí la HbA1c de 7,1
+      // (meta 7,0) parte SU vigencia y la de la glucosa a la mitad: ambas quemaron su
+      // ventana del 50 % el 30-jul, pero su norma sigue viva hasta el 28-oct.
+      // v18.0.143 — ordenanza del 04-sep: «LAS FALLAS TERAPÉUTICAS NO SE TIENEN EN
+      // CUENTA COMO VENCIMIENTO; SI YA PASÓ LA VENTANA DEL 50 %, RIGEN LAS VIGENCIAS
+      // NATURALES DE CADA ANALITO». Glucosa y HbA1c ya NO viajan en `ordenar`: publican
+      // su vencimiento natural (28-oct) y la fecha de la toma vuelve a mandarla la
+      // creatinina (30-sep, el vecino natural más próximo). Este caso sigue protegiendo
+      // lo de siempre —que nada VIGENTE se eche a perder antes de la toma— y ahora las
+      // fallas gastadas también cuentan como vigentes que la cita debe proteger.
+      t.igual(plan.ftl, "2026-09-30", "la toma la manda la creatinina: la falla con la ventana gastada ya no adelanta nada");
+      const glu = plan.drivers.filter((a) => a.clave === "GLUCOSA")[0];
+      t.cierto(!!glu, "precondición: la glucosa sigue entre los drivers");
+      t.igual(glu.subestado, "falla_natural", "la glucosa es falla_natural: ventana del 50 % gastada, norma viva");
+      t.igual(glu.vence, "2026-10-28", "y publica su vencimiento NATURAL (28-oct), no la ventana quemada");
+      t.falso((plan.ordenar || []).some((a) => a.clave === "GLUCOSA"),
+        "no viaja en la orden: no hay criterio para repetirla YA");
+      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl);
       t.igual(antes.map((a) => a.nombre + "@" + a.vence), [], "hay exámenes VIGENTES que vencen ANTES de la toma");
-      t.cierto((plan.ordenar || []).some((a) => yaVencidos.has(a.nombre)) || yaVencidos.size === 0,
-        "y todo lo que ya estaba vencido va en la orden: si no, el médico cita y nadie lo pide");
     });
 
     t.caso("si el vencimiento cae en domingo, la toma se ADELANTA al sábado", () => {
@@ -538,8 +553,11 @@ module.exports = {
     t.caso("v17.6.98: forzar la creatinina NO mueve la fecha de toma ni la de control", () => {
       // El cambio añade un examen a la orden; no cambia el día. La fecha la decide el
       // bloque de arriba, que corre ANTES de la cosecha y no se ha tocado.
+      // v18.0.143 — la fecha se movió DELIBERADAMENTE una sola vez: los lípidos de este
+      // vector están en falla terapéutica con la ventana del 50 % gastada, y esa falla
+      // ya no adelanta la toma (reporte del 04-sep). Rige su vigencia natural: 28-sep.
       const plan = _planAnr("G3b", "2026-06-20");
-      t.igual(plan.ftl, "2026-09-09", "la toma sigue donde la ponen los lípidos vencidos");
+      t.igual(plan.ftl, "2026-09-28", "la toma la pone la vigencia NATURAL de los lípidos (la falla gastada ya no adelanta nada)");
       t.cierto(!!(plan.control && plan.control.fecha), "y el control se sigue calculando desde ella");
       t.cierto(plan.control.fecha > plan.ftl, "después de la toma, como siempre");
     });
@@ -1148,6 +1166,81 @@ module.exports = {
       t.cierto(!!r, "debía salir fecha");
       t.cierto(r.fecha !== "2026-09-12", "el 2º sábado no es suyo: no se propone (salió " + r.fecha + ")");
       t.cierto(api.mtrDiaValidoParaControlConSabado(r.fecha, g13), "y la que salga tiene que ser válida");
+    });
+
+    // ============ v18.0.140 (f) — LA SUGERENCIA AUTOMÁTICA YA NO IMPONE SÁBADOS AJENOS ============
+    // Caso real del 4-sep: «me dice que escoja el sábado 21 pero ese día no trabajo». Los
+    // chips pueden OFRECER un sábado «por confirmar» (se descarta a un clic, con su title),
+    // pero la 🎯 que alimenta «Pasar a la fecha sugerida» ahora exige constancia fiable de
+    // que ESE sábado lo trabaja el médico.
+
+    t.caso("mtrSabadoSugerible solo con grupo fiable y sábado PROPIO", () => {
+      const g13 = { habilitado: true, observados: ["2026-08-01", "2026-08-15"], grupo: "1-3", confianza: "deducido", conflicto: false };
+      t.cierto(api.mtrSabadoSugerible("2026-09-05", g13), "1º sábado de su grupo: sugerible");
+      t.falso(api.mtrSabadoSugerible("2026-09-12", g13), "2º sábado del OTRO grupo: la 🎯 no puede imponerlo");
+      t.falso(api.mtrSabadoSugerible("2026-10-31", g13), "el 5º sábado no es de nadie: se ofrece a un clic, pero no se sugiere");
+      const conj = { habilitado: true, observados: ["2026-08-01"], grupo: "1-3", confianza: "conjetura", conflicto: false };
+      t.falso(api.mtrSabadoSugerible("2026-09-05", conj), "grupo en conjetura («por confirmar»): no sugerible");
+      const conf = { habilitado: true, observados: ["2026-08-01", "2026-08-08"], grupo: null, confianza: "conflicto", conflicto: true };
+      t.falso(api.mtrSabadoSugerible("2026-09-05", conf), "deducción en conflicto: no sugerible");
+      const sinAgenda = { habilitado: false, observados: [], grupo: "1-3", confianza: "deducido", conflicto: false };
+      t.falso(api.mtrSabadoSugerible("2026-09-05", sinAgenda), "sin constancia de que trabaje sábados: claro que no");
+      t.falso(api.mtrSabadoSugerible("2026-09-05", null), "y sin objeto de sábados, tampoco");
+    });
+
+    t.caso("con sabadoSoloFiable la espiral SE SALTA el sábado por confirmar", () => {
+      // Toma el sábado 2026-09-05: el objetivo (+7) es el sábado 12, que con la deducción
+      // en conflicto sí se ofrece en los chips, pero no se puede imponer como sugerencia:
+      // la espiral lo salta y cae en el viernes 11.
+      const conf = { habilitado: true, observados: ["2026-08-01", "2026-08-08"], grupo: null, confianza: "conflicto", conflicto: true };
+      const r = api.mtrFechaControlSugerida("2026-09-05", { grupoSabado: conf, sabadoSoloFiable: true });
+      t.cierto(!!r, "debía salir fecha");
+      t.falso(r.esSabado, "la sugerencia estricta no puede caer en sábado por confirmar (salió " + r.fecha + ")");
+      t.cierto(r.fecha !== "2026-09-12", "el sábado 12 se saltó en la espiral");
+      // Compatibilidad: sin el flag, los demás llamadores conservan la conducta permisiva
+      // histórica (no se les rompe nada al actualizar).
+      const rP = api.mtrFechaControlSugerida("2026-09-05", { grupoSabado: conf });
+      t.cierto(rP.esSabado && rP.fecha === "2026-09-12", "sin el flag el +7 permisivo sigue siendo el sábado 12");
+    });
+
+    t.caso("el sábado PROPIO sí puede ser la sugerencia estricta", () => {
+      const g13 = { habilitado: true, observados: ["2026-08-01", "2026-08-15"], grupo: "1-3", confianza: "deducido", conflicto: false };
+      const r = api.mtrFechaControlSugerida("2026-09-12", { grupoSabado: g13, sabadoSoloFiable: true });
+      t.igual(r.fecha, "2026-09-19", "+7 del sábado 12 es el sábado 19, 3º y suyo: se mantiene");
+      t.cierto(r.esSabado, "y llega marcado como sábado");
+    });
+
+    t.caso("EL MOTOR YA NO IMPONE ese sábado — mtrPlanParaclinicos cablea el modo estricto", () => {
+      // Las pruebas de arriba demuestran que mtrFechaControlSugerida SABE saltarse el
+      // sábado por confirmar; esta demuestra que el motor de verdad —el que alimenta la 🎯
+      // de «Pasar a la fecha sugerida»— lo pidió así (`sabadoSoloFiable: true` en la
+      // llamada dentro de mtrPlanParaclinicos). La auditoría de mutaciones de la v18.0.140
+      // detectó que sin esta prueba el flag podía borrarse de la llamada y todo seguía en
+      // verde: la capacidad estaba probada, el cableado no.
+      //
+      // Montaje: un RAC de 90 días (albuminuria) tomado el 2026-06-07 vence EXACTO el
+      // sábado 2026-09-05, que es hábil — la toma cae en sábado, como en el caso real.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-22", programa: "ERC", estadioAdministrativo: "G3b",
+        esDm2: true, edad: 68, rac: 45,
+        grupoSabado: { habilitado: true, observados: ["2026-08-01", "2026-08-08"], grupo: null, confianza: "conflicto", conflicto: true },
+        ultimos: {
+          RAC: { fecha: "2026-06-07", valor: 45 },
+          CREATININA: { fecha: "2026-08-20", valor: 1.2 },
+          GLUCOSA: { fecha: "2026-08-20", valor: 95 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-20", valor: 190 },
+          COLESTEROL_HDL: { fecha: "2026-08-20", valor: 45 },
+          COLESTEROL_LDL: { fecha: "2026-08-20", valor: 90 },
+          TRIGLICERIDOS: { fecha: "2026-08-20", valor: 120 },
+          UROANALISIS: { fecha: "2026-08-20", valor: 1 },
+          HBA1C: { fecha: "2026-08-20", valor: 6.8 },
+        },
+      });
+      t.igual(plan.ftl, "2026-09-05", "la toma es el sábado 2026-09-05 (vence el RAC): el sábado es hábil");
+      t.cierto(!!plan.control, "y el motor propone fecha de control");
+      t.cierto(plan.control.fecha !== "2026-09-12",
+        "el +7 (sábado 12) es de un grupo que NO consta fiable: el motor no puede imponerlo (salió " + plan.control.fecha + ")");
+      t.falso(plan.control.esSabado, "la sugerencia del motor cae en día de semana, no en un sábado por confirmar");
     });
 
     t.caso("el control se separa de la toma al menos 4 días (>=72 h para el resultado)", () => {

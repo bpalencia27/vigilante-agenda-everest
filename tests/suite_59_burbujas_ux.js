@@ -63,6 +63,57 @@ module.exports = {
   cubre: ["vglTip", "_vglTipAbrir", "_vglTipCerrar", "_vglTipTeclado", "_vglTipInstalar", "mtrAbrirPanelRedaccion"],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B3.3 (Misión B, capa b): el guard de apertura de los open* exige
+    // perfil; un contexto sin padrón resuelve a PÚBLICO y el modal nunca se monta.
+    // Se reenvuelve `cargar` para sembrar en TODOS los contextos la lista
+    // `vgl_acceso_lista` (uid 707 en COMPLETO, como la dejaría el fetch de B2) y
+    // una identidad por defecto. Un caso que siembre SU identidad después de
+    // cargar sigue mandando: la asignación posterior pisa este default.
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-59.acceso",
+          perfiles: {
+            COMPLETO: [
+              { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+              { uid: 102, nombre: "Eliseth Estrada" },
+              { uid: 103, nombre: "María Edineth Pino" },
+            ],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
+    // v18.1.0 — B3.3 (cont.): esta suite también ejercita el `api`/`env` EXTERNO que el
+    // runner crea ANTES de este reenvoltorio (los casos de mtrAbrirPanelRedaccion usan
+    // ese api directo). Ese contexto necesita el mismo padrón e identidad, o el guard de
+    // apertura corta el panel en seco. Un caso que luego cambie SU identidad pisa esto.
+    if (env && env.storage && !env.storage.getItem("vgl_acceso_lista")) {
+      env.storage.setItem("vgl_acceso_lista", JSON.stringify({
+        version: "test-59.acceso",
+        perfiles: {
+          COMPLETO: [
+            { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+            { uid: 102, nombre: "Eliseth Estrada" },
+            { uid: 103, nombre: "María Edineth Pino" },
+          ],
+          LABORATORIOS: [],
+        },
+        blocklist: [],
+      }));
+    }
+    if (api && api.__state && !api.__state.activeDoctor.id) {
+      api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+    }
     t.caso("vglTip: genera un botón '?' con el texto en data-vgl-tip, escapado", () => {
       const html = api.vglTip('Ojo con < > & " esto');
       t.cierto(html.includes('class="vgl-tip-btn"'), "lleva la clase compartida");

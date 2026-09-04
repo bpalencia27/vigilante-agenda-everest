@@ -17,6 +17,33 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B4 (Misión B, capa c): apiLaboratorioAgendarAuto ESCRIBE en
+    // AppCita (AgendarCita → agendar_labs) y la capa c re-comprueba el perfil
+    // justo antes de salir a la red; un contexto sin padrón resuelve a PÚBLICO
+    // y la cita no se crea. Estas pruebas agendan «como el dueño del perfil»:
+    // se siembra en TODOS los contextos la lista `vgl_acceso_lista` (uid 707 en
+    // COMPLETO, como la dejaría el fetch de B2) y una identidad por defecto; un
+    // caso que fije SU doctor después de cargar sigue mandando.
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-13.acceso-b4",
+          perfiles: {
+            COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
     const URL_AGENDA = "/apiviva/APIMedicoHealth/api/Medico/ObtenerConsultas?especialidadId=1&profesionalId=2";
     const ABS_AGENDA = "https://neps.everestintelligent.com" + URL_AGENDA;
 

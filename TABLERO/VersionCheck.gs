@@ -20,7 +20,7 @@
   toda la flota en vez de esperar el ciclo propio de cada Tampermonkey.
 */
 
-const MIN_VERSION = "18.0.32";  // ← Versión mínima requerida (01-sep: hemoglobina del hemograma, parcial de orina, Auto-Labs honesto, blindaje CSS y fuga de PHI)
+const MIN_VERSION = "18.0.142";  // ← Versión mínima requerida (04-sep: reporte en vivo del médico — una paciente con la creatinina venciendo en diciembre y un panel que vence en feb-2027 seguía viendo SIETE exámenes arrastrados a la toma de diciembre. El guardarraíl de "el mismo viaje" existe desde la v18.0.43 (01-sep), pero este MIN_VERSION quedó clavado en la 18.0.32: a los equipos entre ambas versiones nadie les empujaba la actualización y seguían cosechando con la regla vieja. Se sube a la 18.0.142 para empujar la flota completa.)
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
 
 // Ancla de integridad (hallazgo A1 de la auditoría del 03-sep, v18.0.134):
@@ -30,8 +30,8 @@ const FORCE = false;           // ← true = todos auto-reload incluso si están
 // el equipo; con la huella de otra versión el script NO se apaga (este tablero
 // va atrasado, nadie manipuló nada). Actualizar AMBAS constantes en cada
 // release que toque el userscript.
-const EXPECTED_SHA256 = "23927be37b2d30ef8de5ad81e5c686184a42293b0319a9bfe9ebbb3da2f5abee";
-const EXPECTED_SHA_VERSION = "18.0.134";
+const EXPECTED_SHA256 = "a326aab48869d279a3ac328efd1e6fa562023d5f3f80efb21eb493878d9c7bec";
+const EXPECTED_SHA_VERSION = "18.0.142";
 
 // Configuración de Kill-Switch remoto de emergencia (R5.3)
 const KILL_SWITCH = {

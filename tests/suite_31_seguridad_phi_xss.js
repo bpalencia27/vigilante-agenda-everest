@@ -26,6 +26,36 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B3.3 (Misión B, capa b): el guard de apertura de los open* exige
+    // perfil; un contexto sin padrón resuelve a PÚBLICO y el modal nunca se monta.
+    // Se reenvuelve `cargar` para sembrar en TODOS los contextos la lista
+    // `vgl_acceso_lista` (uid 707 en COMPLETO, como la dejaría el fetch de B2) y
+    // una identidad por defecto. Un caso que siembre SU identidad después de
+    // cargar sigue mandando: la asignación posterior pisa este default.
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-31.acceso",
+          perfiles: {
+            COMPLETO: [
+              { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+              { uid: 102, nombre: "Eliseth Estrada" },
+              { uid: 103, nombre: "María Edineth Pino" },
+            ],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
     const RUTA_USERSCRIPT = path.join(__dirname, "..", "vigilante_agenda.user.js");
 
     // ===================================================================
@@ -749,6 +779,47 @@ module.exports = {
       t.igual(guardado["AntecedentePatologicos.Hipertension"], true,
         "lo de Antecedentes sigue ahí aunque esa pestaña ya no exista en el DOM");
       t.igual(guardado["hs.HabitosGestionRiesgo.sedentarismo"], true, "y lo de Hábitos también");
+    });
+
+    t.caso("v18.0.135 — la cosecha acumulada guarda FECHA por campo: lo visto HOY toma hoy", () => {
+      // FRENTE 5 (03-sep): sin fecha por campo, el rótulo A7 no podía distinguir la PA que
+      // el médico acaba de digitar de la que Everest pre-llenó del control anterior, y la
+      // IA redactó el examen físico de HOY con cifras de una consulta previa (#8387512,
+      // #34965201). Aquí se fija el eslabón de PERSISTENCIA: el mapa `domFechas` que viaja
+      // pegado a `dom` en el bloque del paciente (la separación del texto está en suite_57).
+      const c2 = cargar({ silencioso: true });
+      const DOC = "555444333";
+      const gebP = c2.env.doc.getElementById.bind(c2.env.doc);
+      c2.env.doc.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+      const conCedula = (nodos) => (sel) => {
+        const s = String(sel);
+        if (s === ".text-muted") return [{ textContent: "CC " + DOC, closest: () => null }];
+        const m = /^input\[name="(.*)"\]$/.exec(s);
+        if (m) return nodos.filter((x) => x.name === m[1]);
+        if (s.indexOf("[name]") >= 0) return nodos;
+        return [];
+      };
+
+      // Bloque legado: cosecha ANTERIOR con fecha vieja (la PA del control previo).
+      const ANTES = c2.api._vglFechaHace(7);
+      c2.api._vglCosechaGuardar(DOC, { hcEverest: {
+        dom: { "signosVitales.tensionArterial": "135/85" },
+        domFechas: { "signosVitales.tensionArterial": ANTES },
+        ts: 1,
+      } });
+
+      // HOY el médico digita el peso de ESTA consulta; la casilla de la PA ni siquiera está
+      // en el DOM (Angular la destruyó al cambiar de pestaña).
+      c2.env.doc.querySelectorAll = conCedula([{ name: "signosVitales.peso", type: "text", value: "80" }]);
+      c2.api.mtrHcAcumularDelDom(DOC, c2.env.doc);
+
+      const bloque = c2.api.mtrHcLeer(DOC) || {};
+      t.igual((bloque.domFechas || {})["signosVitales.peso"], c2.api.todayStamp(),
+        "lo visto en la pantalla de HOY queda sellado con la fecha de hoy");
+      t.igual((bloque.domFechas || {})["signosVitales.tensionArterial"], ANTES,
+        "y lo cosechado ANTES conserva su fecha vieja: no se «refresca» por accidente");
+      t.igual((bloque.dom || {})["signosVitales.tensionArterial"], "135/85",
+        "la fusión de valores sigue intacta: la fecha es un sello, no un dato");
     });
 
     t.caso("v17.10.0 — lo cosechado en vivo llega al texto que ve la IA", () => {

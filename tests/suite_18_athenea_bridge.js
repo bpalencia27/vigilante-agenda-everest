@@ -29,6 +29,7 @@ module.exports = {
     "_atheneaExtraerSolicitudes", "_parseFechaEspanolLike", "_fechaDesdeNumeroSolicitud",
     "_atheneaMultipart", "_atheneaPareceLogin",
     "_gmReq", "getAtheneaSolicitudesAuto", "getAtheneaLabsAuto",
+    "_vglEsModuloLab", "_vglMarcarLectura",
     "atheneaKeepAlive", "atheneaAutoLogin",
     "atheneaCredsGet", "atheneaCredsSet", "atheneaCredsClear",
     "_vglXor", "_vglOfusca", "_vglDesofusca",
@@ -1052,8 +1053,13 @@ module.exports = {
       t.falso(e.llamadas.some((o) => String(o.url).includes("consultaDetalleSolicitud")));
     });
 
-    await t.casoAsync("getAtheneaLabsAuto: solicitudes existen pero ninguna es del módulo LAB -> [] sin consultar detalle", async () => {
+    await t.casoAsync("getAtheneaLabsAuto: solicitudes existen pero ninguna es del módulo LAB -> [] MARCADO sin consultar detalle (v18.0.141)", async () => {
+      // v18.0.141 — este caso CAMBIÓ de contrato: antes devolvía un [] mudo que el
+      // botón 🧪 presentaba como "no tiene exámenes"; ahora el [] llega marcado con
+      // __vglLectura {estado:"sin_lab"} para que la presentación hable con honestidad
+      // (el reporte del 04-sep: exámenes de mayo negados por un filtro estricto).
       const e = entornoAthenea();
+      const logs = espiarConsola(e.c);
       e.setPlan((o) => {
         const url = String(o.url || "");
         if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
@@ -1062,8 +1068,210 @@ module.exports = {
         else o.onload({ status: 200, responseText: "" });
       });
       const labs = await e.c.api.getAtheneaLabsAuto(DOC);
-      t.igual(labs, []);
+      t.cierto(Array.isArray(labs) && labs.length === 0, "sin solicitudes LAB la salida sigue siendo []");
+      t.igual(labs.__vglLectura && labs.__vglLectura.estado, "sin_lab", "el [] viene marcado con el desenlace de la lectura");
+      t.igual(labs.__vglLectura && labs.__vglLectura.solicitudes, 1);
+      t.igual(labs.__vglLectura && labs.__vglLectura.modulos, ["PAT"]);
+      t.cierto(logs.some((l) => l.includes("WARN") && l.includes("NINGUNA resultó del módulo laboratorio")), "deja rastro del desenlace en consola");
       t.igual(e.llamadas.length, 3, "las 3 de resolver + ninguna de detalle, porque no hay solicitudes LAB");
+      t.igual(JSON.stringify(labs), "[]", "el marcador NO viaja en la serialización (no enumerable)");
+    });
+
+    // =====================================================================
+    // v18.0.141 — LA PACIENTE CON EXÁMENES DE MAYO QUE EL SCRIPT NEGABA.
+    // Reporte del 04-sep: «tiene exámenes pero el script dice que no hay para esa
+    // cédula, y sí los hay pero de mayo». Tres tolerancias nuevas en la extracción
+    // (módulo en minúscula, action con query-string, id con sufijo alfabético) más
+    // la separación honesta de los [] sospechosos.
+    // =====================================================================
+    t.caso("_vglEsModuloLab: casa por PREFIJO en cualquier caja — lab/Lab/LAB/LABORATORIO sí, PAT/IMG/vacío no", () => {
+      t.cierto(api._vglEsModuloLab({ modulo: "LAB" }));
+      t.cierto(api._vglEsModuloLab({ modulo: "lab" }));
+      t.cierto(api._vglEsModuloLab({ modulo: "Lab" }));
+      t.cierto(api._vglEsModuloLab({ modulo: "LABORATORIO" }));
+      t.cierto(api._vglEsModuloLab({ modulo: " lab " }), "con espacios alrededor, normaliza antes de comparar");
+      t.falso(api._vglEsModuloLab({ modulo: "PAT" }));
+      t.falso(api._vglEsModuloLab({ modulo: "IMG" }));
+      t.falso(api._vglEsModuloLab({}), "sin módulo no es laboratorio (no se adivina)");
+      t.falso(api._vglEsModuloLab(null), "null no lanza");
+      t.falso(api._vglEsModuloLab({ modulo: "RADIOLOGIA" }), "prefijo LAB y no substring: BALONPETICION no casaría tampoco");
+    });
+
+    t.caso("_vglMarcarLectura: marca un [] con info, NO enumerable, y devuelve el mismo arreglo", () => {
+      const vacio = [];
+      const marcado = api._vglMarcarLectura(vacio, { estado: "sin_lab", solicitudes: 3, modulos: ["PAT", "IMG"] });
+      t.cierto(marcado === vacio, "muta el arreglo recibido (no crea otro): quien lo guardó en caché ve el marcador");
+      t.igual(marcado.__vglLectura, { estado: "sin_lab", solicitudes: 3, modulos: ["PAT", "IMG"] });
+      t.igual(JSON.stringify(marcado), "[]", "no enumerable: invisible para la serialización");
+      t.igual(marcado.length, 0, "el arreglo sigue siendo un arreglo vacío válido");
+      t.noLanza(() => api._vglMarcarLectura(null, { estado: "x" }), "entrada no arreglo no lanza");
+      t.igual(api._vglMarcarLectura("no-array", { estado: "x" }).length, 0, "entrada inválida cae a [] marcado");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v18.0.141: data-modulo en minúscula se NORMALIZA a LAB en el origen", () => {
+      const html = `<form id="1112026" data-modulo="lab" action="/Resultados/Reporte"></form>`;
+      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 111, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null }]);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v18.0.141: action con query-string (/Resultados/Reporte?...) ya no descarta la tarjeta", () => {
+      const html = `<form id="2222026" data-modulo="LAB" action="/Resultados/Reporte?origen=lista" method="post"></form>`;
+      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 222, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null }]);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v18.0.141: id con sufijo alfabético (1112026LAB, como el ancla #collapse...) se interpreta igual", () => {
+      const html = `<form id="1112026LAB" data-modulo="LAB" action="/Resultados/Reporte"></form>`;
+      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 111, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null }]);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v18.0.141: __vglMeta adjunto (no enumerable) con los conteos de interpretación", () => {
+      const html = `
+        <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte"></form>
+        <form id="2222026" data-modulo="PAT" action="/Resultados/Reporte"></form>
+      `;
+      const out = api._atheneaExtraerSolicitudes(html);
+      const meta = out.__vglMeta;
+      t.cierto(meta && typeof meta === "object", "el meta viaja en el arreglo de salida");
+      t.igual(meta.formularios, 2);
+      t.igual(meta.interpretadas, 2);
+      t.igual(meta.descartadas, 0);
+      t.igual(meta.modulos, { LAB: 1, PAT: 1 });
+      t.igual(JSON.stringify(out).indexOf("__vglMeta"), -1, "no enumerable: invisible para la serialización");
+      t.igual(out.length, 2, "y el arreglo se recorre igual que siempre");
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v18.0.141 (regresión del reporte): tarjeta con data-modulo=\"lab\" y action con query-string -> los exámenes SÍ se leen", async () => {
+      // La combinación exacta que vaciaba la lista del paciente: el módulo en
+      // minúscula mataba en el filtro estricto y el query-string podía matar en la
+      // extracción. Con las dos tolerancias, un paciente "sin exámenes" recupera
+      // sus resultados de punta a punta.
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({
+          status: 200,
+          responseText: `CC: ${DOC}
+            <div class="card">
+              <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+              <div class="card-title no-margin">Numero: 26051503125</div>
+              <form id="8465672026LAB" data-modulo="lab" action="/Resultados/Reporte?origen=lista" method="post">
+                <input type="hidden" id="hash" name="hash" value="HASHMAYO" />
+                <input name="__RequestVerificationToken" type="hidden" value="TOKMAYO" />
+              </form>
+            </div>`,
+        });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2013", NombreParametro: "GLUCOSA EN SUERO", Resultado: "92" }]) }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs.length, 1, "el examen de mayo llega: ya no lo niega");
+      t.igual(labs[0].__vglFechaSolicitud, "2026-05-15");
+      t.igual(labs[0].__vglHash, "HASHMAYO");
+      t.cierto(!labs.__vglLectura, "lectura completa: sin marcador de desenlace sospechoso");
+      // El POST al detalle sigue llevando modulo:"LAB" normalizado (contrato del servidor).
+      const cuerpo = JSON.parse(e.llamadas[3].data);
+      t.igual(cuerpo, { idSolicitud: 846567, ano: 2026, modulo: "LAB" });
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v18.0.141: data-modulo=\"LABORATORIO\" (nombre LARGO del módulo) SÍ se lee — el filtro del núcleo es por PREFIJO", async () => {
+      // La unidad de _vglEsModuloLab ya acepta "LABORATORIO"; esta prueba la hace
+      // FLUIR por el núcleo. Nació de una mutación viva (#514): con el filtro del
+      // núcleo degradado a === "LAB" las 92 comprobaciones seguían en verde — la
+      // capacidad estaba probada, el cableado no. Un data-modulo="LABORATORIO"
+      // (normalizado en origen) debe pasar el filtro y leer su detalle.
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="777" /><input name="__RequestVerificationToken" value="T2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({
+          status: 200,
+          responseText: `CC: ${DOC}
+            <div class="card">
+              <div class="card-text no-margin"><strong>sáb. 16 may. 2026 08:02 a.&nbsp;m.</strong></div>
+              <div class="card-title no-margin">Numero: 26051604001</div>
+              <form id="3332026" data-modulo="LABORATORIO" action="/Resultados/Reporte" method="post">
+                <input type="hidden" id="hash" name="hash" value="HASHLARGO" />
+                <input name="__RequestVerificationToken" type="hidden" value="TOKLARGO" />
+              </form>
+            </div>`,
+        });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2013", NombreParametro: "GLUCOSA EN SUERO", Resultado: "88" }]) }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs.length, 1, "la solicitud de LABORATORIO pasa el filtro del núcleo y se lee");
+      t.igual(labs[0].__vglHash, "HASHLARGO");
+      t.cierto(!labs.__vglLectura, "no es un [] sospechoso: lectura completa");
+      // El contrato del servidor no cambia: el POST del detalle lleva modulo:"LAB" fijo.
+      const cuerpo = JSON.parse(e.llamadas[3].data);
+      t.igual(cuerpo, { idSolicitud: 333, ano: 2026, modulo: "LAB" });
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v18.0.141: formularios presentes pero NINGUNO interpretable -> [] marcado formularios_no_interpretados (no 'no tiene exámenes')", async () => {
+      // El portal respondió, la cédula casó, pero las tarjetas no se dejaron leer
+      // (aquí: id fuera del patrón año). Antes: [] mudo → "no tiene exámenes para
+      // esa cédula". Ahora: [] marcado para que el botón hable con honestidad.
+      const e = entornoAthenea();
+      const logs = espiarConsola(e.c);
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="555" /><input name="__RequestVerificationToken" value="T2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC} <strong>SOLICITUD DE LABORATORIO</strong> <form id="XYZ999" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.cierto(Array.isArray(labs) && labs.length === 0);
+      t.igual(labs.__vglLectura && labs.__vglLectura.estado, "formularios_no_interpretados");
+      t.igual(labs.__vglLectura && labs.__vglLectura.formularios, 1);
+      t.falso(e.llamadas.some((o) => String(o.url).includes("consultaDetalleSolicitud")), "sin detalle que consultar: no hay nada interpretado");
+      t.cierto(logs.some((l) => l.includes("WARN") && l.includes("formularios de /Resultados/Reporte detectados")), "el diagnóstico one-shot deja el rastro");
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v18.0.141: lectura PARcial de solicitudes LAB -> __vglIncompleto sigue NUMÉRICO y no aparece __vglLectura", async () => {
+      // Contrato de v17.7.1 respetado: __vglIncompleto es la cantidad de solicitudes
+      // no leídas (número) y varios consumidores lo comparan con > 0. El marcador
+      // nuevo __vglLectura NO debe colarse en este camino.
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="888" /><input name="__RequestVerificationToken" value="T2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC} <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte"></form><form id="2222026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) {
+          const cuerpo = JSON.parse(o.data);
+          if (cuerpo.idSolicitud === 111) o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2013", NombreParametro: "GLUCOSA EN SUERO", Resultado: "90" }]) }) });
+          else o.onload({ status: 500, responseText: "boom" }); // la segunda no se deja leer
+        } else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs.length, 1, "llegó lo que sí se pudo leer");
+      t.igual(labs.__vglIncompleto, 1, "la cantidad no leída, NUMÉRICA como desde v17.7.1");
+      t.cierto(typeof labs.__vglIncompleto === "number", "el marcador histórico no cambió de tipo");
+      t.cierto(!labs.__vglLectura, "el marcador nuevo no interfiere en las lecturas parciales");
+    });
+
+    await t.casoAsync("getAtheneaSolicitudesAuto v18.0.141: paso 2 con DOS inputs IdPaciente (cédula duplicada en el portal) deja el warn one-shot", async () => {
+      const e = entornoAthenea();
+      const logs = espiarConsola(e.c);
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="101" /><input type="hidden" name="IdPaciente" value="202" /><input name="__RequestVerificationToken" value="T2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC} <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const r = await e.c.api.getAtheneaSolicitudesAuto(DOC);
+      t.cierto(r && r.solicitudes.length === 1, "toma el primero y sigue: la verificación del paso 3 decide");
+      t.cierto(logs.some((l) => l.includes("WARN") && l.includes("2 campos IdPaciente")), "el warn de duplicidad quedó en consola");
     });
   },
 };

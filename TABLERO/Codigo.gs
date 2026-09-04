@@ -101,11 +101,39 @@
  *     / ".err" (con su ".total" en milisegundos, para latencia promedio) llegan por
  *     la MISMA cola "ux" que ya existía — cero cambios de servidor para esas dos.
  *
+ *  7. v18.1.0 — CONTROL DE ACCESO POR MÉDICO (roster de personal, CERO PHI):
+ *     - Hoja nueva "acceso" (perfil | uid | nombre | estado | motivo) que edita
+ *       SOLO el dueño. perfil: COMPLETO o LABORATORIOS; filas cuyo perfil empiece
+ *       por "#" se ignoran (comentarios in-sheet); estado "bloqueado" manda al
+ *       médico a la blocklist (en el cliente gana SIEMPRE y en silencio). Al
+ *       crearse se SIEMBRA con los 7 nombres del padrón y uid VACÍO: NUNCA se
+ *       inventan uids reales, porque el uid manda sobre el nombre y uno fabricado
+ *       podría coincidir con el de otro médico.
+ *     - doGet(e) NUEVO con UNA sola acción: ?accion=listaAcceso&token=... devuelve
+ *       { ok, version, emitida, perfiles, blocklist }. Es la ÚNICA excepción al
+ *       "sin doGet" de v12.5.2 y es deliberada: el roster contiene solo nombres de
+ *       médicos que ya trabajan aquí — ningún dato de paciente — así que una URL
+ *       de lectura pública no filtra nada sensible, y a cambio toda la flota lee
+ *       la MISMA lista. Todo lo demás sigue siendo solo-POST.
+ *     - Las filas SIN uid reciben un uid SINTÉTICO determinista (900000000 +
+ *       djb2(nombre) % 99999999, rango 9xx.xxx.xxx que jamás colisiona con un
+ *       UsuarioId real de Everest): solo para satisfacer el contrato del cliente
+ *       (uid > 0 por entrada); el matching real sigue siendo por nombre hasta que
+ *       el dueño llene los uids. "version" es un hash djb2 del CONTENIDO: cambia
+ *       solo si cambia la hoja, no en cada lectura.
+ *     - Evento nuevo "acceso" { uid, nombre, perfil }, 1/día por equipo: el
+ *       userscript reporta su identidad para que el dueño copie uid↔nombre a la
+ *       hoja "acceso" leyendo la hoja "acceso_uid". Dato de personal, no PHI.
+ *     - Menú Vigilante → "Ver lista de acceso (JSON)": el JSON exacto que vería
+ *       el userscript, para revisar la hoja sin abrir la URL.
+ *
  *  SE CONSERVA de v12.5.2, sin cambios de fondo: sin doGet (el TOKEN vive en texto
  *  plano dentro de un userscript distribuido: un GET con ese token es de facto una
- *  URL de lectura pública), lista blanca de eventos, columnas fijas por hoja,
- *  neutralización de fórmulas en toda celda de texto, conteos forzados a número
- *  (el bug de los ceros de v7.8.4) y el total de "ux" recalculado en el servidor.
+ *  URL de lectura pública — única excepción desde v18.1.0: accion=listaAcceso,
+ *  roster de personal sin PHI, ver punto 7), lista blanca de eventos, columnas
+ *  fijas por hoja, neutralización de fórmulas en toda celda de texto, conteos
+ *  forzados a número (el bug de los ceros de v7.8.4) y el total de "ux"
+ *  recalculado en el servidor.
  *
  * DESPLIEGUE (manual, igual que siempre):
  *   1. script.google.com → el proyecto YA EXISTENTE del tablero (el mismo
@@ -130,9 +158,22 @@
  *   "error":   { origen, msg, donde, migas }          — máx. 5/día por equipo; "migas" son
  *                                                        las últimas acciones antes del fallo
  *   "entorno": { nav, so, zona, pantalla, gestor }    — 1/día por equipo
+ *   "acceso":  { uid, nombre, perfil }                — v18.1.0, 1/día por equipo;
+ *                                                        dato de PERSONAL (no PHI):
+ *                                                        alimenta la hoja "acceso_uid"
+ *                                                        para que el dueño llene los
+ *                                                        uids reales de la hoja "acceso"
+ *   "acceso_deneg": { uid, perfil, cuentas }          — v18.1.0, 1/día por equipo SOLO si
+ *                                                        hubo denegaciones de escritura
+ *                                                        (capa c); hoja "acceso_deneg",
+ *                                                        cuentas = {capacidad: n} saneado
+ *
+ *   GET ?accion=listaAcceso&token=... (v18.1.0, única acción de doGet)
+ *             → { ok, version, emitida, perfiles:{COMPLETO,LABORATORIOS},
+ *                 blocklist:[{uid,nombre,motivo}] }
  */
 var TOKEN = "vgl-2026"; // debe coincidir con TABLERO.token del userscript
-var EVENTOS_VALIDOS = { ux: 1, resumen: 1, fraude: 1, prueba: 1, error: 1, entorno: 1 };
+var EVENTOS_VALIDOS = { ux: 1, resumen: 1, fraude: 1, prueba: 1, error: 1, entorno: 1, acceso: 1, acceso_deneg: 1 }; // "acceso"/"acceso_deneg": v18.1.0, identidad del equipo (personal, sin PHI)
 var LOTE_TTL_SEG = 21600; // 6 h — la cola del userscript no reintenta más allá de eso
 
 function doPost(e) {
@@ -214,6 +255,48 @@ function doPost(e) {
       _appendFila(_hoja(ss, "entorno", COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"])),
         COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"]),
         comunes.concat([_celda(body.nav, 20), _celda(body.so, 20), _celda(body.zona, 40), _celda(body.pantalla, 20), _celda(body.gestor, 20)]));
+    } else if (ev === "acceso") {
+      // v18.1.0 — DESCUBRIMIENTO DE UIDS (1/día por equipo; el candado vive en el
+      // cliente, clave vgl_rep_acceso). Es dato de PERSONAL — la identidad del
+      // médico que usa ESTE equipo —, no PHI de pacientes: alimenta la hoja
+      // "acceso_uid" para que el dueño copie uid↔nombre a la hoja "acceso". El
+      // nombre viaja saneado igual que todo texto del tablero: el servidor no
+      // confía en el emisor.
+      _appendFila(_hoja(ss, "acceso_uid", COMUNES_HD.concat(["uid", "nombre", "perfil"])),
+        COMUNES_HD.concat(["uid", "nombre", "perfil"]),
+        comunes.concat([toNumero(body.uid), _celda(_sinDigitosLargos(body.nombre), 100), _celda(body.perfil, 20)]));
+    } else if (ev === "acceso_deneg") {
+      // v18.1.0 — DENEGACIONES DE ESCRITURA (1/día por equipo, solo si las hubo; el
+      // candado vive en el cliente, clave vgl_rep_acceso_deneg). Solo cuenta la capa
+      // c: un perfil recortado intentó ESCRIBIR de verdad y el guard lo cortó. El
+      // cliente manda cuentas como objeto {capacidad: n}; según cómo venga la cola
+      // puede llegar objeto o cadena, y el servidor JAMÁS confía en el emisor: se
+      // re-sanea igual que las "acciones" del evento ux — claves re-filtradas,
+      // valores a número positivo, tope de 32 claves (el cliente también las toca a
+      // 32). Sin nombres, sin cédulas, sin URLs: cero PHI.
+      var crudoD = body.cuentas;
+      var cuentaD = {};
+      if (typeof crudoD === "string") {
+        try { cuentaD = JSON.parse(crudoD) || {}; } catch (e2) { cuentaD = {}; }
+      } else if (crudoD && typeof crudoD === "object") {
+        cuentaD = crudoD;
+      }
+      var limpioD = {}, aceptadasD = 0, omitidasD = 0;
+      var clavesD = Object.keys(cuentaD);
+      for (var jd = 0; jd < clavesD.length; jd++) {
+        var kd = String(clavesD[jd]).toLowerCase().replace(/\d{6,}/g, "").replace(/[^a-z0-9._-]/g, "").slice(0, 40);
+        var vd = toNumero(cuentaD[clavesD[jd]]);
+        if (!kd || vd <= 0) continue;
+        if (!(kd in limpioD)) {
+          if (aceptadasD >= 32) { omitidasD++; continue; }
+          aceptadasD++;
+        }
+        limpioD[kd] = (limpioD[kd] || 0) + Math.round(vd);
+      }
+      if (omitidasD) limpioD["_recortadas"] = omitidasD;
+      _appendFila(_hoja(ss, "acceso_deneg", COMUNES_HD.concat(["uid", "perfil", "cuentas"])),
+        COMUNES_HD.concat(["uid", "perfil", "cuentas"]),
+        comunes.concat([toNumero(body.uid), _celda(body.perfil, 20), _celda(JSON.stringify(limpioD), 400)]));
     } else { // "prueba"
       _appendFila(_hoja(ss, "prueba", COMUNES_HD), COMUNES_HD, comunes);
     }
@@ -242,8 +325,121 @@ function onOpen() {
       .addItem("Limpiar filas duplicadas", "limpiarDuplicados")
       .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
       .addItem("Reparar encabezados de telemetría", "repararEncabezadosTelemetria")
+      .addItem("Ver lista de acceso (JSON)", "verListaAcceso")
       .addToUi();
   } catch (e) {}
+}
+
+// =====================================================================
+//  v18.1.0 — CONTROL DE ACCESO POR MÉDICO (lado servidor). Roster de
+//  personal con CERO PHI: nombres de médicos que ya trabajan aquí, sin
+//  ningún dato de paciente. ES5 puro y las mismas defensas de doPost:
+//  nunca se confía en el emisor, todo texto pasa por _celda/_sinDigitosLargos.
+// =====================================================================
+
+// La ÚNICA acción de doGet. Un GET con el token es de facto una URL pública y
+// por eso v12.5.2 prohibió doGet entero; la excepción es deliberada y mínima:
+// listaAcceso no expone nada que un tercio no pudió saber ya de otra forma, y
+// a cambio toda la flota lee la MISMA lista (ver nota 7 del encabezado).
+function doGet(e) {
+  try {
+    var q = (e && e.parameter) || {};
+    if (String(q.token || "") !== TOKEN) return _txt("no");
+    if (String(q.accion || "") !== "listaAcceso") return _txt("no");
+    return _txt(JSON.stringify(_listaAccesoRespuesta(SpreadsheetApp.getActiveSpreadsheet())));
+  } catch (err) {
+    return _txt("err");
+  }
+}
+
+// Menú del dueño: muestra en pantalla el JSON EXACTO que vería el userscript,
+// para revisar la hoja "acceso" sin abrir la URL ni adivinar formatos.
+function verListaAcceso() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var json = JSON.stringify(_listaAccesoRespuesta(SpreadsheetApp.getActiveSpreadsheet()), null, 2);
+    ui.alert("Lista de acceso (v18.1.0)", json, ui.ButtonSet.OK);
+  } catch (e) {}
+}
+
+// Devuelve la hoja "acceso", creándola SEMBRADA en el primer uso: los 7 nombres
+// del padrón con uid VACÍO — el dueño pega los UsuarioId reales leyendo la hoja
+// "acceso_uid" (menú: qué uid reportó cada equipo). NUNCA se siembran uids
+// reales inventados: el uid manda sobre el nombre y un uid fabricado podría
+// coincidir con el de otro médico y regalarle su perfil.
+function _hojaAcceso(ss) {
+  var hd = ["perfil", "uid", "nombre", "estado", "motivo"];
+  var h = ss.getSheetByName("acceso");
+  if (!h) {
+    h = _hoja(ss, "acceso", hd);
+    try {
+      var filas = [
+        ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", ""],
+        ["# perfil: COMPLETO o LABORATORIOS | estado: activo (o vacío) / bloqueado (revoca en silencio)", "", "", "", ""],
+        ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", ""],
+        ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", ""],
+        ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", ""],
+        ["COMPLETO", "", "Eliseth Estrada", "activo", ""],
+        ["COMPLETO", "", "María Edineth Pino", "activo", ""],
+        ["COMPLETO", "", "Sinaí Mijares", "activo", ""],
+        ["LABORATORIOS", "", "Maryuris Terán", "activo", ""],
+        ["LABORATORIOS", "", "Daniela Zuluaga", "activo", ""],
+        ["LABORATORIOS", "", "Moisés Carpio", "activo", ""]
+      ];
+      h.getRange(h.getLastRow() + 1, 1, filas.length, 5).setValues(filas);
+    } catch (e) {}
+  }
+  return h;
+}
+
+// Arma la respuesta pública: recorre la hoja ignorando comentarios (perfil que
+// empieza por "#") y perfiles desconocidos. Una fila SIN uid útil recibe un uid
+// SINTÉTICO determinista (rango 900000000-999999998: jamás colisiona con un
+// UsuarioId real de Everest) solo para cumplir el contrato del cliente (uid > 0
+// por entrada): el matching real sigue siendo por nombre hasta que el dueño
+// llene los uids. "bloqueado" manda la fila a la blocklist, que en el cliente
+// gana SIEMPRE y en silencio. `version` = hash del CONTENIDO: cambia solo si
+// cambia la hoja — dos lecturas sin editar devuelven la misma versión.
+function _listaAccesoRespuesta(ss) {
+  var perfiles = { COMPLETO: [], LABORATORIOS: [] };
+  var blocklist = [];
+  try {
+    var valores = _hojaAcceso(ss).getDataRange().getValues();
+    for (var i = 1; i < valores.length; i++) {
+      var fila = valores[i] || [];
+      var perfil = String(fila[0] == null ? "" : fila[0]).trim();
+      if (!perfil || perfil.charAt(0) === "#") continue;
+      if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") continue;
+      var nombre = _celda(fila[2], 100).trim();
+      if (!nombre) continue; // fila a medias: ni entra ni rompe la lista
+      var uidNum = toNumero(fila[1]);
+      var uid = uidNum > 0 ? Math.round(uidNum) : _accesoUidSintetico(nombre);
+      var estado = String(fila[3] == null ? "" : fila[3]).trim().toLowerCase();
+      if (estado === "bloqueado") {
+        blocklist.push({ uid: uid, nombre: nombre, motivo: _celda(fila[4], 60).trim() });
+        continue;
+      }
+      perfiles[perfil].push({ uid: uid, nombre: nombre });
+    }
+  } catch (e) {}
+  var version = "v" + _djb2(JSON.stringify(perfiles) + "|" + JSON.stringify(blocklist));
+  return { ok: true, version: version, emitida: new Date().toISOString(), perfiles: perfiles, blocklist: blocklist };
+}
+
+// uid sintético determinista por nombre: djb2 confinado a 31 bits (jamás
+// negativo), modulado al rango 9xx.xxx.xxx. Mismo nombre → mismo uid, siempre.
+function _accesoUidSintetico(nombre) {
+  return 900000000 + (_djb2(String(nombre == null ? "" : nombre)) % 99999999);
+}
+
+// djb2 (variante clásica con init 5381) con máscara de 31 bits en cada paso:
+// en Apps Script V8 y en Node da el MISMO resultado (el & normaliza el
+// desborde del << 5 que en JS produce enteros de 32 bits con signo).
+function _djb2(s) {
+  var h = 5381;
+  s = String(s == null ? "" : s);
+  for (var i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) & 0x7fffffff;
+  return h >>> 0;
 }
 
 // =====================================================================

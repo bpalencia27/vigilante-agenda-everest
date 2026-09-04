@@ -82,6 +82,36 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.1.0 — B3.3 (Misión B, capa b): el guard de apertura de los open* exige
+    // perfil; un contexto sin padrón resuelve a PÚBLICO y el modal nunca se monta.
+    // Se reenvuelve `cargar` para sembrar en TODOS los contextos la lista
+    // `vgl_acceso_lista` (uid 707 en COMPLETO, como la dejaría el fetch de B2) y
+    // una identidad por defecto. Un caso que siembre SU identidad después de
+    // cargar sigue mandando: la asignación posterior pisa este default.
+    const _cargarAccesoBase = cargar;
+    cargar = (opciones) => {
+      const opts = Object.assign({}, opciones || {});
+      if (!opts.almacen) opts.almacen = {};
+      if (!("vgl_acceso_lista" in opts.almacen)) {
+        opts.almacen.vgl_acceso_lista = JSON.stringify({
+          version: "test-15.acceso",
+          perfiles: {
+            COMPLETO: [
+              { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+              { uid: 102, nombre: "Eliseth Estrada" },
+              { uid: 103, nombre: "María Edineth Pino" },
+            ],
+            LABORATORIOS: [],
+          },
+          blocklist: [],
+        });
+      }
+      const c = _cargarAccesoBase(opts);
+      if (c && c.api && c.api.__state && !c.api.__state.activeDoctor.id) {
+        c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      }
+      return c;
+    };
     // ---- Instancia principal con el panel montado ----
     const cv = cargar({ silencioso: true });
     enriquecerDom(cv);
@@ -1465,8 +1495,12 @@ module.exports = {
       const cuerpoFn = src.slice(iFn, src.indexOf("\n  }", src.indexOf("return resumen;", iFn)));
       t.cierto(/atheneaPrincipalFallo = true/.test(cuerpoFn),
         "marca cuándo Athenea NO respondió — distinto de «no tiene laboratorios»");
-      t.cierto(/if \(o\.fresco && atheneaPrincipalFallo\) \{/.test(cuerpoFn),
-        "y si la lectura pedida EN VIVO falló, NO se sobrescribe la caché compartida con un resumen vacío");
+      // v18.0.143 (reporte del 04-sep) — el guard se AMPLIÓ: ya no es solo o.fresco, es
+      // cualquier lectura fallida de Athenea la que no se cachea (y las buenas van al
+      // else). Era exactamente el vector del reporte: lectura fallida pintada como
+      // «nunca se le ha tomado» en paciente con exámenes hechos.
+      t.cierto(/if \(atheneaPrincipalFallo\) \{/.test(cuerpoFn),
+        "y si la lectura de Athenea falló (viva o no), NO se sobrescribe la caché compartida con un resumen vacío");
     });
 
     // v18.0.89 — hallazgo #41 del enjambre: r.obligatoriasVacias se calculaba en cada
@@ -1644,6 +1678,23 @@ module.exports = {
     // T4 sacó de la tarjeta. Usa _enModuloHCHealth() (alcance amplio, por ruta) en vez de
     // seccionActiva()==="historia" (alcance angosto, por #anamesis): el encargo pide que el
     // widget viva sobre TODA la Historia Clínica, no solo la pestaña con ese marcador.
+    // v18.1.0 (Misión B / B1) — el padrón autorizado ya no vive en el userscript: sale de
+    // `vgl_acceso_lista` (la dejaría ahí el fetch del arreglo B2). mockPacienteDock simula
+    // al médico COMPLETO de estos casos (uid 707), así que siembra la lista en el storage
+    // vivo del arnés para restaurar la semántica previa al desacople.
+    const LISTA_ACCESO_15 = {
+      version: "test-15.1",
+      perfiles: {
+        COMPLETO: [
+          { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+          { uid: 102, nombre: "Eliseth Estrada" },
+          { uid: 103, nombre: "María Edineth Pino" },
+        ],
+        LABORATORIOS: [],
+      },
+      blocklist: [],
+    };
+    const almacenAcceso15 = () => ({ vgl_acceso_lista: JSON.stringify(LISTA_ACCESO_15) });
     function mockPacienteDock(c, doc) {
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
       c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
@@ -1655,6 +1706,7 @@ module.exports = {
       c.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
       c.api.__S.iaRedaccion = true;
       c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
     }
 
     t.caso("createAccionesDockUI: fuera del módulo HCHealth no crea el widget", () => {
@@ -2577,7 +2629,9 @@ module.exports = {
     // como un control editable. Ahora se muestra marcado y deshabilitado para ellos, con
     // una nota explicando por qué. Ver CHANGELOG.
     t.caso("openAgendamientoModal: para un médico de la lista RCV, el checkbox sale marcado y deshabilitado (honesto)", () => {
-      const cRcv = cargar({ silencioso: true });
+      // v18.1.0 (B1): el uid 707 del padrón se siembra en vgl_acceso_lista; el nombre en
+      // pantalla puede estar incompleto ("BRANDON PALENCIA") porque el uid manda.
+      const cRcv = cargar({ silencioso: true, almacen: almacenAcceso15() });
       enriquecerDom(cRcv);
       cRcv.api.__state.activeDoctor.id = 707;
       cRcv.api.__state.activeDoctor.name = "BRANDON PALENCIA";
@@ -2593,40 +2647,49 @@ module.exports = {
       t.cierto(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "explica por qué está bloqueado");
     });
 
-    t.caso("openAgendamientoModal: para un médico fuera de la lista RCV, el checkbox sigue siendo una elección real", () => {
+    // v18.1.0 (Misión B / B3) — RE-ESCRITURA del caso. Bajo el modelo de capacidades ya no
+    // existe «médico fuera de la lista RCV con el modal abierto»: `agendar_control` es de
+    // COMPLETO y COMPLETO ⇒ rcv, así que el checkbox de quien abre el modal siempre sale
+    // marcado y deshabilitado (caso anterior). Para un médico fuera del padrón (uid y
+    // nombre sin match) la apertura corta en seco (capa b): la elección real ya no está
+    // en el checkbox, está en el modal mismo. La aserción vieja («checked editable»)
+    // describía el comparador por nombre de v14.2.0, retirado en B1.
+    t.caso("openAgendamientoModal: para un médico fuera del padrón no hay checkbox que elegir — el modal ni se abre (capa b)", () => {
       const cNoRcv = cargar({ silencioso: true });
       enriquecerDom(cNoRcv);
-      cNoRcv.api.__state.activeDoctor.id = 707;
-      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
+      cNoRcv.api.__state.activeDoctor.id = 999; // uid fuera del padrón sembrado por el wrapper
+      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ"; // el respaldo por nombre tampoco coincide
       cNoRcv.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
       const modal = cNoRcv.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
-      t.cierto(
-        modal.innerHTML.includes('id="vgl-agm-pym-chk" checked>'),
-        "sale marcado por defecto pero editable: para este médico el checkbox sí decide"
-      );
-      t.falso(modal.innerHTML.includes('id="vgl-agm-pym-chk" checked disabled>'), "no debe salir deshabilitado");
-      t.falso(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "sin la nota de bloqueo");
+      t.cierto(!modal, "el guard de apertura corta en seco: sin modal no hay checkbox «editable» que mentir");
     });
 
-    t.caso("esMedicoRCVActivo: invocación directa — coincide por token completo, sin distinguir mayúsculas ni tildes", () => {
-      const cH = cargar({ silencioso: true });
-      cH.api.__state.activeDoctor.name = "dr. ánGEL estrada";
-      t.cierto(cH.api.esMedicoRCVActivo(), "ESTRADA está en RCV_DOCTORS, sin importar tilde/caja");
+    // v18.1.0 (Misión B / B1) — esMedicoRCVActivo ya no compara contra tokens embebidos:
+    // es accesoCap("rcv") sobre el padrón remoto (`vgl_acceso_lista`). El respaldo por
+    // NOMBRE exige nombre COMPLETO normalizado (mayúsculas, sin tildes, espacios
+    // colapsados); un prefijo o un fragmento NO matchea.
+    t.caso("esMedicoRCVActivo: invocación directa — coincide por nombre COMPLETO del padrón, sin distinguir mayúsculas ni tildes", () => {
+      const cH = cargar({ silencioso: true, almacen: almacenAcceso15() });
+      cH.api.__state.activeDoctor.id = 0; // sin uid: el respaldo es por nombre completo
+      cH.api.__state.activeDoctor.name = "  eliSeth   esTRAda ";
+      t.cierto(cH.api.esMedicoRCVActivo(), "Eliseth Estrada está en el padrón COMPLETO, sin importar tilde/caja/espacios");
       cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
-      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en la lista");
+      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en el padrón");
     });
 
-    // [auditoría 25-ago, hallazgo 1.2] "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" —
-    // con match por sub-cadena estos dos médicos, ajenos al programa RCV, quedaban forzados
-    // a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Debe comparar por token.
-    t.caso("esMedicoRCVActivo: un apellido que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado", () => {
-      const cSub = cargar({ silencioso: true });
+    // [auditoría 25-ago, hallazgo 1.2 — adaptado a B1] "PINO" es sub-cadena de "OSPINO" y
+    // de "ESPINOSA": con match por sub-cadena esos médicos, ajenos al padrón, quedaban
+    // forzados a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Desde B1 la
+    // comparación por nombre exige el nombre COMPLETO normalizado del padrón.
+    t.caso("esMedicoRCVActivo: un nombre que CONTIENE a un médico del padrón como sub-cadena no debe activar el forzado", () => {
+      const cSub = cargar({ silencioso: true, almacen: almacenAcceso15() });
+      cSub.api.__state.activeDoctor.id = 0;
       cSub.api.__state.activeDoctor.name = "JORGE OSPINO";
-      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
       cSub.api.__state.activeDoctor.name = "LAURA ESPINOSA";
-      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
-      cSub.api.__state.activeDoctor.name = "DR. PINO";
-      t.cierto(cSub.api.esMedicoRCVActivo(), "PINO como apellido propio (token exacto) sí debe seguir activando el forzado");
+      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
+      cSub.api.__state.activeDoctor.name = "MARÍA EDINETH PINO";
+      t.cierto(cSub.api.esMedicoRCVActivo(), "María Edineth Pino como nombre COMPLETO del padrón (caja/tilde distintas) sí activa el forzado");
     });
 
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {
@@ -4060,6 +4123,43 @@ module.exports = {
       t.igual(modalSinLista.innerHTML.split("vgl-ord-item").length - 1, 0, "tampoco aquí se ofrece ningún ítem");
     });
 
+    await t.casoAsync("openOrdenamientoModal: RESPALDO ACTIVO — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139)", async () => {
+      // Pedido del médico (4-sep): con la base de respaldo activa, el modal decía «NO he
+      // podido mirar qué le corresponde a este paciente»... aunque el respaldo ES la base
+      // que getActivities() consulta cuando pymFallback está en true. Eso se leyó como
+      // que "se negó a mostrar" los pendientes. Ahora: quien figura en la base sin
+      // actividades dice que figura; quien no cruza en la base dice que no cruza. Y el
+      // botón deshabilitado acompaña a cada caso.
+      const s = cOrd.api.__state;
+      // Lección de la mutación M3 de esta misma versión: el framework aborta el caso
+      // en la primera aserción fallida, así que un reset al final del cuerpo no corre
+      // y la fuga de estado (pymFile="BASE PILOTO.xlsx") contamina casos posteriores.
+      // try/finally garantiza la vuelta a fábrica pase lo que pase.
+      try {
+        s.pymFile = "BASE PILOTO.xlsx"; s.pymFallback = true;
+        s.pymDia = cOrd.api.todayStamp(); s.pymTodos = new Set(["999"]);
+        await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
+        let m = ultimoOrd();
+        t.cierto(m.innerHTML.includes("SÍ figura en la base de respaldo"),
+          "el paciente está en la base activa y el aviso lo dice: no fue una negativa");
+        t.falso(m.innerHTML.includes("NO he podido mirar"),
+          "la frase que se leyó como «se negó a mostrarme» ya no sale para quien sí se miró");
+        t.cierto(m.innerHTML.includes("Sin actividades para ordenar"),
+          "y el botón ya no dice «No hay lista» para quien sí está en la base activa");
+
+        s.pymTodos = new Set(["111"]);
+        await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
+        m = ultimoOrd();
+        t.cierto(m.innerHTML.includes("NO figura en la base de respaldo"),
+          "la ausencia sale con su dirección: no cruza en el respaldo");
+        t.cierto(m.innerHTML.includes("No hay lista de prevención"),
+          "y el botón remite a la lista, no a un «al día»");
+      } finally {
+        // Estado de fábrica de vuelta: nada de este caso debe filtrarse al resto.
+        s.pymFile = ""; s.pymTodos = null; s.pymFallback = false; s.pymDia = "";
+      }
+    });
+
     await t.casoAsync("openOrdenamientoModal: con coincidencia, la actividad de otro sexo se OCULTA (v17.26.0)", async () => {
       // v17.26.0 — REFACTOR APROBADO: el choque de sexo ya no se avisa en rojo: la
       // actividad simplemente no se muestra. Mujer con mamografía y PSA en su PyM: la
@@ -4144,6 +4244,39 @@ module.exports = {
       const modal = ultimoOrdF();
       t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "sin poder verificar vigentes, el paquete se premarca como siempre — un fallo de red no bloquea nada");
       t.falso(modal.innerHTML.includes("Ya existe una orden vigente en Everest"), "sin verificación exitosa, tampoco se avisa un falso 'ya vigente'");
+    });
+
+    // =====================================================================
+    // v18.0.135 — REGLA DEL MÉDICO (03-sep-2026): «se puede volver a reordenar en todas
+    // las actividades de PyM, a menos que ya se lo haya hecho y se haya detectado en los
+    // resultados de Athenea». Una orden vigente en Everest SIN resultado en el laboratorio
+    // ya no bloquea la casilla: se vuelve a ordenar, premarcada. Es exactamente el caso
+    // reportado (VIH con orden viva que el modal volvía a ofrecer en bloqueado/sin marca).
+    // =====================================================================
+    await t.casoAsync("openOrdenamientoModal v18.0.135: orden vigente SIN resultado → premarcada, no bloqueada", async () => {
+      const cReord = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
+            // La orden del VIH (CUPS 906249), creada hace 30 días y sin resultado en Athenea.
+            return respuestaJson([{ cup: { codigo: "906249" }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) }]);
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cReord);
+      const ultimoOrdR = () => cReord.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      await cReord.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["VIH"] });
+      const modal = ultimoOrdR();
+      t.cierto(!!modal, "el modal se abre");
+      t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "la casilla del VIH vuelve PREMARCADA: la orden vigente ya no desmarca");
+      t.falso(/data-idx="0"[^>]*disabled/.test(modal.innerHTML), "ni queda bloqueada: el médico puede desmarcarla si no la quiere");
+      t.cierto(modal.innerHTML.includes("sin resultado en el laboratorio"), "y el aviso explica la regla nueva con esas palabras");
+      t.falso(modal.innerHTML.includes("comuníquese con el servicio de órdenes"), "el texto viejo que mandaba a llamar a órdenes se retiró");
     });
 
     // =====================================================================
@@ -5989,6 +6122,93 @@ module.exports = {
       (si._listeners.click || []).forEach((f) => f({}));
       await esperar(60);
       t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "«Sí, crear igual» sigue adelante: el médico manda");
+    });
+
+    // =====================================================================
+    // v18.0.140 (c) — REPORTE DEL MÉDICO (04-sep): «le doy clic a "Pasar a la fecha
+    // sugerida" y no se cierra el modal una vez presionado el botón». AUDITORÍA del
+    // cableado completo del 🎯: se probó un parche explícito (cerrar el recuadro,
+    // limpiar vencOk, repintar) y la MUTACIÓN demostró que era código muerto —
+    // `renderDayChips` → `cargarHoras` ya hace las tres cosas (v17.6.13/v18.0.118/
+    // v15.9.0). Esta prueba sella el ciclo observable que el médico exige — 🎯
+    // recentra en la sugerida, el recuadro de decisión se cierra, el consentimiento
+    // NO se da por hecho, el vencimiento se reevalúa honesto con la fecha nueva y
+    // la reconfirmación SÍ crea la cita — y muere si `cargarHoras` deja de limpiar
+    // `vencOk` (mutación #508 del informe).
+    // =====================================================================
+    await t.casoAsync("v18.0.140 (c): «Pasar a la fecha sugerida» cierra el aviso de confirmación y después la cita SÍ se crea", async () => {
+      const urls = [];
+      const p2 = (n) => String(n).padStart(2, "0");
+      const sumarDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+      const seed = sumarDias(30);   // control sugerido a ~1 mes (plazo preseleccionado)
+      const vence = sumarDias(27);  // vence ANTES de la toma de la sugerida (≈ seed−7) pero DESPUÉS de la de una fecha tardía
+      const mk = () => {
+        const c = cargar({
+          silencioso: true,
+          fetch: async (url) => {
+            const u = String(url); urls.push(u);
+            if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+            if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+            if (u.includes("BuscarCitasDisponibles")) {
+              const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+              return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+            }
+            if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+            if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+            if (u.includes("AsignarTurno")) return respuestaJson({ error: false, data: { radicado: 4242, motivo: "Agendada Correctamente" } });
+            return respuestaJson({});
+          },
+          gmxhr: (o) => { if (o.onerror) o.onerror("sin AppCita en la prueba"); },
+        });
+        enriquecerDom(c);
+        c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+        return c;
+      };
+      const c = mk();
+      // Plan SIN ftl (nada que tomar primero): el control sugerido es el seed y la
+      // creatinina vence 3 días después de la toma que corresponde a la sugerida — la
+      // sugerida la salva, una fecha ~10 días más tardía no.
+      c.api.mtrCacheResumenGuardar("555111", {
+        programa: "HTA",
+        plan: { control: { fecha: seed }, ftl: null, vencidos: [], faltantes: [],
+          drivers: [{ clave: "CREATININA", nombre: "Creatinina sérica", estado: "D", vence: vence }], pasajeros: [] },
+      });
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const vencaviso = modal.querySelector("#vgl-agm-vencaviso");
+      t.cierto(vencaviso.classList.contains("vgl-d-none"), "al abrir, con la sugerida preseleccionada no hay nada que avisar");
+      // El médico se va al ÚLTIMO día sondeado (~7 hábiles después del centro): la toma
+      // (5 hábiles antes de esa fecha) cae después del vencimiento → el aviso aparece.
+      const chips = modal.querySelector("#vgl-day-chips");
+      disparar(chips.children[chips.children.length - 1], "click");
+      await esperar(80);
+      t.cierto(!vencaviso.classList.contains("vgl-d-none"), "al elegir una fecha tardía el aviso de vencimiento se ve");
+      t.cierto(/vgl-agm-venc-fix/.test(vencaviso.innerHTML), "con su botón «🎯 Pasar a la fecha sugerida»");
+      disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      const caja = modal.querySelector("#vgl-agm-confirm-aviso");
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(30);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 0, "Confirmar no crea nada todavía");
+      t.cierto(!caja.classList.contains("vgl-d-none") && /llegaría vencido/.test(caja.innerHTML), "el recuadro de decisión explica el bloqueo");
+      // 🎯: recentra en la sugerida, CIERRA el recuadro, limpia vencOk y repinta el
+      // vencimiento honesto con la fecha nueva (la sugerida lo resuelve → se oculta).
+      // El botón se pide desde la PROPIA caja del aviso: el DOM enriquecido memoiza el
+      // querySelector por nodo, así que «modal.querySelector("#vgl-agm-venc-fix")» sería
+      // un nodo fresco sin el listener que el script sí registró.
+      disparar(vencaviso.querySelector("#vgl-agm-venc-fix"), "click");
+      await esperar(80);
+      t.cierto(caja.classList.contains("vgl-d-none") && caja.innerHTML === "", "el recuadro de decisión se cierra (antes quedaba abierto y el modal no terminaba nunca)");
+      t.igual(confirmar.dataset.vencOk, "", "el consentimiento no se da por hecho: la fecha nueva se reevalúa");
+      t.cierto(vencaviso.classList.contains("vgl-d-none"), "y con la fecha sugerida el vencimiento queda resuelto: el aviso se autooculta");
+      // Re-elección de hora y Confirmar: la cita SÍ sale — el ciclo completa.
+      disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
+      confirmar.dataset.ultimoClic = "0";
+      disparar(confirmar, "click");
+      await esperar(120);
+      t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "la cita se crea: el modal ya no se queda abierto");
     });
 
     t.caso("v18.0.118 (UI/UX #5): sin resumen calculado, el dock muestra «Panel del paciente · leyendo…» deshabilitado en vez de un hueco", () => {

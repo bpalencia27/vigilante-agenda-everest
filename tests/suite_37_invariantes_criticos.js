@@ -176,16 +176,31 @@ module.exports = {
         "con Tab, estando en el ÚLTIMO hay que saltar al PRIMERO");
     });
 
-    t.caso("_dispararAvisoAudible NO depende del módulo — el tono suena esté donde esté el médico", () => {
+    t.caso("_dispararAvisoAudible: el TONO nunca depende del módulo — solo el canal «dentro de la página»", () => {
       // v14.1.5: el aviso audible estaba condicionado a estar dentro de /viva/HCHealth, o
       // sea que el tono y la notificación del sistema —que existen precisamente para
       // avisar cuando el médico NO está mirando— se callaban justo cuando hacían falta.
+      // v18.0.135 (Avisos #4) REFINÓ el invariante, no lo rompió: la pestaña ajena VISIBLE
+      // ya no pinta el toast en una página que no es la clínica (la fuga reportada: el cian
+      // y el ámbar de la misma cita apareciendo en otras ventanas de Everest) y su canal
+      // pasa a ser la notificación del sistema. Lo que SIGUE sin poder mirar el módulo es
+      // todo lo que corre ANTES de la primera mirada al módulo: el tono (startNag/playTone),
+      // el registro del hecho y el silencio temporal (muted). Condicionar CUALQUIERA de
+      // esos tres al módulo es la causa exacta de los avisos tardíos que reportaron los
+      // compañeros del médico ("es como si estuvieran asincrónicas").
       const i = src.indexOf("function _dispararAvisoAudible(");
       t.cierto(i !== -1, "no se encontró _dispararAvisoAudible");
       const cuerpo = src.slice(i, src.indexOf("function _dispararAvisoCartel(", i));
-      t.igual(cuerpo.indexOf("_enModuloHCHealth"), -1,
-        "el aviso AUDIBLE volvió a condicionarse al módulo: es la causa exacta de los avisos " +
-        "tardíos que reportaron los compañeros del médico ('es como si estuvieran asincrónicas')");
+      const primeraMiradaAlModulo = cuerpo.indexOf("_enModuloHCHealth");
+      t.cierto(primeraMiradaAlModulo !== -1,
+        "v18.0.135: el reparto de canales SÍ mira el módulo (la página ajena no se pinta)");
+      ["startNag", "playTone", "muted()"].forEach((marca) => {
+        t.cierto(cuerpo.indexOf(marca) !== -1 && cuerpo.indexOf(marca) < primeraMiradaAlModulo,
+          "«" + marca + "» corre SIEMPRE, antes de cualquier mirada al módulo — volver a " +
+          "condicionarlo al módulo es lo que creó los avisos tardíos de la v14.1.4");
+      });
+      t.cierto(/_pestanaSinAtencion\(\) \|\| !_enModuloHCHealth\(\)/.test(cuerpo),
+        "fuera de HCHealth el canal es la notificación del sistema, nunca el silencio");
     });
 
     // ---------- el guard se protege a sí mismo ----------

@@ -951,27 +951,29 @@ module.exports = {
       t.cierto(cola[0].ts > 0, "y lleva la hora del hecho, para poder caducarlo si se vacía mucho después");
     });
 
-    // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió, nombrando las tres rutas
-    // exactas, que el aviso NO le suene ahí — a diferencia del resto de Everest, donde
-    // v14.1.5 sigue mandando (prueba anterior). El hecho se sigue contando y el cartel
-    // sigue esperando en cola para cuando vuelva a una pantalla clínica real.
-    t.caso("v17.6.75: en las tres pantallas que el médico nombró, el aviso NO suena — pero el hecho se cuenta y el cartel queda en cola", () => {
+    // v18.0.138 — orden del médico (4-sep): ni Vigilante ni notificaciones en
+    // /viva/EverHealth/OrdenamientoHealth, /viva/EverHealth/Acceso ni
+    // /viva/EverHealth/HCHealth — TODO el subárbol /viva/EverHealth/ queda
+    // silenciado (amplía v17.6.75, que enumeraba tres pantallas sueltas). El hecho
+    // se sigue contando y el cartel sigue esperando en cola para cuando el médico
+    // vuelva a la pestaña principal /viva/HCHealth/.
+    t.caso("v18.0.138: en todo el subárbol /viva/EverHealth/ el aviso NO suena — pero el hecho se cuenta y el cartel queda en cola", () => {
       const c = cargar();
       c.env.doc.visibilityState = "hidden";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";
-      const rutas = ["/viva/Acceso/", "/viva/EverHealth/OrdenamientoHealth", "/viva/EverHealth/"];
+      const rutas = ["/viva/Acceso/", "/viva/EverHealth/OrdenamientoHealth", "/viva/EverHealth/HCHealth", "/viva/EverHealth/Acceso", "/viva/EverHealth/"];
       rutas.forEach((ruta, i) => {
         c.env.win.location.pathname = ruta;
         const base = { hora_texto: "08:0" + i + " AM", doc_id: "d" + i, key: "d" + i + "@08:0" + i + " AM", nombre: "PRUEBA", elapsed: 1, reason: "" };
         c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });
         c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });
       });
-      t.igual(notifCount, 0, "ni una sola notificación de Windows en ninguna de las tres rutas nombradas");
-      t.igual(atiempoHoy(c), 3, "pero el hecho SÍ se cuenta en la auditoría — las tres llegadas quedan registradas");
+      t.igual(notifCount, 0, "ni una sola notificación de Windows en ninguna de las cinco rutas silenciadas");
+      t.igual(atiempoHoy(c), 5, "pero el hecho SÍ se cuenta en la auditoría — las cinco llegadas quedan registradas");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola.length, 3, "y el cartel de cada una queda en cola, esperando una pantalla clínica real donde pintarse");
+      t.igual(cola.length, 5, "y el cartel de cada una queda en cola, esperando la pestaña principal /viva/HCHealth/");
     });
 
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
@@ -1037,7 +1039,18 @@ module.exports = {
     // un médico AUTORIZADO, que es la ruta "normal" que sigue vigente. El gating para no
     // autorizados se prueba aparte.
     const AUTHORIZED = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
-    function autorizar(c) { c.api.__state.activeDoctor = AUTHORIZED; }
+    // v18.1.0 (Misión B / B1) — el padrón autorizado ya NO vive en el userscript (7A):
+    // sale de `vgl_acceso_lista`. Se siembra aquí la lista, como la dejaría el fetch del
+    // arreglo B2, para que el uid 707 de AUTHORIZED resuelva COMPLETO igual que antes.
+    const LISTA_ACCESO_04 = {
+      version: "test-04.1",
+      perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
+      blocklist: [],
+    };
+    function autorizar(c) {
+      c.api.__state.activeDoctor = AUTHORIZED;
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_04));
+    }
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).
@@ -1332,6 +1345,66 @@ module.exports = {
       // El reparto de v18.0.120 viaja intacto: vencido y adelantable siguen separados.
       t.cierto(dsp.labs.every((f) => f.vencido !== false), "en `labs` solo va lo vencido de verdad");
       t.cierto(dsp.adelantar.every((f) => f.vencido === false), "y en `adelantar` solo lo que sigue vigente");
+    });
+
+    // =====================================================================
+    // v18.0.135 — SINCRONIZACIÓN AVISO ↔ RESULTADOS (reporte del médico, 03-sep): el aviso
+    // de entrada ofrecía la SOMF que el modal de Laboratorios ya mostraba HECHA (14/08,
+    // con el código propio del laboratorio). Ahora el aviso descuenta lo «ya hecho y
+    // detectado en los resultados» con la misma vara del modal de Ordenar; lo que está
+    // VENCIDO sigue pendiente, y la mamografía (manda la lista de la sede) no se descuenta.
+    // =====================================================================
+    function planPymYaHechos() {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC_LABSV} <form id="5552026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({
+            dataObject: JSON.stringify([
+              { CodigoParametro: "903818", NombreParametro: "COLESTEROL TOTAL", Resultado: "220", Fecha: "2026-01-01" },
+              // La SOMF del reporte: hecha el 14/08/2026 con el código PROPIO del laboratorio
+              // (no el CUPS 907009) — se reconoce por nombre, regla del 03-sep.
+              { CodigoParametro: "LAB-SOMF-001", NombreParametro: "SANGRE OCULTA EN MATERIA FECAL", Resultado: "NEGATIVO", Fecha: "2026-08-14" },
+              // PSA reciente, también con código propio del laboratorio.
+              { CodigoParametro: "LAB-PSA-001", NombreParametro: "ANTIGENO ESPECIFICO DE PROSTATA", Resultado: "0.9", Fecha: "2026-08-28" },
+              // VIH de hace ~15 meses: hecho pero VENCIDO (vigencia 1 año) — sigue pendiente.
+              { CodigoParametro: "906249", NombreParametro: "VIRUS DE INMUNODEFICIENCIA HUMANA 1 Y 2 ANTICUERPOS", Resultado: "NO REACTIVO", Fecha: "2025-06-01" },
+              // Mamografía reciente: la lista de la sede manda (Z123), NO se descuenta.
+              { CodigoParametro: "876802", NombreParametro: "MAMOGRAFIA BILATERAL", Resultado: "BI-RADS 1", Fecha: "2026-08-20" },
+            ]),
+          }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+
+    await t.casoAsync("v18.0.135 PUNTA A PUNTA (reporte en vivo 03-sep): el aviso ya no ofrece la SOMF hecha el 14/08 que el modal de Laboratorios sí veía", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planPymYaHechos() });
+      autorizar(c);
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-03T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-03T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const key = c.api.normalizeKey(DOC_LABSV);
+      c.api.__state.pym = new Map([[key, ["Sangre oculta en materia fecal", "PSA", "Tamización de VIH", "Mamografía"]]]);
+
+      // Antes de que el laboratorio responda: la lectura está incompleta y NO se descuenta
+      // nada (D4: ante la duda, el aviso muestra todo).
+      const antes = c.api._pendientesUniversales(DOC_LABSV);
+      t.falso(antes.labsListos, "sin lectura de laboratorio, nada se da por hecho");
+      t.igual(antes.pym.length, 4, "las cuatro actividades siguen pendientes hasta tener resultados");
+
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const dsp = c.api._pendientesUniversales(DOC_LABSV);
+      t.cierto(dsp.labsListos, "la lectura llegó completa");
+      const nombres = dsp.pym.join(" | ");
+      t.falso(nombres.indexOf("Sangre oculta") >= 0, "la SOMF hecha el 14/08 (código propio del laboratorio) YA NO se ofrece — esto es lo que reportó en vivo");
+      t.falso(nombres.indexOf("PSA") >= 0, "el PSA reciente tampoco");
+      t.cierto(nombres.indexOf("VIH") >= 0, "el VIH de hace ~15 meses está vencido: sigue pendiente");
+      t.cierto(nombres.indexOf("Mamografía") >= 0, "la mamografía manda la lista de la sede: no se descuenta aunque exista resultado");
+      t.igual(dsp.pym.length, 2, "quedan exactamente las dos que de verdad se deben ordenar");
     });
 
     t.caso("v18.0.127: sin paciente o sin nada pendiente, el número es 0 y no lanza", () => {

@@ -397,19 +397,29 @@ module.exports = {
       t.igual(red.posts.length, 1, "no se repite la fila");
     });
 
-    await t.casoAsync("repDailySummary: sin actividad ayer no manda fila, pero el candado queda puesto", async () => {
+    await t.casoAsync("repDailySummary: sin actividad ayer no manda fila NI candado; con stats sí", async () => {
       const red = crearRed();
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
       congelarFecha(c, "2026-03-05T12:00:00");
       c.api.repDailySummary(); // no hay vgl_stats de ayer
       await tick();
       t.igual(red.posts.length, 0, "sin actividad ese día: ni fila");
-      t.igual(c.env.almacen["vgl_rep_sum"], "2026-03-04", "el candado se pone ANTES de mirar las stats");
-      // aunque las stats aparezcan después, hoy ya no se reenvía (comportamiento real)
-      c.env.almacen["vgl_stats"] = JSON.stringify({ "2026-03-04": { fraude: 1 } });
+      t.igual(c.env.almacen["vgl_rep_sum"], undefined, "ni candado: se reintenta en el próximo arranque");
+      // las stats aparecen después (actividad tardía del día): la fila sale igual
+      c.env.almacen["vgl_stats"] = JSON.stringify({
+        "2026-03-04": { fraude: 1, inasistencia: 2, atiempo: 3, ultima: 99 },
+      });
       c.api.repDailySummary();
       await tick();
-      t.igual(red.posts.length, 0);
+      t.igual(red.posts.length, 1, "ahora sí sale el resumen de ayer");
+      const fila = JSON.parse(red.posts[0].data);
+      t.igual(fila.evento, "resumen");
+      t.igual(fila.deDia, "2026-03-04");
+      t.igual(c.env.almacen["vgl_rep_sum"], "2026-03-04", "candado puesto solo cuando hubo fila");
+      // tercera llamada: el candado la corta
+      c.api.repDailySummary();
+      await tick();
+      t.igual(red.posts.length, 1, "no se repite la fila");
     });
 
     // ---------- reportarFraude ----------

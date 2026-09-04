@@ -4,6 +4,51 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.1.0] — 2026-09-04 (Quién ve qué, y el aviso del paciente nuevo)
+
+### 🔐 El control de acceso por médico
+Desde hoy el script no es «todo para todos»: cada médico recibe según su perfil, definido en
+una hoja nueva del tablero (`acceso`), no en el código.
+
+- **COMPLETO**: todo el script, como siempre lo ha tenido usted.
+- **LABORATORIOS**: Centinela, laboratorios, agendamiento de exámenes, widgets de exámenes
+  y el aviso de paciente nuevo; sin panel de paciente, redactor IA, RCV ni agendar control.
+- **PÚBLICO** (colega de Everest fuera del padrón): solo Psicología/Odontología y PyM — como ya era.
+- **BLOQUEADO** (lista negra): el script no se construye, en silencio — ni avisa ni deja rastro en pantalla.
+
+Cambiar un médico de perfil ya no exige publicar versión nueva: se edita la hoja `acceso` en
+el tablero y cada equipo la recoge al arrancar, cada 4 horas y al abrir ajustes; si el tablero
+no responde, se usa la última lista guardada en el equipo (un fallo de red no castiga a nadie).
+
+La identidad pasa a ser el `UsuarioId` de sesión (el número interno de cada cuenta), con el
+nombre solo como respaldo. Si la sesión no expone identidad, hay 12 horas de gracia con el
+último perfil vigente; después, perfil público con las funciones privadas cerradas.
+
+### 🆕 El aviso del paciente nuevo
+Cuando aparece en la agenda una cita de un paciente que no figuraba en el histórico del día,
+suena un aviso una sola vez por cita (máximo 3 por hora, para no convertir el turno de la
+tarde en una tanda de campanas). El conteo del día queda visible en el dock y se reinicia a
+medianoche; el mismo paciente en otra lectura no vuelve a sonar.
+
+### 📊 Lo que se mide (y lo que no)
+Cuando un perfil recortado intenta usar una función que no le corresponde, se cuenta el
+intento — solo el de escritura real. El evento `acceso_deneg` viaja al tablero una vez al día
+y lleva uid, perfil y contadores por capacidad: sin nombre del médico, sin cédulas, sin URLs.
+
+### ⚠️ Para instalar esta versión (orden obligatorio)
+**Primero el tablero, después los equipos.** El Apps Script del tablero debe tener la hoja
+`acceso` publicada ANTES de actualizar el userscript: sin ella, todos los equipos caen a
+perfil público (nada se rompe, pero nadie ve sus módulos). El tablero va anotando en
+`acceso_uid` los uids reales de sesión de cada médico: son los que se copian a `acceso`
+para armar el padrón y la lista negra.
+
+### 🧱 El límite que no cambia
+Un userscript corre en la máquina de quien lo usa: esto es control operativo (evitar errores
+y uso indebido de nuestros servicios), no una barrera de seguridad. La cerradura de verdad
+sigue siendo el servidor.
+
+---
+
 ## [Versión 17.56.0] — 2026-08-29 (La marca de llegada tarde ya no se borra sola)
 
 ### 🔴➡️🟢 El reporte

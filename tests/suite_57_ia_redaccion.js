@@ -40,6 +40,7 @@ module.exports = {
     "mtrCasillaDeModo", "mtrRedactorModoSugerido", "mtrInsertarEnCasillaModo",
     "mtrCacheResumenEdadMin", "mtrCacheResumenBorrar",
     "mtrCalcularDeltaEdicion", "mtrAnalitoQueFijaLaToma",
+    "mtrHojaDeHechos", "mtrHojaDeHechosTexto", "mtrHcTextoParaHoja",
     "_vglClicablePestana", "_vglIrAPestanaYEsperar",
   ],
 
@@ -85,6 +86,20 @@ module.exports = {
       for (const modo of MODOS_PROMPT) {
         const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
         t.cierto(/Un campo AUSENTE significa que no se preguntó/.test(sys), modo + ": la regla numero uno de la casa");
+      }
+    });
+
+    // =================================================================
+    //  v18.0.142 — «PUSE 111/78… FALTÓ LA DIASTÓLICA»: la IA completaba
+    //  el hueco de una diastólica ausente con la cifra de otra medición
+    //  (pantalla 165/70 y 111/78; notas generadas 124/82 y 110/70). La
+    //  regla viaja en MTR_PRECEDENCIA_SYS, que encabeza TODOS los
+    //  prompts: los cinco modos la llevan solos.
+    // =================================================================
+    t.caso("v18.0.142: los CINCO modos PROHÍBEN rellenar la cifra que falta de un signo vital", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(sys.indexOf("PROHIBIDO rellenar la cifra que falta") >= 0, modo + ": la regla del hueco que nadie llenó");
       }
     });
 
@@ -212,6 +227,16 @@ module.exports = {
       const hojaCon = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 128, paDiastolica: 80 } }, { hoyIso: "2026-08-17" });
       t.cierto(/Signos vitales: PA 128\/80 mmHg/.test(api.mtrHojaDeHechosTexto(hojaCon)),
         "con PA en el resumen, la hoja sí la muestra (el dato real no se pierde)");
+    });
+
+    // v18.0.142 — el caso del reporte: la sistólica llegó y la diastólica NO.
+    // La hoja escribe «PA 111 mmHg» tal cual y JAMÁS un «111/» con la cifra
+    // de otra medición completando el hueco.
+    t.caso("v18.0.142: la hoja con SOLO la sistólica no completa la diastólica («PUSE 111/78… FALTÓ LA DIASTÓLICA»)", () => {
+      const hoja = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 111 } }, { hoyIso: "2026-08-17" });
+      const texto = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/PA 111 mmHg/.test(texto), "la sistólica que sí consta se muestra");
+      t.falso(/111\//.test(texto), "sin diastólica no se imprime un «111/» — el hueco se deja hueco");
     });
 
     // v17.6.3 — IA CORRUPTA (reporte del médico): la nota de «Análisis y plan» llegaba con
@@ -2481,6 +2506,86 @@ module.exports = {
       t.cierto(texto.indexOf("80123456") < 0, "la cédula no aparece en el texto que se le entrega al modelo");
       t.cierto(texto.indexOf("3001234567") < 0, "ni el celular");
       t.cierto(/control/i.test(texto), "pero el contenido clínico sí sobrevive");
+    });
+
+    // =====================================================================
+    // v18.0.135 — FRENTE 5 (03-sep): BLINDAJE DEL EXAMEN FÍSICO EN LA REDACCIÓN
+    //
+    // Dos reportes del médico (#8387512 y #34965201): la IA redactaba el examen
+    // físico y los signos vitales de HOY con la PA/peso/IMC de la consulta
+    // anterior («el grounding no está siendo en tiempo real, recibe los datos
+    // de las consultas anteriores»). La causa estaba en la cosecha en vivo: se
+    // acumula entre pestañas, nunca se borra sola y no llevaba FECHA por campo,
+    // así que el rótulo A7 (correctamente honesto) no podía distinguir «el
+    // médico lo acaba de digitar» de «Everest lo pre-llenó del control
+    // anterior». Desde esta versión cada ruta física lleva fecha (`domFechas`,
+    // probada en suite_31) y el texto separa en tres baldes.
+    // =====================================================================
+    t.caso("v18.0.135 — el examen físico se separa por fecha: HOY, ANTERIOR y legado", () => {
+      const hoy = api.todayStamp();
+      const antes = api._vglFechaHace(6);
+      const hechos = {
+        dom: {
+          "signosVitales.peso": 80,                      // camelCase real: el match es case-insensitive
+          "examenFisico.edema": false,
+          "signosVitales.tensionArterial": "135/85",     // vieja: pre-llenada por Everest
+          "examenFisico.cabezaCuello": "sin hallazgos",  // vieja
+          "AntecedentePatologicos.Hipertension": true,   // no física: sigue en A7
+          "examenFisico.torax": "sin hallazgos",         // legado: física cosechada SIN fecha
+        },
+        domFechas: {
+          "signosVitales.peso": hoy,
+          "examenFisico.edema": hoy,
+          "signosVitales.tensionArterial": antes,
+          "examenFisico.cabezaCuello": antes,
+          // Hipertension y torax: SIN fecha a propósito
+        },
+      };
+      const txt = api.mtrHcTextoParaHoja(hechos, hoy);
+      // HOY: lo único que la IA puede usar como examen físico de esta consulta.
+      t.cierto(/signosVitales \(digitado HOY en la pantalla de Everest — examen físico y signos vitales de ESTA consulta\): peso: 80/.test(txt),
+        "lo digitado hoy viaja rotulado como de ESTA consulta");
+      t.cierto(/examenFisico \(digitado HOY en la pantalla de Everest[^)]*\): edema: no/.test(txt),
+        "y el examen físico de hoy también (las rutas reales son camelCase y el match es case-insensitive)");
+      // ANTERIOR: rotulado como lo que es, con su fecha por línea.
+      t.cierto(/cosechado en una consulta ANTERIOR — NO usar como examen físico ni signos vitales de hoy/.test(txt),
+        "lo cosechado antes se marca para que NO se use como examen físico de hoy");
+      t.cierto(new RegExp("tensionArterial: 135/85 \\(cosechado " + antes + "\\)").test(txt),
+        "cada línea vieja viaja con su fecha explícita");
+      // LEGADO y NO-FÍSICO: rótulo A7 intacto.
+      const lineaTorax = txt.split("\n").find((l) => l.indexOf("torax:") >= 0) || "";
+      t.cierto(/Hipertension: sí/.test(txt) && /escrito en la historia de Everest/.test(txt),
+        "el resto de secciones conserva el rótulo honesto A7");
+      t.cierto(/escrito en la historia de Everest/.test(lineaTorax) && lineaTorax.indexOf("cosechado ") < 0,
+        "el físico legado sin fecha NO finge ser ni de hoy ni de antes: cae al rótulo A7");
+      // ORDEN: HOY primero, ANTERIOR después, A7 al final (lo más fresco manda).
+      t.cierto(txt.indexOf("digitado HOY") < txt.indexOf("cosechado en una consulta ANTERIOR"),
+        "lo de HOY aparece antes que lo viejo");
+      t.cierto(txt.indexOf("cosechado en una consulta ANTERIOR") < txt.indexOf("escrito en la historia de Everest"),
+        "y lo viejo antes que lo sin fecha");
+    });
+
+    t.caso("v18.0.135 — la hoja de hechos pasa su HOY a la cosecha física (cableado)", () => {
+      // Probar la pieza no es probar que la pieza está conectada: sin el hoyIso viajando
+      // en la hoja, el aplanador recibiría undefined y TODO el físico caería al balde
+      // legado — la separación existiría pero nunca se ejecutaría en producción.
+      // Fechas FIJAS y ajenas al reloj real: si el aplanador ignorara el hoyIso de la
+      // hoja y cayera a todayStamp() (mutante enmascarado de la #487, cazado el 03-sep),
+      // nada casaría con «HOY» y el físico caería entero al balde legado. Con el reloj
+      // real como hoyIso esa mutación era invisible: las dos fechas coincidían siempre.
+      const hoy = "2001-02-03";
+      const antes = "2001-01-20";
+      const hoja = api.mtrHojaDeHechos({ factores: {} }, {
+        hoyIso: hoy,
+        hcEverest: { dom: { "signosVitales.peso": 94, "examenFisico.edema": true },
+                     domFechas: { "signosVitales.peso": antes, "examenFisico.edema": hoy } },
+      });
+      t.igual(hoja.hoyIso, hoy, "la hoja devuelve el hoy que recibió (mismo formato del sello de fecha)");
+      const txt = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/examenFisico \(digitado HOY en la pantalla de Everest/.test(txt),
+        "el físico de hoy llega al texto del prompt rotulado como de hoy");
+      t.cierto(new RegExp("peso: 94 \\(cosechado " + antes + "\\)").test(txt),
+        "y el peso pre-llenado de la consulta anterior queda con su fecha, no como signo vital actual");
     });
 
 

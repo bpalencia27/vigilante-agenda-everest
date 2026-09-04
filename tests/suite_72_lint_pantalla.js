@@ -381,6 +381,34 @@ module.exports = {
     });
 
     // =================================================================
+    // v18.0.139 — RESPALDO ACTIVO COMO LISTA (pedido del médico, 4-sep)
+    //
+    // "SE SUPONE QUE CON LA BASE DE RESPALDO DEBERÍAN APARECERME QUÉ
+    // ACTIVIDADES TIENE PENDIENTE TAMBIÉN, SE NEGÓ A MOSTRARME, POR QUÉ?"
+    // No hubo negativa: con la piloto activa, getActivities() consulta ESA
+    // MISMA base. Lo que el médico leyó como rechazo era la frase "NO he
+    // podido mirar" saliendo para un paciente que SÍ se pudo mirar (en el
+    // respaldo) y no arrojó nada ahí. La pertenencia separa los dos casos.
+    // =================================================================
+    t.caso("RESPALDO ACTIVO — «se negó a mostrarme» eran dos casos con una sola frase", () => {
+      const esta = api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: true });
+      t.igual(esta.motivo, "piloto_esta_sin_pendientes", "está en el respaldo y de allí no salió nada: motivo propio");
+      t.cierto(/SÍ figura en la base de respaldo/.test(esta.texto), "lo primero que dice es que SÍ lo miró en esa base");
+      t.falso(/NO he podido mirar/.test(esta.texto), "ya no dice que no pudo mirar: miró y no salió nada");
+      t.cierto(/NO prueba que esté al día/.test(esta.texto), "y el vacío del respaldo no se pasa por 'al día'");
+
+      const noEsta = api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: false });
+      t.igual(noEsta.motivo, "piloto_no_esta", "no figura en el respaldo: motivo propio también");
+      t.cierto(/NO figura en la base de respaldo/.test(noEsta.texto), "la ausencia se dice con su dirección");
+      t.cierto(/ni en el respaldo lo puedo ver/.test(noEsta.texto), "honestidad de siempre: es ignorancia, no un hallazgo");
+
+      // Sin poder comprobar la pertenencia (índice sin cargar), el mensaje es el de
+      // siempre: no se inventa ni presencia ni ausencia.
+      t.igual(api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: null }).motivo,
+        "sin_lista", "sin índice no se afirma nada sobre el paciente");
+    });
+
+    // =================================================================
     //  v18.0.43 — CONSULTA AL RESPALDO (pedido del médico, 1-sep)
     //
     //  "SI ES POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE 'Dato faltante: sin registro en

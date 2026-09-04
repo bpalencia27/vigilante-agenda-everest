@@ -573,9 +573,13 @@ module.exports = {
     // de la vigencia del examen». Lo era, pero de 60: la norma ya la había acortado por el
     // estadio renal, y el 50 % se apilaba encima. Decisión del 02-sep: no se apila.
     t.caso("v18.0.130 (reporte 2): el 50 % no se apila sobre una vigencia que el estadio ya acortó", () => {
+      // v18.0.135 — la glicemia ya no se juzga por su propio valor: desde la entrevista del
+      // 02-sep la que enciende la repetición al 50 % es la HbA1c. Para que este caso siga
+      // probando LO MISMO de la v18.0.130 (el no-apilamiento) hay que darle una HbA1c fuera
+      // de meta; una glucosa de 180 sola ya no bastaría — que es justo la regla nueva.
       const ctx = {
         hoyIso: HOY130, programa: "ERC", estadioAdministrativo: "G4", esDm2: true,
-        categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 25,
+        categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 25, valorHba1c: 9.5,
       };
       const a = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2026-07-10", valor: 180 }, ctx);
       t.igual(a.vigenciaNormaDias, 60, "en ERC G4 la norma le da 60 d a la glicemia (no 180)");
@@ -583,9 +587,10 @@ module.exports = {
       t.igual(a.vence, "2026-09-08", "el paciente del reporte pasa de «venció el 9 ago» a «vence el 8 sep»");
       t.igual(a.fueraDeMeta, true, "el examen SIGUE fuera de metas: eso no se oculta");
       t.igual(a.estadioSinAcortar, true, "y se publica por qué no se acortó, para poder decirlo en pantalla");
-      // Donde la vigencia es la base del programa, el 50 % sí sigue aplicándose.
+      // Donde la vigencia es la base del programa, el 50 % sí sigue aplicándose — encendido
+      // por la HbA1c fuera de meta, que es quien decide desde la v18.0.135.
       const b = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2026-07-10", valor: 180 },
-        { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88 });
+        { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88, valorHba1c: 9.5 });
       t.igual(b.vigenciaNormaDias, 180, "en DM2 sin estadio la norma da 180");
       t.igual(b.vigenciaDias, 90, "y ahí el 50 % sí manda: la regla no se desactiva, se acota");
       t.igual(b.estadioSinAcortar, false, "y se dice que aquí no fue el estadio");
@@ -603,9 +608,128 @@ module.exports = {
       t.falso(api.mtrNormaYaAcortadaPorEstadio("GLUCOSA", { programa: "DM2", estadioAdministrativo: null, esDm2: true, edad: 62 }),
         "sin estadio no hay nada que comparar: la guarda no frena");
       // Y la misma vara en el camino del aviso de entrada (la lección de la v18.0.120).
-      const opts = { programa: "ERC", estadio: "G4", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true };
+      // v18.0.135 — con la HbA1c explícita: sin ella la glucosa ya no se parte en ningún
+      // camino (ver la sección de la v18.0.135 más abajo).
+      const opts = { programa: "ERC", estadio: "G4", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true, valorHba1c: 9.5 };
       t.igual(api._vigenciaDiasParaAnalito("GLUCOSA", 180, opts), 60,
         "el aviso de entrada juzga igual que el panel: 60, no 30");
+    });
+
+    // =====================================================================
+    // v18.0.135 — «LA GLUCOSA NO SE REPITE POR SÍ SOLA» (entrevista del 02-sep)
+    //
+    // Textual del médico: «la glucosa no se repite por sí sola, se repite si la HbA1c
+    // está fuera de metas también… una cosa es estar en falla terapéutica y por eso se
+    // repite al 50 % de su vigencia y otra muy diferente estar vencida».
+    //
+    // Dos cambios de fondo que estas pruebas fijan por separado:
+    //   1. El motor ya no mira el valor de la glicemia para partir su vigencia: mira la
+    //      HbA1c del MISMO paciente (sin HbA1c conocida, vigencia normativa completa —
+    //      nada de adivinar control crónico desde un valor suelto).
+    //   2. Agotado el plazo del 50 % con la norma todavía viva, el examen NO está
+    //      vencido ni se repite YA: rige su vigencia natural (subestado "falla_natural",
+    //      v18.0.143). Ordenanza del 04-sep: «LAS FALLAS TERAPÉUTICAS NO SE TIENEN EN
+    //      CUENTA COMO VENCIMIENTO; SI YA PASÓ LA VENTANA DEL 50 %, SE UTILIZAN LAS
+    //      VIGENCIAS NATURALES DE CADA ANALITO».
+    // =====================================================================
+    t.caso("v18.0.135: la glucosa NO se juzga por su propio valor — manda la HbA1c", () => {
+      const ctx = { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88 };
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 300, Object.assign({}, ctx, { valorHba1c: 6.5 })), false,
+        "glucosa de 300 con HbA1c de 6,5 EN meta: la glucosa no se repite sola — esto es exactamente lo que pidió el médico");
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 300, ctx), null,
+        "sin HbA1c conocida no se juzga: un valor suelto no dice nada del control crónico");
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 112, Object.assign({}, ctx, { valorHba1c: 9.5 })), true,
+        "y una glucosa de 112 con HbA1c de 9,5 SÍ la repite: manda el control crónico, no lo que comió esa mañana");
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 300, Object.assign({}, ctx, { valorHba1c: 6.5, esDm2: false })), null,
+        "en quien no es diabético, la glucosa no se mide contra la meta de HbA1c");
+    });
+
+    t.caso("v18.0.135: glucosa alta con HbA1c en meta conserva los 180 días enteros", () => {
+      const a = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2026-05-10", valor: 300 },
+        { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88, valorHba1c: 6.5 });
+      t.igual(a.vigenciaDias, 180, "el 300 ya no parte la vigencia: eso lo decide la HbA1c");
+      t.igual(a.fueraDeMeta, false, "y el propio estado lo publica: no hay repetición por falla");
+      t.igual(a.subestado, "vigente", "una glucosa de mayo sigue vigente hasta noviembre, como manda la norma");
+      // La MISMA vara en el camino del aviso de entrada / antiduplicado de PyM: sin HbA1c o
+      // con HbA1c en meta, tampoco se parte ahí. Dos caminos, una regla (lección v18.0.120).
+      t.igual(api._vigenciaDiasParaAnalito("GLUCOSA", 300, { programa: "DM2", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true, valorHba1c: 6.5 }), 180,
+        "el aviso de entrada mide 180, no 90");
+      t.igual(api._vigenciaDiasParaAnalito("GLUCOSA", 300, { programa: "DM2", esDM2: true, esDm2: true, categoriaRiesgo: "alto", edad: 62, aplicar50: true }), 180,
+        "y sin HbA1c conocida, tampoco: la norma completa en los dos caminos");
+    });
+
+    t.caso("v18.0.143: agotada la ventana del 50 %, la glucosa rige por su vigencia NATURAL", () => {
+      // El reporte real: glucosa y HbA1c del 10-may, hoy 02-sep. La HbA1c en 9,5 parte la
+      // vigencia a 90 d → la ventana venció el 08-ago; la NORMA (180 d) la cubre hasta el
+      // 06-nov. v18.0.135 la ordenaba YA («recontrol_falla»); la ordenanza del 04-sep la
+      // devuelve a su vigencia natural: es un vigente más que vence el 06-nov.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true,
+        categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88,
+        ultimos: {
+          GLUCOSA: { fecha: "2026-05-10", valor: 112 },
+          HBA1C: { fecha: "2026-05-10", valor: 9.5 },
+          CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+          RAC: { fecha: "2026-08-01", valor: 12 },
+          UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 60 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 50 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 110 },
+        },
+      });
+      const glu = [].concat(plan.drivers || [], plan.pasajeros || []).filter((x) => x.clave === "GLUCOSA")[0];
+      t.cierto(!!glu, "precondición: la glucosa está en el plan");
+      t.igual(glu.estado, "D", "con la norma viva no se ordena YA: es un vigente con fecha");
+      t.igual(glu.subestado, "falla_natural", "subestado nuevo: falla con la ventana del 50 % gastada");
+      t.falso(glu.vencidoBase, "y la verdad de terreno es que NO está vencida");
+      t.igual(glu.vence, "2026-11-06", "publica la fecha NATURAL: 6 de noviembre (180 d)");
+      t.igual(glu.venceFalla, "2026-08-08", "conserva la ventana del 50 % en venceFalla: venció el 8 de agosto");
+      t.igual(glu.diasParaVencerFalla, -25, "la deuda de la falla queda visible, pero ya no manda");
+      t.falso((plan.vencidos || []).some((x) => x.clave === "GLUCOSA"),
+        "no aparece en «Ya vencidos»: esa lista es para la norma agotada");
+      // v18.0.143 — matiz del probe: la glucosa vence EXACTAMENTE el 6-nov, que es la
+      // fecha que su vigencia natural le pone a la toma. Por eso SÍ va en la orden —
+      // pero ordenada para el 6-nov, nunca «YA» en septiembre. Lo que se eliminó es el
+      // empujón de la falla terapéutica, no el pedido en su fecha natural.
+      t.cierto((plan.ordenar || []).some((x) => x.clave === "GLUCOSA"),
+        "se pide en la toma del 6-nov — su vencimiento natural —, no YA en septiembre (reporte del 04-sep)");
+      t.falso((plan.diferidos || []).some((x) => x.clave === "GLUCOSA"),
+        "no viaja con los diferidos: su fecha natural ES la fecha de la toma");
+      t.igual(plan.ftl, "2026-11-06", "la fecha de la toma la marcan las vigencias naturales");
+      t.igual(plan.motivoFtl, "en el vencimiento más próximo (Glicemia)",
+        "la glucosa gana el empate con la HbA1c por el orden de MTR_DRIVERS");
+      t.cierto(/HbA1c fuera de meta/.test(glu.motivo) && /vigente hasta el 2026-11-06/.test(glu.motivo),
+        "el motivo dice la diferencia con las dos fechas · " + glu.motivo);
+      t.cierto(/rige la vigencia natural/.test(glu.motivo),
+        "y sella la ordenanza: la ventana del 50 % gastada no es un vencimiento");
+      const hba = [].concat(plan.drivers || [], plan.pasajeros || []).filter((x) => x.clave === "HBA1C")[0];
+      t.igual(hba && hba.subestado, "falla_natural", "la HbA1c, misma falla: también rige por su norma");
+    });
+
+    t.caso("v18.0.135: la glucosa SÍ está vencida cuando lo que se agotó es la NORMA", () => {
+      const a = api.mtrEstadoAnalito("GLUCOSA", { fecha: "2025-01-10", valor: 112 },
+        { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88, valorHba1c: 9.5 });
+      t.igual(a.subestado, "vencido", "norma agotada desde julio de 2025: esta SÍ es una vencida real");
+      t.cierto(a.vencidoBase, "y vencidoBase lo certifica, para la urgencia de piso 14/techo 21");
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true,
+        categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88, valorHba1c: 9.5,
+        ultimos: { GLUCOSA: { fecha: "2025-01-10", valor: 112 } },
+      });
+      t.cierto((plan.vencidos || []).some((x) => x.clave === "GLUCOSA"),
+        "y en el plan va donde debe: al recuadro de «Ya vencidos»");
+    });
+
+    t.caso("v18.0.143: la pantalla pinta la falla gastada como VIGENTE por norma (los pintores)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(src.includes("recontrol_falla"), "el subestado recontrol_falla desapareció del fuente entero");
+      t.falso(/se repite ya/.test(src), "y con él el letrero «se repite ya»: la falla gastada ya no se pide YA");
+      t.cierto(src.includes('subestado = "falla_natural"'), "el motor estampa el subestado nuevo falla_natural");
+      t.cierto(/rige la vigencia natural/.test(src),
+        "y el pintor de vigentes explica la ordenanza del 04-sep con las dos fechas a la vista");
     });
 
     // ---- REPORTE 3: la toma de un día para otro ----
