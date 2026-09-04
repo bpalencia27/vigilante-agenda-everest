@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.0.140
+// @version      18.0.141
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1034,7 +1034,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.140";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.0.141";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2099,6 +2099,11 @@
   // captura de pantalla. Si el texto en español y el Numero DISCREPAN, se descarta la
   // fecha entera en vez de adivinar cuál de las dos tiene razón.
   let _diagFechaSolicitudHtmlLogged = 0; // contador (hasta 2 muestras), no booleano
+  // v18.0.141 — contadores one-shot de los nuevos diagnósticos de lectura (mismo
+  // patrón: hasta 2 muestras por sesión, nunca booleano, para ver si un problema se
+  // repite entre pacientes sin inundar la consola).
+  let _vglDiagSolicitudesLogged = 0;
+  let _vglWarnIdPacienteDup = 0;
   const MESES_ES_ABR = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, oct: 10, nov: 11, dic: 12 };
   function _parseFechaEspanolLike(texto) {
     const out = [];
@@ -2149,7 +2154,12 @@
   }
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
-    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
+    // v18.0.141 — action tolerante a query-string/hash: el regex estricto
+    // exigía action="/Resultados/Reporte" EXACTO entre comillas; un action con
+    // parámetros ("/Resultados/Reporte?id=846567") dejaba la tarjeta fuera del
+    // barrido completo y el paciente terminaba con "no tiene exámenes" pese a
+    // tenerlos (reporte del 04-sep: exámenes de mayo que el botón 🧪 negaba).
+    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte(?:[?#][^"']*)?["'][^>]*>/gi;
     // v12.5.5 — BLOQUEANTE de la revisión adversarial (confirmado 8/9 tarjetas en un repro
     // con 9 solicitudes reales, como las de la captura de pantalla del consultorio): antes
     // se procesaba tarjeta por tarjeta con `while (re.exec(html))` y CADA una recortaba su
@@ -2212,7 +2222,11 @@
     for (let idx = 0; idx < matches.length; idx++) {
       const m = matches[idx];
       const tag = m[0];
-      const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
+      // v18.0.141 — sufijo alfabético opcional en el id: en el DOM real de Athenea ya
+      // se habían visto ids como "1112026LAB" (el mismo consecutivo que usa el ancla
+      // #collapse1112026LAB). El regex estricto moría en la comilla y DESCARTABA la
+      // tarjeta completa — de nuevo: exámenes existentes leídos como inexistentes.
+      const idM = /\bid=["'](\d+)(20\d{2})[A-Za-z]*["']/.exec(tag);
       if (!idM) continue;
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
       let fechaIso = null;
@@ -2323,8 +2337,35 @@
         if (hM) hash = hM[1];
         if (tM) token = tM[1];
       } catch (e) {}
-      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt, hash, token });
+      // v18.0.141 — el módulo se NORMALIZA A MAYÚSCULAS en el origen. La captura de
+      // data-modulo usa /i (indiferente a caja), pero el consumidor de abajo comparaba
+      // EXACTO contra "LAB": un data-modulo="lab"/"Lab"/"LABORATORIO" del DOM real
+      // pasaba la extracción y moría después en el filtro, con todo el paciente
+      // cayendo a "no tiene exámenes" (el reporte del 04-sep). Normalizar aquí
+      // garantiza que TODO consumidor posterior vea la misma caja.
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: (modM ? String(modM[1]).trim().toUpperCase() : "") || "LAB", fechaIso, horaTxt, hash, token });
     }
+    // v18.0.141 — Telemetría de interpretación, adjunta al arreglo de salida como
+    // propiedad NO ENUMERABLE (invisible para JSON.stringify, t.igual del banco y
+    // cualquier recorrido). Solo CONTEOS: ni cédula, ni fechas, ni ids — la regla de
+    // PHI de v14.2.0 sigue mandando. Con ella el núcleo de labs distingue un []
+    // limpio ("el paciente de verdad no tiene solicitudes") de un [] sospechoso
+    // ("había N formularios y NINGUNO se dejó interpretar").
+    try {
+      const modulos = {};
+      out.forEach((s) => { const k = String(s.modulo || "?"); modulos[k] = (modulos[k] || 0) + 1; });
+      const meta = { formularios: matches.length, interpretadas: out.length, descartadas: matches.length - out.length, modulos };
+      const insinuaTarjetas = /data-modulo|Ver\s+(?:Resumen|Informe)|SOLICITUD/i.test(html);
+      if (_vglDiagSolicitudesLogged < 2 && (out.length < matches.length || (matches.length === 0 && insinuaTarjetas))) {
+        _vglDiagSolicitudesLogged++;
+        console.warn("[Vigilante Athenea] diagnóstico de solicitudes #" + _vglDiagSolicitudesLogged +
+          " — formularios de /Resultados/Reporte detectados: " + matches.length +
+          ", interpretados: " + out.length +
+          (matches.length === 0 && insinuaTarjetas ? ", pero el HTML insinúa tarjetas de solicitud (¿cambió el formato del portal?)" : "") +
+          ". Módulos leídos: " + (Object.keys(modulos).length ? Object.entries(modulos).map(([k, v]) => k + "×" + v).join(", ") : "ninguno"));
+      }
+      Object.defineProperty(out, "__vglMeta", { value: meta, enumerable: false, configurable: true });
+    } catch (e) {}
     return out;
   }
 
@@ -2598,6 +2639,19 @@
       // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
       const idPaciente = _atheneaIdPaciente(r2.responseText);
       const token2 = _atheneaToken(r2.responseText);
+      // v18.0.141 — Si la respuesta trae MÁS DE UN input IdPaciente, Athenea devolvió
+      // una lista de coincidencias y _atheneaIdPaciente se queda con el PRIMERO. Puede
+      // ser el correcto o no: la verificación cruzada del paso 3 (cédula de la
+      // respuesta vs buscada) sigue siendo la que decide; esto solo deja el rastro en
+      // consola — sin volcar identificador alguno — para diagnosticar pacientes "con
+      // exámenes que el script no ve" cuya cédula esté duplicada en el portal.
+      try {
+        const nIdPac = ((r2.responseText || "").match(/<input\b[^>]*\bname=["']IdPaciente["']/gi) || []).length;
+        if (nIdPac > 1 && _vglWarnIdPacienteDup < 2) {
+          _vglWarnIdPacienteDup++;
+          console.warn("[Vigilante Athenea] paso 2 devolvió " + nIdPac + " campos IdPaciente en una misma respuesta (¿cédula duplicada en el portal?): se toma el primero y la verificación del paso 3 es la que decide si sirve.");
+        }
+      } catch (e) {}
       // v18.0.134 (auditoría 2026-09-03, B2) — JSON.stringify(idPaciente) volcaba el id tal
       // cual en consola; basta decir si llegó o no. Mismo mensaje, sin identificador.
       if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente: " + (idPaciente ? "presente" : "no") + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
@@ -2672,12 +2726,63 @@
     return salida;
   }
 
+  // v18.0.141 — ¿Es esta solicitud del módulo laboratorio? El DOM real de Athenea ha
+  // llegado a pintar el atributo en otra caja o con el nombre largo ("lab", "Lab",
+  // "LABORATORIO") mientras el filtro antiguo comparaba EXACTO contra "LAB": esas
+  // solicitudes pasaban la extracción y morían en el filtro, y el paciente quedaba
+  // con "no tiene exámenes" pese a tenerlos (reporte del 04-sep: exámenes de mayo
+  // que el botón 🧪 negaba). Se normaliza y compara por PREFIJO. Función aparte,
+  // de nivel superior, para que el arnés de pruebas la exponga solo.
+  function _vglEsModuloLab(s) {
+    return String((s && s.modulo) || "").trim().toUpperCase().indexOf("LAB") === 0;
+  }
+
+  // v18.0.141 — Marcador NO ENUMERABLE de desenlace de lectura, para un [] que ya no
+  // se puede afirmar como "el paciente no tiene laboratorios". NO se reutiliza
+  // __vglIncompleto a propósito: ese marcador es NUMÉRICO desde v17.7.1 (cantidad de
+  // solicitudes que no se dejaron leer), con varios lectores que lo comparan con > 0
+  // y además viaja serializado en _preconGuardar — un objeto ahí rompería contratos
+  // establecidos. Este marcador queda al margen: no enumerable, no serializado, y
+  // solo lo leen las ramas de presentación del botón 🧪.
+  function _vglMarcarLectura(arr, info) {
+    const lista = Array.isArray(arr) ? arr : [];
+    try {
+      Object.defineProperty(lista, "__vglLectura", { value: Object.assign({}, info || {}), enumerable: false, configurable: true });
+    } catch (e) {}
+    return lista;
+  }
+
   async function _getAtheneaLabsAutoNucleo(docId) {
     const resuelto = await getAtheneaSolicitudesAuto(docId);
     // No pude leer el portal: eso NO es "no tiene laboratorios".
     if (!resuelto) return null;
-    if (!resuelto.solicitudes.length) return [];
-    const porLab = resuelto.solicitudes.filter((s) => s.modulo === "LAB");
+    // v18.0.141 — Cero solicitudes interpretadas PERO el HTML traía formularios de
+    // /Resultados/Reporte (__vglMeta, adjunto por _atheneaExtraerSolicitudes): la
+    // lectura NO se puede afirmar como "no tiene exámenes". Es el caso exacto del
+    // reporte del consultorio — tarjetas presentes (las de mayo) que el intérprete
+    // no supo leer: id fuera de patrón, action con query-string, formato cambiado.
+    // Se devuelve [] MARCADO para que el botón 🧪 hable con honestidad en vez de
+    // negar exámenes existentes.
+    if (!resuelto.solicitudes.length) {
+      let metaN = null;
+      try { metaN = resuelto.solicitudes.__vglMeta || null; } catch (e) { metaN = null; }
+      if (metaN && metaN.formularios > 0) {
+        return _vglMarcarLectura([], { estado: "formularios_no_interpretados", formularios: metaN.formularios });
+      }
+      return [];
+    }
+    const porLab = resuelto.solicitudes.filter(_vglEsModuloLab);
+    // v18.0.141 — El portal respondió con solicitudes pero NINGUNA resultó del módulo
+    // laboratorio. Antes este caso caía en silencio hacia "no tiene laboratorios";
+    // bastaba un data-modulo="lab" en el DOM real para vaciar la lista completa (la
+    // normalización en origen ya resuelve la caja; este guardia cubre el resto —
+    // módulos genuinamente otros: PAT, IMG... — y deja rastro de qué módulos llegó a
+    // ver, solo nombres de módulo, sin PHI).
+    if (!porLab.length) {
+      const modulosVistos = [...new Set(resuelto.solicitudes.map((s) => String((s && s.modulo) || "?")))];
+      console.warn("[Vigilante Athenea] " + resuelto.solicitudes.length + " solicitud(es) leídas para el paciente, pero NINGUNA resultó del módulo laboratorio (módulos vistos: " + modulosVistos.join(", ") + ").");
+      return _vglMarcarLectura([], { estado: "sin_lab", solicitudes: resuelto.solicitudes.length, modulos: modulosVistos });
+    }
     // v12.3.35 — cada analito hereda la fecha de SU PROPIA solicitud (raspada de la
     // tarjeta del portal, ver _atheneaExtraerSolicitudes): es la única fuente de fecha
     // que existe, confirmado en campo. No pisa una fecha que fetchAtheneaLabs ya hubiera
@@ -7690,7 +7795,20 @@
                               _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
                               showToast("AMBAR", "Exámenes", "Se inició sesión en el laboratorio, pero no se pudo leer el portal para la cédula " + docId + " (no es que no tenga laboratorios). Intente de nuevo.", false);
                           } else {
-                              _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                              // v18.0.141 — mismo criterio de la rama principal para el camino
+                              // de reintento tras auto-login: un [] MARCADO con __vglLectura no
+                              // se presenta como "no tiene exámenes".
+                              let _lecLabs2 = null;
+                              try { _lecLabs2 = (labs2 && labs2.__vglLectura) || null; } catch (e2) { _lecLabs2 = null; }
+                              if (_lecLabs2 && _lecLabs2.estado === "formularios_no_interpretados") {
+                                  _vglFeedbackBoton(btn, "El portal respondió pero sus solicitudes no se pudieron interpretar", "ambar", "🧪 Exámenes");
+                                  showToast("AMBAR", "Exámenes", "Se inició sesión y el portal respondió (" + (_lecLabs2.formularios || 1) + " solicitud(es) detectadas), pero NINGUNA se pudo interpretar: NO se afirma que el paciente no tenga exámenes. Verifique en el portal Athenea y avise al administrador.", false);
+                              } else if (_lecLabs2 && _lecLabs2.estado === "sin_lab") {
+                                  _vglFeedbackBoton(btn, "Solicitudes leídas pero ninguna de laboratorio", "ambar", "🧪 Exámenes");
+                                  showToast("AMBAR", "Exámenes", "El portal respondió con " + (_lecLabs2.solicitudes || 0) + " solicitud(es) de otros módulos (" + ((_lecLabs2.modulos || []).join(", ") || "?") + ") y ninguna de laboratorio. Si el paciente sí tiene exámenes, verifique directamente en el portal Athenea.", false);
+                              } else {
+                                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                              }
                           }
                       } else {
                           atheneaAvisoSilencioso("athenea_autologin_labs_fallo|" + todayStamp(), "Exámenes",
@@ -7722,8 +7840,24 @@
                   // ambos casos no se diligenció nada y hay que revisar a mano.
                   // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
                   // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
-                  _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
-                  showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
+                  // v18.0.141 — ...salvo que el [] venga MARCADO con __vglLectura (v18.0.141,
+                  // _getAtheneaLabsAutoNucleo): "el portal respondió pero no se puede afirmar
+                  // que no tenga exámenes". Negar exámenes que existen (el reporte del 04-sep:
+                  // exámenes de mayo) es peor que admitir que la lectura falló.
+                  let _lecLabs = null;
+                  try { _lecLabs = (labs && labs.__vglLectura) || null; } catch (e2) { _lecLabs = null; }
+                  if (_lecLabs && _lecLabs.estado === "formularios_no_interpretados") {
+                      _vglFeedbackBoton(btn, "El portal respondió pero sus solicitudes no se pudieron interpretar", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El portal del laboratorio respondió (" + (_lecLabs.formularios || 1) + " solicitud(es) detectadas) pero NINGUNA se pudo interpretar: NO se afirma que el paciente no tenga exámenes. Verifique los resultados en el portal Athenea y avise al administrador del asistente (formato del portal posiblemente cambiado).", false);
+                      try { uxTrack("labs.lectura.formularios_no_interpretados", { formularios: _lecLabs.formularios || 1 }); } catch (e2) {}
+                  } else if (_lecLabs && _lecLabs.estado === "sin_lab") {
+                      _vglFeedbackBoton(btn, "Solicitudes leídas pero ninguna de laboratorio", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El portal respondió con " + (_lecLabs.solicitudes || 0) + " solicitud(es) de otros módulos (" + ((_lecLabs.modulos || []).join(", ") || "?") + ") y ninguna de laboratorio. Si el paciente sí tiene exámenes, verifique directamente en el portal Athenea.", false);
+                      try { uxTrack("labs.lectura.sin_lab", { solicitudes: _lecLabs.solicitudes || 0 }); } catch (e2) {}
+                  } else {
+                      _vglFeedbackBoton(btn, "Sin resultados en el laboratorio para este paciente", "ambar", "🧪 Exámenes");
+                      showToast("AMBAR", "Exámenes", "El laboratorio no tiene resultados registrados para la cédula " + docId + " en el último año.", false);
+                  }
               }
           } catch (e) {
               _vglFeedbackBoton(btn, "❌ El laboratorio no respondió", "ambar", "🧪 Exámenes");
