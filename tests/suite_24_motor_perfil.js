@@ -626,10 +626,11 @@ module.exports = {
     //   1. El motor ya no mira el valor de la glicemia para partir su vigencia: mira la
     //      HbA1c del MISMO paciente (sin HbA1c conocida, vigencia normativa completa —
     //      nada de adivinar control crónico desde un valor suelto).
-    //   2. Agotado el plazo del 50 % con la norma todavía viva, el examen se ordena por
-    //      FALLA TERAPÉUTICA (subestado "recontrol_falla"), nunca como «vencido»: esa era
-    //      la acusación falsa del reporte original (glucosa de mayo pintada de vencida
-    //      con los 180 d todavía corriendo).
+    //   2. Agotado el plazo del 50 % con la norma todavía viva, el examen NO está
+    //      vencido ni se repite YA: rige su vigencia natural (subestado "falla_natural",
+    //      v18.0.143). Ordenanza del 04-sep: «LAS FALLAS TERAPÉUTICAS NO SE TIENEN EN
+    //      CUENTA COMO VENCIMIENTO; SI YA PASÓ LA VENTANA DEL 50 %, SE UTILIZAN LAS
+    //      VIGENCIAS NATURALES DE CADA ANALITO».
     // =====================================================================
     t.caso("v18.0.135: la glucosa NO se juzga por su propio valor — manda la HbA1c", () => {
       const ctx = { hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true, categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88 };
@@ -657,10 +658,11 @@ module.exports = {
         "y sin HbA1c conocida, tampoco: la norma completa en los dos caminos");
     });
 
-    t.caso("v18.0.135: agotado el plazo del 50 %, la glucosa se ordena por FALLA — no sale «vencida»", () => {
+    t.caso("v18.0.143: agotada la ventana del 50 %, la glucosa rige por su vigencia NATURAL", () => {
       // El reporte real: glucosa y HbA1c del 10-may, hoy 02-sep. La HbA1c en 9,5 parte la
-      // vigencia a 90 d → el plazo venció el 08-ago; la NORMA (180 d) la cubre hasta el
-      // 06-nov. El panel viejo la pintaba en «Ya vencidos»: técnicamente falso.
+      // vigencia a 90 d → la ventana venció el 08-ago; la NORMA (180 d) la cubre hasta el
+      // 06-nov. v18.0.135 la ordenaba YA («recontrol_falla»); la ordenanza del 04-sep la
+      // devuelve a su vigencia natural: es un vigente más que vence el 06-nov.
       const plan = api.mtrPlanParaclinicos({
         hoyIso: HOY130, programa: "DM2", estadioAdministrativo: null, esDm2: true,
         categoriaRiesgo: "alto", edad: 62, egfrCkdEpi: 88,
@@ -678,19 +680,31 @@ module.exports = {
       });
       const glu = [].concat(plan.drivers || [], plan.pasajeros || []).filter((x) => x.clave === "GLUCOSA")[0];
       t.cierto(!!glu, "precondición: la glucosa está en el plan");
-      t.igual(glu.estado, "A", "se pide: con la HbA1c en 9,5 hay que repetirla YA");
-      t.igual(glu.subestado, "recontrol_falla", "por FALLA TERAPÉUTICA, el subestado nuevo");
+      t.igual(glu.estado, "D", "con la norma viva no se ordena YA: es un vigente con fecha");
+      t.igual(glu.subestado, "falla_natural", "subestado nuevo: falla con la ventana del 50 % gastada");
       t.falso(glu.vencidoBase, "y la verdad de terreno es que NO está vencida");
-      t.igual(glu.vence, "2026-08-08", "el plazo del 50 % venció el 8 de agosto");
-      t.igual(glu.venceNorma, "2026-11-06", "pero la norma la cubre hasta el 6 de noviembre");
+      t.igual(glu.vence, "2026-11-06", "publica la fecha NATURAL: 6 de noviembre (180 d)");
+      t.igual(glu.venceFalla, "2026-08-08", "conserva la ventana del 50 % en venceFalla: venció el 8 de agosto");
+      t.igual(glu.diasParaVencerFalla, -25, "la deuda de la falla queda visible, pero ya no manda");
       t.falso((plan.vencidos || []).some((x) => x.clave === "GLUCOSA"),
         "no aparece en «Ya vencidos»: esa lista es para la norma agotada");
+      // v18.0.143 — matiz del probe: la glucosa vence EXACTAMENTE el 6-nov, que es la
+      // fecha que su vigencia natural le pone a la toma. Por eso SÍ va en la orden —
+      // pero ordenada para el 6-nov, nunca «YA» en septiembre. Lo que se eliminó es el
+      // empujón de la falla terapéutica, no el pedido en su fecha natural.
       t.cierto((plan.ordenar || []).some((x) => x.clave === "GLUCOSA"),
-        "y SÍ entra en la orden: repetir por falla no es esperar a noviembre");
-      t.cierto(/falla terap.utica/.test(glu.motivo) && /sigue vigente hasta el 2026-11-06/.test(glu.motivo),
+        "se pide en la toma del 6-nov — su vencimiento natural —, no YA en septiembre (reporte del 04-sep)");
+      t.falso((plan.diferidos || []).some((x) => x.clave === "GLUCOSA"),
+        "no viaja con los diferidos: su fecha natural ES la fecha de la toma");
+      t.igual(plan.ftl, "2026-11-06", "la fecha de la toma la marcan las vigencias naturales");
+      t.igual(plan.motivoFtl, "en el vencimiento más próximo (Glicemia)",
+        "la glucosa gana el empate con la HbA1c por el orden de MTR_DRIVERS");
+      t.cierto(/HbA1c fuera de meta/.test(glu.motivo) && /vigente hasta el 2026-11-06/.test(glu.motivo),
         "el motivo dice la diferencia con las dos fechas · " + glu.motivo);
-      t.cierto(/HbA1c fuera de meta/.test(glu.motivo),
-        "y nombra al motor del adelanto: la HbA1c, no el valor de la glucosa");
+      t.cierto(/rige la vigencia natural/.test(glu.motivo),
+        "y sella la ordenanza: la ventana del 50 % gastada no es un vencimiento");
+      const hba = [].concat(plan.drivers || [], plan.pasajeros || []).filter((x) => x.clave === "HBA1C")[0];
+      t.igual(hba && hba.subestado, "falla_natural", "la HbA1c, misma falla: también rige por su norma");
     });
 
     t.caso("v18.0.135: la glucosa SÍ está vencida cuando lo que se agotó es la NORMA", () => {
@@ -707,18 +721,15 @@ module.exports = {
         "y en el plan va donde debe: al recuadro de «Ya vencidos»");
     });
 
-    t.caso("v18.0.135: la pantalla también distingue falla de vencido (los pintores)", () => {
+    t.caso("v18.0.143: la pantalla pinta la falla gastada como VIGENTE por norma (los pintores)", () => {
       const fs = require("fs");
       const path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      // La rama de falla tiene que existir en el tablero y correr ANTES que la de vencido,
-      // o el texto correcto queda tapado por el genérico.
-      const iFalla = src.indexOf('if (a.subestado === "recontrol_falla") {');
-      const iVencido = src.indexOf('if (a.subestado === "vencido")');
-      t.cierto(iFalla >= 0, "el tablero conoce el subestado recontrol_falla");
-      t.cierto(iVencido > iFalla, "y lo pinta ANTES de la rama de vencido");
-      t.cierto(/Falla terap.utica: se repite ya/.test(src), "con un texto que dice «se repite ya», no «venció»");
-      t.cierto(/recontrol_falla: \{ rotulo: "Repetir"/.test(src), "el badge del paquete dice «Repetir», no «Vencido»");
+      t.falso(src.includes("recontrol_falla"), "el subestado recontrol_falla desapareció del fuente entero");
+      t.falso(/se repite ya/.test(src), "y con él el letrero «se repite ya»: la falla gastada ya no se pide YA");
+      t.cierto(src.includes('subestado = "falla_natural"'), "el motor estampa el subestado nuevo falla_natural");
+      t.cierto(/rige la vigencia natural/.test(src),
+        "y el pintor de vigentes explica la ordenanza del 04-sep con las dos fechas a la vista");
     });
 
     // ---- REPORTE 3: la toma de un día para otro ----
