@@ -20,7 +20,7 @@
   toda la flota en vez de esperar el ciclo propio de cada Tampermonkey.
 */
 
-const MIN_VERSION = "18.0.32";  // ← Versión mínima requerida (01-sep: hemoglobina del hemograma, parcial de orina, Auto-Labs honesto, blindaje CSS y fuga de PHI)
+const MIN_VERSION = "18.0.142";  // ← Versión mínima requerida (04-sep: reporte en vivo del médico — una paciente con la creatinina venciendo en diciembre y un panel que vence en feb-2027 seguía viendo SIETE exámenes arrastrados a la toma de diciembre. El guardarraíl de "el mismo viaje" existe desde la v18.0.43 (01-sep), pero este MIN_VERSION quedó clavado en la 18.0.32: a los equipos entre ambas versiones nadie les empujaba la actualización y seguían cosechando con la regla vieja. Se sube a la 18.0.142 para empujar la flota completa.)
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
 
 // Ancla de integridad (hallazgo A1 de la auditoría del 03-sep, v18.0.134):
