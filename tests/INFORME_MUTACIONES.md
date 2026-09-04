@@ -12815,3 +12815,60 @@ mutante que sobrevive no es ruido, es un mapa — la 510 señalaba la costura ex
 azar.
 
 Banco completo: **3.236 comprobaciones pasan, 0 fallan.**
+
+## v18.0.141 — 4-sep — los exámenes de mayo que el botón 🧪 negaba
+
+Reporte del consultorio: «esta paciente tiene exámenes pero el script no me los está
+reconociendo de ninguna manera, me sale que no hay exámenes para esa cédula y sí los
+hay, pero de mayo». La autopsia del camino de lectura encontró TRES fallas
+encadenadas, cada una capaz de vaciar la lista completa: (1) el filtro del núcleo
+comparaba `modulo === "LAB"` EXACTO mientras la captura de `data-modulo` usa `/i` —
+un `data-modulo="lab"` (o `"Lab"`, o `"LABORATORIO"`) del DOM real pasaba la
+extracción y moría en el filtro; (2) el regex del `action` exigía
+`action="/Resultados/Reporte"` exacto entre comillas — un query-string dejaba la
+tarjeta FUERA del barrido; (3) el regex del id no toleraba sufijo alfabético — el DOM
+real ya había mostrado ids como `1112026LAB` (el consecutivo del ancla
+`#collapse1112026LAB`), y la comilla tras el año mataba la tarjeta entera.
+
+El fix de la 141: el módulo se normaliza A MAYÚSCULAS EN EL ORIGEN (el POST del
+detalle sigue llevando `modulo:"LAB"` fijo — contrato del servidor intacto), el filtro
+pasa a ser por PREFIJO (`_vglEsModuloLab`: "lab"/"Lab"/"LAB"/"LABORATORIO" sí),
+y los dos regexes ganan sus tolerancias. Para que un `[]` sospechoso deje de
+disfrazarse de «el paciente no tiene exámenes», `_atheneaExtraerSolicitudes` adjunta
+`__vglMeta` (conteos no enumerables, sin PHI) y el núcleo marca el `[]` con
+`__vglLectura` (`formularios_no_interpretados` / `sin_lab`) — marcador SEPARADO a
+propósito: `__vglIncompleto` sigue siendo NUMÉRICO desde v17.7.1 y sus lectores
+(`> 0`, serialización en `_preconGuardar`) no se tocan. El botón 🧪 lee el marcador
+y habla con honestidad; un warn one-shot adicional deja rastro si el paso 2 devuelve
+MÁS DE UN input `IdPaciente` (cédula duplicada en el portal).
+
+**Pruebas nuevas (suite_18 queda en 93, banco 3.236 → 3.247).** Unidades para las
+tolerancias de regex, la normalización, el prefijo, `_vglMarcarLectura` y `__vglMeta`;
+e2e de la REGRESIÓN EXACTA del reporte (tarjeta de mayo con `id="8465672026LAB"`,
+`data-modulo="lab"` y `action="…?origen=lista"`: los exámenes llegan de punta a
+punta); e2e de `formularios_no_interpretados`, de `sin_lab`, de lectura parcial
+(`__vglIncompleto` numérico, sin `__vglLectura`) y del `IdPaciente` duplicado.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 511 | (2) `action` SIN tolerancia a query-string (regex estricto de la 140) | *suite_18: 2 fallan* (unidad «action con query-string…» + e2e regresión del reporte) | Sí |
+| 512 | (3) `idM` SIN sufijo alfabético: `1112026LAB` muere en la comilla | *suite_18: 2 fallan* (unidad del sufijo + e2e regresión del reporte) | Sí |
+| 513 | (1) push SIN `toUpperCase`: el módulo viaja en la caja del DOM | *suite_18: 1 falla* («data-modulo en minúscula se NORMALIZA a LAB en el origen») | Sí |
+| 514 | (1) filtro del núcleo EXACTO `=== "LAB"` en vez del helper de prefijo | *suite_18: 1 falla* (e2e «data-modulo="LABORATORIO"… SÍ se lee»). SOLO cae tras añadir esa prueba: en la primera corrida el mutante SOBREVIVÍA con las 92 de entonces en verde | Sí |
+| 515 | rama `formularios_no_interpretados` ELIMINADA (`return []` mudo) | *suite_18: 1 falla* (e2e «formularios presentes pero NINGUNO interpretable»: el marcador y el warn desaparecen) | Sí |
+| 516 | marcador `sin_lab` ELIMINADO (`return []` sin `__vglLectura`) | *suite_18: 1 falla* (e2e «ninguna es del módulo LAB → [] MARCADO») | Sí |
+| 517 | `__vglMeta.formularios` contaba INTERPRETADAS en vez de MATCHES | *suite_18: 1 falla* (el guardia `formularios > 0` se apaga con el XYZ999 no interpretado y el e2e de #515 queda mudo) | Sí |
+| 518 | warn one-shot de `IdPaciente` duplicado ELIMINADO | *suite_18: 1 falla* (e2e «DOS inputs IdPaciente»: el warn no queda en consola) | Sí |
+| 519 | rama de presentación del botón 🧪 sin leer `__vglLectura` (mensaje genérico) | **SOBREVIVE el banco completo (3.247 en verde)** — brecha conocida y documentada, no cobertura fingida | Sí |
+
+**Las lecciones de la 141.** Primera: #514 repite la familia de la 510 — la capacidad
+(`_vglEsModuloLab` acepta "LABORATORIO") estaba probada por unidad, el CABLEADO (el
+núcleo pidiendo el helper) no; la diferencia con la 140 es que esta vez la corrida de
+mutaciones fue ANTES de publicar y la prueba se escribió sobre la costura en caliente.
+Segunda: #519 se deja escrito en la tabla aunque sobreviva — la rama del botón es
+presentación pura (sin ella el médico ve el mensaje genérico, no datos corruptos, y
+los warns de consola que SÍ están probados siguen dejando rastro); fingir que esa
+rama está cubierta sería exactamente el tipo de verde que este informe existe para
+cazar.
+
+Banco completo: **3.247 comprobaciones pasan, 0 fallan.**
