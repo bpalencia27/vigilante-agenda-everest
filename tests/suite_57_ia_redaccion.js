@@ -89,6 +89,20 @@ module.exports = {
       }
     });
 
+    // =================================================================
+    //  v18.0.142 — «PUSE 111/78… FALTÓ LA DIASTÓLICA»: la IA completaba
+    //  el hueco de una diastólica ausente con la cifra de otra medición
+    //  (pantalla 165/70 y 111/78; notas generadas 124/82 y 110/70). La
+    //  regla viaja en MTR_PRECEDENCIA_SYS, que encabeza TODOS los
+    //  prompts: los cinco modos la llevan solos.
+    // =================================================================
+    t.caso("v18.0.142: los CINCO modos PROHÍBEN rellenar la cifra que falta de un signo vital", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(sys.indexOf("PROHIBIDO rellenar la cifra que falta") >= 0, modo + ": la regla del hueco que nadie llenó");
+      }
+    });
+
     // El bloque del ejemplo, y solo el: `SALIDA:` a secas tambien aparece en el prompt base
     // ("SALIDA: prosa continua EN MAYUSCULAS..."), asi que buscarlo en todo el sistema es
     // una asercion vacua — se comprobo con una mutacion que borro el par y no cayo nadie.
@@ -213,6 +227,16 @@ module.exports = {
       const hojaCon = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 128, paDiastolica: 80 } }, { hoyIso: "2026-08-17" });
       t.cierto(/Signos vitales: PA 128\/80 mmHg/.test(api.mtrHojaDeHechosTexto(hojaCon)),
         "con PA en el resumen, la hoja sí la muestra (el dato real no se pierde)");
+    });
+
+    // v18.0.142 — el caso del reporte: la sistólica llegó y la diastólica NO.
+    // La hoja escribe «PA 111 mmHg» tal cual y JAMÁS un «111/» con la cifra
+    // de otra medición completando el hueco.
+    t.caso("v18.0.142: la hoja con SOLO la sistólica no completa la diastólica («PUSE 111/78… FALTÓ LA DIASTÓLICA»)", () => {
+      const hoja = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 111 } }, { hoyIso: "2026-08-17" });
+      const texto = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/PA 111 mmHg/.test(texto), "la sistólica que sí consta se muestra");
+      t.falso(/111\//.test(texto), "sin diastólica no se imprime un «111/» — el hueco se deja hueco");
     });
 
     // v17.6.3 — IA CORRUPTA (reporte del médico): la nota de «Análisis y plan» llegaba con
