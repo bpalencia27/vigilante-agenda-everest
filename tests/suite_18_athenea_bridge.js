@@ -888,6 +888,20 @@ module.exports = {
       t.igual(e.llamadas.length, 2);
     });
 
+    await t.casoAsync("v18.1 (M2M f29): sesión caída A MITAD baja la bandera atheneaSesionViva — el paso 2 con login no la deja en true", async () => {
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else o.onload({ status: 200, responseText: `<input type="password" /> Iniciar sesión` });
+      });
+      const r = await e.c.api.getAtheneaSolicitudesAuto(DOC);
+      t.igual(r, null, "precondición: la búsqueda se aborta");
+      t.cierto(typeof e.c.api._atheneaSesionVivaParaTest === "function", "el accessor de prueba existe");
+      t.igual(e.c.api._atheneaSesionVivaParaTest(), false,
+        "el paso 2 devolvió login: la bandera queda en false (antes quedaba en su valor previo y el keep-alive seguía en cadencia de sesión viva)");
+    });
+
     await t.casoAsync("getAtheneaSolicitudesAuto: sin IdPaciente único en el paso 2 (0 o varios resultados) -> null, no adivina", async () => {
       const e = entornoAthenea();
       e.setPlan((o) => {

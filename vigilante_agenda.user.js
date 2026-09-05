@@ -2596,6 +2596,7 @@
       }
     } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
   }
+  function _atheneaSesionVivaParaTest() { return atheneaSesionViva; }
 
   async function getAtheneaSolicitudesAuto(docId) {
     const doc = String(docId || "").replace(/\D/g, "");
@@ -2635,7 +2636,7 @@
       const r2 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/BuscarPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp1.boundary}` }, data: mp1.body });
       diag("2/3 POST BuscarPaciente", "status=" + r2.status + " len=" + (r2.responseText || "").length);
       if (r2.status !== 200) { console.warn("[Vigilante Athenea] paso 2 falló: HTTP " + r2.status); return null; }
-      if (_atheneaPareceLogin(r2.responseText)) { console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
+      if (_atheneaPareceLogin(r2.responseText)) { atheneaSesionViva = false; console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
 
       // Sin IdPaciente no se avanza: puede ser que Athenea no tenga a este
       // paciente, o que la búsqueda haya devuelto una LISTA de coincidencias
@@ -30608,7 +30609,11 @@
     try {
       const res = await pageFetchJson(path);
       if (res) {
-        return res.id || res.Id || (res.data && (res.data.id || res.data.Id)) || null;
+        // v18.1 (M2M f26): extractor blindado — la ficha puede llegar anidada en
+        // `data` (o `data.data[0]`) y la cadena naive devolvía null y hundía la
+        // orden de PyM entera por un contenedor distinto. Ante la duda devuelve
+        // null: "no se pudo" es reversible, un id equivocado no.
+        return extractPatientId(res);
       }
     } catch (e) {}
     return null;

@@ -6207,6 +6207,20 @@ module.exports = {
       t.cierto(athenea >= 1, "la precarga de OTRA cédula tampoco se sirve");
     });
 
+    await t.casoAsync("v18.1 (M2M f28): frontera exacta de los 2 min de precarga — 119,5 s se sirve, 120,5 s ya consulta en vivo", async () => {
+      let athenea = 0;
+      const mk = () => { const c = cargar({ silencioso: true, gmxhr: (o) => { if (/athenea|laboratorio/i.test(String(o.url || ""))) athenea++; if (o.onerror) setTimeout(() => o.onerror("sin portal en la prueba"), 0); return { abort() {} }; } }); enriquecerDom(c); return c; };
+      const labs = [{ nombre: "GLUCOSA", valor: "95", fecha: "2026-08-20" }];
+      const cA = mk();
+      cA.api.__setLabsPrefetchParaTest("222222", labs, Date.now() - 119500);
+      await cA.api.openLaboratoriosModal({ doc_id: "222222", nombre: "PACIENTE PRUEBA" });
+      t.igual(athenea, 0, "119,5 s: todavía fresca, no se golpea el portal");
+      const cB = mk(); athenea = 0;
+      cB.api.__setLabsPrefetchParaTest("222222", labs, Date.now() - 120500);
+      await cB.api.openLaboratoriosModal({ doc_id: "222222", nombre: "PACIENTE PRUEBA" });
+      t.cierto(athenea >= 1, "120,5 s: ya venció, se consulta en vivo (la comparación es estricta: < 120000)");
+    });
+
     await t.casoAsync("v18.0.115 (C17): Agendar recuerda tipo y especialidad de la última cita creada y abre en el paso 2 con el chip «como la última vez · cambiar»; sin recuerdo abre en el paso 1", async () => {
       const urls = [];
       const mk = () => {

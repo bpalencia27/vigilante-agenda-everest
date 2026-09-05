@@ -271,6 +271,20 @@ module.exports = {
       t.igual(await c.api.apiOrdenamientoBuscarPaciente("CC"), null, "doc sin dígitos retorna null (MUT-ORD-012)");
     });
 
+    await t.casoAsync("v18.1 (M2M f26): apiOrdenamientoBuscarPaciente extrae el id aunque la ficha venga anidada (extractPatientId)", async () => {
+      const anidada = cargar({ silencioso: true, fetch: async () => respuesta({ data: { idPaciente: 222 } }) });
+      t.igual(await anidada.api.apiOrdenamientoBuscarPaciente("CC 123456"), 222,
+        "la ficha en data.idPaciente se resuelve: antes la cadena naive devolvía null y hundía la orden de PyM");
+
+      const doble = cargar({ silencioso: true, fetch: async () => respuesta({ data: { data: [{ id: 333 }] } }) });
+      t.igual(await doble.api.apiOrdenamientoBuscarPaciente("CC 123456"), 333, "data.data[0].id también");
+
+      // Ante la duda, null: un contenedor que no declara paciente no se adivina.
+      const ruido = cargar({ silencioso: true, fetch: async () => respuesta({ programas: [{ id: 444 }], ok: true }) });
+      t.igual(await ruido.api.apiOrdenamientoBuscarPaciente("CC 123456"), null,
+        "ids de ramas ajenas (programas) NO se toman como idPaciente — no se adivina");
+    });
+
     // v12.3.3 — getAtheneaIdSolicitudAuto (bridge a localhost:5050) fue REEMPLAZADA por el
     // puente real getAtheneaSolicitudesAuto/getAtheneaLabsAuto (ver suite_18_athenea_sesion.js):
     // ese servidor nunca existió en el repo, era código muerto en todos los equipos.

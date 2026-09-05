@@ -146,6 +146,19 @@ module.exports = {
         "sin vigencia declarada se comporta como las demás confirmaciones: no caduca");
     });
 
+    t.caso("v18.1 (M2M f27): _vglConfirmacionVigente — frontera exacta del día 30 y el sello vacío", () => {
+      const doc = "999777666";
+      const hoy = Date.now();
+      api._vglCosechaGuardar(doc, { confirmaciones: { embarazo: { v: true, ts: hoy } } });
+      const justo = api._vglConfirmacionVigente(doc, "embarazo", 30, hoy + 30 * 86400000);
+      t.cierto(!!justo && justo.v === true, "a los 30 días EXACTOS sigue vigente (la comparación es <=)");
+      t.igual(api._vglConfirmacionVigente(doc, "embarazo", 30, hoy + 30 * 86400000 + 1), null,
+        "un milisegundo más y venció: el médico vuelve a ver la pregunta ese día");
+      api._vglCosechaGuardar(doc, { confirmaciones: { sinsello: { v: true, ts: 0 } } });
+      t.igual(api._vglConfirmacionVigente(doc, "sinsello", 30, hoy), null,
+        "respuesta sin sello de tiempo no vale: no se puede saber si sigue viva");
+    });
+
     t.caso("mtrPreguntaEmbarazo: la pregunta dice POR QUÉ se hace y frena el flujo", () => {
       const q = api.mtrPreguntaEmbarazo();
       t.igual(q.clave, "embarazo");

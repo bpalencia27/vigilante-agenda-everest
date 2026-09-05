@@ -62,7 +62,7 @@ module.exports = {
 
   cubre: ["mtrEsMedicoAutorizado", "esMedicoRCVActivo", "mtrNormalizarNombre",
     "accesoPerfil", "accesoCap", "accesoLeerLista", "accesoListaValida",
-    "accesoRefrescarLista", "repAccesoDiario",
+    "accesoRefrescarLista", "repAccesoDiario", "accesoEscribirUrl",
     "openLaboratoriosModal", "openAgendamientoModal", "openLabSoloModal",
     "openPanelPacienteModal", "abrirRedactorTextoLibre", "mtrAbrirPanelRedaccion"],
 
@@ -596,6 +596,28 @@ module.exports = {
       const res = await x.c.api.pageFetchJson(U78.lectura);
       t.cierto(!!res, "pageFetchJson de lectura sin compuerta");
       t.igual(x.red.fetches.length, 2, "las dos lecturas salieron");
+    });
+
+    t.caso("v18.1 (M2M f24): accesoEscribirUrl directo — las variantes de cancelación cierran y las URLs de impresión/impresión-orden no se catalogan como escritura", () => {
+      const lab = ctxC(201, "Maryuris Terán");
+      t.igual(lab.c.api.accesoPerfil(), "LABORATORIOS", "precondición del contexto");
+      t.falso(lab.c.api.accesoEscribirUrl("/apiviva/APIAcceso/api/Acceso/AnularCita?CitaId=5"),
+        "AnularCita es agendar_control: cerrada para LABORATORIOS");
+      t.falso(lab.c.api.accesoEscribirUrl(ORIGEN78 + "/apiviva/APIAcceso/api/Acceso/CancelarTurno?TurnoId=6"),
+        "CancelarTurno también: el regex cubre las tres grafías de cancelación");
+      t.cierto(lab.c.api.accesoEscribirUrl(U78.ordCorreo),
+        "EnviarEmailOrdenamiento (pym pública) abre para LABORATORIOS");
+
+      const bloq = ctxC(999, "Prueba Bloqueada Uno");
+      t.igual(bloq.c.api.accesoPerfil(), "BLOQUEADO", "precondición del contexto");
+      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=2&Agrupador=3"),
+        "GenerarLinksImpresionOrdenamientos es LECTURA (links de impresión): pasa incluso BLOQUEADO");
+      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=3&idPaciente=2"),
+        "GenerarOrdenHC (imprimir la orden) es navegación de lectura: pasa");
+      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIOrdenamientoHealth/api/Paciente/BuscarPaciente?Identificacion=1&TipoDocumento=CC&epsId=2"),
+        "BuscarPaciente es lectura: la compuerta es control operativo de escrituras, no seguridad");
+      t.falso(bloq.c.api.accesoEscribirUrl(U78.asignar),
+        "y una escritura catalogada sigue cerrada para BLOQUEADO — no se abrió nada de paso");
     });
   },
 };
