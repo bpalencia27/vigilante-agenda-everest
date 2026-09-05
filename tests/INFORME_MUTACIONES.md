@@ -13183,4 +13183,28 @@ Dos huecos del saneador de PII (mismo pipeline de `mtrHcTachar`/`mtrHcValorLimpi
 |---|---|---|---|
 | 560 | se revierte `_SCRUB_RX_GRUPO_NUM` a la forma vieja sin coma ni DV (`/\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g`): la cédula «1,023,456,789» vuelve a viajar entera y el «-0» del DV vuelve a quedar expuesto | *suite_31: «fix 14 M2M: censura cédulas con comas y dígito verificador tras guion» — mutante 52 pasan / 1 falla («esperaba "Paciente [CENSURADO] en sala" y obtuvo "Paciente 1,023,456,789 en sala»); restaurado 53/0* | Sí |
 
+**Entrega FIX 16+25 M2M (2026-09-05) — `_pageFetchJsonCore`: el sobre-error del 200 y el
+cuerpo ilegible.** Dos caras del mismo contrato: cuando Everest contesta HTTP **200** con
+algo que no es un dato útil, el núcleo del API debe devolver `null` (el «sin respuesta» que
+los llamadores ya entienden vía `{__sinRespuesta}`) — **sin** reintentar y **sin** contar
+ni éxito ni fallo. (a) FIX 16: un 200 con sobre `{"Error":"texto"}` se devolvía como dato
+legítimo — el modal de cupos anunciaba «no hay cupos» con el servidor en el suelo y
+`_apiMarcarResultado(true)` pintaba de verde el panel de salud. Predicado estricto
+`_esSobreError200`: objeto no-array con `Error` STRING no vacío — la bandera BOOLEANA
+`Error:true/false` de la anulación de citas sigue siendo respuesta legítima y NO entra.
+(b) FIX 25: un 200 con cuerpo falsy o con `json()` que revienta al parsear caía fuera del
+if/else — consumía los 4 intentos con backoff, se reenviaba por GM y terminaba en
+`_apiMarcarResultado(false)`: cortacircuitos abierto y panel rojo por una respuesta que sí
+llegó. El `AbortError` del tope (v18.0.104, fila 6) se re-lanza ANTES del `return null`
+del catch y sigue siendo caída de red. suite_05 pasó de 35 a **37** casos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 561 | se anula el chequeo del sobre-error en la vía fetch (`if (_esSobreError200(data)) return null;` → `if (false && _esSobreError200(data)) return null;`): un 200 con `{"Error":"..."}` vuelve a devolverse como dato legítimo — el modal de cupos anuncia «no hay cupos» con el servidor caído y el panel de salud queda en verde | *suite_05: «_pageFetchJsonCore: un 200 con sobre-error {"Error"} es "sin respuesta", no dato (fix 16 M2M)» — mutante 36 pasan / 1 falla («un 200 con sobre-error devuelve null, no el sobre como dato: esperaba null y obtuvo {"Error":"Error interno procesando la solicitud"}»); restaurado 37/0* | Sí |
+| 562 | se retira el `return null;` final del cuerpo falsy del 200 (el `if (data) {...}` queda sin su salida corta): un 200 con cuerpo vacío vuelve a caer fuera del if/else, consume los 4 intentos con backoff, se reenvía por GM en cada uno y termina en `_apiMarcarResultado(false)` — cortacircuitos abierto y panel de salud rojo por una respuesta que sí llegó | *suite_05: «_pageFetchJsonCore: un 200 con cuerpo vacío/ilegible no reintenta ni cuenta como fallo (fix 25 M2M)» — mutante 36 pasan / 1 falla («el servidor respondió: NO es un fallo del API: esperaba 0 y obtuvo 1»); restaurado 37/0* | Sí |
+
+Las dos mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la siguiente).
+No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
+suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
+
 

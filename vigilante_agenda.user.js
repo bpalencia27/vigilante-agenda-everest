@@ -21484,6 +21484,16 @@
         return resp;
       }, (e) => { soltar(); throw e; });
   }
+  // fix 16 M2M (auditoría 2026-09-05) — Everest a veces contesta HTTP 200 con un sobre de
+  // error {"Error": "texto"} en lugar de un código de estado. El núcleo lo devolvía como
+  // dato legítimo y p. ej. el modal de cupos anunciaba «no hay cupos» con el servidor en el
+  // suelo, además de pintar de verde el panel de salud. Predicado estricto: objeto no
+  // array con `Error` STRING no vacío. La bandera BOOLEANA `Error:true/false` que usa la
+  // anulación de citas sigue siendo una respuesta legítima y NO entra aquí.
+  function _esSobreError200(data) {
+    return !!data && typeof data === "object" && !Array.isArray(data) &&
+      typeof data.Error === "string" && data.Error.trim() !== "";
+  }
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
@@ -21538,8 +21548,22 @@
           // aquí, al llegar las cabeceras, y `resp.json()` podía esperar para siempre.
           if (resp && resp.ok) {
             let data = null;
-            try { data = await resp.json(); } finally { if (_corta) clearTimeout(_corta); }
+            try { data = await resp.json(); } catch (eJson) {
+              // v18.0.104 (fila 6) preservado: si el TOPE abortó la lectura del cuerpo,
+              // eso SÍ es una caída de red — se re-lanza y sigue el manejo de siempre.
+              // Solo el rechazo de PARSEO entra en el fix 25 (el servidor contestó).
+              if (eJson && eJson.name === "AbortError") throw eJson;
+              return null; // fix 25 M2M: 200 con cuerpo ilegible → sin respuesta, sin reintento, sin fallo
+            } finally { if (_corta) clearTimeout(_corta); }
+            // fix 16 M2M (auditoría 2026-09-05) — el sobre de error {"Error":"…"} se rebaja
+            // a null (el contrato de «sin respuesta» que los llamadores ya entienden vía
+            // {__sinRespuesta}) SIN marcar ni éxito ni fallo: el API sí contestó.
+            if (_esSobreError200(data)) return null;
             if (data) { _apiMarcarResultado(true); return data; }
+            // fix 25 M2M — un 200 con cuerpo falsy (vacío): el servidor respondió; no hay
+            // nada que reintentar y NO es un fallo del API. Antes caía fuera del if/else,
+            // consumía los 4 intentos con backoff + GM y terminaba abriendo el cortacircuitos.
+            return null;
           } else if (resp && resp.status >= 500) {
             isError = true;
           } else if (resp && (resp.status === 401 || resp.status === 403)) {
@@ -21586,6 +21610,7 @@
                 ontimeout: () => reject(new Error("Timeout")),
               }, options || {}));
             });
+            if (_esSobreError200(result)) return null; // fix 16 M2M: el sobre-error tampoco se cuela por la vía GM
             if (result) { _apiMarcarResultado(true); return result; }
           } catch (e) {
             // [BLINDADO v8.2.0 NET-01] Silent Failure eliminado: registrar para diagnóstico técnico (sin datos de pacientes)

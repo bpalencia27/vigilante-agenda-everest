@@ -586,6 +586,77 @@ module.exports = {
       t.igual(c400.api._apiCorteEstadoParaTest().fallos, 0, "ni un 400");
     });
 
+    // fix 16 M2M (auditoría 2026-09-05) — Everest a veces contesta HTTP 200 con un sobre de
+    // error {"Error": "texto"} en lugar de un código de estado. El núcleo lo devolvía como
+    // dato legítimo: el modal de cupos anunciaba «no hay cupos» con el servidor en el suelo
+    // y _apiMarcarResultado(true) pintaba de verde el panel de salud. Ahora: null, sin
+    // reintentos, sin GM, y sin contar ni éxito ni fallo — el API sí contestó.
+    await t.casoAsync("_pageFetchJsonCore: un 200 con sobre-error {\"Error\"} es «sin respuesta», no dato (fix 16 M2M)", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: true, status: 200, json: async () => ({ Error: "Error interno procesando la solicitud" }) }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+      c.api._apiCorteResetParaTest();
+      const r = await c.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(r, null, "un 200 con sobre-error devuelve null, no el sobre como dato");
+      t.igual(c.api._apiCorteEstadoParaTest().fallos, 0, "no cuenta como fallo: el API sí contestó");
+      t.igual(cont.fetch, 1, "no reintenta");
+      t.igual(cont.gm, 0, "ni se reenvía por GM");
+
+      // La bandera BOOLEANA Error:true/false (anulación de citas) SIGUE siendo respuesta
+      // legítima: solo un string no vacío es un sobre de error.
+      const cBool = cargar({ silencioso: true, fetch: async () => respuesta({ Error: false, Mensaje: "Anulada" }), gmxhr: (o) => o.onerror(new Error("red")) });
+      const rBool = await cBool.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.cierto(!!rBool && rBool.Error === false && rBool.Mensaje === "Anulada", "Error:true/false booleano NO es un sobre de error: se devuelve como dato");
+
+      // Y por la segunda vía (GM) tampoco se cuela: fetch sin red, GM responde 200 con sobre.
+      const cGM = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("sin red"); },
+        gmxhr: (o) => { o.onload({ status: 200, responseText: JSON.stringify({ Error: "caído" }) }); },
+      });
+      const rGM = await cGM.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(rGM, null, "el sobre-error por la vía GM tampoco se devuelve como dato");
+    });
+
+    // fix 25 M2M — un 200 con cuerpo falsy o ilegible: el servidor SÍ contestó. Antes caía
+    // fuera del if/else, consumía los 4 intentos con backoff, se reenviaba por GM en cada
+    // uno y terminaba en _apiMarcarResultado(false): cortacircuitos abierto y panel de
+    // salud en rojo por una respuesta que llegó (solo que sin cuerpo útil).
+    await t.casoAsync("_pageFetchJsonCore: un 200 con cuerpo vacío/ilegible no reintenta ni cuenta como fallo (fix 25 M2M)", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const cVacio = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: true, status: 200, json: async () => null }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+      cVacio.api._apiCorteResetParaTest();
+      const r = await cVacio.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(r, null, "devuelve null");
+      t.igual(cVacio.api._apiCorteEstadoParaTest().fallos, 0, "el servidor respondió: NO es un fallo del API");
+      t.igual(cont.fetch, 1, "un solo intento — antes esto consumía 4 con backoff");
+      t.igual(cont.gm, 0, "ni GM");
+
+      // json() que revienta al parsear (SyntaxError): mismo trato — respondió, pero ilegible.
+      const cSyntax = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected end of JSON input"); } }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+      cSyntax.api._apiCorteResetParaTest();
+      const r2 = await cSyntax.api._pageFetchJsonCore("/x", { method: "GET" });
+      t.igual(r2, null, "cuerpo ilegible → null");
+      t.igual(cSyntax.api._apiCorteEstadoParaTest().fallos, 0, "tampoco cuenta como fallo");
+      t.igual(cont.fetch, 2, "un intento por llamada, sin reintentos");
+      t.igual(cont.gm, 0, "ni GM por el parseo roto");
+
+      // El AbortError del tope (v18.0.104, fila 6) NO lo traga este fix: sigue siendo caída
+      // de red y corre el manejo de siempre — ya lo vigila el caso «el tope cubre la
+      // lectura del CUERPO» de arriba.
+    });
+
     await t.casoAsync("_pageFetchJsonCore: escritura (POST) con 500 NO reintenta y NO se reenvía por GM", async () => {
       const cont = { fetch: 0, gm: 0 };
       const c = cargar({
