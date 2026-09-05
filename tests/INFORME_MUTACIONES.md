@@ -13293,4 +13293,26 @@ por eso no se duplica aquí). La celda de «4,9 min sigue AZUL» y la de «DOS
 actividades no pintan» son el contraste de la frontera hacia abajo: sin ellas, un
 umbral que cediera hacia abajo (pintar MORADO demasiado pronto) tampoco se notaría.
 
+## Cierre del banco M2M — dos suites que rompieron los COMMITS de la propia campaña
+
+El banco completo (una suite por proceso, con reintentos) destapó que dos commits de
+esta campaña habían roto pruebas ajenas a su fix sin que nadie lo viera, porque las
+suites de verificación de cada PR solo corrían las que tocaba el cambio. dd59ac6 (f8)
+ensanchó el ternario de la clase del aviso y el lint literal de suite_72 dejó de casar;
+9ebd4c4 (f17+18+22) hizo que `_cedulaDelContenedor` recorriera el contenedor con
+`querySelectorAll` y los mocks de suite_17, que solo sabían `querySelector`, lanzaban
+TypeError dentro de `extractAgenda`. En ambos casos la PRODUCCIÓN estaba bien: lo que
+se reparó fue la prueba. Dos mutaciones muertas fijan cada reparación:
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 581 | la clase del aviso de órdenes parciales/recuperadas vuelve al verde por la puerta de atrás (`? "vgl-ord-parcial" :` → `? "vgl-ord-vigwarn" :` en L31521): las órdenes que se RECUPERAN contra vigentes tras un POST sin respuesta vuelven a pintarse como «ya cubierto» | *suite_72: «v17.11.0 — una corrida de órdenes a medias no puede parecerse a una que salió bien» — mutante 24 pasan / 1 falla («y no puede volver a la clase verde por la puerta de atrás»); restaurado 25/0* | Sí |
+| 582 | `_cedulaDelContenedor` se vuelve ciego a la cédula parseada (`if (doc) return doc;` → `if (doc) return "";` en L14157): el contenedor de la agenda ya no identifica al paciente, el tick aborta la siembra y la instantánea se guarda sin claves | *suite_17: «tick: con la agenda visible SIEMBRA sin notificar (no-inferencia) y guarda la instantánea» — mutante 51 pasan / 1 falla («sembrada con su clave y color reales: esperaba "VERDE" y obtuvo undefined»); restaurado 52/0* | Sí |
+
+Las dos mutaciones se aplicaron y restauraron UNA POR UNA (grep-verificada cada
+restauración). No-regresión: suite_14 (39/0, los otros mocks del extractor que f17 ya
+había enseñado) y suite_04 (111/0). El banco completo sobre las suites del repo termina
+en verde; `tests/suite_82_consentimiento.js` es un archivo VACÍO no commiteado (borrador
+ajeno a esta campaña) sobre el que el runner tropieza — no se cuenta.
+
 

@@ -289,9 +289,11 @@ module.exports = {
       // en la que parte de las órdenes NO se crearon decía «todo bien».
       const fs = require("fs"), path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/successMsg\.className = parcial \? "vgl-ord-parcial"/.test(src),
+      // fix 8 M2M (dd59ac6) ensanchó la condición a (parcial || soloRecuperadas): las órdenes
+      // que se RECUPERAN contra vigentes tras un POST sin respuesta también pintan el ámbar.
+      t.cierto(/successMsg\.className = \(parcial[^)]*\) \? "vgl-ord-parcial"/.test(src),
         "el parcial usa su clase propia, no la del verde de «ya cubierto»");
-      t.falso(/successMsg\.className = parcial \? "vgl-ord-vigwarn"/.test(src),
+      t.falso(/successMsg\.className = \(parcial[^)]*\) \? "vgl-ord-vigwarn"/.test(src),
         "y no puede volver a la clase verde por la puerta de atrás");
       // La clase existe y es ámbar con !important (el modal cuelga de document.body).
       const bloque = /#vgl-ordenar-modal \.vgl-ord-parcial\{[^}]*\}/.exec(src);

@@ -375,6 +375,8 @@ module.exports = {
           ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
           ".fw-bold.mb-0": { textContent: "Presencial" },
         }[sel] || null),
+        // fix 18 M2M: _cedulaDelContenedor recorre el contenedor con querySelectorAll
+        querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "12345678" }] : []),
       };
       const nodoHora = {
         textContent: "07:00 AM",
@@ -413,6 +415,8 @@ module.exports = {
           ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
           ".fw-bold.mb-0": { textContent: "Presencial" },
         }[sel] || null),
+        // fix 18 M2M: igual que el caso anterior — el contenedor aprende querySelectorAll
+        querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "12345678" }] : []),
       };
       const nodoHora = {
         textContent: "07:00 AM",
