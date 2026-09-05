@@ -11715,19 +11715,19 @@
   // lo único que faltaba era no tirarlos.
   //
   // Función PURA para poder probarla: recibe el estado, devuelve el motivo y el texto.
-  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes",
-    // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
-    // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
-    // situaciones distintas y el médico hace cosas distintas con cada una.
-    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio",
-    // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
-    // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
-    // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
-    // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
-    // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
-    // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
-    // llena con ella) separa ahora los dos casos que antes compartían esa frase.
-    "piloto_esta_sin_pendientes", "piloto_no_esta"];
+  // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
+  // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
+  // situaciones distintas y el médico hace cosas distintas con cada una.
+  // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
+  // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
+  // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
+  // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
+  // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
+  // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
+  // llena con ella) separa ahora los dos casos que antes compartían esa frase.
+  // v18.3 (P12 saneamiento) — PYM_SIN_ACT_MOTIVOS, el array que duplicaba estos
+  // literales sin ningún lector (grep de uso: solo su definición), se retiró. Los
+  // motivos vivos son exactamente los que esta función devuelve en línea.
   function pymMotivoSinActividades(est) {
     const e = est || {};
     // v18.0.139 — RESPALDO ACTIVO: primero lo que sí se sabe de esa base. Si el paciente
@@ -41252,10 +41252,6 @@ hora, y su identificador. Nada más.
   //  sobrescribe una categoría que el médico ya haya puesto. Solo propone.
   // =====================================================================
 
-  // Orden de severidad. Se usa para el trinquete: subir el riesgo es seguro,
-  // bajarlo automáticamente no lo es.
-  const MTR_SEVERIDAD_RIESGO = { "bajo": 0, "moderado": 1, "alto": 2, "muy alto": 3 };
-
   // Rango etario en el que las Pooled Cohort Equations están validadas
   // (Goff et al. 2013, ACC/AHA). Fuera de él el número se sigue calculando
   // —no se cambia ninguna conducta sin decisión clínica— pero deja de viajar
@@ -41588,6 +41584,10 @@ hora, y su identificador. Nada más.
   // que ya rige todo el bloque mtr*: una excepción a mitad de consulta es peor
   // que un recuadro que dice qué falta. La conducta clínica es idéntica —sin
   // TFG no hay categoría— pero aquí el médico ve POR QUÉ.
+  // Orden de severidad: muy alto > alto > moderado > bajo, y la clasificación
+  // desciende por pasos sin bajar sola. Es el trinquete: subir el riesgo es
+  // seguro, bajarlo automáticamente no lo es. (v18.3/P12: MTR_SEVERIDAD_RIESGO,
+  // el mapa {bajo:0…muy alto:3} que duplicaba este orden sin ningún lector, se retiró.)
   function mtrClasificarRiesgoCv(f) {
     const x = f || {};
     const egfr = mtrFloat(x.egfrCkdepi);
@@ -42133,6 +42133,7 @@ hora, y su identificador. Nada más.
   // (ver el comentario junto a _vglIrAPestanaYEsperar), así que este clic
   // nunca arriesga borrar nada de lo que esté a medio escribir.
   function mtrIrAPestanaPorNombre(pestania, doc) {
+    uxTrack("zombi.mtrIrAPestanaPorNombre"); // P12 cuarentena: sin llamador en vivo — si esto dispara, docs/SANEAMIENTO.md
     try {
       const tab = _vglClicablePestana(pestania, doc || document);
       if (!tab) return false;
@@ -47014,6 +47015,7 @@ hora, y su identificador. Nada más.
   }
 
   function mtrIaClickDelegado(e) {
+    uxTrack("zombi.mtrIaClickDelegado"); // P12 cuarentena: listener sin registro desde v18.0.x — ver docs/SANEAMIENTO.md
     try {
       const t = e && e.target;
       if (!t || typeof t.closest !== "function") return;
@@ -47958,6 +47960,7 @@ hora, y su identificador. Nada más.
   const MTR_CAMPOS_TA_SIS_ACOSTADO = ["taSistolicaAcostado", "presionSistolicaAcostado"];
   const MTR_CAMPOS_TA_DIA_ACOSTADO = ["taDiastolicaAcostado", "presionDiastolicaAcostado"];
   function _mtrPrimerCampoNumerico(nombres, doc) {
+    uxTrack("zombi._mtrPrimerCampoNumerico"); // P12 cuarentena: sin llamador en vivo — ver docs/SANEAMIENTO.md
     for (const n of nombres) {
       const v = mtrLeerCampoNumerico(n, doc);
       if (v !== null) return v;

@@ -13162,3 +13162,28 @@ cada corrida.
 
 Banco completo: **3.380 comprobaciones pasan, 0 fallan.**
 
+## v18.3 (P12) — saneamiento: constantes muertas fuera, cuarentena zombi
+
+Se retiraron las dos únicas constantes sin lector (`PYM_SIN_ACT_MOTIVOS`,
+`MTR_SEVERIDAD_RIESGO`) re-hospedando el 100 % de sus comentarios históricos junto a
+las funciones vivas que documentan (`pymMotivoSinActividades`, `mtrClasificarRiesgoCv`);
+tres funciones sin llamador entraron en cuarentena con `uxTrack("zombi.<nombre>")`
+como primera línea (`mtrIaClickDelegado`, `mtrIrAPestanaPorNombre`,
+`_mtrPrimerCampoNumerico`). La nueva `suite_84_saneamiento` (estructural, sobre la
+fuente de producción) fija: constantes fuera, memoria re-hospedada, exactamente tres
+marcadores zombi, y que ninguna pieza protegida por tests (F1) pueda desaparecer en
+silencio. Los defectos encontrados (botón `#vgl-ia-redactar` pintado sin listener,
+`CANCEL_PLANTILLA_KEY` que nunca se limpia, `_deshacerOrdenesPyM` sin camino de UI)
+se reportan en `docs/SANEAMIENTO.md` sin arreglos: arreglarlos cambia comportamiento
+visible y P12 no lo toca. Cada mutación se aplicó UNA A LA VEZ y se restauró
+verificando el retorno exacto tras cada corrida.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 563 | Se restaura la constante muerta `MTR_SEVERIDAD_RIESGO` en la fuente (resurrección del array sin lector) | *suite_84: P12·1 — «MTR_SEVERIDAD_RIESGO ya no se declara» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+| 564 | Se quita el marcador `uxTrack("zombi.mtrIrAPestanaPorNombre")` de la función en cuarentena (la telemetría dejaría de delatarla) | *suite_84: P12·3 — «mtrIrAPestanaPorNombre arranca con uxTrack(…)» y «exactamente tres marcadores» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+| 565 | Se renombra `const MTR_CORRECCIONES_NORMA` → `const MTR_CORRECCIONES_NORMA_MUTANTE` (borrar de facto una pieza protegida por F1) | **Sobrevivió la primera corrida** — mutante 5 pasan / 0 fallan: la aserción de presencia casaba por substring y `…_NORMA_MUTANTE` contiene `…_NORMA`. Aserción faltante: límite de palabra. Se reforzó `declara()` (regex escapada + `(?![A-Za-z0-9_])`) y el MISMO mutante cayó: 4 pasan / 1 falla; restaurado 5/0 | Sí |
+| 566 | Se borra el comentario re-hospedado del trinquete de severidad (memoria del proyecto: «subir el riesgo es seguro, bajarlo no») | *suite_84: P12·2 — «el comentario del trinquete queda re-hospedado sobre mtrClasificarRiesgoCv» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+
+Banco completo: **3.385 comprobaciones pasan, 0 fallan.**
+
