@@ -21557,34 +21557,61 @@
   }
 
   // Extractor recursivo de PacienteID para desenrollar cualquier anidación (res.data.data[0]...)
+  // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): la recursión bajaba por TODAS las ramas
+  // hermanas salvo una lista de exclusión (eps, sedes, contratos…). Esa lista no puede
+  // crecer al ritmo del DOM/JSON de Everest: cualquier rama NUEVA con un `id` genérico
+  // (un municipio, un régimen, un tercero) se devolvía como PacienteID — y con ese número
+  // se agendaba y se ordenaba PARA OTRO PACIENTE. Regla nueva: el `id` genérico solo se
+  // acepta cuando el contenedor se alcanzó por una RUTA SEGURA (la raíz de la respuesta,
+  // la clave `data`, un arreglo, o una clave cuyo NOMBRE declara paciente); las claves
+  // que nombran paciente explícitamente (idPaciente, pacienteId…) valen en cualquier
+  // nivel. Ante la duda se devuelve null: "no se pudo" es reversible, un id equivocado no.
+  function _esRutaPaciente(k) {
+      return /paciente|patient/i.test(String(k));
+  }
+  function _extractPatientId(res, profundidad, rutaSegura) {
+      if (!res || profundidad > 8) return null;
+      if (typeof res === "number") return res > 0 ? res : null;
+      if (typeof res === "string") return /^\d+$/.test(res) ? parseInt(res, 10) : null;
+      if (Array.isArray(res)) return res.length > 0 ? _extractPatientId(res[0], profundidad + 1, rutaSegura) : null;
+      if (typeof res === "object") {
+          // 1) Claves que NOMBRAN paciente explícitamente: confiables en cualquier nivel.
+          for (const k of ["idPaciente", "pacienteId", "id_paciente", "paciente_id", "PacienteId", "IdPaciente"]) {
+              if (!(k in res)) continue;
+              const v = res[k];
+              if (typeof v === "number" && v > 0) return v;
+              if (typeof v === "string" && /^\d+$/.test(v)) return parseInt(v, 10);
+          }
+          // 2) `id` genérico: SOLO si el contenedor se alcanzó por una ruta segura — la
+          //    respuesta misma (la ficha real de BuscarPaciente vive en la raíz), `data`,
+          //    un arreglo, o una rama que declara paciente.
+          if (rutaSegura) {
+              const direct = res.id != null ? res.id : (res.ID != null ? res.ID : res.Id);
+              if (typeof direct === "number" && direct > 0) return direct;
+              if (typeof direct === "string" && /^\d+$/.test(direct)) return parseInt(direct, 10);
+          }
+          // 3) Bajar por `data` (la ruta de siempre: res.data.data[0]...).
+          if (res.data) {
+              const fromData = _extractPatientId(res.data, profundidad + 1, true);
+              if (fromData) return fromData;
+          }
+          // 4) Ramas hermanas: SOLO las que declaran paciente en su NOMBRE, y dentro de
+          //    ellas solo claves que NOMBRAN paciente (rutaSegura=false): una colección
+          //    como "programasPaciente" también declara paciente y sus entradas tienen
+          //    ids PROPIOS que no son el del paciente. eps, sedes, contratos y cualquier
+          //    cosa que Everest invente mañana ya ni se recorre.
+          for (const k of Object.keys(res)) {
+              if (k === "data" || !_esRutaPaciente(k)) continue;
+              if (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object")) {
+                  const fromSub = _extractPatientId(res[k], profundidad + 1, false);
+                  if (fromSub) return fromSub;
+              }
+          }
+      }
+      return null;
+  }
   function extractPatientId(res) {
-    if (!res) return null;
-    if (typeof res === "number" && res > 0) return res;
-    if (typeof res === "string" && /^\d+$/.test(res)) return parseInt(res, 10);
-    if (Array.isArray(res) && res.length > 0) return extractPatientId(res[0]);
-    if (typeof res === "object") {
-      const direct = res.idPaciente || res.pacienteId || res.id || res.PacienteId || res.IdPaciente || res.id_paciente || res.ID || res.Id || res.paciente_id;
-      if (direct && typeof direct === "number" && direct > 0) return direct;
-      if (direct && typeof direct === "string" && /^\d+$/.test(direct)) return parseInt(direct, 10);
-      if (res.data) {
-        const fromData = extractPatientId(res.data);
-        if (fromData) return fromData;
-      }
-      // v11.0.1 — Al bajar por las ramas del objeto, NO entrar en las que se sabe que NO
-      // contienen al paciente. Sin esta lista, una ficha sin `id` devolvía el primer entero
-      // positivo que encontrara: el id de la EPS (2) o el de una sede (12). Con ese número
-      // se agendaba y se ordenaba: paciente equivocado.
-      const NO_PACIENTE = new Set(["eps", "sedes", "contratos", "planes_Medicos", "programasPaciente",
-        "ubicacionesBOT", "mediosTransporte", "puntosReferenciaResidencia", "puntosReferenciaUbicacionHabitual",
-        "prestador", "remisor", "usuarioCreacion"]);
-      for (const k of Object.keys(res)) {
-        if (k !== "data" && !NO_PACIENTE.has(k) && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
-          const fromSub = extractPatientId(res[k]);
-          if (fromSub) return fromSub;
-        }
-      }
-    }
-    return null;
+      return _extractPatientId(res, 0, true);
   }
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)

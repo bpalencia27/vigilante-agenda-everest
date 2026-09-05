@@ -162,6 +162,34 @@ module.exports = {
       t.igual(c.api.extractPatientId(trampa), 555);
     });
 
+    // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): la lista negra de v11.0.1 no podía
+    // crecer al ritmo del JSON de Everest. Una rama hermana NUEVA con un id genérico
+    // (acá "tipoAfiliacion"/"municipioResidencia", mañana cualquier cosa) devolvía ese
+    // id como PacienteID — y con ese número se agendaba y ordenaba para OTRO paciente.
+    // Esta prueba cayó roja contra el código viejo (devolvía 77) y obliga a la regla:
+    // id genérico solo por ruta segura; ramas hermanas solo con claves que nombran
+    // paciente explícitamente.
+    t.caso("extractPatientId: rama hermana nueva con id genérico JAMÁS se devuelve como PacienteID (v18.0.145)", () => {
+      const c = cargar({ silencioso: true });
+
+      // La trampa que la lista negra no conocía: ids genéricos de terceros ajenos.
+      const trampaNueva = {
+        tipoAfiliacion: { id: 77 },
+        municipioResidencia: { Id: 88 },
+      };
+      t.igual(c.api.extractPatientId(trampaNueva), null, "ramas hermanas con id genérico: null, jamás un id equivocado");
+
+      // Colecciones que declaran paciente pero NO son el paciente (estaba en la lista
+      // negra vieja y contiene la palabra "Paciente" — la trampa del matching por nombre).
+      const programas = { programasPaciente: [{ id: 34 }] };
+      t.igual(c.api.extractPatientId(programas), null, "programasPaciente tiene ids propios: null");
+
+      // Las rutas seguras de siempre siguen funcionando:
+      t.igual(c.api.extractPatientId({ id: 33, eps: { id: 2 } }), 33, "la ficha en la raíz sigue siendo la fuente válida");
+      t.igual(c.api.extractPatientId({ data: [{ id: 44 }] }), 44, "data->arreglo sigue siendo ruta segura");
+      t.igual(c.api.extractPatientId({ datosPaciente: { idPaciente: 66 } }), 66, "rama hermana que declara paciente + clave explícita: sí");
+    });
+
     await t.casoAsync("apiAccesoBuscarPaciente busca la data usando documento y extrae ID", async () => {
       // Firma real: UN solo argumento (docId). La versión vieja de esta prueba pasaba
       // ("CC", "12345678"), así que docId valía "CC", se quedaba sin dígitos al limpiarlo
