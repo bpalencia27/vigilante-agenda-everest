@@ -182,17 +182,21 @@ module.exports = {
       await new Promise((res) => setTimeout(res, 30));
       t.falso(("vgl_acceso_deneg_2000-01-01" in almacen), "la clave del día viejo se fue");
       t.cierto(("vgl_acceso_deneg_" + c.api.todayStamp()) in almacen, "la del día de hoy quedó");
-      t.cierto(red.posts.length === 1, "un solo POST");
-      const cuerpo = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — con la identidad de equipo delegada en obs*, el arranque de un
+      // navegador limpio emite además «obs.equipo.nuevo» (diferido un tick). Esta prueba
+      // mide el canal de acceso_deneg: contar SOLO sus POST, no los del aviso.
+      const postsAcceso = red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso_deneg"; } catch (e) { return false; } });
+      t.cierto(postsAcceso.length === 1, "un solo POST de acceso_deneg (el aviso obs.equipo.nuevo del primer arranque viaja aparte)");
+      const cuerpo = JSON.parse(postsAcceso[0].data);
       t.igual(cuerpo.evento, "acceso_deneg", "evento acceso_deneg");
       t.igual(cuerpo.uid, 555, "uid del médico (dato de personal)");
       t.igual(cuerpo.perfil, "PUBLICO", "perfil resuelto");
       t.igual(cuerpo.cuentas.redactor_ia, 1, "cuenta agregada por capacidad");
-      t.cierto(String(red.posts[0].data).indexOf("Fuera") === -1, "sin nombre del médico en el POST");
+      t.cierto(String(postsAcceso[0].data).indexOf("Fuera") === -1, "sin nombre del médico en el POST");
       t.igual(almacen["vgl_rep_acceso_deneg"], c.api.todayStamp(), "candado diario escrito");
       c.api._accesoDenegFlush();                    // segundo barrido el mismo día
       await new Promise((res) => setTimeout(res, 30));
-      t.igual(red.posts.length, 1, "el candado diario impide el segundo envío");
+      t.cierto(red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso_deneg"; } catch (e) { return false; } }).length === 1, "el candado diario impide el segundo envío");
     });
 
   },

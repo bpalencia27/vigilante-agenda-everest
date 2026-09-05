@@ -322,10 +322,13 @@ module.exports = {
         trabajadores.push(this);
       }
       const r = cargar({ Worker: TrabajadorFalso, silencioso: true });
-      // Durante la carga el propio guion ya levanta su worker del canal
-      // "latido" (perro guardián), antes de que este caso pudiera poner su
-      // espía. Se reinicia el estado del reloj para que _relojCada tenga
-      // que construir OTRO worker, ya bajo el espía de la URL.
+      // v18.2 (P11) — el canal "latido" (perro guardián) ya NO se registra al
+      // evaluar el guion: lo instala boot() tras el consentimiento, vía
+      // _instalarLatidosBase(). Se instala aquí a mano para reproducir el
+      // mundo real (ese worker ya existe) y luego se reinicia el estado del
+      // reloj para que _relojCada tenga que construir OTRO worker, ya bajo
+      // el espía de la URL.
+      r.api._instalarLatidosBase();
       r.api._relojAjustarParaTest({ worker: null, ok: false, motivo: "" });
       let creadas = 0, revocadas = 0;
       const originales = { c: r.env.win.URL.createObjectURL, r: r.env.win.URL.revokeObjectURL };
@@ -466,6 +469,11 @@ module.exports = {
       let desconectados = 0;
       const original = observador.disconnect;
       observador.disconnect = () => { desconectados++; };
+      // v18.2 (P11) — desde la compuerta de consentimiento el registro de navegación ya
+      // NO se instala al evaluar el script: lo instala boot() tras el consentimiento
+      // (y tras el kill-switch). Aquí se instala a mano para seguir verificando B13:
+      // que el apagado de emergencia lo detiene de verdad.
+      r.api._instalarLatidosBase();
       let navVivo = null;
       for (const [, entrada] of r.env.intervalos) {
         if (String(entrada.f).indexOf("UrlChanged") >= 0) { navVivo = entrada; break; }

@@ -294,7 +294,11 @@ function cargar(opciones) {
     // v18.0.134 (M8) — `_vglLimpiarSesionDia` vacía tres estructuras de sesión que solo
     // son alcanzables dentro del IIFE (dos Set y un Map declarados con let). Sin este
     // accessor el banco no puede llenarlas para demostrar que la limpieza funciona.
-    "\n;try{ globalThis.__VGL__.__sesionDiaParaTest = function(){ return { fechasLab: _diagLabFechaPorCasilla, contextoAvisado: _vglContextoAvisado, acompEntendido: _acompEntendidoEnMs }; }; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8)
+    "\n;try{ globalThis.__VGL__.__sesionDiaParaTest = function(){ return { fechasLab: _diagLabFechaPorCasilla, contextoAvisado: _vglContextoAvisado, acompEntendido: _acompEntendidoEnMs }; }; }catch(e){}\n" +
+    // v18.2 (P11) — las constantes de la compuerta de consentimiento se declaran como
+    // `const` al nivel del IIFE, de modo que el autodescubrimiento de funciones no las
+    // ve. Se publican a mano para que suite_82 pueda comparar el texto contra el repo.
+    "\n;try{ globalThis.__VGL__.__TERMINOS_VERSION = TERMINOS_VERSION; globalThis.__VGL__.__TERMINOS_TEXTO = TERMINOS_TEXTO; globalThis.__VGL__.__TERMINOS_RESUMEN = TERMINOS_RESUMEN; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8) + v18.2 (P11)
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");

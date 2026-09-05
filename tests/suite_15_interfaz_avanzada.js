@@ -291,6 +291,91 @@ module.exports = {
       t.cierto(Array.isArray(cas));
     });
 
+    // ============ _emparejarNormalidadFija (v18.0.145 — auditoría M2M, hallazgo crítico) ============
+    // DOM fiel al real (v14.2.10): 38 casillas — 19 de Revisión por sistemas (la 19.ª, índice
+    // 18, es la ÚNICA con id propio "sintomasGenerales") + 19 de Examen físico, de las cuales
+    // Mamas y Genito/Urinario llevan etiqueta cercana legible para la exclusión por texto.
+    // Antes del fix el emparejamiento era PURAMENTE posicional: un DOM que conservara el
+    // conteo pero no el orden pegaba frases en casillas equivocadas sin avisar.
+    const _mkCasilla = (i, etiqueta) => ({
+      tagName: "INPUT", type: "text", value: "",
+      id: i === 18 ? "sintomasGenerales" : "alert_message",
+      getAttribute: () => null,
+      closest: (sel) => (sel === "tr" && etiqueta ? { firstElementChild: { textContent: etiqueta } } : null),
+    });
+    const _domExamenBueno = () => {
+      const rev = ["Piel", "Oído", "Boca", "Cardio", "Faringe", "Vías aéreas", "Pelvis", "Urinaria", "Endocrino", "Hematológico",
+        "Ocular", "Nasal", "Vascular periférico", "Digestivo alto", "Intestinal", "Osteomuscular", "Neurológico", "Linfático", "Síntomas generales"];
+      const fis = ["Estado general", "Piel y faneras", "Cabeza", "Cuello", "Ojos", "Fosas nasales", "Boca", "Cardiovascular", "Orofaringe",
+        "Tórax", "MAMAS", "Abdomen", "GENITO URINARIO", "Columna", "Oídos", "Extremidades", "Neurológico", "Vascular", "Cabeza (cabello)"];
+      return rev.concat(fis).map((et, i) => _mkCasilla(i, et));
+    };
+
+    t.caso("_emparejarNormalidadFija: DOM bueno (38 casillas, sintomasGenerales en 18) empareja las tres franjas (v18.0.145)", () => {
+      const dom = _domExamenBueno();
+      const rRev = cv.api._emparejarNormalidadFija(dom, "revision");
+      t.cierto(rRev.ok, "revisión: debe emparejar");
+      t.igual(rRev.usar.length, 19);
+      t.igual(rRev.plantilla.length, 19);
+      t.igual(rRev.usar[18].id, "sintomasGenerales", "la frase 19 debe caer en Síntomas generales");
+      t.igual(rRev.excluidas, 0);
+      const rFis = cv.api._emparejarNormalidadFija(dom, "fisico");
+      t.cierto(rFis.ok, "físico: debe emparejar excluyendo Mamas/Genito por texto");
+      t.igual(rFis.usar.length, 17);
+      t.igual(rFis.excluidas, 2);
+      t.igual(rFis.usar[0], dom[19], "la franja física arranca en la casilla 20 del DOM");
+      const rAmb = cv.api._emparejarNormalidadFija(dom, "ambos");
+      t.cierto(rAmb.ok);
+      t.igual(rAmb.usar.length, 36);
+      t.igual(rAmb.excluidas, 2);
+      t.igual(rAmb.usar[18], dom[18], "ambos: el índice 18 de la lista usada sigue siendo Síntomas generales");
+    });
+
+    t.caso("_emparejarNormalidadFija: casilla NUEVA antes de Síntomas generales (conteo de franja intacto) => rehúso total (v18.0.145)", () => {
+      // Caso que el código viejo NO cazaba: modo "revision" con una casilla insertada antes
+      // del índice 18 sigue teniendo 19 casillas en el slice y habría pegado TODO desplazado.
+      const dom = _domExamenBueno();
+      dom.splice(10, 0, _mkCasilla(-1, "Signo nuevo"));
+      const r = cv.api._emparejarNormalidadFija(dom, "revision");
+      t.falso(r.ok, "debe rehusarse: el ancla se movió");
+      t.igual(r.motivo, "ancla");
+      t.igual(r.sg, 1);
+      t.igual(r.pos, 19, "sintomasGenerales quedó empujada al índice 19");
+      t.igual(r.total, 39);
+      t.falso(cv.api._emparejarNormalidadFija(dom, "ambos").ok, "ambos también rehúsa");
+      t.falso(cv.api._emparejarNormalidadFija(dom, "fisico").ok, "físico también rehúsa");
+    });
+
+    t.caso("_emparejarNormalidadFija: sintomasGenerales AUSENTE (Everest cambió el id) => rehúso, nunca escritura desplazada (v18.0.145)", () => {
+      const dom = _domExamenBueno().map((el) => (el.id === "sintomasGenerales" ? Object.assign({}, el, { id: "alert_message" }) : el));
+      const r = cv.api._emparejarNormalidadFija(dom, "revision");
+      t.falso(r.ok);
+      t.igual(r.motivo, "ancla");
+      t.igual(r.sg, 0);
+      t.igual(r.pos, -1);
+      t.falso(cv.api._emparejarNormalidadFija(dom, "ambos").ok);
+    });
+
+    t.caso("_emparejarNormalidadFija: sintomasGenerales DUPLICADA => rehúso (v18.0.145)", () => {
+      const dom = _domExamenBueno();
+      dom[5] = Object.assign({}, dom[5], { id: "sintomasGenerales" });
+      const r = cv.api._emparejarNormalidadFija(dom, "ambos");
+      t.falso(r.ok);
+      t.igual(r.motivo, "ancla");
+      t.igual(r.sg, 2);
+      t.igual(r.pos, -1);
+    });
+
+    t.caso("_emparejarNormalidadFija: ancla bien pero franja física sin etiquetas Mamas/Genito => rehúso por conteo (conducta previa intacta)", () => {
+      const dom = _domExamenBueno().map((el, i) => (i >= 19 ? Object.assign({}, el, { closest: () => null }) : el));
+      const r = cv.api._emparejarNormalidadFija(dom, "fisico");
+      t.falso(r.ok);
+      t.igual(r.motivo, "conteo");
+      t.igual(r.candidatos, 19);
+      t.igual(r.plantilla, 17);
+      t.cierto(cv.api._emparejarNormalidadFija(dom, "revision").ok, "la revisión no depende de la franja física");
+    });
+
     t.caso("toggleSheet: repetir el mismo tipo funciona como conmutador (cierra)", () => {
       cv.api.toggleSheet("resumen");
       t.igual(cv.api.__state.sheet, "resumen");
@@ -2014,11 +2099,23 @@ module.exports = {
     function campoFalso(valor, opciones) {
       const o = opciones || {};
       return {
-        id: "alert_message", type: "text", value: valor,
+        id: o.id || "alert_message", type: "text", value: valor,
         offsetParent: o.oculto ? null : {},
+        // v18.0.145 — etiqueta de fila para _etiquetaCercanaCasilla (exclusión Mamas/Genito)
+        closest: o.etiqueta ? (sel) => (sel === "tr" ? { firstElementChild: { textContent: o.etiqueta } } : null) : undefined,
         _eventos: [],
         dispatchEvent(ev) { this._eventos.push(ev.type); return true; },
       };
+    }
+
+    // v18.0.145 — DOM REAL (v14.2.10, dos capturas del Grabador 3): 38 casillas visibles,
+    // la 19.ª (índice 18) es la ÚNICA con id propio "sintomasGenerales" y cierra la
+    // Revisión por sistemas; el examen físico (índices 19..37) trae Mamas y Genito/Urinario
+    // con su etiqueta de fila legible — el ancla estructural del emparejamiento.
+    function domExamenReal() {
+      const revis = Array.from({ length: 18 }, () => campoFalso("")).concat([campoFalso("", { id: "sintomasGenerales" })]);
+      const fisico = Array.from({ length: 19 }, (_, i) => campoFalso("", i === 2 ? { etiqueta: "MAMAS :" } : (i === 6 ? { etiqueta: "GENITO URINARIO:" } : {})));
+      return revis.concat(fisico); // 38 visibles; Mamas y Genito se excluyen por texto → 36
     }
 
     // setNgValue construye `new Event(...)` para disparar input/change: el DOM falso del
@@ -2056,12 +2153,14 @@ module.exports = {
 
     t.caso("Normalidad fija: un solo clic rellena SOLO las vacías, sin pedir confirmación, respeta las que ya tienen texto", () => {
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
-      const yaEscrita = campoFalso("El médico ya escribió esto y NUNCA se toca");
-      const vacia1 = campoFalso("");
-      const vacia2 = campoFalso("   "); // solo espacios: cuenta como vacía
-      const oculta = campoFalso("", { oculto: true });
-      const casillas36 = [yaEscrita, vacia1, vacia2].concat(Array.from({ length: 33 }, () => campoFalso(""))).concat([oculta]);
-      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? casillas36 : []);
+      const dom = domExamenReal(); // DOM real v14.2.10: 38 visibles con sintomasGenerales@18
+      const yaEscrita = dom[0] = campoFalso("El médico ya escribió esto y NUNCA se toca");
+      const vacia1 = dom[1] = campoFalso("");
+      const vacia2 = dom[2] = campoFalso("   "); // solo espacios: cuenta como vacía
+      const sg = dom[18];
+      const oculta = campoFalso("", { oculto: true }); // cruda pero invisible: _casillasExamenFisico la filtra
+      const crudas = dom.concat([oculta]); // 39 crudas → 38 candidatas visibles
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? crudas : []);
       let confirmLlamado = false;
       cv.ctx.confirm = () => { confirmLlamado = true; return false; }; // si el botón llamara confirm() y devolviera false, esta prueba lo detectaría
       const alertas = [];
@@ -2072,6 +2171,8 @@ module.exports = {
       t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta");
       t.igual(vacia1.value, "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 vacía recibe la frase fija de SU posición (Oído), no la 0 (Piel, que ya estaba ocupada)");
       t.igual(vacia2.value, "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.", "posición 2 (solo espacios) también cuenta como vacía y recibe la frase de SU posición (Boca)");
+      t.cierto(String(sg.value).indexOf("NEGATIVO PARA ASTENIA") === 0, "v18.0.145: el ancla sintomasGenerales (índice 18) queda alineada con SU frase de Síntomas generales");
+      t.igual(dom[22].value, "NORMOCÉFALO. SIN PUNTOS DOLOROSOS NI SIGNOS DE TRAUMA.", "tras excluir Mamas (índice 21) la casilla siguiente recibe la frase de SU posición, sin correrse una fila");
       t.igual(oculta.value, "", "una casilla oculta no se toca");
       t.cierto(vacia1._eventos.includes("input") && vacia1._eventos.includes("change"), "setNgValue disparó input y change");
       t.igual(yaEscrita._eventos.length, 0, "la casilla respetada no dispara ningún evento");
@@ -2080,27 +2181,31 @@ module.exports = {
 
     t.caso("Normalidad fija: si el número de casillas de hoy no coincide con las 36 de la plantilla fija, el botón avisa el desajuste y se rehúsa por seguridad (v14.2.2)", () => {
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
-      const vacia = campoFalso("");
-      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? [vacia] : []);
+      // v18.0.145 — el ancla debe estar BIEN (sintomasGenerales@18) para que la rehusada
+      // sea por CONTEO y no por ancla: 19 de revisión + 1 de física suelta = 20 candidatas.
+      const incompleto = Array.from({ length: 18 }, () => campoFalso("")).concat([campoFalso("", { id: "sintomasGenerales" }), campoFalso("")]);
+      const vacia = incompleto[19];
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? incompleto : []);
       // v15.6.0 — sin alert() del navegador: el desajuste se cuenta EN el botón.
       btnN.onclick();
       elegirOpcionChooser(cv, "ambos");
       t.igual(vacia.value, "", "por seguridad (v14.2.2) ante desajuste de casillas no se pega nada");
       t.cierto(btnN.innerHTML.includes("⚠ No pegué nada"), "el botón anuncia el rehúso por seguridad");
-      t.cierto(btnN.innerHTML.includes("1 casillas") && btnN.innerHTML.includes("36"), "avisa el desajuste con ambas cifras (las de la pantalla y las de la plantilla)");
+      t.cierto(btnN.innerHTML.includes("20 casillas") && btnN.innerHTML.includes("36"), "avisa el desajuste con ambas cifras (las de la pantalla y las de la plantilla)");
     });
 
     t.caso("Examen normal: «Revisión por sistemas» llena SOLO las primeras 19 casillas (deja el examen físico intacto)", () => {
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
-      const revis = Array.from({ length: 19 }, () => campoFalso(""));
-      const fisico = Array.from({ length: 17 }, () => campoFalso(""));
-      const todas = revis.concat(fisico); // 36 visibles, sin Mamas/Genito
-      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? todas : []);
+      const dom = domExamenReal(); // 38 visibles: 19 de revisión (sg@18) + 19 de física
+      const revis = dom.slice(0, 19);
+      const fisico = dom.slice(19);
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? dom : []);
       btnN.onclick();
       elegirOpcionChooser(cv, "revision");
       t.cierto(revis[0].value.indexOf("NEGATIVO PARA LESIONES") === 0, "la 1.ª de revisión recibe la frase de Piel");
-      t.cierto(revis[18].value.indexOf("NEGATIVO PARA ASTENIA") === 0, "la 19.ª de revisión recibe Síntomas generales");
+      t.cierto(revis[18].value.indexOf("NEGATIVO PARA ASTENIA") === 0, "la 19.ª de revisión (el ancla sintomasGenerales) recibe Síntomas generales");
       t.igual(fisico[0].value, "", "la 1.ª del examen físico queda intacta (no se llenó)");
+      t.cierto(fisico.every((c) => c.value === ""), "v18.0.145: NINGUNA casilla del examen físico recibe texto en modo revisión");
     });
 
     t.caso("Normalidad fija: la plantilla trae exactamente 36 frases (19 de revisión por sistema + 17 de examen físico, sin MAMAS ni GENITO/URINARIO)", () => {

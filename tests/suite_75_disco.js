@@ -891,11 +891,13 @@ module.exports = {
       const e = escenario({ gmxhr: red.gmxhr });
       t.cierto(e.c.api.reportar("prueba", { cosa: 1 }), "encoló");
       await dormir(20);
-      t.igual(red.posts.length, 1, "un POST");
-      const fila = red.cuerpos()[0];
+      // v18.3 (P13) — nacer el id de equipo emite «obs.equipo.nuevo» diferido un
+      // tick: ese POST viaja aparte. Esta prueba mide la fila «prueba».
+      t.igual(red.cuerpos().filter((p) => p.evento === "prueba").length, 1, "un POST");
+      const fila = red.cuerpos().find((p) => p.evento === "prueba");
       t.igual(fila.evento, "prueba");
       t.igual(fila.dia, FECHA, "día del reloj congelado");
-      t.igual(fila.ver, "18.1.0", "versión viva");
+      t.igual(fila.ver, "18.3.0", "versión viva");
       t.igual(fila.cosa, 1, "extra mergeado");
       t.cierto(typeof fila.token === "string" && fila.token.length > 0, "token del tablero");
       t.cierto(/-/.test(String(fila.lote)), "lote trazable");
@@ -908,7 +910,9 @@ module.exports = {
       const e = escenario({ gmxhr: red.gmxhr });
       t.cierto(e.c.api.reportar("prueba"), "true: ENCOLADA es la promesa del circuito");
       await dormir(20);
-      t.igual(JSON.parse(e.c.env.gm["vgl_repq"]).length, 1, "la fila quedó en la cola");
+      // v18.3 (P13) — el aviso «obs.equipo.nuevo» del nacimiento también queda
+      // encolado sin red: contar solo la fila «prueba» que esta prueba mide.
+      t.igual(JSON.parse(e.c.env.gm["vgl_repq"]).filter((f) => f.evento === "prueba").length, 1, "la fila quedó en la cola");
     });
 
     await t.casoAsync("M4: el resumen diario ya no entierra un día sin fila (v18.0.136)", async () => {
@@ -923,14 +927,16 @@ module.exports = {
         { [AYER]: { fraude: 1, inasistencia: 2, atiempo: 3, ultima: 99 } });
       e.c.api.repDailySummary();
       await dormir(20);
-      t.igual(red.posts.length, 1, "ahora sí sale el resumen");
-      const fila = red.cuerpos()[0];
+      // v18.3 (P13) — nacer el id emite «obs.equipo.nuevo» diferido: contar SOLO
+      // los POST de «resumen» que esta prueba mide.
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1, "ahora sí sale el resumen");
+      const fila = red.cuerpos().find((p) => p.evento === "resumen");
       t.igual(fila.evento, "resumen");
       t.igual(fila.deDia, AYER, "resumen del día anterior");
       t.igual(e.c.env.almacen["vgl_rep_sum"], AYER, "candado recién ahora");
       e.c.api.repDailySummary();
       await dormir(20);
-      t.igual(red.posts.length, 1, "con fila entregada no se repite");
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1, "con fila entregada no se repite");
     });
   },
 };

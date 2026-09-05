@@ -895,16 +895,20 @@ module.exports = {
         ? [{ closest: () => null, textContent: "CC 12.345.678" }]
         : []);
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
-      t.cierto(llamadas[0].includes("BusquedaPaciente"));
-      t.cierto(llamadas[1].includes("BuscarPaciente"));
+      // v18.3 (P13) — el nacimiento del id de equipo emite «obs.equipo.nuevo»
+      // diferido un tick hacia el TABLERO (script.google.com). Esta prueba mide
+      // las llamadas a ATENEA: contar solo las del dominio de Everest.
+      const llamadasAthenea = llamadas.filter((u) => String(u).includes("atheneasoluciones"));
+      t.igual(llamadasAthenea.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
+      t.cierto(llamadasAthenea[0].includes("BusquedaPaciente"));
+      t.cierto(llamadasAthenea[1].includes("BuscarPaciente"));
       t.cierto(datosPaso2.includes('name="numId"') && datosPaso2.includes("12345678"), "la cédula sale limpia de puntos y espacios en el campo numId del multipart");
       const logs1 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
       t.igual(logs1.length, 1);
       t.igual(logs1[0].det.section, "historia");
       // mismo paciente: no se vuelve a consultar (guarda lastAutoFetchedDoc)
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 2, "guarda anti-repetición: mismo paciente, ninguna llamada nueva");
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 2, "guarda anti-repetición: mismo paciente, ninguna llamada nueva");
       const logs2 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
       t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora al repetir");
     });
@@ -938,13 +942,15 @@ module.exports = {
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ closest: () => null, textContent: "CC 12.345.678" }] : []);
 
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
+      // v18.3 (P13) — ídem: el aviso «obs.equipo.nuevo» del primer arranque viaja
+      // a script.google.com y no cuenta como llamada a Athenea.
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
 
       // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min
       // de la pre-carga (que ahora sí quedó fijada, aunque haya sido con 0 laboratorios).
       ahora += 31000;
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
     });
 
     // v12.3.14 — initLabMutationObserver fue ERRADICADA (observaba document.body ENTERO con
@@ -1019,6 +1025,10 @@ module.exports = {
     // tPymCaptador + los tres de acceso del v18.1: tAccesoBoot, tAccesoLoop,
     // tAccesoUid) y el handle del chequeo de versión escalonado (setTimeout 4 s)
     // tiene que estar entre ellos.
+    // v18.2 (P11, R5.1-bis): +2 — los dos setInterval literales de
+    // _instalarLatidosBase() (navLog 5 s y vigía del reloj 30 s, que boot() llama
+    // tras el kill-switch) también se registran, para que el apagado remoto los
+    // cancele igual que al resto. Total: 17 + 2 = 19.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -1032,8 +1042,8 @@ module.exports = {
       c.api.boot();
       const timers = c.api.__state.timers;
 
-      t.igual(timers.length, antes + 17,
-        "boot registra los 17 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid)");
+      t.igual(timers.length, antes + 19,
+        "boot registra los 19 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid + los 2 latidos base v18.2: navLog, vigiaReloj)");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");
