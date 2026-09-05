@@ -13,7 +13,8 @@ module.exports = {
   nombre: "Extracción del DOM de Everest (Suite 14)",
   cubre: [
     "firstMatch", "containerOf", "extractAgenda", "seccionActiva",
-    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth", "_enPaginaExcluidaDeAvisos"
+    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth", "_enPaginaExcluidaDeAvisos",
+    "_contadorSospechaSelector", "_hayCedulaVisibleEnPantalla", "_vigilarSilencioVigilancia"
   ],
 
   pruebas(t, api, env, cargar) {
@@ -279,6 +280,99 @@ module.exports = {
         { textContent: "Tel: 123", closest: () => null },   // muy corto para ser cédula
       ] : []);
       t.igual(c.api.extractPacienteAbierto(), "");
+    });
+
+    // =====================================================================
+    // v18.0.146 — DETECTOR DE APAGADO SILENCIOSO (fix 4 de la auditoría M2M).
+    // seccionActiva() es una lista blanca: si Everest renombra #anamesis o cambia
+    // .labelHora/.status-label, devuelve "otra" para siempre y el Vigilante se
+    // apaga sin avisar. El detector cuenta ticks sospechosos (sección "otra"
+    // crónica con paciente visible en HCHealth, o historia abierta sin cédula
+    // legible) y avisa UNA vez por sesión.
+    // =====================================================================
+    t.caso("_contadorSospechaSelector: cuenta, avisa una sola vez y se reinicia (v18.0.146)", () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(typeof c.api._contadorSospechaSelector === "function", "la función pura del detector debe estar exportada");
+      let r = c.api._contadorSospechaSelector(true, 0, false);
+      t.igual(r.ticks, 1, "el primer tick sospechoso cuenta 1");
+      t.falso(r.avisa, "un tick no alcanza el umbral de 24");
+      r = c.api._contadorSospechaSelector(true, 23, false);
+      t.cierto(r.avisa, "el tick 24 consecutivo debe disparar el aviso");
+      r = c.api._contadorSospechaSelector(true, 24, true);
+      t.falso(r.avisa, "con el aviso ya dado no vuelve a avisar en la sesión");
+      t.igual(r.ticks, 25, "el contador sigue subiendo aunque ya no avise");
+      r = c.api._contadorSospechaSelector(false, 20, false);
+      t.igual(r.ticks, 0, "un tick no sospechoso (sección reconocida) reinicia el contador");
+      t.falso(r.avisa);
+    });
+
+    t.caso('_vigilarSilencioVigilancia: "otra" crónica en HCHealth con paciente visible => aviso único (v18.0.146)', () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      const appIndex = { querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "C.C. 1.098.765.432", closest: () => null }] : []) };
+      c.env.doc.querySelector = (sel) => (sel === "app-index" ? appIndex : null);
+      c.env.doc.getElementById = () => null;
+      let ultimo = null;
+      for (let i = 1; i <= 24; i++) ultimo = c.api._vigilarSilencioVigilancia("otra");
+      t.cierto(ultimo && typeof ultimo === "object", "el detector debe devolver su veredicto");
+      t.igual(ultimo.otraTicks, 24, "24 ticks seguidos de «otra» con paciente visible en pantalla");
+      t.cierto(ultimo.avisoOtra, "al llegar al umbral debe avisar: apagado silencioso detectado");
+      t.cierto(c.api.__state._selRotoAviso === true, "el aviso queda marcado: UNA vez por sesión");
+      const r25 = c.api._vigilarSilencioVigilancia("otra");
+      t.igual(r25.otraTicks, 25, "el contador sigue contando");
+      t.falso(r25.avisoOtra, "no repite el aviso dentro de la misma sesión");
+      const rAgenda = c.api._vigilarSilencioVigilancia("agenda");
+      t.igual(rAgenda.otraTicks, 0, "reconocer la agenda de nuevo reinicia el contador");
+      t.falso(rAgenda.avisoOtra);
+    });
+
+    t.caso('_vigilarSilencioVigilancia: "otra" legítima (fuera de HCHealth o sin paciente) no acumula (v18.0.146)', () => {
+      // Ruta ajena al módulo clínico (Acceso): ahí "otra" es una pantalla legítima, no una rotura
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      const appIndex = { querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "C.C. 1.098.765.432", closest: () => null }] : []) };
+      c.env.doc.querySelector = (sel) => (sel === "app-index" ? appIndex : null);
+      c.env.doc.getElementById = () => null;
+      let r = null;
+      for (let i = 0; i < 30; i++) r = c.api._vigilarSilencioVigilancia("otra");
+      t.cierto(!!r, "veredicto leído");
+      t.igual(r.otraTicks, 0, "fuera de HCHealth «otra» es legítima: el contador no se mueve");
+      t.falso(r.avisoOtra);
+      t.cierto(c.api._hayCedulaVisibleEnPantalla() === true, "con .text-muted legible la cédula SÍ se ve en pantalla");
+      // Dentro de HCHealth pero sin cédula legible (pantalla sin paciente): tampoco acumula
+      const c2 = cargar({ silencioso: true });
+      c2.env.win.location.pathname = "/viva/HCHealth/";
+      const appIndex2 = { querySelectorAll: () => [] };
+      c2.env.doc.querySelector = (sel) => (sel === "app-index" ? appIndex2 : null);
+      c2.env.doc.getElementById = () => null;
+      let r2 = null;
+      for (let i = 0; i < 30; i++) r2 = c2.api._vigilarSilencioVigilancia("otra");
+      t.igual(r2.otraTicks, 0, "sin cédula visible no hay paciente en pantalla: no es apagado silencioso");
+      t.falso(r2.avisoOtra);
+      t.cierto(c2.api._hayCedulaVisibleEnPantalla() === false, "sin .text-muted con cédula, la pantalla no muestra paciente");
+    });
+
+    t.caso("_vigilarSilencioVigilancia: historia abierta sin cédula legible => guard anti-cruce ciego, aviso único (v18.0.146)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      // Fase 1: historia con la cédula a la vista — todo normal, nunca acumula
+      const appIndex = { querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "C.C. 1.098.765.432", closest: () => null }] : []) };
+      c.env.doc.querySelector = (sel) => (sel === "app-index" ? appIndex : null);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : null);
+      let r = null;
+      for (let i = 0; i < 30; i++) r = c.api._vigilarSilencioVigilancia("historia");
+      t.igual(r.historiaTicks, 0, "con la cédula legible el guard no está ciego");
+      t.falso(r.avisoHistoria);
+      // Fase 2: .text-muted deja de existir (Everest cambió): la historia sigue
+      // abierta pero ya no se puede leer DE QUIÉN es
+      appIndex.querySelectorAll = () => [];
+      let r2 = null;
+      for (let i = 1; i <= 24; i++) r2 = c.api._vigilarSilencioVigilancia("historia");
+      t.igual(r2.historiaTicks, 24, "24 ticks seguidos sin poder leer de quién es la historia");
+      t.cierto(r2.avisoHistoria, "el guard ciego debe avisar");
+      t.cierto(c.api.__state._selCiegoAviso === true, "marcado: una sola vez por sesión");
+      const r25 = c.api._vigilarSilencioVigilancia("historia");
+      t.falso(r25.avisoHistoria, "no repite el aviso en la sesión");
     });
 
     // ---------- captureDoctorInfo ----------

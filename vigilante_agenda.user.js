@@ -14166,6 +14166,58 @@
       return "";
     } catch (e) { return ""; }
   }
+
+  // =====================================================================
+  //  v18.0.146 — APAGADO SILENCIOSO: ¿SIGUE VIVA LA VIGILANCIA? (auditoría M2M, fix 4)
+  //  Un cambio de DOM en Everest puede romper los selectores sin lanzar error
+  //  visible: el tick sigue corriendo, la sección se lee "otra" y el panel se
+  //  autodockea sin avisar. Este detector NO depende de selectores nuevos:
+  //  cuenta ticks SEGUIDOS de sospecha y avisa UNA sola vez por carga. Cero PHI.
+  //    A) "otra" durante muchos ticks SEGUIDOS con un paciente visible en pantalla
+  //    B) "historia" durante muchos ticks SEGUIDOS SIN cédula legible
+  // =====================================================================
+  const VGL_SEL_ROTO_UMBRAL_TICKS = 24;   // ticks de 5 s => 2 min seguidos de sospecha
+
+  function _contadorSospechaSelector(sospechoso, ticksPrevios, yaAviso) {
+    const t = sospechoso ? (ticksPrevios || 0) + 1 : 0;
+    return { ticks: t, avisa: !yaAviso && t >= VGL_SEL_ROTO_UMBRAL_TICKS };
+  }
+
+  function _hayCedulaVisibleEnPantalla() {
+    try {
+      const contenedor = document.querySelector("app-index") || document;
+      for (const el of contenedor.querySelectorAll(".text-muted")) {
+        if (el.closest && el.closest("#vgl-root")) continue;   // nunca leer el propio panel
+        if (_vglDocCanon(limpio(el.textContent))) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function _vigilarSilencioVigilancia(secc) {
+    try {
+      const hayAppIndex = !!document.querySelector("app-index");
+      const hayCedula = _hayCedulaVisibleEnPantalla();
+      // A) apagado total con paciente en pantalla
+      const rA = _contadorSospechaSelector(secc === "otra" && _enModuloHCHealth() && hayAppIndex && hayCedula, state._selRotoOtraTicks, state._selRotoAviso);
+      state._selRotoOtraTicks = rA.ticks;
+      if (rA.avisa) {
+        state._selRotoAviso = true;
+        try { spToast("No encuentro la agenda ni la historia clínica en esta pantalla. Si está viendo una de las dos, Everest cambió su forma y quedé ciego: repórtelo.", 15000); } catch (e2) {}
+        try { vglLog("NAV", "SelectorRotoOtra", { umbral: VGL_SEL_ROTO_UMBRAL_TICKS }); } catch (e2) {}
+      }
+      // B) historia abierta sin cédula legible: guard anti-cruce ciego
+      const rB = _contadorSospechaSelector(secc === "historia" && !hayCedula, state._selCiegoHistoriaTicks, state._selCiegoAviso);
+      state._selCiegoHistoriaTicks = rB.ticks;
+      if (rB.avisa) {
+        state._selCiegoAviso = true;
+        try { spToast("La historia clínica está abierta pero no logro leer de quién es: la protección anti-cruce quedó ciega. Repórtelo.", 15000); } catch (e2) {}
+        try { vglLog("NAV", "SelectorRotoHistoria", { umbral: VGL_SEL_ROTO_UMBRAL_TICKS }); } catch (e2) {}
+      }
+      return { otraTicks: rA.ticks, avisoOtra: rA.avisa, historiaTicks: rB.ticks, avisoHistoria: rB.avisa };
+    } catch (e) { return { otraTicks: 0, avisoOtra: false, historiaTicks: 0, avisoHistoria: false }; }
+  }
+
   // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiraron
   // `otroAvisoDePacienteAbierto` y `checkRecordatorioPym`: el guard contra
   // modales superpuestos que describían (PyM/PES/labs vencidos en pantalla a
@@ -35159,6 +35211,11 @@
       }
       state.lastSeccion = secc;
 
+      // v18.0.146 (fix 4 M2M) — detector de apagado silencioso: si "otra" se vuelve
+      // crónico con un paciente visible en pantalla (o la historia abierta dejó de
+      // mostrar cédula), el Vigilante avisó UNA vez y dejó rastro en telemetría.
+      try { _vigilarSilencioVigilancia(secc); } catch (e) {}
+
       // v12.3.14 — Disparo del Robot Athenea SIN MutationObserver global: la pregunta
       // que el observador erradicado respondía quemando CPU en cada mutación de la SPA
       // se contesta aquí por el precio de un getElementById por tick. Corre en TODA
@@ -38598,7 +38655,8 @@
       if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
         "Apixabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
       if (cg < 30) return mtrAlerta("doac", med, "CAP_DOSIS",
-        "Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+        "Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.",
+        MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
     }
     if (cg < 15) {
       return mtrAlerta("doac", med, "CONTRAINDICADA",
