@@ -79,16 +79,16 @@ Si `npm test` ≠ 3317/0 **frena**: algo cambió el mundo bajo tus pies.
 | P3 | Vigilancia post-despliegue (telemetría, denegaciones) | S3 | P1+P2 | PENDIENTE |
 | P4 | R3 ESTABILIDAD (entrevista) → R4 parches | S4 | **DUEÑO** (responde; aporta `ESTABILIDAD/` de SU máquina) | PENDIENTE |
 | P5 | Cerradura servidor-side (uid fuera del padrón) | S5 | **DUEÑO** (decisión) | PROPUESTA |
-| P6 | Futuras releases (bump→banco→gist→push→merge→registro) | S6 | Haber probado el cambio | PLANTILLA |
+| P6 | Futuras releases (bump→banco→gist→push→merge→registro) | S6 | Haber probado el cambio | EJECUTADO 2026-09-05: v18.3.0 (banco 3.387/0, gist rev 65b0cd6b, main 04997dd) |
 | P7 | Manejo/revocación de PAT | S7 | Token vivo presente | PERMANENTE |
 | **P8** | **Carpeta local: de historia clínica a caché cifrado** (`01_carpeta_local_URGENTE.txt`) | S8 | ninguno | **FUSIONADO 2026-09-04: `claude/carpeta-local-cifrada`, banco 3.326/0, sin bump (S6 publica)** |
-| P9 | Migración del redactor a GLM-5.3 + medición 30 días (`09_migracion_glm_y_medicion.txt`) | S8 | Clave API general de z.ai (**hecho**) | PENDIENTE |
-| P10 | Barrera cero-identificables hacia la IA (`02_barrera_cero_identificables.txt`) | S8 | P9 (la capa de proveedor primero) | PENDIENTE |
-| P11 | Consentimiento + purga 12 meses (`04_consentimiento.txt`) | S8 | P8+P10 (no publicar promesas que el código no cumple) | PENDIENTE |
-| P12 | Saneamiento y rendimiento (`06_saneamiento_rendimiento.txt`) | S8 | banco verde | PENDIENTE |
-| P13 | Observabilidad y adopción (`07_observabilidad_adopcion.txt`) | S8 | P9 | PENDIENTE |
+| P9 | Migración del redactor a GLM-5.3 + medición 30 días (`09_migracion_glm_y_medicion.txt`) | S8 | Clave API general de z.ai (**hecho**) | FUSIONADO v18.3.0 (2026-09-05) |
+| P10 | Barrera cero-identificables hacia la IA (`02_barrera_cero_identificables.txt`) | S8 | P9 (la capa de proveedor primero) | FUSIONADO v18.3.0 (2026-09-05) |
+| P11 | Consentimiento + purga 12 meses (`04_consentimiento.txt`) | S8 | P8+P10 (no publicar promesas que el código no cumple) | FUSIONADO v18.3.0 (2026-09-05) |
+| P12 | Saneamiento y rendimiento (`06_saneamiento_rendimiento.txt`) | S8 | banco verde | FUSIONADO v18.3.0 — 3 defectos menores abiertos (docs/SANEAMIENTO.md) |
+| P13 | Observabilidad y adopción (`07_observabilidad_adopcion.txt`) | S8 | P9 | FUSIONADO v18.3.0 (2026-09-05) |
 
-Grafo: P1 → P2 → P3. P8 FUSIONADO (falta publicar vía S6). P9 → P10 → P11. P4, P5, P12
+Grafo: P1 → P2 → P3. P8-P13 publicados en v18.3.0 (2026-09-05). P9 → P10 → P11. P4, P5, P12
 independientes. P6 cierra cada tanda. P7 transversal. Gate cerrado → despacha
 sin volver a preguntar.
 
