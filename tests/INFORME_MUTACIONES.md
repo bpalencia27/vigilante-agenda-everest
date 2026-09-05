@@ -13115,3 +13115,27 @@ y se restauraron verificando `git diff` vacío tras cada una.
 
 Banco completo: **3.357 comprobaciones pasan, 0 fallan.**
 
+## v18.2.2 (P11) — compuerta de consentimiento antes de todo (+ purga de 12 meses del tablero)
+
+Nada —ni nodo, ni temporizador, ni petición de red, ni evento de telemetría— corre
+antes de que el médico acepte la versión vigente de los Términos (v1.1, z.ai+Gemini).
+La nueva `suite_82_consentimiento` fija la decisión pura, el fail-closed, la constancia
+exacta `{version, ts, id}`, el TTL del rechazo, el foco atrapado y la cadena estructural
+(solo `boot();` vive dentro de `mtrArrancarTodo`). Los tres latidos base se movieron a
+`_instalarLatidosBase()` (tras el kill-switch, dentro de boot): R5.1-bis exige que sus
+dos `setInterval` literales queden en `state.timers`, y el contador de suite_17 subió de
+17 a 19. La purga de 12 meses es entregable Apps Script aparte
+(`docs/tablero_purga_12m.gs`, instalación manual del dueño) y no toca el userscript.
+Todas las mutaciones se aplicaron UNA A LA VEZ sobre el archivo de producción y se
+restauraron verificando el retorno exacto de cada línea tras cada corrida.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 553 | la compuerta se abre en fail-open (`mtrCompuertaDecision` devuelve `arrancar:true` en el caso «preguntar»): sin constancia el script arranca igual | *suite_82: P11·0 y P11·1 — «sin constancia previa, la decisión es preguntar los términos» y «lo único que aparece es la pantalla de términos» (más 6 casos que dependen del velo) — mutante 3 pasan / 8 fallan; restaurado 11/0* | Sí |
+| 554 | `mtrConsentimientoConstancia` deja de comparar la versión (`c.version !== TERMINOS_VERSION` → `false`): una constancia de la 1.0 autoriza la 1.1 sin re-preguntar | *suite_82: P11·6 — «una constancia de la 1.0 NO sirve para la 1.1: se re-pregunta» — mutante 10 pasan / 1 falla; restaurado 11/0* | Sí |
+| 555 | `_instalarLatidosBase` no registra el intervalo NAV en `state.timers` (`state.timers.push(navLog)` comentado): el kill-switch deja latiendo el registro de navegación tras el apagado | *suite_17: «boot registra los 19 timers que crea (… + los 2 latidos base v18.2: navLog, vigiaReloj)» — esperaba 19 y obtuvo 18 — mutante 51 pasan / 1 falla; restaurado 52/0* | Sí |
+| 556 | `_terminosAlRechazar` no deja la marca local (`GM_setValue(TERMINOS_GM_RECHAZO,…)` comentado): el rechazo no se recuerda y el TTL queda huérfano | *suite_82: P11·0 y P11·2 — «_terminosAlRechazar solo deja la marca con hora» y «queda marca local de rechazo con hora» — mutante 9 pasan / 2 fallan; restaurado 11/0* | Sí |
+| 557 | `_terminosAlAceptar` guarda la constancia sin el identificador (`id: mtrIdentificadorParaConstancia()` comentado): la constancia pierde al firmante | *suite_82: P11·0 y P11·4 — «con el identificador del padrón sembrado» y «constancia con el identificador validado por Everest (uid:101)» — mutante 9 pasan / 2 fallan; restaurado 11/0* | Sí |
+
+Banco completo: **3.368 comprobaciones pasan, 0 fallan.**
+
