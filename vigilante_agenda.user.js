@@ -32197,13 +32197,17 @@
   //  probar toda la lógica sin navegador: el banco le pasa un sistema de
   //  archivos de mentira y comprueba lo que se escribiría.
   // ===================================================================
-  const VGL_CARPETA_VERSION = 1;
+  // v18.0.144 — el formato pasó de «historia clínica identificada» a CACHÉ MÍNIMO: por control
+  // solo queda lo que el ancla del redactor (mtrAnclaControlAnterior) lee. Se eliminaron
+  // `laboratorios` y `series` (se escribían y NUNCA se leían: grep del 04-sep-2026 —
+  // `.series` 0 consumidores; `laboratorios` solo se CONTABAN sus claves), y el resto de
+  // campos se retiró tras verificar uno a uno que ningún otro consumidor los tocaba.
+  const VGL_CARPETA_VERSION = 2;
 
   // La instantánea de un control. PURA: recibe el resumen ya calculado y
   // devuelve el objeto que se guardará. Nada de relojes ni de DOM aquí.
   function mtrInstantaneaDeResumen(resumen, extras, hoyIso) {
     const r = resumen || {};
-    const x = extras || {};
     const erc = r.erc || {};
     const riesgo = r.riesgo || {};
     const meta = r.meta || {};
@@ -32211,141 +32215,293 @@
     return {
       v: VGL_CARPETA_VERSION,
       fecha: hoyIso || r._hoyIso || null,
-      medico: num(x.medico) || null,
-      edad: num((r.factores || {}).edad),
-      sexo: mtrSexoCanonico((r.factores || {}).sexo),   // A5: la carpeta archiva "F"/"M", no el crudo "MASCULINO"
-      riesgo: {
-        categoria: riesgo.categoria || null,
-        paso: num(riesgo.paso),
-        criterios: Array.isArray(riesgo.criterios) ? riesgo.criterios.slice() : [],
-      },
+      riesgo: { categoria: riesgo.categoria || null },
       renal: {
-        crcl: num(erc.crcl), egfr: num(erc.egfr),
-        estadioAdministrativo: erc.estadioAdministrativo || null,
+        egfr: num(erc.egfr),
         estadioClinico: erc.estadioClinico || null,
-        egfrPrevio: num(erc.egfrPrevio), egfrPrevioFecha: erc.egfrPrevioFecha || null,
-        sospechaIra: !!erc.sospechaIra, remitirNefrologia: !!erc.remitirNefrologia,
       },
       metas: {
         ldl: num(meta.metas && meta.metas.ldl), ldlActual: num(meta.ldlActual),
-        ldlBasal: num(meta.ldlBasal), reduccionPct: num(meta.reduccionPct),
-        estado: meta.estado || null,
         hba1c: num(r.hba1c && r.hba1c.actual), hba1cMeta: num(r.hba1c && r.hba1c.meta),
       },
-      laboratorios: r._ultimos || {},
-      series: r._series || {},
-      // v17.0.2 — AUDITORÍA: `mtrLeerMedicamentos` devuelve null cuando NO SE PUDO leer, y
-      // su contrato lo dice expresamente («no es lo mismo que no toma nada»). Aquí se
-      // colapsaba a [], así que el registro permanente del paciente afirmaba que ese día
-      // no tomaba ningún medicamento. Se conserva la diferencia: null = no se leyó.
+      // v17.0.2 — AUDITORÍA (se conserva): `mtrLeerMedicamentos` devuelve null cuando NO SE
+      // PUDO leer («no es lo mismo que no toma nada»). null = no se leyó; no se colapsa a [].
       medicamentos: Array.isArray(r.medicamentos) ? r.medicamentos.slice() : null,
-      duplicidades: (function () {
-        try { return mtrDuplicidadesTerapeuticas(r.medicamentos || []).map((d) => d.rotulo); } catch (e) { return []; }
-      })(),
-      uroanalisis: r.uroanalisis || null,
       plan: {
-        ftl: num(r.plan && r.plan.ftl),
-        control: num(r.plan && r.plan.control && r.plan.control.fecha),
         ordenar: (r.plan && Array.isArray(r.plan.ordenar)) ? r.plan.ordenar.map((a) => a.nombre || a.clave).filter(Boolean) : [],
       },
-      confirmaciones: num(x.confirmaciones) || {},
-      notaInsertada: num(x.notaInsertada) || null,
     };
   }
 
-  // Historial COMPLETO, sin poda: la decisión fue explícita. Lo único que se
-  // evita es guardar dos veces la MISMA instantánea del mismo día — si el
-  // médico abre el panel cuatro veces en una consulta, el control es uno.
-  // Cuando algo cambió dentro del día, se REEMPLAZA la del día por la nueva
-  // (la última lectura es la buena), no se apila.
-  // ¿La instantánea nueva conserva al menos lo que ya tenía la guardada? Se mide por lo
-  // que de verdad importa: laboratorios leídos, categoría de riesgo y medicamentos.
+  // v18.0.144 — poda al esquema mínimo. Se aplica a TODO control que entra al caché: al que
+  // viene de un archivo del formato viejo (migración y fusión) y también a la instantánea
+  // nueva (doble seguro). El anidamiento es EXACTO al que lee mtrAnclaControlAnterior para
+  // que su salida no cambie ni una coma.
+  function _vglCarpetaPodarControl(c) {
+    const o = c || {};
+    const ren = o.renal || {}, met = o.metas || {}, pla = o.plan || {};
+    return {
+      v: VGL_CARPETA_VERSION,
+      fecha: o.fecha || null,
+      riesgo: { categoria: (o.riesgo && o.riesgo.categoria) || null },
+      renal: {
+        egfr: ren.egfr === undefined ? null : ren.egfr,
+        estadioClinico: ren.estadioClinico || null,
+      },
+      metas: {
+        ldl: met.ldl === undefined ? null : met.ldl,
+        ldlActual: met.ldlActual === undefined ? null : met.ldlActual,
+        hba1c: met.hba1c === undefined ? null : met.hba1c,
+        hba1cMeta: met.hba1cMeta === undefined ? null : met.hba1cMeta,
+      },
+      medicamentos: Array.isArray(o.medicamentos) ? o.medicamentos.slice() : null,
+      plan: { ordenar: Array.isArray(pla.ordenar) ? pla.ordenar.slice() : [] },
+    };
+  }
+
+  // Historial PODADO al esquema mínimo (v18.0.144). Lo único que se evita sigue igual:
+  // guardar dos veces la MISMA instantánea del mismo día — si el médico abre el panel
+  // cuatro veces en una consulta, el control es uno. Cuando algo cambió dentro del día,
+  // se REEMPLAZA la del día por la nueva (la última lectura es la buena), no se apila.
+  // ¿La nueva conserva al menos lo que ya tenía la guardada? v18.0.144: la riqueza ya NO
+  // se mide por claves de laboratorio (esos campos no existen) sino por cuántos de los
+  // CAMPOS CONSERVADOS vienen con valor.
   function _mtrInstantaneaAlMenosTanRica(nueva, vieja) {
     if (!vieja) return true;
     if (!nueva) return false;
     const n = (x) => {
-      const o = x || {};
+      const o = x || {}, ren = o.renal || {}, met = o.metas || {}, pla = o.plan || {};
+      let campos = 0;
+      if (o.riesgo && o.riesgo.categoria) campos++;
+      if (ren.egfr != null) campos++;
+      if (ren.estadioClinico) campos++;
+      if (met.ldl != null) campos++;
+      if (met.ldlActual != null) campos++;
+      if (met.hba1c != null) campos++;
+      if (met.hba1cMeta != null) campos++;
+      if (Array.isArray(pla.ordenar) && pla.ordenar.length) campos++;
       return {
-        labs: Object.keys(o.laboratorios || {}).length,
-        riesgo: (o.riesgo && o.riesgo.categoria) ? 1 : 0,
+        campos,
         // v17.1.0 (#113) — Se comparan medicamentos ÚNICOS, no renglones. Con la lista
         // cruda, el día del despliegue un paciente con instantánea previa de 27 renglones
         // habría recibido una nueva de 9 deduplicados: `a.meds >= b.meds` daba falso, la
         // lectura buena se descartaba en silencio y su archivo se quedaba congelado con la
-        // lista vieja para siempre. La guarda existe para detectar lecturas POBRES (labs
-        // caídos), no cambios de formato.
+        // lista vieja para siempre. La guarda existe para detectar lecturas POBRES, no
+        // cambios de formato.
         meds: Array.isArray(o.medicamentos) ? mtrMedicamentosUnicos(o.medicamentos).length : 0,
-        renal: (o.renal && (o.renal.egfr != null || o.renal.crcl != null)) ? 1 : 0,
       };
     };
     const a = n(nueva), b = n(vieja);
-    return a.labs >= b.labs && a.riesgo >= b.riesgo && a.meds >= b.meds && a.renal >= b.renal;
+    return a.campos >= b.campos && a.meds >= b.meds;
   }
 
   function mtrHistorialAgregar(historialPrevio, instantanea) {
-    const prev = (historialPrevio && Array.isArray(historialPrevio.controles)) ? historialPrevio.controles.slice() : [];
-    const inst = instantanea || {};
+    // v18.0.144 — todo control entra PODADO: los que vienen de un archivo viejo sueltan aquí
+    // edad, laboratorios, series y demás campos retirados; `doc` ya no existe (la cédula no
+    // vuelve al contenido del archivo: vive solo en el nombre seudonimizado).
+    const prev = ((historialPrevio && Array.isArray(historialPrevio.controles)) ? historialPrevio.controles : [])
+      .map((c) => { try { return _vglCarpetaPodarControl(c); } catch (e) { return c; } });
+    const inst = _vglCarpetaPodarControl(instantanea || {});
     if (!inst.fecha) return { v: VGL_CARPETA_VERSION, controles: prev };
     const i = prev.findIndex((c) => c && c.fecha === inst.fecha);
-    // v17.0.1 — AUDITORÍA DE LA v17: aquí la nueva instantánea reemplazaba SIEMPRE a la
-    // del mismo día. Pero no todas las lecturas son iguales: si los laboratorios no
-    // respondieron, el resumen sale con `laboratorios: {}` y `riesgo: null`, y esa
-    // versión pobre borraba la buena que se había guardado media hora antes. «La última
-    // lectura es la buena» solo vale si la última es al menos tan completa como la que
-    // hay. Cuando no lo es, se conserva la anterior y se anota el intento.
+    // v17.0.1 — AUDITORÍA DE LA v17 (se conserva): la nueva instantánea NO reemplaza
+    // SIEMPRE a la del mismo día. Si la lectura salió pobre (campos sin valor), esa
+    // versión pobre no puede borrar la buena que se guardó media hora antes. «La última
+    // lectura es la buena» solo vale si la última es al menos tan completa como la que hay.
     if (i >= 0) {
       if (_mtrInstantaneaAlMenosTanRica(inst, prev[i])) prev[i] = inst;
     } else prev.push(inst);
     prev.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
     return {
       v: VGL_CARPETA_VERSION,
-      doc: (historialPrevio && historialPrevio.doc) || inst.doc || null,
       controles: prev,
     };
   }
 
-  // 02-sep (cierre adversarial, fila 21) — el nombre sale de la cédula CANÓNICA (sin ceros de
-  // relleno), la misma clave que indexa toda la memoria local desde v17.48.0. Antes solo
-  // quitaba letras: «0000111111» y «111111» daban dos archivos para el mismo paciente.
-  function mtrNombreArchivoPaciente(docId) {
-    const d = normalizeKey(docId);
-    return d ? d + ".json" : null;
+  // v18.0.144 — SEUDONIMIZACIÓN DEL NOMBRE DE ARCHIVO. Antes el nombre ERA la cédula: un
+  // listado de la carpeta delataba a cada paciente. Ahora es HMAC-SHA-256(cédula, clave del
+  // equipo) en hexadecimal. NO un hash simple a propósito: una cédula colombiana son ~10
+  // dígitos, y un SHA-256 sin clave se revierte por fuerza bruta en segundos recorriendo los
+  // 10^10 números posibles. Con HMAC y una clave de 256 bits generada al azar por equipo, ese
+  // ataque se vuelve imposible sin el almacenamiento del navegador.
+  // La clave vive SOLO en GM_setValue (almacenamiento del navegador), JAMÁS en la carpeta. Si
+  // se pierde (perfil limpiado), el caché viejo queda ilegible y se descarta: es un caché, no
+  // un registro — la fuente de verdad siempre es Everest.
+  const VGL_CARPETA_CLAVE_GM = "vgl_carpeta_clave_equipo";
+  const VGL_CARPETA_PURGA_GM = "vgl_carpeta_purga_dia";
+  const VGL_CARPETA_TIPO = "cache-derivado-no-historia-clinica";
+  const _VGL_CARPETA_RE_CACHE = /^[0-9a-f]{64}\.json$/i;    // nombre nuevo: HMAC hex
+  const _VGL_CARPETA_RE_LEGADO = /^\d+\.json$/i;            // nombre viejo: la cédula misma
+  let _vglCarpetaClaveCache = null;
+  let _vglCarpetaClaveAesCache = null;
+
+  function _vglHex(bytes) {
+    return Array.prototype.map.call(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  function _vglBytesDeHex(hex) {
+    const h = String(hex || "").toLowerCase();
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+    return out;
+  }
+  function _vglBytesAB64(bytes) {
+    let s = "";
+    const u = new Uint8Array(bytes);
+    for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+    return btoa(s);
+  }
+  function _vglB64ABytes(b64) {
+    const s = atob(String(b64 || ""));
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+
+  // La clave del equipo: 32 bytes al azar la primera vez, persistida en GM_storage.
+  // Devuelve el hex de 64 caracteres, o null si no hay webcrypto/GM (fail-closed: sin clave
+  // no se guarda NADA — antes de esta versión habría bastado un sha256 sin clave).
+  async function _vglCarpetaClaveEquipo() {
+    if (_vglCarpetaClaveCache) return _vglCarpetaClaveCache;
+    try {
+      let hex = null;
+      if (typeof GM_getValue !== "undefined") { try { hex = GM_getValue(VGL_CARPETA_CLAVE_GM, null); } catch (e) { hex = null; } }
+      if (hex && /^[0-9a-f]{64}$/i.test(String(hex))) {
+        _vglCarpetaClaveCache = String(hex).toLowerCase();
+        return _vglCarpetaClaveCache;
+      }
+      if (typeof crypto === "undefined" || !crypto.subtle || typeof crypto.getRandomValues !== "function") return null;
+      hex = _vglHex(crypto.getRandomValues(new Uint8Array(32)));
+      if (typeof GM_setValue === "undefined") return null;   // sin dónde guardarla, no se fabrica
+      GM_setValue(VGL_CARPETA_CLAVE_GM, hex);
+      _vglCarpetaClaveCache = hex;
+      return hex;
+    } catch (e) { return null; }
+  }
+
+  // Nombre de archivo = HMAC-SHA-256(cédula canónica, clave del equipo) + ".json".
+  // ASÍNCRONA desde v18.0.144 (importKey/sign son async). Fail-closed: sin clave de equipo
+  // devuelve null y el guardado no ocurre — jamás cae al nombre-cédula de antes.
+  async function mtrNombreArchivoPaciente(docId) {
+    const d = normalizeKey(docId);       // 02-sep (fila 21) — cédula CANÓNICA, sin ceros de relleno
+    if (!d) return null;
+    const claveHex = await _vglCarpetaClaveEquipo();
+    if (!claveHex) return null;
+    try {
+      const k = await crypto.subtle.importKey("raw", _vglBytesDeHex(claveHex), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const mac = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(d));
+      return _vglHex(mac) + ".json";
+    } catch (e) { return null; }
+  }
+
+  // ---------- capa 2: contenido CIFRADO (AES-GCM 256, IV nuevo por escritura) ----------
+  // La clave AES se deriva de la del equipo con HKDF (salt/info fijos de dominio): así la
+  // clave que nombra archivos y la que cifra contenido son distintas, pero ambas mueren con
+  // el almacenamiento del navegador. La cabecera del archivo queda EN CLARO y solo dice qué
+  // es: versión y la marca de que esto es un caché derivado, no una historia clínica.
+  async function _vglCarpetaClaveAes() {
+    if (_vglCarpetaClaveAesCache) return _vglCarpetaClaveAesCache;
+    const claveHex = await _vglCarpetaClaveEquipo();
+    if (!claveHex) return null;
+    try {
+      const maestra = await crypto.subtle.importKey("raw", _vglBytesDeHex(claveHex), "HKDF", false, ["deriveKey"]);
+      const aes = await crypto.subtle.deriveKey(
+        { name: "HKDF", hash: "SHA-256", salt: new TextEncoder().encode("vgl-carpeta-v1"), info: new TextEncoder().encode("aes-gcm") },
+        maestra, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+      _vglCarpetaClaveAesCache = aes;
+      return aes;
+    } catch (e) { return null; }
+  }
+
+  async function _vglCarpetaCifrar(historial) {
+    const aes = await _vglCarpetaClaveAes();
+    if (!aes) return null;
+    try {
+      const iv = crypto.getRandomValues(new Uint8Array(12));   // IV nuevo en CADA escritura
+      const claro = new TextEncoder().encode(JSON.stringify(historial));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aes, claro));
+      return JSON.stringify({ v: 2, tipo: VGL_CARPETA_TIPO, iv: _vglBytesAB64(iv), datos: _vglBytesAB64(ct) });
+    } catch (e) { return null; }
+  }
+
+  // Devuelve el historial descifrado {controles:[…]…} o null (clave perdida, corrupción,
+  // formato desconocido). null = el archivo se descarta: ES UN CACHÉ, no se respalda ni se
+  // bloquea el guardado por su culpa.
+  async function _vglCarpetaDescifrar(texto) {
+    let sobre = null;
+    try { sobre = JSON.parse(texto); } catch (e) { return null; }
+    if (!sobre || typeof sobre !== "object" || sobre.tipo !== VGL_CARPETA_TIPO || Number(sobre.v) !== 2) return null;
+    const aes = await _vglCarpetaClaveAes();
+    if (!aes) return null;
+    try {
+      const claro = await crypto.subtle.decrypt({ name: "AES-GCM", iv: _vglB64ABytes(sobre.iv) }, aes, _vglB64ABytes(sobre.datos));
+      const h = JSON.parse(new TextDecoder().decode(claro));
+      return (h && Array.isArray(h.controles)) ? h : null;
+    } catch (e) { return null; }
   }
   // 02-sep (fila 21) — la carpeta se escribió antes de esa canonicalización, así que puede tener
   // «0000111111.json». Sin esto, el historial viejo quedaba huérfano en silencio: la lectura
   // por nombre exacto no lo veía (el Panel no mostraba los controles previos) y la siguiente
-  // instantánea creaba «111111.json» al lado. Mismo patrón que _vglClaveDeDoc para la cosecha:
+  // instantánea creaba otro archivo al lado. Mismo patrón que _vglClaveDeDoc para la cosecha:
   // se lee y se escribe donde YA está archivado. Un `fs` sin `listar` se comporta como antes.
   // v18.0.104 — refutador de v18.0.99 (fila 21): TODOS los archivos de la misma cédula canónica,
   // el canónico primero y los legados en orden fijo (no el de `entries()`, que no está
   // garantizado). Un archivo de OTRA cédula nunca entra: solo casa la clave canónica exacta.
+  // v18.0.144 — el canónico ya no es la cédula sino su HMAC; los legados siguen siendo
+  // «dígitos.json» de la clave canónica (la migración los absorbe y los borra).
   async function _vglCarpetaNombresDeDoc(io, docId) {
-    const canon = mtrNombreArchivoPaciente(docId);
-    if (!canon) return [];
-    if (!io || typeof io.listar !== "function") return [canon];
+    const clave = normalizeKey(docId);
+    if (!clave) return [];
+    const canon = await mtrNombreArchivoPaciente(docId);
+    if (!io || typeof io.listar !== "function") return canon ? [canon] : [];
     let nombres = null;
     try { nombres = await io.listar(); } catch (e) { nombres = null; }
-    if (!Array.isArray(nombres)) return [canon];
-    const clave = normalizeKey(docId);
+    if (!Array.isArray(nombres)) return canon ? [canon] : [];
     const legados = nombres
       .map(String)
-      .filter((n) => n !== canon && /^\d+\.json$/i.test(n) && normalizeKey(n.replace(/\.json$/i, "")) === clave)
+      .filter((n) => _VGL_CARPETA_RE_LEGADO.test(n) && normalizeKey(n.replace(/\.json$/i, "")) === clave)
       .sort();
-    return (nombres.indexOf(canon) >= 0 ? [canon] : []).concat(legados).concat(nombres.indexOf(canon) >= 0 || legados.length ? [] : [canon]);
+    const tieneCanon = !!(canon && nombres.indexOf(canon) >= 0);
+    return (tieneCanon ? [canon] : []).concat(legados).concat(tieneCanon || legados.length || !canon ? [] : [canon]);
   }
   async function _vglCarpetaResolverNombre(io, docId) {
     const lista = await _vglCarpetaNombresDeDoc(io, docId);
     return lista.length ? lista[0] : null;
   }
-  // Lee y FUSIONA todos los archivos de la cédula (escisión canónico + legado, o dos legados):
-  // ningún control queda huérfano. Devuelve null si no hay ninguno legible.
+  // Entiende un archivo del caché en CUALQUIERA de sus dos formatos: sobre cifrado v2 (se
+  // descifra) o historial viejo en claro con {controles} (se poda). Devuelve el historial
+  // PODADO o null. Devuelve null también cuando el sobre es nuestro pero la clave ya no abre:
+  // es un caché, no una historia clínica — se descarta y sigue.
+  async function _vglCarpetaEntender(txt) {
+    if (txt == null || !String(txt).trim()) return null;
+    const h = await _vglCarpetaDescifrar(txt);
+    if (h) return h;
+    try {
+      const j = JSON.parse(txt);
+      if (j && typeof j === "object" && !Array.isArray(j) && Array.isArray(j.controles)) {
+        return mtrHistorialAgregar(j, null);   // poda cada control vía mtrHistorialAgregar
+      }
+    } catch (e) {}
+    return null;
+  }
+  // ¿Es un sobre NUESTRO aunque no se pueda abrir? (clave perdida). Se usa en el guardado
+  // para decidir que ese archivo NO merece respaldo .roto: es caché propio, no un archivo
+  // ajeno que alguien dejó en la carpeta.
+  function _vglCarpetaEsSobreNuestro(txt) {
+    try {
+      const j = JSON.parse(txt);
+      return !!(j && typeof j === "object" && !Array.isArray(j) && j.tipo === VGL_CARPETA_TIPO);
+    } catch (e) { return false; }
+  }
+  // Lee y FUSIONA todos los archivos de la cédula (canónico + legados por migrar): ningún
+  // control queda huérfano. Devuelve null si no hay ninguno legible.
   async function _vglCarpetaLeerFusionado(io, docId) {
     const nombres = await _vglCarpetaNombresDeDoc(io, docId);
     let h = null;
     for (const n of nombres) {
-      let j = null;
-      try { const txt = await io.leer(n); j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
-      if (!j || !Array.isArray(j.controles)) continue;
+      let txt = null;
+      try { txt = await io.leer(n); } catch (e) { txt = null; }
+      const j = await _vglCarpetaEntender(txt);
+      if (!j) continue;
       if (!h) { h = j; continue; }
       for (const ctl of j.controles) { try { h = mtrHistorialAgregar(h, ctl); } catch (e) {} }
     }
@@ -32422,30 +32578,34 @@
     try {
       const h = await window.showDirectoryPicker({ id: "vgl-historias", mode: "readwrite" });
       if (!h) return { ok: false, motivo: "No se eligió ninguna carpeta." };
+      // v18.0.144 — RECHAZO (antes: solo se advertía). El caché que se guarda aquí es cifrado
+      // y seudonimizado, pero sube igual a la nube del servicio de sincronización, donde el
+      // control de retención y acceso ya no es del médico ni de la IPS. Se decide ANTES de
+      // asignar el handle: la carpeta no queda elegida y el guardado sigue apagado. El nombre
+      // puede dar un falso positivo (una carpeta local que se llame así); el costo de ese
+      // falso positivo es renombrar la carpeta, no perder datos.
+      if (_vglCarpetaPareceSincronizada(h.name)) {
+        try {
+          showToast("AMBAR", "Carpeta sincronizada con la nube",
+            "La carpeta «" + String(h.name || "") + "» parece pertenecer a un servicio de sincronización (OneDrive, Google Drive, Dropbox, iCloud…). Ahí NO se guarda nada: lo que se escribe en esa carpeta sale del equipo por cuenta de ese programa, aunque vaya cifrado. Elija una carpeta local, por ejemplo dentro de Documentos.",
+            true, "carpeta|sync");
+        } catch (e) {}
+        try { uxTrack("carpeta.sincronizada.rechazada"); } catch (e) {}
+        return { ok: false, motivo: "Carpeta sincronizada con la nube (" + String(h.name || "") + "): elija una carpeta LOCAL de este computador.", sincronizada: true };
+      }
       _vglCarpetaHandle = h;
       try { await _vglCarpetaGuardarHandle(h); } catch (e) {}   // v17.0.1 — sobrevive a la recarga
       try { uxTrack("carpeta.elegida"); } catch (e) {}
-      // v18.0.108 (S+ robustez, B5) — el navegador solo entrega el NOMBRE de la carpeta, no su
-      // ruta: si ese nombre delata una carpeta sincronizada con la nube, se dice. No se
-      // bloquea (puede ser una carpeta local que se llame así), pero el médico lo sabe.
-      const sincronizada = _vglCarpetaPareceSincronizada(h.name);
-      if (sincronizada) {
-        try {
-          showToast("AMBAR", "Carpeta sincronizada con la nube",
-            "La carpeta «" + String(h.name || "") + "» parece pertenecer a un servicio de sincronización: lo que se guarde ahí (historias con cédula) SÍ sale del equipo por cuenta de ese programa. Si no es lo que quiere, elija una carpeta local, por ejemplo dentro de Documentos.",
-            true, "carpeta|sync");
-        } catch (e) {}
-        try { uxTrack("carpeta.sincronizada"); } catch (e) {}
-      }
-      return { ok: true, nombre: h.name || "carpeta", sincronizada: sincronizada };
+      return { ok: true, nombre: h.name || "carpeta" };
     } catch (e) {
       // El usuario cerró el diálogo: no es un error que haya que gritar.
       return { ok: false, motivo: (e && e.name === "AbortError") ? "Elección cancelada." : "No se pudo abrir la carpeta: " + ((e && e.message) || e) };
     }
   }
 
-  // Guarda la instantánea en <carpeta>/<cédula>.json, fusionándola con lo que
-  // ya hubiera. `fs` es la costura de prueba: {leer(nombre), escribir(nombre, texto)}.
+  // Guarda la instantánea en <carpeta>/<HMAC de la cédula>.json (v18.0.144: antes era la
+  // cédula misma), cifrada y fusionada con lo que ya hubiera. `fs` es la costura de prueba:
+  // {leer(nombre), escribir(nombre, texto), listar(), borrar(nombre)}.
   // v17.0.1 — AUDITORÍA DE LA v17: el guardado es un leer-fusionar-reescribir del archivo
   // entero, sin candado, y dos módulos del mismo paciente pueden dispararlo a la vez
   // (Laboratorios y el Panel llaman ambos a mtrResumenDesdeModalLabs). Dos escrituras
@@ -32470,7 +32630,11 @@
     // misma, y al reinsertarse queda al FINAL: la posición de cada clave refleja su
     // ÚLTIMO uso, no el primero, y la poda solo alcanza a quien de verdad lleva 200
     // pacientes distintos sin actividad.
-    const nombreCola = mtrNombreArchivoPaciente(docId) || String(docId == null ? "" : docId);
+    // v18.0.144 — la clave de cola era `mtrNombreArchivoPaciente(docId)`, pero esa función es
+    // async desde el cambio a HMAC: un Promise siempre es truthy y TODOS los docId caían en la
+    // MISMA clave de cola. Se indexa por la cédula canónica (la misma que alimenta el HMAC,
+    // sin ceros de relleno): única por paciente, síncrona y estable.
+    const nombreCola = normalizeKey(docId) || String(docId == null ? "" : docId);
     let previoEnCola = _vglCarpetaCola.get(nombreCola);
     if (previoEnCola !== undefined) _vglCarpetaCola.delete(nombreCola);
     if (_vglCarpetaCola.size > 200) {
@@ -32483,14 +32647,22 @@
   }
 
   async function _vglCarpetaGuardarAhora(docId, instantanea, fs) {
-    if (!mtrNombreArchivoPaciente(docId)) return { ok: false, motivo: "Sin cédula legible no se puede nombrar el archivo." };
+    if (!normalizeKey(docId)) return { ok: false, motivo: "Sin cédula legible no se puede nombrar el archivo." };
     const io = fs || _vglCarpetaFsReal();
     if (!io) return { ok: false, motivo: "No hay carpeta elegida todavía." };
-    const nombre = await _vglCarpetaResolverNombre(io, docId);   // 02-sep — donde YA esté archivado
-    // v18.0.104 (fila 21) — si hay más de un archivo de la misma cédula (escisión previa), el
-    // previo es la FUSIÓN de todos: el archivo que se escribe se lleva todos los controles.
+    // v18.0.144 — SIEMPRE el canónico HMAC. Si la carpeta aún tiene el archivo viejo
+    // «<cédula>.json», su contenido se fusiona aquí abajo y el original se borra al final.
+    // Fail-closed: sin clave de equipo el nombre es null y NO se guarda nada — jamás cae
+    // al nombre-cédula de antes.
+    const nombre = await mtrNombreArchivoPaciente(docId);
+    if (!nombre) return { ok: false, motivo: "No se pudo derivar el nombre seudonimizado de este paciente (sin clave de equipo no se guarda nada). Lo de Everest no se toca." };
+    // Contenido previo de TODOS los archivos de esta cédula (canónico + legados por migrar):
+    // ningún control queda huérfano cuando el guardado absorbe al archivo viejo.
     let _fusionPrevia = null;
-    try { const ns = await _vglCarpetaNombresDeDoc(io, docId); if (ns.length > 1) _fusionPrevia = await _vglCarpetaLeerFusionado(io, docId); } catch (e) { _fusionPrevia = null; }
+    try {
+      const ns = await _vglCarpetaNombresDeDoc(io, docId);
+      if (ns.some((n) => n !== nombre)) _fusionPrevia = await _vglCarpetaLeerFusionado(io, docId);
+    } catch (e) { _fusionPrevia = null; }
     // v17.0.1 — AUDITORÍA DE LA v17. Este bloque tenía tres formas de BORRAR el historial
     // de un paciente, que es lo único irreparable que puede hacer esta función:
     //  (a) si el respaldo del archivo ilegible fallaba (disco lleno, permiso), el catch
@@ -32520,16 +32692,20 @@
       crudo = null;
     }
 
-    let previo = null, formaValida = false;
+    // v18.0.144 — el archivo existente puede ser: (a) sobre cifrado nuestro y legible → previo
+    // directo; (b) historial viejo en claro {controles} → se entiende y se poda; (c) sobre
+    // NUESTRO que ya no abre (clave perdida) → se descarta SIN respaldo: es caché propio, no
+    // una historia que rescatar; (d) cualquier otra cosa → respaldo .roto (guardas v17 intactas).
+    let previo = null, formaValida = true, sobreNuestro = false;
     if (crudo && String(crudo).trim()) {
-      try {
-        previo = JSON.parse(crudo);
-        formaValida = !!(previo && typeof previo === "object" && !Array.isArray(previo) && Array.isArray(previo.controles));
-      } catch (e) { previo = null; formaValida = false; }
-    } else {
-      formaValida = true;                 // archivo nuevo: no hay nada que entender
-      previo = null;
+      previo = await _vglCarpetaEntender(crudo);
+      if (previo) formaValida = true;
+      else {
+        formaValida = false;
+        sobreNuestro = _vglCarpetaEsSobreNuestro(crudo);
+      }
     }
+    if (sobreNuestro) { formaValida = true; previo = null; }   // (c): caché ilegible, se reescribe
 
     let respaldo = null;
     if (!formaValida) {
@@ -32568,13 +32744,34 @@
       previo = null;
     }
 
-    const historial = mtrHistorialAgregar(_fusionPrevia || previo, Object.assign({ doc: String(docId) }, instantanea || {}));   // v18.0.104
+    // v18.0.144 — SIN `doc`: la cédula no vuelve al contenido del archivo (vive solo en el
+    // nombre seudonimizado), y la instantánea ya sale PODADA de mtrInstantaneaDeResumen.
+    const historial = mtrHistorialAgregar(_fusionPrevia || previo, instantanea || {});
+    // Capa 2: lo que se escribe es un sobre cifrado, no JSON en claro.
+    const texto = await _vglCarpetaCifrar(historial);
+    if (!texto) return { ok: false, motivo: "No se pudo cifrar el caché de este paciente (sin clave de equipo no se guarda nada). Lo de Everest no se toca." };
     try {
-      await io.escribir(nombre, JSON.stringify(historial, null, 1));
-      return { ok: true, archivo: nombre, controles: historial.controles.length, respaldo: respaldo };
+      await io.escribir(nombre, texto);
     } catch (e) {
       return { ok: false, motivo: "No se pudo escribir en la carpeta: " + ((e && e.message) || e) };
     }
+    // El guardado absorbió los archivos viejos «<cédula>.json» de esta cédula: sus controles
+    // ya viven en el canónico cifrado, así que el original identificable SE BORRA. Solo si su
+    // contenido se ENTENDIÓ (auditoría v17: un archivo ajeno o corrupto con ese nombre no se
+    // borra sin copia — lo deja la migración de arranque, que tampoco toca lo que no entiende).
+    let migrados = 0;
+    if (typeof io.borrar === "function") {
+      try {
+        const legados = (await _vglCarpetaNombresDeDoc(io, docId)).filter((n) => n !== nombre && _VGL_CARPETA_RE_LEGADO.test(n));
+        for (const lg of legados) {
+          let txt = null;
+          try { txt = await io.leer(lg); } catch (e) { continue; }
+          if (!(await _vglCarpetaEntender(txt))) continue;
+          try { await io.borrar(lg); migrados++; } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    return { ok: true, archivo: nombre, controles: historial.controles.length, respaldo: respaldo, migrados: migrados };
   }
 
   // La implementación real sobre File System Access, detrás de la misma costura.
@@ -32600,18 +32797,24 @@
         for await (const [n, h] of _vglCarpetaHandle.entries()) { if (h && h.kind === "file") nombres.push(n); }
         return nombres;
       },
+      // v18.0.144 — borrar archivos del caché (migración del formato viejo, purga a 365 días
+      // y «Borrar todo lo guardado»). Sin esto no hay migración: el original identificaba al
+      // paciente y quedarse en disco es exactamente lo que esta versión viene a quitar.
+      borrar: async (nombre) => {
+        await _vglCarpetaHandle.removeEntry(nombre);
+        return true;
+      },
     };
   }
 
   // Lee el historial de un paciente de la carpeta (para el prellenado y las
   // tendencias entre controles). Devuelve null si no hay carpeta o no hay archivo.
   async function vglCarpetaLeerHistorial(docId, fs) {
-    const nombre = mtrNombreArchivoPaciente(docId);
-    if (!nombre) return null;
+    if (!normalizeKey(docId)) return null;
     const io = fs || _vglCarpetaFsReal();
     if (!io) return null;
     try {
-      return await _vglCarpetaLeerFusionado(io, docId);   // 02-sep — tolera ceros de relleno; v18.0.104 — fusiona escisiones
+      return await _vglCarpetaLeerFusionado(io, docId);   // 02-sep — tolera ceros de relleno; v18.0.104 — fusiona escisiones; v18.0.144 — descifra o poda legados
     } catch (e) { return null; }
   }
 
@@ -33165,6 +33368,158 @@
     try { uxTrack("disco.banner_rechazado"); } catch (e) {}
   }
 
+  // ---------- capa 4 (v18.0.144): PURGA A 365 DÍAS ----------
+  // Este caché no es un archivo histórico: un control de hace más de un año ya no sirve de
+  // ancla para nadie. Una vez al día, al arrancar, se eliminan los controles de más de 365
+  // días y los archivos que queden sin controles. Telemetría: CONTEOS, jamás cuáles.
+  function _vglCarpetaFechaIsoHace(dias) {
+    const d = new Date(Date.now() - dias * 86400000);
+    const p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  }
+  async function _vglCarpetaPurgar(io) {
+    if (!io || typeof io.listar !== "function") return { controles: 0, archivos: 0 };
+    let nombres = null;
+    try { nombres = await io.listar(); } catch (e) { return { controles: 0, archivos: 0 }; }
+    if (!Array.isArray(nombres)) return { controles: 0, archivos: 0 };
+    const limite = _vglCarpetaFechaIsoHace(365);
+    let controles = 0, archivos = 0;
+    for (const nombre of nombres.map(String)) {
+      if (!_VGL_CARPETA_RE_CACHE.test(nombre)) continue;   // los legados los toma la migración
+      let txt = null;
+      try { txt = await io.leer(nombre); } catch (e) { continue; }
+      const h = await _vglCarpetaEntender(txt);
+      if (!h || !Array.isArray(h.controles) || !h.controles.length) continue;
+      const quedan = h.controles.filter((c) => c && c.fecha && c.fecha >= limite);
+      if (quedan.length === h.controles.length) continue;
+      controles += h.controles.length - quedan.length;
+      if (!quedan.length) {
+        if (typeof io.borrar === "function") { try { await io.borrar(nombre); archivos++; } catch (e) {} }
+      } else {
+        const texto = await _vglCarpetaCifrar({ v: VGL_CARPETA_VERSION, controles: quedan });
+        if (texto) { try { await io.escribir(nombre, texto); } catch (e) {} }
+      }
+    }
+    return { controles, archivos };
+  }
+  async function _vglCarpetaPurgarSiToca() {
+    try {
+      const hoy = (typeof todayStamp === "function") ? todayStamp() : "";
+      if (!hoy) return;
+      if (typeof GM_getValue !== "undefined" && GM_getValue(VGL_CARPETA_PURGA_GM, "") === hoy) return;
+      if (typeof GM_setValue !== "undefined") GM_setValue(VGL_CARPETA_PURGA_GM, hoy);
+      const r = await _vglCarpetaPurgar(_vglCarpetaFsReal());
+      if (r.controles || r.archivos) { try { uxTrack("carpeta.purgada", { n: r.controles, archivos: r.archivos }); } catch (e) {} }
+    } catch (e) {}
+  }
+
+  // ---------- capa 5 (v18.0.144): conteo y borrado total, para Ajustes ----------
+  async function _vglCarpetaContar(io) {
+    if (!io || typeof io.listar !== "function") return null;
+    let nombres = null;
+    try { nombres = await io.listar(); } catch (e) { return null; }
+    if (!Array.isArray(nombres)) return null;
+    let archivos = 0, controles = 0;
+    for (const nombre of nombres.map(String)) {
+      if (!_VGL_CARPETA_RE_CACHE.test(nombre)) continue;
+      let txt = null;
+      try { txt = await io.leer(nombre); } catch (e) { continue; }
+      const h = await _vglCarpetaEntender(txt);
+      if (!h) continue;
+      archivos++; controles += h.controles.length;
+    }
+    return { archivos, controles };
+  }
+
+  // «Borrar todo lo guardado»: elimina TODA huella del asistente en la carpeta. Los sobres
+  // cifrados se borran POR NOMBRE (no hace falta poder descifrarlos: también cubre el caso
+  // de clave perdida); los legados «<cédula>.json» solo si su contenido parsea como historial
+  // nuestro (un archivo ajeno que se llame igual no se toca); y los respaldos .roto de ambos.
+  async function vglCarpetaBorrarTodo(fs) {
+    const io = fs || _vglCarpetaFsReal();
+    if (!io || typeof io.listar !== "function" || typeof io.borrar !== "function") return { n: 0, fallos: [] };
+    let nombres = null;
+    try { nombres = await io.listar(); } catch (e) { return { n: 0, fallos: [] }; }
+    if (!Array.isArray(nombres)) return { n: 0, fallos: [] };
+    let n = 0; const fallos = [];
+    for (const nombre of nombres.map(String).sort()) {
+      let nuestro = _VGL_CARPETA_RE_CACHE.test(nombre)
+        || /^[0-9a-f]{64}\.roto-/i.test(nombre)
+        || /^\d+\.roto-/i.test(nombre);
+      if (!nuestro && _VGL_CARPETA_RE_LEGADO.test(nombre)) {
+        let txt = null;
+        try { txt = await io.leer(nombre); } catch (e) { txt = null; }
+        nuestro = !!(await _vglCarpetaEntender(txt));
+      }
+      if (!nuestro) continue;
+      try { await io.borrar(nombre); n++; } catch (e) { fallos.push(nombre); }
+    }
+    try { uxTrack("carpeta.borrado", { n: n, fallos: fallos.length }); } catch (e) {}
+    return { n: n, fallos };
+  }
+
+  // ---------- capa 6 (v18.0.144): MIGRACIÓN de lo que ya está en los discos ----------
+  // Hay archivos del formato viejo (cédula como nombre, contenido en claro) en discos reales
+  // HOY. Cada uno se lee, se poda al esquema mínimo, se cifra con el nombre nuevo y EL
+  // ORIGINAL SE BORRA: dejarlo al lado duplicaría el problema en vez de resolverlo. Si el
+  // borrado falla, la migración NO se da por terminada: se le dice al médico cuál archivo
+  // borrar a mano (File System Access no expone la ruta absoluta: se reporta el nombre de la
+  // carpeta elegida + el nombre del archivo) y se reintenta en cada arranque. Telemetría:
+  // cuántos migraron y cuántos quedan pendientes. Nunca cuáles.
+  async function _vglCarpetaMigrar(io) {
+    if (!io || typeof io.listar !== "function") return { migrados: 0, pendientes: [] };
+    let nombres = null;
+    try { nombres = await io.listar(); } catch (e) { return { migrados: 0, pendientes: [] }; }
+    if (!Array.isArray(nombres)) return { migrados: 0, pendientes: [] };
+    let migrados = 0; const pendientes = [];
+    for (const nombre of nombres.map(String).sort()) {
+      if (!_VGL_CARPETA_RE_LEGADO.test(nombre)) continue;
+      let txt = null;
+      try { txt = await io.leer(nombre); } catch (e) { continue; }   // ilegible: no es de esta migración
+      const h = await _vglCarpetaEntender(txt);
+      if (!h) continue;   // no es un historial del asistente: no se toca
+      const canon = await mtrNombreArchivoPaciente(nombre.replace(/\.json$/i, ""));
+      if (!canon) { pendientes.push(nombre); continue; }
+      // Fusiona con lo que ya viva en el canónico (idempotente: dedup por fecha).
+      let destino = h;
+      try {
+        let previoTxt = null;
+        try { previoTxt = await io.leer(canon); } catch (e) { previoTxt = null; }
+        const existente = await _vglCarpetaEntender(previoTxt);
+        if (existente) for (const ctl of existente.controles) destino = mtrHistorialAgregar(destino, ctl);
+      } catch (e) {}
+      const texto = await _vglCarpetaCifrar(destino);
+      if (!texto) { pendientes.push(nombre); continue; }
+      try { await io.escribir(canon, texto); }
+      catch (e) { pendientes.push(nombre); continue; }
+      if (typeof io.borrar !== "function") { pendientes.push(nombre); continue; }
+      try { await io.borrar(nombre); migrados++; }
+      catch (e) { pendientes.push(nombre); }   // el nuevo ya está escrito; el viejo resiste: pendiente
+    }
+    return { migrados, pendientes };
+  }
+  async function _vglCarpetaMigrarYReportar() {
+    try {
+      const r = await _vglCarpetaMigrar(_vglCarpetaFsReal());
+      try { uxTrack("carpeta.migrada", { n: r.migrados, pendientes: r.pendientes.length }); } catch (e) {}
+      if (r.migrados && !r.pendientes.length) {
+        try {
+          showToast("VERDE", "Carpeta actualizada al formato cifrado",
+            "Se convirtieron " + r.migrados + " archivo(s) del formato viejo al caché cifrado y los originales ya no están: en la carpeta no queda ninguna cédula.",
+            false, "carpeta|migracion");
+        } catch (e) {}
+      }
+      if (r.pendientes.length) {
+        try {
+          showToast("ROJO", "Migración incompleta — hace falta su mano",
+            "Este archivo(s) del formato viejo sigue en la carpeta con la cédula en el nombre y no pude borrarlo. Bórrelo(s) usted abriendo la carpeta elegida: " + r.pendientes.slice(0, 5).join(", ") + (r.pendientes.length > 5 ? " (y " + (r.pendientes.length - 5) + " más)" : "") + ". Hasta entonces el cambio no está completo; lo volveré a intentar en cada arranque.",
+            true, "carpeta|migracion");
+        } catch (e) {}
+      }
+      return r;
+    } catch (e) { return { migrados: 0, pendientes: [] }; }
+  }
+
   function renderResumen() {
     const hoy = statsToday(), dias = lastDays(7), evs = eventsOf();
     const max = Math.max(1, ...dias.map((d) => (d.fraude || 0) + (d.inasistencia || 0) + (d.atiempo || 0)));
@@ -33438,11 +33793,14 @@
         <div class="vgl-fld"><label>Aviso del paciente al abrir la historia<span class="vgl-hint">Referencia: un único aviso por paciente reúne, al abrir su historia, las actividades de prevención (PyM) pendientes, el abandono del Programa de Riesgo Cardiovascular y los laboratorios RCV sin resultado vigente (últimos 180 días). Siempre activo, sin interruptores separados.</span></label><span class="vgl-hint" style="opacity:.85">Siempre activo</span></div>
         <div class="vgl-fld"><label>Clave de la IA (Gemini)<span class="vgl-hint">Una sola clave para toda la sede; con ella el redactor de texto libre queda disponible para los médicos. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
         <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere la clave de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
-        <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO. Decisión suya (20-ago): un .json por cédula
-             con el historial completo de lo que el asistente vio en cada control. Vive en SU
-             computador; nada de esto viaja por red. -->
-        <div class="vgl-fld"><label>Carpeta de historias en su computador<span class="vgl-hint">Elija una carpeta y el asistente guardará, por cada control, un archivo <b>&lt;cédula&gt;.json</b> con lo que leyó: laboratorios, función renal, riesgo, metas, medicamentos, plan y la nota insertada. Historial completo, sin borrar nada. Además respalda la memoria del asistente en <b>Vigilante de Agenda/Memoria/</b> y una historia legible por día en <b>Vigilante de Agenda/Historias/&lt;cédula&gt;/</b>: si el navegador se queda sin espacio, lo aprendido se recupera desde su computador. <b>Todo se queda en su equipo</b> — el asistente no lo manda a ninguna red. El navegador pide permiso una vez y recuerda la carpeta entre sesiones. <b>Evite carpetas sincronizadas</b> (OneDrive, Google Drive, Dropbox, iCloud): lo que se guarde ahí sí sale del equipo por cuenta de ese programa.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
-        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: instantánea por control, historia diaria en «Historias/» y memoria respaldada en «Memoria/»." : "Sin carpeta elegida: el historial y la memoria solo viven en este navegador (vulnerables al espacio lleno)."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
+        <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO; v18.0.144 — ya NO guarda historias clínicas
+             identificadas: es un CACHÉ mínimo, cifrado y seudonimizado (sin cédulas dentro
+             ni en los nombres), que solo alimenta el ancla del «control anterior». La
+             memoria y la historia diaria legibles (v18.0.136) van aparte, en carpetas
+             propias dentro de la misma carpeta elegida. -->
+        <div class="vgl-fld"><label>Carpeta del caché en su computador<span class="vgl-hint">Elija una carpeta LOCAL y el asistente guardará, por cada control, un archivo <b>cifrado y sin cédula</b> (ni en el nombre ni dentro): solo fecha, riesgo, función renal, metas, medicamentos y exámenes ordenados — lo mínimo para recordarle el control anterior. Además respalda la memoria del asistente en <b>Vigilante de Agenda/Memoria/</b> y una historia legible por día en <b>Vigilante de Agenda/Historias/&lt;cédula&gt;/</b>. El navegador pide permiso una vez y recuerda la carpeta. <b>Las carpetas sincronizadas con la nube (OneDrive, Google Drive, Dropbox, iCloud) se RECHAZAN</b>: aunque el contenido vaya cifrado, subiría a cuentas que no controla la IPS.</span></label><button class="vgl-btn" id="c-carpeta">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Cambiar carpeta" : "Elegir carpeta…"}</button></div>
+        <div class="vgl-fld"><label>Estado de la carpeta<span class="vgl-hint" id="c-carpeta-est">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Carpeta activa: caché cifrado por control, historia diaria en «Historias/» y memoria respaldada en «Memoria/»." : "Sin carpeta elegida: el caché y la memoria solo viven en este navegador (vulnerables al espacio lleno)."}</span></label><b class="vgl-count" id="c-carpeta-n">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "✓" : "—"}</b></div>
+        <div class="vgl-fld"><label>Contenido guardado<span class="vgl-hint" id="c-carpeta-info">${(typeof vglCarpetaElegida === "function" && vglCarpetaElegida()) ? "Contando…" : "— (sin carpeta elegida)"}</span></label><button class="vgl-btn off" id="c-carpeta-borrar">Borrar todo lo guardado</button></div>
         <!-- v15.8.0 (N4) — texto REAL de los SMS, capturado por el administrador. Vacío = la
              vista previa describe el contenido sin inventar redacción. -->
         <div class="vgl-fld"><label>Texto real del SMS de cita<span class="vgl-hint">Péguelo tal cual llegó a un celular de prueba, cambiando los datos concretos por <b>{fecha} {hora} {sede} {profesional}</b>. La vista previa del agendamiento lo mostrará exacto. (Cómo capturarlo: guía CAPTURAR_MENSAJES de la entrega.)</span></label><textarea id="c-sms-plantilla" rows="3" placeholder="(sin capturar aún)">${escapeHtml(S.smsPlantillaCita || "")}</textarea></div>
@@ -33620,6 +33978,18 @@
     });
     // v17.0.0 — Elegir la carpeta local. El diálogo lo abre el navegador y exige un
     // gesto real del usuario: por eso va en el clic mismo, sin awaits antes.
+    // v18.0.144 — las sincronizadas se RECHAZAN (r.ok:false con motivo claro) y el conteo
+    // de «Contenido guardado» se refresca en cada apertura de Ajustes y tras cada acción.
+    const _ajustesCarpetaRefrescar = async () => {
+      const info = q("#c-carpeta-info");
+      if (!info) return;
+      if (!vglCarpetaElegida()) { info.textContent = "— (sin carpeta elegida)"; return; }
+      try {
+        const c = await _vglCarpetaContar(_vglCarpetaFsReal());
+        info.textContent = c ? (c.archivos + " archivo(s) cifrado(s) · " + c.controles + " control(es) — sin cédulas dentro ni en los nombres") : "No pude leer la carpeta.";
+      } catch (e) { info.textContent = "No pude leer la carpeta."; }
+    };
+    _ajustesCarpetaRefrescar();
     const carpBtn = q("#c-carpeta");
     if (carpBtn) carpBtn.addEventListener("click", async () => {
       const est = q("#c-carpeta-est"), n = q("#c-carpeta-n");
@@ -33629,13 +33999,33 @@
       }
       const r = await vglCarpetaElegir();
       if (est) est.textContent = r.ok
-        ? "Carpeta «" + r.nombre + "» activa: instantánea por control, historias diarias y memoria respaldadas en su computador."
+        ? "Carpeta «" + r.nombre + "» activa: caché cifrado por control, historias diarias y memoria respaldadas en su computador."
         : r.motivo;
       if (n) n.textContent = r.ok ? "✓" : "—";
-      if (r.ok) carpBtn.textContent = "Cambiar carpeta";
+      if (r.ok) { carpBtn.textContent = "Cambiar carpeta"; _ajustesCarpetaRefrescar(); }
       // v18.0.136 — al quedar la carpeta lista desde Ajustes también se restauran/migran
       // la memoria y las historias al disco (mismo camino que el banner de arranque).
       if (r.ok) { try { _vglDiscoActivar("ajustes"); } catch (e2) {} }
+    });
+    // v18.0.144 — «Borrar todo lo guardado» con confirmación en dos pasos (mismo patrón del
+    // botón Restablecer): el borrado es real, incluye los archivos viejos y los respaldos.
+    const carpDel = q("#c-carpeta-borrar");
+    if (carpDel) carpDel.addEventListener("click", async () => {
+      const info = q("#c-carpeta-info");
+      if (!vglCarpetaElegida()) { if (info) info.textContent = "— (sin carpeta elegida)"; return; }
+      if (carpDel.dataset.armado !== "1") {
+        carpDel.dataset.armado = "1";
+        carpDel.textContent = "¿Seguro? Toque de nuevo para borrar TODO el caché";
+        setTimeout(() => { try { carpDel.dataset.armado = ""; carpDel.textContent = "Borrar todo lo guardado"; } catch (e) {} }, 6000);
+        return;
+      }
+      try {
+        const r = await vglCarpetaBorrarTodo();
+        if (info) info.textContent = r.fallos.length
+          ? "Borré " + r.n + ", pero " + r.fallos.length + " archivo(s) resistieron: revise la carpeta a mano."
+          : "Listo: " + r.n + " archivo(s) eliminado(s). La carpeta ya no tiene nada del asistente.";
+      } catch (e) { if (info) info.textContent = "No pude borrar: revise la carpeta a mano."; }
+      try { carpDel.dataset.armado = ""; carpDel.textContent = "Borrar todo lo guardado"; } catch (e) {}
     });
     const exportBtn = q("#c-export-logs"); if (exportBtn) exportBtn.addEventListener("click", () => vglExportLogs());
     const testBtn = q("#c-test"); if (testBtn) testBtn.addEventListener("click", testNotifications);
@@ -35945,7 +36335,17 @@
     try { _cwfInstalarEscucha(); } catch (e) {}  // v17.24.0 — repinta el widget de farmacia de Conducta tras reformular
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
-    try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
+    // v17.0.1 — la carpeta del médico sobrevive a la recarga. v18.0.144 — al revivir, primero
+    // se MIGRAN los archivos viejos del formato identificable (cédula en el nombre; si alguno
+    // resiste al borrado, se le dice al médico cuál es) y después corre la purga diaria de
+    // 365 días. Nada de esto bloquea el arranque: va en .then y cada paso traga lo suyo.
+    try {
+      vglCarpetaRestaurar().then(async () => {
+        if (!vglCarpetaElegida()) return;
+        try { await _vglCarpetaMigrarYReportar(); } catch (e) {}
+        try { await _vglCarpetaPurgarSiToca(); } catch (e) {}
+      }).catch(() => {});
+    } catch (e) {}
     try { _vglDiscoArranque(); } catch (e) {}    // v18.0.136 — memoria en disco: revive, restaura, migra o pide autorizar la carpeta
     applySettings();   // aplica tus ajustes guardados (tolerancia, refresco, tema, sonido…) y arranca el reloj
     avisarSiActualizado();

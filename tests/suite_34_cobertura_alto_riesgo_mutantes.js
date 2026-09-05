@@ -780,7 +780,9 @@ module.exports = {
       for (const f of suites) {
         const src = fs.readFileSync(path.join(dir, f), "utf8");
         src.split("\n").forEach((line, idx) => {
-          const clean = line.replace(/\/\/.*$/, "").trim();
+          // v18.0.144: los tests viven en CRLF en disco y sin quitar el \r final el
+          // `$` no matchea — los comentarios NO se limpiaban y daban falsos positivos.
+          const clean = line.replace(/\r$/, "").replace(/\/\/.*$/, "").trim();
           if (/\b(?:t|it|describe|test)\.skip\s*\(/.test(clean)) skips.push(`${f}:${idx + 1}`);
           if (/\b(?:t|it|describe|test)\.xfail\s*\(/.test(clean)) xfails.push(`${f}:${idx + 1}`);
           if (/\bt\.casoAsync\s*\(/.test(clean) && !/\bawait\s+t\.casoAsync\s*\(/.test(clean)) {
