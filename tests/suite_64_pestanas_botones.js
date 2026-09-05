@@ -118,6 +118,72 @@ module.exports = {
       t.falso(a._vglEnPestana("anamnesis", docExamen), "ni el botón de redacción de Enfermedad actual");
     });
 
+    // v18.1 (M2M f34) — los cuatro ids ancla son frágiles: "ngb-tab-8" lo autogenera
+    // Angular POR POSICIÓN (se renumera si Everest añade o reordena pestañas) y los
+    // otros tres son ids internos que un rediseño puede borrar. La identidad estable de
+    // la barra es su COPY, ya declarado en VGL_PESTANAS: si un día NINGÚN id aparece,
+    // la barra debe localizarse por el TEXTO de sus pestañas — y aunque el tabset suelto
+    // de los programas aparezca PRIMERO en el DOM, no puede ganar, porque sus pestañas
+    // no contienen ningún copy de la barra principal.
+    t.caso("M2M f34: sin NINGÚN id ancla, la barra principal se localiza por el TEXTO de sus pestañas", () => {
+      const activo = { id: "", textContent: "Ruta Crónicos" };
+      const contenedorReal = {
+        querySelector(sel) {
+          const s = String(sel);
+          if (s.indexOf("active") >= 0 || s.indexOf('aria-selected="true"') >= 0) return activo;
+          return null;
+        },
+      };
+      const tabPrincipal = (texto) => ({ id: "", textContent: texto, closest: () => contenedorReal, parentElement: contenedorReal });
+      const docSinIds = {
+        getElementById: () => null,
+        // El tabset SUELTO de los programas aparece primero en el documento entero...
+        querySelector(sel) {
+          const s = String(sel);
+          if (s.indexOf("active") >= 0) return { id: "decoy", textContent: "Síndrome Metabólico (tabset suelto de Ruta Crónicos)" };
+          return null;
+        },
+        // ...pero sus pestañas no contienen NINGÚN copy de la barra principal.
+        querySelectorAll(sel) {
+          const s = String(sel);
+          if (s.indexOf("tab") >= 0) {
+            return [
+              { id: "prog-1", textContent: "Síndrome Metabólico", closest: () => null, parentElement: { esDecoy: true } },
+              { id: "prog-2", textContent: "Hipertensión Arterial", closest: () => null, parentElement: { esDecoy: true } },
+              tabPrincipal("Revision por sistema y Examen fisico"),
+              tabPrincipal("Ruta Crónicos"),
+              tabPrincipal("Antecedentes"),
+            ];
+          }
+          return [];
+        },
+      };
+      const barraHallada = a._vglBarraPestanasPrincipal(docSinIds);
+      t.cierto(!!barraHallada && !barraHallada.esDecoy, "encuentra la barra principal aunque ningún id ancla exista — y no es el tabset de los programas");
+      t.igual(
+        barraHallada && barraHallada.querySelector && barraHallada.querySelector('a.nav-link.active[role="tab"]').textContent,
+        "Ruta Crónicos",
+        "anclada por el TEXTO de sus pestañas, no por ids que Angular puede renumerar"
+      );
+
+      const r = a._vglPestanaActiva(docSinIds);
+      t.igual(r && r.texto, "Ruta Crónicos", "la pestaña activa se lee de la barra hallada por copy, no del decoy");
+      t.cierto(a._vglEnPestana("cronicos", docSinIds), "Auto-Labs SÍ en Ruta Crónicos hallada por texto");
+      t.falso(a._vglEnPestana("examen", docSinIds), "Normalidad NO se cuela en Ruta Crónicos");
+    });
+
+    // v18.1 (M2M f35) — fronteras del matching por copy: la normalización de espacios y
+    // el plegado de tildes/caja ya existían, pero ninguna prueba fijaba SUS fronteras.
+    // Si alguien endurece o afloja `_vglPestanaActiva`/`_vglEnPestana`, cae aquí.
+    t.caso("M2M f35: fronteras del copy — espacios dobles, MAYÚSCULAS totales, tildes y el negativo que solo comparte palabras", () => {
+      t.cierto(a._vglEnPestana("cronicos", barra("x", "RUTA  CRÓNICOS")), "MAYÚSCULAS totales con doble espacio interno: el copy matchea igual");
+      t.cierto(a._vglEnPestana("examen", barra("x", "  Revision   por sistema ")), "espacios múltiples y de borde, sin tilde");
+      t.cierto(a._vglEnPestana("impresion", barra("x", "Impresión Diagnóstica del episodio")), "el nombre de la pestaña dentro de un copy más largo");
+      t.falso(a._vglEnPestana("cronicos", barra("x", "Ruta de atención del paciente")), "«Ruta de atención» NO es «Ruta Crónicos»: compartir la palabra «ruta» no basta");
+      t.falso(a._vglEnPestana("impresion", barra("x", "Impresión terapéutica")), "«impresión terapéutica» no contiene «impresión diagnóstica»");
+      t.falso(a._vglEnPestana("anamnesis", barra("x", "Antecedentes anamnésicos")), "«antecedentes anamnésicos» no contiene el substring «anamnesis»: el parecido no basta");
+    });
+
     t.caso("_vglVisibleDeVerdad: distingue lo que Everest deja MONTADO por debajo de lo que de verdad se ve", () => {
       t.falso(a._vglVisibleDeVerdad(null), "sin elemento, no es visible");
       t.falso(a._vglVisibleDeVerdad(undefined), "tampoco con undefined");

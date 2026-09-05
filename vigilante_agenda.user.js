@@ -1869,7 +1869,10 @@
   // cuando NINGÚN radio del par está seleccionado todavía.
   function _marcarUroanalisisSi() {
       try {
-          const radios = document.querySelectorAll('input[name="resultadoPrograma.swUroanalisis"]');
+          // v18.1 (M2M f36) — ancla por SUFIJO del name: el prefijo "resultadoPrograma."
+          // es estructura interna del FormControl de Angular (refactorable); lo
+          // identitario del control es su nombre final, "swUroanalisis".
+          const radios = document.querySelectorAll('input[name$="swUroanalisis"]');
           let yaElegido = false, radioSi = null;
           for (const el of radios) {
               if (el.checked) yaElegido = true;
@@ -6684,6 +6687,18 @@
     impresion: { textos: ["impresion diagnostica", "impresión diagnóstica"], ids: ["impDiagnostica"] },
   };
 
+  // v18.1 (M2M f34) — los cuatro ids de "_vglBarraPestanasPrincipal" son frágiles:
+  // "ngb-tab-8" lo autogenera Angular POR POSICIÓN (se renumera si Everest añade o
+  // reordena pestañas) y pes/anamesis/impDiagnostica son ids internos que un rediseño
+  // puede borrar. La identidad estable de la barra es su COPY — el mismo principio con
+  // el que VGL_PESTANAS identifica cada pestaña. Índice de textos titulares de la barra
+  // (SIN "conducta": ese ancla vive en la zona de órdenes y puede no pertenecer a la
+  // barra) para el respaldo por texto de esa función.
+  const VGL_BARRA_TEXTOS = [].concat(
+    VGL_PESTANAS.examen.textos, VGL_PESTANAS.cronicos.textos, VGL_PESTANAS.antecedentes.textos,
+    VGL_PESTANAS.habitos.textos, VGL_PESTANAS.anamnesis.textos, VGL_PESTANAS.impresion.textos
+  );
+
   // v17.1.1 (reporte en vivo del 21-ago: los botones de una pestaña salían en OTRA —
   // «Enfermedad actual» y «Auto-Labs» en Revisión por sistema, «Normalidad fija» en Ruta
   // Crónicos) — buscar 'a.nav-link.active[role="tab"]' SIN ACOTAR devuelve el primer
@@ -6708,6 +6723,25 @@
         if (cont) return cont;
       } catch (e) {}
     }
+    // v18.1 (M2M f34) — respaldo por TEXTO cuando ningún id ancla: el copy de la barra es
+    // lo estable, los ids no. Se barre 'a[role="tab"]' y se sube al tablist del primero
+    // cuyo texto contenga un titular de VGL_BARRA_TEXTOS. El tabset suelto de los
+    // programas (v17.1.1/#151: Síndrome Metabólico / Hipertensión / Diabetes / ERC) no
+    // contiene NINGUNO de esos textos, así que este camino no puede anclar al decoy.
+    // Defensivo con querySelectorAll: arneses y mocks de prueba pueden no traerlo.
+    try {
+      if (typeof d.querySelectorAll === "function") {
+        const tabs = d.querySelectorAll('a[role="tab"]');
+        for (const tab of tabs) {
+          if (!tab) continue;
+          const tx = stripAccents(String(tab.textContent || "")).toLowerCase();
+          if (VGL_BARRA_TEXTOS.some((x) => tx.indexOf(stripAccents(String(x)).toLowerCase()) >= 0)) {
+            const cont = (typeof tab.closest === "function" && tab.closest('[role="tablist"]')) || tab.parentElement;
+            if (cont) return cont;
+          }
+        }
+      }
+    } catch (e) {}
     return null;
   }
 

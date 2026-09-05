@@ -621,7 +621,7 @@ module.exports = {
       const radioSi = { checked: false, click: () => { radioClicked = true; }, parentElement: { textContent: "SI" } };
       const radioNo = { checked: false, parentElement: { textContent: "NO" } };
       cLabs.env.doc.querySelectorAll = (sel) => {
-        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi, radioNo];
+        if (String(sel).indexOf("swUroanalisis") >= 0) return [radioSi, radioNo];
         return [];
       };
 
