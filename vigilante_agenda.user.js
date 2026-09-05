@@ -29850,6 +29850,49 @@
 
         setTimeout(() => closeMod(), 2600);
       } else {
+        // v18.1.1 (FIX 21 M2M) — POST SIN VEREDICTO (res == null): las escrituras no se
+        // reintentan en _pageFetchJsonCore, así que este null no dice si la cita llegó a
+        // crearse (timeout tras aceptar el POST). ANTES de ofrecer «Reintentar Crear Cita»
+        // — que crearía la DUPLICADA si la primera llegó — se re-verifica el cupo con el
+        // MISMO matcher de la guarda de arriba: si ya NO está libre, lo más probable es
+        // que NUESTRO turno sí quedó asignado. No se marca como creada (el cupo pudo
+        // tomarlo otro usuario): se bloquea el reintento a ciegas y se manda a verificar
+        // a AppCita. Si el cupo sigue libre o la verificación falla, el fallo es fallo y
+        // el reintento legítimo sigue igual (no se bloquea por una duda).
+        if (res == null && ctxElegido && ctxElegido.agendaId) {
+          let _cupoOcupadoSR = null;
+          try {
+            const frescoSR = await apiAccesoObtenerTurnos(ctxElegido.agendaId, ctxElegido.fecha, pacienteIdAcceso);
+            if (!vivo()) return;
+            const listaSR = extractAgendasList(frescoSR);
+            if (Array.isArray(listaSR) && listaSR.length) {
+              const sigueLibreSR = listaSR.some((t) => {
+                const idT = t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno;
+                const eSR = String((t && t.estado) || "ACT").toUpperCase().trim();
+                return String(idT) === String(turnoId) && (eSR === "" || eSR === "ACT");
+              });
+              _cupoOcupadoSR = !sigueLibreSR;
+            }
+          } catch (e) { _cupoOcupadoSR = null; }
+          if (_cupoOcupadoSR === true) {
+            vglLog("APPCITA", "CitaSinRespuestaCupoOcupado", { turnoId });
+            try { uxTrack("cita.sin_respuesta_cupo_ocupado"); } catch (e) {}
+            try {
+              showToast("AMBAR", "Cita sin confirmación — verifíquela en AppCita",
+                "El envío quedó sin respuesta y el cupo " + (horaTxt || "elegido") + " ya no aparece libre: lo más probable es que la cita SÍ quedó creada. NO la reitere aquí: ábrala en AppCita/Everest, confirme el radicado y solo entonces decida si hace falta otra.",
+                true, "citasinres|" + apt.doc_id);
+            } catch (e) {}
+            if (vivo()) {
+              confirmBtn.disabled = true;
+              confirmBtn.textContent = "⚠ Cupo tomado sin confirmación — verifique en AppCita";
+              const wSR = document.createElement("div");
+              wSR.className = "vgl-agm-err";
+              wSR.textContent = "⚠ El cupo dejó de estar libre sin que llegara respuesta del servidor: la cita pudo quedar creada. Verifíquela en AppCita antes de reintentar — no la duplique.";
+              try { if (typeof slotsEl.prepend === "function") slotsEl.prepend(wSR); else slotsEl.appendChild(wSR); } catch (e) {}
+            }
+            return;
+          }
+        }
         if (vivo()) {
           confirmBtn.disabled = false;
           confirmBtn.textContent = "✓ Reintentar Crear Cita";

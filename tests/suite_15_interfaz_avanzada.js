@@ -3342,6 +3342,104 @@ module.exports = {
       t.cierto(modal.querySelector("#vgl-agm-confirm").textContent.includes("Cita Creada Exitosamente"));
     });
 
+    // 05-sep — AUDITORÍA M2M, hallazgo 21: cuando AsignarTurno queda SIN VEREDICTO
+    // (res == null: _pageFetchJsonCore NO reintenta escrituras), el modal ofrecía
+    // «Reintentar Crear Cita» a ciegas — si el POST sí llegó al servidor, ese reintento
+    // creaba la cita DUPLICADA. Ahora se re-verifica el cupo con el mismo matcher de la
+    // guarda: si ya NO está libre, se bloquea el reintento y se manda a verificar a
+    // AppCita; si sigue libre, el fallo es fallo y el reintento legítimo queda igual.
+    await t.casoAsync("v18.1.1 (FIX 21 M2M): POST sin respuesta y el cupo ya NO está libre → NO se ofrece reintento a ciegas (no se duplica la cita)", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      let turnosServidos = 0;
+      const urlsVistas = [];
+      const cSR = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urlsVistas.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          // El POST queda SIN VEREDICTO: la conexión se corta tras aceptar la escritura
+          // (fetch que lanza → _pageFetchJsonCore marca isError → por ser escritura
+          // devuelve null, sin reintentos). Exactamente el caso del hallazgo.
+          if (u.includes("AsignarTurno")) throw new Error("timeout simulado: respuesta perdida");
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) {
+            // #1 listado y #2 guarda pre-confirmar: libre. #3 la re-verificación del
+            // FIX 21: el turno ya aparece CAN — lo más probable es que el POST sí llegó.
+            turnosServidos++;
+            return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: turnosServidos <= 2 ? "ACT" : "CAN" }] });
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cSR);
+      cSR.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cSR.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cSR.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const botonTurno = [...slots.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      disparar(botonTurno, "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      disparar(confirmar, "click");
+      await esperar(120);
+      t.igual(urlsVistas.filter((u) => u.includes("AsignarTurno")).length, 1, "el POST se intentó UNA sola vez: no se re-POSTea a ciegas");
+      t.cierto(confirmar.disabled, "el botón de confirmar queda bloqueado: no ofrece reintento");
+      t.cierto(String(confirmar.textContent || "").includes("verifique en AppCita"), "el botón manda a verificar en AppCita/Everest");
+      t.falso(String(confirmar.textContent || "").includes("Reintentar Crear Cita"), "ya NO se ofrece «Reintentar Crear Cita», que crearía la duplicada");
+      const textosSR = [...slots.children].map((n) => (n.textContent || "") + " " + (n.innerHTML || "")).join(" | ");
+      t.cierto(textosSR.includes("no la duplique"), "el aviso en el listado de horas dice que verifique y no duplique");
+    });
+
+    await t.casoAsync("v18.1.1 (FIX 21 M2M): POST sin respuesta y el cupo SIGUE libre → el fallo es fallo: el reintento legítimo sigue disponible", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const urlsVistas2 = [];
+      const cSRLibre = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urlsVistas2.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("AsignarTurno")) throw new Error("timeout simulado: respuesta perdida");
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cSRLibre);
+      cSRLibre.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cSRLibre.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal2 = cSRLibre.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots2 = modal2.querySelector("#vgl-agm-slots");
+      const botonTurno2 = [...slots2.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      disparar(botonTurno2, "click");
+      const confirmar2 = modal2.querySelector("#vgl-agm-confirm");
+      disparar(confirmar2, "click");
+      await esperar(120);
+      t.igual(urlsVistas2.filter((u) => u.includes("AsignarTurno")).length, 1, "tampoco aquí se re-POSTea sin decisión del médico");
+      // La rama de fallo normal re-lista los horarios (cargarHoras): ObtenerTurnos ya
+      // salió #1 listado + #2 guarda + #3 re-verificación del FIX 21 + #4 re-listado.
+      t.cierto(urlsVistas2.filter((u) => u.includes("ObtenerTurnos")).length >= 4, "con el cupo libre el fallo sigue su curso de siempre: se re-listan los horarios");
+      t.falso(String(confirmar2.textContent || "").includes("verifique en AppCita"), "NO se aplica el bloqueo del FIX 21 cuando el cupo sigue libre");
+      t.falso(String(confirmar2.textContent || "").includes("Cupo tomado sin confirmación"), "el botón no queda marcado como cupo tomado");
+      const textosLibre = [...slots2.children].map((n) => (n.textContent || "") + " " + (n.innerHTML || "")).join(" | ");
+      t.falso(textosLibre.includes("no la duplique"), "no aparece el aviso de no duplicar: aquí el reintento es legítimo");
+      const reListado = [...slots2.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      t.cierto(!!reListado, "la hora vuelve a quedar disponible para elegirla otra vez (reintento legítimo)");
+      t.cierto(String(confirmar2.textContent || "").includes("Elija un horario") || String(confirmar2.textContent || "").includes("Sí, Crear Cita"), "el botón vuelve a su estado normal de elegir hora, no al bloqueo del FIX 21");
+    });
+
     // 02-sep — CIERRE DEL ENJAMBRE (auditoría adversarial, fila 24, gravedad alta): el mismo
     // defecto que el hallazgo #19 cerró en Ordenar (v18.0.63) seguía abierto en Agendar. Si el
     // médico cerraba el cuadro con AsignarTurno en vuelo, la cita se creaba en Everest pero la
