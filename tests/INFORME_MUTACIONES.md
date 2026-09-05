@@ -13060,3 +13060,35 @@ mismo que producía el formato viejo.
 
 Banco completo: **3.326 comprobaciones pasan, 0 fallan.**
 
+## v18.0.145 — auditoría M2M, parte 1: tres críticos que fallaban en silencio
+
+Primera tanda de correcciones de la auditoría adversarial máquina-a-máquina (30 hallazgos;
+esta entrega cierra los tres CRÍTICOS). **Fix 1** — en el DOM real de Everest la HbA1c
+comparte `id`/`name` `resultadoHemoglobina` con la Hemoglobina del hemograma y el
+`resultadoHBA1C` del whitelist nunca existió: `_findLabField` devolvía null y una HbA1c
+obligatoria y vacía no se reportaba jamás. Ahora HBA1C se enruta por atributo vía
+`_findHbA1cFields` (la misma ruta que ya usaba la escritura de Auto-Labs). **Fix 2** —
+`extractPatientId` recorría la respuesta con una recursión libre y una deny-list frágil:
+cualquier rama hermana nueva con un `id` genérico (programas, eps, acudiente) podía
+colarse como PacienteID y apuntar el guard al paciente equivocado. Ahora solo se aceptan
+rutas explícitas seguras (raíz, `data`→arreglo, `data.pacienteId`, `idPaciente`,
+`datosPaciente.idPaciente`); lo demás devuelve null. **Fix 3** — «Normalidad fija» pegaba
+la plantilla POR POSICIÓN: si Everest inserta una casilla nueva, oculta una o cambia el
+orden, las 36 frases clínicas caían desplazadas una fila (genitourinario escrito en
+tórax, etc.) sin ningún aviso. Ahora `_emparejarNormalidadFija` exige un ancla
+estructural — exactamente una casilla con id `sintomasGenerales` en el índice 18, la
+única del formulario con id propio, confirmada en dos capturas del Grabador 3 (v14.2.10) —
+y valida el conteo de cada franja por modo; si no cuadra, no pega nada, avisa al médico
+con un toast que explica por qué y emite telemetría (solo conteos, sin PHI). La exclusión
+Mamas/Genito se mantiene pero ahora se lee de la etiqueta de fila, y los tres fixtures
+viejos de suite_15 se reescribieron contra el DOM real (37 `alert_message` + 1
+`sintomasGenerales` = 38 visibles).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 545 | HBA1C deja de enrutarse por atributo en `_casillasObligatoriasVacias`: con el choque real de ids (HbA1c comparte `resultadoHemoglobina` con la Hemoglobina del hemograma y `resultadoHBA1C` no existe), una HbA1c obligatoria y vacía vuelve a no reportarse | *suite_30: «_casillasObligatoriasVacias: HBA1C obligatoria y vacía SÍ se reporta pese a compartir id con Hemoglobina (v18.0.145)» — mutante 43 pasan / 1 falla; restaurado 44/0* | Sí |
+| 546 | `extractPatientId` vuelve a la recursión libre con deny-list: una rama hermana con id genérico se devuelve como PacienteID | *suite_05: «extractPatientId: rama hermana nueva con id genérico JAMÁS se devuelve como PacienteID (v18.0.145)» — mutante 34 pasan / 1 falla; restaurado 35/0* | Sí |
+| 547 | se desactiva el ancla estructural de `_emparejarNormalidadFija` (`if (false && (sgIdx…))`): el pegado por posición vuelve a escribir aunque «Síntomas generales» esté ausente, duplicada o desplazada | *suite_15: «casilla NUEVA antes de Síntomas generales (conteo de franja intacto) => rehúso total», «sintomasGenerales AUSENTE (Everest cambió el id) => rehúso, nunca escritura desplazada» y «sintomasGenerales DUPLICADA => rehúso» — mutante 266 pasan / 3 fallan; restaurado 269/0* | Sí |
+
+Banco completo: **3.351 comprobaciones pasan, 0 fallan.**
+

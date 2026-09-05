@@ -8573,6 +8573,71 @@
       return filtrados.length === objetivo ? filtrados : null;
   }
 
+  // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): el emparejamiento plantilla↔casillas del
+  // botón «Examen normal» era PURAMENTE posicional: casillas.slice(0,19) y slice(19)
+  // contra la plantilla fija, con la única guarda de que los LARGOS cuadraran. Un cambio
+  // del DOM de Everest que conservara el conteo (una casilla nueva antes de «Síntomas
+  // generales» y otra menos al final, o simplemente una casilla insertada en la revisión)
+  // pasaba todas las guardas y la frase de un sistema caía en la casilla del siguiente —
+  // texto clínico en el hueco equivocado, sin aviso, en un EHR real.
+  //
+  // ANCLA ESTRUCTURAL (evidencia v14.2.10, dos capturas reales del Grabador 3): «Síntomas
+  // generales» es la ÚNICA casilla de texto de la pestaña con id propio —
+  // <input type="text" id="sintomasGenerales"> — y CIERRA la Revisión por sistemas, así que
+  // en el orden natural del documento ocupa SIEMPRE el índice 18 de los candidatos
+  // (0..17 = Piel y faneras … Sistema Linfático; 19 en adelante = examen físico). Esa
+  // casilla es un marcador estructural: si falta, sobra o se movió, el DOM ya no es el que
+  // la plantilla describe y se rehúsa TODO (nunca se pega a ciegas).
+  //
+  // Función PURA: solo decide y devuelve, no toca el DOM. PHI-safe: el objeto de fallo
+  // lleva únicamente conteos y modo, nunca valores ni etiquetas.
+  function _emparejarNormalidadFija(candidatos, modo) {
+      const N_REVISION = 19;      // plantilla: [0..19) Revisión por sistemas
+      const SG_IDX_ESPERADO = 18; // índice 18 = «Síntomas generales», fin de la revisión
+
+      // --- 1) Ancla estructural: exactamente UNA sintomasGenerales, en el índice 18 ---
+      const sgIdx = [];
+      if (Array.isArray(candidatos)) {
+          for (let i = 0; i < candidatos.length; i++) {
+              const el = candidatos[i];
+              let id = "";
+              try {
+                  if (el && el.id != null && el.id !== "") id = String(el.id);
+                  else if (el && typeof el.getAttribute === "function") { const v = el.getAttribute("id"); if (v != null) id = String(v); }
+              } catch (e) {}
+              if (id === "sintomasGenerales") sgIdx.push(i);
+          }
+      }
+      if (sgIdx.length !== 1 || sgIdx[0] !== SG_IDX_ESPERADO) {
+          return { ok: false, motivo: "ancla", sg: sgIdx.length, pos: sgIdx.length === 1 ? sgIdx[0] : -1, total: Array.isArray(candidatos) ? candidatos.length : 0, modo: modo || "" };
+      }
+
+      // --- 2) Franjas de siempre (0..18 revisión, 19.. examen físico — ahora garantizadas
+      //        por el ancla) + exclusión Mamas/Genito por texto cuando el largo no cuadra ---
+      let plantilla, casillasObjetivo;
+      if (modo === "revision") {
+          plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(0, N_REVISION);
+          casillasObjetivo = candidatos.slice(0, N_REVISION);
+      } else if (modo === "fisico") {
+          plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(N_REVISION);
+          casillasObjetivo = candidatos.slice(N_REVISION);
+      } else {
+          plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA;
+          casillasObjetivo = candidatos;
+      }
+      let usar = casillasObjetivo;
+      let excluidas = 0;
+      if (casillasObjetivo.length !== plantilla.length) {
+          const filtrados = (modo === "revision") ? null : _excluirMamasGenitoPorTexto(casillasObjetivo, plantilla.length);
+          if (!filtrados) {
+              return { ok: false, motivo: "conteo", candidatos: casillasObjetivo.length, plantilla: plantilla.length, modo: modo || "" };
+          }
+          usar = filtrados;
+          excluidas = casillasObjetivo.length - filtrados.length;
+      }
+      return { ok: true, usar, plantilla, excluidas, motivo: "" };
+  }
+
   // =====================================================================
   //  v15.5.0 — RED DE SEGURIDAD «DESHACER» + RESULTADO CONTADO EN EL BOTÓN
   //  (pedido del médico: estos dos botones deben quedar a prueba de niños).
@@ -8915,38 +8980,30 @@
           // plantilla fija está ordenada: [0..19) Revisión por sistemas (19) y [19..36)
           // Examen físico (17, sin Mamas/Genito). El DOM de Everest trae las casillas en ese
           // MISMO orden: primero las 19 subjetivas, luego las del examen físico.
-          const N_REVISION = 19;
-          let plantilla, casillasObjetivo;
-          if (modo === "revision") {
-              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(0, N_REVISION);
-              casillasObjetivo = candidatos.slice(0, N_REVISION);
-          } else if (modo === "fisico") {
-              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA.slice(N_REVISION);
-              casillasObjetivo = candidatos.slice(N_REVISION);
-          } else {
-              plantilla = EXAMEN_FISICO_NORMALIDAD_FIJA;
-              casillasObjetivo = candidatos;
-          }
-
-          // La sección de Examen físico trae 19 casillas en el DOM pero la plantilla solo 17
-          // (se omiten Mamas y Genito/Urinario a pedido del médico). Se excluyen por texto
-          // esas dos antes de emparejar, misma red de seguridad de siempre, acotada a la
-          // franja que se va a llenar. En "Revisión por sistemas" no hay nada que excluir:
-          // si la cuenta no cuadra, se rehúsa entero (nunca se pega a ciegas).
-          let usar = casillasObjetivo;
-          let excluidas = 0;
-          if (casillasObjetivo.length !== plantilla.length) {
-              const filtrados = (modo === "revision") ? null : _excluirMamasGenitoPorTexto(casillasObjetivo, plantilla.length);
-              if (!filtrados) {
-                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: casillasObjetivo.length, plantilla: plantilla.length, modo });
-                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + casillasObjetivo.length + " casillas y la plantilla espera " + plantilla.length, "ambar", "🩺 Examen normal");
-                  showToast("AMBAR", "Examen normal", "Por seguridad no se escribió nada: esta pantalla tiene " + casillasObjetivo.length + " casillas y la plantilla espera exactamente " + plantilla.length + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
-                  return;
+          // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): todo el cálculo de franjas y
+          // exclusiones vive ahora en _emparejarNormalidadFija(), que ADEMÁS exige el ancla
+          // estructural (sintomasGenerales única, índice 18). Antes el emparejamiento era
+          // solo posicional: un DOM que conservara el conteo pero no el orden pasaba todas
+          // las guardas y pegaba frases en casillas equivocadas. Ancla rota => rehúso total.
+          const par = _emparejarNormalidadFija(candidatos, modo);
+          if (!par.ok) {
+              if (par.motivo === "ancla") {
+                  // Telemetría PHI-safe: solo conteos (ver cabecera de _emparejarNormalidadFija).
+                  uxTrack("examenFisico.normalidadFija.anclaRota", { sg: par.sg, pos: par.pos, total: par.total, modo });
+                  const como = par.sg === 0 ? "ausente" : (par.sg > 1 ? "repetida" : "fuera de sitio");
+                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: la pantalla cambió de forma", "ambar", "🩺 Examen normal");
+                  showToast("AMBAR", "Examen normal", "Por seguridad no se escribió nada: esta pantalla ya no tiene las casillas donde el asistente las espera (la referencia «Síntomas generales» está " + como + "). Llene el examen a mano esta vez y repórtelo para recalibrar.", true);
+              } else {
+                  uxTrack("examenFisico.normalidadFija.rehusada", { candidatos: par.candidatos, plantilla: par.plantilla, modo });
+                  _vglFeedbackBoton(btnNormalidad, "⚠ No pegué nada: " + par.candidatos + " casillas y la plantilla espera " + par.plantilla, "ambar", "🩺 Examen normal");
+                  showToast("AMBAR", "Examen normal", "Por seguridad no se escribió nada: esta pantalla tiene " + par.candidatos + " casillas y la plantilla espera exactamente " + par.plantilla + " — el texto podría caer en la casilla equivocada (p. ej. Mamas o Genito/Urinario). Llene el examen a mano esta vez.", true);
               }
-              usar = filtrados;
-              excluidas = casillasObjetivo.length - filtrados.length;
-              uxTrack("examenFisico.normalidadFija.exclusionTexto", { candidatos: casillasObjetivo.length, excluidas, modo });
+              return;
           }
+          const usar = par.usar;
+          const plantilla = par.plantilla;
+          const excluidas = par.excluidas;
+          if (excluidas) uxTrack("examenFisico.normalidadFija.exclusionTexto", { excluidas, modo });
 
           const porAplicar = [];
           for (let i = 0; i < usar.length; i++) {
