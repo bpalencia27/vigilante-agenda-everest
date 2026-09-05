@@ -89,19 +89,22 @@ const get=q=>doGet({parameter:q}).t;
   console.log("sin params :",sinNada,"(debe ser no)");
   if(tMalo!=="no"||aMala!=="no"||sinNada!=="no")fallos.push("puertas doGet");
 
-  // 2) siembra: primera lectura crea la hoja con 4 comentarios + 7 nombres
+  // 2) siembra: primera lectura crea la hoja con 4 comentarios + 8 nombres
   const j1=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
   console.log("ok         :",j1.ok,"(debe ser true)");
-  console.log("perfiles   : COMPLETO=%s LABORATORIOS=%s (deben ser 4 y 3)",j1.perfiles.COMPLETO.length,j1.perfiles.LABORATORIOS.length);
-  console.log("filas hoja acceso:",hojas["acceso"].d.length,"(debe ser 12: encabezado+4#+7)");
+  console.log("perfiles   : COMPLETO=%s LABORATORIOS=%s (deben ser 5 y 3)",j1.perfiles.COMPLETO.length,j1.perfiles.LABORATORIOS.length);
+  console.log("filas hoja acceso:",hojas["acceso"].d.length,"(debe ser 13: encabezado+4#+8)");
   if(!j1.ok)fallos.push("ok!==true");
-  if(j1.perfiles.COMPLETO.length!==4||j1.perfiles.LABORATORIOS.length!==3)fallos.push("siembra 4/3");
-  if(hojas["acceso"].d.length!==12)fallos.push("siembra filas");
+  if(j1.perfiles.COMPLETO.length!==5||j1.perfiles.LABORATORIOS.length!==3)fallos.push("siembra 5/3");
+  if(hojas["acceso"].d.length!==13)fallos.push("siembra filas");
+  const glo=j1.perfiles.COMPLETO.filter(p=>p.nombre.indexOf("Jaramillo")>=0)[0];
+  console.log("nueva autorizada:",glo?glo.nombre+" #"+glo.uid:"NO ESTÁ","(debe estar: Dra. Gloria Alejandra Jaramillo Montoya)");
+  if(!glo)fallos.push("Gloria Jaramillo no quedó en el padrón COMPLETO");
 
   // 3) uids sintéticos: enteros en [900000000, 999999998] (jamás uid real)
   const todos=j1.perfiles.COMPLETO.concat(j1.perfiles.LABORATORIOS);
   const uidOk=todos.every(p=>Number.isInteger(p.uid)&&p.uid>=900000000&&p.uid<=999999998);
-  console.log("uids sintéticos en rango 9xx:",uidOk,"ej:",todos[0].uid,todos[6].uid);
+  console.log("uids sintéticos en rango 9xx:",uidOk,"ej:",todos[0].uid,todos[7].uid);
   if(!uidOk)fallos.push("uids sintéticos fuera de rango");
 
   // 4) version = hash de CONTENIDO: dos lecturas sin editar, misma version
@@ -119,7 +122,7 @@ const get=q=>doGet({parameter:q}).t;
   console.log("version cambió:",j3.version!==j1.version,"(debe ser true)");
   console.log("blocklist   :",JSON.stringify(bl));
   if(j3.version===j1.version)fallos.push("bloqueado no cambia version");
-  if(j3.perfiles.COMPLETO.length!==3)fallos.push("bloqueado no sale del perfil");
+  if(j3.perfiles.COMPLETO.length!==4)fallos.push("bloqueado no sale del perfil");
   if(!bl||bl.uid!==uidBrandon||bl.motivo!=="vacaciones")fallos.push("blocklist mal");
 
   // 6) uid REAL en la hoja manda sobre el sintético

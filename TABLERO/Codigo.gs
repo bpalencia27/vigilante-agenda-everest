@@ -1,6 +1,14 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.10.14 — 05-09-2026: AUTORIZACIÓN de la Dra. Gloria Alejandra Jaramillo
+ * Montoya (perfil COMPLETO). Solo cambia la SEMILLA de la hoja "acceso": +1 fila
+ * en el padrón (8 nombres). OJO: la siembra SOLO ocurre si la hoja "acceso" NO
+ * existe; si ya existe en producción, el dueño añade la fila A MANO en la Hoja:
+ * perfil "COMPLETO" | uid VACÍO | nombre EXACTO "Gloria Alejandra Jaramillo
+ * Montoya" | estado "activo". Nada más cambia: el userscript NO lleva nombres
+ * desde v18.1.0 (lee el padrón del servidor), así que el gist no se toca.
+ *
  * v12.10.13 — 29-08-2026: auditoría contra un export real (XLSX + CSV). Dos problemas
  * ESTRUCTURALES en la Hoja, ambos del lado del receptor:
  *
@@ -105,8 +113,9 @@
  *     - Hoja nueva "acceso" (perfil | uid | nombre | estado | motivo) que edita
  *       SOLO el dueño. perfil: COMPLETO o LABORATORIOS; filas cuyo perfil empiece
  *       por "#" se ignoran (comentarios in-sheet); estado "bloqueado" manda al
- *       médico a la blocklist (en el cliente gana SIEMPRE y en silencio). Al
- *       crearse se SIEMBRA con los 7 nombres del padrón y uid VACÍO: NUNCA se
+ *       médico a la blocklist (en el cliente gana SIEMPRE y en silencio).
+ *     - Al crearse se SIEMBRA con los 8 nombres del padrón (05-09-2026: +Dra.
+ *       Gloria Alejandra Jaramillo Montoya, COMPLETO) y uid VACÍO: NUNCA se
  *       inventan uids reales, porque el uid manda sobre el nombre y uno fabricado
  *       podría coincidir con el de otro médico.
  *     - doGet(e) NUEVO con UNA sola acción: ?accion=listaAcceso&token=... devuelve
@@ -362,7 +371,7 @@ function verListaAcceso() {
   } catch (e) {}
 }
 
-// Devuelve la hoja "acceso", creándola SEMBRADA en el primer uso: los 7 nombres
+// Devuelve la hoja "acceso", creándola SEMBRADA en el primer uso: los 8 nombres
 // del padrón con uid VACÍO — el dueño pega los UsuarioId reales leyendo la hoja
 // "acceso_uid" (menú: qué uid reportó cada equipo). NUNCA se siembran uids
 // reales inventados: el uid manda sobre el nombre y un uid fabricado podría
@@ -382,6 +391,7 @@ function _hojaAcceso(ss) {
         ["COMPLETO", "", "Eliseth Estrada", "activo", ""],
         ["COMPLETO", "", "María Edineth Pino", "activo", ""],
         ["COMPLETO", "", "Sinaí Mijares", "activo", ""],
+        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", ""],
         ["LABORATORIOS", "", "Maryuris Terán", "activo", ""],
         ["LABORATORIOS", "", "Daniela Zuluaga", "activo", ""],
         ["LABORATORIOS", "", "Moisés Carpio", "activo", ""]
