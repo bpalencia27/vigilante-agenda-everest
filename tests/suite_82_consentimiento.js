@@ -276,11 +276,78 @@ module.exports = {
       const idt = [...FUENTE.matchAll(/setTimeout\(identidadDesdeCliente,\s*0\)/g)];
       t.igual(idt.length, 1, "la resolución de identidad por red se programa exactamente una vez");
       const iBoot = FUENTE.indexOf("function boot() {");
+      // v18.3.1 — la ventana fija «iBoot + 3000» la rompió v18.3.0 (boot() creció a
+      // 3047 chars hasta el setTimeout): el límite correcto es el fin REAL de boot(),
+      // marcado por la siguiente función de nivel IIFE (indentación de 2 espacios).
+      const iBootFin = FUENTE.indexOf("\n  function ", iBoot + 20);
       const iKill = FUENTE.indexOf('GM_getValue("vgl_kill_active"', iBoot);
-      t.cierto(idt[0] && idt[0].index > iKill && idt[0].index < iBoot + 3000, "dentro de boot(), después del kill-switch — nunca antes de la compuerta");
+      t.cierto(idt[0] && idt[0].index > iKill && idt[0].index < iBootFin, "dentro de boot(), después del kill-switch — nunca antes de la compuerta");
       // Y la fila de Ajustes muestra la versión vigente
       t.cierto(FUENTE.indexOf('id="c-terminos"') === FUENTE.lastIndexOf('id="c-terminos"'), "una sola definición de la fila de términos en Ajustes");
       t.cierto(FUENTE.indexOf("${escapeHtml(_terminosAjustesTexto())}") > 0, "la fila pinta el texto de versión/fecha real, no un literal fijo");
+    });
+
+    // ── v18.3.1 ── rescate del arranque sin caché (deadlock real) ─────
+    // Incidencia de producción: el único escritor de la caché del padrón vivía
+    // DENTRO de boot(), y boot() solo corre si la caché ya autoriza → una máquina
+    // sin caché válida (primera instalación) o envenenada jamás se auto-reparaba
+    // («no sale nada»). La compuerta ahora refresca el padrón ANTES de resignarse
+    // al silencio del veredicto «fuera-del-padron» y re-decide una sola vez.
+    const PADRON_REMOTO = { ok: true, version: "vTest2", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] };
+
+    // Identidad presente (login de sesión + caché GM validada por Everest) PERO
+    // sin padrón en localStorage: la máquina de una médica recién autorizada.
+    function sembrarIdentidadSinPadron(env) {
+      env.almacen["user"] = JSON.stringify({ username: "bpalencia", userIdentity: "x" });
+      env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 101, name: "Prueba Uno", ts: Date.now() } };
+    }
+
+    await t.casoAsync("P11·11 — máquina sin caché: la compuerta refresca el padrón ANTES de resignarse y luego pregunta los términos", async () => {
+      const red = redContada();
+      let usos = 0;
+      const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr });
+      sembrarIdentidadSinPadron(c.env);
+      await c.api.mtrCompuertaArranque();
+      t.cierto(usos === 1 && red.contadores.fetch === 0, "la compuerta fue a buscar el padrón exactamente una vez por GM_xmlhttpRequest (usos " + usos + ", fetch " + red.contadores.fetch + ")");
+      t.cierto(!!c.env.almacen["vgl_acceso_lista"], "el padrón descargado quedó cacheado (versión " + (JSON.parse(c.env.almacen["vgl_acceso_lista"] || "{}").version || "?") + ")");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "y con el padrón en mano la compuerta SÍ pregunta los términos — el script «sale» sin remedio manual");
+      t.cierto(!c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "sin panel ni temporizadores mientras no se acepta");
+    });
+
+    await t.casoAsync("P11·12 — sello de refresco fresco (<4 h): la compuerta NO vuelve a gastar red aunque siga fuera del padrón", async () => {
+      let usos = 0;
+      const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
+      const c = await cargar({ silencioso: true, fetch: async () => { usos += 100; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } }; }, gmxhr });
+      // Padrón cacheado VÁLIDO pero sin esta médica (quedó viejo/envenenado) y
+      // sello de refresco fresco: el tablero acaba de ser consultado hace <4 h.
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t0", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [] });
+      c.env.almacen["vgl_acceso_fetch"] = JSON.stringify({ ts: Date.now(), ok: true });
+      sembrarIdentidadSinPadron(c.env);
+      await c.api.mtrCompuertaArranque();
+      t.cierto(usos === 0, "con el sello fresco el rescate respeta la cuarentena de 4 h: cero peticiones (usos " + usos + ")");
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "fuera del padrón y sin rescate disponible: silencio total");
+    });
+
+    await t.casoAsync("P11·13 — si el rescate falla (red caída), la compuerta termina en silencio sin romperse", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      sembrarIdentidadSinPadron(c.env);
+      await c.api.mtrCompuertaArranque();
+      t.cierto(red.contadores.gmxhr === 1, "intentó el rescate exactamente una vez");
+      const sello = JSON.parse(c.env.almacen["vgl_acceso_fetch"] || "null");
+      t.cierto(!!sello && sello.ok === false, "el sello quedó pesimista (ok:false) — un fallo NO bloquea el reintento de la próxima carga");
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "silencio total, cero temporizadores y sin excepción");
+    });
+
+    await t.casoAsync("P11·14 — BLOQUEADO no se refresca: su silencio no negocia con el tablero", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [{ uid: 101, nombre: "Prueba Uno" }] });
+      sembrarIdentidadSinPadron(c.env);
+      await c.api.mtrCompuertaArranque();
+      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "bloqueado no dispara NI un intento de rescate");
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "silencio total: el bloqueo no se re-evalúa por red");
     });
   }
 };

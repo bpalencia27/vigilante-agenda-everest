@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.3.0
+// @version      18.3.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -37164,10 +37164,28 @@ hora, y su identificador. Nada más.
 
   // Punto de entrada único del script (v18.2, P11). Fail-closed: ante cualquier
   // excepción en la decisión, no se monta nada.
-  function mtrCompuertaArranque() {
+  // v18.3.1 — ARREGLO DEL DEADLOCK DE ARRANQUE (incidencia real): el refresco del
+  // padrón solo corría DENTRO de boot(), pero boot() solo corre si el padrón en
+  // CACHÉ ya autoriza → una máquina sin caché válida (primera instalación de una
+  // médica nueva) o con caché envenenada jamás se auto-reparaba: "no sale nada"
+  // sin remedio local, porque el único escritor de la caché vive tras la puerta
+  // que esa misma caché mantiene cerrada. Ahora, ANTES de resignarse al silencio
+  // del veredicto «fuera-del-padron», la compuerta intenta UN refresco del padrón
+  // SIN forzar (respeta el sello de 4 h: una máquina fuera del padrón no martilla
+  // el tablero en cada carga; un sello de fallo no bloquea el reintento) y
+  // re-decide una sola vez con lo que haya quedado en caché. BLOQUEADO, rechazo
+  // fresco y excepción NO se refrescan: su silencio es intencional. La función es
+  // async SOLO por este camino; con caché sana todo corre igual que siempre
+  // (síncrono hasta pintar la pantalla o arrancar).
+  async function mtrCompuertaArranque() {
     let decision;
     try { decision = mtrCompuertaDecision(); }
     catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
+    if (!decision.arrancar && decision.motivo === "fuera-del-padron") {
+      try { await accesoRefrescarLista(); } catch (e) {}
+      try { decision = mtrCompuertaDecision(); }
+      catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
+    }
     if (decision.arrancar) {
       try { mtrArrancarTodo(); } catch (e) { console.error("[Vigilante] arranque post-consentimiento falló:", e); }
       return;
