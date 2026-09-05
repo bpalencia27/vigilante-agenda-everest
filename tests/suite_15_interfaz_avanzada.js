@@ -4559,6 +4559,78 @@ module.exports = {
       t.igual(posts.length, 1, "la segunda pulsación NO crea una orden duplicada de verdad en Everest");
     });
 
+    // =====================================================================
+    // v18.1.1 (FIX 8 M2M) — POST PERDIDO: GuardarOrdenamiento es una ESCRITURA,
+    // no se reintenta (v11.0.1) y pageFetchJson devuelve null. Ese null no
+    // distingue "no llegó" de "llegó y la respuesta se perdió" (timeout tras
+    // aceptar el POST). El reintento ciego re-POSTeaba y creaba la orden
+    // DUPLICADA. Ahora, antes de darla por fallida, se consulta la fuente de
+    // verdad: si TODOS los CUPS del paquete figuran vigentes con fechaCreacion
+    // de HOY, la orden llegó — se marca, se tacha la casilla y el resumen dice
+    // la verdad en ámbar (sin botón de reintento: reintentar duplicaría).
+    // =====================================================================
+    await t.casoAsync("v18.1.1: POST perdido pero la orden SÍ llegó → se recupera contra vigentes y NO se re-POSTea", async () => {
+      const guardarIntentos = [];
+      const cupsPedidos = [];
+      let vigentesLlamadas = 0;
+      const cPerd = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPaciente")) return respuestaJson({ id: 801848 });
+          if (u.includes("ObtenerListadoDiagnostico")) return respuestaJson([{ codigo: "Z108", id: 55, nombre: "TAMIZACION" }]);
+          if (u.includes("ObtenerListadoCupsPorPaciente")) {
+            const cod = decodeURIComponent(/filter=([^&]+)/.exec(u)[1]);
+            cupsPedidos.push(cod);
+            return respuestaJson([{ codigo: cod, id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]);
+          }
+          // La ESCRITURA se pierde: la red cae tras aceptar el POST (la firma
+          // exacta que deja pageFetchJson en null para no reenviar).
+          if (u.includes("GuardarOrdenamiento")) { guardarIntentos.push(u); throw new Error("red caida tras aceptar el POST"); }
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
+            vigentesLlamadas++;
+            // 1.ª llamada = apertura del modal (cruce antiduplicado): nada vigente.
+            // Desde la 2.ª = recuperación tras el POST perdido: el servidor SÍ
+            // registró la orden (todos los CUPS pedidos, fechaCreacion de HOY).
+            if (vigentesLlamadas === 1) return respuestaJson([]);
+            return respuestaJson(cupsPedidos.map((c) => ({ cup: { codigo: c }, estado: "PEN", fechaCreacion: iso_N_diasAtras(0) })));
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cPerd);
+      cPerd.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+      const abrirYGenerarPerd = async () => {
+        // Casilla NUEVA en cada apertura, como en el DOM real (el modal se repinta).
+        const cas = _casillaOrd(true, false, 0);
+        _inyectarCasilla(cPerd, cas);
+        await cPerd.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE DE PRUEBA", sexo: "M", pym: ["Tamización cardiometabólica"] });
+        await esperar(80);
+        const m = cPerd.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+        disparar(m.querySelector("#vgl-ord-confirm"), "click");
+        await esperar(150);
+        return { m, cas };
+      };
+
+      const { m: m1, cas: cas1 } = await abrirYGenerarPerd();
+      t.igual(guardarIntentos.length, 1, "la primera corrida sí envió el POST (que se perdió)");
+      t.cierto(cPerd.api.ordenCreadaHoyParaCie10("21545051", "Z108"), "la orden sin confirmación quedó marcada como creada HOY (verificada contra vigentes)");
+      t.cierto(cas1.disabled === true, "la casilla quedó tachada y deshabilitada, como una orden creada con respuesta");
+      // v14.0.1 — El harness no reconstruye innerHTML/textContent desde appendChild:
+      // el successMsg se busca entre los hijos de la tarjeta (igual que slots/chips más arriba).
+      const msgRec = [...m1.querySelector(".vgl-agm-card").children]
+        .find((n) => String(n.className || "").includes("vgl-ord-parcial"));
+      t.cierto(!!msgRec && msgRec.innerHTML.includes("conexión se cortó"), "el resumen dice la verdad: la orden SÍ quedó creada pese a la caída");
+      t.cierto(!!msgRec && msgRec.innerHTML.includes("vuelva a generar"), "y prohíbe explícitamente el reintento que duplicaría");
+      t.igual(m1.querySelector("#vgl-ord-confirm").textContent, "1 orden creada sin confirmación", "el botón ya no ofrece reintentar: la orden existe y reintentar duplicaría");
+
+      // El médico reabre «Ordenar» y vuelve a pulsar Generar: la reproducción
+      // exacta del hallazgo (antes, el botón de reintento creaba el duplicado).
+      await abrirYGenerarPerd();
+      t.igual(guardarIntentos.length, 1, "la segunda pulsación NO re-POSTea: la orden ya figura creada en Everest");
+    });
+
     await t.casoAsync("v18.0.63 (contención): si el médico marca él mismo la casilla, la orden SÍ se repite — él manda", async () => {
       const posts = [];
       const cDup = _dupFixture(posts);

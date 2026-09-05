@@ -22446,6 +22446,36 @@
     }
   }
 
+  // v18.1.1 (FIX 8 M2M) — ¿Llegó al servidor una orden cuyo POST se PERDIÓ? Un Guardar
+  // de ordenamiento es una ESCRITURA: _pageFetchJsonCore NO lo reintenta por la segunda
+  // vía (duplicaría la orden) y devuelve null. Ese null no distingue "no llegó" de
+  // "llegó pero la respuesta se perdió" (timeout tras aceptar el POST). ANTES de dejar
+  // que el médico reintente (y duplique), se consulta la fuente de verdad: las órdenes
+  // VIGENTES del paciente. Solo cuenta como creada si TODOS los CUPS enviados figuran
+  // con fechaCreacion de HOY — una orden vigente de ayer no dice nada de este POST y no
+  // puede silenciar un reintento legítimo. La caché se invalida primero porque pudo
+  // llenarse ANTES del POST perdido. Un fallo de esta consulta devuelve false (no
+  // bloquea el reintento: "casilla vacía antes que dato inventado").
+  async function _ordenYaFiguraEnEverestHoy(pid, cupsEnviados) {
+    if (!pid) return false;
+    const cups = (Array.isArray(cupsEnviados) ? cupsEnviados : [])
+      .map((c) => String(c == null ? "" : c).trim()).filter(Boolean);
+    if (!cups.length) return false;
+    try { _ordenesVigentesInvalidar(); } catch (e) {}
+    let ordenes = null;
+    try { ordenes = await apiHcObtenerOrdenamientosVigentes(pid); } catch (e) { ordenes = null; }
+    if (!Array.isArray(ordenes) || !ordenes.length) return false;
+    const hoy = todayStamp();
+    const hallados = new Set();
+    for (const o of ordenes) {
+      if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
+      const fc = _parseFechaHoraLike(o.fechaCreacion);
+      if (!fc || fc.iso !== hoy) continue;   // solo HOY habla de este POST perdido
+      hallados.add(String(o.cup.codigo));
+    }
+    return cups.every((c) => hallados.has(c));
+  }
+
   // v14.1.0 (R1b) — SIGNOS VITALES: la única pieza que le faltaba al motor renal.
   // El médico decidió el 14-ago-2026 que la fórmula que gobierna el estadio es
   // COCKCROFT-GAULT, y esa fórmula necesita el PESO REAL, que hasta hoy no existía en
@@ -31149,6 +31179,7 @@
       let creadasCount = 0;
       let agrupadores = [];
       let fallidasCount = 0;
+      let recuperadasCount = 0;              // v18.1.1 (FIX 8 M2M) — POST sin respuesta que SÍ llegó al servidor
       let omitidasCount = 0;                 // v18.0.63 — no se pidieron porque ya se pidieron hoy
       const omitidasTitulos = [];
       const cie10Creados = [];               // v18.0.63 — QUÉ paquetes quedaron creados
@@ -31220,6 +31251,37 @@
             c.disabled = true;
             const lbl = c.closest("label"); if(lbl && lbl.classList) lbl.classList.add("vgl-op-half", "vgl-line-through");
           }
+        } else if (resOrd == null) {
+          // v18.1.1 (FIX 8 M2M) — POST SIN VEREDICTO: la escritura no se reintenta y
+          // pageFetchJson devolvió null. Ese null no dice si la orden se creó (timeout
+          // tras aceptar el POST). ANTES de contarla como fallida (y dejar el botón de
+          // "Reintentar" crear el duplicado), se consulta la fuente de verdad: si TODOS
+          // los CUPS de este paquete ya figuran como vigentes con fecha de HOY, la orden
+          // LLEGÓ — se marca como creada y la casilla se tacha, igual que una creada con
+          // respuesta. Sin agrupador no hay impresión desde aquí: el resumen remite al
+          // módulo de Ordenamientos. Si la consulta falla o no figura, cae a fallida
+          // (reintento legítimo: no se bloquea por una duda).
+          let _pidOrd = pid;
+          if (!_pidOrd) { try { _pidOrd = await apiAccesoBuscarPaciente(apt.doc_id); } catch (e) { _pidOrd = null; } }
+          const _cupsEnviados = cupsObjs.map((co) => co && (co.codigo || co.Codigo));
+          let _recuperada = false;
+          try { _recuperada = await _ordenYaFiguraEnEverestHoy(_pidOrd, _cupsEnviados); } catch (e) { _recuperada = false; }
+          if (_recuperada) {
+            recuperadasCount++;
+            cie10Creados.push(String(pkg.cie10));
+            actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
+            try { markOrdenesCreadasHoy(apt.doc_id, [], (pymPorPaquete.get(pkg) || []), [pkg.cie10]); } catch (e) {}
+            vglLog("ORDEN", "GuardarOrdenRecuperadaSinRespuesta", { cie10: String(pkg.cie10) });
+            try { uxTrack("ordenes.post_perdido.recuperada", { cie10: String(pkg.cie10) }); } catch (e) {}
+            if (vivo()) {
+              c.checked = false;
+              c.disabled = true;
+              const lblR = c.closest("label"); if (lblR && lblR.classList) lblR.classList.add("vgl-op-half", "vgl-line-through");
+            }
+          } else {
+            fallidasCount++;
+            if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); }
+          }
         } else {
           fallidasCount++;
           if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); }
@@ -31253,7 +31315,12 @@
       // se dice con números qué faltó, dejando el reintento SOLO para lo que falló (las
       // casillas creadas ya quedaron tachadas y deshabilitadas por el bucle de arriba).
       const parcial = creadasCount > 0 && fallidasCount > 0;
-      if (creadasCount > 0) {
+      // v18.1.1 (FIX 8 M2M) — corrida cuyo POST se perdió pero la orden SÍ llegó al
+      // servidor (confirmada contra ObtenerOrdenamientoPorPacienteIdVigente). No hay
+      // agrupadores para imprimir ni Radicado que mostrar: no puede pintarse como éxito
+      // pleno, pero TAMPOCO como fallo — el reintento duplicaría la orden.
+      const soloRecuperadas = creadasCount === 0 && recuperadasCount > 0 && fallidasCount === 0;
+      if (creadasCount > 0 || recuperadasCount > 0) {
         // v17.6.8 — AUDITORÍA 5 MÓDULOS (P1 PyM): la llamada de 2 argumentos dejaba
         // `det.actividades` SIN escribir; mientras el campo faltaba, pymPendientesRestantes
         // caía al fallback de "marca vieja" y el aviso silenciaba VIH, cérvix, mama, colon,
@@ -31261,18 +31328,25 @@
         markOrdenesCreadasHoy(apt.doc_id, [...new Set(agrupadores)], [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
         const agrupadoresUnicos = [...new Set(agrupadores)];
         if (vivo()) {
-          if (!parcial) confirmBtn.classList.add("vgl-bg-success");
+          if (!parcial && !soloRecuperadas) confirmBtn.classList.add("vgl-bg-success");
           confirmBtn.textContent = parcial
             ? `Reintentar las ${fallidasCount} que faltaron`
-            : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
+            : soloRecuperadas
+              ? (recuperadasCount === 1 ? "1 orden creada sin confirmación" : `${recuperadasCount} órdenes creadas sin confirmación`)
+              : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
           // v17.11.0 — hallazgo #44: el parcial usaba .vgl-ord-vigwarn, que en este modal es
           // VERDE («ya está cubierto»). Una corrida a medias no puede parecerse a una que
           // salió bien: clase propia en ámbar.
-          successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
-          successMsg.innerHTML = parcial
+          successMsg.className = (parcial || soloRecuperadas) ? "vgl-ord-parcial" : "vgl-msg-success";
+          successMsg.innerHTML = soloRecuperadas
+            ? `
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">La conexión se cortó, pero ${recuperadasCount === 1 ? "la orden ya quedó creada" : `las ${recuperadasCount} órdenes ya quedaron creadas`} en Everest</div>
+            <div style="font-size:12px;opacity:0.9">El servidor no devolvió la confirmación y se verificó contra las órdenes vigentes: ${recuperadasCount === 1 ? "figura creada hoy" : "figuran creadas hoy"}. <b>No ${recuperadasCount === 1 ? "la vuelva a generar" : "las vuelva a generar"}</b> — el botón de reintento crearía ${recuperadasCount === 1 ? "un duplicado" : "duplicados"}. Verifíquela e imprímala desde el módulo de Ordenamientos de Everest.</div>
+          `
+            : parcial
             ? `
             <div style="font-size:14px;font-weight:600;margin-bottom:4px">Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
             <div style="font-size:12px;opacity:0.9">Las ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} creadas quedaron listas para imprimir y quedan registradas como generadas: <b>no las vuelva a generar</b>. ${fallidasCount === 1 ? "La que falta está marcada en rojo; el botón de arriba reintenta solo esa." : `Las ${fallidasCount} que faltan están marcadas en rojo; el botón de arriba reintenta solo esas.`}</div>
@@ -31286,7 +31360,10 @@
           // v15.7.0 — AUTO-IMPRESIÓN: la primera orden se abre sola (como Everest). Si hay
           // más de un agrupador, los demás quedan con su botón (el navegador solo permite
           // una pestaña por gesto del usuario).
-          if (pestanaImpresion) {
+          // v18.1.1 (FIX 8 M2M) — el guard de agrupadoresUnicos.length: en una corrida
+          // soloRecuperadas el POST se perdió y no hay agrupador; sin el guard se llamaba
+          // GenerarLinks con undefined.
+          if (pestanaImpresion && agrupadoresUnicos.length) {
             try {
               uxTrack("ordenes.imprimir.auto");
               let urlServidorAuto = null;
@@ -31301,6 +31378,9 @@
           // v12.5.13 — Imprimir directamente la(s) orden(es) recién creada(s). Contrato real,
           // ver imprimirOrdenPyM. Un botón por agrupador ÚNICO de ESTA corrida — nunca una
           // orden vieja de otra sesión ni de otro paciente.
+          // v18.1.1 (FIX 8 M2M) — sin agrupadores (soloRecuperadas) no hay botones: la
+          // verificación e impresión van por el módulo de Ordenamientos, como dice el aviso.
+          if (agrupadoresUnicos.length) {
           const printBox = document.createElement("div");
           printBox.className = "vgl-ord-printbox";
           printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">Imprimir las órdenes generadas</label>`;
@@ -31380,13 +31460,14 @@
               ? `Órdenes enviadas al correo del paciente.`
               : (okCount > 0 ? `Se enviaron ${okCount} de ${agrupadoresUnicos.length} órdenes. Verifique en la plataforma de Everest.` : "No fue posible enviar las órdenes por correo. Verifique el correo o inténtelo desde la plataforma de Everest.");
           });
+          }   // v18.1.1 (FIX 8 M2M) — fin del guard de agrupadores (printBox + mailBox)
         }
 
         // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
         // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
         // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
         markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
-        uxTrack("ordenes.creadas", { n: creadasCount, fallidas: fallidasCount });
+        uxTrack("ordenes.creadas", { n: creadasCount, fallidas: fallidasCount, recuperadas: recuperadasCount });
         _fnCompletado = true;
         try { uxTrack("fn.ordenar.complete"); } catch (e) {}
         // v16.7.0 — AUDITORÍA #10: el aviso también decía VERDE «Generadas» en las
@@ -31394,6 +31475,10 @@
         // único que el médico puede usar para decidir si le falta algo por ordenar.
         if (parcial) {
           notify("AMBAR", "Órdenes incompletas", `${patientName} · ${creadasCount} de ${creadasCount + fallidasCount} órdenes quedaron creadas. ${fallidasCount === 1 ? "Falta 1: reintente solo esa" : `Faltan ${fallidasCount}: reintente solo esas`} en el módulo.`, true); // [COPY-UX]
+        } else if (soloRecuperadas) {
+          // v18.1.1 (FIX 8 M2M) — caída de conexión con la orden YA creada en el servidor:
+          // ni verde (no hay confirmación formal) ni reintento (duplicaría).
+          notify("AMBAR", "Órdenes sin confirmación de Everest", `${patientName} · ${recuperadasCount === 1 ? "la orden quedó creada pese a" : `${recuperadasCount} órdenes quedaron creadas pese a`} la caída de conexión. No ${recuperadasCount === 1 ? "la vuelva a generar" : "las vuelva a generar"}: verifíquelas en el módulo de Ordenamientos.`, true); // [COPY-UX]
         } else {
           // v18.0.109 (C18) — el bloque verde del modal ya lo dice; el aviso solo si la pestaña no se mira.
           if (_pestanaSinAtencion()) notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]

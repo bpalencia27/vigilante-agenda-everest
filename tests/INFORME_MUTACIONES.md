@@ -13124,6 +13124,7 @@ consultados.
 | 549 | se revierte el mensaje del apixabán (CrCl 15-29) al texto viejo «Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.», que ordena la reducción por el CrCl solo | *suite_39: «fix 5 M2M — apixabán CrCl 15-29: pedir verificación 2-de-3, no reducir por CrCl solo» — mutante 49 pasan / 1 falla; y suite_43: «_regla_doac -> mtrReglaDoac: 560 vectores contra motor_deterministic.py» y «no sobra ninguna divergencia declarada» — las 35 divergencias declaradas dejan de divergir y quedan huérfanas, mutante 38 pasan / 2 fallan; restaurado 50/0 y 40/0* | Sí |
 | 550 | el tope de furosemida vuelve a decir «(G3b-G5)», estadio que el gate `egfr >= 30 return null` excluye antes de llegar a la rama | *suite_39: «fix 5 M2M — el tope de furosemida dice G4-G5, lo único que el gate deja pasar» — mutante 49 pasan / 1 falla; restaurado 50/0* | Sí |
 | 551 | se elimina `diasSinRespuesta++` del `catch` del bucle de 30 días del botón «primer cupo»: 30 fallos de red seguidos vuelven a anunciarse como «Sin cupos libres en los próximos 30 días hábiles» | *suite_15: «fix 7 M2M — 30 días sin respuesta del servidor no se anuncian como "Sin cupos libres"» — mutante 268 pasan / 2 fallan (la segunda caída es la pre-existente de renderDayChips, presente también en HEAD); restaurado 269/1, solo la pre-existente* | Sí |
+| 552 | se anula la rama de recuperación del POST sin veredicto en el lote de órdenes (`if (_recuperada)` → `if (false && _recuperada)`): la orden que SÍ llegó al servidor con respuesta perdida vuelve a contarse como fallida y el botón «Reintentar» queda ofreciendo crear el duplicado | *suite_15: «v18.1.1: POST perdido pero la orden SÍ llegó → se recupera contra vigentes y NO se re-POSTea» — mutante 270 pasan / 1 falla; restaurado 271/0* | Sí |
 
 Banco completo: **3.355 comprobaciones pasan, 3 fallan**. Las 3 caídas —
 «v18.0.131 (hallazgo 11): renderDayChips» en suite_15 y las dos de cascada CSS
@@ -13131,4 +13132,13 @@ Banco completo: **3.355 comprobaciones pasan, 3 fallan**. Las 3 caídas —
 HEAD 76128d1 SIN estos cambios, verificado extrayendo el HEAD limpio con `git archive`
 a un directorio aparte y corriendo suite_15 y suite_25 sobre él (268/1 y 30/2). Son
 hallazgos NO tocados por esta entrega, reportados aparte.
+
+**Entrega FIX 8 M2M (2026-09-05).** Causa raíz de las 3 caídas «pre-existentes»
+identificada y reparada: el archivo en disco había quedado con finales de línea CRLF
+(git de Windows lo reescribió en un checkout/stash), y las pruebas de fuente que
+buscan `"\n    });\n"` literal recibían `cierre = -1`, quedando su ventana de
+respaldo de 900 caracteres sin alcanzar las llamadas reales. Normalizados
+`vigilante_agenda.user.js` y `tests/suite_15_interfaz_avanzada.js` a LF (UTF-8 sin
+BOM, diff de git nulo porque los blobs ya eran LF): suite_15 pasó de 269/1 a
+**271/0** y suite_25 de 30/2 a **32/0**. Las 3 caídas ya no existen.
 
