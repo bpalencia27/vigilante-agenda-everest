@@ -16,6 +16,66 @@ module.exports = {
       t.cierto(c.api.__state.fraudWatch.has(r.key));
     });
 
+    // =====================================================================
+    //  FIX 19/20 (auditoría M2M) — FRONTERAS EXACTAS DE colorAndAlert.
+    //  Los casos de arriba usan valores cómodos (10 min, 5,5 min): nunca el
+    //  valor EXACTO del umbral. Si un `>=` se degrada a `>` en la frontera
+    //  (grace=6, prealert=5) o el corte de PyM baja de 3, ningún test lo
+    //  nota. Aquí, el minuto exacto y la actividad justa.
+    // =====================================================================
+    t.caso("FIX 19 M2M — frontera exacta: Sin presentarse a los 6 minutos JUSTOS es AMBAR (>=, no >)", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:06:00").getTime());
+      t.igual(r.color, "AMBAR", "elapsed == gracia exacta: el umbral es inclusivo");
+      t.cierto(c.api.__state.fraudWatch.has(r.key), "a los 6 justos ya nace la marca de fraude");
+    });
+
+    t.caso("FIX 19 M2M — frontera exacta: Sin presentarse a los 5 minutos JUSTOS es MORADO de pre-alerta", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:05:00").getTime());
+      t.igual(r.color, "MORADO", "elapsed == prealerta exacta (5): el umbral es inclusivo");
+      t.igual(r.reason, "tiempo", "y el motivo declarado es el reloj");
+      t.falso(c.api.__state.fraudWatch.has(r.key), "aún NO es inasistencia: no nace marca de fraude");
+    });
+
+    t.caso("FIX 19 M2M — un décimo menos (4,9 min) sigue AZUL: la frontera de pre-alerta no cede hacia abajo", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:04:54").getTime());
+      t.igual(r.color, "AZUL", "4,9 < 5: aún sin color");
+      t.igual(r.reason, "", "y sin motivo");
+    });
+
+    t.caso("FIX 19 M2M — frontera exacta: TRES actividades de PyM en estado neutro pintan MORADO «pym»", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", estado: "En espera", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api.__state.pym.set(c.api.normalizeKey("123"), ["uno", "dos", "tres"]);
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:02:00").getTime()); // 2 min < prealerta 5
+      t.igual(r.color, "MORADO", "3 actividades JUSTAS: el umbral es inclusivo");
+      t.igual(r.reason, "pym", "y el motivo es la carga de PyM, no el reloj");
+    });
+
+    t.caso("FIX 19 M2M — DOS actividades de PyM NO pintan MORADO: la frontera de PyM no cede hacia abajo", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", estado: "En espera", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api.__state.pym.set(c.api.normalizeKey("123"), ["uno", "dos"]);
+      const r = c.api.colorAndAlert(a, new Date("2026-08-10T08:02:00").getTime());
+      t.igual(r.color, "AZUL", "2 < 3: sin pre-alerta por PyM");
+      t.igual(r.reason, "", "y sin motivo");
+    });
+
     // v17.6.74 — REPORTE EN VIVO (26-ago, captura): "confirmación extemporánea" para un
     // paciente que el médico jura tuvo en sala a tiempo — "es como si no leyera en tiempo
     // real la agenda". Causa real: una pestaña de fondo (con el temporizador estrangulado

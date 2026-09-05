@@ -13258,4 +13258,31 @@ La mutación se aplicó y restauró (una sola). No-regresión: suite_32 (45/0), 
 suite_76_disco_hostil CUELGA en este entorno de forma PREEXISTENTE (verificado con el código
 commiteado vía stash: imprime la cabecera y no llega al resumen) — no la ejercita este cambio.
 
+## FIX 19-20+30-33 (auditoría M2M) — fronteras exactas que nadie probaba
+
+Los tests existentes de `colorAndAlert`, de las guardas renales y del candado «ya
+agendado/ordenado hoy» usaban valores cómodos (10 min, 5,5 min, peso 0/140, día
+"2020-01-01"): nunca el valor EXACTO del umbral. La producción resultó CORRECTA en
+todas las fronteras (`>=` bien usado; el día se compara por igualdad `!==`), así que
+el fix es solo la adición de 8 pruebas SIBLING con el minuto justo, la actividad
+justa y el valor justo: suite_04 pasó de 106 a **111**, suite_09 de 36 a **37** y
+suite_27 de 12 a **14**. Cada frontera se mutó a propósito (degradar `>=` a `>`,
+igualdad a orden) y cada mutante cayó con la prueba nueva antes de restaurarse.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 567 | en `colorAndAlert`, la frontera de inasistencia se degrada (`if (elapsed >= grace)` → `if (elapsed > grace)` en L14761): «Sin presentarse» a los 6 minutos JUSTOS vuelve a pintarse MORADO de pre-alerta en vez de ÁMBAR, sin marca de fraude | *suite_04: «FIX 19 M2M — frontera exacta: Sin presentarse a los 6 minutos JUSTOS es AMBAR (>=, no >)» — mutante 110 pasan / 1 falla; restaurado 111/0* | Sí |
+| 568 | la frontera de pre-alerta se degrada (`} else if (elapsed >= prealert)` → `} else if (elapsed > prealert)` en L14810): a los 5 minutos JUSTOS el MORADO de tiempo desaparece y la celda cae a AZUL | *suite_04: «FIX 19 M2M — frontera exacta: Sin presentarse a los 5 minutos JUSTOS es MORADO de pre-alerta» — mutante 110 pasan / 1 falla («esperaba "MORADO" y obtuvo "AZUL"»); restaurado 111/0* | Sí |
+| 569 | el corte de PyM se degrada (`pym.length >= 3` → `pym.length > 3` en L14812): TRES actividades justas ya no pintan MORADO «pym» y la celda cae a AZUL | *suite_04: «FIX 19 M2M — frontera exacta: TRES actividades de PyM en estado neutro pintan MORADO «pym»» — mutante 110 pasan / 1 falla («esperaba "MORADO" y obtuvo "AZUL"»); restaurado 111/0* | Sí |
+| 570 | el piso de peso de la guarda renal se degrada (`peso >= 20` → `peso > 20` en L4511): un adulto de exactamente 20 kg vuelve a ser rechazado como implausible y se queda sin CrCl | *suite_27: «FIX 32/33 M2M — frontera exacta de peso: 20 y 300 kg calculan, 19,9 y 300,1 son centinela 0» — mutante 13 pasan / 1 falla («peso 20 JUSTO… obtuvo false»); restaurado 14/0* | Sí |
+| 571 | el piso de creatinina se degrada (`creat >= 0.1` → `creat > 0.1` en L4511): la creatinina de exactamente 0,1 (borde inferior del rango oficial de Everest) vuelve a ser centinela 0 | *suite_27: «FIX 32/33 M2M — frontera exacta de creatinina: 0,1 y 20 mg/dL calculan, 0,09 y 20,1 son centinela 0» — mutante 13 pasan / 1 falla («creatinina 0,1 JUSTA… obtuvo false»); restaurado 14/0* | Sí |
+| 572 | el candado del antiduplicados se degrada de igualdad a orden (`data.dia !== today` → `data.dia < today` en L9593): un registro sellado con el día SIGUIENTE (corrupto) ya no se resetea y secuestra el «ya ordenado hoy» de un día que aún no llega | *suite_09: «FIX 20 M2M — un registro sellado con el día de MAÑANA se resetea: el candado es igualdad, no orden» — mutante 36 pasan / 1 falla («esperaba "2026-09-05" y obtuvo "2026-09-06"»); restaurado 37/0* | Sí |
+
+Las seis mutaciones se aplicaron y restauraron UNA POR UNA (grep-verificada cada
+restauración antes de la siguiente). No-regresión: suite_10 (30/0, toca
+`colorAndAlert`) y suite_32 (45/0, frontera de edad 18/120 ya cubierta por R2.3 —
+por eso no se duplica aquí). La celda de «4,9 min sigue AZUL» y la de «DOS
+actividades no pintan» son el contraste de la frontera hacia abajo: sin ellas, un
+umbral que cediera hacia abajo (pintar MORADO demasiado pronto) tampoco se notaría.
+
 

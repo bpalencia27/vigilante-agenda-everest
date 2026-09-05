@@ -79,6 +79,22 @@ module.exports = {
       t.igual(p.ordenes, ["22"]);
     });
 
+    // FIX 20 (auditoría M2M) — frontera exacta del día: el candado compara IGUALDAD
+    // con todayStamp, no orden. El caso de "2020-01-01" de arriba dejaría pasar una
+    // comparación degradada (`<`/`<=`): un registro sellado con el día SIGUIENTE
+    // (dato corrupto, reloj del servidor, migración) NO se resetearía y secuestraría
+    // el antiduplicados «ya ordenado hoy» de todo un día que aún no llega.
+    t.caso("FIX 20 M2M — un registro sellado con el día de MAÑANA se resetea: el candado es igualdad, no orden", () => {
+      const manana = A.todayStamp(new Date(Date.now() + 86400000));
+      A.writeJSON(PROC_KEY, { dia: manana, citas: ["777"], ordenes: ["888"] });
+      const p = A.getProcessedToday();
+      t.igual(p.dia, A.todayStamp(), "vuelve al día real, no al del sello corrupto");
+      t.igual(p.ordenes, [], "la orden del día futuro no bloquea hoy");
+      t.igual(p.citas, [], "ni la cita del día futuro");
+      A.markOrdenesCreadasHoy("999");
+      t.cierto(A.isOrdenesCreadasHoy("999"), "y una orden de HOY sí bloquea: el contraste de la frontera");
+    });
+
     // ------------------------------------------------------------------
     //  isCitaAgendadaHoy / isOrdenesCreadasHoy / mark…
     // ------------------------------------------------------------------

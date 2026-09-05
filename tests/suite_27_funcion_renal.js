@@ -49,6 +49,33 @@ module.exports = {
       t.igual(api.cockcroftGault(140, 70, 1, "M"), 0);
     });
 
+    // =====================================================================
+    //  FIX 32/33 (auditoría M2M) — FRONTERAS EXACTAS DE LAS GUARDAS DE ENTRADA.
+    //  Los centinelas de arriba usan valores lejanos (0, 140). Las fronteras
+    //  reales de plausibilidad (peso 20-300, creatinina 0,1-20, edad 18-120 —
+    //  la de edad ya vive en suite_32) nunca se habían probado con el valor
+    //  EXACTO del corte: un `>=` degradado a `>` tumbaría un paciente real
+    //  (peso exactamente 20 kg, creatinina exactamente 0,1) sin que nadie lo
+    //  notara. Aquí el valor justo y el que está un escalón por fuera.
+    // =====================================================================
+    t.caso("FIX 32/33 M2M — frontera exacta de peso: 20 y 300 kg calculan, 19,9 y 300,1 son centinela 0", () => {
+      t.cierto(api.cockcroftGault(55, 20, 1.1, "M") > 0, "peso 20 JUSTO: un adulto muy hipotrófico sigue siendo evaluable");
+      t.igual(api.cockcroftGault(55, 19.9, 1.1, "M"), 0, "19,9 ya no: bajo el piso de plausibilidad");
+      t.cierto(api.cockcroftGault(55, 300, 1.1, "M") > 0, "peso 300 JUSTO: el techo también es inclusivo");
+      t.igual(api.cockcroftGault(55, 300.1, 1.1, "M"), 0, "300,1 ya no: dato corrupto");
+    });
+
+    t.caso("FIX 32/33 M2M — frontera exacta de creatinina: 0,1 y 20 mg/dL calculan, 0,09 y 20,1 son centinela 0", () => {
+      t.cierto(api.cockcroftGault(55, 70, 0.1, "M") > 0, "creatinina 0,1 JUSTA (la del rango oficial de Everest): evaluable");
+      t.igual(api.cockcroftGault(55, 70, 0.09, "M"), 0, "0,09 ya no: implausible");
+      t.cierto(api.cockcroftGault(55, 70, 20, "M") > 0, "creatinina 20 JUSTA (techo del rango oficial): evaluable");
+      t.igual(api.cockcroftGault(55, 70, 20.1, "M"), 0, "20,1 ya no: dato corrupto");
+      t.cierto(api.ckdEpi2021(55, 0.1, "M") > 0, "la misma frontera en CKD-EPI 2021 (0,1 evaluable)");
+      t.cierto(api.ckdEpi2021(55, 20, "M") > 0, "y su techo (20 evaluable)");
+      t.igual(api.ckdEpi2021(55, 0.09, "M"), 0, "0,09 rechazado también ahí");
+      t.igual(api.ckdEpi2021(55, 20.1, "M"), 0, "y 20,1 igual");
+    });
+
     t.caso("ckdEpi2021 - casos verificados independientemente", () => {
       t.igual(api.ckdEpi2021(63, 0.55, "F"), 102.9);
       t.igual(api.ckdEpi2021(55, 1.1, "M"), 79.3);
