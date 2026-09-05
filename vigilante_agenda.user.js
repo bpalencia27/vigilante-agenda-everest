@@ -2970,11 +2970,30 @@
   }
 
   // Primer elemento del DOM que exista entre el id principal y sus alternativas.
+  // v18.1.1 (FIX 9 M2M) — Everest ya demostró renderar el MISMO id/name en varios
+  // <input> a la vez (HbA1c vs Hemoglobina, v12.3.26). getElementById/querySelector
+  // devuelven SIEMPRE el primero del documento; si ese primero vive en una copia
+  // OCULTA (pestaña de fondo, acordeón plegado, plantilla residual de Angular),
+  // escribíamos en una casilla que el médico no ve. Ahora se recolectan TODOS los
+  // candidatos por id y por name; si hay varios, gana el primero VISIBLE y habilitado;
+  // si ninguno lo es, se devuelve el primero (comportamiento de siempre, sin regresión).
   function _findLabField(primaryId, altIds) {
       for (const id of [primaryId].concat(altIds || [])) {
           if (!id) continue;
-          const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
-          if (el) return el;
+          const cands = [];
+          const push = (el) => { if (el && cands.indexOf(el) === -1) cands.push(el); };
+          push(document.getElementById(id));
+          let esc = null;
+          try { esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id.replace(/[^a-zA-Z0-9_-]/g, "\\$&"); } catch (e) { esc = id; }
+          try { push(document.querySelector(`[name="${id}"]`)); } catch (e) {}
+          try { Array.prototype.forEach.call(document.querySelectorAll("#" + esc), push); } catch (e) {}
+          try { Array.prototype.forEach.call(document.querySelectorAll('[name="' + esc + '"]'), push); } catch (e) {}
+          if (!cands.length) continue;
+          if (cands.length === 1) return cands[0];
+          for (const el of cands) {
+              if (!el.disabled && _vglVisibleDeVerdad(el)) return el;
+          }
+          return cands[0];
       }
       return null;
   }
@@ -31827,13 +31846,17 @@
       if (!sigueElMismo()) return false;
       const items = Array.from(d.querySelectorAll("li"));
       let li = null;
-      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; } }
+      // v18.1.1 (FIX 10 M2M) — mismo filtro de visibilidad que _conductaClicPaqueteHTA
+      // (probado 2 veces en producción en esta misma pantalla): Angular deja residuos de
+      // listas ocultas en el DOM y sin este filtro podíamos clickear el <li> de una copia
+      // que el médico no ve.
+      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo && _vglVisibleDeVerdad(el)) { li = el; break; } }
       if (!li) return false;
       li.click();
       await _conductaEsperar(700);   // cadencia real observada: ~700-1500ms entre <li> y "Agregar"
       if (!sigueElMismo()) return false;               // ← el hueco grande: 700 ms
       const botones = Array.from(d.querySelectorAll("button"));
-      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled);
+      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled && _vglVisibleDeVerdad(b));
       if (!btnAgregar) return false;
       btnAgregar.click();
       // Cuadro opcional (visto en la captura real para algunos analitos, no todos): se
@@ -31841,16 +31864,16 @@
       await _conductaEsperar(400);
       if (!sigueElMismo()) return false;
       const botones2 = Array.from(d.querySelectorAll("button"));
-      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO");
+      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO" && _vglVisibleDeVerdad(b));
       if (btnRepetir) {
         btnRepetir.click();
         await _conductaEsperar(300);
         if (!sigueElMismo()) return false;
         const botones3 = Array.from(d.querySelectorAll("button"));
-        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR");
+        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR" && _vglVisibleDeVerdad(b));
         if (btnConfirmar) btnConfirmar.click();
       } else {
-        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO");
+        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO" && _vglVisibleDeVerdad(b));
         if (btnEntendido) btnEntendido.click();
       }
       return true;

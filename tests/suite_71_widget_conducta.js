@@ -514,9 +514,18 @@ module.exports = {
       if (o.rect) b.getBoundingClientRect = () => o.rect;
       return b;
     }
-    function mockLi(texto, alClick) {
+    // o.visible === false (FIX 10 M2M): simula un <li> en una copia OCULTA del DOM
+    // (offsetParent null, como los residuos de Angular) para las pruebas de visibilidad.
+    function mockLi(texto, alClick, opts) {
+      const o = opts || {};
       let clics = 0;
-      return { textContent: texto, click() { clics++; if (alClick) alClick(); }, get _clicado() { return clics > 0; }, get _clics() { return clics; } };
+      return {
+        textContent: texto,
+        offsetParent: o.visible === false ? null : {},
+        click() { clics++; if (alClick) alClick(); },
+        get _clicado() { return clics > 0; },
+        get _clics() { return clics; },
+      };
     }
     function mockFila(codigo) {
       return { querySelector: (sel) => (sel === "td" ? { textContent: codigo } : null) };
@@ -608,6 +617,59 @@ module.exports = {
       d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
       const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
       t.falso(ok, "un Agregar deshabilitado no cuenta como disponible");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen (FIX 10 M2M): <li> solo existe en una copia OCULTA del DOM — false sin clic", async () => {
+      // Mismo criterio que _conductaClicPaqueteHTA (probado en producción): Angular deja
+      // residuos ocultos y el find() de documento completo podía clickear el <li> de una
+      // lista que el médico no ve.
+      const d = mockDocConducta({});
+      const li = mockLi("HEMOGLOBINA", null, { visible: false });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.falso(ok);
+      t.falso(li._clicado, "el <li> de la copia oculta (offsetParent null) no debe recibir el clic");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen (FIX 10 M2M): 'Agregar' oculto aunque sea el único — false, y el <li> visible SÍ se clickea", async () => {
+      const d = mockDocConducta({});
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(mockBoton("Agregar", { visible: false })));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.falso(ok, "sin un Agregar visible no hay nada seguro que clickear");
+      t.cierto(li._clicado, "el <li> visible sí se clickea — es la copia buena");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen (FIX 10 M2M): dos 'Agregar' en el DOM — clica el VISIBLE, nunca el primero a ciegas", async () => {
+      const d = mockDocConducta({});
+      const oculto = mockBoton("Agregar", { visible: false });
+      const visible = mockBoton("Agregar", {});
+      const li = mockLi("HEMOGLOBINA", () => { d._agregarBoton(oculto); d._agregarBoton(visible); });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.cierto(ok);
+      t.falso(oculto._clicado, "el Agregar de la copia oculta no debe recibir el clic");
+      t.cierto(visible._clicado, "el Agregar visible debe recibir el clic");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen (FIX 10 M2M): 'Repetirlo' oculto se ignora y cierra por el 'Entendido' visible", async () => {
+      const d = mockDocConducta({});
+      const repetirOculto = mockBoton("Repetirlo", { visible: false });
+      const entendido = mockBoton("Entendido", {});
+      const btnAgregar = mockBoton("Agregar", { alClick: () => { d._agregarBoton(repetirOculto); d._agregarBoton(entendido); } });
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.cierto(ok);
+      t.falso(repetirOculto._clicado, "el Repetirlo de la copia oculta no debe recibir el clic");
+      t.cierto(entendido._clicado, "sin Repetirlo visible, el cierre cae al Entendido visible");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen (FIX 10 M2M): 'Confirmar' oculto no se clickea", async () => {
+      const d = mockDocConducta({});
+      const confirmarOculto = mockBoton("Confirmar", { visible: false });
+      const btnRepetir = mockBoton("Repetirlo", { alClick: () => d._agregarBoton(confirmarOculto) });
+      const btnAgregar = mockBoton("Agregar", { alClick: () => d._agregarBoton(btnRepetir) });
+      const li = mockLi("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", d);
+      t.cierto(ok, "el flujo sigue contando como cerrado aunque el Confirmar residual esté oculto");
+      t.falso(confirmarOculto._clicado, "el Confirmar de la copia oculta no debe recibir el clic");
     });
     await t.casoAsync("_conductaBuscarYAgregarExamen: el cuadro opcional Repetirlo→Confirmar se reconoce y se cierra", async () => {
       const d = mockDocConducta({});

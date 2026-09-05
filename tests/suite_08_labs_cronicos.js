@@ -128,6 +128,36 @@ module.exports = {
       t.igual(testApi._findLabField("campoPrincipal", []), null);
     });
 
+    // FIX 9 M2M — Everest ya renderó el MISMO id/name en dos <input> (HbA1c vs
+    // Hemoglobina, v12.3.26). getElementById siempre devuelve la PRIMERA copia; si esa
+    // primera vive en una copia OCULTA (pestaña de fondo, plantilla residual de Angular),
+    // el Auto-Labs escribía en una casilla que el médico no ve.
+    t.caso("_findLabField (FIX 9 M2M): id duplicado — gana la copia VISIBLE, no la primera del DOM", () => {
+      mockDOM = {};   // getElementById no aporta nada: las copias solo existen en el DOM vivo
+      const oculta = { id: "campoDup", value: "x", offsetParent: null };
+      const visible = { id: "campoDup", value: "" };
+      const qsaOriginal = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) =>
+        (sel === "#campoDup" || sel === '[name="campoDup"]') ? [oculta, visible] : [];
+      try {
+        t.igual(testApi._findLabField("campoDup", []), visible, "debe saltarse la copia oculta (offsetParent null)");
+      } finally {
+        c.env.doc.querySelectorAll = qsaOriginal;
+      }
+    });
+    t.caso("_findLabField (FIX 9 M2M): TODAS las copias ocultas → devuelve la primera (contrato de siempre)", () => {
+      mockDOM = {};
+      const o1 = { id: "campoDup2", value: "", offsetParent: null };
+      const o2 = { id: "campoDup2", value: "", offsetParent: null };
+      const qsaOriginal = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === "#campoDup2" ? [o1, o2] : []);
+      try {
+        t.igual(testApi._findLabField("campoDup2", []), o1, "fail-safe: sin copia visible se conserva el comportamiento antiguo");
+      } finally {
+        c.env.doc.querySelectorAll = qsaOriginal;
+      }
+    });
+
     t.caso("setNgValue: escribe el valor y despacha eventos 'input' y 'change'", () => {
       let dispatched = [];
       const fakeInput = {
