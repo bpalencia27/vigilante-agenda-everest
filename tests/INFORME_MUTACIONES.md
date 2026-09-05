@@ -13234,4 +13234,28 @@ Las tres mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la s
 No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
 suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
 
+## f15 — FIX 15 (M2M): cosecha merge multi-pestaña (rebase-on-write en `_vglCosechaGuardar`)
+
+`_vglCosechaGuardar` hacía read-modify-write del almacén COMPLETO (`vgl_cosecha`, hasta 80
+pacientes) sin protección. Dos pestañas del mismo Everest corren en procesos distintos:
+ambas leen S0, ambas fusionan su paciente y la que escribe última PISA la memoria clínica
+que la otra pestaña acabó de guardar (lost update clásico — la guarda v18.0.4 redujo la
+frecuencia, no cerró la ventana; el comentario del propio código lo admitía). Cierre: tras
+armar la fusión inicial se RE-LEE el disco vía `_vglCosechaTodo()`; si la memo quedó inválida
+por contenido (la otra pestaña escribió), se re-resuelve la clave con `_vglClaveDeDoc`,
+la fusión se rehace sobre lo fresco (la pantalla gana, como siempre) y `todo` se arma desde
+lo fresco — los pacientes de la otra pestaña sobreviven. La poda y la guarda de escritura
+existentes corren DESPUÉS y cubren la mezcla rebasada sin duplicar código. La prueba simula
+la carrera real: el `getItem` falso devuelve S0 en la primera lectura y S1 en las siguientes
+(la otra pestaña escribió mientras tanto); las aserciones leen el mapa crudo del almacén.
+suite_64 pasó de 39 a **40** casos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 566 | se anula el rebase multi-pestaña (`if (fresco !== previoTodo) {` → `if (false && fresco !== previoTodo) {`): la escritura vuelve a armarse toda sobre la foto vieja S0 y PISA al paciente "222222" que la otra pestaña guardó mientras tanto (y pierde su "hta" para este paciente) | *suite_64: «FIX 15 M2M — la escritura no pisa la memoria que otra pestaña guardó mientras tanto» — mutante 39 pasan / 1 falla («la memoria del paciente de la OTRA pestaña sobrevive (obtuvo false)»); restaurado 40/0* | Sí |
+
+La mutación se aplicó y restauró (una sola). No-regresión: suite_32 (45/0), suite_75 (50/0).
+suite_76_disco_hostil CUELGA en este entorno de forma PREEXISTENTE (verificado con el código
+commiteado vía stash: imprime la cabecera y no llega al resumen) — no la ejercita este cambio.
+
 

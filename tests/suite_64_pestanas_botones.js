@@ -260,6 +260,27 @@ module.exports = {
       t.igual(porLaRellenada.programas.diabetes, true);
     });
 
+    t.caso("FIX 15 M2M — la escritura no pisa la memoria que otra pestaña guardó mientras tanto", () => {
+      const c = cargar({ silencioso: true });
+      const ahora = Date.now();
+      // S0: lo que ESTA pestaña leyó al entrar. S1: lo que la OTRA pestaña escribió
+      // mientras tanto — actualizó a este paciente (hta) y guardó a otro (tabaquismo).
+      // Se simula la carrera real: dos procesos, la 1.ª lectura ve S0, el disco ya tiene S1.
+      const s0 = JSON.stringify({ "111111": { ts: ahora - 2000, programas: { dm: true } } });
+      const s1 = JSON.stringify({
+        "111111": { ts: ahora - 1000, programas: { dm: true, hta: true } },
+        "222222": { ts: ahora - 500, factores: { tabaquismo: { v: true, ts: ahora - 500 } } },
+      });
+      const realGet = c.env.storage.getItem.bind(c.env.storage);
+      let lecturas = 0;
+      c.env.storage.getItem = (k) => (k === "vgl_cosecha" ? (++lecturas <= 1 ? s0 : s1) : realGet(k));
+      c.api._vglCosechaGuardar("111111", { tension: { pas: 150 } });
+      const guardado = JSON.parse(c.env.almacen["vgl_cosecha"]);
+      t.cierto(!!guardado["222222"], "la memoria del paciente de la OTRA pestaña sobrevive");
+      t.igual(guardado["111111"].programas.hta, true, "la actualización del otro para ESTE paciente se conserva");
+      t.igual(guardado["111111"].tension.pas, 150, "y lo cosechado en esta pestaña se suma");
+    });
+
     t.caso("v17.48.0 — dos pacientes DISTINTOS siguen sin cruzarse (los ceros no fusionan de más)", () => {
       const c = cargar({ silencioso: true });
       c.api._vglCosechaGuardar("5150076", { programas: { hta: true } });

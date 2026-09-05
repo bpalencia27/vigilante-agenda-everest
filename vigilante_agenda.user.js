@@ -5377,11 +5377,28 @@
       // desde v17.53.0 para su propio almacén: si el paciente ya tiene una entrada bajo
       // cualquier forma de su cédula, se escribe ENCIMA de esa; solo si no existe ninguna se
       // crea con la forma canónica de hoy.
-      const id = _vglClaveDeDoc(previoTodo, idCrudo) || idCrudo;
-      const previo = previoTodo[id] || {};
-      const fusion = Object.assign({}, previo, datos, { ts: Date.now() });
-      const todo = Object.assign({}, previoTodo);
+      let id = _vglClaveDeDoc(previoTodo, idCrudo) || idCrudo;
+      let previo = previoTodo[id] || {};
+      let fusion = Object.assign({}, previo, datos, { ts: Date.now() });
+      let todo = Object.assign({}, previoTodo);
       todo[id] = fusion;
+      // v18.1.x — FIX 15 M2M: MERGE MULTI-PESTAÑA. Dos pestañas del mismo Everest corren
+      // en procesos distintos: ambas leen el almacén, ambas fusionan su paciente y la que
+      // escribe última PISA la memoria que la otra acabó de guardar (lost update clásico
+      // de read-modify-write sin protección — la v18.0.4 redujo la frecuencia, no cerró
+      // la ventana). Cierre práctico: re-leer el disco y rebasar — los pacientes de la
+      // otra pestaña se conservan tal cual, y para ESTE paciente la fusión se rehace
+      // encima de lo que haya en disco (la pantalla gana, como siempre).
+      try {
+        const fresco = _vglCosechaTodo();
+        if (fresco !== previoTodo) {
+          id = _vglClaveDeDoc(fresco, idCrudo) || idCrudo;
+          previo = fresco[id] || {};
+          fusion = Object.assign({}, previo, datos, { ts: Date.now() });
+          todo = Object.assign({}, fresco);
+          todo[id] = fusion;
+        }
+      } catch (e1) {}
       // Poda: por edad y por cantidad, sacrificando siempre lo más viejo.
       // v18.0.134 — `podaCambio` avisa si esta pasada BORRÓ algo: en ese caso hay que
       // persistir sí o sí (la firma por registro solo mira al paciente recién cosechado
