@@ -13057,8 +13057,12 @@ mismo que producía el formato viejo.
 | 542 | la migración cifra y escribe pero NO borra el original con la cédula en el nombre | *suite_69: caso 5 — «el archivo con la cédula en el nombre DESAPARECE»* | Sí |
 | 543 | la poda conserva `edad`, un campo del esquema viejo sin consumidor en el caché | *suite_69: caso 5 — «podado al esquema mínimo: esperaba "fecha,…,v" y obtuvo "edad,fecha,…,v"»* | Sí |
 | 544 | `_mtrInstantaneaAlMenosTanRica` siempre `true`: una lectura pobre pisa la instantánea buena del mismo día | *suite_68: «REGRESIÓN — una instantánea degradada NO pisa la buena del mismo día» y «_mtrInstantaneaAlMenosTanRica: qué cuenta como no perder nada»* | Sí |
+| 545 | la escalera vuelve a leer TODA respuesta con ojos de Gemini (`prov.parsear` → `mtrRespuestaGemini`): una respuesta OpenAI de z.ai ya no se entiende | *suite_70: P9·5b, P9·7b y P9·11 — «choices[0].message.content debe leerse como éxito»* | Sí |
+| 546 | la banda de edicion_fuerte se come el borde inferior (sim >= 0,8): el pin «0,80 exacto sigue leve» se rompe | *suite_70: P9·9 — «16 de 20 → sim 0,80 EXACTO → sigue leve»* | Sí |
+| 547 | el código 1211 de z.ai sale del clasificador de modelo-no-disponible: rotaría sin razón | *suite_70: P9·4 — «z.ai 1211 = modelo que no existe → rotar, no fallar en seco»* | Sí |
+| 548 | se borra `// @connect api.z.ai` del encabezado: Tampermonkey bloquearía la petición del proveedor primario | *suite_70: P9·extra — «sin @connect, Tampermonkey bloquearía la petición»* | Sí |
 
-Banco completo: **3.326 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.344 comprobaciones pasan, 0 fallan.**
 
 ## v18.0.145 — auditoría M2M, parte 1: tres críticos que fallaban en silencio
 
