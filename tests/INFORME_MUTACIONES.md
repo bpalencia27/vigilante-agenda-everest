@@ -13139,3 +13139,26 @@ restauraron verificando el retorno exacto de cada línea tras cada corrida.
 
 Banco completo: **3.368 comprobaciones pasan, 0 fallan.**
 
+## v18.3 (P13) — observabilidad de adopción sin identificadores
+
+Módulo `obs*` del userscript: identidad de equipo (manual → GM → LS legado → huella →
+nuevo con aviso diferido un tick), sesión de consulta con ventana de 5 min y dedup por
+módulo, serialización por lista blanca con contexto acotado a `[A-Za-z0-9._:-]{0,24}`
+(solo-números de máx. 4 dígitos), presupuesto de interrupciones (tope 6/día, fall-open)
+y contador diario de eventos perdidos. La nueva `suite_83_observabilidad` fija el hash
+de las claves, la fuga imposible de la cédula, el dedup del denominador, el tope diario
+y la persistencia. Las suites 11/17/75/78/80 se ajustaron para convivir con el nuevo
+módulo (conteo neto cero). Todas las mutaciones se aplicaron UNA A LA VEZ sobre el
+archivo de producción y se restauraron verificando el retorno exacto de cada línea tras
+cada corrida.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 558 | `obsConsultaAbrir` deja de hashear la clave del paciente (`obsFnv1a(clave)` → `String(clave)`): la cédula saldría entera en la fila | *suite_83: P13·3 — «el id de consulta es el HASH de la clave (la cédula no sale)» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 559 | `obsSerializar` admite cadenas ctx «solo números» largas (se quita `&& (v.length <= 4 \|\| /[A-Za-z]/.test(v))`): la cédula con o sin puntos cabría en el contexto | *suite_83: P13·6 — «la cédula (con o sin puntos) NO cabe: solo-números largos fuera» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 560 | `obsConsultaElegible` pierde el dedup por módulo (`if (!m \|\| obsConsulta.elegibles[m])` → `if (!m)`): marcar dos veces el mismo módulo infla el denominador | *suite_83: P13·3 — «marcarlo dos veces no duplica el denominador» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 561 | `obsPresupuestoEstado` siempre permite (`permite: limite === 0 \|\| st.usados < limite` → `permite: true`): el tope diario de interrupciones ya no corta | *suite_83: P13·4.4 — «el séptimo del día ya no interrumpe» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 562 | `reportar` vuelve a construir el literal dentro del `repQ.push` (blindaje de reentrancia revertido) | **Sobrevivió** — mutante 12 pasan / 0 fallan: con el aviso «obs.equipo.nuevo» diferido un tick (P13·R1), el nacimiento del id ya no re-entra en sincronía durante la construcción del literal, así que ninguna prueba puede alcanzar la ventana original en producción; el blindaje queda como defensa en profundidad y fue restaurado igualmente | Sí |
+
+Banco completo: **3.380 comprobaciones pasan, 0 fallan.**
+
