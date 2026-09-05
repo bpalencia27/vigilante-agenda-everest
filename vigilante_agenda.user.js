@@ -45066,6 +45066,82 @@
   };
   function mtrProveedorIA(id) { return MTR_PROVEEDORES_IA[id] || null; }
 
+  // v18.2.1 (P10) — BARRERA CERO-IDENTIFICABLES. Cambio de enfoque: los saneadores
+  // (scrubPII / mtrSanearTextoLibreAI) CENSURAN por forma; esto es la revisión FINAL
+  // que DECIDE si el prompt puede salir. Se ejecuta sobre el mensaje ENSAMBLADO
+  // (system+user), después de todos los saneadores y justo antes del único
+  // GM_xmlhttpRequest de IA — cubre también el canal que ningún saneador ve (el JSON
+  // v68 viaja crudo). Detector puro: sin red, sin UI, sin telemetría (eso lo hace el
+  // llamador, y solo con conteos). Si dispara, NADA se envía.
+  // Lo que NO detecta, dicho sin adornos: un nombre propio desconocido en MAYÚSCULAS
+  // SOSTENIDAS sin honorífico delante — para una regex «MARIA» e «HIPERTENSO» son la
+  // misma forma (v18.0.25 lo demostró con la censura de más). Límite aceptado y es
+  // la razón de que D5 use el nombre real del paciente, no adivinación de formas.
+  function mtrBarreraIdentificables(system, user, nombrePaciente) {
+    const hallazgos = [];
+    const canal = (donde, texto) => {
+      const t = String(texto == null ? "" : texto);
+      const add = (tipo, muestra) => { if (hallazgos.length < 6) hallazgos.push({ tipo: tipo, muestra: String(muestra).slice(0, 24), donde: donde }); };
+      // D1 — carrera de 6+ dígitos: cédula, historia, teléfono pegado. Las cifras
+      // clínicas son de 1-3 dígitos y las fechas ISO de 4; 6 seguidos solo puede ser
+      // un identificador que ningún saneador alcanzó.
+      let m = t.match(/\d{6,}/);
+      if (m) add("numero_largo", m[0]);
+      // D2 — teléfono móvil colombiano CON separadores («313 456 7890»): cada grupo
+      // es corto y D1 no lo ve; pegado son 10 dígitos y D1 sí lo caza.
+      m = t.match(/(?:\+?57[\s.\-]\s*)?3\d{2}[\s.\-]\d{3}[\s.\-]\d{4}\b/);
+      if (m) add("telefono", m[0]);
+      // D3 — correo electrónico.
+      m = t.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/);
+      if (m) add("correo", m[0]);
+      // D4 — dirección con nomenclatura colombiana («Cra 45 #12-34»).
+      m = t.match(/\b(?:calle|carrera|cra|kr|avenida|av|diagonal|diag|dg|transversal|trans|tv|cl)\.?\s*\d+\s*#\s*\d{1,3}\s*-\s*\d{1,4}\b/i);
+      if (m) add("direccion", m[0]);
+      // D5 — el nombre del propio paciente, por tokens (con/sin tildes, cualquier
+      // caja): la MISMA política de mtrSanearTextoLibreAI. Si el saneador no lo tachó
+      // (canal crudo, o nombre ausente en ese canal), aquí salta.
+      if (nombrePaciente) {
+        try {
+          const tokens = String(nombrePaciente).trim().split(/\s+/).filter(_mtrTokenDeNombreTachable);
+          if (tokens.length) {
+            const alt = tokens.map(_mtrPatronConTildes).join("|");
+            const reTok = new RegExp("(?<![" + MTR_LETRA_ES + "])(?:" + alt + ")(?![" + MTR_LETRA_ES + "])", "i");
+            const mm = t.match(reTok);
+            if (mm) add("nombre_paciente", mm[0]);
+          }
+        } catch (e) {}
+      }
+      // D6 — honorífico + nombre capitalizado («Paciente María», «Acompañante: Jose»,
+      // «Sr. Pérez», «DR. Gómez»). DOS ramas, porque un punto tras el honorífico significa
+      // cosas opuestas según la palabra: en «Sr. Pérez» el punto ES la abreviatura; en
+      // «…del paciente. Prohibido…» es fin de oración y lo que sigue es una frase con
+      // mayúscula inicial — permitir el punto ahí hacía saltar la barrera con los prompts
+      // REALES (hallado por la suite 81: el system de analisis_plan contiene
+      // «paciente. Prohibido»). Regla final: honoríficos COMPLETOS solo con espacio,
+      // «:» o «,» antes del nombre; ABREVIATURAS (sr, sra, dr, dra) SOLO con punto.
+      try {
+        const variantes = (lista) => lista.map((w) => { const pr = w[0]; return "[" + pr.toUpperCase() + pr + "]" + w.slice(1) + "|" + w.toUpperCase(); }).join("|");
+        const honCompletos = MTR_HONORIFICOS_IA.filter((w) => w.length > 3).concat(["don", "doctor", "doctora"]);
+        const honAbrev = MTR_HONORIFICOS_IA.filter((w) => w.length <= 3 && w !== "don").concat(["dr", "dra"]);
+        const reHon = new RegExp(
+          "(?:^|[^" + MTR_LETRA_ES + "])(?:(?:" + variantes(honCompletos) + ")\\s*[:,]?\\s*|(?:" + variantes(honAbrev) + ")\\.\\s*)([A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+)",
+          "");
+        const mh = reHon.exec(t);
+        // La palabra capitalizada debe ser un nombre de verdad, no una palabra de
+        // función del español («paciente: Sé preciso»): mismo filtro de tokens que
+        // el saneador. Sin esto, cualquier instrucción con «paciente: Sé/Has/Va…»
+        // saltaría la barrera.
+        if (mh && _mtrTokenDeNombreTachable(mh[1])) add("nombre_con_honorifico", String(mh[0] || "").trim());
+      } catch (e) {}
+    };
+    canal("system", system);
+    canal("user", user);
+    const ok = hallazgos.length === 0;
+    const resumen = hallazgos.map((h) => h.donde + ": " + h.tipo).join("; ");
+    const motivo = ok ? "" : "posible identificador (" + resumen + ") en el prompt — no se envió nada a la IA. Revise Indicaciones y contexto (¿nombre, cédula, teléfono, dirección, correo?) y vuelva a generar.";
+    return { ok: ok, hallazgos: hallazgos, motivo: motivo };
+  }
+
   // v18.0.112 (S+ flujo, C7) — cuántas generaciones hay en vuelo (el dock pinta ⏳).
   let _iaGenerandoN = 0;
   function mtrIaGenerando() { return _iaGenerandoN > 0; }
@@ -45097,6 +45173,19 @@
         const _t0 = Date.now();
         const _tel = (a) => { try { uxTrack(a); } catch (e) {} };
         const _telBucket = () => { const s = (Date.now() - _t0) / 1000; return s < 2 ? "lt2" : s < 5 ? "2a5" : s < 10 ? "5a10" : "gt10"; };
+        // v18.2.1 (P10) — LA GUARDA DEL PUNTO ÚNICO DE SALIDA: la barrera decide sobre el
+        // mensaje YA ensamblado (system+user de TODOS los canales, incluido el JSON v68
+        // crudo), ANTES de cualquier disparo de red y antes de contar ia.gen — lo
+        // bloqueado no se generó. Si dispara: nada sale, el motivo le dice al médico
+        // qué se detectó y en qué mitad del prompt, y la telemetría queda en conteos.
+        const _bar = mtrBarreraIdentificables(p.system, p.user, _mtrNombreEfectivo(o.nombrePaciente, o.docId));
+        if (!_bar.ok) {
+          _tel("ia.barrera.bloqueo");
+          _bar.hallazgos.forEach((h) => { _tel("ia.barrera.tipo." + h.tipo); });
+          try { vglLog("IA", "BarreraIdentificablesBloqueo", { donde: _bar.hallazgos.map((h) => h.donde + ":" + h.tipo).join(","), systemChars: (p.system || "").length, userChars: (p.user || "").length }); } catch (e) {}
+          resolve({ ok: false, texto: "", motivo: _bar.motivo });
+          return;
+        }
         _tel("ia.gen." + (modo || "?"));
         let intentos = 0;
         // v18.2.0 (P9) — con clave z.ai: 1 intento z.ai + 1 de respaldo Gemini. Sin
