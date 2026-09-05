@@ -25,6 +25,7 @@
 // @connect      googleusercontent.com
 // @connect      gist.githubusercontent.com
 // @connect      generativelanguage.googleapis.com
+// @connect      api.z.ai
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -8267,7 +8268,7 @@
     // libre de la historia; el médico revisa, edita e inserta — nunca se escribe solo.
     // v17.x.x — REFACTOR S+ (30-ago): solo autorizado Y con la API (Gemini) configurada.
     // Sin API configurada, el botón ni se muestra (pedido explícito del médico).
-    if (_autorizado && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini()) {
+    if (_autorizado && typeof S !== "undefined" && S.iaRedaccion === true && mtrHayClaveIA()) {
     const bRedactar = document.createElement("button");
     bRedactar.className = "vgl-dock-btn";
     bRedactar.setAttribute("data-accion", "redactar");
@@ -25304,7 +25305,7 @@
     // re-comprueba al montar (defense-in-depth).
     if (!accesoCap("redactor_ia")) return;
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
-    if (!(typeof S !== "undefined" && S.iaRedaccion === true) || !mtrLeerClaveGemini()) {
+    if (!(typeof S !== "undefined" && S.iaRedaccion === true) || !mtrHayClaveIA()) {
       showToast("AMBAR", "Redactar con IA", "La redacción con IA aún no está activada en este computador. Pida al administrador del asistente activarla — es un paso único por equipo.", false);
       try { uxTrack("fn.redactor.sin_config"); } catch (e) {}
       return;
@@ -33791,8 +33792,10 @@
              sección visible: el médico no tiene nada que decidir ahí (reporte del 20-08,
              pantallazo). Se conserva aquí como referencia de comportamiento. -->
         <div class="vgl-fld"><label>Aviso del paciente al abrir la historia<span class="vgl-hint">Referencia: un único aviso por paciente reúne, al abrir su historia, las actividades de prevención (PyM) pendientes, el abandono del Programa de Riesgo Cardiovascular y los laboratorios RCV sin resultado vigente (últimos 180 días). Siempre activo, sin interruptores separados.</span></label><span class="vgl-hint" style="opacity:.85">Siempre activo</span></div>
-        <div class="vgl-fld"><label>Clave de la IA (Gemini)<span class="vgl-hint">Una sola clave para toda la sede; con ella el redactor de texto libre queda disponible para los médicos. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
-        <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere la clave de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
+        <!-- v18.2 — dos proveedores: z.ai (GLM-5.3) principal y Gemini de respaldo. -->
+        <div class="vgl-fld"><label>Clave de la IA (z.ai — principal)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). El redactor usa GLM-5.3 con esta clave; si falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Clave de la IA (Gemini — respaldo)<span class="vgl-hint">Se usa sola si no hay clave de z.ai, o como único reintento cuando GLM-5.3 falla. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere alguna de las claves de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO; v18.0.144 — ya NO guarda historias clínicas
              identificadas: es un CACHÉ mínimo, cifrado y seudonimizado (sin cédulas dentro
              ni en los nombres), que solo alimenta el ancla del «control anterior». La
@@ -33956,6 +33959,18 @@
         v = v.replace(/[•]/g, "").trim();                // si escribió pegado a la máscara, quita los bullets
         mtrGuardarClaveGemini(v);                        // v vacío la borra (comportamiento buscado)
         iaKey.value = v ? "••••••••" : "";
+      });
+    }
+    // v18.2 — clave de z.ai (proveedor principal, GLM-5.3): mismo patrón de máscara que Gemini.
+    const zaiKey = q("#c-zai-key");
+    if (zaiKey) {
+      try { zaiKey.value = mtrLeerClaveZai() ? "••••••••" : ""; } catch (e) {}
+      zaiKey.addEventListener("change", () => {
+        let v = String(zaiKey.value || "");
+        if (/^[•\s]+$/.test(v)) return;                  // solo la máscara: no la tocó
+        v = v.replace(/[•]/g, "").trim();
+        mtrGuardarClaveZai(v);                           // v vacío la borra
+        zaiKey.value = v ? "••••••••" : "";
       });
     }
     // v14.2.0 — El modelo ya no se edita a mano: es automático con rotación por cuota.
@@ -43738,6 +43753,22 @@
   function mtrLeerClaveGemini() {
     try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_GEMINI_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
   }
+  // v18.2.0 (P9) — CLAVE DE Z.AI (proveedor PRINCIPAL; Gemini queda de respaldo).
+  // API GENERAL de z.ai (api.z.ai), no el Coding Plan. Mismo patrón ofuscado que la
+  // de Gemini: la fija el médico en Ajustes, nunca en claro ni en logs.
+  const MTR_ZAI_KEY = "vgl_zai_key";
+  function mtrGuardarClaveZai(clave) {
+    try { if (typeof GM_setValue === "undefined") return false; const c = String(clave || "").trim(); if (!c) { GM_setValue(MTR_ZAI_KEY, null); return true; } GM_setValue(MTR_ZAI_KEY, _vglOfusca(c)); return true; } catch (e) { return false; }
+  }
+  function mtrLeerClaveZai() {
+    try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_ZAI_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
+  }
+  // ¿Hay ALGUNA clave de IA configurada (z.ai o Gemini)? Los gates de entrada al
+  // redactor (dock, inyectores, panel, Generar) preguntan esto, no por un proveedor
+  // concreto: el médico no elige proveedor, la escalera sí.
+  function mtrHayClaveIA() {
+    try { return !!(mtrLeerClaveZai() || mtrLeerClaveGemini()); } catch (e) { return false; }
+  }
   function _mtrModeloIdx() {
     try {
       if (typeof GM_getValue === "undefined") return 0;
@@ -44427,6 +44458,18 @@
   // contexto no cabe en 300 caracteres.
   const MTR_PREGUNTA_MAX = 2000;
 
+  // v18.2.0 (P9) — LAS TRES PIEZAS DE PROMPT QUE SE AÑADEN (el texto existente NO se
+  // reescribe: está afinado con reportes de campo y hay verificadores que dependen de
+  // su forma). Las tres se pegan aquí, juntas, porque mtrRedaccionPrompt es su único
+  // consumidor. (2) Autoverificación al FINAL de cada system; (3) línea de fuentes que
+  // el conector recorta (mtrRecortarFuentes) antes de que el borrador llegue a alguien;
+  // (4) las dos reglas duras repetidas al FINAL del user — imprescindible con
+  // systemAparte:false (z.ai lee UN solo turno: sin esto, el cierre del user compite
+  // con nada y las reglas del system quedan lejos).
+  const MTR_AUTOVERIF_SYS = "\n\nANTES DE RESPONDER, RELEE TU BORRADOR Y COMPRUEBA: (1) cada cifra que escribiste aparece en alguno de los bloques recibidos; (2) cada afirmación clínica —incluidas las negativas, del tipo «NIEGA DOLOR TORÁCICO»— procede de un bloque, no de lo que suele pasar en pacientes parecidos; (3) no dejaste fuera ningún hallazgo relevante que sí estaba. Si algo no cumple, corrígelo antes de entregar. Entrega solo el texto final, sin mencionar esta revisión.";
+  const MTR_FUENTES_SYS = "\n\n# LÍNEA DE FUENTES\nCierra tu respuesta con una última línea exactamente así:\nFUENTES: hecho1; hecho2; hecho3\n…donde cada hecho es un dato de los bloques que usaste para redactar. Esa línea es para el control interno del asistente: el médico nunca la verá.";
+  const MTR_RECUERDA_USER = "\n\nRECUERDA: lo que no esté en los bloques anteriores NO EXISTE. Y no omitas nada relevante que sí esté.";
+
   function mtrRedaccionPrompt(modo, hoja, opts) {
     const o = Object.assign({}, opts || {});
     // v18.0.103 — S+ robustez #1: el marcador «Paciente Everest» no es un nombre (tacharía la
@@ -44533,7 +44576,9 @@
     ].join("\n"));
     if (ejemplos) bloques.push(ejemplos);
     bloques.push("Con base únicamente en la información anterior, " + instruccion);
-    return { system: system, user: bloques.join("\n\n") };
+    // v18.2.0 (P9) — autoverificación + línea FUENTES en el system; recordatorio
+    // anti-invención/anti-omisión al FINAL del user (lo último que lee el modelo).
+    return { system: system + MTR_AUTOVERIF_SYS + MTR_FUENTES_SYS, user: bloques.join("\n\n") + MTR_RECUERDA_USER };
   }
 
   // ---------- PARSEO DE LA RESPUESTA ----------
@@ -44566,6 +44611,32 @@
     return { ok: true, texto: texto, motivo: null, finishReason: finishReason };
   }
 
+  // v18.2.0 (P9) — PARSEO DE LA RESPUESTA DE Z.AI (API GENERAL, forma OpenAI):
+  // { choices:[{ message:{ content }, finish_reason }] }. Mismos motivos internos y
+  // mismas decisiones de diseño que mtrRespuestaGemini: MAX_TOKENS es ÉXITO con
+  // aviso (mtrEstadoBorrador lo pinta), el bloqueo por contenido se distingue del
+  // error genérico, y el detalle crudo SOLO va al log (nunca PHI: es texto de la API).
+  function mtrRespuestaZai(raw) {
+    let d = raw;
+    if (typeof raw === "string") { try { d = JSON.parse(raw); } catch (e) { return { ok: false, texto: "", motivo: "respuesta no-JSON" }; } }
+    if (!d || typeof d !== "object") return { ok: false, texto: "", motivo: "respuesta vacía" };
+    if (d.error) {
+      const code = (d.error && (d.error.code != null ? d.error.code : d.error.status)) || "";
+      try { vglLog("ERROR", "ZaiApiError", { code: String(code) }); } catch (e) {}
+      if (/1301|sensitive|content.?filter/i.test(String(d.error.message || "") + " " + String(code))) {
+        return { ok: false, texto: "", motivo: "bloqueado por el modelo (contenido sensible)" };
+      }
+      return { ok: false, texto: "", motivo: "la IA rechazó la petición; intente de nuevo (" + code + ")" };
+    }
+    const ch = Array.isArray(d.choices) ? d.choices[0] : null;
+    if (!ch) return { ok: false, texto: "", motivo: "sin respuesta del modelo" };
+    const frRaw = ch.finish_reason || "";
+    const finishReason = frRaw === "length" ? "MAX_TOKENS" : (frRaw === "content_filter" ? "SAFETY" : "STOP");
+    const texto = String((ch.message && ch.message.content) || "").trim();
+    if (!texto) return { ok: false, texto: "", motivo: frRaw === "content_filter" ? "bloqueado por el modelo (contenido sensible)" : "respuesta sin texto", finishReason: finishReason };
+    return { ok: true, texto: texto, motivo: null, finishReason: finishReason };
+  }
+
   // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "los resultados a veces aparecen cortados
   // incompletos". Causa real: mtrRespuestaGemini trata MAX_TOKENS como éxito normal
   // (r.ok=true) A PROPÓSITO — un borrador parcial es mejor que nada, y cortarlo en seco
@@ -44582,7 +44653,9 @@
   // v15.2.0 — MÉTRICA REINA LLMOps (Zero-PHI):
   // Evalúa la tasa de adopción comparando el texto original generado contra el editado
   // por el médico. NUNCA registra texto, solo la categoría discreta:
-  // "intacta" (100% igual) | "edicion_leve" (delta < 20%) | "reescritura" (delta >= 20%) | "descarte" (vacío)
+  // "intacta" (100% igual) | "edicion_leve" (cambió ≤25% de las palabras) |
+  // "edicion_fuerte" (v18.2.0/P9·B1: cambió >25% dentro de la banda leve) |
+  // "reescritura" | "descarte" (vacío)
   function mtrCalcularDeltaEdicion(original, editado) {
     try {
       const orig = String(original || "").trim();
@@ -44600,8 +44673,58 @@
         if (setE.has(wO[i])) compartidas++;
       }
       const sim = compartidas / Math.max(wO.length, wE.length);
-      return sim >= 0.8 ? "edicion_leve" : "reescritura";
+      if (sim < 0.8) return "reescritura";
+      // v18.2.0 (P9/B1) — TERCER NIVEL, tallado POR DENTRO de lo que hoy era
+      // "edicion_leve" (el corte sim >= 0.8 y todo lo anterior quedan intactos).
+      // NOTA MATEMÁTICA: dentro de la banda sim >= 0.8, compartidas >= 0.8·max(wO,wE)
+      // acota el porcentaje de palabras cambiadas a <= 20%, así que un umbral "cambió
+      // > 25%" sería una RAMA MUERTA (nunca alcanzable). El corte de fuerte es por
+      // SIMILITUD: conservar >= 85% del vocabulario sigue siendo leve; entre 0.8 y 0.85
+      // (≈15–20% de las palabras alteradas) ya es una edición fuerte. Bandas ABIERTAS
+      // en ambos extremos: el pin de suite_57 (sim = 0.8 EXACTO => leve) y el caso
+      // trivial sim = 0.85 se quedan en leve.
+      return (sim > 0.8 && sim < 0.85) ? "edicion_fuerte" : "edicion_leve";
     } catch (e) { return "edicion_leve"; }
+  }
+
+  // v18.2.0 (P9) — LA LÍNEA FUENTES. El prompt (MTR_FUENTES_SYS) pide al modelo cerrar
+  // con "FUENTES: hecho1; hecho2". Aquí se separa del texto que ve el médico y se
+  // guarda como corpus para el verificador de afirmaciones. Tolera que el modelo la
+  // pinte varias veces o con mayúsculas distintas.
+  function mtrRecortarFuentes(texto) {
+    const t = String(texto || "");
+    const fuentes = [];
+    const limpio = t.split("\n").filter((linea) => {
+      const m = /^\s*FUENTES\s*:\s*(.*)$/i.exec(linea);
+      if (!m) return true;
+      const resto = m[1].trim();
+      if (resto) fuentes.push(resto);
+      return false;
+    }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    return { texto: limpio, fuentes: fuentes };
+  }
+
+  // v18.2.0 (P9) — Verificador de AFIRMACIONES (no de cifras): recorre el borrador
+  // buscando patrones "NIEGA/REFIERE/SIN <síntoma>" y marca los que NO aparecen ni en
+  // la línea FUENTES del modelo ni en el respaldo del médico. HEURÍSTICA documentada
+  // como tal: es una red de seguridad que AVISA, no un veredicto — el médico decide.
+  // PURA: recibe textos, devuelve hallazgos; nada de DOM aquí.
+  function mtrVerificarFuentesIA(texto, fuentes, respaldo) {
+    const fuera = [];
+    try {
+      const t = String(texto || "");
+      const corpus = [fuentes, respaldo].filter(Boolean).join("\n").toLowerCase();
+      const re = /\b(NIEGA|REFIERE|SIN)\s+([A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\s,]{2,60}?)(?=[,.;:)]|\s+(?:Y|CON|SIN|NI|DESDE|HACE)\b|$)/g;
+      let m;
+      while ((m = re.exec(t)) !== null) {
+        const sintoma = (m[2] || "").replace(/[\s,]+$/, "").trim();
+        if (sintoma.length < 8) continue;
+        if (corpus.indexOf(sintoma.toLowerCase()) < 0 && !fuera.some((x) => x.sintoma === sintoma)) {
+          fuera.push({ sintoma: sintoma, contexto: (m[1] || "") + " " + sintoma });
+        }
+      }
+    } catch (e) { return []; }
+    return fuera;
   }
 
   // v17.6.10 — mtrPartirNota se retiró por no tener llamador en producción: la
@@ -44765,7 +44888,10 @@
   // ¿La respuesta indica cuota/límite agotado? (429 o RESOURCE_EXHAUSTED) -> conviene rotar.
   function mtrEsCuotaAgotada(status, texto) {
     if (Number(status) === 429) return true;
-    return /RESOURCE_EXHAUSTED|quota|rate limit|rateLimit|"code":\s*429/i.test(String(texto || ""));
+    // v18.2.0 (P9) — z.ai (API GENERAL) reporta la familia de cuota/saldo con códigos
+    // propios en el cuerpo (1113 saldo insuficiente, 1302/1305/1308 límites de plan),
+    // no solo con 429. Se reconocen los dos formatos: numérico y cadena.
+    return /RESOURCE_EXHAUSTED|quota|rate limit|rateLimit|insufficient balance|"code":\s*"?(429|1113|1302|1305|1308)/i.test(String(texto || ""));
   }
   // v17.0.3 — Reporte real (21-ago): "Análisis y plan" murió con "This model is currently
   // experiencing high demand..." y el médico tuvo que reintentar A MANO. Es un aviso de
@@ -44794,8 +44920,60 @@
   function mtrEsModeloNoDisponible(status, texto) {
     const s = Number(status);
     if (s === 400 || s === 404 || s === 500 || s === 502 || s === 504) return true;
-    return /NOT_FOUND|INVALID_ARGUMENT|no longer available|"code":\s*40[04]/i.test(String(texto || ""));
+    return /NOT_FOUND|INVALID_ARGUMENT|no longer available|"code":\s*"?(40[04]|1211)/i.test(String(texto || ""));
   }
+
+  // v18.2.0 (P9) — CAPA DE PROVEEDORES. El redactor ya no habla con un proveedor
+  // concreto: arma (system, user) UNA vez (mtrRedaccionPrompt) y cada proveedor
+  // declara cómo se le envía. z.ai es PRIMARIO (GLM-5.3, API GENERAL api.z.ai,
+  // forma OpenAI); Gemini queda de RESPALDO con su cuerpo ACTUAL replicado aquí
+  // byte a byte — la suite 70 lo compara contra el objeto serializado construido
+  // con las reglas de hoy: si cambia una coma, es regresión.
+  // Contrato por proveedor: { id, modelos, url(modelo), headers(clave),
+  // cuerpo(modelo, system, user, modo), parsear(cruda) }.
+  const MTR_PROVEEDORES_IA = {
+    zai: {
+      id: "zai",
+      modelos: ["glm-5.3"],
+      // GLM-5.3 razona SIEMPRE (no se apaga): ni control de razonamiento ni campo
+      // de pensamiento. El system viaja PEGADO al inicio del user (un solo turno).
+      url: () => "https://api.z.ai/api/paas/v4/chat/completions",
+      headers: (clave) => ({ "Content-Type": "application/json", "Authorization": "Bearer " + clave }),
+      cuerpo: (modelo, system, user) => JSON.stringify({
+        model: modelo,
+        messages: [{ role: "user", content: (system ? system + "\n\n" : "") + user }],
+        temperature: 0.2,
+        max_tokens: 8192,
+      }),
+      parsear: (cruda) => mtrRespuestaZai(cruda),
+    },
+    gemini: {
+      id: "gemini",
+      modelos: MTR_GEMINI_MODELOS,
+      url: (modelo) => "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent",
+      headers: (clave) => ({ "Content-Type": "application/json", "x-goog-api-key": clave }),
+      // Réplica EXACTA del cuerpoPara() de v18.1 (misma gen por generación de modelo,
+      // misma esCorta por modo, mismo orden de claves). No «mejorarlo»: la identidad
+      // estructural con el cuerpo de hoy es un requisito probado.
+      cuerpo: (modelo, system, user, modo) => {
+        const esCorta = MTR_CASILLAS_REDACTOR ? ((modo in MTR_CASILLAS_REDACTOR) && MTR_MODOS_NOTA_LARGA.indexOf(modo) < 0) || modo === "consulta" : false;
+        const gen = /^gemini-2\./.test(modelo)
+          ? { temperature: 0.2, maxOutputTokens: 8192 }
+          : { maxOutputTokens: 8192 };
+        if (esCorta) {
+          if (/^gemini-3/.test(modelo)) gen.thinkingConfig = { thinkingLevel: "minimal" };
+          else if (/^gemini-2\.5-flash/.test(modelo)) gen.thinkingConfig = { thinkingBudget: 0 };
+        }
+        return JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: user }] }],
+          generationConfig: gen,
+        });
+      },
+      parsear: (cruda) => mtrRespuestaGemini(cruda),
+    },
+  };
+  function mtrProveedorIA(id) { return MTR_PROVEEDORES_IA[id] || null; }
 
   // v18.0.112 (S+ flujo, C7) — cuántas generaciones hay en vuelo (el dock pinta ⏳).
   let _iaGenerandoN = 0;
@@ -44809,61 +44987,17 @@
       let resuelto = false;
       const resolve = (r) => { if (resuelto) return; resuelto = true; _iaGenerandoN = Math.max(0, _iaGenerandoN - 1); resolveCrudo(r); };
       try {
-        const clave = mtrLeerClaveGemini();
-        if (!clave) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
+        // v18.2.0 (P9) — ESCALERA DE PROVEEDORES: z.ai PRIMARIO (un intento, GLM-5.3)
+        // y Gemini de RESPALDO. El médico no elige proveedor: si el primario no está
+        // configurado, Gemini conserva SU rotación completa de hoy; si lo está y falla
+        // por algo que merezca rotar, Gemini entra UNA vez con el modelo del modo.
+        const claveZai = mtrLeerClaveZai();
+        const claveGem = mtrLeerClaveGemini();
+        if (!claveZai && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
         if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, texto: "", motivo: "sin GM_xmlhttpRequest" }); return; }
         const p = mtrRedaccionPrompt(modo, hoja, o);
-        // Guía oficial de migración a Gemini 3.x: quitar los parámetros de muestreo
-        // (temperature/top_p/top_k) — el modelo razonador viene optimizado con sus valores
-        // por defecto y el determinismo se pide en la instrucción del sistema. Los 2.x de
-        // reserva SÍ conservan temperature baja (en esa generación ayudaba). El cuerpo se
-        // arma POR MODELO porque la rotación puede cruzar de generación en pleno reintento.
-        // maxOutputTokens sube 1400 -> 2048: la nota clínica completa (7 secciones) podía
-        // rozar el tope y salir truncada por MAX_TOKENS.
-        // v17.6.23 — REPORTE DE CAMPO (24-ago-2026): el aviso honesto de "borrador
-        // incompleto" (mtrEstadoBorrador) no basta — "necesito que siempre salga completo,
-        // así no me sirve". El aviso queda como red de seguridad, pero la causa raíz se
-        // ataca aquí: 2048 -> 8192. En los modelos 3.x el PENSAMIENTO consume del MISMO
-        // presupuesto que el texto visible (ver el comentario de _esCasillaCorta más abajo)
-        // y las notas largas NO restringen el pensamiento a propósito (conservan el
-        // comportamiento por defecto del modelo) — con 2048 de tope total, una nota de 7
-        // secciones podía quedarse sin espacio de salida real después de que el modelo
-        // "pensara". 8192 es un techo ampliamente soportado por los modelos gratuitos de
-        // la rotación (2.x y 3.x) y cuadruplica el margen real.
-        // v15.6.0 — Optimización por modelo (pedido del médico: explotar las ventajas de
-        // los flash-lite y esquivar sus debilidades). Las CASILLAS de texto libre son
-        // plantillar-desde-hechos, no razonamiento largo: en los Gemini 3.x se pide
-        // thinkingLevel «minimal» (más rápido y barato; en 3.5-flash-lite ya es el valor
-        // por defecto — fijarlo protege contra cambios de default y cubre 3.1); en los
-        // 2.x de reserva se apaga el presupuesto de pensamiento. La NOTA CLÍNICA completa
-        // (larga, multiseccional) conserva el comportamiento por defecto del modelo.
-        // v16.5.0 — analisis_plan dejó de ser "corta": ahora genera la nota completa del
-        // Copiloto (tope de salida amplio); briefing desapareció con la decisión del médico.
-        // v17.0.3 — BUG REAL DE CAMPO: aquí solo se excluía "analisis_plan" A MANO, pero
-        // MTR_MODOS_NOTA_LARGA (la lista que de verdad manda quién usa el modelo potente)
-        // también incluye "enfermedad_actual" — que SÍ caía en _esCasillaCorta y por tanto
-        // recibía thinkingLevel:"minimal", nivel que el modelo potente no soporta. Error
-        // reproducible al 100%: "API: Thinking level MINIMAL is not supported for this
-        // model." Ahora se excluye la lista completa, no un nombre suelto, así que las dos
-        // notas largas quedan consistentes entre sí y una tercera que se agregue después
-        // no repite el mismo hueco.
-        const _esCasillaCorta = MTR_CASILLAS_REDACTOR ? ((modo in MTR_CASILLAS_REDACTOR) && MTR_MODOS_NOTA_LARGA.indexOf(modo) < 0) || modo === "consulta" : false;
-        const cuerpoPara = (modelo) => {
-          const gen = /^gemini-2\./.test(modelo)
-            ? { temperature: 0.2, maxOutputTokens: 8192 }
-            : { maxOutputTokens: 8192 };
-          if (_esCasillaCorta) {
-            if (/^gemini-3/.test(modelo)) gen.thinkingConfig = { thinkingLevel: "minimal" };
-            else if (/^gemini-2\.5-flash/.test(modelo)) gen.thinkingConfig = { thinkingBudget: 0 };
-            // El tope de salida NO se recorta: en los 3.x el pensamiento consume del mismo
-            // presupuesto y la lección v14.2 (nota truncada por MAX_TOKENS) sigue vigente.
-          }
-          return JSON.stringify({
-            systemInstruction: { parts: [{ text: p.system }] },
-            contents: [{ role: "user", parts: [{ text: p.user }] }],
-            generationConfig: gen,
-          });
-        };
+        // El cuerpo de cada proveedor vive en MTR_PROVEEDORES_IA (gemini.cuerpo es la
+        // réplica exacta del cuerpoPara de v18.1; ver la nota del contrato ahí arriba).
         // Reintento con ROTACIÓN de modelo: si el modelo actual devuelve cuota agotada (429),
         // se pasa al siguiente de la lista y se reintenta, hasta agotar todos los modelos.
         // Telemetría de calidad (conteos anónimos, SIN dato de paciente ni texto del
@@ -44874,7 +45008,16 @@
         const _telBucket = () => { const s = (Date.now() - _t0) / 1000; return s < 2 ? "lt2" : s < 5 ? "2a5" : s < 10 ? "5a10" : "gt10"; };
         _tel("ia.gen." + (modo || "?"));
         let intentos = 0;
-        const maxIntentos = MTR_GEMINI_MODELOS.length;
+        // v18.2.0 (P9) — con clave z.ai: 1 intento z.ai + 1 de respaldo Gemini. Sin
+        // clave z.ai: la rotación COMPLETA de Gemini de hoy (longitud de su lista).
+        const maxIntentos = (claveZai ? 1 : 0) + (claveGem ? (claveZai ? 1 : MTR_GEMINI_MODELOS.length) : 0);
+        // El intento n de la escalera: primero z.ai (si hay clave), luego Gemini.
+        const _slot = (n) => {
+          if (claveZai && n === 0) return { prov: MTR_PROVEEDORES_IA.zai, clave: claveZai, modelo: "glm-5.3" };
+          const nGem = claveZai ? (n - 1) : n;
+          const modelo = (nGem === 0) ? mtrModeloGemini(modo) : mtrModeloGemini();
+          return { prov: MTR_PROVEEDORES_IA.gemini, clave: claveGem, modelo: modelo };
+        };
         // v17.0.3 — Reporte real: "Análisis y plan" murió con el modelo potente saturado
         // (503/"high demand") y el médico tuvo que darle a Generar otra vez A MANO — la
         // rotación solo miraba mtrEsCuotaAgotada, que es un motivo distinto. Ahora rota
@@ -44889,8 +45032,10 @@
           // Así el potente se gasta solo en el primer disparo de las notas que lo merecen,
           // nunca en ráfagas de reintentos. Respaldo real: cada médico con SU PROPIA clave
           // en Ajustes duplica la cuota (es por clave, no por computador) — recomendado.
-          const modelo = (intentos === 0) ? mtrModeloGemini(modo) : mtrModeloGemini();
-          const url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent";
+          // v18.2.0 (P9) — el «qué modelo y con qué proveedor» sale del slot de la escalera.
+          const slot = _slot(intentos);
+          const prov = slot.prov, clave = slot.clave, modelo = slot.modelo;
+          const url = prov.url(modelo);
           // v18.0.112 (C7) — el llamador ve por dónde va («intento 3 de 7, con X») en vez de un
           // «Generando con…» fijo hasta 7 × 25 s; y puede cancelar: el control recibe la
           // función que aborta la petición en vuelo.
@@ -44898,8 +45043,8 @@
           if (o.control && o.control.cancelado) { resolve({ ok: false, texto: "", motivo: "cancelado" }); return; }
           const req = GM_xmlhttpRequest({
             method: "POST", url: url, timeout: 25000,
-            headers: { "Content-Type": "application/json", "x-goog-api-key": clave },
-            data: cuerpoPara(modelo),
+            headers: prov.headers(clave),
+            data: prov.cuerpo(modelo, p.system, p.user, modo),
             onload: (res) => {
               if (o.control && o.control.cancelado) return;   // v18.0.112 (C7)
               const status = res && res.status, cuerpoResp = res && res.responseText;
@@ -44908,15 +45053,21 @@
                 _tel(mtrEsCuotaAgotada(status, cuerpoResp) ? "ia.cuota.rota" : (mtrEsModeloSobrecargado(status, cuerpoResp) ? "ia.saturado.rota" : "ia.nodisponible.rota"));
                 intentos++; mtrRotarModelo(); intentar(); return;   // rota y reintenta con el siguiente
               }
-              const r = mtrRespuestaGemini(cuerpoResp);
+              // v18.2.0 (P9) — el parseo pertenece al PROVEEDOR del slot: z.ai responde
+              // en forma OpenAI (choices[0].message.content); usar aquí mtrRespuestaGemini
+              // era leer con los ojos de Gemini una respuesta que no es suya.
+              const r = prov.parsear(cuerpoResp);
               if (r && r.finishReason) {
                 const sMot = uxClaveLimpia(r.finishReason).toLowerCase();
                 if (sMot) _tel("ia.stop." + sMot);
               }
-              if (!r.ok && mtrEsCuotaAgotada(status, cuerpoResp)) r.motivo = "cuota diaria agotada en todos los modelos gratuitos";
+              if (!r.ok && mtrEsCuotaAgotada(status, cuerpoResp)) r.motivo = "cuota o saldo agotados en todos los proveedores configurados";
               else if (!r.ok && mtrEsModeloSobrecargado(status, cuerpoResp)) r.motivo = "todos los modelos están temporalmente saturados (alta demanda); intente de nuevo en un momento";
               else if (!r.ok && mtrEsModeloNoDisponible(status, cuerpoResp)) r.motivo = "ningún modelo configurado respondió correctamente (puede ser temporal; si persiste, revise Ajustes → Redacción IA)";
               if (r.ok) {
+                // v18.2.0 (P9) — la línea FUENTES se recorta AQUÍ (antes de los
+                // saneadores) para que ningún camino entregue texto con ella pegada.
+                try { const _rf = mtrRecortarFuentes(r.texto); r.texto = _rf.texto; r.fuentes = _rf.fuentes; } catch (e) {}
                 // v17.6.3 — IA CORRUPTA: el borrador de la nota clínica pasa por el
                 // saneador de markdown AQUÍ, en el conector, para que TODOS los caminos
                 // (Generar y Generar todo) entreguen texto limpio a la casilla de
@@ -44929,6 +45080,8 @@
                 if (modo === "enfermedad_actual") {
                   try { r.texto = mtrQuitarDatosProhibidosEA(r.texto); } catch (e) {}
                 }
+                // v18.2.0 (P9) — QUÉN respondió (zai/gemini), antes que nada.
+                _tel("ia.prov." + prov.id);
                 _tel("ia.ok");
                 const sMod = uxClaveLimpia(modelo).toLowerCase();
                 _tel("ia.ok.model." + modelo);
@@ -44956,9 +45109,9 @@
               _tel("ia.fallo"); _tel("ia.fallo.timeout");
               if (intentos < maxIntentos - 1) {
                 _tel("ia.timeout.rota");
-                intentos++; mtrRotarModelo(); intentar(); return;
+                intentos++; if (prov.id === "gemini") mtrRotarModelo(); intentar(); return;
               }
-              resolve({ ok: false, texto: "", motivo: "tiempo agotado en todos los modelos" });
+              resolve({ ok: false, texto: "", motivo: "tiempo agotado en todos los proveedores configurados" });
             },
           });
           if (o.control) {
@@ -46264,7 +46417,7 @@
       // nuevo de _vglMinDescartarDeOtroPaciente (ver createAccionesDockUI). Mismo patrón
       // que #vgl-panel-modal: se anota el dueño con el docId que el resumen ya trae.
       try { modal.dataset.vglDoc = String(resumen._docId || ""); } catch (e) {}
-      const hayClave = !!mtrLeerClaveGemini();
+      const hayClave = mtrHayClaveIA();
       const btnModo = (m, etiqueta) => '<button class="vgl-agm-pbtn' + (m === modoInicial ? ' active' : '') + '" data-modo="' + m + '">' + etiqueta + '</button>';
       modal.innerHTML =
         '<div class="vgl-agm-card" style="max-width:760px">'
@@ -46298,7 +46451,7 @@
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
         + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
         + '<div id="vgl-ia-cifras"></div>'
-        + '<div class="vgl-rcv-pie" style="margin-top:6px">A Gemini se envían datos clínicos y fechas de atención (necesarias para la cronología), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
+        + '<div class="vgl-rcv-pie" style="margin-top:6px">A la IA (GLM-5.3 de z.ai, o Gemini como respaldo) se envían datos clínicos y fechas de atención (necesarias para la cronología), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
         + '</div>';
       document.body.appendChild(modal);
 
@@ -46395,8 +46548,19 @@
       const habilitarPost = (texto) => {
         const hay = !!String(texto || "").trim();
         btnCop.disabled = !hay;
-        btnIns.disabled = !(hay && puedeInsertar());
+        btnIns.disabled = !(hay && puedeInsertar() && !_haySinVer());
       };
+      // v18.2 — P9: los avisos de cifras/afirmaciones sin respaldo bloquean «Insertar»
+      // hasta que el médico pulse «✓ la vi» en cada uno (no basta con ver la caja: hay
+      // que cerrar el aviso). Estado del módulo; se declaran DESPUÉS de habilitarPost
+      // porque ninguna llamada a esta ocurre antes de ejecutarse estas líneas (la
+      // primera llamada real la registra el handler de cambio de chip, más abajo).
+      let _hallazgosCifras = [];
+      let _hallazgosFuentes = [];
+      const _cifrasVistas = new Set();
+      const _claveHallazgo = (x) => (x ? String(x.numero || x.sintoma || "") + "|" + String(x.contexto || "") : "|");
+      const _haySinVer = () => _hallazgosCifras.concat(_hallazgosFuentes).some((x) => !_cifrasVistas.has(_claveHallazgo(x)));
+      let _fuentesIA = [];
       // v16.6.0 — memoria de borradores por casilla + chips con marca de "✓ insertado".
       const _borradores = {};
       // v17.1.0 (#110) — se acota a los chips de CASILLA. El selector viejo alcanzaba
@@ -46433,7 +46597,7 @@
         // auto-avance dispara este mismo click handler sobre el chip siguiente). Se
         // preservan las banderas ya existentes; solo texto/original/estado se actualizan
         // con lo que hay ahora mismo en pantalla.
-        _borradores[modoAnterior] = Object.assign({}, _borradores[modoAnterior], { texto: salida.value, original: textoGeneradoOriginal, estado: estado.textContent });
+        _borradores[modoAnterior] = Object.assign({}, _borradores[modoAnterior], { texto: salida.value, original: textoGeneradoOriginal, estado: estado.textContent, fuentes: _fuentesIA.slice() });
         // v16.7.0 — SE LLAMABA `b` Y MATABA LOS CHIPS. `b` ya era el parámetro del
         // forEach (el botón); declarar `const b` aquí lo sombreaba en TODO el cuerpo de
         // la función, así que la primera línea (`b.classList.add("active")`) caía en la
@@ -46441,6 +46605,7 @@
         // El nombre propio (`_bor`) es la corrección; el error salía en el dump del 20-ago.
         const _bor = _borradores[modo] || { texto: "", original: "", estado: "" };
         salida.value = _bor.texto; textoGeneradoOriginal = _bor.original;
+        _fuentesIA = Array.isArray(_bor.fuentes) ? _bor.fuentes.slice() : [];   // v18.2 — FUENTES viajan con el borrador
         estado.textContent = _bor.insertado ? "✓ Ya insertado en la historia. Puede regenerar o pasar a otra casilla." : (_bor.estado || "");
         habilitarPost(salida.value);
         _pintarCifras();
@@ -46529,8 +46694,13 @@
             (function () { try { return libreAhora().combinado || ""; } catch (e) { return ""; } })(),
             (function () { try { return mtrTextoDeOtrasCasillas(modo, document, resumen._nombrePaciente) || ""; } catch (e) { return ""; } })(),
           ]);
-          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja, _respaldoDelMedico);
-          if (!hallazgos.length) { if (caja) caja.remove(); return; }
+          _hallazgosCifras = mtrVerificarCifrasIA(salida.value, hoja, _respaldoDelMedico);
+          // v18.2 — P9: además de cifras, caza afirmaciones negativas («NIEGA/REFIERE/
+          // SIN…») que no aparecen ni en la línea FUENTES que el propio modelo declaró
+          // ni en el respaldo del médico (indicaciones, pregunta, otras casillas, texto
+          // ya escrito en la historia). Mismo tratamiento: aviso rojo + «✓ la vi».
+          _hallazgosFuentes = mtrVerificarFuentesIA(salida.value, _fuentesIA.join("\n"), _respaldoDelMedico.join("\n"));
+          if (!_hallazgosCifras.length && !_hallazgosFuentes.length) { if (caja) caja.remove(); habilitarPost(salida.value); return; }
           if (!caja) {
             caja = document.createElement("div");
             caja.id = "vgl-ia-cifras";
@@ -46544,9 +46714,34 @@
             // donde no hay forma de no verlo.
             salida.parentNode.insertBefore(caja, salida);
           }
-          caja.innerHTML = '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
-            + hallazgos.map((x) => '<div style="margin:4px 0"><b class="vgl-ia-cifra-n">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");
-        } catch (e) {}
+          // v18.2 — cada fila lleva su clave y su botón «✓ la vi»: hasta que el médico no
+          // cierre TODOS los avisos, «Insertar» queda deshabilitado (habilitarPost).
+          const _filaAviso = (etiqueta, x) => {
+            const k = _claveHallazgo(x);
+            const vista = _cifrasVistas.has(k);
+            return '<div style="margin:4px 0' + (vista ? ";opacity:.55" : "") + '" data-k="' + escapeHtml(k) + '"><b class="vgl-ia-cifra-n">' + escapeHtml(etiqueta) + '</b> · “' + escapeHtml(x.contexto) + '” '
+              + (vista
+                ? '<span style="color:#2a7a2a!important">✓ vista</span>'
+                : '<button type="button" class="vgl-agm-btn" style="margin-left:6px;padding:1px 8px;font-size:11px" data-ver="1">✓ la vi</button>')
+              + '</div>';
+          };
+          caja.innerHTML = (_hallazgosCifras.length
+              ? '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
+                + _hallazgosCifras.map((x) => _filaAviso(x.numero, x)).join("")
+              : "")
+            + (_hallazgosFuentes.length
+              ? '<div style="font-weight:700;margin-top:6px">⚠ Afirmaciones («NIEGA/REFIERE/SIN…») que no están en los hechos entregados — confírmelas usted antes de firmar:</div>'
+                + _hallazgosFuentes.map((x) => _filaAviso(x.sintoma, x)).join("")
+              : "");
+          caja.querySelectorAll("button[data-ver]").forEach((b) => b.addEventListener("click", () => {
+            try {
+              const fila = b.closest("[data-k]");
+              if (fila) { _cifrasVistas.add(fila.getAttribute("data-k") || ""); fila.remove(); }
+              if (!_haySinVer()) caja.remove();
+              habilitarPost(salida.value);
+            } catch (e) {}
+          }));
+        } catch (e) { try { habilitarPost(salida.value); } catch (e2) {} }
       };
 
       // v16.6.1 — NÚCLEO DE GENERACIÓN por casilla, compartido por «Generar» y
@@ -46632,20 +46827,28 @@
             .filter(Boolean).join("\n\n"),
           jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(_res, _hoja) : null,
         };
-        if (!mtrLeerClaveGemini()) {
+        if (!mtrHayClaveIA()) {
           _congelarChips(false);
+          _fuentesIA = [];
           salida.value = mtrHojaDeHechosTexto(_hoja);
           textoGeneradoOriginal = salida.value;
-          estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
+          estado.textContent = "Sin clave de la IA: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
+        // v18.2 — P9 (mejora 5): indicaciones kilométricas diluyen el prompt y alargan la
+        // respuesta. Se avisa una vez por generación, sin bloquear: el médico manda.
+        try {
+          const _indLen = String((($("#vgl-ia-indicaciones") || {}).value || "")).trim().length;
+          if (_indLen > 1500) showToast("AZUL", "Redactor · indicaciones largas", "Las indicaciones tienen " + _indLen + " caracteres: la nota puede salir más lenta y menos fiel a los hechos. Considere resumirlas a lo esencial.");
+        } catch (e) {}
         // v18.0.125 (auditoría UI/UX, fila 33 · UX-20) — la línea principal decía «Generando con
         // gemini-2.5-flash…»: el nombre interno del modelo no le dice nada al médico en consulta
         // y ocupa el único renglón que sí tenía que informarle. El dato no se pierde —sirve para
         // diagnosticar— pero se va al `title`, donde no estorba.
         btnGen.disabled = true; estado.textContent = "Redactando la nota…"; salida.value = "";
-        try { estado.title = "Modelo: " + mtrModeloGemini(modoGen); } catch (e) {}
-        _ultimoModelo = mtrModeloGemini(modoGen);
+        const _modeloInicial = mtrLeerClaveZai() ? "glm-5.3" : mtrModeloGemini(modoGen);   // v18.2 — z.ai es el principal
+        try { estado.title = "Modelo: " + _modeloInicial; } catch (e) {}
+        _ultimoModelo = _modeloInicial;
         try { uxTrack("fn.ia.gen"); } catch (e) {}
         // v18.0.112 (C7) — progreso visible y «Cancelar» mientras la IA responde.
         const _controlGen = {};
@@ -46660,6 +46863,8 @@
           } catch (e) {}
         };
         const _textoAntes = _borradores[modoGen] ? _borradores[modoGen].texto : "";
+        // v18.2 — P9 (B3): regeneración = pulsó Generar habiendo borrador previo SIN insertar.
+        try { if (_textoAntes && _borradores[modoGen] && !_borradores[modoGen].insertado) uxTrack("ia.regenerada." + modoGen); } catch (e) {}
         if (btnCancelar) {
           btnCancelar.classList.remove("vgl-d-none");
           btnCancelar.onclick = () => { try { if (_controlGen.cancelar) _controlGen.cancelar(); } catch (e) {} };
@@ -46694,13 +46899,16 @@
           }
           // v17.6.11 — el borrador se guarda bajo SU modo y solo se pinta si ese modo
           // sigue activo; así un cambio de chip (por código) nunca mezcla casillas.
-          _borradores[modoGen] = { texto: textoFinal, original: textoFinal, estado: mtrEstadoBorrador(r) };
+          _borradores[modoGen] = { texto: textoFinal, original: textoFinal, estado: mtrEstadoBorrador(r), fuentes: Array.isArray(r.fuentes) ? r.fuentes : [] };
           if (modoGen === modo) {
             salida.value = textoFinal;
             textoGeneradoOriginal = textoFinal;
+            _fuentesIA = Array.isArray(r.fuentes) ? r.fuentes.slice() : [];   // v18.2 — FUENTES declaradas por el modelo
             estado.textContent = mtrEstadoBorrador(r);
             habilitarPost(textoFinal);
             _pintarCifras();
+            // v18.2 — P9 (B2): cuántos avisos de cifras sin respaldo provocó esta generación (techo en 3+).
+            try { uxTrack("ia.cifras." + Math.min(_hallazgosCifras.length, 3)); } catch (e) {}
             _autosizeSalida();   // v17.6.12
           }
           _pintarMeta();
@@ -46723,10 +46931,12 @@
           _borradores[modoGen] = Object.assign({}, _borradores[modoGen], {
             texto: mtrHojaDeHechosTexto(hoja), original: mtrHojaDeHechosTexto(hoja),
             estado: "La IA no redactó (" + (r.motivo || "desconocido") + "). Le dejo los hechos para copiar a mano.",
+            fuentes: [],
           });
           if (modoGen === modo) {
             salida.value = _borradores[modoGen].texto;
             textoGeneradoOriginal = _borradores[modoGen].original;
+            _fuentesIA = [];   // v18.2 — sin FUENTES fuera de una generación exitosa
             estado.textContent = _borradores[modoGen].estado;
             habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; _autosizeSalida();
           }
@@ -46843,8 +47053,35 @@
         } catch (e) {}
       };
 
+      // v18.2 — P9 (B5): pulso diario del médico sobre los borradores. Se pregunta UNA vez
+      // al día, tras una inserción, con 👍/👎 en la línea de estado; a telemetría solo va
+      // el voto, jamás texto clínico.
+      const MTR_IA_FEEDBACK_DIA_KEY = "vgl_ia_feedback_dia";
+      const _preguntarFeedback = () => {
+        try {
+          const hoy = String((typeof todayStamp === "function" ? todayStamp() : "")).slice(0, 10);
+          if (!hoy || GM_getValue(MTR_IA_FEEDBACK_DIA_KEY, "") === hoy) return;
+          GM_setValue(MTR_IA_FEEDBACK_DIA_KEY, hoy);
+          const bOk = document.createElement("button");
+          bOk.className = "vgl-agm-btn sec"; bOk.textContent = "👍"; bOk.title = "El borrador me sirvió";
+          const bNo = document.createElement("button");
+          bNo.className = "vgl-agm-btn sec"; bNo.textContent = "👎"; bNo.style.marginLeft = "4px"; bNo.title = "El borrador no me sirvió";
+          bOk.addEventListener("click", () => { try { uxTrack("ia.feedback.bien"); } catch (e) {} bOk.remove(); bNo.remove(); });
+          bNo.addEventListener("click", () => { try { uxTrack("ia.feedback.mal"); } catch (e) {} bOk.remove(); bNo.remove(); });
+          estado.appendChild(document.createTextNode(" ¿Qué tal el borrador? "));
+          estado.appendChild(bOk); estado.appendChild(bNo);
+        } catch (e) {}
+      };
+
       btnIns.addEventListener("click", async () => {
         if (!puedeInsertar()) { estado.textContent = "Este texto se copia con 📋 Copiar (no tiene casilla propia en la historia)."; return; }
+        // v18.2 — P9: no se inserta con avisos de cifras/afirmaciones sin revisar. La caja
+        // roja existe desde v17.6.3 pero no frenaba nada; ahora exige el «✓ la vi» explícito.
+        if (_haySinVer()) {
+          estado.textContent = "Hay avisos de cifras/afirmaciones sin revisar: pulse «✓ la vi» en cada uno para habilitar Insertar.";
+          btnIns.disabled = true;
+          return;
+        }
         const info = MTR_CASILLAS_REDACTOR[modo] || {};
         // 1) Si la casilla no está a la vista, el script NAVEGA él mismo (v16.6.0).
         let res = mtrInsertarEnCasillaModo(modo, salida.value, resumen._docId);
@@ -46888,6 +47125,7 @@
           });
           estado.appendChild(okTxt); estado.appendChild(bUndo);
           _casillaHechaYSiguiente();
+          _preguntarFeedback();   // v18.2 — P9 (B5): una vez al día, tras el auto-avance (estado ya es estable)
         } else if (res.motivo === "otro_paciente") {
           estado.textContent = "⚠ La historia abierta ya no es la de este paciente. No se insertó nada.";
         } else if (res.motivo === "sin_casilla") {
