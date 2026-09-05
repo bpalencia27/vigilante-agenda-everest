@@ -4300,7 +4300,14 @@
           if (!key) continue; // no mapeado en el catálogo -> no se reporta (§2.1 aplicada)
           const item = WHITELIST_13_LABS.find((w) => w.key === key);
           if (!item) continue;
-          const el = _findLabField(item.resultId, item.altIds);
+          // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): HBA1C comparte id/name
+          // "resultadoHemoglobina" con la Hemoglobina del hemograma (choque de ids del
+          // propio Everest, ver _findHbA1cFields), y su resultId "resultadoHBA1C" nunca
+          // existió en el DOM. _findLabField() devolvía null y una HbA1c obligatoria y
+          // vacía JAMÁS se reportaba — falso negativo silencioso. Se enruta por
+          // _findHbA1cFields(), la MISMA ruta (por atributo, no por posición) que usa
+          // la escritura de Auto-Labs, para que ambas mitades no puedan discrepar.
+          const el = key === "HBA1C" ? _findHbA1cFields().resultEl : _findLabField(item.resultId, item.altIds);
           if (!el) continue; // no existe en el DOM de esta vista -> no se reporta
           const val = String(el.value == null ? "" : el.value).trim();
           if (val === "") {

@@ -474,6 +474,44 @@ module.exports = {
       t.igual(vacias[0].resultId, "resultadoCreatinina");
     });
 
+    // v18.0.145 — AUDITORÍA M2M (hallazgo crítico): en el DOM real de Everest la casilla
+    // de HbA1c SÍ existe, pero comparte id/name "resultadoHemoglobina" con la Hemoglobina
+    // del hemograma, y "resultadoHBA1C" (el resultId del whitelist) nunca existió. Antes
+    // del fix, _findLabField() devolvía null y una HbA1c obligatoria y vacía JAMÁS se
+    // reportaba. Esta prueba cayó en rojo contra el código viejo y pasa enrutando HBA1C
+    // por _findHbA1cFields() (la misma ruta por atributo que usa la escritura de Auto-Labs).
+    t.caso("_casillasObligatoriasVacias: HBA1C obligatoria y vacía SÍ se reporta pese a compartir id con Hemoglobina (v18.0.145)", () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.win.document;
+
+      // Choque de ids real: Hemoglobina (text) primero, HbA1c (number + max=30) después.
+      const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", value: "13.2", getAttribute: () => null, closest: () => null };
+      const fakeHbA1c = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "number", value: "", getAttribute: (k) => (k === "max" ? "30" : null), closest: () => null };
+
+      const prevQSA = doc.querySelectorAll;
+      doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') return [fakeHemoNormal, fakeHbA1c];
+        return prevQSA(sel);
+      };
+      try {
+        const tabla = [
+          { codigoExamen: "HBA1C", swRequerido: true },
+          { codigoExamen: "HEMOGLOBINA", swRequerido: true },
+        ];
+        const vacias = c.api._casillasObligatoriasVacias(tabla, {});
+        t.igual(vacias.length, 1, "la HbA1c obligatoria y vacía debe reportarse aunque su id colisione con Hemoglobina");
+        t.igual(vacias[0].key, "HBA1C");
+        t.igual(vacias[0].codigoExamen, "HBA1C");
+
+        // Al llenarla, deja de reportarse (Hemoglobina del hemograma ya estaba llena).
+        fakeHbA1c.value = "7.2";
+        const vacias2 = c.api._casillasObligatoriasVacias(tabla, {});
+        t.igual(vacias2.length, 0, "HbA1c con valor y Hemoglobina llena: nada que reportar");
+      } finally {
+        doc.querySelectorAll = prevQSA;
+      }
+    });
+
     t.caso("_casillasObligatoriasVacias: ante tabla vacía o inválida devuelve []", () => {
       t.igual(api._casillasObligatoriasVacias(null), []);
       t.igual(api._casillasObligatoriasVacias([]), []);
