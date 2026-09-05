@@ -5026,6 +5026,9 @@
       // paciente" (el piso de 30 s de arriba queda como respaldo para los casos de error).
       if (docId === _labsPrefetch.docId && _labsPrefetch.labs && (ahora - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) return;
       vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
+      // v18.3 (P13·1.2) — DENOMINADOR: cada paciente abierto en Historia Clínica
+      // cuenta UNA consulta (id hasheado: la cédula no sale del equipo).
+      try { obsConsultaAbrir(docId); } catch (e) {}
 
       try { _preconHidratar(docId); } catch (e) {}   // v16.6.0 — si la pre-consulta ya lo trajo, la ficha abre al instante
       lastAutoFetchedAt = ahora;
@@ -12293,16 +12296,12 @@
   // poniéndole nombre al equipo en Ajustes.
   const EQUIPO_ID_KEY = "vgl_equipo_id";
   function _equipoId() {
-    try {
-      const manual = String(S.equipo || "").trim();
-      if (manual) return manual.slice(0, 40);
-      let id = localStorage.getItem(EQUIPO_ID_KEY);
-      if (!id) {
-        id = "eq-" + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
-        localStorage.setItem(EQUIPO_ID_KEY, id);
-      }
-      return String(id).slice(0, 40);
-    } catch (e) { return ""; }
+    // v18.3 (P13·1.1) — delega en el módulo obs: misma prioridad que siempre
+    // (ajuste manual → id persistente → id nuevo), pero el id ahora vive en GM
+    // (sobrevive la limpieza de datos del sitio), migra el legado de
+    // localStorage y avisa cuando nace uno nuevo. Función declarada (hoisted):
+    // el módulo obs vive al final del archivo.
+    try { return obsIdentidadEquipo(); } catch (e) { return ""; }
   }
 
   // v12.6.9 — `lote`: identificador único por fila encolada. En la Hoja aparecieron filas
@@ -12322,8 +12321,16 @@
     // porque con la cuota llena la cola no sobrevive en localStorage y el día quedaba
     // marcado «reportado» sin haber salido jamás: la fila resumen silenciosa del tablero.
     if (!repOn()) return false;
+    // v18.3 (P13·R1) — BLINDAJE DE REENTRANCIA. La fila se construye en una constante
+    // ANTES de recargar repQ: construir el literal puede re-entrar en reportar() —el
+    // nacimiento del id de equipo emite «obs.equipo.nuevo» vía _equipoId(), y cada
+    // reportar() reasigna repQ dentro de repQLoad(). Si el push se resolvía dentro del
+    // mismo enunciado que evaluaba el literal, el receiver quedaba atado al array VIEJO
+    // y la fila externa se perdía en silencio (cinco casos de la suite 83 caían por
+    // exactamente esto). Evaluar fila → recargar → push cierra la ventana.
+    const fila = Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {});
     repQLoad();
-    repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
+    repQ.push(fila);
     repQSave();
     // v17.6.14 — H5: BACKOFF de facto. Sin esto, cada evento reintentaba contra un panel
     // caído: cada repPost espera hasta 20 s en fallar, y hasta 40 errores + 20 fraudes
@@ -12357,7 +12364,8 @@
       reportar("entorno", {
         nav, so, zona,
         pantalla: (screen && screen.width ? screen.width + "x" + screen.height : ""),
-        gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : ""
+        gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : "",
+        obs_perdidos: obsPerdidosLeer().n || 0   // v18.3 (P13·1.7): sanity check de la lista blanca
       });
     } catch (e) {}
   }
@@ -15319,6 +15327,10 @@
       // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
       const prioridadRcv = !!datos.prioridadRcv;
       if (!abandono && !pym.length && !labs.length && !adelantar.length) return; // nada que mostrar
+      // v18.3 (P13·4.4) — PRESUPUESTO de interrupciones por equipo y día: medido
+      // ≈4.020 en 14 días (≈72/equipo/día, prompt 07). `esPrueba` queda exento y un
+      // fallo de almacenaje NO tapa el aviso (fall-open en obsPresupuestoConsumir).
+      if (!esPrueba && !obsPresupuestoConsumir()) return;
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
@@ -15396,7 +15408,10 @@
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
       if (nEl) nEl.textContent = nombre || "Paciente";
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
-      const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
+      // v18.3 (P13·1.4) — desenlace del aviso: "accion" = el médico lo cerró
+      // conscientemente. El id es LOCAL: solo une mostrado↔desenlace, no sale.
+      const avisoObsId = (!esPrueba) ? obsAvisoMostrar({ ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 }) : "";
+      const closeMod = () => { if (!esPrueba) { uxTrack("aviso.universal.entendido"); try { obsAvisoDesenlace(avisoObsId, "accion"); } catch (e) {} } ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 });
@@ -50705,6 +50720,336 @@ hora, y su identificador. Nada más.
       if (dif < mejorDif) { mejorDif = dif; mejor = it; }
     }
     return mejor;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // v18.3.0 — P13 · FASE 1: OBSERVABILIDAD DE ADOPCIÓN (módulo obs*).
+  // Diseño y "qué pregunta de negocio responde cada evento": docs/INSTRUMENTACION.md.
+  // Problema de raíz medido (prompt 07, hoja uso_detalle, 22-ago→4-sep-2026):
+  // el tablero cuenta EVENTOS pero no tiene DENOMINADOR (¿cuántas consultas
+  // hubo?) ni IDENTIDAD de médico (48 ids de equipo en 14 días, 32 vistos un
+  // solo día) — ninguna adherencia es calculable. Este módulo añade, sin
+  // tocar reglas clínicas y con cero PHI:
+  //   1.1 identidad estable de equipo (GM, migra el legado de localStorage)
+  //       e identidad de médico hasheada ("m-" + FNV-1a del uid/login validado)
+  //   1.2 denominador: consulta.abierta / cerrada / elegible.<modulo>
+  //   1.3 evento genérico con desenlace {fase, resultado, codigo, ms, n, ctx}
+  //   1.4 desenlace de avisos: accion|cerrado|ignorado|expirado|silenciado|
+  //       posterior ("posterior" = el médico hizo después por su cuenta —
+  //       la métrica de oro)
+  //   1.5 obsCatch: contador de código FIJO para los catch hoy mudos
+  //   1.6 serialización con LISTA BLANCA: fuera de números/booleanos/enums
+  //       solo pasan cadenas cortas SIN ESPACIOS y sin ser "solo números"
+  //       largos — la prosa y la cédula no caben; el canario es estructural
+  //   1.7 contador de perdidos (eventos rechazados por el saneamiento)
+  //   4.4 presupuesto de interrupciones por equipo y día (aviso universal)
+  // Todo sale por la cola existente (reportar → vgl_repq → TABLERO) con el
+  // prefijo "obs." en el evento, sin mezclarse con la telemetría v15.
+  // Las funciones viven al final del IIFE pero se declaran con `function`
+  // (hoisting): _equipoId(), mucho más arriba, puede delegar en ellas.
+  // ══════════════════════════════════════════════════════════════════════
+  const OBS_EQUIPO_GM = "vgl_obs_equipo";        // id persistente (GM)
+  const OBS_EQUIPO_LS = "vgl_equipo_id";         // legado v12.6.9: se migra, no se borra
+  const OBS_EQUIPO_FP = "vgl_obs_equipo_fp";     // {huella: id} — respaldo si el id se pierde
+  const OBS_PERDIDOS_GM = "vgl_obs_perdidos";
+  const OBS_PRESUPUESTO_GM = "vgl_obs_presupuesto";
+  const OBS_FASES = Object.freeze({ INICIO: "inicio", FIN: "fin" });
+  const OBS_RESULTADOS = Object.freeze({ OK: "ok", FALLO: "fallo", CANCELADO: "cancelado", VACIO: "vacio", TIMEOUT: "timeout" });
+  const OBS_DESENLACES = Object.freeze({ ACCION: "accion", CERRADO: "cerrado", IGNORADO: "ignorado", EXPIRADO: "expirado", SILENCIADO: "silenciado", POSTERIOR: "posterior" });
+  const OBS_ACCION_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/;
+  const OBS_CTX_VALOR_RE = /^[A-Za-z0-9._:-]{0,24}$/;   // sin espacios: la prosa no cabe
+  const OBS_CONSULTA_VENTANA_MS = 5 * 60 * 1000;        // misma clave dentro de 5 min = misma consulta
+
+  // Almacenaje: GM cuando existe (sobrevive la limpieza de datos del sitio),
+  // localStorage como respaldo. El par leer/guardar es simétrico: lo que una
+  // rama escribe, la misma rama lo lee — las claves son nuevas, nadie más las toca.
+  function obsGmLeer(key, def) {
+    try {
+      if (typeof GM_getValue !== "undefined") {
+        const v = GM_getValue(key, null);
+        return (v === null || v === undefined) ? def : v;
+      }
+    } catch (e) {}
+    try {
+      const v = localStorage.getItem(key);
+      return (v === null) ? def : JSON.parse(v);
+    } catch (e2) { return def; }
+  }
+  function obsGmGuardar(key, val) {
+    try { if (typeof GM_setValue !== "undefined") { GM_setValue(key, val); return; } } catch (e) {}
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e2) {}
+  }
+
+  // Hash FNV-1a de 32 bits, determinista y sin dependencias: convierte
+  // identificadores (cédula, uid, login) en huellas cortas no reversibles
+  // que SIRVEN para unir filas pero no identifican a nadie por sí solas.
+  function obsFnv1a(s) {
+    let h = 0x811c9dc5;
+    s = String(s == null ? "" : s);
+    for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, "0");
+  }
+
+  // Huella de respaldo del equipo: atributos técnicos estables. No identifica
+  // a una persona (mismo consultorio = misma resolución/zona casi siempre).
+  function obsHuellaEquipo() {
+    try {
+      const scr = (typeof screen !== "undefined" && screen && screen.width) ? (screen.width + "x" + screen.height) : "";
+      const lng = String((typeof navigator !== "undefined" && navigator && navigator.language) || "");
+      const hc = String((typeof navigator !== "undefined" && navigator && navigator.hardwareConcurrency) || "");
+      let tz = ""; try { tz = String(Intl.DateTimeFormat().resolvedOptions().timeZone || ""); } catch (e) {}
+      return obsFnv1a(scr + "|" + lng + "|" + hc + "|" + tz);
+    } catch (e) { return ""; }
+  }
+
+  let _obsEquipoCache = "", _obsEquipoNuevo = false;
+  // 1.1 — IDENTIDAD DE EQUIPO. Prioridad invariable: ajuste manual → id
+  // persistente en GM → migración del legado localStorage → recuperación por
+  // huella → id nuevo (y avisar que nació: es el dato que explica los "48 ids
+  // en 14 días" — sin ese aviso no se distingue un equipo nuevo de un bug).
+  function obsIdentidadEquipo() {
+    try {
+      const manual = String(S.equipo || "").trim();
+      if (manual) return manual.slice(0, 40);
+      if (_obsEquipoCache) return _obsEquipoCache;
+      let id = String(obsGmLeer(OBS_EQUIPO_GM, "") || "").slice(0, 40);
+      if (!id) {
+        try { id = String(localStorage.getItem(OBS_EQUIPO_LS) || "").slice(0, 40); } catch (e) {}
+      }
+      const fp = obsHuellaEquipo();
+      if (!id && fp) {
+        const mapa = obsGmLeer(OBS_EQUIPO_FP, null);
+        if (mapa && typeof mapa === "object" && mapa[fp]) id = String(mapa[fp]).slice(0, 40);
+      }
+      if (!id) {
+        id = "eq-" + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+        _obsEquipoNuevo = true;
+      }
+      obsGmGuardar(OBS_EQUIPO_GM, id);
+      if (fp) { const m = obsGmLeer(OBS_EQUIPO_FP, null); const mapa = (m && typeof m === "object") ? m : {}; mapa[fp] = id; obsGmGuardar(OBS_EQUIPO_FP, mapa); }
+      _obsEquipoCache = id;   // antes del aviso: reportar() re-entra por _equipoId()
+      if (_obsEquipoNuevo) {
+        _obsEquipoNuevo = false;
+        // v18.3 (P13·R1) — el aviso se DIFIERE un tick. Emitirlo aquí en sincronía
+        // re-entra en reportar() mientras ESTA llamada nace de la evaluación del
+        // literal de otra fila (equipo: _equipoId()): el evento que provocó el
+        // nacimiento llegaba segundo al tablero y el orden de la cola cambiaba según
+        // quién despertara al id. Diferido, el nacimiento queda registrado sin pisar
+        // al evento que lo provocó — y sin reentrar en la cola. No se usa uxTrack():
+        // contaminaría la ventana UX de la media hora en que nazca (y el evento ya
+        // viaja entero por el reportar diferido).
+        try { setTimeout(() => { try { if (repOn()) reportar("obs.equipo.nuevo", {}); } catch (e3) {} }, 0); } catch (e2) {}
+      }
+      return id;
+    } catch (e) { return ""; }
+  }
+
+  // 1.1 — IDENTIDAD DE MÉDICO, hasheada. Reusa la identidad que la compuerta
+  // P11 ya valida (uid de Everest o login de sesión); viaja SOLO como
+  // "m-<hash>". Sin identidad validada no se inventa nada (casilla vacía).
+  let _obsMedicoCache = "";
+  function obsIdentidadMedico() {
+    try {
+      if (_obsMedicoCache) return _obsMedicoCache;
+      let base = "";
+      try { base = (typeof mtrIdentificadorParaConstancia === "function") ? String(mtrIdentificadorParaConstancia() || "") : ""; } catch (e) {}
+      if (!base) return "";
+      _obsMedicoCache = "m-" + obsFnv1a(base);
+      return _obsMedicoCache;
+    } catch (e) { return ""; }
+  }
+
+  // 1.2 — DENOMINADOR: la "consulta" es un paciente abierto en Historia
+  // Clínica. El id que viaja es el HASH de la clave del paciente (nunca la
+  // cédula). Ventana de 5 min: re-lecturas del DOM de Angular (mismo paciente)
+  // no crean consultas nuevas; un paciente distinto cierra la anterior.
+  const obsConsulta = { id: "", ts: 0, elegibles: {} };
+  function obsConsultaAbrir(clave) {
+    try {
+      if (!String(clave == null ? "" : clave)) return obsConsulta.id;
+      const id = obsFnv1a(clave);
+      const ahora = Date.now();
+      if (obsConsulta.id === id && (ahora - obsConsulta.ts) < OBS_CONSULTA_VENTANA_MS) return id;
+      if (obsConsulta.id) obsConsultaCerrar("reemplazada");
+      obsConsulta.id = id; obsConsulta.ts = ahora; obsConsulta.elegibles = {};
+      obsEvento("consulta.abierta", {});
+      return id;
+    } catch (e) { obsCatch("consulta.abrir", e); return ""; }
+  }
+  function obsConsultaCerrar(motivo) {
+    try {
+      if (!obsConsulta.id) return false;
+      const ms = Math.max(0, Date.now() - obsConsulta.ts);
+      obsEvento("consulta.cerrada", { ms, ctx: { motivo: motivo || "desconocido" } });
+      obsConsulta.id = ""; obsConsulta.ts = 0; obsConsulta.elegibles = {};
+      return true;
+    } catch (e) { obsCatch("consulta.cerrar", e); return false; }
+  }
+  function obsConsultaActiva() { return obsConsulta.id; }
+  function obsConsultaElegible(modulo) {
+    // "Este paciente SÍ necesitaba el módulo X": el denominador por módulo.
+    try {
+      if (!obsConsulta.id) return false;
+      const m = obsModuloLimpio(modulo);
+      if (!m || obsConsulta.elegibles[m]) return false;
+      obsConsulta.elegibles[m] = 1;
+      return obsEvento("consulta.elegible." + m, {});
+    } catch (e) { obsCatch("consulta.elegible", e); return false; }
+  }
+  function obsConsultaMarcarModulo(modulo, resultado, extra) {
+    // Numerador: el módulo se usó (fase fin) y cómo terminó.
+    try {
+      const m = obsModuloLimpio(modulo);
+      if (!m) return false;
+      const e2 = Object.assign({}, (extra && typeof extra === "object") ? extra : {}, { fase: "fin", resultado: resultado });
+      return obsEvento("modulo." + m, e2);
+    } catch (e) { obsCatch("consulta.marcar", e); return false; }
+  }
+  function obsModuloLimpio(m) {
+    return String(m == null ? "" : m).toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 16);
+  }
+
+  // 1.4 — DESENLACE DE AVISOS. El id es LOCAL (nunca sale del equipo): solo
+  // une el "mostrado" con su desenlace y permite medir cuánto tardó el médico.
+  const obsAvisos = new Map();
+  let _obsAvisoSeq = 0;
+  function obsAvisoMostrar(extra) {
+    try {
+      const id = "a" + (++_obsAvisoSeq);
+      obsAvisos.set(id, Date.now());
+      if (obsAvisos.size > 40) obsAvisos.delete(obsAvisos.keys().next().value);
+      obsEvento("aviso.mostrado", { fase: "inicio", ctx: (extra && typeof extra === "object" && !Array.isArray(extra)) ? extra : {} });
+      return id;
+    } catch (e) { obsCatch("aviso.mostrar", e); return ""; }
+  }
+  function obsAvisoDesenlace(id, desenlace) {
+    try {
+      const d = OBS_DESENLACES[String(desenlace || "").toUpperCase()] || "";
+      if (!d) return false;
+      const ts0 = obsAvisos.get(id) || 0;
+      obsAvisos.delete(id);
+      const ms = ts0 ? Math.max(0, Date.now() - ts0) : 0;
+      return obsEvento("aviso.desenlace", { ms, ctx: { d } });
+    } catch (e) { obsCatch("aviso.desenlace", e); return false; }
+  }
+  function obsAvisoCumplido(id) {
+    // MÉTRICA DE ORO: el aviso se cerró sin acción y el médico hizo DESPUÉS,
+    // por su cuenta, lo que sugería. Solo mide; no juzga ni toca nada.
+    return obsAvisoDesenlace(id, "posterior");
+  }
+
+  // 1.6 — SERIALIZACIÓN CON LISTA BLANCA. Lo que no está aquí no existe para
+  // la red. El sobre (token/equipo/ver/evento/ts/dia/lote) lo pone reportar():
+  // esta fila JAMÁS repite esas claves (Object.assign las pisaría). ctx viaja
+  // como cadena compacta "k1:v1,k2:v2" (máx 64 chars): la hoja recibe plano.
+  // Cadena admitida: charset cerrado SIN ESPACIOS (la prosa no cabe) y, si no
+  // trae letras, de 4 chars o menos — una cédula o un celular son "solo
+  // números": quedan fuera aunque no tengan espacios.
+  function obsSerializar(extra) {
+    const fila = { medico: "", consulta: "", fase: "", resultado: "", codigo: "", ms: 0, n: 0, ctx: "" };
+    try {
+      extra = (extra && typeof extra === "object" && !Array.isArray(extra)) ? extra : {};
+      fila.medico = /^m-[0-9a-f]{8}$/.test(obsIdentidadMedico()) ? obsIdentidadMedico() : "";
+      fila.consulta = /^[0-9a-f]{8}$/.test(obsConsulta.id) ? obsConsulta.id : "";
+      const fase = OBS_FASES[String(extra.fase || "").toUpperCase()] || "";
+      if (fase) fila.fase = fase;
+      const res = OBS_RESULTADOS[String(extra.resultado || "").toUpperCase()] || "";
+      if (res) fila.resultado = res;
+      const cod = String(extra.codigo || "");
+      if (cod && OBS_ACCION_RE.test(cod)) fila.codigo = cod.slice(0, 32);
+      if (typeof extra.ms === "number" && isFinite(extra.ms) && extra.ms >= 0) fila.ms = Math.min(Math.round(extra.ms), 24 * 3600 * 1000);
+      if (typeof extra.n === "number" && isFinite(extra.n) && extra.n >= 0) fila.n = Math.min(Math.round(extra.n), 1000000);
+      if (extra.ctx && typeof extra.ctx === "object" && !Array.isArray(extra.ctx)) {
+        const pares = [];
+        for (const k of Object.keys(extra.ctx)) {
+          if (pares.length >= 6) break;
+          const ck = String(k).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16);
+          if (!ck) continue;
+          const v = extra.ctx[k];
+          let cv = null;
+          if (typeof v === "number" && isFinite(v) && Math.abs(v) <= 100000) cv = v;
+          else if (typeof v === "boolean") cv = v ? 1 : 0;
+          else if (typeof v === "string" && OBS_CTX_VALOR_RE.test(v) && (v.length <= 4 || /[A-Za-z]/.test(v))) cv = v;
+          if (cv === null) { obsPerdidosSumar("ctx_rechazado"); continue; }
+          pares.push(ck + ":" + cv);
+        }
+        fila.ctx = pares.join(",").slice(0, 64);
+      }
+      return fila;
+    } catch (e) { obsCatch("serializar", e); return fila; }
+  }
+
+  // 1.3 — EVENTO GENÉRICO. Devuelve false si el evento no salió (acción
+  // inválida, reporte apagado): quien lo llama decide si le importa.
+  function obsEvento(accion, extra) {
+    try {
+      const a = String(accion || "");
+      if (!OBS_ACCION_RE.test(a)) { obsPerdidosSumar("accion_invalida"); return false; }
+      return reportar("obs." + a, obsSerializar(extra));
+    } catch (e) { obsCatch("evento", e); return false; }
+  }
+
+  // 1.5 — CATCH CONTADO. Los ~891 catch mudos del script no dejan rastro. Este
+  // contador es el primer peldaño: código FIJO, nada del error viaja (el
+  // mensaje con PHI no puede colarse). La migración de los catch existentes es
+  // incremental; los de este módulo ya lo usan.
+  function obsCatch(codigo, e) {
+    try {
+      const c = String(codigo || "desconocido").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 32) || "desconocido";
+      uxTrack("obs.catch." + c);
+      return true;
+    } catch (e2) { return false; }
+  }
+
+  // 1.7 — PERDIDOS: eventos que el saneamiento rechazó. Si el contador sube,
+  // algo del código está mandando algo que la lista blanca no admite — mejor
+  // saberlo que perderlo en silencio. Viaja en la fila de entorno diaria.
+  function obsPerdidosEstado() {
+    const hoy = todayStamp();
+    const crudo = obsGmLeer(OBS_PERDIDOS_GM, null);
+    return (crudo && typeof crudo === "object" && crudo.dia === hoy && typeof crudo.n === "number")
+      ? crudo : { dia: hoy, n: 0, motivos: {} };
+  }
+  function obsPerdidosSumar(motivo) {
+    try {
+      const st = obsPerdidosEstado();
+      st.n++;
+      const m = String(motivo || "desconocido").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 24) || "desconocido";
+      st.motivos[m] = (st.motivos[m] || 0) + 1;
+      obsGmGuardar(OBS_PERDIDOS_GM, st);
+    } catch (e) {}
+  }
+  function obsPerdidosLeer() {
+    const st = obsPerdidosEstado();
+    return { dia: st.dia, n: st.n || 0, motivos: st.motivos || {} };
+  }
+
+  // 4.4 — PRESUPUESTO DE INTERRUPCIONES, en el código. Medido: ≈4.020
+  // interrupciones en 14 días (≈72 por equipo/día) — el aviso universal pasa
+  // de útil a ruido. Tope por equipo y día; `esPrueba` lo exime (el banco
+  // pinta el modal decenas de veces). Ajustable: S.obsPresupuestoAvisos
+  // (número ≥ 0; 0 = sin tope). No toca colores, tonos ni reglas clínicas:
+  // solo decide cuántas veces al día este aviso puede interrumpir.
+  function obsPresupuestoLimite() {
+    try {
+      const v = S && S.obsPresupuestoAvisos;
+      return (typeof v === "number" && isFinite(v) && v >= 0) ? Math.floor(v) : 6;
+    } catch (e) { return 6; }
+  }
+  function obsPresupuestoEstado() {
+    const hoy = todayStamp();
+    let st = obsGmLeer(OBS_PRESUPUESTO_GM, null);
+    if (!(st && typeof st === "object" && st.dia === hoy && typeof st.usados === "number")) st = { dia: hoy, usados: 0 };
+    const limite = obsPresupuestoLimite();
+    return { dia: hoy, usados: st.usados, limite, permite: limite === 0 || st.usados < limite };
+  }
+  function obsPresupuestoConsumir() {
+    try {
+      const st = obsPresupuestoEstado();
+      if (!st.permite) { uxTrack("aviso.presupuesto.agotado"); return false; }
+      if (st.limite > 0) obsGmGuardar(OBS_PRESUPUESTO_GM, { dia: st.dia, usados: st.usados + 1 });
+      return true;
+    } catch (e) { return true; }   // fall-open: el presupuesto no puede tapar el aviso por un fallo de almacenaje
   }
 
 })();

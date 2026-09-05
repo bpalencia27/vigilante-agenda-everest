@@ -302,8 +302,12 @@ module.exports = {
       conDoctor(c.api, 201, "Maryuris Terán");
       c.api.repAccesoDiario();
       await new Promise((res) => setTimeout(res, 30));
-      t.igual(red.posts.length, 1, "un solo POST");
-      const cuerpo = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — el arranque de un navegador limpio emite además
+      // «obs.equipo.nuevo» (diferido un tick) al nacer el id de equipo. Esta
+      // prueba mide el canal «acceso»: contar SOLO sus POST.
+      const postsAcceso = red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso"; } catch (err) { return false; } });
+      t.igual(postsAcceso.length, 1, "un solo POST");
+      const cuerpo = JSON.parse(postsAcceso[0].data);
       t.igual(cuerpo.evento, "acceso");
       t.igual(cuerpo.uid, 201);
       t.igual(cuerpo.nombre, "Maryuris Terán");
@@ -311,7 +315,7 @@ module.exports = {
       t.igual(c.env.almacen["vgl_rep_acceso"], c.api.todayStamp(), "candado diario escrito");
       c.api.repAccesoDiario();
       await new Promise((res) => setTimeout(res, 30));
-      t.igual(red.posts.length, 1, "el candado diario impide el segundo envío");
+      t.igual(red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso"; } catch (err) { return false; } }).length, 1, "el candado diario impide el segundo envío");
     });
 
     t.caso("B2: repAccesoDiario sin uid no reporta nada (ni gasta el candado)", () => {
