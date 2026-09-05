@@ -609,6 +609,9 @@ module.exports = {
     await t.casoAsync("schedulePymBase: loadPymBase rechaza (por ej. sin TextDecoder) y la cadena de reintentos se mantiene", async () => {
       const cont = contadorNuevo("base_piloto.csv", "T");
       const c = cargar({ silencioso: true, gmxhr: gmxhrPiloto(cont) });
+      // El mock del harness provee TextDecoder desde v18.0.144 (lo necesita el caché de la
+      // carpeta); este caso simula el rechazo: se fuerza su AUSENCIA en el contexto.
+      c.ctx.TextDecoder = undefined;
       c.api.__CONFIG.SP.respaldo = { id: PILOTO_GUID, name: "base_piloto.csv" };
       c.api.schedulePymBase();
       await dormir(400);

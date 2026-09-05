@@ -324,15 +324,18 @@ module.exports = {
     });
 
     t.caso("REGRESIÓN — una instantánea degradada NO pisa la buena del mismo día", () => {
-      const buena = { fecha: "2026-08-21", laboratorios: { CREATININA: {}, HBA1C: {} }, riesgo: { categoria: "ALTO" }, medicamentos: ["A", "B"], renal: { egfr: 55 } };
-      const pobre = { fecha: "2026-08-21", laboratorios: {}, riesgo: { categoria: null }, medicamentos: [], renal: {} };
+      // v18.0.144 — la riqueza ya no se mide en claves de `laboratorios` (ese campo se
+      // retiró del caché): cuenta los CAMPOS CONSERVADOS que traen valor.
+      const buena = { fecha: "2026-08-21", riesgo: { categoria: "ALTO" }, medicamentos: ["A", "B"], renal: { egfr: 55 }, metas: { ldl: 70, ldlActual: 120 } };
+      const pobre = { fecha: "2026-08-21", riesgo: { categoria: null }, medicamentos: [], renal: {}, metas: {} };
       const h1 = api.mtrHistorialAgregar(null, buena);
       const h2 = api.mtrHistorialAgregar(h1, pobre);
-      t.igual(Object.keys(h2.controles[0].laboratorios).length, 2,
-        "la lectura sin laboratorios (red caída) no borra la completa de media hora antes");
-      const mejor = { fecha: "2026-08-21", laboratorios: { CREATININA: {}, HBA1C: {}, RAC: {} }, riesgo: { categoria: "ALTO" }, medicamentos: ["A", "B"], renal: { egfr: 55 } };
+      t.igual(h2.controles[0].renal.egfr, 55,
+        "la lectura pobre (red caída) no borra la completa de media hora antes");
+      t.igual(h2.controles[0].metas.ldl, 70, "ni sus metas");
+      const mejor = { fecha: "2026-08-21", riesgo: { categoria: "ALTO" }, medicamentos: ["A", "B", "C"], renal: { egfr: 55, estadioClinico: "G3a" }, metas: { ldl: 55 } };
       const h3 = api.mtrHistorialAgregar(h2, mejor);
-      t.igual(Object.keys(h3.controles[0].laboratorios).length, 3, "pero una lectura MÁS completa sí actualiza");
+      t.igual(h3.controles[0].metas.ldl, 55, "pero una lectura MÁS completa sí actualiza");
     });
 
     t.caso("_vglDeshacerFlotante: el botón del llenado NO reusa la clase que quedaba tapada", () => {
@@ -475,7 +478,10 @@ module.exports = {
     });
 
     await t.casoAsync("REGRESIÓN — si el respaldo no se puede escribir, el archivo original NO se toca", async () => {
-      const disco = { "777.json": "{{{ corrupto" };
+      // v18.0.144 — el archivo del asistente ya no se llama «777.json» sino por su HMAC:
+      // la basura se siembra en el nombre canónico de ESA cédula.
+      const nombre = await api.mtrNombreArchivoPaciente("777");
+      const disco = { [nombre]: "{{{ corrupto" };
       const fs = {
         leer: async (n) => disco[n],
         escribir: async (n, txt) => {
@@ -486,18 +492,19 @@ module.exports = {
       const r = await api.vglCarpetaGuardarInstantanea("777", { fecha: "2026-08-21" }, fs);
       t.falso(r.ok, "no se guarda");
       t.cierto(/no lo toco para no perderlo/.test(r.motivo), "y se dice por qué: " + r.motivo);
-      t.igual(disco["777.json"], "{{{ corrupto", "el archivo original queda intacto — antes se borraba el historial entero");
+      t.igual(disco[nombre], "{{{ corrupto", "el archivo original queda intacto — antes se borraba el historial entero");
     });
 
     await t.casoAsync("REGRESIÓN — un archivo con OTRA forma también se respalda, y sin pisar respaldos previos", async () => {
-      const disco = { "888.json": JSON.stringify({ v: 9, otraCosa: [1, 2, 3] }) };
+      const nombre = await api.mtrNombreArchivoPaciente("888");
+      const disco = { [nombre]: JSON.stringify({ v: 9, otraCosa: [1, 2, 3] }) };
       const fs = { leer: async (n) => disco[n], escribir: async (n, txt) => { disco[n] = txt; return true; } };
       const r = await api.vglCarpetaGuardarInstantanea("888", { fecha: "2026-08-21" }, fs);
       t.cierto(r.ok);
       t.cierto(!!r.respaldo, "un JSON válido pero de otra forma también se respalda: antes se descartaba sin copia");
       t.cierto(/otraCosa/.test(String(disco[r.respaldo])), "con su contenido");
       // Segunda corrupción el mismo día: NO puede pisar el respaldo anterior.
-      disco["888.json"] = JSON.stringify({ v: 9, otraCosa: ["distinto"] });
+      disco[nombre] = JSON.stringify({ v: 9, otraCosa: ["distinto"] });
       const r2 = await api.vglCarpetaGuardarInstantanea("888", { fecha: "2026-08-21" }, fs);
       t.falso(r2.respaldo === r.respaldo, "el segundo respaldo tiene otro nombre: " + r2.respaldo);
       t.cierto(/otraCosa":\[1/.test(String(disco[r.respaldo])), "y el primero sigue intacto");
@@ -965,7 +972,9 @@ module.exports = {
 
       const r1 = await api.vglCarpetaGuardarInstantanea("1093800", inst("2026-02-01", 150), fs);
       t.cierto(r1.ok, "se guardó");
-      t.igual(r1.archivo, "1093800.json", "un archivo por cédula");
+      // v18.0.144 — el nombre ya NO es la cédula: es su HMAC con la clave del equipo.
+      t.cierto(/^[0-9a-f]{64}\.json$/.test(r1.archivo), "un archivo por cédula, seudonimizado: " + r1.archivo);
+      t.falso(String(r1.archivo).indexOf("1093800") >= 0, "y la cédula no aparece en el nombre");
       await api.vglCarpetaGuardarInstantanea("1093800", inst("2026-08-01", 90), fs);
       const r3 = await api.vglCarpetaGuardarInstantanea("1093800", inst("2026-08-01", 85), fs);
       t.igual(r3.controles, 2, "el mismo día se REEMPLAZA (abrir el panel cuatro veces no son cuatro controles)");
@@ -980,11 +989,13 @@ module.exports = {
     });
 
     await t.casoAsync("carpeta: un archivo ilegible se conserva al lado en vez de pisarse", async () => {
-      const disco = { "999.json": "esto no es json {{{" };
+      // v18.0.144 — la basura se siembra en el nombre canónico (HMAC) de ESA cédula.
+      const nombre = await api.mtrNombreArchivoPaciente("999");
+      const disco = { [nombre]: "esto no es json {{{" };
       const fs = { leer: async (n) => disco[n], escribir: async (n, txt) => { disco[n] = txt; return true; } };
       const r = await api.vglCarpetaGuardarInstantanea("999", { fecha: "2026-08-21" }, fs);
       t.cierto(r.ok, "se guarda igual: el médico no pierde el control de hoy");
-      t.cierto(/^999\.roto-/.test(String(r.respaldo)), "y lo ilegible queda al lado con nombre único: " + r.respaldo);
+      t.cierto(/\.roto-/.test(String(r.respaldo)), "y lo ilegible queda al lado con nombre único: " + r.respaldo);
       t.cierto(String(disco[r.respaldo]).indexOf("{{{") >= 0, "con su contenido intacto");
     });
 
@@ -1011,47 +1022,57 @@ module.exports = {
     });
 
     // 02-sep — CIERRE ADVERSARIAL (fila 21): la carpeta se escribió antes de la canonicalización
-    // de v17.48.0 y puede tener «0000111111.json». La lectura por nombre exacto no lo veía (el
-    // Panel no mostraba los controles previos) y la siguiente instantánea creaba «111111.json»
-    // al lado: dos archivos del mismo paciente, el viejo huérfano en silencio.
-    await t.casoAsync("02-sep: un historial archivado con ceros de relleno se encuentra y se sigue escribiendo AHÍ, no en un archivo nuevo", async () => {
+    // de v17.48.0 y puede tener «0000111111.json». v18.0.144: el legado sigue ENCONTRÁNDOSE
+    // al leer (tolerancia intacta), pero el guardado escribe al nombre SEUDONIMIZADO, absorbe
+    // sus controles y BORRA el archivo viejo identificable — no se crea un segundo archivo.
+    await t.casoAsync("02-sep: un historial archivado con ceros de relleno se encuentra, se absorbe al caché cifrado y el archivo viejo se borra", async () => {
       const disco = { "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01", metas: { ldlActual: 150 } }] }) };
-      const fs = { leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) };
+      const fs = { leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco), borrar: async (n) => { delete disco[n]; } };
       const h = await api.vglCarpetaLeerHistorial("111111", fs);
       t.cierto(!!h && h.controles.length === 1, "la cédula canónica encuentra el archivo viejo con ceros");
       const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fs);
       t.cierto(r.ok, "se guarda");
-      t.igual(r.archivo, "0000111111.json", "y la instantánea nueva se escribe en ESE archivo, no en uno nuevo");
-      t.igual(Object.keys(disco).length, 1, "un solo archivo para el paciente");
-      t.igual(JSON.parse(disco["0000111111.json"]).controles.length, 2, "con los dos controles juntos");
-      // Sin archivo viejo, el nombre es el canónico aunque la cédula llegue con ceros.
+      t.cierto(/^[0-9a-f]{64}\.json$/.test(r.archivo || ""), "al nombre seudonimizado, nunca a la cédula");
+      t.falso("0000111111.json" in disco, "y el archivo viejo con la cédula DESAPARECE del disco");
+      const sobre = JSON.parse(disco[r.archivo]);
+      t.igual(sobre.tipo, "cache-derivado-no-historia-clinica", "lo escrito es un sobre de caché cifrado");
+      const guardado = await api._vglCarpetaDescifrar(disco[r.archivo]);
+      t.igual(guardado.controles.map((c) => c.fecha).join(","), "2026-03-01,2026-09-02", "con los dos controles juntos, ordenados");
+      t.cierto(!JSON.stringify(sobre).includes("111111"), "y la cédula no vive en el sobre");
+      // Sin archivo viejo, el nombre nuevo es el mismo llegue la cédula con o sin ceros.
       const disco2 = {};
       const fs2 = { leer: async (n) => disco2[n] || null, escribir: async (n, txt) => { disco2[n] = txt; return true; }, listar: async () => Object.keys(disco2) };
       const r2 = await api.vglCarpetaGuardarInstantanea("0000222222", { fecha: "2026-09-02" }, fs2);
-      t.igual(r2.archivo, "222222.json", "un paciente nuevo estrena el nombre canónico");
+      const r2b = await api.vglCarpetaGuardarInstantanea("222222", { fecha: "2026-09-02" }, fs2);
+      t.igual(r2.archivo, r2b.archivo, "el nombre no depende de los ceros de relleno: es el hash de la cédula limpia");
       // Un fs sin `listar` (el de las pruebas de siempre) se comporta exactamente como antes.
-      t.igual(await api.vglCarpetaLeerHistorial("111111", { leer: async (n) => disco[n] || null }), null, "sin listar no hay tolerancia: nombre exacto y no está");
+      disco["0000333333.json"] = JSON.stringify({ v: 1, doc: "0000333333", controles: [{ fecha: "2026-03-01" }] });
+      t.igual(await api.vglCarpetaLeerHistorial("333333", { leer: async (n) => disco[n] || null }), null, "sin listar no hay tolerancia: nombre exacto y no está");
     });
 
     // v18.0.104 — refutador de v18.0.99 (fila 21): (a) un mutante que resolvía al PRIMER archivo
     // numérico cruzaba historiales de OTRO paciente con el banco verde; (b) `listar()` real
     // (entries()) no tenía cobertura; (c) canónico + legado coexistiendo (escisión previa) o dos
-    // legados dejaban controles huérfanos según el orden del listado.
+    // legados dejaban controles huérfanos según el orden del listado. v18.0.144: el guardado
+    // escribe al SEUDONIMIZADO y borra los legados que absorbe.
     await t.casoAsync("v18.0.104: la carpeta nunca lee el archivo de OTRA cédula, fusiona escisiones, y listar() real funciona", async () => {
-      const fsDe = (disco) => ({ leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco) });
+      const fsDe = (disco) => ({ leer: async (n) => disco[n] || null, escribir: async (n, txt) => { disco[n] = txt; return true; }, listar: async () => Object.keys(disco), borrar: async (n) => { delete disco[n]; } });
       // (a) Solo hay un archivo de OTRA cédula: no se lee ni se escribe encima.
       const otro = { "0000222222.json": JSON.stringify({ v: 1, doc: "0000222222", controles: [{ fecha: "2026-03-01" }] }) };
       t.igual(await api.vglCarpetaLeerHistorial("111111", fsDe(otro)), null, "el historial de otra cédula NO se lee");
       const r = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(otro));
-      t.igual(r.archivo, "111111.json", "y se escribe en el canónico propio");
+      t.cierto(/^[0-9a-f]{64}\.json$/.test(r.archivo || ""), "y se escribe en el suyo seudonimizado");
       t.igual(JSON.parse(otro["0000222222.json"]).controles.length, 1, "el del otro paciente queda intacto");
-      // (c) Escisión previa: canónico + legado → se leen fusionados y el canónico se lleva todo.
+      // (c) Escisión previa: dos archivos de esta cédula → se leen fusionados y el guardado
+      // se lleva los controles al seudonimizado, borrando los dos identificables.
       const esc = { "111111.json": JSON.stringify({ v: 1, doc: "111111", controles: [{ fecha: "2026-08-30" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
       const h = await api.vglCarpetaLeerHistorial("111111", fsDe(esc));
       t.igual(h.controles.map((x) => x.fecha).join(","), "2026-03-01,2026-08-30", "los dos controles, ordenados, aunque estén en dos archivos");
       const r2 = await api.vglCarpetaGuardarInstantanea("111111", { fecha: "2026-09-02" }, fsDe(esc));
-      t.igual(r2.archivo, "111111.json", "se escribe en el canónico");
-      t.igual(JSON.parse(esc["111111.json"]).controles.length, 3, "y ya lleva los tres controles: el legado dejó de ser huérfano");
+      t.cierto(/^[0-9a-f]{64}\.json$/.test(r2.archivo || ""), "se escribe al seudonimizado");
+      t.falso("111111.json" in esc || "0000111111.json" in esc, "y los dos archivos con la cédula en el nombre DESAPARECEN");
+      const j2 = await api._vglCarpetaDescifrar(esc[r2.archivo]);
+      t.igual(j2.controles.length, 3, "y ya lleva los tres controles: ningún legado queda huérfano");
       // Dos legados: fusión determinista, sin depender del orden del listado.
       const dos = { "00111111.json": JSON.stringify({ v: 1, doc: "00111111", controles: [{ fecha: "2026-05-01" }] }), "0000111111.json": JSON.stringify({ v: 1, doc: "0000111111", controles: [{ fecha: "2026-03-01" }] }) };
       const h2 = await api.vglCarpetaLeerHistorial("111111", fsDe(dos));
@@ -1069,15 +1090,16 @@ module.exports = {
       t.cierto(!!hReal && hReal.controles.length === 1, "y con la carpeta real el legado con ceros se encuentra");
     });
 
-    t.caso("mtrHistorialAgregar y mtrNombreArchivoPaciente: las piezas sueltas", () => {
+    await t.casoAsync("mtrHistorialAgregar y mtrNombreArchivoPaciente: las piezas sueltas", async () => {
       const h1 = api.mtrHistorialAgregar(null, { fecha: "2026-08-01" });
       t.igual(h1.controles.length, 1, "sin historial previo se crea");
       const h2 = api.mtrHistorialAgregar(h1, { fecha: "2026-02-01" });
       t.igual(h2.controles[0].fecha, "2026-02-01", "una instantánea vieja se coloca en su sitio, no al final");
       t.igual(api.mtrHistorialAgregar(h2, {}).controles.length, 2, "sin fecha no se agrega nada");
-      t.igual(api.mtrNombreArchivoPaciente("1.093.800"), "1093800.json", "el nombre sale de la cédula limpia");
-      t.igual(api.mtrNombreArchivoPaciente("abc"), null, "sin dígitos no hay archivo");
-      t.igual(api.mtrNombreArchivoPaciente(null), null, "ni con null");
+      // v18.0.144 — el nombre es el HMAC de la cédula limpia (async): nunca la cédula misma.
+      t.cierto(/^[0-9a-f]{64}\.json$/.test(await api.mtrNombreArchivoPaciente("1.093.800")), "el nombre se deriva de la cédula limpia, seudonimizado");
+      t.igual(await api.mtrNombreArchivoPaciente("abc"), null, "sin dígitos no hay archivo");
+      t.igual(await api.mtrNombreArchivoPaciente(null), null, "ni con null");
     });
 
     t.caso("carpeta: el estado se puede consultar sin abrir ningún diálogo", () => {
@@ -1237,22 +1259,24 @@ module.exports = {
       t.cierto(/no escribe en la historia/.test(c.api.mtrMensajeLlenado(r)), "con su explicación al médico");
     });
 
-    // v18.0.108 — S+ robustez (B5): Ajustes prometía «Todo se queda en su equipo» sin advertir
-    // sobre carpetas sincronizadas (OneDrive/Drive/Dropbox), y decía que al cerrar Chrome había
-    // que volver a elegirla (falso desde v17.0.1).
-    await t.casoAsync("v18.0.108 (S+ B5): una carpeta que parece sincronizada con la nube se acepta pero queda marcada y se avisa; el texto de Ajustes ya no promete lo que el navegador no cumple", async () => {
+    // v18.0.108 → v18.0.144 (S+ B5, endurecido): la carpeta sincronizada ya no se acepta con
+    // advertencia — se RECHAZA. Lo que sube a la nube de un tercero sale del control del médico
+    // y de la IPS, aunque vaya cifrado. Y Ajustes ya no promete lo que el navegador no cumple.
+    await t.casoAsync("v18.0.144 (S+ B5): una carpeta sincronizada con la nube se RECHAZA y no queda elegida; el texto de Ajustes lo dice claro", async () => {
       const c = cargar({ silencioso: true });
       t.cierto(c.api._vglCarpetaPareceSincronizada("OneDrive - IPS") && c.api._vglCarpetaPareceSincronizada("Google Drive") && c.api._vglCarpetaPareceSincronizada("Dropbox"), "OneDrive / Google Drive / Dropbox se reconocen por el nombre");
       t.falso(c.api._vglCarpetaPareceSincronizada("Historias") || c.api._vglCarpetaPareceSincronizada("Documentos"), "una carpeta local no");
       c.env.win.showDirectoryPicker = async () => ({ name: "OneDrive - IPS" });
       const r = await c.api.vglCarpetaElegir();
-      t.cierto(!!r && r.ok === true && r.sincronizada === true, "la elección se acepta (el médico manda) pero queda marcada: " + JSON.stringify(r));
+      t.cierto(!!r && r.ok === false && r.sincronizada === true, "la elección se RECHAZA: " + JSON.stringify(r));
+      t.cierto(/carpeta LOCAL/i.test(r.motivo), "y el motivo se lo explica al médico en lenguaje llano");
+      t.falso(c.api.vglCarpetaElegida(), "la carpeta NO queda elegida: el guardado sigue apagado");
       c.env.win.showDirectoryPicker = async () => ({ name: "Historias" });
       const r2 = await c.api.vglCarpetaElegir();
-      t.cierto(!!r2 && r2.ok === true && r2.sincronizada === false, "una carpeta local, sin marca");
+      t.cierto(!!r2 && r2.ok === true && !r2.sincronizada, "una carpeta local, sí");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/Evite carpetas sincronizadas/.test(src) && !/si cierra Chrome habrá que volver a elegirla/.test(src), "Ajustes advierte sobre carpetas sincronizadas y ya no dice que hay que volver a elegirla al cerrar Chrome");
-      t.cierto(/showToast\("AMBAR", "Carpeta sincronizada con la nube"/.test(src), "y el aviso ámbar existe en la elección");
+      t.cierto(/se RECHAZAN/.test(src) && !/Evite carpetas sincronizadas/.test(src) && !/si cierra Chrome habrá que volver a elegirla/.test(src), "Ajustes dice que las sincronizadas se RECHAZAN y ya no promete lo que el navegador no cumple");
+      t.cierto(/carpeta\.sincronizada\.rechazada/.test(src), "y el rechazo se reporta por telemetría");
     });
 
   },

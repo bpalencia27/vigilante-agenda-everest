@@ -81,8 +81,15 @@ Si `npm test` ≠ 3317/0 **frena**: algo cambió el mundo bajo tus pies.
 | P5 | Cerradura servidor-side (uid fuera del padrón) | S5 | **DUEÑO** (decisión) | PROPUESTA |
 | P6 | Futuras releases (bump→banco→gist→push→merge→registro) | S6 | Haber probado el cambio | PLANTILLA |
 | P7 | Manejo/revocación de PAT | S7 | Token vivo presente | PERMANENTE |
+| **P8** | **Carpeta local: de historia clínica a caché cifrado** (`01_carpeta_local_URGENTE.txt`) | S8 | ninguno | **FUSIONADO 2026-09-04: `claude/carpeta-local-cifrada`, banco 3.326/0, sin bump (S6 publica)** |
+| P9 | Migración del redactor a GLM-5.3 + medición 30 días (`09_migracion_glm_y_medicion.txt`) | S8 | Clave API general de z.ai (**hecho**) | PENDIENTE |
+| P10 | Barrera cero-identificables hacia la IA (`02_barrera_cero_identificables.txt`) | S8 | P9 (la capa de proveedor primero) | PENDIENTE |
+| P11 | Consentimiento + purga 12 meses (`04_consentimiento.txt`) | S8 | P8+P10 (no publicar promesas que el código no cumple) | PENDIENTE |
+| P12 | Saneamiento y rendimiento (`06_saneamiento_rendimiento.txt`) | S8 | banco verde | PENDIENTE |
+| P13 | Observabilidad y adopción (`07_observabilidad_adopcion.txt`) | S8 | P9 | PENDIENTE |
 
-Grafo: P1 → P2 → P3. P4, P5, P6 independientes. P7 transversal. Gate cerrado → despacha
+Grafo: P1 → P2 → P3. P8 FUSIONADO (falta publicar vía S6). P9 → P10 → P11. P4, P5, P12
+independientes. P6 cierra cada tanda. P7 transversal. Gate cerrado → despacha
 sin volver a preguntar.
 
 ## 5. SUBAGENTES — prompts textuales
@@ -246,6 +253,28 @@ Eres S7-SEGURIDAD. Un PAT existe en esta sesión.
    GitHub funciona sin token (repo público): distingue "token muerto" de "sin red".
 ENTREGA: estado del token, dónde se usó, qué quedó limpio, qué falta.
 PROHIBIDO: probar el token fuera de github.com, loguear el token completo (primeros 6 + ...).
+```
+
+### S8 · EJECUTOR-DE-PROMPT (P8-P13)
+
+```
+Eres S8-EJECUTOR. Ejecutas UN prompt externo, entero y al pie de la letra. No lo resumas,
+no lo reinterpretes, no lo mejores: ya está escrito y medido sobre este código.
+ENTRADA: <ruta del .txt> y <nombre de rama> que te da el orquestador.
+1) Confirma el archivo con `dir` y pega sus primeras 5 líneas. Si no lo puedes leer (la
+   herramienta te limita al proyecto), PARA y dilo con esas palabras.
+2) git checkout main && git pull && git checkout -b <rama>.
+3) Ejecuta el prompt. Si te pide pegar una lista antes de escribir código, la pegas ANTES.
+4) Banco COMPLETO verde + node --check. Mutación verificada en cada arreglo (REGLA 13):
+   las cuatro salidas pegadas.
+5) La entrada del cambio va en docs/CAMBIOS_<rama>.md. NO toques CHANGELOG.md ni @version
+   (REGLAS 3 y 10): eso es de S6 al publicar.
+6) git checkout main && git merge <rama>. Conflicto → resolver y volver a correr el banco
+   completo antes de seguir.
+7) Actualiza la fila de sección 4 en ORQUESTADOR.md (Estado → FUSIONADO + nº de pruebas).
+ENTREGA: qué hizo el prompt, las cuatro salidas por arreglo, banco final, rama fusionada.
+PROHIBIDO: abrir el userscript completo, dos prompts a la vez, copiar los prompts al repo,
+inventar trabajo que el archivo no pide, publicar (eso es S6).
 ```
 
 ## 6. Protocolo del orquestador

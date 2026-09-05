@@ -13023,3 +13023,40 @@ aserción lo cazó a la primera. La disciplina es correr el mutante y ver, no
 razonar si va a caer.
 
 Banco completo: **3.260 comprobaciones pasan, 0 fallan.**
+
+## v18.0.144 — la carpeta local deja de ser una historia clínica en el disco: caché cifrado, seudonimizado y migrado
+
+La carpeta local guardaba, por cada control, un `<cédula>.json` EN CLARO con laboratorios y
+series completas — y con el número de documento como nombre de archivo y además dentro. La
+telemetría de los últimos 14 días trajo 67 `disco.activado` y 6 `carpeta.elegida`: hay archivos
+así en discos reales AHORA. Este release reconstruye la carpeta como un caché derivado con seis
+capas: (1) nombre de archivo = HMAC-SHA-256 de la cédula con una clave de equipo aleatoria
+guardada en `GM_setValue` — jamás en la carpeta; sin clave, el caché viejo se descarta, es un
+caché y no un registro; (2) contenido en AES-GCM (`crypto.subtle`, IV nuevo por escritura) con
+cabecera en claro que solo dice versión y `cache-derivado-no-historia-clinica`; (3) las carpetas
+sincronizadas (OneDrive/Drive/Dropbox) ya no se advierten: se RECHAZAN con explicación en
+lenguaje llano; (4) purga diaria a 365 días que reporta conteos, nunca cuáles; (5) Ajustes
+muestra cuántos pacientes y controles hay y un «Borrar todo lo guardado» con confirmación que
+borra de verdad; (6) migración del formato viejo: leer, podar, cifrar, escribir con el nombre
+nuevo y BORRAR el original — si el borrado falla, se le muestra al médico el archivo exacto y la
+migración no se da por terminada. El registro se poda a lo único que `mtrAnclaControlAnterior`
+lee (fecha, categoría de riesgo, eGFR+estadio, LDL+meta, HbA1c+meta, medicamentos, ordenado):
+`laboratorios` y `series` se escribían y no se leían en ninguna parte — grep-verificado antes de
+tocarlos — y cada campo retirado exigió su propio grep con consumidor real o se quedó. La nueva
+`suite_69_v18_carpeta_cifrada` fija las nueve pruebas del diseño con 47 comprobaciones, incluida
+la invariante que cierra el círculo: el texto del ancla de Enfermedad Actual es byte a byte el
+mismo que producía el formato viejo.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 537 | `mtrNombreArchivoPaciente` devuelve la cédula como nombre (`d + ".json"`) en vez del HMAC: el seudonimizado desaparece | *suite_69: casos 1, 2, 4, 5, 6, 8 y 9 — «ninguno de los 20 nombres delata la cédula: esperaba 0 y obtuvo 20»* | Sí |
+| 538 | `_vglCarpetaCifrar` escribe el historial en claro sin sobre AES-GCM | *suite_69: casos 3 y 5 — «la cabecera solo lleva versión, tipo e IV: esperaba "datos,iv,tipo,v"»* | Sí |
+| 539 | `vglCarpetaElegir` acepta la carpeta sincronizada (`if (false && …pareceSincronizada)`): la advertencia vuelve a dejar pasar | *suite_69: caso 7 — «se RECHAZA, no se advierte y sigue»* | Sí |
+| 540 | la purga con límite a 36500 días: nada caduca nunca | *suite_69: caso 6 — «366 fuera, 364 queda: esperaba 2 y obtuvo 0»* | Sí |
+| 541 | `vglCarpetaBorrarTodo` cuenta sin borrar (`try { n++; }`): el botón miente | *suite_69: caso 9 — «no queda NI UN archivo del asistente: esperaba 0 y obtuvo 4»* | Sí |
+| 542 | la migración cifra y escribe pero NO borra el original con la cédula en el nombre | *suite_69: caso 5 — «el archivo con la cédula en el nombre DESAPARECE»* | Sí |
+| 543 | la poda conserva `edad`, un campo del esquema viejo sin consumidor en el caché | *suite_69: caso 5 — «podado al esquema mínimo: esperaba "fecha,…,v" y obtuvo "edad,fecha,…,v"»* | Sí |
+| 544 | `_mtrInstantaneaAlMenosTanRica` siempre `true`: una lectura pobre pisa la instantánea buena del mismo día | *suite_68: «REGRESIÓN — una instantánea degradada NO pisa la buena del mismo día» y «_mtrInstantaneaAlMenosTanRica: qué cuenta como no perder nada»* | Sí |
+
+Banco completo: **3.326 comprobaciones pasan, 0 fallan.**
+

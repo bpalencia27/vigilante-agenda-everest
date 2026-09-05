@@ -145,7 +145,18 @@ function crearEntorno(opciones) {
     btoa: (s) => Buffer.from(String(s), "binary").toString("base64"),
     atob: (s) => Buffer.from(String(s), "base64").toString("binary"),
     TextEncoder: typeof TextEncoder !== "undefined" ? TextEncoder : require("util").TextEncoder,
-    crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }),
+    // v18.0.144 — el descifrado del caché de carpeta hace `new TextDecoder().decode(…)`. En un
+    // contexto vm TextDecoder NO existe como global intrínseco, y el catch de _vglCarpetaDescifrar
+    // tragaba el ReferenceError: TODO lo cifrado por el propio userscript se leía como null y las
+    // pruebas de relectura/fusión daban "Cannot read properties of null". Un navegador real
+    // siempre tiene TextDecoder junto a TextEncoder; el mock ya no será menos navegador que eso.
+    TextDecoder: typeof TextDecoder !== "undefined" ? TextDecoder : require("util").TextDecoder,
+    // v18.0.144 — la carpeta local ahora usa HMAC-SHA-256 y AES-GCM (crypto.subtle.importKey/
+    // deriveKey/encrypt). El api principal del runner se carga con cargar({silencioso:true}) sin
+    // inyección, así que el fallback por defecto debe ser el webcrypto REAL de Node (>=15),
+    // no un digest suelto: sin esto, mtrNombreArchivoPaciente devuelve null y TODAS las pruebas
+    // de carpeta rompen aunque el userscript esté bien.
+    crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : (() => { try { return require("crypto").webcrypto; } catch (e) { return { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }; } })()),
     console: o.silencioso ? { log() {}, warn() {}, error() {}, info() {} } : console,
     DecompressionStream: undefined,
     Worker: o.Worker,          // inyectable: sin el, el reloj cae al de la pagina (ruta por defecto)
@@ -265,6 +276,11 @@ function cargar(opciones) {
     // v18.0.104 — la implementación REAL de la carpeta (File System Access) solo se activa con
     // un handle; se publica un setter para probar `listar()` con un handle simulado.
     "\n;try{ globalThis.__VGL__.__setCarpetaHandleParaTest = function(h){ _vglCarpetaHandle = h; }; }catch(e){}" +
+    // v18.0.144 — la clave de equipo (HMAC/AES) vive en GM_setValue y en dos cachés de módulo.
+    // Sin este accessor no hay forma de probar "otro equipo" (dos claves → nombres distintos)
+    // ni "almacenamiento limpiado" (clave perdida → caché ilegible): cada carga del userscript
+    // fabricaría UNA clave y la retendría hasta el final de la prueba.
+    "\n;try{ globalThis.__VGL__.__vglCarpetaResetClaveParaTest = function(nuevaHex){ _vglCarpetaClaveCache = nuevaHex ? String(nuevaHex).toLowerCase() : null; _vglCarpetaClaveAesCache = null; try{ if(nuevaHex){ GM_setValue(VGL_CARPETA_CLAVE_GM, _vglCarpetaClaveCache); } else { GM_deleteValue(VGL_CARPETA_CLAVE_GM); } }catch(e){} try{ GM_deleteValue(VGL_CARPETA_PURGA_GM); }catch(e){} }; }catch(e){}" +
     // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
     // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
     // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la
