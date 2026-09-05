@@ -13169,3 +13169,18 @@ del resto de la suite (antes comparaba a ciegas con `t.igual`).
 Las cuatro mutaciones se aplicaron UNA A LA VEZ (restaurando cada una antes de la
 siguiente). Al cierre del clúster: suite_39 **53/0** y suite_43 **40/0**.
 
+**Entrega FIX 14 M2M (2026-09-05) — `scrubPII`: cédulas con comas y dígito verificador.**
+Dos huecos del saneador de PII (mismo pipeline de `mtrHcTachar`/`mtrHcValorLimpio`
+→ `scrubPII`, que sale del equipo en bitácora, prompts de IA y exportaciones):
+(a) la coma no estaba en la clase de separadores de `_SCRUB_RX_GRUPO_NUM`, así que
+«1,023,456,789» (formato que Everest devuelve en algunos campos) viajaba ENTERA —
+`_SCRUB_RX_DOC_PLANO` tampoco la caza porque cada trozo queda por debajo de 6 dígitos;
+(b) el dígito verificador colombiano quedaba expuesto: «1.023.456.789-0» salía
+«[CENSURADO]-0». La regex pasa de `[\s.-]` a `[\s.,-]` y gana el sufijo opcional
+`(?:\s*-\s*\d)?` (DV de cédula/NIT = un dígito). suite_31 pasó de 52 a **53** casos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 560 | se revierte `_SCRUB_RX_GRUPO_NUM` a la forma vieja sin coma ni DV (`/\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g`): la cédula «1,023,456,789» vuelve a viajar entera y el «-0» del DV vuelve a quedar expuesto | *suite_31: «fix 14 M2M: censura cédulas con comas y dígito verificador tras guion» — mutante 52 pasan / 1 falla («esperaba "Paciente [CENSURADO] en sala" y obtuvo "Paciente 1,023,456,789 en sala»); restaurado 53/0* | Sí |
+
+

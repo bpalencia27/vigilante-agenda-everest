@@ -9114,7 +9114,13 @@
   const _SCRUB_RX_TEL = /(?<!\d)(?:\+?0?57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g;
   const _SCRUB_RX_FECHA_NUM = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/g;
   const _SCRUB_RX_FECHA_TXT = /\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:del?\s+)?\d{2,4})?\b/gi;
-  const _SCRUB_RX_GRUPO_NUM = /\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g;
+  // fix 14 M2M (auditoría 2026-09-05) — dos huecos del hallazgo 14: (a) la coma no estaba
+  // en la clase de separadores y una cédula «1,023,456,789» (formato que devuelve Everest
+  // en algunos campos) viajaba entera — DOC_PLANO tampoco la caza porque cada trozo queda
+  // por debajo de 6 dígitos; (b) el dígito verificador tras guion quedaba expuesto: la
+  // cédula «1.023.456.789-0» salía «[CENSURADO]-0». El DV colombiano (cédula y NIT) es un
+  // solo dígito. La clase sigue siendo UN carácter: «, » con espacio no casa (aceptable).
+  const _SCRUB_RX_GRUPO_NUM = /\b\d{1,3}(?:[\s.,-]\d{3}){1,3}(?:\s*-\s*\d)?\b/g;
   const _SCRUB_RX_DOC_PREFIJO = /(?<=\b(?:CC|TI|CE|PPT|Doc|Documento|Cédula|Cedula|Identificación|Identificacion)\s+)\d{5,11}\b/gi;
   const _SCRUB_RX_DOC_PLANO = /(?<=\b|_)\d{6,11}(?=\b|_)/g;
   function scrubPII(input, opciones) {

@@ -80,6 +80,23 @@ module.exports = {
       t.igual(c.api.scrubPII("Código 12345 y valor 99999"), "Código 12345 y valor 99999");
     });
 
+    t.caso("fix 14 M2M: censura cédulas con comas y dígito verificador tras guion", () => {
+      const c = cargar({ silencioso: true });
+
+      // Con comas (formato anglosajón que Everest devuelve en algunos campos):
+      // ninguna regex del pipeline la cazaba (cada trozo < 6 dígitos para DOC_PLANO)
+      t.igual(c.api.scrubPII("Paciente 1,023,456,789 en sala"), "Paciente [CENSURADO] en sala");
+      t.igual(c.api.scrubPII("CC 1,023,456 en sala"), "CC [CENSURADO] en sala");
+
+      // Dígito verificador pegado con guion: antes quedaba expuesto («[CENSURADO]-0»)
+      t.igual(c.api.scrubPII("Cédula 1.023.456.789-0 confirmada"), "Cédula [CENSURADO] confirmada");
+      t.igual(c.api.scrubPII("NIT 900.123.456-7 activo"), "NIT [CENSURADO] activo");
+      t.igual(c.api.scrubPII("CC 1,023,456,789-0 en sala"), "CC [CENSURADO] en sala");
+
+      // Decimal corto con coma (una sola cifra tras la coma) NO se toca
+      t.igual(c.api.scrubPII("Dosis 1,5 mg diaria"), "Dosis 1,5 mg diaria");
+    });
+
     t.caso("scrubPII: censura fechas en múltiples formatos (ISO, guión, punto, texto en español)", () => {
       const c = cargar({ silencioso: true });
 
