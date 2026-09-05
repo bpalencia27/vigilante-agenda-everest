@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.1.0
+// @version      18.3.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.1.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25156,6 +25156,11 @@
     const o = opciones || {};
     const todosLabs = [];
     let _labsAtheneaParaMarca = null;   // A4 (S+, 02-sep): crudos de Athenea para la marca de incompleto del consolidado
+    // v18.3.0 (Incidencia 4, causa raíz) — se declara a nivel de función: antes vivía DENTRO
+    // del try de Athenea de abajo, y su lectura en el guardado de caché (fuera de ese bloque)
+    // lanzaba ReferenceError en cualquier llamada que llegara al final con el motor sano —
+    // un throw que ningún try de esta función atrapaba y escalaba justo como la Incidencia 4.
+    let atheneaPrincipalFallo = false;
     try {
       // v17.6.2 — DESENGANCHE Panel ↔ pre-consulta. Síntoma real en consulta (22-ago): el
       // Panel abría «sin laboratorios» aunque el robot ya los había precargado — la
@@ -25174,7 +25179,6 @@
       // perdía: un `null` se trataba igual que un `[]` y el resumen vacío resultante se
       // guardaba en la caché compartida con sello de tiempo fresco, como si fuera una lectura
       // real. `atheneaPrincipalFallo` conserva la distinción hasta el guardado, más abajo.
-      let atheneaPrincipalFallo = false;
       if (!o.fresco && _labsPrefetchCoincide(apt.doc_id) && Array.isArray(_labsPrefetch.labs) &&
           (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
         labsArr = _labsPrefetch.labs;
@@ -25220,19 +25224,37 @@
     if (!sigueVivo()) return null;
     try { if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") await mtrRefrescarMedicamentos(pacienteIdLabs); } catch (e) {}
     if (!sigueVivo()) return null;
-    const resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
+    // v18.3.0 (Incidencia 4, paridad con el hotfix v18.1.4 del gist) — un throw del
+    // motor de resumen ya no escala hasta openPanelPacienteModal: sin esta guarda, el
+    // Panel pintaba «No se pudo leer al paciente ahora (los laboratorios no
+    // respondieron)» en TODOS los pacientes aunque el fallo fuera interno. Ahora se
+    // degrada con honestidad («sin dato») y se marca _resumenDegradado.
+    let resumen = null;
+    let _resumenDegradado = false;
+    try {
+      resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
+    } catch (e) {
+      console.warn("[Vigilante Riesgo] Error construyendo el resumen clínico (se degrada a «sin dato»):", e);
+      _resumenDegradado = true;
+      try { resumen = mtrResumenClinico({ hoyIso: todayStamp(), factores: {}, ultimos: {} }); }
+      catch (e2) { resumen = null; }
+      if (resumen) resumen._resumenDegradado = true;
+    }
     // v18.0.143 (reporte del 04-sep) — si el portal principal no respondió (fresco o no),
     // NO se guarda: la caché compartida (que alimenta Agendar, Ordenar, Conducta y el
     // Redactor IA) conserva la última lectura BUENA con su antigüedad real, en vez de un
     // resumen vacío sellado como «recién leído» — que es exactamente lo que pintaba
     // «nunca se le ha tomado» en pacientes con exámenes hechos (v18.0.131 solo cubría
     // o.fresco; ahora cualquier lectura fallida). La marca baja al plan para que los
-    // pintores lo digan con honestidad.
-    if (atheneaPrincipalFallo) {
-      resumen._lecturaAtheneaFallo = true;
-      if (resumen && resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
-    } else {
-      try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+    // pintores lo digan con honestidad. v18.3.0: el resumen degradado tampoco se
+    // guarda — un «sin dato» por error interno no debe pisar la última lectura buena.
+    if (resumen && !_resumenDegradado) {
+      if (atheneaPrincipalFallo) {
+        resumen._lecturaAtheneaFallo = true;
+        if (resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
+      } else {
+        try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+      }
     }
     return resumen;
   }
@@ -25410,6 +25432,11 @@
     if (!resumen) {
       showToast("AZUL", "Redactar con IA", "Leyendo los datos del paciente (laboratorios, medicamentos, historia)… el panel se abre en unos segundos.", false);
       try { resumen = await mtrCalcularResumenClinico(apt, () => true); } catch (e) { resumen = null; }
+      // v18.3.0 (Incidencia 4, paridad con el hotfix v18.1.5 del gist) — GUARDA DE
+      // GROUNDING: si el motor devolvió un resumen DEGRADADO (error interno atrapado),
+      // el redactor IA no lo usa: una hoja de hechos vacía le daría a la IA libertad
+      // de inventar. Sin datos reales, mejor el aviso honesto de «sin datos».
+      if (resumen && resumen._resumenDegradado) resumen = null;
       // v16.2.9 — GUARDA DE PACIENTE AL VOLVER DE LA ESPERA. Decisión del médico (20-ago):
       // "descartar y avisar si cambió de paciente".
       // Esta espera dura 3-6 segundos (Athenea + Annar/Citi + medicamentos + función
