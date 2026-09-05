@@ -1858,6 +1858,8 @@ module.exports = {
       const el = (txt, extra) => Object.assign({ textContent: txt, closest: () => null, querySelector: () => null }, extra || {});
       const tarjeta = {
         querySelector: (sel) => (sel === ".status-label" ? el("PENDIENTE") : (sel === ".fw-bold.mb-0" ? el("Presencial") : null)),
+        // fix 18 M2M: la lectura de cédula itera querySelectorAll(".text-muted")
+        querySelectorAll: (sel) => (sel === ".text-muted" ? [el("C.C. 0005150076")] : []),
       };
       tarjeta.querySelector = ((orig) => (sel) => {
         if (sel === ".status-label") return el("PENDIENTE");

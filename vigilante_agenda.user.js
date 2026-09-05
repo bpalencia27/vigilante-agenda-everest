@@ -9949,10 +9949,15 @@
       // fallar así, pedir el vínculo actual de la carpeta y actualizar SOLO este token.
       shareLink: "https://viva1aips-my.sharepoint.com/:f:/g/personal/director_bello_viva1a_com_co/IgCsGP_chaHvTKYH9v-QZ2Q1AQuJo3umR5gDLjKlkUqgPS4?e=Xael2W",
     },
+    // fix 17 M2M: hora/estado/documento/modalidad/fecha pasan a LISTAS de respaldo.
+    // Hoy cada lista trae el único selector verificado contra Everest (no se inventan
+    // clases nuevas): si Everest renombra una clase Bootstrap basta añadir el string
+    // adicional aquí — qAll()/firstMatch() ya recorren la lista, el código de lectura
+    // no se toca y la agenda no se apaga en silencio por un renombre de clase.
     SEL: {
-      hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
-      documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
-      modalidad: ".fw-bold.mb-0", fecha: ".fecha",
+      hora: [".labelHora"], estado: [".status-label"], contenedor: [".card-body", ".card"],
+      documento: [".text-muted"], nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
+      modalidad: [".fw-bold.mb-0"], fecha: [".fecha"],
     },
   };
   // [UI-CSS] Paleta clínica suavizada (WCAG compliant, tono no estresante)
@@ -14071,25 +14076,49 @@
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
   function firstMatch(root, selList) { const arr = Array.isArray(selList) ? selList : [selList]; for (const s of arr) { const el = root.querySelector(s); if (el) return el; } return null; }
+  // fix 17 M2M: querySelectorAll sobre una LISTA de selectores (unión, en el orden del
+  // mapa). Es el papel de firstMatch pero devolviendo todos los nodos: la agenda y la
+  // cédula dejan de depender de un selector suelto que un renombre de Everest silencia.
+  function qAll(root, selList) { const arr = Array.isArray(selList) ? selList : [selList]; let out = []; for (const s of arr) { const els = root.querySelectorAll(s); if (els && els.length) out = out.concat(Array.from(els)); } return out; }
+  // fix 22 M2M: ¿este ancestro abriga otra hora de cita además de la propia? Si sí,
+  // envuelve VARIAS citas y leer ahí estado/nombre/cédula mezcla pacientes distintos.
+  function _abrigaOtraHora(n, elHora) { return qAll(n, CONFIG.SEL.hora).some((el) => el !== elHora); }
   function containerOf(elHora) {
     for (const s of CONFIG.SEL.contenedor) { const c = elHora.closest(s); if (c) return c; }
     const body = elHora.ownerDocument.body; let n = elHora.parentElement, saltos = 0;
-    while (n && n !== body && saltos < 8) { if (n.querySelector(CONFIG.SEL.estado)) return n; n = n.parentElement; saltos++; }
+    while (n && n !== body && saltos < 8) {
+      // fix 22 M2M: contenedor válido = tiene chip de estado Y no abriga otra cita.
+      // Antes devolvía el primer ancestro con CUALQUIER .status-label aunque fuera el
+      // wrapper de toda la agenda, y la cita leía la cédula del paciente de al lado.
+      if (!_abrigaOtraHora(n, elHora) && firstMatch(n, CONFIG.SEL.estado)) return n;
+      n = n.parentElement; saltos++;
+    }
     return null;
+  }
+  // fix 18 M2M: mismo patrón que extractPacienteAbierto — quedarse con el primer
+  // .text-muted que PARSEE como cédula. Leer el primero a ciegas hacía que un
+  // epígrafe/correo/cualquier texto muted dejara la cita con doc_id "" en silencio
+  // (y el emparejamiento PyM moría para ese paciente).
+  function _cedulaDelContenedor(cont) {
+    for (const el of qAll(cont, CONFIG.SEL.documento)) {
+      const doc = _vglDocCanon(limpio(el.textContent));
+      if (doc) return doc;
+    }
+    return "";
   }
   function extractAgenda(doc) {
     doc = doc || document;
-    const horas = Array.from(doc.querySelectorAll(CONFIG.SEL.hora));
+    const horas = qAll(doc, CONFIG.SEL.hora);                        // fix 17 M2M: lista con respaldo
     if (horas.length === 0) return { visible: false, citas: [] };
     const citas = horas.map((h, i) => {
       const cont = containerOf(h); let estado = "", documento = "", nombre = "", modalidad = "";
       if (cont) {
-        estado = limpio((cont.querySelector(CONFIG.SEL.estado) || {}).textContent);
-        documento = limpio((firstMatch(cont, CONFIG.SEL.documento) || {}).textContent);
+        estado = limpio((firstMatch(cont, CONFIG.SEL.estado) || {}).textContent);       // fix 17 M2M
+        documento = _cedulaDelContenedor(cont);                                        // fix 18 M2M
         nombre = limpio((firstMatch(cont, CONFIG.SEL.nombre) || {}).textContent);
-        modalidad = limpio((cont.querySelector(CONFIG.SEL.modalidad) || {}).textContent);
+        modalidad = limpio((firstMatch(cont, CONFIG.SEL.modalidad) || {}).textContent); // fix 17 M2M
       }
-      return { hora_texto: limpio(h.textContent), doc_id: _vglDocCanon(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
+      return { hora_texto: limpio(h.textContent), doc_id: documento, nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
     });
     return { visible: true, citas };
   }
@@ -14160,7 +14189,7 @@
       // "En Sala"/"Sin presentarse"/"Atendido", que una pantalla de RESERVA de turnos no
       // tendría — ahí no hay estados de asistencia, solo horarios disponibles) es mucho
       // más específico de la vista real que vigila el script.
-      if (document.querySelector(CONFIG.SEL.hora) && document.querySelector(CONFIG.SEL.estado)) return "agenda";
+      if (firstMatch(document, CONFIG.SEL.hora) && firstMatch(document, CONFIG.SEL.estado)) return "agenda"; // fix 17 M2M: listas de respaldo
       return "otra";
     } catch (e) { return "otra"; }              // ante la duda, apagar la vigilancia para no causar errores en DOM
   }

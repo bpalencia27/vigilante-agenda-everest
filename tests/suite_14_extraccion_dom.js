@@ -12,7 +12,7 @@
 module.exports = {
   nombre: "Extracción del DOM de Everest (Suite 14)",
   cubre: [
-    "firstMatch", "containerOf", "extractAgenda", "seccionActiva",
+    "firstMatch", "qAll", "containerOf", "_abrigaOtraHora", "extractAgenda", "_cedulaDelContenedor", "seccionActiva",
     "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth", "_enPaginaExcluidaDeAvisos",
     "_contadorSospechaSelector", "_hayCedulaVisibleEnPantalla", "_vigilarSilencioVigilancia"
   ],
@@ -20,12 +20,15 @@ module.exports = {
   pruebas(t, api, env, cargar) {
     // ---- ayudantes de nodos falsos ----
     const elTexto = (txt) => ({ textContent: txt });
-    // contenedor de cita: responde solo a los selectores del mapa
-    const contFake = (mapa) => ({ querySelector: (sel) => (sel in mapa ? mapa[sel] : null) });
-    // eslabón de la cadena de padres para containerOf
-    const padre = (arriba, tieneEstado) => ({
+    // contenedor de cita: responde solo a los selectores del mapa (querySelectorAll
+    // devuelve el mismo elemento como lista — fix 18 M2M itera los .text-muted)
+    const contFake = (mapa) => ({ querySelector: (sel) => (sel in mapa ? mapa[sel] : null), querySelectorAll: (sel) => (sel in mapa ? [mapa[sel]] : []) });
+    // eslabón de la cadena de padres para containerOf (otrasHoras: qué .labelHora
+    // adicionales abriga el eslabón — fix 22 M2M; por defecto ninguna)
+    const padre = (arriba, tieneEstado, otrasHoras) => ({
       parentElement: arriba,
       querySelector: (sel) => (tieneEstado && sel === ".status-label" ? elTexto("En Sala") : null),
+      querySelectorAll: (sel) => (sel === ".labelHora" ? otrasHoras || [] : []),
     });
 
     // ---------- firstMatch ----------
@@ -45,6 +48,16 @@ module.exports = {
       t.cierto(api.firstMatch(root, ".unico") === objetivo, "un string debe envolverse como lista de uno");
       t.igual(api.firstMatch(root, [".nada", ".tampoco"]), null);
       t.igual(api.firstMatch(root, []), null, "lista vacía no puede casar nada");
+    });
+
+    t.caso("qAll: une los querySelectorAll de la lista de selectores, en orden (fix 17 M2M)", () => {
+      const a1 = elTexto("a1"), b1 = elTexto("b1"), b2 = elTexto("b2");
+      const root = { querySelectorAll: (s) => (s === ".a" ? [a1] : s === ".b" ? [b1, b2] : []) };
+      const u = api.qAll(root, [".a", ".b"]);
+      t.cierto(u.length === 3 && u[0] === a1 && u[1] === b1 && u[2] === b2, "debe concatenar TODOS los selectores de la lista");
+      t.cierto(api.qAll(root, ".b").length === 2, "un string suelto debe envolverse como lista de uno");
+      t.igual(api.qAll(root, [".nada"]), [], "lo que no casa no aporta nodos");
+      t.igual(api.qAll(root, []), [], "lista vacía devuelve vacío");
     });
 
     // ---------- containerOf ----------
@@ -83,6 +96,24 @@ module.exports = {
       t.cierto(!!api.containerOf(alBorde), "en el salto 8 aún debe encontrarlo");
     });
 
+    t.caso("containerOf: ancestro con estado que abriga OTRA cita no sirve (fix 22 M2M)", () => {
+      const body = {};
+      const otraHora = elTexto("08:00 a. m.");
+      const hora = { closest: () => null, ownerDocument: { body }, parentElement: null };
+      // nivel 2 tiene chip de estado PERO envuelve las dos horas de cita (nuestra y la vecina)
+      const envolvente = padre(body, true, [hora, otraHora]);
+      hora.parentElement = padre(envolvente, false, [hora]);
+      t.igual(api.containerOf(hora), null, "un ancestro que abarca varias citas no puede ser el contenedor: mezclaría pacientes");
+      // control: si el ancestro solo abriga la propia hora, el ascenso histórico sigue intacto
+      const hora2 = { closest: () => null, ownerDocument: { body }, parentElement: null };
+      const bueno = padre(body, true, [hora2]);
+      hora2.parentElement = padre(bueno, false, [hora2]);
+      t.cierto(api.containerOf(hora2) === bueno, "el ancestro que solo abriga SU cita sigue valiendo");
+      // invocación directa del guard (lo ejercita sin pasar por containerOf)
+      t.cierto(api._abrigaOtraHora(envolvente, hora) === true, "el wrapper con dos horas abriga otra cita");
+      t.cierto(api._abrigaOtraHora(bueno, hora2) === false, "el contenedor propio no abriga otra cita");
+    });
+
     // ---------- extractAgenda ----------
     t.caso("extractAgenda: sin .labelHora devuelve visible:false y lista vacía", () => {
       const docVacio = { querySelectorAll: () => [] };
@@ -112,6 +143,23 @@ module.exports = {
       t.igual(c0.index, 0);
     });
 
+    t.caso("extractAgenda: la cédula es el primer .text-muted que PARSEA, no el primero a ciegas (fix 18 M2M)", () => {
+      const cont = {
+        querySelector: (sel) => (sel === ".status-label" ? elTexto("Pendiente") : null),
+        querySelectorAll: (sel) => (sel === ".text-muted" ? [
+          elTexto("Correo: paciente@correo.com"),      // texto muted que NO es cédula
+          elTexto(" C.C. 1.023.456.789 "),
+        ] : []),
+      };
+      const hora = { textContent: "09:00 a. m.", closest: (s) => (s === ".card-body" ? cont : null) };
+      const doc = { querySelectorAll: (sel) => (sel === ".labelHora" ? [hora] : []) };
+      const r = api.extractAgenda(doc);
+      t.igual(r.citas[0].doc_id, "1023456789", "debía saltar el .text-muted que no parsea y quedarse con la cédula");
+      t.igual(r.citas[0].estado, "Pendiente");
+      // invocación directa del extractor (lo ejercita sin pasar por extractAgenda)
+      t.igual(api._cedulaDelContenedor(cont), "1023456789", "directa: devuelve la primera cédula que parsea");
+    });
+
     t.caso("extractAgenda: cita huérfana (sin contenedor) usa los valores por defecto", () => {
       const body = {};
       const horaSola = { textContent: "07:20 a. m.", closest: () => null, ownerDocument: { body }, parentElement: null };
@@ -137,6 +185,23 @@ module.exports = {
       t.igual(r.citas[0].nombre, "MARIA GOMEZ", "debía usar el segundo selector de CONFIG.SEL.nombre");
       t.igual(r.citas[0].estado, "Atendido");
       t.igual(r.citas[1].index, 1, "el índice debe seguir el orden de la pantalla");
+    });
+
+    t.caso("extractAgenda: si el único ancestro con estado abriga varias citas, la cita queda huérfana (fix 22 M2M)", () => {
+      const body = {};
+      const hNuestra = { textContent: "09:00 a. m.", closest: () => null, ownerDocument: { body }, parentElement: null };
+      const hVecina = { textContent: "09:20 a. m." };
+      const wrapper = {
+        parentElement: body,
+        querySelector: (sel) => (sel === ".status-label" ? elTexto("En Sala") : null),
+        querySelectorAll: (sel) => (sel === ".labelHora" ? [hNuestra, hVecina] : (sel === ".text-muted" ? [elTexto("1.111.111.111, CC del vecino")] : [])),
+      };
+      hNuestra.parentElement = wrapper;
+      const doc = { querySelectorAll: (sel) => (sel === ".labelHora" ? [hNuestra] : []) };
+      const r = api.extractAgenda(doc);
+      t.igual(r.citas[0].estado, "Pendiente", "huérfana: el estado del vecino no se lee");
+      t.igual(r.citas[0].doc_id, "", "huérfana: la cédula del vecino no se lee");
+      t.igual(r.citas[0].nombre, "Paciente Everest", "huérfana: valor por defecto, no el nombre de otro paciente");
     });
 
     // ---------- seccionActiva ----------

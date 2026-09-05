@@ -13207,4 +13207,31 @@ Las dos mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la si
 No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
 suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
 
+## f17 — FIX 17+18+22 (M2M): selectores Bootstrap con respaldo/salud (agenda, guarda de cédula, containerOf)
+
+`CONFIG.SEL` pasa a LISTAS de selectores (`hora`, `estado`, `contenedor`, `documento`,
+`nombre`, `modalidad`, `fecha`) recorridas por `firstMatch()`/`qAll()` (nuevo, unión de
+querySelectorAll en orden del mapa): si Everest renombra una clase Bootstrap basta añadir
+el string adicional al mapa y la agenda no se apaga en silencio. Hoy cada lista trae solo
+el selector verificado contra Everest (no se inventan clases). (b) FIX 18:
+`_cedulaDelContenedor()` itera los `.text-muted` del contenedor y se queda con el primero
+que PARSEE como cédula (mismo patrón que `extractPacienteAbierto`) — antes leía el primero
+a ciegas y un epígrafe/correo dejaba la cita con `doc_id ""` en silencio, matando el
+emparejamiento PyM de ese paciente. (c) FIX 22: el fallback ascendente de `containerOf()`
+exige además `_abrigaOtraHora()` (que el ancestro NO abrigue otra hora de cita): antes
+devolvía cualquier ancestro con `.status-label` aunque fuera el wrapper de TODA la agenda
+y la cita leía estado/cédula/nombre del paciente de al lado. La cita huérfana cae en
+valores por defecto (Pendiente/Paciente Everest/doc_id "") — casilla vacía antes que
+mezclar PHI. suite_14 pasó de 35 a **39** casos; suite_04 mantiene 106.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 563 | en `qAll` la unión se reemplaza por el último selector con vida (`out = out.concat(Array.from(els))` → `out = Array.from(els)`): un respaldo futuro dejaría de verse y la lectura de agenda/cédula volvería a depender de un único selector | *suite_14: «qAll: une los querySelectorAll de la lista de selectores, en orden (fix 17 M2M)» — mutante 38 pasan / 1 falla («debe concatenar TODOS los selectores de la lista (obtuvo false)»); restaurado 39/0* | Sí |
+| 564 | en `_cedulaDelContenedor` el `if (doc) return doc;` pierde la guarda (→ `return doc;` incondicional): vuelve a entregarse el primer `.text-muted` a ciegas y un correo/epígrafe deja la cita con `doc_id ""` en silencio | *suite_14: «extractAgenda: la cédula es el primer .text-muted que PARSEA, no el primero a ciegas (fix 18 M2M)» — mutante 38 pasan / 1 falla («debía saltar el .text-muted que no parsea y quedarse con la cédula: esperaba "1023456789" y obtuvo ""»); restaurado 39/0* | Sí |
+| 565 | en `containerOf` se retira el guard del ancestro multi-cita (`!_abrigaOtraHora(n, elHora) && ` eliminado): el fallback vuelve a aceptar el primer ancestro con `.status-label` aunque abrigue varias citas y la cita lee la cédula del vecino | *suite_14: «containerOf: ancestro con estado que abriga OTRA cita no sirve (fix 22 M2M)» y «extractAgenda: si el único ancestro con estado abriga varias citas, la cita queda huérfana (fix 22 M2M)» — mutante 37 pasan / 2 fallan («un ancestro que abarca varias citas no puede ser el contenedor: mezclaría pacientes: esperaba null» / «huérfana: el estado del vecino no se lee: esperaba "Pendiente" y obtuvo "En Sala"»); restaurado 39/0* | Sí |
+
+Las tres mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la siguiente).
+No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
+suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
+
 
