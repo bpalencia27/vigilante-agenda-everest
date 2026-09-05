@@ -13096,3 +13096,22 @@ viejos de suite_15 se reescribieron contra el DOM real (37 `alert_message` + 1
 
 Banco completo: **3.351 comprobaciones pasan, 0 fallan.**
 
+## v18.2.1 (P10) — barrera cero-identificables antes de la red
+
+Revisión FINAL del prompt ensamblado (system+user de todos los canales, incluido el
+JSON v68 crudo) justo antes del único disparo de red de IA: si detecta un posible
+identificador, no se envía nada. La nueva `suite_81_barrera_ia` fija los seis
+detectores, el daño cero contra los prompts reales de los cinco modos, el tablero
+canarios × canales y la cadena estructural prompt → barrera → red. Todas las
+mutaciones se aplicaron una a una sobre `mtrBarreraIdentificables`/`mtrGeminiRedactar`
+y se restauraron verificando `git diff` vacío tras cada una.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 549 | D1 sube el umbral del número largo a 12 dígitos (`/\d{6,}/` → `/\d{12,}/`): la cédula de 10 escapa | *suite_81: P10·1, P10·4 y P10·5 — «dispara ante numero_largo», «clasifica el número que viajaba crudo» y «CERO disparos de red» — mutante 3 pasan / 3 fallan; restaurado 6/0* | Sí |
+| 550 | D6 pierde las abreviaturas dr/dra (`honAbrev` sin `.concat(["dr","dra"])`): «DR. Pérez» viaja al proveedor | *suite_81: P10·1 y P10·3 — «DR. + nombre capitalizado dispara aunque el saneador no lo conozca» y «al menos el canario DR. es detenido por la barrera» — mutante 4 pasan / 2 fallan; restaurado 6/0* | Sí |
+| 551 | D5 se apaga (`if (nombrePaciente)` → `if (false && nombrePaciente)`): el nombre del propio paciente ya no se barre en ningún canal | *suite_81: P10·1 y P10·4 — «dispara ante nombre_paciente» y «clasifica el nombre del paciente» — mutante 4 pasan / 2 fallan; restaurado 6/0* | Sí |
+| 552 | la guarda del punto único de salida se neutraliza (`if (!_bar.ok)` → `if (false && !_bar.ok)`): la barrera detecta pero la petición SALE igual | *suite_81: P10·5 — «CERO disparos de red: ni z.ai ni gemini recibieron nada» — mutante 5 pasan / 1 falla; restaurado 6/0* | Sí |
+
+Banco completo: **3.357 comprobaciones pasan, 0 fallan.**
+
