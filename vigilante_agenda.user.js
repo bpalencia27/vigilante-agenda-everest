@@ -38545,7 +38545,7 @@
   function mtrReglaBetabloqueadorHidrofilico(med, egfr, potasio) {
     if (egfr < 15) {
       return mtrAlerta("betabloqueador_hidrofilico", med, "CAP_DOSIS",
-        "Atenolol/Nadolol: máximo 25 mg/día o 50 mg interdiarios con eGFR < 15 mL/min/1.73m2.",
+        "Atenolol/Nadolol: máximo 50 mg cada 48 horas con eGFR < 15 mL/min/1.73m2 (ficha FDA de Tenormin).",
         MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
     }
     if (egfr < 35) {
@@ -38699,9 +38699,12 @@
     const esCana = norm.indexOf("canagliflozina") >= 0;
 
     if (egfr < 20) {
-      return mtrAlerta("sglt2", med, "SUSPENDER",
-        "iSGLT2: suspender con eGFR < 20 mL/min/1.73m2.",
-        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+      return mtrAlerta("sglt2", med, "EVITAR",
+        "iSGLT2 con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2: NO iniciar. Si ya lo toma y " +
+        "lo tolera, CONTINUAR por renoproteccion/cardioproteccion (KDIGO 2024). " +
+        "Vigilar cetoacidosis euglicemica; suspender ante enfermedad " +
+        "intercurrente grave o inicio de dialisis.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
     }
     if (egfr < 45) {
       if (egfr >= 20 && egfr < 30 && hba1c !== null && hba1c !== undefined && hba1c > 8.0) {
@@ -38823,6 +38826,23 @@
         "por el CrCl solo.  Verificar los criterios de la ficha técnica (sección 4.2) y reducir " +
         "solo si cumple 2 de 3: edad >= 80 años, peso <= 60 kg o creatinina sérica >= 1.5 mg/dL.",
         MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+    }
+    if (norm.indexOf("edoxaban") >= 0) {
+      // fix 13 M2M — la ficha técnica (Savaysa/Lixiana, sección 4.2) da al
+      // edoxabán un ajuste propio que ningún fallback reproducía: con CrCl > 95
+      // la exposición cae y está contraindicado INICIARLO en FAnV no valvular
+      // (caía en el silencio del `return null`); con CrCl 15-50 la dosis es
+      // 30 mg/día, no el mensaje genérico de "revisar ficha".
+      if (cg > 95) return mtrAlerta("doac", med, "EVITAR",
+        "Edoxabán: NO usar con CrCl > 95 mL/min (exposición reducida; eficacia no " +
+        "demostrada en FAnV no valvular, sección 4.2 de la ficha técnica). Rotar a " +
+        "otro anticoagulante directo.",
+        MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+      if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
+        "Edoxabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
+      if (cg < 50) return mtrAlerta("doac", med, "CAP_DOSIS",
+        "Edoxabán: reducir a 30 mg/día con CrCl 15-50 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+      return null;
     }
     if (cg < 15) {
       return mtrAlerta("doac", med, "CONTRAINDICADA",
@@ -38981,7 +39001,7 @@
         "agudo, hiperkalemia y sangrado GI. Rotar a Paracetamol " +
         "1 g c/8h.  Si dolor inflamatorio: COX-2 selectivo solo " +
         "con IECA/ARA-II activo y monitoria estrecha.",
-        MTR_FORMULA_CKDEPI, tfgCkdepi, tieneRaas ? MTR_SEV_HIGH : MTR_SEV_CRITICAL));
+        MTR_FORMULA_CKDEPI, tfgCkdepi, tieneRaas ? MTR_SEV_CRITICAL : MTR_SEV_HIGH));
     }
     return alertas;
   }

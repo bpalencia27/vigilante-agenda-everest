@@ -13145,3 +13145,27 @@ respaldo de 900 caracteres sin alcanzar las llamadas reales. Normalizados
 BOM, diff de git nulo porque los blobs ya eran LF): suite_15 pasó de 269/1 a
 **271/0** y suite_25 de 30/2 a **32/0**. Las 3 caídas ya no existen.
 
+**Entrega FIX 11-13+23 M2M (2026-09-05) — clúster de reglas clínicas `mtrRegla*`.**
+Cuatro correcciones del motor de dosis renal (fix 11: AINE+RAAS en G3a/A2 es la
+combinación crítica; fix 12: atenolol/nadolol eGFR<15 a 50 mg cada 48 horas según la
+ficha FDA de Tenormin; fix 13: rama propia de edoxabán — CrCl>95 EVITAR, 15-50 a
+30 mg/día, <15 contraindicado, ficha Savaysa/Lixiana §4.2; fix 23: iSGLT2 con eGFR<20
+pasa de SUSPENDER/CRITICAL a EVITAR/HIGH «NO iniciar pero CONTINUAR si lo tolera»,
+KDIGO 2024). suite_39 pasó de 50 a **53** casos; suite_43 (conformidad cruzada contra
+los dorados del Copiloto Python) extendida con 247 divergencias declaradas (63 de
+betabloqueador, 180 de sglt2 y 4 del orquestador) — el generador de dorados llama cada
+regla con todos los fármacos SIN clasificar por grupo, así que los «controles
+negativos» (CARVEDILOL, metformina) SÍ activan las ramas de umbral bajo y también
+divergen. El test del orquestador se equipó con el mismo mecanismo DIVERGENCIAS/usadas
+del resto de la suite (antes comparaba a ciegas con `t.igual`).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 556 | se invierte el ternario del AINE en G3a/A2 (`tieneRaas ? MTR_SEV_CRITICAL : MTR_SEV_HIGH` → `tieneRaas ? MTR_SEV_HIGH : MTR_SEV_CRITICAL`): la doble whammy AINE+IECA/ARA-II vuelve a ser solo HIGH y el AINE solo baja a CRITICAL | *suite_39: «fix 11 M2M — en G3a/A2 el AINE con IECA/ARA-II activo es CRITICAL (doble whammy)» — mutante 52 pasan / 1 falla; restaurado 53/0* | Sí |
+| 557 | el mensaje del atenolol con eGFR<15 se revierte primero a «máximo 25 mg/día…» y después a la réplica EXACTA del dorado Python («máximo 25 mg/día o 50 mg interdiarios con eGFR < 15 mL/min/1.73m2.») | *suite_39: «fix 12 M2M — atenolol con eGFR < 15: tope 50 mg cada 48 horas (ficha FDA Tenormin)» — mutante 52/1 con ambas variantes; y suite_43 con la réplica literal: «_regla_betabloqueador_hidrofilico» + orquestador + «no sobra ninguna divergencia declarada» — mutante 37/3; restaurado 53/0 y 40/0. La variante de texto libre NO la caza suite_43 (sigue difiriendo del dorado literal): la vigilancia semántica del contenido la hace suite_39* | Sí |
+| 558 | se elimina la rama completa de edoxabán de `mtrReglaDoac`: CrCl>95 vuelve al silencio del `return null` y 15-50 al mensaje genérico de «revisar ficha» | *suite_39: «fix 13 M2M — edoxabán: CrCl > 95 EVITAR, 15-50 a 30 mg/día, < 15 contraindicado» — mutante 52 pasan / 1 falla; restaurado 53/0. Sin divergencias en suite_43: el dorado `_regla_doac.json` (560 vectores) no contiene edoxabán* | Sí |
+| 559 | la rama iSGLT2 eGFR<20 se revierte a SUSPENDER/CRITICAL, primero con texto propio y después con la réplica EXACTA del dorado («iSGLT2: suspender con eGFR < 20 mL/min/1.73m2.») | *suite_39: «fix 23 M2M — iSGLT2 con eGFR < 20: EVITAR/HIGH, no iniciar pero continuar si lo tolera» — mutante 52/1 con ambas variantes; y suite_43 con la réplica literal: «_regla_sglt2» + orquestador + «no sobra ninguna divergencia» — mutante 37/3 (el corte fail-fast del caso deja huérfanas el resto de claves); restaurado 53/0 y 40/0* | Sí |
+
+Las cuatro mutaciones se aplicaron UNA A LA VEZ (restaurando cada una antes de la
+siguiente). Al cierre del clúster: suite_39 **53/0** y suite_43 **40/0**.
+
