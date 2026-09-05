@@ -1019,6 +1019,10 @@ module.exports = {
     // tPymCaptador + los tres de acceso del v18.1: tAccesoBoot, tAccesoLoop,
     // tAccesoUid) y el handle del chequeo de versión escalonado (setTimeout 4 s)
     // tiene que estar entre ellos.
+    // v18.2 (P11, R5.1-bis): +2 — los dos setInterval literales de
+    // _instalarLatidosBase() (navLog 5 s y vigía del reloj 30 s, que boot() llama
+    // tras el kill-switch) también se registran, para que el apagado remoto los
+    // cancele igual que al resto. Total: 17 + 2 = 19.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -1032,8 +1036,8 @@ module.exports = {
       c.api.boot();
       const timers = c.api.__state.timers;
 
-      t.igual(timers.length, antes + 17,
-        "boot registra los 17 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid)");
+      t.igual(timers.length, antes + 19,
+        "boot registra los 19 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid + los 2 latidos base v18.2: navLog, vigiaReloj)");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");

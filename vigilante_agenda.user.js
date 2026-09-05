@@ -1164,18 +1164,12 @@
 
   // Observador de Navegación y Secciones Everest
   let lastObservedUrl = "";
-  const _navLogTimer = setInterval(() => {
-    if (location.href !== lastObservedUrl) {
-      const oldUrl = lastObservedUrl;
-      lastObservedUrl = location.href;
-      vglLog("NAV", "UrlChanged", { from: oldUrl, to: lastObservedUrl, section: seccionActiva() });
-    }
-  // v15.5.0 (auditoría de rendimiento): 1 s → 5 s. El registro de navegación no necesita
-  // granularidad de segundo; a 1 s eran 3.600 despertares/hora del hilo principal solo
-  // para comparar una cadena. Con 5 s el dato es el mismo y sobran 2.880 despertares.
-  // v18.0.134 (auditoría 2026-09-03, B13) — el identificador queda guardado: el apagado
-  // de emergencia lo detiene y el script muerto no vuelve a despertar cada 5 segundos.
-  }, 5000);
+  // v18.2 (P11) — el registro ya NO se instala al evaluar el script: antes de aceptar los
+  // términos no puede despertar nada cada 5 segundos. Vive en _instalarLatidosBase(), que
+  // boot() llama tras el consentimiento. El identificador sigue aquí, a propósito, porque
+  // emergencyTeardown lo detiene (v18.0.134, B13). v15.5.0: 5 s bastan para el registro
+  // (a 1 s eran 3.600 despertares/hora del hilo para comparar una cadena).
+  let _navLogTimer = null;
  // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
@@ -10190,7 +10184,8 @@
       }
     });
   } catch (e) {}
-  try { setInterval(_relojVigilarWorker, 30000); } catch (e) {}
+  // v18.2 (P11) — la vigilía del reloj ya no se registra al evaluar el script: nada debe
+  // despertar cada 30 s antes del consentimiento. Vive en _instalarLatidosBase().
   // Si el worker muere, cada canal sigue con el setInterval de la página (misma cadencia).
   function _relojDegradar() {
     try { if (_reloj.worker) _reloj.worker.terminate(); } catch (e) {}
@@ -17048,19 +17043,8 @@
   // v14.2.12 — Este bucle de 5 s (latido de liderazgo + ventana crítica) corre sobre el
   // reloj de segundo plano (_relojCada), no sobre setInterval: con la pestaña oculta el
   // latido y la lectura de la ventana crítica seguían el mismo estrangulamiento que tick().
-  _relojCada("latido", 5000, () => {
-    try {
-      // v12.3.36 — El latido de liderazgo se renueva AQUÍ, cada 5 s, pase lo que pase
-      // con el "Refresco" de Ajustes (que gobierna tick() y puede llegar a 120 s):
-      // sin esta renovación frecuente, el latido del propio líder vencería entre
-      // ticks y las pestañas se relevarían en falso unas a otras.
-      if (!heartbeat()) return;
-      const crit = hayVentanaCritica();
-      if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
-      if (crit) tickApi();
-      _criticoPrev = crit;
-    } catch (e) {}
-  });
+  // v18.2 (P11) — el registro se movió a _instalarLatidosBase(): el latido de liderazgo
+  // no puede latir antes del consentimiento.
 
 
   // ---- Overlay ----
@@ -21123,13 +21107,16 @@
   // fresca — la garantía de v12.3.2 queda intacta.
   const MTR_IDENTIDAD_MEDICO_KEY = "vgl_identidad_medico_cache";
   const MTR_IDENTIDAD_MEDICO_TTL_MS = 12 * 60 * 60 * 1000;   // 12 h: cubre un turno largo, vence entre días
-  function _identidadMedicoCacheLeer(login) {
+  // v18.2 (P11) — `incluirVencidos` lo usa SOLO la compuerta de consentimiento: antes de
+  // aceptar no puede haber red (GetUsuarioPerfil), así que la identidad se toma de la caché
+  // aunque haya cumplido las 12 h. El resto de llamadores sigue exigiendo caché fresca.
+  function _identidadMedicoCacheLeer(login, incluirVencidos) {
     try {
       if (typeof GM_getValue === "undefined" || !login) return null;
       const mapa = GM_getValue(MTR_IDENTIDAD_MEDICO_KEY, null);
       const entry = mapa && typeof mapa === "object" ? mapa[String(login).toLowerCase()] : null;
       if (!entry || !(entry.id > 0) || !entry.name) return null;
-      if (Date.now() - (entry.ts || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) return null;
+      if (!incluirVencidos && Date.now() - (entry.ts || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) return null;
       return { id: entry.id, name: entry.name };
     } catch (e) { return null; }
   }
@@ -21229,9 +21216,10 @@
       if (login) { loginVisto = login; resolverMedicoPorPerfil(login); }
     } catch (e) {}
   }
-  // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
-  // sesión ya existe a document-start; el timeout evita depender del orden de las const).
-  try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
+  // v18.2 (P11) — este arranque temprano de la identidad se MOVIÓ dentro de boot(): corría a
+  // document-start, ANTES de cualquier consentimiento, y era la única llamada de red que la
+  // compuerta no cubría. La identidad SIN red (login de sesión + caché GM) la resuelve la
+  // compuerta con mtrLoginDeSesion(); la validación contra Everest vuelve a pasar en boot().
   const FESTIVOS = new Set([
     // 2024
     "2024-01-01", "2024-01-08", "2024-03-25", "2024-03-28", "2024-03-29",
@@ -33852,6 +33840,9 @@
              script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
              y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
         <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activa en este equipo</span></div>
+        <!-- v18.2 (P11) — versión vigente de los términos siempre visible en Ajustes
+             (requisito de la PARTE 2 §7 del propio documento). Solo lectura. -->
+        <div class="vgl-fld"><label>Términos de uso y privacidad<span class="vgl-hint">Versión del aviso que usted aceptó para usar el asistente, con su fecha. Si el texto cambia, se le pedirá autorización de nuevo antes de continuar.</span></label><b id="c-terminos" style="font-size:var(--t-micro)">${escapeHtml(_terminosAjustesTexto())}</b></div>
       </div>
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
@@ -36404,6 +36395,10 @@
       }
     } catch (e) {}
 
+    // v18.2 (P11) — los latidos de nivel superior se instalan AQUÍ: después del
+    // kill-switch y solo tras el consentimiento (ver _instalarLatidosBase).
+    try { _instalarLatidosBase(); } catch (e) {}
+
     // v14.2.0 (auditoría pre-producción) — de aquí en adelante boot() no tenía try/catch
     // propio: una sola excepción en buildOverlay()/applySettings()/etc. abortaba el arranque
     // completo en silencio (tick() nunca llegaba a programarse) y el médico se quedaba sin
@@ -36411,6 +36406,10 @@
     // captura y se deja constancia (consola + reportarError) sin cambiar ningún otro
     // comportamiento cuando todo sale bien.
     try {
+    // v18.2 (P11) — la resolución de identidad por red (GetUsuarioPerfil) vive AHORA aquí:
+    // solo corre cuando la compuerta ya confirmó padrón + consentimiento. Es un setTimeout(0)
+    // para no bloquear el primer render del panel, como siempre.
+    try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
     if (_detectarInstanciaDuplicada()) return;
     if (document.getElementById("vgl-root")) return;
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
@@ -36600,27 +36599,565 @@
     }
   }
 
+  // =====================================================================
+  //  P11 — COMPUERTA DE CONSENTIMIENTO (v18.2)
+  //  ------------------------------------------------------------------
+  //  La compuerta corre ANTES que todo lo demás y decide en tres pasos:
+  //    1. ¿Está el médico en el padrón de autorizados? → si no, el script
+  //       no monta NADA (en silencio, sin pantalla).
+  //    2. ¿Aceptó la versión VIGENTE de los términos? → si no, se muestra
+  //       la pantalla de términos. Rechazó hace <12 h → tampoco se pregunta:
+  //       apagado completo y en silencio.
+  //    3. Solo con las dos en verde arranca boot() (o el captador ligero
+  //       de SharePoint).
+  //  Antes del paso 3 no puede ocurrir NADA: ni dock, ni panel, ni widgets,
+  //  ni observadores del DOM, ni temporizadores, ni una sola llamada de red
+  //  — ni un evento de telemetría. Por eso la identidad por red
+  //  (GetUsuarioPerfil) se movió DENTRO de boot() y el observador de
+  //  rendimiento ya no se instala en la entrada del script.
+  //
+  //  ACEPTA guarda en GM_setValue SOLO {versión, fecha-hora, identificador}.
+  //  RECHAZA deja una marca local con hora (12 h), cero envíos y ni un
+  //  evento de rechazo. Escape y cerrar NO son responder: la pantalla no
+  //  tiene botón ✕ y Escape no hace nada.
+  //
+  //  DESVIACIONES documentadas (docs/CAMBIOS_claude-compuerta-consentimiento.md):
+  //   · RECHAZA no llama emergencyTeardown(): nada está montado aún (la
+  //     compuerta corrió antes que boot) y esa vía escribe vgl_kill_active
+  //     PERMANENTE, que contradice la re-pregunta a las 12 h y rompería un
+  //     arranque posterior tras aceptar. El kill-switch remoto queda intacto.
+  //   · En SharePoint no hay localStorage de Everest: el padrón no es
+  //     evaluable allí, así que la compuerta decide SOLO consentimiento.
+  // =====================================================================
+  const TERMINOS_VERSION = "1.1";
+  const TERMINOS_GM_ACEPTA = "vgl_terminos_acepta";
+  const TERMINOS_GM_RECHAZO = "vgl_terminos_rechazo";
+  const TERMINOS_RECHAZO_MS = 12 * 60 * 60 * 1000;   // re-pregunta a las 12 h (2 h no, 13 h sí)
+  // Lo que muestra la pantalla de primer uso (PARTE 1 del documento, en limpio).
+  const TERMINOS_RESUMEN = [
+    "Centinela es una herramienta de apoyo hecha por un colega, Brandon Jesús Palencia Martínez. No es un programa oficial de la IPS ni de Everest/Athenea, y no reemplaza su criterio: usted sigue siendo responsable de todo lo que firme en la historia clínica.",
+    "Para poder mejorarla, el programa registra cómo se usa: qué funciones abre, si terminaron bien o mal, cuánto tardan y qué errores técnicos ocurren. Nunca registra datos de sus pacientes — ni nombres, ni documentos, ni diagnósticos, ni el texto de la historia.",
+    "Ese registro es condición para usar la herramienta: no se puede desactivar. Si no está de acuerdo, no pasa nada — el programa simplemente no se abrirá."
+  ].join("\n\n");
+  // El documento ENTERO, carácter por carácter (docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md).
+  // La suite 82 lo compara en estricto contra el archivo: cualquier edición del doc
+  // obliga a repasar esta constante Y a subir TERMINOS_VERSION (re-pregunta al médico).
+  // La vinculación versión↔texto la garantiza esa prueba, no la memoria de nadie.
+  const TERMINOS_TEXTO = `# Términos de uso y aviso de privacidad — Asistente Centinela
+**Versión 1.1 · 5 de septiembre de 2026**
+
+> **Nota para Brandon:** este texto lo redacté yo (Claude) como documento de trabajo, no como
+> asesoría legal. Está escrito para que se entienda y para que diga la verdad sobre lo que el
+> programa hace. Ya no quedan decisiones abiertas: solo falta la lectura de tu asesor legal y
+> que la tarea de borrado a doce meses exista antes de publicarlo. Si publicas otro día,
+> cambia la fecha de arriba.
+
+---
+
+## PARTE 1 · La pantalla de primer uso
+
+Este es el texto que ve el médico la primera vez, y cada vez que cambie la versión de los
+términos. Dos botones: **Acepto y continúo** · **No acepto**.
+
+> ### Antes de empezar
+>
+> **Centinela** es una herramienta de apoyo hecha por un colega, Brandon Jesús Palencia
+> Martínez. **No es un programa oficial de la IPS ni de Everest/Athenea**, y no reemplaza su
+> criterio: usted sigue siendo responsable de todo lo que firme en la historia clínica.
+>
+> Para poder mejorarla, el programa **registra cómo se usa**: qué funciones abre, si terminaron
+> bien o mal, cuánto tardaron y qué errores técnicos ocurren. **Nunca registra datos de sus
+> pacientes** — ni nombres, ni documentos, ni diagnósticos, ni el texto de la historia.
+>
+> Ese registro es **condición para usar la herramienta**: no se puede desactivar. Si no está de
+> acuerdo, no pasa nada — el programa simplemente no se abrirá.
+>
+> [Ver los términos completos y el aviso de privacidad]
+>
+> **[ Acepto y continúo ]   [ No acepto ]**
+
+Y si pulsa **No acepto**:
+
+> Sin esa autorización el asistente no puede funcionar. No se le registrará nada.
+> Si cambia de opinión, vuelva a abrir Everest más tarde y se le preguntará de nuevo.
+>
+> **[ Entendido ]**
+
+---
+
+## PARTE 2 · Términos de uso
+
+### 1. Qué es esto y quién responde por ello
+Centinela es una herramienta personal, hecha y mantenida por **Brandon Jesús Palencia Martínez**,
+médico general, por su cuenta y a su costo. **No es un producto de la IPS donde usted trabaja, ni
+de Everest, ni de Athenea, ni cuenta con su respaldo o certificación.** Se comparte entre colegas
+como una ayuda, sin costo.
+
+### 2. Qué hace y qué no hace
+Centinela vigila la agenda del día, agrupa información que ya está en Everest y Athenea, y
+prepara borradores y sugerencias para ahorrarle pasos.
+
+Lo que **no** hace, y conviene que quede escrito:
+- **No decide por usted.** Todo lo que propone es una sugerencia que usted revisa.
+- **No escribe solo en la historia clínica.** Solo llena casillas cuando usted lo pide y siempre
+  deja cómo deshacerlo; una casilla que usted ya escribió no se pisa nunca.
+- **No reemplaza la verificación en Everest.** Ninguna cita, orden o cancelación se da por hecha
+  hasta que Everest la confirme.
+- **No es un dispositivo médico ni una guía clínica.** Las sugerencias clínicas son ayudas de
+  memoria, no indicaciones. La responsabilidad profesional sigue siendo enteramente suya.
+
+### 3. Quién puede usarlo
+Solo los profesionales autorizados expresamente por el autor. El acceso es personal e
+intransferible: no comparta el archivo, no lo instale en equipos de terceros y no lo modifique.
+El autor puede retirar el acceso en cualquier momento, sin necesidad de explicar por qué.
+
+### 4. Cómo se entrega
+Se entrega **tal como está**, sin garantía de que funcione siempre ni de que esté libre de
+errores. Everest y Athenea son sistemas ajenos que pueden cambiar sin aviso y dejar partes de la
+herramienta sin funcionar. Si algo falla, avísele al autor: ese aviso es lo que la mejora.
+
+**En caso de duda entre lo que dice Centinela y lo que dice Everest o Athenea, siempre manda
+Everest o Athenea.**
+
+### 5. Inteligencia artificial
+Cuando usted usa la función de redacción asistida, el texto se envía a un servicio de
+inteligencia artificial — Z.ai (GLM) o Google Gemini, según cuál esté configurado en el panel —
+**después de retirarle los datos que identifican al paciente**, y lo que vuelve es un borrador
+que usted lee, corrige y decide si inserta. Si prefiere no usar esa función, no la use: el resto
+de la herramienta funciona igual.
+
+### 6. Sus obligaciones
+- No pegar datos de pacientes en canales que no sean la historia clínica.
+- No usar la herramienta para nada distinto de su trabajo asistencial.
+- Reportar los fallos que encuentre, sobre todo los que afecten a un paciente.
+
+### 7. Cambios
+Estos términos pueden cambiar. Si el cambio es de fondo, se le volverá a pedir su autorización
+antes de seguir usando la herramienta. La versión vigente aparece siempre en el panel de ajustes.
+
+### 8. Ley aplicable
+Se rigen por la ley colombiana.
+
+---
+
+## PARTE 3 · Aviso de privacidad y autorización para el tratamiento de datos
+
+### Responsable
+**Brandon Jesús Palencia Martínez**, médico general. Contacto para cualquier solicitud sobre sus
+datos: **bpalencia27@gmail.com**.
+
+### Qué datos se recogen
+- Un **identificador de usuario** tomado de su sesión de Everest y un identificador del equipo,
+  usados para saber qué perfil de acceso aplicar y para distinguir un computador de otro.
+- **Qué funciones usa y cómo terminan**: qué módulo abrió, si la acción terminó bien, mal o se
+  canceló, el motivo del fallo cuando lo hay, y cuánto tardó.
+- **Errores técnicos**: el mensaje de error, dónde ocurrió y la secuencia de acciones previa.
+- **Datos del equipo**: navegador, sistema operativo, tamaño de pantalla, versión instalada.
+- **Contadores de la agenda**: cuántas citas llegaron a tiempo, cuántas no se presentaron y
+  cuántas se marcaron como atendidas sin haber llegado — **como números, sin identificar a ningún
+  paciente**.
+
+### Qué NO se recoge — y cómo se garantiza
+**Ningún dato de pacientes.** Ni nombres, ni números de documento, ni diagnósticos, ni resultados
+de laboratorio, ni el texto de la historia clínica.
+
+Esto no es una promesa suelta: el programa solo puede enviar campos de una lista aprobada de
+antemano, y existe una prueba automática que introduce a propósito un nombre y un documento en
+cada punto de envío y **falla si alguno logra salir**.
+
+### Para qué se usan
+Únicamente para **corregir fallos y mejorar la herramienta**: saber qué se usa y qué no, qué se
+rompe, qué va lento y qué confunde.
+
+Dicho con todas las letras: el responsable **sí puede ver qué funciones usa cada usuario** — es
+justamente lo que permite descubrir qué módulo falla, cuál nadie entiende y cuál sobra. Ese
+detalle se usa **solo para mejorar la herramienta**: **no se comparte con la IPS de forma
+individualizada** y **no se usa para evaluar su desempeño laboral**.
+
+### Dónde se guardan
+En una hoja de cálculo de Google Drive del responsable, a la que solo él tiene acceso. Google
+actúa como proveedor del servicio de almacenamiento.
+
+**Cómo se cumple el plazo:** el borrado a los doce meses no es una intención, es una tarea
+programada que corre sola sobre esa hoja y elimina lo que ya cumplió el año. Mientras esa tarea
+no exista, esta promesa no se está cumpliendo.
+
+### Por cuánto tiempo
+**Doce meses** contados desde el día en que cada registro se recibe. Cumplido ese plazo, el
+registro se borra. Si al cabo del año la herramienta sigue en uso, el plazo se revisa y, si
+cambia, se le avisará antes.
+
+### Es obligatorio para usar la herramienta
+El registro de uso **no tiene interruptor**: es la condición para usar un programa que se entrega
+sin costo, y es lo único que permite corregirlo. Si usted no lo autoriza, la herramienta no se
+abrirá, y no se le registrará absolutamente nada.
+
+### Sus derechos
+Conforme a la Ley 1581 de 2012, usted puede en cualquier momento **conocer, actualizar,
+rectificar y suprimir** sus datos, y **revocar** esta autorización, escribiendo a
+**bpalencia27@gmail.com**. Revocarla implica dejar de usar la herramienta, porque sin ese registro
+no puede funcionar. Al suprimir sus datos se borran los registros asociados a su identificador.
+
+### Su autorización
+Al pulsar **Acepto y continúo** usted declara que leyó este aviso y autoriza el tratamiento de sus
+datos en los términos descritos. Se guardará la constancia: la versión del texto, la fecha y la
+hora, y su identificador. Nada más.
+
+---
+
+## Antes de publicar
+
+1. ✅ **Contacto:** bpalencia27@gmail.com.
+2. ✅ **Conservación:** doce meses — con la tarea de borrado programada, o la frase es falsa.
+3. ✅ **Uso de los datos:** se ve el uso individual, se usa solo para mejorar la herramienta, y
+   no se comparte con la IPS ni sirve para evaluar desempeño. Si algún día eso cambia, hay que
+   pedir la autorización de nuevo **antes** — no después.
+4. **Una lectura de tu asesor legal.** Esto está redactado para ser honesto y comprensible, y
+   para dejar por escrito que la responsabilidad clínica sigue siendo del médico. No sustituye
+   la revisión de alguien que responda legalmente por el texto.
+`;
+
+  // Login de la sesión SIN red: localStorage user/jwt coherentes (el jwt es el token
+  // vivo de ESTA sesión; user.username solo vale si su userIdIdentity coincide con
+  // el sub del jwt) y, como respaldo, la cookie UsuarioMedico. Misma regla de
+  // v12.3.2 que identidadDesdeCliente — de hecho esa función ahora delega aquí.
+  function mtrLoginDeSesion() {
+    try {
+      let login = "";
+      let u = null;
+      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
+      let jwtSub = "";
+      try {
+        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
+        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
+      } catch (e) {}
+      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
+        login = String(u.username).trim();
+      }
+      if (!login) {
+        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
+        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
+      }
+      return login || "";
+    } catch (e) { return ""; }
+  }
+
+  // Perfil de acceso evaluado ANTES de boot(): sin red (nada puede salir antes del
+  // consentimiento) y sin state.activeDoctor (boot aún no corrió). La identidad
+  // sale del login de sesión + la caché GM de la última validación que Everest SÍ
+  // hizo para ese login — se acepta vencida: la red está vetada hasta aceptar y
+  // boot() revalida en cuanto corre. Sin identidad, la gracia de 12 h del núcleo
+  // ACCESO respalda al médico confirmado antes en este equipo (misma regla D2).
+  // Fall-closed: cualquier duda termina en PÚBLICO y PÚBLICO no monta NADA.
+  function mtrCompuertaPerfil() {
+    try {
+      // SharePoint: no hay localStorage de Everest en ese origen, el padrón no es
+      // evaluable. Allí solo corre el captador ligero; la compuerta decide solo
+      // consentimiento. (Desviación documentada en docs/CAMBIOS_.)
+      if (/sharepoint\.com$/i.test(location.hostname)) return "COMPLETO";
+      const lista = accesoLeerLista();
+      const cache = _identidadMedicoCacheLeer(mtrLoginDeSesion(), true);
+      const uid = cache ? Number(cache.id) || 0 : 0;
+      const nombre = cache ? mtrNormalizarNombre(cache.name) : "";
+      if (lista) {
+        const porUid = (e) => Number(e.uid) === uid;
+        const porNombre = (e) => mtrNormalizarNombre(e.nombre) === nombre;
+        if ((uid && lista.blocklist.some(porUid)) || (nombre && lista.blocklist.some(porNombre))) return "BLOQUEADO";
+        if ((uid && lista.perfiles.COMPLETO.some(porUid)) || (nombre && lista.perfiles.COMPLETO.some(porNombre))) return "COMPLETO";
+        if ((uid && lista.perfiles.LABORATORIOS.some(porUid)) || (nombre && lista.perfiles.LABORATORIOS.some(porNombre))) return "LABORATORIOS";
+      }
+      if (!uid && !nombre) {
+        const g = _accesoGracia();
+        if (g) return g;
+      }
+      return "PUBLICO";
+    } catch (e) { return "PUBLICO"; }
+  }
+
+  // Constancia de aceptación. SOLO sirve si es de la versión VIGENTE: subir
+  // TERMINOS_VERSION (el texto cambió) vuelve a preguntar; actualizar el script
+  // sin tocar el texto, no. Forma guardada: {version, ts, id} y nada más.
+  function mtrConsentimientoConstancia() {
+    try {
+      const c = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_ACEPTA, null) : null;
+      if (!c || typeof c !== "object" || c.version !== TERMINOS_VERSION) return null;
+      if (typeof c.ts !== "number" || !c.ts) return null;
+      return c;
+    } catch (e) { return null; }
+  }
+  function mtrConsentimientoAceptado() { return !!mtrConsentimientoConstancia(); }
+
+  // ¿El rechazo de esta máquina sigue fresco (< 12 h)? Fresco = NO re-preguntar.
+  function mtrTerminosRechazoFresco() {
+    try {
+      const r = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_RECHAZO, null) : null;
+      return !!(r && typeof r === "object" && typeof r.ts === "number" && r.ts > 0 && Date.now() - r.ts < TERMINOS_RECHAZO_MS);
+    } catch (e) { return false; }
+  }
+
+  // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
+  // las pruebas. arrancar=true solo con padrón Y consentimiento vigentes.
+  function mtrCompuertaDecision() {
+    const perfil = mtrCompuertaPerfil();
+    if (perfil === "BLOQUEADO") return { arrancar: false, pantalla: null, motivo: "bloqueado" };
+    if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") return { arrancar: false, pantalla: null, motivo: "fuera-del-padron" };
+    if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "aceptado" };
+    if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
+    return { arrancar: false, pantalla: "terminos", motivo: "preguntar" };
+  }
+
+  // El "identificador" de la constancia: uid validado por Everest si la caché lo
+  // tiene; si no, el login de sesión; si no, vacío (versión y fecha-hora quedan).
+  function mtrIdentificadorParaConstancia() {
+    try {
+      const login = mtrLoginDeSesion();
+      const cache = login ? _identidadMedicoCacheLeer(login, true) : null;
+      if (cache && cache.id > 0) return "uid:" + cache.id;
+      if (login) return "login:" + login.toLowerCase();
+    } catch (e) {}
+    return "";
+  }
+
+  // ---------- pantallas (modal propio, cuelgan directo de document.body) ----------
+  // Regla del repo para CSS fuera de #vgl-root: cssText inline con `!important` en
+  // los colores y SIEMPRE con fallback en cada var(--x,...) — el CSS de Everest es
+  // una caja negra que puede ganarle a una regla sin !important (patrón tomado de
+  // _mostrarAvisoPausaClinica). Los dos botones comparten EXACTAMENTE el mismo
+  // estilo: mismo peso, ninguno destacado sobre el otro.
+  function _terminosBtnCss() {
+    return "flex:1 1 200px;min-height:44px;border-radius:10px;border:1px solid #3b4767;background:#1a2438;color:#e8edf5 !important;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;padding:10px 18px;";
+  }
+  function _terminosCerrarPantalla() {
+    try { const v = document.getElementById("vgl-terminos-velo"); if (v) v.remove(); } catch (e) {}
+  }
+
+  function mtrTerminosPantalla() {
+    try { if (typeof document === "undefined" || !document.body) return; } catch (e) { return; }
+    try { const previa = document.getElementById("vgl-terminos-velo"); if (previa) previa.remove(); } catch (e) {}
+    const velo = document.createElement("div");
+    velo.id = "vgl-terminos-velo";
+    velo.setAttribute("role", "dialog");
+    velo.setAttribute("aria-modal", "true");
+    velo.setAttribute("aria-label", "Términos de uso y aviso de privacidad");
+    velo.setAttribute("tabindex", "-1");
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    const tarjeta = document.createElement("div");
+    tarjeta.id = "vgl-terminos-tarjeta";
+    tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(720px,92vw);max-height:86vh;overflow:auto;border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:26px 30px;";
+    const titulo = document.createElement("h2");
+    titulo.textContent = "Antes de empezar";
+    titulo.style.cssText = "margin:0 0 6px 0;font-size:19px;font-weight:700;color:#e8edf5 !important;";
+    tarjeta.appendChild(titulo);
+    const parrafos = String(TERMINOS_RESUMEN).split("\n\n");
+    for (const p of parrafos) {
+      const el = document.createElement("p");
+      el.textContent = p;
+      el.style.cssText = "margin:10px 0 0 0;font-size:14.5px;line-height:1.55;color:#cdd6e4 !important;";
+      tarjeta.appendChild(el);
+    }
+    // Los términos completos existen ANTES de aceptar: un clic los despliega aquí
+    // mismo (texto íntegro, carácter por carácter el del documento versionado).
+    const completo = document.createElement("div");
+    completo.id = "vgl-terminos-texto";
+    completo.style.cssText = "display:none;margin-top:14px;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid #2b3653;border-radius:10px;white-space:pre-wrap;color:#cdd6e4 !important;font-size:13px;line-height:1.5;max-height:40vh;overflow:auto;";
+    completo.textContent = TERMINOS_TEXTO;
+    const ver = document.createElement("button");
+    ver.id = "vgl-terminos-toggle";
+    ver.type = "button";
+    ver.textContent = "Ver los términos completos y el aviso de privacidad";
+    ver.style.cssText = "display:block;margin:16px 0 0 0;background:none;border:none;padding:0;color:#60a5fa !important;text-decoration:underline;cursor:pointer;font-size:14px;text-align:left;";
+    ver.addEventListener("click", () => {
+      const abierto = completo.style.display !== "none";
+      completo.style.display = abierto ? "none" : "block";
+      ver.textContent = abierto ? "Ver los términos completos y el aviso de privacidad" : "Ocultar los términos completos";
+    });
+    tarjeta.appendChild(ver);
+    tarjeta.appendChild(completo);
+    const fila = document.createElement("div");
+    fila.style.cssText = "display:flex;gap:12px;margin-top:22px;flex-wrap:wrap;";
+    const btnAceptar = document.createElement("button");
+    btnAceptar.id = "vgl-terminos-aceptar";
+    btnAceptar.type = "button";
+    btnAceptar.textContent = "Acepto y continúo";
+    btnAceptar.style.cssText = _terminosBtnCss();
+    const btnRechazar = document.createElement("button");
+    btnRechazar.id = "vgl-terminos-rechazar";
+    btnRechazar.type = "button";
+    btnRechazar.textContent = "No acepto";
+    btnRechazar.style.cssText = _terminosBtnCss();
+    btnAceptar.addEventListener("click", _terminosAlAceptar);
+    btnRechazar.addEventListener("click", _terminosAlRechazar);
+    fila.appendChild(btnAceptar);
+    fila.appendChild(btnRechazar);
+    tarjeta.appendChild(fila);
+    // Foco atrapado dentro de la tarjeta: Tab/Shift+Tab rotan entre los tres
+    // controles y no salen del diálogo. Escape NO cierra ni responde nada (cerrar
+    // sin responder no es responder) y la pantalla NO tiene botón ✕: las únicas
+    // salidas son los dos botones.
+    const focos = [ver, btnAceptar, btnRechazar];
+    velo.addEventListener("keydown", (ev) => {
+      try {
+        if (!ev) return;
+        if (ev.key === "Escape") { if (ev.preventDefault) ev.preventDefault(); return; }
+        if (ev.key !== "Tab") return;
+        if (ev.preventDefault) ev.preventDefault();
+        let i = focos.indexOf(document.activeElement);
+        i = ev.shiftKey ? (i <= 0 ? focos.length - 1 : i - 1) : (i < 0 ? 0 : (i + 1) % focos.length);
+        try { focos[i].focus(); } catch (e) {}
+      } catch (e) {}
+    });
+    velo.appendChild(tarjeta);
+    document.body.appendChild(velo);
+    try { ver.focus(); } catch (e) {}
+  }
+
+  // Pantalla tras «No acepto»: informa y se cierra sola con «Entendido». No envía
+  // nada — ni siquiera el rechazo (P11: cero eventos de rechazo).
+  function mtrTerminosPantallaRechazo() {
+    try { if (typeof document === "undefined" || !document.body) return; } catch (e) { return; }
+    const velo = document.createElement("div");
+    velo.id = "vgl-terminos-rechazo-velo";
+    velo.setAttribute("role", "dialog");
+    velo.setAttribute("aria-modal", "true");
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    const tarjeta = document.createElement("div");
+    tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(520px,92vw);border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:24px 28px;";
+    const p1 = document.createElement("p");
+    p1.textContent = "Sin esa autorización el asistente no puede funcionar. No se le registrará nada.";
+    p1.style.cssText = "margin:0;font-size:15px;line-height:1.55;color:#cdd6e4 !important;";
+    const p2 = document.createElement("p");
+    p2.textContent = "Si cambia de opinión, vuelva a abrir Everest más tarde y se le preguntará de nuevo.";
+    p2.style.cssText = "margin:10px 0 0 0;font-size:14px;line-height:1.55;color:#cdd6e4 !important;";
+    const ok = document.createElement("button");
+    ok.id = "vgl-terminos-rechazo-ok";
+    ok.type = "button";
+    ok.textContent = "Entendido";
+    ok.style.cssText = "display:block;margin:20px 0 0 0;min-height:40px;border-radius:10px;border:1px solid #3b4767;background:#1a2438;color:#e8edf5 !important;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;padding:8px 20px;";
+    ok.addEventListener("click", () => { try { velo.remove(); } catch (e) {} });
+    tarjeta.appendChild(p1);
+    tarjeta.appendChild(p2);
+    tarjeta.appendChild(ok);
+    velo.appendChild(tarjeta);
+    document.body.appendChild(velo);
+    try { ok.focus(); } catch (e) {}
+  }
+
+  function _terminosAlAceptar() {
+    // SOLO la constancia {versión, fecha-hora, identificador} — nada más (prueba 4).
+    try {
+      GM_setValue(TERMINOS_GM_ACEPTA, { version: TERMINOS_VERSION, ts: Date.now(), id: mtrIdentificadorParaConstancia() });
+      // La marca de rechazo se retira SOLO si existía: un aceptar limpio no escribe
+      // ninguna otra clave, y uno tras un rechazo no puede dejar fresca una marca
+      // que ya no aplica.
+      try { if (GM_getValue(TERMINOS_GM_RECHAZO, null)) GM_deleteValue(TERMINOS_GM_RECHAZO); } catch (e) {}
+    } catch (e) {}
+    _terminosCerrarPantalla();
+    mtrArrancarTodo();
+  }
+
+  function _terminosAlRechazar() {
+    // Marca local con hora y NADA MÁS: apagado completo, cero envíos, ni un
+    // evento de rechazo. No se toca emergencyTeardown (ver nota del banner P11).
+    try { GM_setValue(TERMINOS_GM_RECHAZO, { ts: Date.now() }); } catch (e) {}
+    _terminosCerrarPantalla();
+    try { mtrTerminosPantallaRechazo(); } catch (e) {}
+  }
+
+  // v18.2 (P11) — Latidos que antes se registraban al mero evaluar el script (registro de
+  // navegación, vigilía del reloj de segundo plano y latido de liderazgo): despertaban el
+  // hilo cada 5–30 s aunque el médico nunca aceptara los términos. Ahora boot() los instala
+  // en cadena — consentimiento en verde y DESPUÉS del kill-switch: un script apagado en
+  // remoto tampoco late. emergencyTeardown los sigue deteniendo como siempre (B13).
+  let _latidosBaseInstalados = false;
+  function _instalarLatidosBase() {
+    if (_latidosBaseInstalados) return;
+    _latidosBaseInstalados = true;
+    // v18.2 (P11, R5.1-bis) — todo setInterval nacido de este instalador (que boot()
+    // llama) queda registrado en state.timers: son el registro de navegación y el
+    // perro guardián del reloj, y un apagado remoto de emergencia debe poder
+    // detenerlos igual que a cualquier otro temporizador de boot().
+    try {
+      const navLog = setInterval(() => {
+        if (location.href !== lastObservedUrl) {
+          const oldUrl = lastObservedUrl;
+          lastObservedUrl = location.href;
+          vglLog("NAV", "UrlChanged", { from: oldUrl, to: lastObservedUrl, section: seccionActiva() });
+        }
+      }, 5000);
+      _navLogTimer = navLog;            // emergencyTeardown también lo suelta directo (B13)
+      state.timers.push(navLog);
+    } catch (e) {}
+    try {
+      const vigiaReloj = setInterval(_relojVigilarWorker, 30000);
+      state.timers.push(vigiaReloj);
+    } catch (e) {}
+    try {
+      _relojCada("latido", 5000, () => {
+        try {
+          // v12.3.36 — El latido de liderazgo se renueva AQUÍ, cada 5 s, pase lo que pase
+          // con el "Refresco" de Ajustes (que gobierna tick() y puede llegar a 120 s):
+          // sin esta renovación frecuente, el latido del propio líder vencería entre
+          // ticks y las pestañas se relevarían en falso unas a otras.
+          if (!heartbeat()) return;
+          const crit = hayVentanaCritica();
+          if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
+          if (crit) tickApi();
+          _criticoPrev = crit;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  // Arranque real, ya con padrón + consentimiento en verde. Es exactamente lo que
+  // antes corría la entrada del script, sin perder la corrección v16.2.4.
+  function mtrArrancarTodo() {
+    if (/sharepoint\.com$/i.test(location.hostname)) {
+      // En SharePoint SOLO corre el captador ligero de la base (y solo si falta la de hoy).
+      bootSharepointLite();
+      return;
+    }
+    apiObservar(window); // aprende la llamada de la agenda en cuanto Everest la haga
+    boot();
+  }
+
+  // Punto de entrada único del script (v18.2, P11). Fail-closed: ante cualquier
+  // excepción en la decisión, no se monta nada.
+  function mtrCompuertaArranque() {
+    let decision;
+    try { decision = mtrCompuertaDecision(); }
+    catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
+    if (decision.arrancar) {
+      try { mtrArrancarTodo(); } catch (e) { console.error("[Vigilante] arranque post-consentimiento falló:", e); }
+      return;
+    }
+    if (decision.pantalla === "terminos") {
+      try { mtrTerminosPantalla(); } catch (e) { console.error("[Vigilante] no se pudo mostrar la pantalla de términos:", e); }
+      return;
+    }
+    // Fuera del padrón, bloqueado, rechazo fresco o fallo: silencio total. Ni
+    // pantalla, ni nodo, ni evento — el script no existe para esta pestaña.
+  }
+
+  // Fila de Ajustes: la versión vigente de los términos siempre visible (§7 de la
+  // PARTE 2 del propio documento) con la fecha de la constancia.
+  function _terminosAjustesTexto() {
+    const c = mtrConsentimientoConstancia();
+    if (!c) return "aún no aceptado en este equipo";
+    const f = new Date(c.ts);
+    const dos = (n) => String(n).padStart(2, "0");
+    return "versión " + c.version + " · aceptado el " + dos(f.getDate()) + "/" + dos(f.getMonth() + 1) + "/" + f.getFullYear() + " " + dos(f.getHours()) + ":" + dos(f.getMinutes());
+  }
+
   // v7.3 MODO LIGERO: sin ganchos de red (no se envuelve fetch/XHR ni se clona
   // ninguna respuesta) y sin cosechador de SharePoint. Para la vía directa del API
   // solo se usa el OBSERVADOR DE RENDIMIENTO del propio navegador: una lista de URLs
   // que el navegador ya lleva de todos modos; costo prácticamente cero.
-  if (/sharepoint\.com$/i.test(location.hostname)) {
-    // En SharePoint SOLO corre el captador ligero de la base (y solo si falta la de hoy).
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => { bootSharepointLite(); });
-    else bootSharepointLite();
-    return;
-  }
-  apiObservar(window); // document-start: aprende la llamada de la agenda en cuanto Everest la haga
-  // v16.2.4 — El `else boot()` corría boot() A MITAD de la evaluación del script:
-  // todo lo declarado con const/let MÁS ABAJO (MTR_CSS y compañía, ~línea 25000)
-  // seguía en zona muerta, y el primer acceso lanzaba y tumbaba el arranque
-  // entero. Con setTimeout(...,0) el script termina de evaluarse primero y boot()
-  // encuentra el módulo completo. Es la causa raíz del "se desactiva solo, toca
-  // F5" que se reportaba desde hacía semanas y que no se había podido reproducir:
-  // solo pasa cuando el documento YA cargó al inyectarse (navegación interna de
-  // Everest o inyección tardía de Tampermonkey).
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else setTimeout(boot, 0);
+  // v18.2 (P11) — TODO eso corre ahora tras la compuerta: antes de confirmar padrón
+  // + consentimiento no se registra NINGÚN arranque. El setTimeout(...,0) conserva
+  // la corrección de v16.2.4 (el script termina de evaluarse antes de que arranque
+  // nada: sin zona muerta de const/let declarados más abajo).
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mtrCompuertaArranque);
+  else setTimeout(mtrCompuertaArranque, 0);
 
 
   // =====================================================================
