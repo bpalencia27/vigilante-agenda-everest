@@ -13089,6 +13089,46 @@ viejos de suite_15 se reescribieron contra el DOM real (37 `alert_message` + 1
 | 545 | HBA1C deja de enrutarse por atributo en `_casillasObligatoriasVacias`: con el choque real de ids (HbA1c comparte `resultadoHemoglobina` con la Hemoglobina del hemograma y `resultadoHBA1C` no existe), una HbA1c obligatoria y vacía vuelve a no reportarse | *suite_30: «_casillasObligatoriasVacias: HBA1C obligatoria y vacía SÍ se reporta pese a compartir id con Hemoglobina (v18.0.145)» — mutante 43 pasan / 1 falla; restaurado 44/0* | Sí |
 | 546 | `extractPatientId` vuelve a la recursión libre con deny-list: una rama hermana con id genérico se devuelve como PacienteID | *suite_05: «extractPatientId: rama hermana nueva con id genérico JAMÁS se devuelve como PacienteID (v18.0.145)» — mutante 34 pasan / 1 falla; restaurado 35/0* | Sí |
 | 547 | se desactiva el ancla estructural de `_emparejarNormalidadFija` (`if (false && (sgIdx…))`): el pegado por posición vuelve a escribir aunque «Síntomas generales» esté ausente, duplicada o desplazada | *suite_15: «casilla NUEVA antes de Síntomas generales (conteo de franja intacto) => rehúso total», «sintomasGenerales AUSENTE (Everest cambió el id) => rehúso, nunca escritura desplazada» y «sintomasGenerales DUPLICADA => rehúso» — mutante 266 pasan / 3 fallan; restaurado 269/0* | Sí |
+| 548 | se elimina el hook `_vigilarSilencioVigilancia(secc)` de `tick()` y se devuelve `false` fijo en `_contadorSospechaSelector`: 24 ticks seguidos de sección «otra» con paciente visible (o historia abierta sin cédula legible) vuelven a transcurrir en silencio absoluto, sin toast ni telemetría | *suite_14: «_contadorSospechaSelector: cuenta, avisa una sola vez y se reinicia», «"otra" crónica en HCHealth con paciente visible => aviso único», «"otra" legítima (fuera de HCHealth o sin paciente) no acumula» y «historia abierta sin cédula legible => guard anti-cruce ciego, aviso único» (v18.0.146) — mutante 32 pasan / 3 fallan; restaurado 35/0* | Sí |
 
 Banco completo: **3.351 comprobaciones pasan, 0 fallan.**
+
+## v18.1.0 — auditoría M2M, parte 2: fixes 4 a 7
+
+Segunda tanda de la auditoría adversarial M2M. **Fix 4 (CRÍTICO)** — el detector de
+apagado silencioso: si Everest cambiaba el DOM y el Vigilante dejaba de encontrar la
+sección que esperaba, 24 ticks seguidos transcurrían sin que nada lo dijera — el script
+podía llevar horas ciego sin síntoma visible. Ahora `_vigilarSilencioVigilancia` avisa
+UNA sola vez (toast + telemetría de conteos, sin PHI) y se reinicia por sección; el
+caso «historia abierta sin cédula legible» avisa con el matiz de guard anti-cruce.
+**Fix 5 (ALTO)** — dos textos del motor renal portado: (a) el apixabán con CrCl 15-29
+ordenaba «reducir dosis a 2.5 mg cada 12 horas» por el CrCl solo, cuando la ficha técnica
+de Eliquis (sección 4.2) manda reducir solo si el paciente cumple 2 de 3: edad >= 80 años,
+peso <= 60 kg o creatinina sérica >= 1.5 mg/dL; como el orquestador portado no recibe
+edad/peso/creatinina, el mensaje ahora pide verificar los tres criterios en lugar de
+sugerir la reducción (la conducta CAP_DOSIS/HIGH no cambia), y los 35 vectores afectados
+quedan declarados divergentes en suite_43 porque el Copiloto Python conserva el mensaje
+viejo; (b) el tope de furosemida decía «(G3b-G5)» cuando el gate `egfr >= 30 return null`
+solo deja llegar a esa rama a G4-G5. **Fix 6 (ALTO)** — reintento de timeout y guarda RAC:
+cerrado SIN cambio de código; la verificación en fuente mostró ambos caminos ya blindados
+por entregas anteriores. **Fix 7 (MEDIO)** — el botón «primer cupo»: cada día que fallaba
+por red era un `catch { continue }` en silencio, y tras 30 fallos seguidos el cuadro
+anunciaba «Sin cupos libres en los próximos 30 días hábiles» — un hecho que nadie comprobó,
+la misma clase de bug de la auditoría #11 de v16.7.0 («no hay cupos» vs «no se pudo
+preguntar»). Ahora se cuentan los días sin respuesta (`diasSinRespuesta`) y el mensaje
+final distingue «No se pudo consultar la disponibilidad» del conteo honesto de días
+consultados.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 549 | se revierte el mensaje del apixabán (CrCl 15-29) al texto viejo «Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.», que ordena la reducción por el CrCl solo | *suite_39: «fix 5 M2M — apixabán CrCl 15-29: pedir verificación 2-de-3, no reducir por CrCl solo» — mutante 49 pasan / 1 falla; y suite_43: «_regla_doac -> mtrReglaDoac: 560 vectores contra motor_deterministic.py» y «no sobra ninguna divergencia declarada» — las 35 divergencias declaradas dejan de divergir y quedan huérfanas, mutante 38 pasan / 2 fallan; restaurado 50/0 y 40/0* | Sí |
+| 550 | el tope de furosemida vuelve a decir «(G3b-G5)», estadio que el gate `egfr >= 30 return null` excluye antes de llegar a la rama | *suite_39: «fix 5 M2M — el tope de furosemida dice G4-G5, lo único que el gate deja pasar» — mutante 49 pasan / 1 falla; restaurado 50/0* | Sí |
+| 551 | se elimina `diasSinRespuesta++` del `catch` del bucle de 30 días del botón «primer cupo»: 30 fallos de red seguidos vuelven a anunciarse como «Sin cupos libres en los próximos 30 días hábiles» | *suite_15: «fix 7 M2M — 30 días sin respuesta del servidor no se anuncian como "Sin cupos libres"» — mutante 268 pasan / 2 fallan (la segunda caída es la pre-existente de renderDayChips, presente también en HEAD); restaurado 269/1, solo la pre-existente* | Sí |
+
+Banco completo: **3.355 comprobaciones pasan, 3 fallan**. Las 3 caídas —
+«v18.0.131 (hallazgo 11): renderDayChips» en suite_15 y las dos de cascada CSS
+(v18.0.124 alto contraste, v18.0.127 densidad 1366x768) — se reproducen idénticas en
+HEAD 76128d1 SIN estos cambios, verificado extrayendo el HEAD limpio con `git archive`
+a un directorio aparte y corriendo suite_15 y suite_25 sobre él (268/1 y 30/2). Son
+hallazgos NO tocados por esta entrega, reportados aparte.
 

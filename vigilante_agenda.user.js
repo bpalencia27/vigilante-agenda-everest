@@ -28893,15 +28893,20 @@
           if (!vivo() || miTok !== _pcToken) return;
           if (!pacienteIdAcceso) { pcNota("No se encontró el paciente en el sistema de agenda — no se puede buscar el cupo."); return; }
           const dias = mtrListaDiasBusquedaCupo(todayStamp(), 30);
+          let diasSinRespuesta = 0;   // fix 7 M2M — un día sin RESPUESTA no es un día sin cupo
           for (const iso of dias) {
             if (!vivo() || miTok !== _pcToken) return;
             pcNota("🔎 Buscando el primer cupo… revisando el " + mtrFechaLegible(iso));
             let agendasDelDia = [];
             try {
               const res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, iso, selectedEspId, true);
+              // Con propagarError=true la marca no llega hoy, pero si alguien cambia la
+              // firma del llamador, «no se pudo preguntar» no puede volver a leerse como
+              // «ese día no tiene cupos» (misma clase de bug que v16.7.0, auditoría #11).
+              if (res && res.__sinRespuesta) { diasSinRespuesta++; continue; }
               const fmt = mtrIsoAFechaAgenda(iso);
               agendasDelDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === fmt);
-            } catch (e) { continue; }
+            } catch (e) { diasSinRespuesta++; continue; }
             if (!vivo() || miTok !== _pcToken) return;
             if (selectedEspId === 12) agendasDelDia = _agendasPropias(agendasDelDia, doctorName);
             if (!agendasDelDia.length) continue;
@@ -28933,7 +28938,15 @@
             }
           }
           if (!vivo() || miTok !== _pcToken) return;
-          pcNota("Sin cupos libres en los próximos 30 días hábiles" + (selectedEspId === 12 ? " en su agenda" : "") + ". Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
+          // fix 7 M2M — el mensaje de cierre ya no afirma «sin cupos» cuando los días
+          // fallaron por red: sin respuesta real no se sabe si hay cupos o no.
+          if (diasSinRespuesta >= dias.length) {
+            pcNota("⚠ No se pudo consultar la disponibilidad: el servidor no respondió en ninguno de los " + dias.length + " días probados. No es que no haya cupos — reintente o revise la agenda oficial de Everest.");
+          } else if (diasSinRespuesta > 0) {
+            pcNota("Sin cupos libres en los " + (dias.length - diasSinRespuesta) + " de " + dias.length + " días consultados (" + diasSinRespuesta + " no respondieron). Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
+          } else {
+            pcNota("Sin cupos libres en los próximos 30 días hábiles" + (selectedEspId === 12 ? " en su agenda" : "") + ". Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
+          }
         } finally {
           if (miTok === _pcToken && pcBtn) pcBtn.disabled = false;
         }

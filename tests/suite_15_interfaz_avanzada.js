@@ -3911,6 +3911,30 @@ module.exports = {
       t.cierto(/Búsqueda detenida/.test(bloque), "y lo dice al detenerse, sin dejar el cuadro mudo");
     });
 
+    t.caso("fix 7 M2M — 30 días sin respuesta del servidor no se anuncian como «Sin cupos libres»", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = src.indexOf("const dias = mtrListaDiasBusquedaCupo(todayStamp(), 30);");
+      t.cierto(i >= 0, "existe la búsqueda de 30 días del primer cupo");
+      const bloque = src.slice(i, i + 6000);
+      // Cada día que fallaba por red era un `continue` en silencio: tras 30 fallos
+      // seguidos el cuadro decía «Sin cupos libres en los próximos 30 días hábiles»
+      // — un hecho que nadie comprobó, con Everest caído. Misma clase de bug que la
+      // auditoría #11 de v16.7.0 («no hay cupos» vs «no se pudo preguntar»).
+      t.cierto(/let diasSinRespuesta = 0;/.test(bloque), "se cuentan los días que NO respondieron");
+      t.cierto(/catch \(e\) \{ diasSinRespuesta\+\+; continue; \}/.test(bloque),
+        "una excepción de red cuenta como día sin respuesta, no como día sin cupos");
+      t.cierto(/res && res\.__sinRespuesta\) \{ diasSinRespuesta\+\+; continue; \}/.test(bloque),
+        "la marca __sinRespuesta también se cuenta, por si la firma del llamador cambia");
+      t.cierto(/diasSinRespuesta >= dias\.length/.test(bloque),
+        "con TODOS los días sin respuesta, no se afirma nada sobre los cupos");
+      t.cierto(/No se pudo consultar la disponibilidad/.test(bloque),
+        "se lo dice al médico como error de consulta");
+      t.cierto(/días consultados \(" \+ diasSinRespuesta/.test(bloque),
+        "con fallos parciales, el conteo del mensaje es honesto");
+    });
+
     t.caso("v18.0.125 (fila 37): con todo en «No sé», el botón no promete escribir nada", () => {
       const fs = require("fs");
       const path = require("path");
