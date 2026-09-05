@@ -38655,7 +38655,9 @@
       if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
         "Apixabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
       if (cg < 30) return mtrAlerta("doac", med, "CAP_DOSIS",
-        "Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.",
+        "Apixabán con CrCl " + mtrFmt0(cg) + " mL/min: la reducción a 2.5 mg c/12h NO se decide " +
+        "por el CrCl solo.  Verificar los criterios de la ficha técnica (sección 4.2) y reducir " +
+        "solo si cumple 2 de 3: edad >= 80 años, peso <= 60 kg o creatinina sérica >= 1.5 mg/dL.",
         MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
     }
     if (cg < 15) {
@@ -38684,7 +38686,7 @@
     if (dosisMg !== null && dosisMg !== undefined && dosisMg > 40) {
       return mtrAlerta("furosemida", med, "CAP_DOSIS",
         "Furosemida: dosis " + mtrFmt0(dosisMg) + " mg/dia con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2 " +
-        "(G3b-G5).  Ambulatorio, CAPAR DOSIS a 40 mg/dia maximo.  Si requiere " +
+        "(G4-G5).  Ambulatorio, CAPAR DOSIS a 40 mg/dia maximo.  Si requiere " +
         "mayor efecto diuretico, rotar a Torasemida o usar combinacion con " +
         "tiazida (secuencia nefrotica) bajo control estrecho.",
         MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);

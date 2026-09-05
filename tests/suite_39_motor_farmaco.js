@@ -336,6 +336,23 @@ module.exports = {
       t.igual(conTilde.mensaje, sinTilde.mensaje, "la tilde no puede cambiar la conducta");
     });
 
+    t.caso("fix 5 M2M — apixabán CrCl 15-29: pedir verificación 2-de-3, no reducir por CrCl solo", () => {
+      // Ficha técnica de Eliquis, sección 4.2: la reducción a 2.5 mg c/12h en FA no
+      // valvular corresponde solo si el paciente cumple 2 de 3 (edad >= 80 años,
+      // peso <= 60 kg, creatinina sérica >= 1.5 mg/dL). El mensaje viejo ordenaba
+      // la reducción por el CrCl solo — clínica incorrecta.
+      const r = api.mtrReglaDoac("APIXABAN 5 MG", 20, null);
+      t.igual(r.conducta, "CAP_DOSIS", "la conducta no cambia");
+      t.igual(r.severidad, "HIGH", "ni la severidad");
+      t.cierto(r.mensaje.indexOf("2 de 3") >= 0, "debe nombrar la regla 2-de-3 de la ficha técnica");
+      t.cierto(r.mensaje.indexOf("80") >= 0 && r.mensaje.indexOf("60 kg") >= 0 && r.mensaje.indexOf("1.5") >= 0,
+        "debe listar los tres criterios: edad, peso y creatinina sérica");
+      t.falso(r.mensaje.indexOf("reducir dosis a 2.5 mg cada 12 horas con CrCl") >= 0,
+        "no puede seguir ordenando la reducción por CrCl solo");
+      t.igual(api.mtrReglaDoac("APIXABAN 5 MG", 14, null).conducta, "CONTRAINDICADA",
+        "el umbral < 15 sigue intacto");
+    });
+
     t.caso("la metformina cruza sus dos umbrales en el sitio exacto", () => {
       t.igual(api.mtrReglaMetformina("METFORMINA", 29.9, null).conducta, "CONTRAINDICADA");
       t.igual(api.mtrReglaMetformina("METFORMINA", 30, null).conducta, "CAP_DOSIS");
@@ -455,6 +472,17 @@ module.exports = {
       t.igual(r.severidad, "HIGH");
       t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 80).conducta, "CAP_DOSIS");
       t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 40).severidad, "INFO");
+    });
+
+    t.caso("fix 5 M2M — el tope de furosemida dice G4-G5, lo único que el gate deja pasar", () => {
+      // El gate `egfr >= 30 return null` excluye a G3b (30-44): solo G4 (15-29) y
+      // G5 (<15) llegan a esta rama. El texto viejo decía "(G3b-G5)".
+      const r = api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 80);
+      t.igual(r.conducta, "CAP_DOSIS");
+      t.cierto(r.mensaje.indexOf("(G4-G5)") >= 0, "debe decir G4-G5");
+      t.falso(r.mensaje.indexOf("G3b") >= 0, "G3b es 30-44 y retorna null antes de llegar aquí");
+      t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 30, null, 80), null,
+        "frontera: 30 mL/min es G3b y no genera aviso de tope");
     });
 
     t.caso("hipokalemia con ERC avanzada manda sobre el tope de dosis", () => {

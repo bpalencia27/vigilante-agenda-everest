@@ -131,6 +131,25 @@ for (const v of [['"2026-06-28"', 14], ['"2026-07-11"', 1], ['"2026-07-11"', 2],
   DIVERGENCIAS["sumar_dias_habiles|[" + v[0] + "," + v[1] + "]"] = DIV_FESTIVO_EXTRA_PY;
 }
 
+// fix 5 M2M — el mensaje del apixabán con CrCl 15-29 sugería reducir a
+// 2.5 mg c/12h por el CrCl solo, cuando la ficha técnica de Eliquis (sección 4.2)
+// manda reducir solo si el paciente cumple 2 de 3: edad >= 80 años, peso <= 60 kg,
+// creatinina sérica >= 1.5 mg/dL. El orquestador portado no recibe edad/peso/
+// creatinina, así que el mensaje se corrigió para pedirle al médico que verifique
+// esos 3 criterios en lugar de sugerir la reducción. El Copiloto Python conserva
+// el mensaje viejo: estos 35 vectores se declaran divergentes a propósito y la
+// conducta (CAP_DOSIS/HIGH) no cambia. Decisión del médico (05-sep-2026).
+const DIV_APIXABAN_SPC_42 =
+  "El Vigilante ya no sugiere reducir apixabán a 2.5 mg c/12h por CrCl solo: la ficha " +
+  "técnica de Eliquis (sección 4.2) solo reduce con 2 de 3 (edad >= 80 años, peso <= 60 kg, " +
+  "creatinina sérica >= 1.5 mg/dL) y el mensaje pide verificar esos criterios. El Python " +
+  "conserva el mensaje viejo. Fix 5 M2M (05-sep-2026).";
+for (const cg of [15.0, 16.0, 20.0, 25.0, 29.0]) {
+  for (const k of [null, 3.0, 4.0, 5.0, 5.1, 5.5, 6.0]) {
+    DIVERGENCIAS["_regla_doac|" + JSON.stringify(["apixaban 5", cg, k])] = DIV_APIXABAN_SPC_42;
+  }
+}
+
 function norm(v, campoConjunto) {
   if (campoConjunto && Array.isArray(v)) {
     v = v.map((x) => {
