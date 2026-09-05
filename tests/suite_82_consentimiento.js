@@ -349,5 +349,76 @@ module.exports = {
       t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "bloqueado no dispara NI un intento de rescate");
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "silencio total: el bloqueo no se re-evalúa por red");
     });
+
+    // ── v18.3.2 ── médico nuevo en MÁQUINA NUEVA (incidencia Dra. Gloria) ──
+    // El padrón cacheado la sirve, PERO la máquina no tiene NI rastro de
+    // identidad validada: la caché GM solo la escribe resolverMedicoPorPerfil,
+    // que vive DENTRO de boot(), y boot() solo corre si la compuerta lo deja.
+    // v18.3.1 arregló la LISTA; esto es el deadlock de IDENTIDAD que quedaba.
+    function sembrarMaquinaNueva(env) {
+      env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      env.almacen["user"] = JSON.stringify({ username: "bpalencia", userIdentity: "x" });
+    }
+
+    await t.casoAsync("P11·15 — máquina nueva sin identidad: la compuerta SÍ pregunta los términos (caso Dra. Gloria)", async () => {
+      const red = redContada();
+      let usos = 0;
+      const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr });
+      sembrarMaquinaNueva(c.env);
+      const d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.pantalla === "terminos" && d.motivo === "sin-identidad", "la decisión es preguntar por la vía sin-identidad (motivo «" + d.motivo + "»)");
+      c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
+      await c.api.mtrCompuertaArranque();
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "a una primera instalación se le muestra la pantalla de términos — ya no silencio eterno");
+      t.cierto(usos === 0 && red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "la vía sin-identidad NO gasta red: no hay rescate que hacer (gmxhr " + usos + ", fetch " + red.contadores.fetch + ")");
+      t.cierto(!c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "sin panel ni temporizadores hasta responder");
+      c.env.doc.getElementById("vgl-terminos-aceptar")._listeners.click[0]();
+      const k = c.env.gm["vgl_terminos_acepta"];
+      t.cierto(!!k && k.version === "1.1" && k.id === "login:bpalencia", "la constancia firma con el login de sesión cuando no hay uid validado («" + (k && k.id) + "»)");
+      t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica") && !c.env.doc.getElementById("vgl-root"), "aceptar arranca boot() de verdad (aviso del kill-switch visible, sin panel)");
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "la pantalla se cerró sola");
+    });
+
+    await t.casoAsync("P11·16 — máquina nueva con constancia vigente: arranca directo, no re-pregunta", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      sembrarMaquinaNueva(c.env);
+      c.env.gm["vgl_terminos_acepta"] = { version: "1.1", ts: Date.now(), id: "login:bpalencia" };
+      c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
+      const d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === true && d.motivo === "sin-identidad-aceptado" && d.pantalla === null, "constancia vigente + sin identidad = arranque directo (motivo «" + d.motivo + "»)");
+      await c.api.mtrCompuertaArranque();
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "no vuelve a preguntar lo ya aceptado");
+      t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica") && !c.env.doc.getElementById("vgl-root"), "boot() corrió directo tras la compuerta");
+    });
+
+    await t.casoAsync("P11·17 — sin identidad Y sin login de sesión: a nadie se le pregunta nada", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      // Solo el padrón cacheado: ni user de sesión ni identidad ni constancia.
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      const d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.pantalla === null && d.motivo === "fuera-del-padron", "sin sesión la vía sin-identidad no aplica (motivo «" + d.motivo + "»)");
+      await c.api.mtrCompuertaArranque();
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "silencio total: no se pregunta a una máquina sin médico en sesión");
+      t.cierto(red.contadores.gmxhr === 1, "el motivo fuera-del-padron sí intenta su único rescate (gmxhr " + red.contadores.gmxhr + ")");
+    });
+
+    await t.casoAsync("P11·18 — REGRESIÓN: con identidad presente, el padrón sigue mandando — fuera es fuera", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      // Identidad validada (uid 202) que el padrón cacheado NO trae, y sello de
+      // refresco fresco para que el rescate no gaste red y se vea la decisión pura.
+      c.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
+      c.env.gm["vgl_identidad_medico_cache"] = { bgloria: { id: 202, name: "Prueba Dos", ts: Date.now() } };
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      c.env.almacen["vgl_acceso_fetch"] = JSON.stringify({ ts: Date.now(), ok: true });
+      const d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.pantalla === null && d.motivo === "fuera-del-padron", "identidad presente pero fuera del padrón: silencio, no términos (motivo «" + d.motivo + "»)");
+      await c.api.mtrCompuertaArranque();
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "el arreglo de máquina nueva NO abre la puerta a quien el padrón no trae");
+      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "sello fresco: ni siquiera rescate (fetch " + red.contadores.fetch + ", gmxhr " + red.contadores.gmxhr + ")");
+    });
   }
 };

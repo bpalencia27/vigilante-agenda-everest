@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -36937,12 +36937,41 @@ hora, y su identificador. Nada más.
     } catch (e) { return false; }
   }
 
+  // v18.3.2 — ¿Esta máquina no tiene NI rastro de identidad del médico en
+  // sesión? (login presente pero sin caché GM de la última validación que
+  // Everest hizo de ese login.) Es el estado de TODA primera instalación, y es
+  // un deadlock sin esta vía: el único escritor de esa caché vive DENTRO de
+  // boot() (resolverMedicoPorPerfil → GetUsuarioPerfil) y boot() solo corre si
+  // la compuerta lo deja — la puerta que esa misma identidad mantiene cerrada.
+  // Incidencia real (Dra. Gloria, 05-09-2026): médica recién autorizada en el
+  // padrón, máquina nueva, "no aparece nada" para siempre aunque el tablero
+  // SÍ la sirva; borrar cookies no ayuda (la identidad no vive ahí).
+  function mtrCompuertaSinIdentidad() {
+    try { return !_identidadMedicoCacheLeer(mtrLoginDeSesion(), true); }
+    catch (e) { return false; }
+  }
+
   // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
   // las pruebas. arrancar=true solo con padrón Y consentimiento vigentes.
   function mtrCompuertaDecision() {
     const perfil = mtrCompuertaPerfil();
     if (perfil === "BLOQUEADO") return { arrancar: false, pantalla: null, motivo: "bloqueado" };
-    if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") return { arrancar: false, pantalla: null, motivo: "fuera-del-padron" };
+    if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") {
+      // v18.3.2 — MÉDICO NUEVO EN MÁQUINA NUEVA: sin identidad la compuerta no
+      // puede NI validar ni refutar (el refresco del padrón de v18.3.1 arregla
+      // la LISTA, no la identidad). En vez del silencio, se muestran los
+      // términos y la capa ACCESO del núcleo decide DESPUÉS, con la identidad
+      // ya resuelta dentro de boot(): sin red ni nodo antes del "sí" (la
+      // pantalla no toca red), y si quien acepta no está en el padrón,
+      // accesoCap() no monta NADA (PÚBLICO no construye UI). Requiere login de
+      // sesión: sin sesión no se le pregunta a nadie.
+      if (mtrCompuertaSinIdentidad() && mtrLoginDeSesion()) {
+        if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "sin-identidad-aceptado" };
+        if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
+        return { arrancar: false, pantalla: "terminos", motivo: "sin-identidad" };
+      }
+      return { arrancar: false, pantalla: null, motivo: "fuera-del-padron" };
+    }
     if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "aceptado" };
     if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
     return { arrancar: false, pantalla: "terminos", motivo: "preguntar" };
