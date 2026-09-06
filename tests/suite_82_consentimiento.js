@@ -420,5 +420,24 @@ module.exports = {
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "el arreglo de máquina nueva NO abre la puerta a quien el padrón no trae");
       t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "sello fresco: ni siquiera rescate (fetch " + red.contadores.fetch + ", gmxhr " + red.contadores.gmxhr + ")");
     });
+
+    await t.casoAsync("P11·19 — v18.3.3 diagnóstico: la compuerta deja escrito su veredicto en GM", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      // Fuera-del-padron SIN login: el caso del silencio eterno — ahora rastreable.
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      await c.api.mtrCompuertaArranque();
+      const d = c.env.gm["vgl_compuerta_diagnostico"];
+      t.cierto(!!d, "la clave vgl_compuerta_diagnostico quedó escrita");
+      t.cierto(d && d.motivo === "fuera-del-padron", "motivo registrado («" + (d && d.motivo) + "»)");
+      t.cierto(d && d.login === "no", "sin sesión se registra login «no»");
+      // Y con login: el motivo cambia a sin-identidad y login «si».
+      const c2 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c2.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      c2.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
+      await c2.api.mtrCompuertaArranque();
+      const d2 = c2.env.gm["vgl_compuerta_diagnostico"];
+      t.cierto(d2 && d2.motivo === "sin-identidad" && d2.login === "si", "con sesión registra sin-identidad + login si («" + (d2 && d2.motivo) + "»/" + (d2 && d2.login) + ")");
+    });
   }
 };

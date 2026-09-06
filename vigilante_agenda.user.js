@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.3.2
+// @version      18.3.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -37206,6 +37206,29 @@ hora, y su identificador. Nada más.
   // fresco y excepción NO se refrescan: su silencio es intencional. La función es
   // async SOLO por este camino; con caché sana todo corre igual que siempre
   // (síncrono hasta pintar la pantalla o arrancar).
+  // v18.3.3 — DIAGNÓSTICO DE COMPUERTA: incidencia real (Dra. Gloria,
+  // 05-09-2026): ya con el fix de sin-identidad despliegado, seguía "no
+  // aparece nada" y NO había forma de saber desde afuera qué rama estaba
+  // callando (fuera-del-padron con login no detectado, rechazo fresco,
+  // aceptado-perfuera-del-padron…). Ahora la compuerta deja escrito su
+  // veredicto en el almacenamiento GM (legible en Panel de TM → este script
+  // → pestaña Almacenamiento, clave vgl_compuerta_diagnostico) y una línea
+  // en consola. Sin PHI: motivo + sí/no hay login + versión + fecha.
+  function mtrCompuertaDiagnostico(decision) {
+    // Solo en las rutas de INCIDENCIA (fuera-del-padron, sin-identidad,
+    // rechazo-fresco, bloqueado, excepción): la pantalla de términos rutinaria
+    // del médico del padrón («preguntar») y el arranque normal no dejan rastro
+    // — P11·4 exige que el camino aceptar→arrancar no escriba ninguna clave
+    // aparte de la constancia, y P11·19 exige rastro en las rutas mudas.
+    if (decision && (decision.arrancar || decision.motivo === "preguntar")) return;
+    try {
+      const login = mtrLoginDeSesion();
+      const d = { version: (typeof VERSION !== "undefined") ? VERSION : "", motivo: decision && decision.motivo ? decision.motivo : "?", login: login ? "si" : "no", ts: Date.now() };
+      if (typeof GM_setValue !== "undefined") GM_setValue("vgl_compuerta_diagnostico", d);
+      try { console.info("[Vigilante] compuerta:", d.motivo, "· login:", d.login); } catch (e2) {}
+    } catch (e) {}
+  }
+
   async function mtrCompuertaArranque() {
     let decision;
     try { decision = mtrCompuertaDecision(); }
@@ -37215,6 +37238,7 @@ hora, y su identificador. Nada más.
       try { decision = mtrCompuertaDecision(); }
       catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
     }
+    mtrCompuertaDiagnostico(decision);
     if (decision.arrancar) {
       try { mtrArrancarTodo(); } catch (e) { console.error("[Vigilante] arranque post-consentimiento falló:", e); }
       return;

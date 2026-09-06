@@ -13196,3 +13196,27 @@ Banco completo: **3.387 comprobaciones pasan, 0 fallan.**
 
 Banco completo al cerrar la v18.3.1: **3.386 pasan / 5 fallan** en la corrida con el diff aplicado; 2 de los fallos eran la cuádruple sincronización de versión de este mismo cambio (package.json y el pin de la «versión viva» de suite_75) y quedaron verdes por suite tras el ajuste (suite_30: 44/0, suite_75: 50/0, suite_82: 15/15). Los 3 fallos restantes son **preexistentes en la punta `009b8da` sin mis cambios** — corrida baseline en HEAD (stash `verif-baseline`): suite_15 «renderDayChips» (268 ok / 1 fallan) y suite_25 «cascada CSS» (30 ok / 2 fallan) reproducen exactamente los mismos fallos. Total proyectado con el diff final: 3.388 pasan / 3 fallan preexistentes.
 
+## v18.3.3 — diagnóstico de compuerta: rastro del «no sale nada»
+
+Incidencia real (Dra. Gloria, 05-09-2026): con el fix de sin-identidad ya
+desplegado seguía «no aparece nada» sin forma de saber desde afuera qué rama
+callaba. La compuerta deja ahora su veredicto en GM (`vgl_compuerta_diagnostico`:
+motivo + sí/no login + versión + ts — sin PHI) y una línea de consola, SOLO en las
+rutas de incidencia (fuera-del-padron, sin-identidad, rechazo-fresco, bloqueado,
+excepción). La pantalla de términos rutinaria del médico del padrón («preguntar»)
+y el arranque normal NO dejan rastro: P11·4 exige que el camino aceptar→arrancar
+no escriba ninguna clave aparte de la constancia — un guard que solo respete
+`arrancar` cae exactamente ahí, y excluir por pantalla («terminos») tampoco sirve
+porque «sin-identidad» también abre pantalla y P11·19 exige rastro en esa ruta.
+La exclusión correcta es por MOTIVO. Caso nuevo P11·19 en suite_82 (hermano del
+anterior, con await). Versiones en paso (18.3.3 en `@version` L4, `VERSION`
+L1038, package.json y pin de suite_75 L900). Banco completo con el diff final:
+solo los 3 fallos preexistentes de la punta base (suite_15 renderDayChips
+268/1, suite_25 cascada CSS 30/2), idénticos a la baseline documentada arriba.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 574 | El diagnóstico se escribe en TODA decisión (guard de rutas eliminado): la clave `vgl_compuerta_diagnostico` aparece en el camino aceptar→arrancar | *suite_82: P11·4 — «aceptar no escribe ninguna OTRA clave GM (…después: vgl_compuerta_diagnostico,…)» — mutante 19 pasan / 1 fallan; restaurado con guard 20/0* | Sí |
+| 575 | El guard excluye por pantalla (`decision.pantalla === "terminos"`) en vez de por motivo: la ruta sin-identidad (que también abre la pantalla de términos) dejaba de dejar rastro | *suite_82: P11·19 — «con sesión registra sin-identidad + login si («undefined»/undefined)» — mutante 19 pasan / 1 fallan; restaurado (exclusión por motivo «preguntar») 20/0* | Sí |
+| 576 | La escritura se neutraliza (`if (typeof GM_setValue !== "undefined")` → `if (false)`): la compuerta decide pero no deja rastro en GM | *suite_82: P11·19 — «la clave vgl_compuerta_diagnostico quedó escrita (obtuvo false)» — mutante 19 pasan / 1 fallan; restaurado 20/0* | Sí |
+
