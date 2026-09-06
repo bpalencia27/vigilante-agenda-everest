@@ -13340,3 +13340,75 @@ cascada CSS 30/2). NOTA de entorno: suite_15 presenta además un cuelgue intermi
 PREEXISTENTE (reproducido en HEAD limpio, caso «v18.0.105 ANTIDUP — dos pestañas»;
 en el banco completo de esta corrida pasó 268/1) — diagnóstico pendiente, no tocado.
 
+## v18.3.5 — higiene pendiente (N3)
+
+Cuatro arreglos de higiene del enjambre (mantenimiento, sin cambio clínico):
+
+**T1 — el retiro del monitor también suelta la vigilancia de DOM.**
+`_vglRetirarMonitorPorPerfil` (v18.3.4, N8-B1) hacía el aseo de `emergencyTeardown`
+pero dejaba vivos el MutationObserver de body+subtree y los 3 listeners de captura
+— el mismo hueco que T4 arregló para el kill (nota explícita de la sección
+v18.3.4 T4: «fuera de alcance de T4»). Se replica ahí el bloque de T4 (disconnect
+de `_vglDomObs`, removeEventListener de `_vglDomAlTocar` ×3, refs a null), sin
+banderas de kill ni aviso (no es emergencia). El latch `_vglDomObsInstalado` se
+deja en true a propósito, mismo contrato: una llamada tardía a `_vglDomEstaSucia`
+no debe reinstalar el observador de un monitor retirado. La prueba N8-B1 de
+suite_78 se EXTENDIÓ (mismo caso, hermano de nada: 35/0 se conserva) para montar
+la vigilancia antes del retiro (`_vglDomEstaSucia`) y comprobar tras `tick()` que
+las refs quedan sueltas vía `__vglDomVigilanciaParaTest` (misma LIMITACIÓN de
+arnés que suite_30: disconnect/removeEventListener son no-ops, se observa el
+ciclo de vida de las referencias).
+
+**T2 — login duplicado (hallazgo T6/N1-#3).** `identidadDesdeCliente` (L21237)
+copiaba el parseo de `mtrLoginDeSesion` (L36991): localStorage user/jwt coherentes
++ cookie UsuarioMedico, y el comentario de la segunda decía «esa función ahora
+delega aquí» sin que delegara. Ahora `identidadDesdeCliente` llama a
+`mtrLoginDeSesion()` (function declarations del mismo IIFE: el hoisting resuelve
+la llamada aunque viva ~15k líneas más abajo — verificado con `node -c` y
+suite_19 29/0) y conserva SOLO su semántica propia: el guard
+`state.activeDoctor.id`, `loginVisto` y `resolverMedicoPorPerfil`. El comentario
+se corrigió para decir la verdad. Sin divergencia de comportamiento: la copia
+era carácter a carácter el mismo parseo (incluidos los try/catch internos).
+
+**T3 — padrón GS (hallazgo B4/N8).** `TABLERO/Codigo.gs`
+(`_listaAccesoRespuesta`): el perfil se normaliza con `trim().toUpperCase()`
+(«completo»/«Laboratorios» clasificaban EN SILENCIO como desconocidos) y el
+estado «inactivo» revoca igual que «bloqueado» (antes un médico «inactivo»
+quedaba ACTIVO en el padrón). Actualizado también el comentario de cabecera y la
+fila de ayuda de la siembra. `TABLERO/simulacion_local.js` (que evalúa el .gs
+real) gana 2 casos con nombres SYN-* (cero PHI): perfil en minúscula y estado
+inactivo. Verificado antes y después: exit 0 con «TODO OK».
+
+**T4 — sellado de `docs/MAPA_v14.md`.** Aviso en negrita al principio: documento
+histórico congelado a la v14 (fecha de corte declarada por su propio contenido,
+2026-08-20), líneas ~×2 tras v14, cifras NO regeneradas (casilla vacía antes que
+dato inventado), navegación actual por grep + este informe. Contenido existente
+conservado íntegro.
+
+`node -c` limpio en `vigilante_agenda.user.js`, `tests/suite_78_acceso.js` y
+`TABLERO/simulacion_local.js`. Sin tocar suite_15 ni el banco completo (3 fallos
+preexistentes de la baseline intactos).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 583 | Se neutraliza la suelta de la vigilancia de DOM en `_vglRetirarMonitorPorPerfil` (disconnect + asignaciones a null, L35126-35135 → cuerpo vacío): el monitor retirado por perfil vuelve a dejar el observer conectado y referenciado | *suite_78: N8-B1 — «tras el retiro el observer de DOM quedó desconectado y sin referencia: esperaba null y obtuvo {}» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+| 584 | Se neutraliza `mtrLoginDeSesion` (`return login \|\| ""` → `return ""`): si la delegación de T2 fuera cable muerto, identidadDesdeCliente seguiría resolviendo por su cuenta | *suite_19: 3 casos — «'user' con username + userIdIdentity == sub del jwt -> resuelve por GetUsuarioPerfil», «sin jwt en absoluto, se acepta 'user'.username directamente» y «sin 'user' pero con cookie UsuarioMedico, usa el login de la cookie» — mutante 26 pasan / 3 fallan; restaurado 29/0. La delegación es viva y las pruebas existentes la cubren: no hubo aserción faltante que añadir* | Sí |
+| 585 | Se quita `.toUpperCase()` de la lectura de perfil en `_listaAccesoRespuesta` (Codigo.gs L426): «completo» vuelve a clasificarse en silencio como perfil desconocido | *simulador TABLERO/simulacion_local.js (evalúa el .gs real): exit 1, «FALLA B2/B6 servidor: perfil en minúscula ignorado»; restaurado exit 0 «TODO OK»* | Sí |
+| 586 | Se quita `\|\| estado === "inactivo"` (Codigo.gs L437): un médico marcado «inactivo» vuelve a quedar ACTIVO en el padrón | *simulador TABLERO/simulacion_local.js: exit 1, «FALLA B2/B6 servidor: estado inactivo no revoca \| estado inactivo quedó ACTIVO en el perfil»; restaurado exit 0 «TODO OK»* | Sí |
+
+## v18.3.5 — bump de versión (integrador) y Playwright E2E
+
+Cuádruple sincronizada a 18.3.5: `@version` L4, `VERSION` L1038, `package.json`
+y pin de suite_75 L900 (red de pruebas existente: suite_75 «versión viva» 50/0,
+canario suite_30 45/0, comparador de suite_82 22/0). Banco completo con el diff
+final, corrido con salida directa a archivo (Start-Process -Redirect, protocolo
+post-N6): **3.397 pasan / 3 fallan** — exactamente los 3 preexistentes de la
+baseline (suite_15 renderDayChips 268/1, suite_25 cascada CSS 30/2). Diagnóstico
+N6 del cuelgue intermitente (causa raíz: bloqueo de escritura stderr por tubería
+de PowerShell 5.1 bajo carga, NO un bug del producto) documentado arriba por el
+propio N6. Además: `playwright` añadido como devDependency (solo herramientas de
+prueba — el userscript sigue sin dependencias de runtime) para E2E/simulación de
+uso real con el chromium ya presente en caché (`ms-playwright/chromium-1234`,
+executablePath directo; el CDN de playwright.dev no responde desde esta red).
+Smoke test verificado: lanzar navegador + getComputedStyle real OK.
+

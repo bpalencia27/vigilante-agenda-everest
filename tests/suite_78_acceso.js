@@ -635,11 +635,28 @@ module.exports = {
       enriquecerDom78(c2);
       c2.api.boot();
       t.cierto(montado(c2, "vgl-root"), "sin identidad conocida el monitor SÍ se monta (diferimiento de v18.3.2, no bloqueo)");
+      // v18.3.5 (higiene N3, T1) — mientras el monitor vive, la vigilancia de DOM
+      // debe estar instalada (se instala perezosamente desde la compuerta de
+      // cosecha). LIMITACIÓN del arnés (misma que suite_30): disconnect y
+      // removeEventListener son no-ops aquí, así que se observa el ciclo de vida
+      // de las referencias vía __vglDomVigilanciaParaTest.
+      t.cierto(c2.api._vglDomEstaSucia() === true, "montaje: la compuerta de cosecha responde (con ella se instala la vigilancia de DOM)");
+      const vigAntes = c2.api.__vglDomVigilanciaParaTest();
+      t.cierto(!!vigAntes.obs, "montaje: el observer de DOM quedó referenciado a nivel de módulo");
+      t.cierto(typeof vigAntes.alTocar === "function", "montaje: los listeners de captura quedaron referenciados");
       // (c) La identidad llega tarde y resuelve PÚBLICO: la re-visa de tick()
       // retira el monitor montado.
       conDoctor(c2.api, 555, "Médico Nuevosur del Hospital");
       c2.api.tick();
       t.falso(montado(c2, "vgl-root"), "tick() retira el monitor cuando la identidad resuelta no tiene «centinela»");
+      // v18.3.5 (higiene N3, T1) — el retiro también SUELTA la vigilancia de DOM
+      // (mismo hueco que T4 arregló para el kill): el monitor retirado no sigue
+      // observando el DOM. El latch de instalación se queda en true a propósito:
+      // una llamada tardía a la compuerta no reinstala el observador.
+      const vigDespues = c2.api.__vglDomVigilanciaParaTest();
+      t.igual(vigDespues.obs, null, "tras el retiro el observer de DOM quedó desconectado y sin referencia");
+      t.igual(vigDespues.alTocar, null, "tras el retiro los listeners de captura quedaron retirados y sin referencia");
+      t.cierto(vigDespues.instalado === true, "el latch de instalación sigue en true: una llamada tardía a la compuerta no reinstala el observador de un monitor retirado");
       // Y un COMPLETO del padrón con el monitor montado NO lo pierde: la
       // re-visa solo retira perfiles sin la capacidad.
       const c3 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });

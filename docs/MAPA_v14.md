@@ -1,5 +1,18 @@
 # Mapa Arquitectónico y Catálogo de Funciones — Vigilante de Agenda (v14)
 
+> **⚠️ DOCUMENTO HISTÓRICO, CONGELADO A LA v14 (fecha de corte declarada por su
+> propio contenido: 2026-08-20).** Este mapa describe el archivo tal como era en
+> su fecha de generación y NO se ha vuelto a generar desde entonces: tras v14,
+> `vigilante_agenda.user.js` migró a ~×2 las líneas declaradas aquí y el banco de
+> pruebas creció más allá de las 64 suites y los 736 conteos de funciones que
+> este documento afirma, así que **las líneas, conteos y nombres de suite de
+> abajo NO corresponden con el presente** y NO deben citarse como cifras
+> actuales. Las cifras NO se regeneraron a propósito (regla del proyecto: casilla
+> vacía antes que dato inventado). La navegación actual del código es por
+> grep/Grep sobre `vigilante_agenda.user.js` más el registro incremental
+> `tests/INFORME_MUTACIONES.md`. El contenido original se conserva íntegro a
+> continuación, sin borrar nada.
+
 **Fecha de generación:** 2026-08-20T04:28:12.663Z  
 **Archivo analizado:** `vigilante_agenda.user.js` (736 funciones declaradas)  
 **Suites de prueba:** 64 archivos en `tests/`  

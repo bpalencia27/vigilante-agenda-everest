@@ -384,7 +384,7 @@ function _hojaAcceso(ss) {
     try {
       var filas = [
         ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", ""],
-        ["# perfil: COMPLETO o LABORATORIOS | estado: activo (o vacío) / bloqueado (revoca en silencio)", "", "", "", ""],
+        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", ""],
         ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", ""],
         ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", ""],
         ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", ""],
@@ -407,9 +407,11 @@ function _hojaAcceso(ss) {
 // SINTÉTICO determinista (rango 900000000-999999998: jamás colisiona con un
 // UsuarioId real de Everest) solo para cumplir el contrato del cliente (uid > 0
 // por entrada): el matching real sigue siendo por nombre hasta que el dueño
-// llene los uids. "bloqueado" manda la fila a la blocklist, que en el cliente
-// gana SIEMPRE y en silencio. `version` = hash del CONTENIDO: cambia solo si
-// cambia la hoja — dos lecturas sin editar devuelven la misma versión.
+// llene los uids. El perfil se compara en mayúsculas (v18.3.5, B4/N8: la Hoja
+// se edita a mano). "bloqueado" o "inactivo" manda la fila a la blocklist,
+// que en el cliente gana SIEMPRE y en silencio. `version` = hash del CONTENIDO:
+// cambia solo si cambia la hoja — dos lecturas sin editar devuelven la misma
+// versión.
 function _listaAccesoRespuesta(ss) {
   var perfiles = { COMPLETO: [], LABORATORIOS: [] };
   var blocklist = [];
@@ -417,15 +419,22 @@ function _listaAccesoRespuesta(ss) {
     var valores = _hojaAcceso(ss).getDataRange().getValues();
     for (var i = 1; i < valores.length; i++) {
       var fila = valores[i] || [];
-      var perfil = String(fila[0] == null ? "" : fila[0]).trim();
+      // v18.3.5 (hallazgo B4/N8) — la Hoja la edita el dueño A MANO y un perfil
+      // escrito "completo"/"Laboratorios" es el mismo COMPLETO/LABORATORIOS: se
+      // normaliza con trim().toUpperCase(). Sin esto la fila quedaba mal
+      // clasificada EN SILENCIO (ignorada como perfil desconocido).
+      var perfil = String(fila[0] == null ? "" : fila[0]).trim().toUpperCase();
       if (!perfil || perfil.charAt(0) === "#") continue;
       if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") continue;
       var nombre = _celda(fila[2], 100).trim();
       if (!nombre) continue; // fila a medias: ni entra ni rompe la lista
       var uidNum = toNumero(fila[1]);
       var uid = uidNum > 0 ? Math.round(uidNum) : _accesoUidSintetico(nombre);
+      // v18.3.5 (hallazgo B4/N8) — "inactivo" revoca igual que "bloqueado": antes
+      // un médico marcado "inactivo" quedaba ACTIVO en el padrón (solo se
+      // entendía "bloqueado" exacto).
       var estado = String(fila[3] == null ? "" : fila[3]).trim().toLowerCase();
-      if (estado === "bloqueado") {
+      if (estado === "bloqueado" || estado === "inactivo") {
         blocklist.push({ uid: uid, nombre: nombre, motivo: _celda(fila[4], 60).trim() });
         continue;
       }

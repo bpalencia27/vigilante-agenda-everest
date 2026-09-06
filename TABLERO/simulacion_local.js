@@ -153,6 +153,27 @@ const get=q=>doGet({parameter:q}).t;
   if(!cDen||cDen.redactor_ia!==2||cDen.rcv!==1||cDen.panel_paciente!==1)fallos.push("cuentas saneadas");
   if(cDen&&cDen.mala_con_12345678901!==undefined)fallos.push("digitos largos sobrevivieron");
 
+  // 9) v18.3.5 (hallazgo B4/N8) — el perfil se lee IGNORANDO mayúsculas/minúsculas:
+  //    la Hoja la edita el dueño a mano y "completo"/"Laboratorios" son el mismo
+  //    perfil. Sin la normalización la fila quedaba mal clasificada EN SILENCIO
+  //    (ignorada como perfil desconocido). Nombres SYN-*: cero PHI.
+  hojas["acceso"].appendRow(["completo","","SYN Prueba Perfil Minuscula","activo",""]);
+  const j5=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
+  const synMin=j5.perfiles.COMPLETO.filter(p=>p.nombre==="SYN Prueba Perfil Minuscula")[0];
+  console.log("perfil minúscula :",!!synMin,"(debe ser true: 'completo' clasifica como COMPLETO)");
+  if(!synMin)fallos.push("perfil en minúscula ignorado");
+
+  // 10) v18.3.5 (hallazgo B4/N8) — estado "inactivo" revoca igual que "bloqueado":
+  //    antes un médico marcado "inactivo" quedaba ACTIVO en el padrón (solo se
+  //    entendía "bloqueado" exacto) y el cliente lo seguía tratando como LABORATORIOS.
+  hojas["acceso"].appendRow(["Laboratorios","","SYN Prueba Estado Inactivo","inactivo",""]);
+  const j6=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
+  const synIna=j6.blocklist.filter(p=>p.nombre==="SYN Prueba Estado Inactivo")[0];
+  const synInaActivo=j6.perfiles.LABORATORIOS.filter(p=>p.nombre==="SYN Prueba Estado Inactivo").length>0;
+  console.log("estado inactivo :",!!synIna&&!synInaActivo,"(debe ser true: 'inactivo' va a blocklist y sale de LABORATORIOS)");
+  if(!synIna)fallos.push("estado inactivo no revoca");
+  if(synInaActivo)fallos.push("estado inactivo quedó ACTIVO en el perfil");
+
   if(fallos.length){console.error("FALLA B2/B6 servidor:",fallos.join(" | "));process.exitCode=1;}
   else console.log("B2/B6 servidor: TODO OK");
 })();

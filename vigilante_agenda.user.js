@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.3.4
+// @version      18.3.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -21237,21 +21237,14 @@
   function identidadDesdeCliente() {
     if (state.activeDoctor.id) return;
     try {
-      let login = "";
-      let u = null;
-      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
-      let jwtSub = "";
-      try {
-        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
-        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
-      } catch (e) {}
-      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
-        login = String(u.username).trim();
-      }
-      if (!login) {
-        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
-        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
-      }
+      // v18.3.5 (higiene N3, T6/N1-#3) — el parseo del login (localStorage
+      // user/jwt coherentes + cookie UsuarioMedico) ya existe como
+      // mtrLoginDeSesion: se delega ahí (function declaration del mismo IIFE,
+      // el hoisting resuelve la llamada aunque viva más abajo en el archivo)
+      // para que quede UNA sola copia. Lo exclusivo de esta función se
+      // conserva intacto: registrar loginVisto y disparar la validación de
+      // Everest (resolverMedicoPorPerfil).
+      const login = mtrLoginDeSesion();
       if (login) { loginVisto = login; resolverMedicoPorPerfil(login); }
     } catch (e) {}
   }
@@ -35116,13 +35109,30 @@
   }
   // v18.3.4 (hallazgo N8-B1) — RETIRO DEL MONITOR POR PERFIL. Mismo aseo que
   // emergencyTeardown (reloj, observador de minimizado, registro de navegación,
-  // temporizadores y nodos vgl-*) PERO sin escribir banderas de kill ni mostrar
+  // temporizadores, nodos vgl-* y —desde v18.3.5, T1— vigilancia de DOM) PERO
+  // sin escribir banderas de kill ni mostrar
   // el aviso rojo: esto no es una emergencia remota, es la compuerta de acceso
   // cumpliendo «PÚBLICO no construye UI» cuando la identidad llegó tarde.
   function _vglRetirarMonitorPorPerfil() {
     try { _relojDetenerTodo(); } catch (e) {}
     try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
     try { clearInterval(_navLogTimer); } catch (e) {}
+    // v18.3.5 (higiene N3, T1) — la vigilancia de DOM (observer de body+subtree y 3
+    // listeners de captura input/change/click) también se suelta, mismo bloque que
+    // emergencyTeardown (T4): un monitor retirado por perfil no debe seguir
+    // observando el DOM ni despertando el hilo. El latch _vglDomObsInstalado se
+    // deja en true a propósito: una llamada tardía a _vglDomEstaSucia no debe
+    // reinstalar el observador de un monitor ya retirado.
+    try {
+      if (_vglDomObs && typeof _vglDomObs.disconnect === "function") _vglDomObs.disconnect();
+      _vglDomObs = null;
+      if (typeof _vglDomAlTocar === "function" && typeof document.removeEventListener === "function") {
+        document.removeEventListener("input", _vglDomAlTocar, true);
+        document.removeEventListener("change", _vglDomAlTocar, true);
+        document.removeEventListener("click", _vglDomAlTocar, true);
+      }
+      _vglDomAlTocar = null;
+    } catch (e) {}
     if (Array.isArray(state.timers)) {
       state.timers.forEach((t) => {
         try { clearTimeout(t); } catch (e) {}
@@ -36975,7 +36985,9 @@ hora, y su identificador. Nada más.
   // Login de la sesión SIN red: localStorage user/jwt coherentes (el jwt es el token
   // vivo de ESTA sesión; user.username solo vale si su userIdIdentity coincide con
   // el sub del jwt) y, como respaldo, la cookie UsuarioMedico. Misma regla de
-  // v12.3.2 que identidadDesdeCliente — de hecho esa función ahora delega aquí.
+  // v12.3.2. Desde v18.3.5 (higiene N3, T6/N1-#3) es la ÚNICA copia del parseo:
+  // identidadDesdeCliente delega aquí para obtener el login y conserva solo lo
+  // suyo (loginVisto + resolverMedicoPorPerfil).
   function mtrLoginDeSesion() {
     try {
       let login = "";
