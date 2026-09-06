@@ -13220,3 +13220,123 @@ solo los 3 fallos preexistentes de la punta base (suite_15 renderDayChips
 | 575 | El guard excluye por pantalla (`decision.pantalla === "terminos"`) en vez de por motivo: la ruta sin-identidad (que también abre la pantalla de términos) dejaba de dejar rastro | *suite_82: P11·19 — «con sesión registra sin-identidad + login si («undefined»/undefined)» — mutante 19 pasan / 1 fallan; restaurado (exclusión por motivo «preguntar») 20/0* | Sí |
 | 576 | La escritura se neutraliza (`if (typeof GM_setValue !== "undefined")` → `if (false)`): la compuerta decide pero no deja rastro en GM | *suite_82: P11·19 — «la clave vgl_compuerta_diagnostico quedó escrita (obtuvo false)» — mutante 19 pasan / 1 fallan; restaurado 20/0* | Sí |
 
+## v18.3.4 — barrera (T1+T5): la segunda puerta ciega y la excepción mal clasificada
+
+Dos cierres de la clase «no sale nada» (frente COMPUERTA del enjambre):
+
+**T1 — «sin-identidad-aceptado → PÚBLICO» arrancaba sin rastro.** El médico
+aceptó los Términos sin identidad, boot() corrió y resolvió quién es, pero el
+padrón no lo trae (o la lista quedó corrupta): el núcleo corría recortado a
+PÚBLICO sin que la compuerta —que ya había decidido «arrancar»— volviera a
+opinar. El diagnóstico de GM se escribe ahora en el punto donde el perfil
+PÚBLICO con sesión SE DESCUBRE: `repAccesoDiario` (L12382), el único punto
+1/día que ya consultaba `accesoPerfil()` — el candado diario existente evita
+el martilleo, nunca se escribe por tick de accesoPerfil. Se le pasa
+`{motivo:"publico-con-sesion"}` SIN `arrancar` a mtrCompuertaDiagnostico:
+`decision.arrancar` queda undefined (falso) y pasa el guard de rutas de
+incidencia sin tocarlo (misma clave GM, sin PHI). Caso nuevo **P11·20**
+(hermano, con await): escritura con motivo/login/estructura exacta, candado
+consumido no re-escribe, COMPLETO con sesión no deja rastro y PÚBLICO sin
+sesión tampoco.
+
+**T5 — la excepción de mtrCompuertaSinIdentidad se leía como «hay
+identidad».** El catch devolvía `false` ⇒ mtrCompuertaDecision caía en
+fuera-del-padron (silencio) en vez de sin-identidad (pantalla de Términos).
+Ahora el catch devuelve `true` («no se pudo saber» → pantalla de Términos;
+la salida la deciden boot()/accesoCap() después — sigue fail-closed: la
+pantalla no toca red y PÚBLICO no monta nada). **Limitación documentada**:
+`_identidadMedicoCacheLeer` y `mtrLoginDeSesion` tragan sus propias
+excepciones (`return null` / `return ""`), así que el catch NO es simulable
+en vivo desde el arnés sin mutar el archivo — la prueba **P11·21** lo fija
+como regresión de código fuente (mismo patrón estructural de P11·10: probar
+el cable cuando la pieza no se puede desconectar por fuera).
+
+Suite_82: 20 → 22 casos. `node -c` limpio en ambos archivos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 577 | Se neutraliza la condición del diagnóstico de T1 (`if (perfil === "PUBLICO" && mtrLoginDeSesion())` → `if (false && …)`): el perfil PÚBLICO con sesión ya no deja rastro en GM | *suite_82: P11·20 — «PÚBLICO con sesión: el reporte diario deja diagnóstico «publico-con-sesion» («undefined») (obtuvo false)» — mutante 21 pasan / 1 fallan; restaurado 22/0* | Sí |
+| 578 | Se revierte el catch de mtrCompuertaSinIdentidad a `return false` (**el defecto original de T5**): la excepción vuelve a clasificarse como «hay identidad» | *suite_82: P11·21 — «el catch devuelve true: fail-closed hacia la pantalla de Términos (obtuvo false)» — mutante 21 pasan / 1 fallan; restaurado 22/0* | Sí |
+
+Tras restaurar cada mutación: suite_82 **22 pasan / 0 fallan**, suite_78
+**34 pasan / 0 fallan** (los 3 fallos preexistentes de la punta base en
+suite_15/suite_25 no se tocaron).
+
+## v18.3.4 — barrera (T2)
+
+Hallazgo N8-B1: la capacidad `centinela` (declarada en `ACCESO_CAPS_LABORATORIOS`
+y fijada por la matriz de suites 78/80: LABORATORIOS la tiene, PÚBLICO no) era
+consultada por CERO consumidores — `boot()` montaba `#vgl-root` sin compuerta de
+perfil y el monitor núcleo corría para PÚBLICO en la ruta
+sin-identidad-aceptado. Se cablea en DOS barreras: (a) compuerta en `boot()`
+antes de `buildOverlay()` — con identidad fijada SIN red primero (login de
+sesión + caché GM, la misma fuente que la compuerta de consentimiento) porque
+`state.activeDoctor` aún está vacío en ese punto y con la gracia de 12 h vencida
+un médico del padrón resolvía PÚBLICO; (b) re-visa en `tick()` que retira el
+monitor (`_vglRetirarMonitorPorPerfil`, el aseo de `emergencyTeardown` sin
+banderas de kill ni aviso rojo) cuando la identidad llegó tarde — la ruta
+sin-identidad de v18.3.2 NO se bloquea en el montaje (bloquearla reviviría el
+«no aparece nada» de la Dra. Gloria), la re-visa decide al resolverse la
+identidad. NOTA de la mutación 579: la primera tentativa de mutar SOLO la
+compuerta de `boot()` sobrevivió, porque la re-visa de `tick()` (que
+`applySettings` dispara dentro del propio arranque) retiraba el monitor igual —
+defensa en profundidad funcionando; la prueba aísla cada barrera blindando
+`tick()` con `state.killed` en el caso (a).
+
+Suite_78: 34 → 35 casos. `node -c` limpio en `vigilante_agenda.user.js` y
+`tests/suite_78_acceso.js`. Suite_15 de este worktree no completa ni SIN estos
+cambios (verificado A/B revirtiendo ambos hunks: exit 1 sin resumen) — cuelgue
+preexistente del entorno, no tocado.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 579 | Se neutraliza la compuerta de capa a del monitor (`if ((state.activeDoctor.id \|\| state.activeDoctor.name) && !accesoCap("centinela"))` → `if (false && …)` en boot): PÚBLICO con identidad conocida vuelve a montar #vgl-root | *suite_78: N8-B1 — «boot() NO monta #vgl-root para PÚBLICO con identidad conocida (obtuvo true)» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+| 580 | Se neutraliza la re-visa de tick() (`if (false && (state.activeDoctor.id \|\| …) && !accesoCap("centinela"))`): el monitor montado por la ruta sin-identidad ya nunca se retira aunque la identidad resuelva PÚBLICO | *suite_78: N8-B1 — «tick() retira el monitor cuando la identidad resuelta no tiene «centinela» (obtuvo true)» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+
+Tras restaurar cada mutación: suite_78 **35 pasan / 0 fallan**, suite_80
+**9 pasan / 0 fallan**, suite_82 **22 pasan / 0 fallan**, suite_17 **52 pasan /
+0 fallan** (boot/tick intactos), suite_25 **30 pasan / 2 fallan** (los mismos
+2 fallos preexistentes de CSS en cascada, sin relación con la compuerta).
+
+## v18.3.4 — higiene (T4)
+
+Hallazgos N7-#2 y #3 (kill-switch incompleto, mantenimiento puro): (a) el tono
+insistente del ROJO y el parpadeo de pestaña viven en intervalos propios
+(`nagTimer`/`flashTimer`, fuera de `state.timers`) — un kill durante un aviso
+activo dejaba el sonido sonando hasta ~6 min con la UI ya borrada y sin modal
+que permitiera reconocerlo; `emergencyTeardown` ahora llama `stopNag()`/
+`stopFlash()` (el edge-trigger de `alertedFraud` NO se toca: solo se apaga al
+matar). (b) `_vglInstalarVigilanciaDom` dejaba su MutationObserver y sus 3
+listeners de captura en variables LOCALES — el kill no podía recogerlos y el
+script «muerto» seguía observando el DOM; las referencias ahora viven a nivel
+de módulo (`_vglDomObs`/`_vglDomAlTocar`, L5188-5189) y el teardown las
+desconecta y retira (patrón B13 de `vglMinInstalar._obs`). El latch
+`_vglDomObsInstalado` se deja en true a propósito: una llamada tardía a la
+compuerta no debe reinstalar el observador de un script muerto. LIMITACIÓN del
+arnés: `MutationObserver.disconnect` y `document.removeEventListener` son
+no-ops ahí, así que la prueba observa el ciclo de vida de las referencias
+(accessor `__vglDomVigilanciaParaTest` añadido a `tests/harness.js`) y de los
+intervalos (`env.intervalos`). NO se tocó `_vglRetirarMonitorPorPerfil` (N8-B1,
+subagente B), que tiene el mismo hueco del observador de DOM: fuera de alcance
+de T4.
+
+Suite_30: 11 → 12 casos. `node -c` limpio en `vigilante_agenda.user.js`,
+`tests/harness.js` y `tests/suite_30_killswitch_canario.js`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 581 | Se neutralizan los apagados de aviso en emergencyTeardown (`try { stopNag(); } catch`/`try { stopFlash(); } catch`, L35843-35844 → cuerpos vacíos): el kill vuelve a dejar vivos los intervalos de nag/flash | *suite_30: v18.3.4 — «tras el kill no queda vivo ningún intervalo de nag/flash: el aviso murió con el script» — esperaba [] y obtuvo [1,2]; mutante 11 pasan / 1 fallan* | Sí — suite_30 12/0, suite_17 52/0 |
+| 582 | Se neutraliza la suelta de la vigilancia de DOM en emergencyTeardown (disconnect y las dos asignaciones a null, L35857-35865, quedan muertas): el observer queda conectado y referenciado tras el kill | *suite_30: v18.3.4 — «tras el kill el observer de DOM quedó desconectado y sin referencia» — esperaba null y obtuvo {}; mutante 11 pasan / 1 fallan* | Sí — suite_30 12/0, suite_17 52/0 |
+
+## v18.3.4 — bump de versión (integrador)
+
+Cuádruple sincronizada a 18.3.4 por el orquestador al cerrar los frentes T1+T5/T2/T4:
+`@version` L4, `VERSION` L1038, `package.json` y pin de suite_75 L900. Sin mutación
+propia: el alineo lo fijan las pruebas ya existentes (suite_75 «versión viva» 50/0,
+suite_30 canario 45/0, y el comparador `@version`↔`VERSION` de suite_82 22/0 — la
+misma red que cazó el desalineo de v18.3.2). Banco completo con el diff final: solo
+los 3 fallos preexistentes de la baseline (suite_15 renderDayChips 268/1, suite_25
+cascada CSS 30/2). NOTA de entorno: suite_15 presenta además un cuelgue intermitente
+PREEXISTENTE (reproducido en HEAD limpio, caso «v18.0.105 ANTIDUP — dos pestañas»;
+en el banco completo de esta corrida pasó 268/1) — diagnóstico pendiente, no tocado.
+

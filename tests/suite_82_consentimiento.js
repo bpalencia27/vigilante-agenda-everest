@@ -439,5 +439,65 @@ module.exports = {
       const d2 = c2.env.gm["vgl_compuerta_diagnostico"];
       t.cierto(d2 && d2.motivo === "sin-identidad" && d2.login === "si", "con sesión registra sin-identidad + login si («" + (d2 && d2.motivo) + "»/" + (d2 && d2.login) + ")");
     });
+
+    // ── v18.3.4 ── segunda puerta ciega: «sin-identidad-aceptado → PÚBLICO» ──
+    // El médico aceptó los Términos sin identidad, boot() arrancó y ya resolvió
+    // quién es, pero el padrón no lo trae (o quedó corrupto): el núcleo corre
+    // recortado a PÚBLICO sin que la compuerta —que ya decidió— deje rastro.
+    // El descubrimiento vive en el reporte diario de acceso (repAccesoDiario),
+    // el único punto 1/día que ya consultaba el perfil.
+    await t.casoAsync("P11·20 — v18.3.4 puerta ciega 2: perfil PÚBLICO con sesión deja diagnóstico «publico-con-sesion» (1/día)", async () => {
+      const red = redContada();
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      // Padrón que NO trae a la médica (uid 202) + sesión presente + identidad
+      // ya resuelta por boot(): accesoPerfil() resuelve PÚBLICO.
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      c.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
+      c.api.__state.activeDoctor.id = 202;
+      c.api.__state.activeDoctor.name = "Prueba Dos";
+      c.api.repAccesoDiario();
+      const d = c.env.gm["vgl_compuerta_diagnostico"];
+      t.cierto(!!d && d.motivo === "publico-con-sesion", "PÚBLICO con sesión: el reporte diario deja diagnóstico «publico-con-sesion» («" + (d && d.motivo) + "»)");
+      t.cierto(d && d.login === "si", "registrado con login «si»");
+      t.cierto(d && Object.keys(d).sort().join(",") === "login,motivo,ts,version" && typeof d.ts === "number" && d.ts > 0 && typeof d.version === "string", "sin PHI: SOLO {motivo, login sí/no, versión, ts}");
+      // El candado diario ya se gastó: un segundo paso NO martilla la clave GM.
+      delete c.env.gm["vgl_compuerta_diagnostico"];
+      c.api.repAccesoDiario();
+      t.cierto(!("vgl_compuerta_diagnostico" in c.env.gm), "con el candado del día consumido no se vuelve a escribir (1/día, no por tick de accesoPerfil)");
+      // La médica DEL padrón reporta normal: ningún rastro de compuerta.
+      const c2 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c2.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 202, nombre: "Prueba Dos" }], LABORATORIOS: [] }, blocklist: [] });
+      c2.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
+      c2.api.__state.activeDoctor.id = 202;
+      c2.api.__state.activeDoctor.name = "Prueba Dos";
+      c2.api.repAccesoDiario();
+      t.cierto(!("vgl_compuerta_diagnostico" in c2.env.gm), "perfil COMPLETO con sesión: el reporte diario NO deja diagnóstico (el rastro es solo de incidencia)");
+      // Y PÚBLICO sin sesión tampoco: sin login no hay a quién rastrear.
+      const c3 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c3.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      c3.api.__state.activeDoctor.id = 202;
+      c3.api.__state.activeDoctor.name = "Prueba Dos";
+      c3.api.repAccesoDiario();
+      t.cierto(!("vgl_compuerta_diagnostico" in c3.env.gm), "PÚBLICO sin sesión: sin login no se deja diagnóstico");
+      await new Promise((res) => setTimeout(res, 30));
+    });
+
+    t.caso("P11·21 — v18.3.4 REGRESIÓN: la excepción en sin-identidad cuenta como SIN identidad (Términos), nunca como «hay identidad»", () => {
+      // _identidadMedicoCacheLeer y mtrLoginDeSesion tragan sus propias
+      // excepciones (return null / return ""), así que el catch de
+      // mtrCompuertaSinIdentidad no es simulable EN VIVO desde el arnés sin
+      // mutar el archivo: se fija como regresión de código fuente, el mismo
+      // patrón estructural de P11·10 (probar el cable cuando la pieza no se
+      // puede desconectar por fuera). El contrato: catch → true (falta de
+      // identidad sin resolver → pantalla de Términos; boot()/accesoCap()
+      // deciden después), nunca false (excepción leída como «hay identidad»
+      // → fuera-del-padron → silencio eterno).
+      const ini = FUENTE.indexOf("function mtrCompuertaSinIdentidad()");
+      const fin = FUENTE.indexOf("function mtrCompuertaDecision()", ini);
+      t.cierto(ini >= 0 && fin > ini, "mtrCompuertaSinIdentidad existe y precede a la decisión");
+      const cuerpo = FUENTE.slice(ini, fin);
+      t.cierto(/catch\s*\(e\)\s*\{\s*return true;?\s*\}/.test(cuerpo), "el catch devuelve true: fail-closed hacia la pantalla de Términos");
+      t.cierto(!/return false/.test(cuerpo), "y no queda ningún return false: la excepción ya no puede clasificarse como «hay identidad»");
+    });
   }
 };

@@ -298,7 +298,13 @@ function cargar(opciones) {
     // v18.2 (P11) — las constantes de la compuerta de consentimiento se declaran como
     // `const` al nivel del IIFE, de modo que el autodescubrimiento de funciones no las
     // ve. Se publican a mano para que suite_82 pueda comparar el texto contra el repo.
-    "\n;try{ globalThis.__VGL__.__TERMINOS_VERSION = TERMINOS_VERSION; globalThis.__VGL__.__TERMINOS_TEXTO = TERMINOS_TEXTO; globalThis.__VGL__.__TERMINOS_RESUMEN = TERMINOS_RESUMEN; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8) + v18.2 (P11)
+    "\n;try{ globalThis.__VGL__.__TERMINOS_VERSION = TERMINOS_VERSION; globalThis.__VGL__.__TERMINOS_TEXTO = TERMINOS_TEXTO; globalThis.__VGL__.__TERMINOS_RESUMEN = TERMINOS_RESUMEN; }catch(e){}\n" +
+    // v18.3.4 (T4) — las referencias de la vigilancia de DOM (_vglDomObs/_vglDomAlTocar) son
+    // `let` de módulo, invisibles para el autodescubrimiento. Sin este accessor, suite_30 no
+    // podría comprobar que emergencyTeardown las suelta: en el arnés MutationObserver.disconnect
+    // y document.removeEventListener son no-ops, así que lo único observable es el ciclo de vida
+    // de la referencia misma.
+    "\n;try{ globalThis.__VGL__.__vglDomVigilanciaParaTest = function(){ return { obs: _vglDomObs, alTocar: _vglDomAlTocar, instalado: _vglDomObsInstalado }; }; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8) + v18.2 (P11) + v18.3.4 (T4)
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");

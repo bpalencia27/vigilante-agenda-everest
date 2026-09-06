@@ -601,5 +601,54 @@ module.exports = {
       t.cierto(!!res, "pageFetchJson de lectura sin compuerta");
       t.igual(x.red.fetches.length, 2, "las dos lecturas salieron");
     });
+
+    // =====================================================================
+    //  v18.3.4 — N8-B1: LA CAPACIDAD «CENTINELA» POR FIN CONSULTADA. Estaba
+    //  declarada (ACCESO_CAPS_LABORATORIOS) y probada por la matriz de la
+    //  suite 80, pero NADIE la consultaba: boot() montaba #vgl-root sin
+    //  compuerta de perfil y el monitor núcleo corría para PÚBLICO en la
+    //  ruta sin-identidad-aceptado. Ahora: (a) con identidad conocida se
+    //  exige ANTES de montar; (b) sin identidad NO se bloquea (v18.3.2, caso
+    //  Dra. Gloria: el montaje se difiere, no se cancela); (c) cuando la
+    //  identidad llega tarde y resuelve PÚBLICO, la re-visa de tick() retira
+    //  el monitor — «PÚBLICO no construye UI», la promesa del comentario de
+    //  mtrCompuertaDecision.
+    // =====================================================================
+    await t.casoAsync("N8-B1 (v18.3.4): «centinela» se exige al montar el monitor — PÚBLICO con identidad no monta #vgl-root; sin identidad se difiere y tick() retira al resolver PÚBLICO", async () => {
+      // (a) PÚBLICO con identidad resuelta: boot() NO monta el monitor. Se
+      // blinda tick() con state.killed para aislar ESTA compuerta: sin el
+      // escudo, la re-visa de tick() (que applySettings dispara en el propio
+      // arranque) retiraría el monitor aunque la compuerta de boot faltara, y
+      // la aserción mediría la otra barrera, no esta.
+      const c1 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      conDoctor(c1.api, 555, "Médico Nuevosur del Hospital");
+      enriquecerDom78(c1);
+      t.igual(c1.api.accesoPerfil(), "PUBLICO", "precondición: identidad fuera del padrón");
+      t.falso(c1.api.accesoCap("centinela"), "precondición: PÚBLICO no tiene «centinela» (matriz suite 80)");
+      c1.api.__state.killed = true;   // escudo: tick() no puede retirar nada
+      c1.api.boot();
+      t.falso(montado(c1, "vgl-root"), "boot() NO monta #vgl-root para PÚBLICO con identidad conocida");
+      // (b) Sin identidad conocida (ruta sin-identidad de v18.3.2): el montaje
+      // NO se bloquea — se difiere. Bloquear aquí reviviría el «no aparece
+      // nada» de la Dra. Gloria.
+      const c2 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      enriquecerDom78(c2);
+      c2.api.boot();
+      t.cierto(montado(c2, "vgl-root"), "sin identidad conocida el monitor SÍ se monta (diferimiento de v18.3.2, no bloqueo)");
+      // (c) La identidad llega tarde y resuelve PÚBLICO: la re-visa de tick()
+      // retira el monitor montado.
+      conDoctor(c2.api, 555, "Médico Nuevosur del Hospital");
+      c2.api.tick();
+      t.falso(montado(c2, "vgl-root"), "tick() retira el monitor cuando la identidad resuelta no tiene «centinela»");
+      // Y un COMPLETO del padrón con el monitor montado NO lo pierde: la
+      // re-visa solo retira perfiles sin la capacidad.
+      const c3 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      enriquecerDom78(c3);
+      c3.api.boot();
+      t.cierto(montado(c3, "vgl-root"), "precondición: COMPLETO arrancó sin identidad y montó el monitor");
+      conDoctor(c3.api, 101, "Brandon Jesús Palencia Martínez");
+      c3.api.tick();
+      t.cierto(montado(c3, "vgl-root"), "COMPLETO del padrón conserva el monitor tras la re-visa");
+    });
   },
 };

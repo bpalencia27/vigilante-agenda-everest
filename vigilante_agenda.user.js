@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.3.3
+// @version      18.3.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.3.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5180,6 +5180,13 @@
   let _vglDomSucio = true;          // nace sucia: la primera cosecha de la sesión siempre corre
   let _vglDomObsActivo = false;     // latch: el observador ya reportó su primera mutación real
   let _vglDomObsInstalado = false;
+  // v18.3.4 (higiene T4) — referencias a nivel de módulo para que emergencyTeardown pueda
+  // desconectar el observer y retirar los listeners de captura: antes vivían en variables
+  // LOCALES de _vglInstalarVigilanciaDom y el kill no tenía vía de recogerlas (patrón de
+  // vglMinInstalar._obs, B13). Solo cambia la vida de las referencias: la semántica de la
+  // compuerta (_vglDomEstaSucia) y sus repintados queda intacta.
+  let _vglDomObs = null;
+  let _vglDomAlTocar = null;
   let _vglDomUltimaCosechaMs = 0;
 
   function _vglNodoEsDelVigilante(n) {
@@ -5201,7 +5208,9 @@
     if (typeof document === "undefined" || !document.body) return;
     if (typeof MutationObserver !== "function" || typeof document.addEventListener !== "function") return;
     try {
-      const obs = new MutationObserver((muts) => {
+      // v18.3.4 (T4) — se asignan a las variables de módulo (antes `const obs`/`const alTocar`
+      // locales) para que el kill-switch pueda recogerlas después. Mismo comportamiento.
+      _vglDomObs = new MutationObserver((muts) => {
         for (const m of muts || []) {
           if (m.type === "characterData") {
             if (!_vglNodoEsDelVigilante(m.target)) { _vglDomMarcarSucio(); return; }
@@ -5212,13 +5221,13 @@
           }
         }
       });
-      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-      const alTocar = (ev) => {
+      _vglDomObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      _vglDomAlTocar = (ev) => {
         try { if (!ev || !ev.target || !_vglNodoEsDelVigilante(ev.target)) _vglDomMarcarSucio(); } catch (e) {}
       };
-      document.addEventListener("input", alTocar, true);
-      document.addEventListener("change", alTocar, true);
-      document.addEventListener("click", alTocar, true);
+      document.addEventListener("input", _vglDomAlTocar, true);
+      document.addEventListener("change", _vglDomAlTocar, true);
+      document.addEventListener("click", _vglDomAlTocar, true);
       _vglDomObsInstalado = true;
     } catch (e) { _vglDomObsInstalado = false; }
   }
@@ -12387,10 +12396,25 @@
       const k = "vgl_rep_acceso";
       if (localStorage.getItem(k) === todayStamp()) return;
       localStorage.setItem(k, todayStamp());
+      const perfil = accesoPerfil();
+      // v18.3.4 — SEGUNDA PUERTA CIEGA de la clase «no sale nada»: el médico
+      // aceptó los Términos sin identidad («sin-identidad-aceptado»), boot()
+      // arrancó y ya resolvió quién es, pero el padrón no lo trae (o la lista
+      // quedó corrupta): el núcleo corre recortado a PÚBLICO sin dejar rastro
+      // — a esta altura la compuerta ya decidió y no vuelve a opinar. Este
+      // reporte es el único punto 1/día que YA consulta el perfil, así que
+      // aquí (y nunca en cada tick de accesoPerfil) se deja el MISMO
+      // diagnóstico de GM de la compuerta: motivo fijo «publico-con-sesion».
+      // Se pasa SIN `arrancar`, que así pasa el guard de rutas de incidencia
+      // de mtrCompuertaDiagnostico sin tocarlo. Sin PHI: motivo + login
+      // sí/no + versión + ts.
+      if (perfil === "PUBLICO" && mtrLoginDeSesion()) {
+        try { mtrCompuertaDiagnostico({ motivo: "publico-con-sesion" }); } catch (e) {}
+      }
       reportar("acceso", {
         uid,
         nombre: String((state && state.activeDoctor && state.activeDoctor.name) || "").slice(0, 100),
-        perfil: accesoPerfil()
+        perfil
       });
     } catch (e) {}
   }
@@ -35090,9 +35114,46 @@
       _relojCada("tick", deseado, tick);
     } catch (e) {}
   }
+  // v18.3.4 (hallazgo N8-B1) — RETIRO DEL MONITOR POR PERFIL. Mismo aseo que
+  // emergencyTeardown (reloj, observador de minimizado, registro de navegación,
+  // temporizadores y nodos vgl-*) PERO sin escribir banderas de kill ni mostrar
+  // el aviso rojo: esto no es una emergencia remota, es la compuerta de acceso
+  // cumpliendo «PÚBLICO no construye UI» cuando la identidad llegó tarde.
+  function _vglRetirarMonitorPorPerfil() {
+    try { _relojDetenerTodo(); } catch (e) {}
+    try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
+    try { clearInterval(_navLogTimer); } catch (e) {}
+    if (Array.isArray(state.timers)) {
+      state.timers.forEach((t) => {
+        try { clearTimeout(t); } catch (e) {}
+        try { clearInterval(t); } catch (e) {}
+      });
+      state.timers.length = 0;
+    }
+    try {
+      if (document.querySelectorAll) {
+        document.querySelectorAll("[id^='vgl-']").forEach((el) => { try { el.remove(); } catch (e) {} });
+      }
+    } catch (e) {}
+    console.warn("[Vigilante] Monitor retirado: la identidad resuelta no tiene la capacidad «centinela» (PÚBLICO no construye UI).");
+  }
+
   function tick() {
     try {
       if (state.killed) return;
+      // v18.3.4 (hallazgo N8-B1) — RE-VISA DEL MONITOR: la ruta sin-identidad de
+      // v18.3.2 monta #vgl-root antes de saber quién consulta (el montaje se
+      // difiere en boot()). En cuanto la identidad ES conocida y el perfil
+      // resuelto no tiene la capacidad «centinela» (PÚBLICO/BLOQUEADO — la
+      // misma matriz de suites 78/80), el monitor se retira: PÚBLICO no
+      // construye UI. Sin identidad conocida no se toca nada.
+      try {
+        if ((state.activeDoctor.id || state.activeDoctor.name) &&
+            document.getElementById("vgl-root") && !accesoCap("centinela")) {
+          _vglRetirarMonitorPorPerfil();
+          return;
+        }
+      } catch (e) {}
       // v16.2.4 — DUPLICADOS AL VOLVER (reportado por el médico, 20-ago-2026: "las
       // notificaciones de llegada no se deben repetir... cuando me voy a Ordenamiento
       // o Acceso vuelve y me salen todas"). `eraLider` se captura ANTES de heartbeat():
@@ -35774,11 +35835,34 @@
     state.killed = true;
     state.killReason = reason || "Apagado remoto de emergencia";
     try { _relojDetenerTodo(); } catch (e) {}   // v14.2.12 — el reloj de segundo plano también se apaga
+    // v18.3.4 (higiene T4) — el tono insistente del ROJO y el parpadeo de pestaña viven en
+    // intervalos propios (nagTimer/flashTimer, fuera de state.timers): si el kill caía
+    // durante un aviso activo, el sonido seguía hasta ~6 min con la UI ya borrada y sin
+    // modal que permitiera reconocerlo (acknowledge() es inalcanzable tras retirar el DOM).
+    // Se apagan aquí; el edge-trigger (alertedFraud) NO se toca — esto solo apaga al matar.
+    try { stopNag(); } catch (e) {}
+    try { stopFlash(); } catch (e) {}
     // v18.0.134 (auditoría 2026-09-03, B10+B13) — el apagado de emergencia también suelta el
     // observador de ventanas minimizadas y detiene el registro de navegación: el script
     // "muerto" no debe seguir despertando el hilo ni observando el DOM.
     try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
     try { clearInterval(_navLogTimer); } catch (e) {}
+    // v18.3.4 (higiene T4) — la vigilancia de DOM (observer de body+subtree y 3 listeners de
+    // captura input/change/click) también se suelta: sus referencias ahora viven a nivel de
+    // módulo (_vglDomObs/_vglDomAlTocar). El latch _vglDomObsInstalado se deja en true a
+    // propósito: una llamada tardía a _vglDomEstaSucia no debe reinstalar el observador de
+    // un script ya muerto. Mismo contrato que B13: «el script muerto no debe seguir
+    // despertando el hilo ni observando el DOM».
+    try {
+      if (_vglDomObs && typeof _vglDomObs.disconnect === "function") _vglDomObs.disconnect();
+      _vglDomObs = null;
+      if (typeof _vglDomAlTocar === "function" && typeof document.removeEventListener === "function") {
+        document.removeEventListener("input", _vglDomAlTocar, true);
+        document.removeEventListener("change", _vglDomAlTocar, true);
+        document.removeEventListener("click", _vglDomAlTocar, true);
+      }
+      _vglDomAlTocar = null;
+    } catch (e) {}
     if (typeof GM_setValue !== "undefined") {
       GM_setValue("vgl_kill_active", true);
       GM_setValue("vgl_kill_reason", state.killReason);
@@ -36454,6 +36538,35 @@
     try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
     if (_detectarInstanciaDuplicada()) return;
     if (document.getElementById("vgl-root")) return;
+    // v18.3.4 (hallazgo N8-B1) — CAPA a del monitor núcleo: la capacidad
+    // «centinela» (ACCESO_CAPS_LABORATORIOS) estaba declarada y probada por la
+    // matriz (suites 78/80) pero NUNCA consultada: boot() montaba #vgl-root sin
+    // compuerta de perfil y el monitor corría para PÚBLICO en la ruta
+    // sin-identidad-aceptado. Ahora se exige ANTES de montar, con UNA excepción
+    // documentada: si la identidad del médico aún no se conoce (ruta
+    // sin-identidad de v18.3.2, caso Dra. Gloria), aquí no se bloquea — sin
+    // identidad no hay perfil que exigir y hacerlo reviviría el «no aparece
+    // nada» de la v18.3.2; la re-visa de tick() retira el monitor si al
+    // resolverse la identidad el perfil no tiene la capacidad.
+    // La identidad SIN red se fija primero (login de sesión + caché GM, la
+    // misma fuente que la compuerta) porque en este punto del arranque
+    // state.activeDoctor aún está vacío: sin esto, un médico del padrón con la
+    // gracia de 12 h vencida (primer arranque de la mañana) resolvía PÚBLICO
+    // y perdía el monitor.
+    try {
+      if (!state.activeDoctor.id) {
+        const _lgN8 = mtrLoginDeSesion();
+        const _cacheN8 = _lgN8 ? _identidadMedicoCacheLeer(_lgN8, true) : null;
+        if (_cacheN8 && Number(_cacheN8.id) > 0) {
+          state.activeDoctor.id = Number(_cacheN8.id);
+          state.activeDoctor.name = _cacheN8.name;
+        }
+      }
+    } catch (e) {}
+    if ((state.activeDoctor.id || state.activeDoctor.name) && !accesoCap("centinela")) {
+      console.warn("[Vigilante] Monitor no montado: el perfil de acceso no tiene la capacidad «centinela» (PÚBLICO no construye UI).");
+      return;
+    }
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
     buildOverlay();
     // v18.0.80 — AUDITORÍA (hallazgo de enjambre #32): antes esta llamada vivía ANTES del
@@ -36947,8 +37060,12 @@ hora, y su identificador. Nada más.
   // padrón, máquina nueva, "no aparece nada" para siempre aunque el tablero
   // SÍ la sirva; borrar cookies no ayuda (la identidad no vive ahí).
   function mtrCompuertaSinIdentidad() {
+    // v18.3.4 — el catch también es fail-closed: una excepción NO es «hay
+    // identidad» (esa lectura errónea callaba en fuera-del-padron), es «no se
+    // pudo saber» → true abre la pantalla de Términos y boot()/accesoCap()
+    // deciden después (la pantalla no toca red; PÚBLICO no monta nada).
     try { return !_identidadMedicoCacheLeer(mtrLoginDeSesion(), true); }
-    catch (e) { return false; }
+    catch (e) { return true; }
   }
 
   // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
