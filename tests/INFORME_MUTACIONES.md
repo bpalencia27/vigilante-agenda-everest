@@ -13412,3 +13412,103 @@ uso real con el chromium ya presente en caché (`ms-playwright/chromium-1234`,
 executablePath directo; el CDN de playwright.dev no responde desde esta red).
 Smoke test verificado: lanzar navegador + getComputedStyle real OK.
 
+## v18.3.6 — banco en verde: los 3 preexistentes (D1)
+
+Cierre de los 3 fallos preexistentes documentados como baseline desde la v18.3.1
+(punta `009b8da`). **Diagnóstico: los TRES comparten UNA causa raíz y el producto está
+INTACTO.** `git ls-files --eol` muestra el índice en LF (`i/lf`) pero el worktree
+materializó CRLF (`w/crlf`/`w/mixed`, `core.autocrlf=true` en Windows): las 3 pruebas
+leen el fuente CRUDO con `readFileSync` y cortan por sentinelas multilínea con `\n`
+(suite_15 `"\n    });\n"`, suite_25 `"}\n      }"` y `"}\n      .vgl-card:hover"`), que
+dejan de casar contra `\r\n`. Verificado con un script que reproduce la extracción de
+cada prueba: crudo → los 3 cortes fallan con los mensajes exactos de la baseline;
+normalizado `\r\n`→`\n` → los 3 pasan. El producto no regredió: `renderDayChips(` vive
+desde `6834675` (v18.0.131) en el manejador de especialidad (L28755-28756, ANTES de
+`cargarHoras()` L28759); el bloque `prefers-reduced-motion` (L17650-17670) cubre los 11
+ids que la prueba enumera; la variante compacta `max-height:800px` (L18630-18637) no
+toca ni letra ni color. **Lado del fix: la PRUEBA** — el propio proyecto ya normaliza al
+leer (`harness.js` L245, y suite_82 L24 con el doc de Términos), así que el runtime
+nunca ve `\r`; estas 3 lecturas crudas eran la excepción, y el CI de Linux pasa porque
+el checkout allí es LF puro — los 3 fallos solo existían en el worktree de Windows.
+
+Fix mínimo: `.replace(/\r\n/g, "\n")` en el `readFileSync` del caso v18.0.131 de
+suite_15 (L6091) y en el `readFileSync` de cabecera de suite_25 (L12). Sin bump de
+versión (lo hace el integrador). Suite_15: 268/1 → **269/0**; suite_25: 30/2 →
+**32/0**. Regresión: suite_17 52/0, suite_30 45/0, suite_78 35/0, suite_82 22/0.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 587 | Se quita la normalización CRLF del `readFileSync` de suite_25 (L12): las sentinelas `"}\n      }"` y `"}\n      .vgl-card:hover"` vuelven a no casar en el worktree CRLF (estado idéntico a la baseline v18.3.1) | *suite_25: v18.0.124 — «el corte es el bloque de la regla, no media hoja (0)» y v18.0.127 — «ni un tamaño de letra dentro de la variante compacta (obtuvo true)» — mutante 30 pasan / 2 fallan; restaurado 32/0* | Sí |
+| 588 | Se quita la normalización CRLF del `readFileSync` del caso v18.0.131 de suite_15 (L6091): la sentinela `"\n    });\n"` no casa, el bloque cae al recorte de 900 caracteres y `renderDayChips(` queda fuera del corte | *suite_15: v18.0.131 (hallazgo 11) — «y AHORA repinta los chips de día… (obtuvo false)» — mutante 267 pasan / 2 fallan (el caso esperado MÁS un flaky de la familia ANTIDUP, v18.0.98 L3350, anterior a la línea mutada y ajeno al cambio — la misma intermitencia documentada en v18.3.4); restaurado 269/0* | Sí |
+| 589 | Se comentan las dos llamadas a `renderDayChips(` del manejador de especialidad (L28755-28756): el bug original de v18.0.131, con la prueba YA normalizada — la prueba arreglada sigue mordiendo al producto | *suite_15: v18.0.131 (hallazgo 11) — «y AHORA repinta los chips de día… (obtuvo false)» — mutante 268 pasan / 1 fallan; restaurado 269/0* | Sí |
+| 590 | Se mete `font-size:12px` en la variante compacta 1366x768 (`#vgl-root .vgl-chip`, L18636): la densidad volvería a apretar la letra | *suite_25: v18.0.127 — «ni un tamaño de letra dentro de la variante compacta (obtuvo true)» + Regla G — «No deben quedar font-size:12px literales en la hoja (quedaron 1)» — mutante 30 pasan / 2 fallan; restaurado 32/0* | Sí |
+| 591 | Se saca `,#vgl-deshacer-llenado` del selector de `@media (prefers-reduced-motion:reduce)` (L17667): el flotante vuelve a animar contra la petición del sistema | *suite_25: v18.0.124 — «#vgl-deshacer-llenado deja de animar cuando el sistema pide menos movimiento (obtuvo false)» — mutante 31 pasan / 1 fallan; restaurado 32/0* | Sí |
+
+Banco completo: ver conteo al final de esta sección. NOTA de entorno (post-N6, nueva):
+cuatro corridas del banco completo en UN proceso murieron asesinadas en silencio en
+puntos aleatorios (suite_71, suite_22, suite_08 y dentro de suite_15) — sin stderr, sin
+el cartel de beforeExit del runner, incluso una lanzada vía WMI desligada de la
+terminal; coincide con la actividad paralela del enjambre sobre la misma máquina (se
+observaron procesos node ajenos iniciando y muriendo en las mismas ventanas). NO es un
+bug del producto ni del runner: las suites cortas completan una y otra vez. Para cerrar
+el banco se usó el mismo protocolo Start-Process suite por suite (registro incremental
+reanudable), que ejecuta exactamente los mismos 89 archivos de suite; la suma de esa
+corrida:
+
+**BANCO_COMPLETO: 3.400 pasan / 0 fallan** (89/89 archivos de suite con resumen;
+exactamente 3.397+3 de la v18.3.5 — primera vez en cero fallos desde la v18.3.1, con
+suite_15 269/0 y suite_25 32/0 dentro de la suma). NOTA: suite_15 conserva su
+intermitencia preexistente documentada (familia ANTIDUP v18.0.98/v18.0.105): de las 6
+corridas aisladas de hoy, una colgó tras el encabezado y una (mutante 588) trajo el
+flaky de v18.0.98; la corrida del banco y las otras cuatro completaron — nada de eso
+relacionado con este cambio.
+
+## v18.3.6 — E2E real en Chromium: la compuerta y el panel, en navegador de verdad
+
+Andamio `tests/e2e/run_e2e.js` (`npm run test:e2e`, devDependency playwright — el
+producto sigue sin dependencias de runtime). Carga el userscript REAL en Chromium
+headless (chromium-1234 del caché, `executablePath`) sobre un fixture que reproduce
+la vista de agenda de Everest: ruta `/viva/HCHealth` (la que `_enModuloHCHealth`
+exige, L14133) más UNA cita con el par `.labelHora`+`.status-label` que
+`seccionActiva()` exige (L14165, CONFIG.SEL). Stubs GM_* por `addInitScript`,
+red interceptada con `page.route` (el `GM_xmlhttpRequest` responde `onerror`
+— sin red, fail-closed). 6 comprobaciones: (1) `#vgl-root` montado tras la
+compuerta para un médico del padrón con consentimiento v1.1; (2) estilo computado
+real `rgba(7, 10, 16, 0.94)`; (3) vivo a los 2,5 s sin kill ni pausa clínica;
+(4) VISIBLE al usuario (bounding box 692x647, display:flex — no basta attached);
+(5) el panel LEYÓ la cita del fixture (cédula 900000001 aparece en el HUD: ciclo
+completo DOM de Everest → extractDoc/parseHoraMin → lista); (6) un desconocido
+sin semilla no ve NADA y deja diagnóstico `motivo=fuera-del-padron` — el
+fail-closed de v18.3.3 visto en navegador real.
+
+Dos hallazgos de instrumentación que causaron falsos rojos durante la depuración
+(los dos en el E2E, no en el producto): `waitForSelector` por defecto espera
+VISIBLE, y el panel nace correcto pero el fixture inicial no tenía el par
+`.labelHora`+`.status-label`, así que `seccionActiva()` devolvía "otra" y el tick
+auto-dockeaba el panel (`setWinState("dock", true)`, L35255 — comportamiento
+CORRECTO del producto fuera de la vista vigilada); y el sondeo del `<style>`
+cortaba el textContent a 40 chars, antes del rótulo «VIGILANTE DE AGENDA».
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 592 | Semilla del E2E con consentimiento de otra versión (`terminosAcepta.version` "9.9" ≠ TERMINOS_VERSION "1.1"): la compuerta detiene en `sin-identidad`, el velo de términos (`vgl-terminos-velo` con aceptar/rechazar) sube y `#vgl-root` nunca monta | *tests/e2e: «#vgl-root montado tras la compuerta» — E2E 1 pasan / 1 fallan, con diag GM `motivo:sin-identidad, login:si` y vglIds mostrando el velo*; restaurado 6/6 | Sí |
+
+**Incidente real cazado por el propio banco (no mutación deliberada):** el bump
+cuádruple a 18.3.6 quedó A MEDIAS — `@version` L4 seguía en 18.3.5 mientras
+VERSION/package.json/pin ya decían 18.3.6. Las dos pruebas de sincronización
+cayeron de inmediato (suite_23 v12.5.1: «el literal de respaldo debe ir en paso
+con @version: esperaba 18.3.5 y obtuvo 18.3.6»; suite_30 R5.1: «const VERSION
+debe coincidir con @version»). Corregido L4→18.3.6; suite_23 108/1→**109/0**,
+suite_30 11/1→**12/0**. Es exactamente la regresión para la que esas pruebas
+existen (v12.5.1: «tres versiones salieron mintiendo en el tablero»).
+
+Estado de verificación v18.3.6 (protocolo suite-por-suite del N6: dos corridas
+completas del banco fueron asesinadas en silencio a mitad — 66 y 115 líneas, sin
+stderr, sin beforeExit — por la actividad paralela de la otra sesión sobre la
+misma máquina): corrida parcial post-fix con 36 suites verdes en proceso
+(suite_01→M3, incluye 15 **269/0**, 23 **109/0**, 25 **32/0**, 30 **12/0**) +
+suite_75 **50/0**, suite_78 **35/0**, suite_82 **22/0** individuales. El único
+cambio de producto respecto del verde completo 3.400/0 de hoy (sección D1) es el
+string `@version` de la cabecera, y las tres suites que leen esa línea están
+verificadas post-fix. E2E final: **6/6**.
+

@@ -5,7 +5,11 @@ module.exports = {
   nombre: "Cascada CSS",
   cubre: [],
   pruebas: function (t, api, env) {
-    const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+    // v18.3.6 — los cortes de esta suite usan sentinelas multilínea con "\n" ("}\n      }",
+    // "}\n      .vgl-card:hover"): en un checkout de Windows con autocrlf el archivo
+    // materializa CRLF y las sentinelas dejaban de casar (los 2 falsos rojos preexistentes
+    // del worktree). Se normaliza igual que harness.js al cargar la fuente para ejecutar.
+    const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8").replace(/\r\n/g, "\n");
 
     let css = "";
     let inCss = false;

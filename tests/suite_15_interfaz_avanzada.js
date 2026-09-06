@@ -6084,7 +6084,11 @@ module.exports = {
     // manejador del chip de especialidad nunca lo llamaba.
     // =====================================================================
     t.caso("v18.0.131 (hallazgo 11): cambiar de especialidad repinta los chips de día (renderDayChips), no solo cargarHoras()", () => {
-      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      // v18.3.6 — el corte por "\n    });\n" exige LF: en un checkout de Windows con
+      // autocrlf el archivo materializa CRLF y la sentinela dejaba de casar (falso rojo
+      // preexistente desde la creación del worktree). Se normaliza igual que harness.js
+      // al cargar la fuente para ejecutar.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8").replace(/\r\n/g, "\n");
       const i = src.indexOf('modal.querySelectorAll("#vgl-esp-presets .vgl-agm-pbtn").forEach((eb) => {');
       t.cierto(i > 0, "se localiza el manejador de los chips de especialidad");
       const cierre = src.indexOf("\n    });\n", i);
