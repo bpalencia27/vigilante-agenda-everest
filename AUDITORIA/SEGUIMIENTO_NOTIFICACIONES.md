@@ -85,3 +85,4 @@ según AE-014 se mantienen en REGISTRO_ELITE.md.
 | 2026-09-07 | IMP-6 | **Banco FINAL (cierre_impl_nt_final.txt): 3464 pasan / 0 fallan — VERDE.** Anclas re-verificadas tras la corrida (8/8). Temporales de trabajo borrados |
 | 2026-09-07 | DEPLOY | Commit 393faaa (93 archivos) pusheado a origin/claude/sf-simulacion-flujos; gist de distribución actualizado a v18.4.4 |
 | 2026-09-07 | A24 | Requerimiento de permiso `pym_opcional` (Dra. Gloria, Medicina General): v18.4.4 + TABLERO v12.10.15 implementados; 2 mutaciones; banco v18.4.4 en corrida final |
+| 2026-09-07 | CIERRE | **Banco v18.4.4 FINAL (cierre_v1844_final3.txt): 3467 pasan / 0 fallan — VERDE.** Commits 393faaa + 4690f51 pusheados a origin/claude/sf-simulacion-flujos; gist de distribución actualizado a v18.4.4 y verificado contra el raw |
