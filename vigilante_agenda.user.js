@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.4.4
+// @version      18.4.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1396,6 +1396,30 @@
     { key: "SANGRE",      placeholder: "RESULTADO SANGRE",      names: ["SANGRE", "HEMOGLOBINA"] },
     { key: "HEMATIES",    placeholder: "RESULTADO HEMATIES",    names: ["HEMATIE", "ERITROCITO"] },
     { key: "LEUCOCITOS",  placeholder: "RESULTADO LEUCOCITOS",  names: ["LEUCOCIT", "ESTERASA"] }
+  ];
+
+  // [REQ 07-sep — interpretación general del uroanálisis] Athenea llena las casillas de
+  // los COMPONENTES (nitritos, leucocitos…), pero la casilla GENERAL del uroanálisis
+  // (la interpretación global, junto a la fecha) queda vacía. Este es el léxico del menú
+  // que se le ofrece al médico cuando eso pasa tras usar el botón «🧪 Exámenes».
+  // Decisión del dueño en la entrevista del 07-sep: lista CORTA y generalista («que no
+  // sature al médico; por lo general son opciones generalistas»). Fuentes del léxico:
+  // guías de interpretación del uroanálisis (tira reactiva + sedimento) y las categorías
+  // del propio motor clínico (mtrEvaluarUroanalisis). El orden va de lo global a lo
+  // específico; el menú puede poner primero la RECOMENDADA con su fundamento.
+  const MTR_URO_TERMINOS = [
+    "NORMAL",
+    "ANORMAL",
+    "GLUCOSURIA",
+    "HEMATURIA",
+    "PROTEINURIA",
+    "BACTERIURIA",
+    "LEUCOCITURIA (PIURIA)",
+    "CRISTALURIA",
+    "NITRITOS POSITIVOS",
+    "SUGESTIVO DE ITU",
+    "BACTERIURIA ASINTOMÁTICA",
+    "MUESTRA CONTAMINADA",
   ];
 
   // Normalización compartida para comparar nombres/placeholders: sin tildes, en
@@ -7845,6 +7869,57 @@
     return dentro;
   }
 
+  // [REQ 07-sep — interpretación general del uroanálisis] EL MENÚ. Se invoca ~1,5 s
+  // después del llenado del botón «🧪 Exámenes» (opciones «Última toma completa» e
+  // «Historial por analito»), cuando la casilla GENERAL del uroanálisis quedó vacía:
+  // Athenea llena los componentes, pero la interpretación global la escribe el médico.
+  // Reglas de la casa que se conservan todas: solo casilla VACÍA (nunca pisa lo que el
+  // médico o el LIS ya escribieron), el mismo paciente sigue abierto, cerrar sin elegir
+  // deja la casilla vacía (nada se inventa), y la recomendación automática es una
+  // SUGERENCIA destacada (⭐ + fundamento) calculada con el motor clínico — la decisión
+  // sigue siendo del médico. El fundamento queda registrado en la libreta local
+  // `vgl_uro_interp` (por documento, sin PHI adicional) y en la telemetría (cero PHI).
+  function _vglMenuInterpretacionUro(docId, labsUsados) {
+    try {
+      if (typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(docId)) return;
+      const _casillaUro = () => document.getElementById("resultadoUroanalisis")
+        || (typeof _findLabField === "function" ? _findLabField("resultadoUroanalisis") : null);
+      const inputEl = _casillaUro();
+      if (!inputEl) return; // la vista no tiene el bloque del uroanálisis montado: nada que hacer
+      if (String(inputEl.value == null ? "" : inputEl.value).trim() !== "") return; // ya escrita: no se toca
+      let sintomas = null;
+      try { sintomas = _uroSintomasConfirmados(docId); } catch (eS) {}
+      const rec = mtrUroRecomendacion(labsUsados, sintomas);
+      const opciones = [];
+      if (rec) opciones.push({ id: rec.termino, rotulo: rec.termino, icono: "⭐", desc: "Recomendado según el parcial: " + rec.fundamento });
+      MTR_URO_TERMINOS.forEach((t) => { if (!rec || t !== rec.termino) opciones.push({ id: t, rotulo: t }); });
+      if (!opciones.length) return;
+      try { uxTrack("uro.menu.abierto", { conRec: !!rec }); } catch (eT) {}
+      _vglChooserModal({
+        titulo: "Interpretación del uroanálisis",
+        descripcion: "La casilla general del uroanálisis quedó vacía. Elija el resultado global del parcial — la recomendada va primero con su fundamento (Enter la elige; Escape o clic fuera la deja vacía).",
+        opciones: opciones,
+        onPick: (id) => {
+          try {
+            if (typeof _pacienteSigueAbierto === "function" && !_pacienteSigueAbierto(docId)) return;
+            const inp = _casillaUro();
+            if (!inp) { showToast("AMBAR", "Uroanálisis", "La casilla de interpretación ya no está en pantalla: no se escribió nada.", false); return; }
+            if (String(inp.value == null ? "" : inp.value).trim() !== "") { showToast("AMBAR", "Uroanálisis", "La casilla ya tenía valor: no se tocó.", false); return; }
+            if (!setNgValue(inp, id)) { showToast("AMBAR", "Uroanálisis", "El navegador rechazó la escritura de «" + id + "»: escríbala a mano.", false); return; }
+            // Registro del fundamento (libreta local por documento + telemetría sin PHI).
+            try {
+              const lib = JSON.parse(localStorage.getItem("vgl_uro_interp") || "{}");
+              lib[docId] = { termino: id, fundamento: rec && rec.termino === id ? rec.fundamento : "elección manual del médico", ts: Date.now() };
+              localStorage.setItem("vgl_uro_interp", JSON.stringify(lib));
+            } catch (eL) {}
+            try { uxTrack("uro.menu.elegido", { recAceptada: !!(rec && rec.termino === id) }); } catch (eT2) {}
+            showToast("VERDE", "Uroanálisis", "«" + id + "» escrito en la casilla de interpretación.", false);
+          } catch (e2) {}
+        },
+      });
+    } catch (e) {}
+  }
+
   function createLabInjectorUI() {
       autoFetchAtheneaLabsForActivePatient();
       // v15.5.0 — Solo VISIBLE donde aplica: el botón escribe en la Ruta Crónicos; si la
@@ -8002,6 +8077,12 @@
                       _autoLabsAvisoDoc = docId; _autoLabsAvisoTs = Date.now();
                       showToast("VERDE", "Exámenes", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false, "labs|" + docId);   // v18.0.104: agrupados por paciente
                   }
+                  // [REQ 07-sep — interpretación general del uroanálisis] Si la casilla
+                  // GENERAL quedó vacía tras el llenado (Athenea llena componentes, no la
+                  // interpretación global), se ofrece el menú con la recomendación del
+                  // motor clínico destacada. 1,5 s: deja aterrizar los reintentos de los
+                  // componentes (300/900 ms). Cerrar sin elegir la deja vacía, como siempre.
+                  setTimeout(() => { try { _vglMenuInterpretacionUro(docId, labs); } catch (eUro) {} }, 1500);
                   // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
                   // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
                   // casilla en esta vista» que prometía el comentario del código no existía.
@@ -50262,6 +50343,85 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       }
     }
     return hayAlguno ? h : null;
+  }
+
+  // [REQ 07-sep — interpretación general del uroanálisis] RECOMENDACIÓN AUTOMÁTICA.
+  // Pura (sin DOM ni red): recibe los labs que acabaron de escribirse en la Ruta
+  // Crónicos y el estado de síntomas urinarios confirmados del paciente (true/false/null)
+  // y devuelve { termino, fundamento } con la opción del léxico MTR_URO_TERMINOS que
+  // mejor describe el parcial SEGÚN EL MOTOR CLÍNICO YA EXISTENTE — no reglas nuevas:
+  //   · sugestivo + síntomas confirmados   → SUGESTIVO DE ITU
+  //   · sugestivo + síntomas negados       → BACTERIURIA ASINTOMÁTICA (no se trata)
+  //   · sugestivo + síntomas desconocidos  → NULL (no se afirma ni se niega: decide el médico)
+  //   · bacteriuria franca sin piuria       → BACTERIURIA
+  //   · hematuria / proteinuria / glucosuria francas → el hallazgo correspondiente
+  //   · todo negativo                       → NORMAL (con los componentes leídos como fundamento)
+  // La glucosuria NUNCA dispara ITU (regla S4 del motor). Texto no interpretable → NULL
+  // (casilla vacía antes que dato inventado). El resultado es una SUGERENCIA: la palabra
+  // final es del médico, que ve el fundamento y puede elegir cualquier término del menú.
+  function mtrUroRecomendacion(labsArray, sintomas) {
+    try {
+      const h = mtrHallazgosUroDesdeLabs(labsArray);
+      if (!h) return null; // sin datos de orina en lo que se escribió: no hay base para sugerir
+      const ev = mtrEvaluarUroanalisis(h, sintomas === true ? true : (sintomas === false ? false : null), false);
+      if (ev.noInterpretables && ev.noInterpretables.length) return null; // hay ruido: decide el médico
+      const crit = (ev.criterios && ev.criterios.length) ? ev.criterios.join(" · ") : "";
+      if (ev.sugestivo) {
+        if (sintomas === true) return { termino: "SUGESTIVO DE ITU", fundamento: (crit || "criterios de tira reactiva positivos") + "; síntomas urinarios confirmados" };
+        if (sintomas === false) return { termino: "BACTERIURIA ASINTOMÁTICA", fundamento: (crit || "criterios de tira reactiva positivos") + "; sin síntomas urinarios confirmados (no se trata)" };
+        return null;
+      }
+      // Grado franco por componente (la tira): mtrHallazgos no expone glucosa/proteína,
+      // se leen directo del arreglo con el MISMO matcher de componentes del catálogo.
+      const gradoDe = (key) => {
+        let mejor = null;
+        if (Array.isArray(labsArray) && typeof _matchUroComponente === "function") {
+          for (const lab of labsArray) {
+            if (!lab || (typeof _esAnalitoDeOrina === "function" && !_esAnalitoDeOrina(lab))) continue;
+            const comp = _matchUroComponente(lab);
+            if (!comp || comp.key !== key) continue;
+            const val = lab.Resultado != null ? lab.Resultado : (lab.resultado != null ? lab.resultado : lab.valor);
+            if (val == null || String(val).trim() === "" || Number(lab.idEstado) === 1) continue;
+            const g = mtrUroGrado(val);
+            if (g !== null && (mejor === null || g > mejor)) mejor = g;
+          }
+        }
+        return mejor;
+      };
+      if (ev.bacteriuria) return { termino: "BACTERIURIA", fundamento: "bacterias en orina (" + String(h.bacteriuria).trim() + ") sin piuria acompañante" };
+      const gSangre = gradoDe("SANGRE");
+      const gHematies = gradoDe("HEMATIES");
+      const recHematies = (function () {
+        if (!Array.isArray(labsArray)) return null;
+        for (const lab of labsArray) {
+          if (!lab || (typeof _esAnalitoDeOrina === "function" && !_esAnalitoDeOrina(lab))) continue;
+          const comp = _matchUroComponente(lab);
+          if (comp && comp.key === "HEMATIES") {
+            const val = lab.Resultado != null ? lab.Resultado : (lab.resultado != null ? lab.resultado : lab.valor);
+            const r = mtrUroRecuento(val);
+            if (r !== null) return r;
+          }
+        }
+        return null;
+      })();
+      // Hematuria: tira franca (≥1 cruz) o hematíes por encima de lo fisiológico (>3/campo).
+      if ((gSangre !== null && gSangre >= 1) || (recHematies !== null && recHematies > 3)) {
+        return { termino: "HEMATURIA", fundamento: "sangre/hematíes en el sedimento (tira " + (gSangre !== null ? gSangre + " cruz(es)" : "negativa") + (recHematies !== null ? ", hematíes " + recHematies + "/campo" : "") + ")" };
+      }
+      const gProt = gradoDe("PROTEINURIA");
+      if (gProt !== null && gProt >= 1) return { termino: "PROTEINURIA", fundamento: "proteína positiva en la tira (" + gProt + " cruz(es))" };
+      const gGluc = gradoDe("GLUCOSURIA");
+      if (gGluc !== null && gGluc >= 1) return { termino: "GLUCOSURIA", fundamento: "glucosa positiva en la tira (" + gGluc + " cruz(es)); no es criterio de ITU" };
+      const recLeu = mtrUroRecuento(h.leucocitos);
+      const gEst = (h.esterasa != null) ? mtrUroGrado(h.esterasa) : null;
+      if ((recLeu !== null && recLeu >= 10) || (gEst !== null && gEst >= 1)) {
+        return { termino: "LEUCOCITURIA (PIURIA)", fundamento: "leucocitos " + (recLeu !== null ? recLeu + "/campo" : "no contados") + (gEst !== null ? ", esterasa " + gEst + " cruz(es)" : "") + ", sin criterios de ITU" };
+      }
+      // Había componentes y todos salieron negativos/francos-cero: el parcial es normal.
+      const leidos = (ev.valores && ev.valores.length) || 0;
+      if (leidos > 0) return { termino: "NORMAL", fundamento: leidos + " componente(s) del parcial negativos" };
+      return null;
+    } catch (e) { return null; }
   }
 
   // v15.7.0 — mtrExamenesParaConducta se retiró junto con la maquinaria de clics en Conducta.

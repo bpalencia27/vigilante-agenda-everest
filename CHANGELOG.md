@@ -4,6 +4,27 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.4.5] — 2026-09-07 (Interpretación general del uroanálisis, con recomendación del motor)
+
+### 🧪 El menú de interpretación del uroanálisis tras «Exámenes»
+Athenea llena las casillas de los COMPONENTES del parcial (nitritos, leucocitos…), pero la
+casilla GENERAL —la interpretación global que va junto a la fecha— siempre quedaba vacía.
+Ahora, tras usar **🧪 Exámenes** (opción 1 «Última toma completa» u opción 2 «Historial por
+analito»), si esa casilla está VACÍA se despliega un menú numerado con 12 términos
+generalistas (NORMAL, ANORMAL, GLUCOSURIA, HEMATURIA, PROTEINURIA, BACTERIURIA,
+LEUCOCITURIA (PIURIA), CRISTALURIA, NITRITOS POSITIVOS, SUGESTIVO DE ITU,
+BACTERIURIA ASINTOMÁTICA, MUESTRA CONTAMINADA).
+
+La primera opción es la **RECOMENDADA** por el motor clínico (⭐ con su fundamento a la
+vista): analiza los componentes recién escritos y los síntomas urinarios confirmados del
+paciente — p. ej. tira sugestiva + síntomas → «SUGESTIVO DE ITU»; sin síntomas →
+«BACTERIURIA ASINTOMÁTICA (no se trata)». Sin base suficiente, ninguna opción se presenta
+como recomendada: **el script sugiere, el médico decide.** El fundamento de lo elegido
+queda registrado por paciente (libreta local). Cerrar sin elegir deja la casilla vacía,
+como siempre. Pruebas y mutaciones en `tests/suite_90_uro_menu.js`.
+
+---
+
 ## [Versión 18.4.4] — 2026-09-07 (Permiso individual: programa PyM opcional para Medicina General)
 
 ### 🎫 `pym_opcional`: agendar sin programa especial cuando su especialidad no es RCV

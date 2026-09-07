@@ -116,7 +116,30 @@ module.exports = {
       await dormir(40);
       const sobreViejo = cA.env.storage.getItem("vgl_cosecha") || "";
 
-      const cB = cargar({ silencioso: true });
+      // FLAKY CAZADO (07-sep, banco v18.4.5 a plena carga): la carrera que este caso
+      // quiere demostrar depende de que el CIFRADO de la escritura siga volando cuando
+      // la hidratación haga su guarda. Con webcrypto real, cifrar (que además importa
+      // la clave) y descifrar son dos operaciones de latencia comparable y el orden de
+      // llegada es una moneda al aire según la carga del equipo: bajo carga, el cifrado
+      // podía terminar ANTES de la guarda, el sello PENDIENTE ya no estaba y el caso
+      // fallaba aunque el producto estuviera bien. Se fija el orden con un crypto
+      // inyectado (opción del arnés) que RETRASA el encrypt 120 ms: la escritura queda
+      // PENDING con garantía cuando llega la hidratación, y la redonda por disco la
+      // sigue esperando esperarDisco (hasta 4 s) — el camino real se ejercita igual.
+      const _realCrypto = (typeof crypto !== "undefined" && crypto.subtle ? crypto : require("crypto").webcrypto);
+      const cB = cargar({ silencioso: true, crypto: {
+        getRandomValues: _realCrypto.getRandomValues.bind(_realCrypto),
+        randomUUID: _realCrypto.randomUUID ? _realCrypto.randomUUID.bind(_realCrypto) : undefined,
+        subtle: {
+          importKey: _realCrypto.subtle.importKey.bind(_realCrypto.subtle),
+          digest: _realCrypto.subtle.digest.bind(_realCrypto.subtle),
+          deriveKey: _realCrypto.subtle.deriveKey.bind(_realCrypto.subtle),
+          deriveBits: _realCrypto.subtle.deriveBits.bind(_realCrypto.subtle),
+          sign: _realCrypto.subtle.sign.bind(_realCrypto.subtle),
+          decrypt: _realCrypto.subtle.decrypt.bind(_realCrypto.subtle),
+          encrypt: async (...args) => { await dormir(120); return _realCrypto.subtle.encrypt(...args); },
+        },
+      } });
       cB.api.__vglCarpetaResetClaveParaTest(HEX_B);
       cB.env.storage.setItem("vgl_cosecha", sobreViejo);   // disco viejo sin hidratar
       cB.api._vglCosechaGuardar("777777", { factores: { dm: true } });   // escritura en vuelo

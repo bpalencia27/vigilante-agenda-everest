@@ -13537,3 +13537,9 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 | user.js _vglTopeHora (M5/NT-108) | `if (false && arr.length >= tope)` (el tope 3/hora del aviso �3+ PyM� queda anulado) | NO | Ninguna: *suite_89: �M5/NT-108: 3+ PyM avisa UNA vez por cita (silencioso), con tope 3/hora�* en rojo � mutante 19/1; restaurado 20/0 |
 | ~11004 | accesoCapExtra: return false inmediato (la cap nunca se concede) | NO | - |
 | ~30296 | guarda de _confirmarCita: quitar accesoCapExtra(pym_opcional) de la condición (!false) | NO | - |
+| 1418 | MTR_URO_TERMINOS: quitar "CRISTALURIA" del léxico (el menú pierde un término) | NO | - |
+| 7889 | _vglMenuInterpretacionUro: invertir la guarda de casilla vacía (`!==`→`===`: el menú abre con la casilla LLENA y no abre con la VACÍA) | NO | - |
+| 50370 | mtrUroRecomendacion: invertir las ramas de síntomas (true→BACTERIURIA ASINTOMÁTICA, false→SUGESTIVO DE ITU) | NO | - |
+| 8085 | hook de _ejecutarLlenadoExamenes: `_vglMenuInterpretacionUro(docId, [])` (el menú abre sin los labs recién escritos) | NO | - |
+| 7907 | onPick del menú: `if (false)` en la re-verificación de casilla llena (pisa lo que el LIS/médico escribió con el menú abierto) | NO | - |
+| 5200 | guarda PENDING de _vglCosechaHidratar: `if (false && …)` (la hidratación tardía vuelve a pisar la escritura en vuelo) — re-verify tras estabilizar el caso CARRERA (flaky cazado el 07-sep con crypto inyectado que retrasa encrypt 120 ms) | NO | - |
