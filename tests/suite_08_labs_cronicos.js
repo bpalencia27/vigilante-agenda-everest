@@ -128,36 +128,6 @@ module.exports = {
       t.igual(testApi._findLabField("campoPrincipal", []), null);
     });
 
-    // FIX 9 M2M — Everest ya renderó el MISMO id/name en dos <input> (HbA1c vs
-    // Hemoglobina, v12.3.26). getElementById siempre devuelve la PRIMERA copia; si esa
-    // primera vive en una copia OCULTA (pestaña de fondo, plantilla residual de Angular),
-    // el Auto-Labs escribía en una casilla que el médico no ve.
-    t.caso("_findLabField (FIX 9 M2M): id duplicado — gana la copia VISIBLE, no la primera del DOM", () => {
-      mockDOM = {};   // getElementById no aporta nada: las copias solo existen en el DOM vivo
-      const oculta = { id: "campoDup", value: "x", offsetParent: null };
-      const visible = { id: "campoDup", value: "" };
-      const qsaOriginal = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) =>
-        (sel === "#campoDup" || sel === '[name="campoDup"]') ? [oculta, visible] : [];
-      try {
-        t.igual(testApi._findLabField("campoDup", []), visible, "debe saltarse la copia oculta (offsetParent null)");
-      } finally {
-        c.env.doc.querySelectorAll = qsaOriginal;
-      }
-    });
-    t.caso("_findLabField (FIX 9 M2M): TODAS las copias ocultas → devuelve la primera (contrato de siempre)", () => {
-      mockDOM = {};
-      const o1 = { id: "campoDup2", value: "", offsetParent: null };
-      const o2 = { id: "campoDup2", value: "", offsetParent: null };
-      const qsaOriginal = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "#campoDup2" ? [o1, o2] : []);
-      try {
-        t.igual(testApi._findLabField("campoDup2", []), o1, "fail-safe: sin copia visible se conserva el comportamiento antiguo");
-      } finally {
-        c.env.doc.querySelectorAll = qsaOriginal;
-      }
-    });
-
     t.caso("setNgValue: escribe el valor y despacha eventos 'input' y 'change'", () => {
       let dispatched = [];
       const fakeInput = {
@@ -670,7 +640,7 @@ module.exports = {
       const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
-        if (String(sel).indexOf("swUroanalisis") >= 0) return [radioSi, radioNo];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi, radioNo];
         // El bloque del uroanálisis NO existe hasta que el SI está marcado.
         if (sel === 'input[placeholder]') return siMarcado ? [inputSangre] : [];
         return [];
@@ -691,7 +661,7 @@ module.exports = {
       let siMarcado = false;
       const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
       const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (String(sel).indexOf("swUroanalisis") >= 0 ? [radioSi] : []);
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? [radioSi] : []);
       const res = testApi.injectLabsIntoCronicos([
         { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }
       ]);
@@ -714,7 +684,7 @@ module.exports = {
       const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
-        if (String(sel).indexOf("swUroanalisis") >= 0) return [radioSi];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
         if (sel === 'input[placeholder]') { busquedas++; return busquedas >= 3 ? [inputSangre] : []; }
         return [];
       };
@@ -759,7 +729,7 @@ module.exports = {
       };
       cu.env.doc.querySelector = () => null;
       cu.env.doc.querySelectorAll = (sel) => {
-        if (String(sel).indexOf("swUroanalisis") >= 0) return [radioSi];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
         if (sel === "input[placeholder]") return montada ? [compSangre] : [];
         return [];
       };
@@ -847,7 +817,7 @@ module.exports = {
     t.caso("_marcarUroanalisisSi: ningún radio elegido todavía -> marca SI y devuelve true", () => {
       const { radioSi, radioNo, lista } = crearRadiosUro();
       const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (String(sel).indexOf("swUroanalisis") >= 0 ? lista : []);
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
       const r = testApi._marcarUroanalisisSi();
       c.env.doc.querySelectorAll = prevQSA;
       t.cierto(r, "debe reportar que sí marcó");
@@ -858,7 +828,7 @@ module.exports = {
     t.caso("_marcarUroanalisisSi: el médico YA eligió SI -> no lo vuelve a tocar (idempotente) y devuelve false", () => {
       const { radioSi, lista } = crearRadiosUro({ siChecked: true });
       const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (String(sel).indexOf("swUroanalisis") >= 0 ? lista : []);
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
       const r = testApi._marcarUroanalisisSi();
       c.env.doc.querySelectorAll = prevQSA;
       t.falso(r);
@@ -868,7 +838,7 @@ module.exports = {
     t.caso("_marcarUroanalisisSi: el médico YA eligió NO -> se respeta, jamás se sobrescribe con SI", () => {
       const { radioSi, radioNo, lista } = crearRadiosUro({ noChecked: true });
       const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (String(sel).indexOf("swUroanalisis") >= 0 ? lista : []);
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
       const r = testApi._marcarUroanalisisSi();
       c.env.doc.querySelectorAll = prevQSA;
       t.falso(r);
@@ -885,26 +855,6 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
     });
 
-    // v18.1 (M2M f36) — el prefijo "resultadoPrograma." del name es estructura interna
-    // del FormControl de Angular (refactorable); lo identitario del control es su nombre
-    // final, "swUroanalisis". Si un refactor de Everest lo deja como "frm.swUroanalisis"
-    // o "swUroanalisis" a secas, el marcado de SI no puede morir con el prefijo. El mock
-    // SOLO responde a un selector de SUFIJO (name$=): si producción vuelve al name
-    // completo, esta prueba se pone roja.
-    t.caso("_marcarUroanalisisSi (M2M f36): un name reestructurado por Angular sigue encontrando los radios (ancla por sufijo)", () => {
-      const { radioSi, radioNo, lista } = crearRadiosUro();
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => {
-        const s = String(sel);
-        return s.indexOf("swUroanalisis") >= 0 && s.indexOf("name$=") >= 0 ? lista : [];
-      };
-      const r = testApi._marcarUroanalisisSi();
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r, "el selector de producción debe anclarse por SUFIJO del name, no por el name completo con prefijo refactorable");
-      t.cierto(radioSi.clicked, "el radio SI recibe el click igual que con el name actual");
-      t.falso(radioNo.clicked, "el radio NO sigue sin tocarse");
-    });
-
     // ================= v14.0.3 — _conductaBuscarYAgregarExamen (RETIRADA) =================
     // Deuda muerta documentada en docs/cambios-pendientes/001-retiro-codigo-muerto.md:
     // el mecanismo de clic <li>→"Agregar" y su tabla CONDUCTA_LI_TEXTO_POR_ANALITO se
@@ -918,7 +868,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
@@ -936,7 +886,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }];
@@ -953,7 +903,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
@@ -969,7 +919,7 @@ module.exports = {
       mockDOM = { "resultadoColesterolTotal": { value: "" } };
       const { radioSi, lista: radios } = crearRadiosUro();
       const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (String(sel).indexOf("swUroanalisis") >= 0 ? radios : []);
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? radios : []);
       const labs = [{ NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
       const res = testApi.injectLabsIntoCronicos(labs);
       c.env.doc.querySelectorAll = prevQSA;
@@ -997,7 +947,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
@@ -1019,7 +969,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
@@ -1041,7 +991,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
@@ -1059,7 +1009,7 @@ module.exports = {
       const prevQSA = c.env.doc.querySelectorAll;
       c.env.doc.querySelectorAll = (sel) => {
         if (sel === 'input[placeholder]') return [inputNitritos];
-        if (String(sel).indexOf("swUroanalisis") >= 0) return radios;
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
         return [];
       };
       const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));

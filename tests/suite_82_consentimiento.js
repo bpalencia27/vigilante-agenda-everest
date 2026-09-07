@@ -156,7 +156,7 @@ module.exports = {
       c.api.mtrCompuertaArranque();
       c.env.doc.getElementById("vgl-terminos-aceptar")._listeners.click[0]();
       const k = c.env.gm["vgl_terminos_acepta"];
-      t.cierto(!!k && k.version === "1.2" && typeof k.ts === "number" && k.ts > 0, "constancia con versión y fecha-hora");
+      t.cierto(!!k && k.version === "1.3" && typeof k.ts === "number" && k.ts > 0, "constancia con versión y fecha-hora");
       t.cierto(!!k && k.id === "uid:101", "constancia con el identificador validado por Everest (uid:101)");
       t.cierto(Object.keys(k || {}).sort().join(",") === "id,ts,version", "la constancia guarda SOLO {versión, fecha-hora, identificador}");
       const clavesDespues = Object.keys(c.env.gm).sort().join(",");
@@ -203,11 +203,11 @@ module.exports = {
       sembrarMedico(c.env);
       c.env.gm["vgl_terminos_acepta"] = { version: "1.0", ts: Date.now(), id: "uid:101" };
       c.api.mtrCompuertaArranque();
-      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "una constancia de la 1.0 NO sirve para la 1.2: se re-pregunta");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "una constancia de la 1.0 NO sirve para la 1.3: se re-pregunta");
       t.cierto(!c.env.doc.getElementById("vgl-root") && red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "y no arranca nada mientras tanto");
       // La forma guardada que no es {version vigente, ts numérico} tampoco autoriza
       try { c.env.doc.getElementById("vgl-terminos-velo").remove(); } catch (e) {}
-      c.env.gm["vgl_terminos_acepta"] = { version: "1.2", ts: "ayer" };
+      c.env.gm["vgl_terminos_acepta"] = { version: "1.3", ts: "ayer" };
       c.api.mtrCompuertaArranque();
       t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "una constancia sin fecha-hora numérica NO autoriza");
     });
@@ -218,7 +218,7 @@ module.exports = {
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       sembrarMedico(c.env);
       c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
-      c.env.gm["vgl_terminos_acepta"] = { version: "1.2", ts: Date.now() - 30 * 24 * 3600 * 1000, id: "uid:101" };
+      c.env.gm["vgl_terminos_acepta"] = { version: "1.3", ts: Date.now() - 30 * 24 * 3600 * 1000, id: "uid:101" };
       c.api.mtrCompuertaArranque();
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "constancia vigente aunque antigua: NO se re-pregunta");
       t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica"), "el arranque real corrió directamente (aviso del kill-switch)");
@@ -250,8 +250,8 @@ module.exports = {
       let i = 0;
       while (i < a.length && i < b.length && a[i] === b[i]) i++;
       t.cierto(a === b, "TERMINOS_TEXTO === docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md" + (a === b ? "" : " — primera diferencia en el carácter " + i + ": «" + a.slice(i, i + 40) + "» vs «" + b.slice(i, i + 40) + "» (longitudes " + a.length + "/" + b.length + ")"));
-      t.igual(c.api.__TERMINOS_VERSION, "1.2", "la versión vigente de la constante");
-      t.cierto(b.indexOf("**Versión 1.2 ·") === 0 || b.indexOf("**Versión 1.2 ·") > 0, "el documento declara la misma versión que la constante");
+      t.igual(c.api.__TERMINOS_VERSION, "1.3", "la versión vigente de la constante");
+      t.cierto(b.indexOf("**Versión 1.3 ·") === 0 || b.indexOf("**Versión 1.3 ·") > 0, "el documento declara la misma versión que la constante");
       t.cierto(typeof c.api.__TERMINOS_RESUMEN === "string" && c.api.__TERMINOS_RESUMEN.length > 200 && c.api.__TERMINOS_RESUMEN.length < b.length, "PARTE 1: resumen en limpio, más corto que el documento completo");
     });
 
@@ -375,7 +375,7 @@ module.exports = {
       t.cierto(!c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "sin panel ni temporizadores hasta responder");
       c.env.doc.getElementById("vgl-terminos-aceptar")._listeners.click[0]();
       const k = c.env.gm["vgl_terminos_acepta"];
-      t.cierto(!!k && k.version === "1.2" && k.id === "login:bpalencia", "la constancia firma con el login de sesión cuando no hay uid validado («" + (k && k.id) + "»)");
+      t.cierto(!!k && k.version === "1.3" && k.id === "login:bpalencia", "la constancia firma con el login de sesión cuando no hay uid validado («" + (k && k.id) + "»)");
       t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica") && !c.env.doc.getElementById("vgl-root"), "aceptar arranca boot() de verdad (aviso del kill-switch visible, sin panel)");
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "la pantalla se cerró sola");
     });
@@ -384,7 +384,7 @@ module.exports = {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       sembrarMaquinaNueva(c.env);
-      c.env.gm["vgl_terminos_acepta"] = { version: "1.2", ts: Date.now(), id: "login:bpalencia" };
+      c.env.gm["vgl_terminos_acepta"] = { version: "1.3", ts: Date.now(), id: "login:bpalencia" };
       c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
       const d = c.api.mtrCompuertaDecision();
       t.cierto(d.arrancar === true && d.motivo === "sin-identidad-aceptado" && d.pantalla === null, "constancia vigente + sin identidad = arranque directo (motivo «" + d.motivo + "»)");

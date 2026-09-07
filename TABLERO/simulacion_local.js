@@ -89,19 +89,22 @@ const get=q=>doGet({parameter:q}).t;
   console.log("sin params :",sinNada,"(debe ser no)");
   if(tMalo!=="no"||aMala!=="no"||sinNada!=="no")fallos.push("puertas doGet");
 
-  // 2) siembra: primera lectura crea la hoja con 4 comentarios + 7 nombres
+  // 2) siembra: primera lectura crea la hoja con 4 comentarios + 8 nombres
   const j1=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
   console.log("ok         :",j1.ok,"(debe ser true)");
-  console.log("perfiles   : COMPLETO=%s LABORATORIOS=%s (deben ser 4 y 3)",j1.perfiles.COMPLETO.length,j1.perfiles.LABORATORIOS.length);
-  console.log("filas hoja acceso:",hojas["acceso"].d.length,"(debe ser 12: encabezado+4#+7)");
+  console.log("perfiles   : COMPLETO=%s LABORATORIOS=%s (deben ser 5 y 3)",j1.perfiles.COMPLETO.length,j1.perfiles.LABORATORIOS.length);
+  console.log("filas hoja acceso:",hojas["acceso"].d.length,"(debe ser 13: encabezado+4#+8)");
   if(!j1.ok)fallos.push("ok!==true");
-  if(j1.perfiles.COMPLETO.length!==4||j1.perfiles.LABORATORIOS.length!==3)fallos.push("siembra 4/3");
-  if(hojas["acceso"].d.length!==12)fallos.push("siembra filas");
+  if(j1.perfiles.COMPLETO.length!==5||j1.perfiles.LABORATORIOS.length!==3)fallos.push("siembra 5/3");
+  if(hojas["acceso"].d.length!==13)fallos.push("siembra filas");
+  const glo=j1.perfiles.COMPLETO.filter(p=>p.nombre.indexOf("Jaramillo")>=0)[0];
+  console.log("nueva autorizada:",glo?glo.nombre+" #"+glo.uid:"NO ESTÁ","(debe estar: Dra. Gloria Alejandra Jaramillo Montoya)");
+  if(!glo)fallos.push("Gloria Jaramillo no quedó en el padrón COMPLETO");
 
   // 3) uids sintéticos: enteros en [900000000, 999999998] (jamás uid real)
   const todos=j1.perfiles.COMPLETO.concat(j1.perfiles.LABORATORIOS);
   const uidOk=todos.every(p=>Number.isInteger(p.uid)&&p.uid>=900000000&&p.uid<=999999998);
-  console.log("uids sintéticos en rango 9xx:",uidOk,"ej:",todos[0].uid,todos[6].uid);
+  console.log("uids sintéticos en rango 9xx:",uidOk,"ej:",todos[0].uid,todos[7].uid);
   if(!uidOk)fallos.push("uids sintéticos fuera de rango");
 
   // 4) version = hash de CONTENIDO: dos lecturas sin editar, misma version
@@ -119,7 +122,7 @@ const get=q=>doGet({parameter:q}).t;
   console.log("version cambió:",j3.version!==j1.version,"(debe ser true)");
   console.log("blocklist   :",JSON.stringify(bl));
   if(j3.version===j1.version)fallos.push("bloqueado no cambia version");
-  if(j3.perfiles.COMPLETO.length!==3)fallos.push("bloqueado no sale del perfil");
+  if(j3.perfiles.COMPLETO.length!==4)fallos.push("bloqueado no sale del perfil");
   if(!bl||bl.uid!==uidBrandon||bl.motivo!=="vacaciones")fallos.push("blocklist mal");
 
   // 6) uid REAL en la hoja manda sobre el sintético
@@ -150,6 +153,94 @@ const get=q=>doGet({parameter:q}).t;
   if(!cDen||cDen.redactor_ia!==2||cDen.rcv!==1||cDen.panel_paciente!==1)fallos.push("cuentas saneadas");
   if(cDen&&cDen.mala_con_12345678901!==undefined)fallos.push("digitos largos sobrevivieron");
 
+  // 9) v18.3.5 (hallazgo B4/N8) — el perfil se lee IGNORANDO mayúsculas/minúsculas:
+  //    la Hoja la edita el dueño a mano y "completo"/"Laboratorios" son el mismo
+  //    perfil. Sin la normalización la fila quedaba mal clasificada EN SILENCIO
+  //    (ignorada como perfil desconocido). Nombres SYN-*: cero PHI.
+  hojas["acceso"].appendRow(["completo","","SYN Prueba Perfil Minuscula","activo",""]);
+  const j5=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
+  const synMin=j5.perfiles.COMPLETO.filter(p=>p.nombre==="SYN Prueba Perfil Minuscula")[0];
+  console.log("perfil minúscula :",!!synMin,"(debe ser true: 'completo' clasifica como COMPLETO)");
+  if(!synMin)fallos.push("perfil en minúscula ignorado");
+
+  // 10) v18.3.5 (hallazgo B4/N8) — estado "inactivo" revoca igual que "bloqueado":
+  //    antes un médico marcado "inactivo" quedaba ACTIVO en el padrón (solo se
+  //    entendía "bloqueado" exacto) y el cliente lo seguía tratando como LABORATORIOS.
+  hojas["acceso"].appendRow(["Laboratorios","","SYN Prueba Estado Inactivo","inactivo",""]);
+  const j6=JSON.parse(get({accion:"listaAcceso",token:"vgl-2026"}));
+  const synIna=j6.blocklist.filter(p=>p.nombre==="SYN Prueba Estado Inactivo")[0];
+  const synInaActivo=j6.perfiles.LABORATORIOS.filter(p=>p.nombre==="SYN Prueba Estado Inactivo").length>0;
+  console.log("estado inactivo :",!!synIna&&!synInaActivo,"(debe ser true: 'inactivo' va a blocklist y sale de LABORATORIOS)");
+  if(!synIna)fallos.push("estado inactivo no revoca");
+  if(synInaActivo)fallos.push("estado inactivo quedó ACTIVO en el perfil");
+
   if(fallos.length){console.error("FALLA B2/B6 servidor:",fallos.join(" | "));process.exitCode=1;}
   else console.log("B2/B6 servidor: TODO OK");
+})();
+
+// =====================================================================
+// v18.4.0 — ALERTAS DEL TABLERO. revisarAlertas()/calcularAlertas() contra
+// el .gs REAL: un equipo enfermo (canal mudo + tormenta + api degradada), un
+// equipo con salto súbito tras historia tranquila (z-score), un equipo sano
+// que no dispara nada, el reenvío del MISMO lote que no infla conteos, y el
+// dedup de la hoja "alertas" al repetir la revisión.
+// =====================================================================
+(function pruebaAlertas(){
+  const fallos=[];
+  // Sembrar por NOMBRE de columna: el orden del encabezado de "uso" ya migró
+  // (v12.10.13) y escribir posiciones a ciegas es justo el defecto que esa
+  // migración cerró.
+  const hdUso=hojas["uso"].d[0];
+  const filaUso=(vals)=>{const r=[];for(let i=0;i<hdUso.length;i++)r.push(vals[hdUso[i]]!==undefined?vals[hdUso[i]]:"");hojas["uso"].appendRow(r);};
+  const ventana=(eq,dia,lote,acc)=>filaUso({equipo:eq,deDia:dia,lote:lote,acciones:JSON.stringify(acc)});
+
+  // 1) equipo ENFERMO, un solo día, todo lo que hubo el 27-ago en miniatura:
+  //    errores detectados sin entrega (canal mudo), 18 huellas (tormenta) y un
+  //    endpoint con 83 % de fallos (api-degradada).
+  const D="2026-09-05";
+  ventana("eq-alerta1",D,"AL1",{"error.js":30,"error.api":2,"error.promesa":1,
+    "error.distintos":18,"api.buscarpaciente.err":25,"api.buscarpaciente.ok":5,"rum.page.inp.poor":9});
+  // reenvío del MISMO lote: no puede duplicar los conteos (lección del export real)
+  ventana("eq-alerta1",D,"AL1",{"error.js":30,"error.api":2,"error.promesa":1,
+    "error.distintos":18,"api.buscarpaciente.err":25,"api.buscarpaciente.ok":5,"rum.page.inp.poor":9});
+
+  // 2) equipo con HISTORIA tranquila (7 días, 2..4 errores) y salto súbito hoy.
+  //    entregados=20 y api sano: SOLO debe disparar la anomalía por z-score.
+  const iso=(dt)=>dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+  [2,3,2,4,3,2,3].forEach((n,i)=>{
+    const dt=new Date(2026,8,5); dt.setDate(dt.getDate()-(7-i));   // 2026-08-29 .. 2026-09-04
+    ventana("eq-alerta2",iso(dt),"ALZ"+i,{"error.js":n,"error.entregado":n,"error.distintos":n,"api.buscarpaciente.ok":50});
+  });
+  ventana("eq-alerta2",D,"ALZ9",{"error.js":20,"error.entregado":20,"error.distintos":4,"api.buscarpaciente.ok":50});
+
+  // 3) equipo SANO: errores que se detectan y se entregan, api sana. Cero filas.
+  ventana("eq-sano",D,"ALS1",{"error.js":2,"error.entregado":2,"error.distintos":2,
+    "api.buscarpaciente.ok":100,"api.buscarpaciente.err":1});
+
+  revisarAlertas();
+  const hA=hojas["alertas"];
+  const filasA=hA?hA.d.slice(1):[];
+  const tiposDe=(eq)=>filasA.filter(r=>r[2]===eq).map(r=>r[3]);
+  console.log("\n-- alertas ("+filasA.length+" filas):");
+  filasA.forEach(r=>console.log("   "+r[1]+" | "+r[2]+" | "+r[3]+" | "+r[4]+" | "+r[5]));
+
+  const t1=tiposDe("eq-alerta1"), t2=tiposDe("eq-alerta2"), t3=tiposDe("eq-sano");
+  if(t1.indexOf("canal-mudo")<0)fallos.push("canal-mudo no disparó");
+  else{
+    const cm=filasA.find(r=>r[2]==="eq-alerta1"&&r[3]==="canal-mudo");
+    if(!/33 errores/.test(String(cm[5])))fallos.push("canal-mudo contó "+cm[5]+" (33 esperados: ¿dedup por lote roto?)");
+  }
+  if(t1.indexOf("tormenta")<0)fallos.push("tormenta no disparó");
+  if(t1.indexOf("api-degradada")<0)fallos.push("api-degradada no disparó");
+  if(t2.indexOf("anomalia")<0)fallos.push("anomalia (z-score) no disparó");
+  if(t2.indexOf("canal-mudo")>=0||t2.indexOf("tormenta")>=0)fallos.push("equipo con entrega sana disparó canal-mudo/tormenta");
+  if(t3.length)fallos.push("equipo sano disparó: "+t3.join(","));
+
+  // 4) dedup: repetir la revisión NO reescribe las mismas alertas.
+  revisarAlertas();
+  const filasB=hojas["alertas"].d.slice(1);
+  if(filasB.length!==filasA.length)fallos.push("re-visión duplicó filas: "+filasA.length+" -> "+filasB.length);
+
+  if(fallos.length){console.error("FALLA alertas:",fallos.join(" | "));process.exitCode=1;}
+  else console.log("alertas v18.4: TODO OK");
 })();

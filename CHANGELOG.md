@@ -4,6 +4,59 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.3.0] — 2026-09-05 (La IA con red de seguridad, y el consentimiento antes de nada)
+
+### 🪜 La escalera de IA (m2m)
+El redactor clínico deja de depender de un único proveedor: z.ai (GLM-5.3) es el primario
+y Gemini el respaldo — si el primario falla o tarda, la nota se pide al respaldo sin que
+usted note más que unos segundos de más. Cada llamada mide su latencia y el proveedor que
+respondió, para auditar la calidad del servicio con datos, no con impresiones.
+
+Tres errores finos corregidos en el camino:
+- **Agendarle a otro paciente**: la lectura del identificador del paciente ahora usa la ruta
+  segura del dato — antes podía tomar un número de la vista y agendar para la persona equivocada.
+- **HbA1c obligatoria vacía ya se reporta**: un valor exigido pero sin diligenciar aparece en
+  el reporte como pendiente; ya no desaparece en silencio.
+- **«Normalidad» solo con ancla**: la normalidad fija del Examen ya no se afirma sola — exige
+  el hallazgo que la sustenta.
+
+### 🔒 La barrera de cero identificables
+Todo lo que sale hacia el proveedor de IA pasa por una barrera que garantiza cero datos
+identificables: ni cédulas, ni nombres, ni números de historia — solo lo clínico estricto.
+
+### ✋ El consentimiento, antes de la primera nota
+Primera versión con compuerta de consentimiento **fail-closed**: sin consentimiento vigente
+del paciente, el redactor no funciona — y si algo falla al consultarlo, también queda cerrado
+(nunca abierto por defecto). Los términos v1.1 se presentan al médico, se versionan y se deja
+constancia en el tablero (fecha y versión aceptada), además del latido base del módulo.
+
+### 📈 Observabilidad sin identificadores
+Módulo nuevo de observación (`obs*`) que cuenta latidos y salud del script — parámetros,
+procesos, tiempos de arranque — sin cédulas, sin nombres, sin URLs de pacientes.
+
+### 🧹 Saneamiento del código
+Dos constantes muertas salieron del archivo y tres funciones zombi (nadie las llama) quedaron
+en cuarentena con marcador, listas para retirarse en la próxima versión. El banco de pruebas
+creció a **3.385 comprobaciones en verde** y cada cambio se verificó rompiéndolo a propósito
+primero (mutación) antes de darlo por bueno.
+
+### 🩹 Incidencia 4 — el Panel que culpaba a los laboratorios
+Corregida la causa que hacía que el Panel del Paciente mostrara «No se pudo leer al paciente
+ahora (los laboratorios no respondieron)» en **todos** los pacientes:
+
+- **Causa raíz (scope)**: una bandera interna vivía declarada dentro de un bloque `try` y se
+  leía fuera de él — cualquier lectura exitosa que llegaba al final reventaba con un error
+  invisible que nadie atrapaba, y el Panel lo reportaba como fallo de laboratorios. La bandera
+  ahora vive a nivel de función.
+- **Degradación honesta**: si el motor del resumen falla por cualquier otro motivo interno,
+  ya no revienta hasta el Panel: se degrada a «sin dato» y se marca como degradado — jamás
+  se inventa ni se culpa a los laboratorios.
+- **La caché no se envenena**: un resumen degradado por error interno **no** pisa la última
+  lectura buena guardada.
+- **El redactor IA no alucina con hoja vacía**: si el resumen llegó degradado, el redactor
+  lo descarta antes de usarlo como hoja de hechos — sin datos reales, prefiere el aviso
+  honesto de «sin datos» antes que darle a la IA libertad de inventar.
+
 ## [Versión 18.1.0] — 2026-09-04 (Quién ve qué, y el aviso del paciente nuevo)
 
 ### 🔐 El control de acceso por médico

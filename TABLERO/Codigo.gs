@@ -1,6 +1,14 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.10.14 — 05-09-2026: AUTORIZACIÓN de la Dra. Gloria Alejandra Jaramillo
+ * Montoya (perfil COMPLETO). Solo cambia la SEMILLA de la hoja "acceso": +1 fila
+ * en el padrón (8 nombres). OJO: la siembra SOLO ocurre si la hoja "acceso" NO
+ * existe; si ya existe en producción, el dueño añade la fila A MANO en la Hoja:
+ * perfil "COMPLETO" | uid VACÍO | nombre EXACTO "Gloria Alejandra Jaramillo
+ * Montoya" | estado "activo". Nada más cambia: el userscript NO lleva nombres
+ * desde v18.1.0 (lee el padrón del servidor), así que el gist no se toca.
+ *
  * v12.10.13 — 29-08-2026: auditoría contra un export real (XLSX + CSV). Dos problemas
  * ESTRUCTURALES en la Hoja, ambos del lado del receptor:
  *
@@ -105,8 +113,9 @@
  *     - Hoja nueva "acceso" (perfil | uid | nombre | estado | motivo) que edita
  *       SOLO el dueño. perfil: COMPLETO o LABORATORIOS; filas cuyo perfil empiece
  *       por "#" se ignoran (comentarios in-sheet); estado "bloqueado" manda al
- *       médico a la blocklist (en el cliente gana SIEMPRE y en silencio). Al
- *       crearse se SIEMBRA con los 7 nombres del padrón y uid VACÍO: NUNCA se
+ *       médico a la blocklist (en el cliente gana SIEMPRE y en silencio).
+ *     - Al crearse se SIEMBRA con los 8 nombres del padrón (05-09-2026: +Dra.
+ *       Gloria Alejandra Jaramillo Montoya, COMPLETO) y uid VACÍO: NUNCA se
  *       inventan uids reales, porque el uid manda sobre el nombre y uno fabricado
  *       podría coincidir con el de otro médico.
  *     - doGet(e) NUEVO con UNA sola acción: ?accion=listaAcceso&token=... devuelve
@@ -326,6 +335,10 @@ function onOpen() {
       .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
       .addItem("Reparar encabezados de telemetría", "repararEncabezadosTelemetria")
       .addItem("Ver lista de acceso (JSON)", "verListaAcceso")
+      .addSeparator()
+      .addItem("Revisar alertas ahora", "revisarAlertas")                       // v18.4.0
+      .addItem("Instalar revisión diaria de alertas (23:30)", "instalarAlertasDiarias")
+      .addItem("Quitar revisión diaria de alertas", "quitarAlertasDiarias")
       .addToUi();
   } catch (e) {}
 }
@@ -362,7 +375,7 @@ function verListaAcceso() {
   } catch (e) {}
 }
 
-// Devuelve la hoja "acceso", creándola SEMBRADA en el primer uso: los 7 nombres
+// Devuelve la hoja "acceso", creándola SEMBRADA en el primer uso: los 8 nombres
 // del padrón con uid VACÍO — el dueño pega los UsuarioId reales leyendo la hoja
 // "acceso_uid" (menú: qué uid reportó cada equipo). NUNCA se siembran uids
 // reales inventados: el uid manda sobre el nombre y un uid fabricado podría
@@ -375,13 +388,14 @@ function _hojaAcceso(ss) {
     try {
       var filas = [
         ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", ""],
-        ["# perfil: COMPLETO o LABORATORIOS | estado: activo (o vacío) / bloqueado (revoca en silencio)", "", "", "", ""],
+        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", ""],
         ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", ""],
         ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", ""],
         ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", ""],
         ["COMPLETO", "", "Eliseth Estrada", "activo", ""],
         ["COMPLETO", "", "María Edineth Pino", "activo", ""],
         ["COMPLETO", "", "Sinaí Mijares", "activo", ""],
+        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", ""],
         ["LABORATORIOS", "", "Maryuris Terán", "activo", ""],
         ["LABORATORIOS", "", "Daniela Zuluaga", "activo", ""],
         ["LABORATORIOS", "", "Moisés Carpio", "activo", ""]
@@ -397,9 +411,11 @@ function _hojaAcceso(ss) {
 // SINTÉTICO determinista (rango 900000000-999999998: jamás colisiona con un
 // UsuarioId real de Everest) solo para cumplir el contrato del cliente (uid > 0
 // por entrada): el matching real sigue siendo por nombre hasta que el dueño
-// llene los uids. "bloqueado" manda la fila a la blocklist, que en el cliente
-// gana SIEMPRE y en silencio. `version` = hash del CONTENIDO: cambia solo si
-// cambia la hoja — dos lecturas sin editar devuelven la misma versión.
+// llene los uids. El perfil se compara en mayúsculas (v18.3.5, B4/N8: la Hoja
+// se edita a mano). "bloqueado" o "inactivo" manda la fila a la blocklist,
+// que en el cliente gana SIEMPRE y en silencio. `version` = hash del CONTENIDO:
+// cambia solo si cambia la hoja — dos lecturas sin editar devuelven la misma
+// versión.
 function _listaAccesoRespuesta(ss) {
   var perfiles = { COMPLETO: [], LABORATORIOS: [] };
   var blocklist = [];
@@ -407,15 +423,22 @@ function _listaAccesoRespuesta(ss) {
     var valores = _hojaAcceso(ss).getDataRange().getValues();
     for (var i = 1; i < valores.length; i++) {
       var fila = valores[i] || [];
-      var perfil = String(fila[0] == null ? "" : fila[0]).trim();
+      // v18.3.5 (hallazgo B4/N8) — la Hoja la edita el dueño A MANO y un perfil
+      // escrito "completo"/"Laboratorios" es el mismo COMPLETO/LABORATORIOS: se
+      // normaliza con trim().toUpperCase(). Sin esto la fila quedaba mal
+      // clasificada EN SILENCIO (ignorada como perfil desconocido).
+      var perfil = String(fila[0] == null ? "" : fila[0]).trim().toUpperCase();
       if (!perfil || perfil.charAt(0) === "#") continue;
       if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") continue;
       var nombre = _celda(fila[2], 100).trim();
       if (!nombre) continue; // fila a medias: ni entra ni rompe la lista
       var uidNum = toNumero(fila[1]);
       var uid = uidNum > 0 ? Math.round(uidNum) : _accesoUidSintetico(nombre);
+      // v18.3.5 (hallazgo B4/N8) — "inactivo" revoca igual que "bloqueado": antes
+      // un médico marcado "inactivo" quedaba ACTIVO en el padrón (solo se
+      // entendía "bloqueado" exacto).
       var estado = String(fila[3] == null ? "" : fila[3]).trim().toLowerCase();
-      if (estado === "bloqueado") {
+      if (estado === "bloqueado" || estado === "inactivo") {
         blocklist.push({ uid: uid, nombre: nombre, motivo: _celda(fila[4], 60).trim() });
         continue;
       }
@@ -900,3 +923,197 @@ function _sinDigitosLargos(v) {
 function _val(fila, idx) { return idx >= 0 ? fila[idx] : ""; }
 
 function _txt(s) { return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.TEXT); }
+
+// =====================================================================
+// v18.4.0 — ALERTAS DEL TABLERO: que el silencio se vea SOLO.
+// ---------------------------------------------------------------------
+// El canal de errores estuvo mudo medio año (v17.2.0→v18.0.66) y nadie lo
+// notó hasta que el médico exportó la Hoja a mano (docs/TELEMETRIA_20260901.md
+// §1). Estas reglas leen lo que YA llega por `uso` y `error` (cero cambios de
+// esquema, cero eventos nuevos del cliente) y escriben una fila por anomalía
+// en la hoja "alertas", con dedup por día+equipo+tipo. Todo el cálculo vive en
+// calcularAlertas(), PURA (sin SpreadsheetApp), para poder ejercerla desde
+// TABLERO/simulacion_local.js contra el .gs real.
+//
+// Reglas (umbrales elegidos contra los incidentes REALES del export):
+//  1. canal-mudo   — ≥5 errores detectados (error.js/api/promesa), 0 entregados
+//                    (error.entregado) y 0 filas en la hoja `error` ese día:
+//                    habría cazado el incidente del 27-ago el mismo día.
+//  2. tormenta     — ≥15 huellas distintas (error.distintos) en un día.
+//  3. anomalia     — z-score ≥ 3 del día vs los 7 previos (≥4 con datos),
+//                    con hoy ≥ 5: la subida súbita del 27-ago (81 detectados
+//                    en seis equipos) entra sin que un lunes normal dispare.
+//  4. api-degradada— un endpoint con ≥20 fallos y ≥50 % de tasa de error.
+// =====================================================================
+var ALERTA_CANAL_MUDO_DETECTADOS = 5;
+var ALERTA_TORMENTA_DISTINTOS = 15;
+var ALERTA_Z_HISTORIA_MIN = 4;    // días previos con datos, mínimo para opinar
+var ALERTA_Z_UMBRAL = 3;
+var ALERTA_Z_HOY_MIN = 5;
+var ALERTA_API_ERR_MIN = 20;
+var ALERTA_API_TASA = 0.5;
+
+// "YYYY-MM-DD" o "". Sheets auto-parsea "2026-09-05" como fecha aunque el
+// emisor lo mande como texto (_celda no fuerza formato), y getValues() lo
+// devuelve como Date: sin esta normalización esas filas se saltarían EN
+// SILENCIO y las alertas mirarían una hoja que parece llena y está vacía.
+function _diaIso(v) {
+  if (v instanceof Date) return v.getFullYear() + "-" + ("0" + (v.getMonth() + 1)).slice(-2) + "-" + ("0" + v.getDate()).slice(-2);
+  return String(v == null ? "" : v).slice(0, 10);
+}
+
+// Agrega la hoja "uso" (deduplicando por lote, como enseña el export real:
+// los reenvíos de la cola duplican ventanas) y la hoja "error" (conteo de
+// filas entregadas). Estructura de salida:
+//   { porEquipoDia: { equipo: { dia: { detectados, entregados, distintos,
+//                                      filasError, api: { ep: {ok, err} } } } } }
+function _alertasAgregar(ss) {
+  var agg = { porEquipoDia: {} };
+  var dia = function (eq, d) {
+    var porEq = agg.porEquipoDia[eq] || (agg.porEquipoDia[eq] = {});
+    return porEq[d] || (porEq[d] = { detectados: 0, entregados: 0, distintos: 0, filasError: 0, api: {} });
+  };
+  var sh = ss.getSheetByName("uso");
+  if (sh && sh.getLastRow() >= 2) {
+    var vals = sh.getDataRange().getValues();
+    var hd = vals.shift() || [];
+    var c = function (n) { return hd.indexOf(n); };
+    var ci = { eq: c("equipo"), deDia: c("deDia"), lote: c("lote"), acciones: c("acciones") };
+    if (ci.eq >= 0 && ci.deDia >= 0) {
+      var vistos = {};
+      vals.forEach(function (r) {
+        var eq = String(r[ci.eq] || "").trim();
+        var d = _diaIso(r[ci.deDia]);
+        if (!eq || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+        // dedup por lote: el mismo lote reenviado (TTL de 6 h vencido) ya contó
+        var lote = ci.lote >= 0 ? String(r[ci.lote] || "") : "";
+        if (lote) { if (vistos[lote]) return; vistos[lote] = 1; }
+        var acc = {};
+        try { acc = JSON.parse(String(r[ci.acciones] || "{}")) || {}; } catch (e2) { acc = {}; }
+        var celda = dia(eq, d);
+        for (var k in acc) {
+          var v = toNumero(acc[k]);
+          if (v <= 0 || k === "_recortadas" || k.slice(-7) === ".total") continue;
+          if (k === "error.js" || k === "error.api" || k === "error.promesa") celda.detectados += v;
+          else if (k === "error.entregado") celda.entregados += v;
+          else if (k === "error.distintos") celda.distintos = Math.max(celda.distintos, v);
+          else if (k.indexOf("api.") === 0) {
+            var m = /^(api\..+)\.(ok|err)$/.exec(k);
+            if (m) { var ep = celda.api[m[1]] || (celda.api[m[1]] = { ok: 0, err: 0 }); ep[m[2]] += v; }
+          }
+        }
+      });
+    }
+  }
+  var she = ss.getSheetByName("error");
+  if (she && she.getLastRow() >= 2) {
+    var vale = she.getDataRange().getValues();
+    var hde = vale.shift() || [];
+    var ce = function (n) { return hde.indexOf(n); };
+    var cie = { eq: ce("equipo"), d: ce("dia") };
+    if (cie.eq >= 0 && cie.d >= 0) {
+      vale.forEach(function (r) {
+        var eq = String(r[cie.eq] || "").trim();
+        var d = String(r[cie.d] || "").slice(0, 10);
+        if (eq && d) dia(eq, d).filasError++;
+      });
+    }
+  }
+  return agg;
+}
+
+// PURA: recibe lo que produce _alertasAgregar y devuelve las alertas del día
+// más reciente con datos de cada equipo. Sin SpreadsheetApp, sin fechas del
+// reloj: el "hoy" de cada equipo es su último día reportado, así el cálculo es
+// reproducible desde el simulador y desde un trigger de madrugada.
+function calcularAlertas(agg) {
+  var alertas = [];
+  var equipos = Object.keys(agg.porEquipoDia).sort();
+  equipos.forEach(function (eq) {
+    var dias = Object.keys(agg.porEquipoDia[eq]).sort();
+    if (!dias.length) return;
+    var hoy = dias[dias.length - 1];
+    var c = agg.porEquipoDia[eq][hoy];
+    // 1. canal-mudo: detectados sin ENTREGA NI FILA — el defecto de la v17.2.0.
+    if (c.detectados >= ALERTA_CANAL_MUDO_DETECTADOS && c.entregados === 0 && c.filasError === 0) {
+      alertas.push({ dia: hoy, equipo: eq, tipo: "canal-mudo", severidad: "alta",
+        detalle: c.detectados + " errores detectados y NINGUNO entregado (0 filas en la hoja error)" });
+    }
+    // 2. tormenta de defectos distintos.
+    if (c.distintos >= ALERTA_TORMENTA_DISTINTOS) {
+      alertas.push({ dia: hoy, equipo: eq, tipo: "tormenta", severidad: "alta",
+        detalle: c.distintos + " huellas de error distintas en un solo dia" });
+    }
+    // 3. anomalia por z-score contra los 7 dias previos (minimo 4 con datos).
+    var previos = dias.slice(Math.max(0, dias.length - 8), dias.length - 1);
+    if (previos.length >= ALERTA_Z_HISTORIA_MIN && c.detectados >= ALERTA_Z_HOY_MIN) {
+      var media = 0;
+      previos.forEach(function (d2) { media += agg.porEquipoDia[eq][d2].detectados; });
+      media = media / previos.length;
+      var varianza = 0;
+      previos.forEach(function (d2) { var dif = agg.porEquipoDia[eq][d2].detectados - media; varianza += dif * dif; });
+      var desv = Math.sqrt(varianza / previos.length);
+      if (desv < 1) desv = 1;   // piso: sin variacion historica, cualquier salto es anomalia
+      var z = (c.detectados - media) / desv;
+      if (z >= ALERTA_Z_UMBRAL) {
+        alertas.push({ dia: hoy, equipo: eq, tipo: "anomalia", severidad: "media",
+          detalle: c.detectados + " errores hoy contra media " + (Math.round(media * 10) / 10) + " de " + previos.length + " dias (z=" + (Math.round(z * 10) / 10) + ")" });
+      }
+    }
+    // 4. endpoint degradado: fallos masivos con tasa de error >= 50 %.
+    Object.keys(c.api).sort().forEach(function (ep) {
+      var a = c.api[ep];
+      var total = a.ok + a.err;
+      if (a.err >= ALERTA_API_ERR_MIN && total > 0 && a.err / total >= ALERTA_API_TASA) {
+        alertas.push({ dia: hoy, equipo: eq, tipo: "api-degradada", severidad: "media",
+          detalle: ep + ": " + a.err + " fallos de " + total + " llamadas (" + Math.round((a.err / total) * 100) + " %)" });
+      }
+    });
+  });
+  return alertas;
+}
+
+// Lee, calcula y escribe en la hoja "alertas" {recibido, dia, equipo, tipo,
+// severidad, detalle}, SIN repetir lo ya anotado (dia+equipo+tipo).
+function revisarAlertas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var nuevas = calcularAlertas(_alertasAgregar(ss));
+  if (!nuevas.length) { try { SpreadsheetApp.getActive().toast("Sin alertas nuevas."); } catch (e) {} return; }
+  var hoja = _hoja(ss, "alertas", ["recibido", "dia", "equipo", "tipo", "severidad", "detalle"]);
+  var ya = {};
+  var vals = hoja.getDataRange().getValues();
+  var hd = vals.shift() || [];
+  var ci = { d: hd.indexOf("dia"), eq: hd.indexOf("equipo"), t: hd.indexOf("tipo") };
+  if (ci.d >= 0 && ci.eq >= 0 && ci.t >= 0) {
+    vals.forEach(function (r) { ya[r[ci.d] + "|" + r[ci.eq] + "|" + r[ci.t]] = 1; });
+  }
+  var filas = [];
+  nuevas.forEach(function (a) {
+    var clave = a.dia + "|" + a.equipo + "|" + a.tipo;
+    if (ya[clave]) return;
+    ya[clave] = 1;
+    filas.push([new Date(), _celda(a.dia, 10), _celda(a.equipo, 40), _celda(a.tipo, 20), _celda(a.severidad, 10), _celda(_sinDigitosLargos(a.detalle), 180)]);
+  });
+  if (filas.length) {
+    hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, 6).setValues(filas);
+    try { SpreadsheetApp.getActive().toast("Alertas nuevas: " + filas.length); } catch (e) {}
+  } else {
+    try { SpreadsheetApp.getActive().toast("Sin alertas nuevas."); } catch (e) {}
+  }
+}
+
+// Trigger diario (lo instala/quita el dueño una vez desde el menú; idempotente).
+function instalarAlertasDiarias() {
+  try {
+    var ya = false;
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "revisarAlertas") ya = true; });
+    if (!ya) ScriptApp.newTrigger("revisarAlertas").timeBased().atHour(23).nearMinute(30).everyDays(1).create();
+    try { SpreadsheetApp.getActive().toast("Revision diaria de alertas instalada (23:30)."); } catch (e) {}
+  } catch (e) { try { SpreadsheetApp.getActive().toast("No se pudo instalar: " + e); } catch (e2) {} }
+}
+function quitarAlertasDiarias() {
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "revisarAlertas") ScriptApp.deleteTrigger(t); });
+    try { SpreadsheetApp.getActive().toast("Revision diaria de alertas quitada."); } catch (e) {}
+  } catch (e) { try { SpreadsheetApp.getActive().toast("No se pudo quitar: " + e); } catch (e2) {} }
+}

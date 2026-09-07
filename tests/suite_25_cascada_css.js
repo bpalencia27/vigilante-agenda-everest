@@ -5,7 +5,11 @@ module.exports = {
   nombre: "Cascada CSS",
   cubre: [],
   pruebas: function (t, api, env) {
-    const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+    // v18.3.6 — los cortes de esta suite usan sentinelas multilínea con "\n" ("}\n      }",
+    // "}\n      .vgl-card:hover"): en un checkout de Windows con autocrlf el archivo
+    // materializa CRLF y las sentinelas dejaban de casar (los 2 falsos rojos preexistentes
+    // del worktree). Se normaliza igual que harness.js al cargar la fuente para ejecutar.
+    const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8").replace(/\r\n/g, "\n");
 
     let css = "";
     let inCss = false;
@@ -819,7 +823,14 @@ module.exports = {
       // complejidad en su estado inicial (.vgl-complex-pill, VGL_UX_CSS: +1 abajo). El censo
       // sintético anterior no los veía por tres puntos ciegos, ya cerrados en
       // tools/auditar_color_todo_chromium.js y vigilados por la Regla S de más abajo.
-      t.cierto(importantTotal === 656, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96 + 2 del número de tecla del menú de elección (C20) en la v18.0.112 + 1 del chip «como la última vez» de Agendar (C17) en la v18.0.115 - 1 que la v18.0.124 (UI/UX UI#12) QUITA: .vgl-tl dejó de apagar el anillo de foco con la marca de prioridad, que era lo único que impedía ver el foco de teclado en los tres semáforos + 1 que la v18.0.125 (fila 30) AÑADE: la chapa .vgl-labs-srcoff, que dice en ámbar que el portal del laboratorio no respondió y vive en un modal pegado a document.body; salió ${importantTotal})`);
+      // v18.4.1 (auditoría 06-sep) — 656 -> 654: la deduplicación de la regla @media
+      // prefers-reduced-motion copiada dos veces desde la fusión de hojas de la v12.3.13
+      // retiró 2 !important que el navegador ya ignoraba (la segunda copia era idéntica).
+      // v18.4.2 — 654 -> 668: el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes,
+      // flotante de la historia clínica pegado a document.body) trae sus 13 reglas de
+      // color con !important (CLAUDE.md, fuera de #vgl-root) + 1 mención de la palabra
+      // en su propio comentario de cabecera (el censo cuenta texto crudo).
+      t.cierto(importantTotal === 668, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal y los 14 del panel RCV de la v18.4.2 (13 reglas de color + 1 en su comentario; esperado 654 base + 14 = 668; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
@@ -991,7 +1002,9 @@ module.exports = {
       // v17.6.83+ — la línea de producción suma 3 sitios más en la misma capa: los
       // sugeridores de la Ficha del paciente (#vgl-cw-examenes, #vgl-cw-farmaco) y el
       // botón/panel de ordenamiento de la consulta: 3 -> 6.
-      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y los sugeridores de la Ficha (6 sitios). Salieron ${zWidget.length}.`);
+      // v18.4.2 — el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes, flotante de la
+      // historia clínica) se une a la misma capa de widget: 6 -> 7.
+      t.cierto(zWidget.length === 7, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, los sugeridores de la Ficha y #vgl-rcv-pendientes (7 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);
@@ -1525,6 +1538,23 @@ module.exports = {
 
       t.igual(sitios.length, 0,
         `un color en línea sin !important lo pisa cualquier regla nuestra de la hoja (todas llevan !important desde la v18.0.14). O lleva !important, o el elemento lleva clase propia y su color vive en la hoja. Sitios: ${sitios.slice(0, 6).join(" | ")}`);
+    });
+
+    t.caso("v18.3.6 — la fusión de hojas de v12.3.13 no dejó reglas duplicadas exactas", () => {
+      // Auditoría del 06-sep: Resumen y Ajustes traían cada uno su propio bloque de estilos
+      // antes de consolidarse en una hoja única, y tres reglas quedaron copiadas DOS veces
+      // (idénticas al carácter). La segunda copia es peso muerto que el navegador parsea
+      // igual — inofensiva hoy, pero un lugar donde un cambio futuro puede editarse "la que
+      // no aplica" y creer que no pasó nada. Se fija UNA copia de cada una.
+      const REGLAS = [
+        "#vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}",
+        "#vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}",
+        "@media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}",
+      ];
+      for (const r of REGLAS) {
+        const n = code.split(r).length - 1;
+        t.igual(n, 1, "la regla aparece UNA sola vez (hay " + n + "): " + r.slice(0, 64) + "…");
+      }
     });
 
   }

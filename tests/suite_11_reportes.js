@@ -353,9 +353,11 @@ module.exports = {
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
       c.api.reportar("sin_red");
       await tick();
-      const enCola = JSON.parse(c.env.gm["vgl_repq"]);
+      // v18.3 (P13) — nacer el id de equipo emite «obs.equipo.nuevo» diferido un
+      // tick; sin red, ese aviso también queda encolado. Esta prueba mide la
+      // supervivencia de la fila «sin_red»: filtrar la cola por su evento.
+      const enCola = JSON.parse(c.env.gm["vgl_repq"]).filter((f) => f.evento === "sin_red");
       t.igual(enCola.length, 1, "el fallo no borra la fila");
-      t.igual(enCola[0].evento, "sin_red");
       // vuelve la red: el reintento (en producción, cada 10 min) la entrega
       red.modo = "ok";
       await c.api.repFlush();
@@ -382,8 +384,11 @@ module.exports = {
       });
       c.api.repDailySummary();
       await tick();
-      t.igual(red.posts.length, 1);
-      const fila = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — el arranque de un navegador limpio emite además
+      // «obs.equipo.nuevo» (diferido un tick) al nacer el id de equipo. Esta
+      // prueba mide el canal «resumen»: contar SOLO sus POST.
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1);
+      const fila = red.cuerpos().find((p) => p.evento === "resumen");
       t.igual(fila.evento, "resumen");
       t.igual(fila.deDia, "2026-03-04", "el resumen es del día ANTERIOR");
       t.igual(fila.fraude, 2);
@@ -394,7 +399,7 @@ module.exports = {
       // segunda llamada el mismo día: el candado la corta
       c.api.repDailySummary();
       await tick();
-      t.igual(red.posts.length, 1, "no se repite la fila");
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1, "no se repite la fila");
     });
 
     await t.casoAsync("repDailySummary: sin actividad ayer no manda fila NI candado; con stats sí", async () => {
@@ -411,15 +416,17 @@ module.exports = {
       });
       c.api.repDailySummary();
       await tick();
-      t.igual(red.posts.length, 1, "ahora sí sale el resumen de ayer");
-      const fila = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — nacer el id emite «obs.equipo.nuevo» diferido: contar SOLO
+      // los POST de «resumen» que esta prueba mide.
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1, "ahora sí sale el resumen de ayer");
+      const fila = red.cuerpos().find((p) => p.evento === "resumen");
       t.igual(fila.evento, "resumen");
       t.igual(fila.deDia, "2026-03-04");
       t.igual(c.env.almacen["vgl_rep_sum"], "2026-03-04", "candado puesto solo cuando hubo fila");
       // tercera llamada: el candado la corta
       c.api.repDailySummary();
       await tick();
-      t.igual(red.posts.length, 1, "no se repite la fila");
+      t.igual(red.cuerpos().filter((p) => p.evento === "resumen").length, 1, "no se repite la fila");
     });
 
     // ---------- reportarFraude ----------
@@ -428,8 +435,10 @@ module.exports = {
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
       c.api.reportarFraude("07:10 AM", 12.34);
       await tick();
-      t.igual(red.posts.length, 1);
-      const fila = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — nacer el id emite «obs.equipo.nuevo» diferido: contar SOLO
+      // los POST de «fraude» que esta prueba mide.
+      t.igual(red.cuerpos().filter((p) => p.evento === "fraude").length, 1);
+      const fila = red.cuerpos().find((p) => p.evento === "fraude");
       t.igual(fila.evento, "fraude");
       t.igual(fila.hora, "07:10 AM");
       t.igual(fila.min, 12.3, "redondeo a un decimal");
@@ -438,7 +447,7 @@ module.exports = {
       // sin datos: hora vacía y 0 minutos, nada de NaN
       c.api.reportarFraude(null, null);
       await tick();
-      const fila2 = JSON.parse(red.posts[red.posts.length - 1].data);
+      const fila2 = red.cuerpos().filter((p) => p.evento === "fraude").pop();
       t.igual(fila2.hora, "");
       t.igual(fila2.min, 0);
     });

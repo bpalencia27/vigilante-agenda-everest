@@ -194,7 +194,11 @@ module.exports = {
     // quedan más de 500, las más viejas. Las claves de prueba son
     // alfabéticas a propósito: no colapsan entre sí por cédula.
     // ---------------------------------------------------------------
-    t.caso("M4: el historial de inasistencias se poda al registrar", () => {
+    await t.casoAsync("M4: el historial de inasistencias se poda al registrar", async () => {
+      // v18.4.3 (H5): el historial descansa cifrado en disco y se escribe ASYNC —
+      // el caso pasó a async para leer el memo (_noShowLeer) y esperar el desenlace
+      // del disco ANTES del finally, que así no deja basura en el entorno compartido.
+      const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
       try {
         const semilla = {};
         semilla["viejitoPodado"] = { total: 3, ultima: api._vglFechaHace(200) };
@@ -204,13 +208,17 @@ module.exports = {
           semilla[clave] = { total: 1, ultima: api._vglFechaHace(10) };
         }
         env.almacen["vgl_nosh_hist"] = JSON.stringify(semilla);
+        const semillaRaw = env.almacen["vgl_nosh_hist"];
         const total = api._noShowRegistrar("nuevoPodado");
-        const hist = JSON.parse(env.almacen["vgl_nosh_hist"]);
+        const hist = api._noShowLeer();
         t.igual(total, 1, "M4: primera inasistencia del paciente nuevo");
         t.falso("viejitoPodado" in hist, "M4: la entrada de hace 200 días salió");
         t.cierto("fresquitoVivo" in hist, "M4: la entrada de hoy sobrevive");
         t.cierto(hist["nuevoPodado"] && hist["nuevoPodado"].ultima === api.todayStamp(), "M4: la nueva entrada quedó fechada hoy");
         t.cierto(Object.keys(hist).length <= 500, "M4: el historial quedó acotado a 500");
+        // Dejar aterrizar la escritura async del sobre antes de borrar la clave:
+        // si el finally corriera antes, el vuelco la re-creararía después.
+        for (let i = 0; i < 200 && env.almacen["vgl_nosh_hist"] === semillaRaw; i++) await dormir(20);
       } finally {
         delete env.almacen["vgl_nosh_hist"];
       }
@@ -322,10 +330,13 @@ module.exports = {
         trabajadores.push(this);
       }
       const r = cargar({ Worker: TrabajadorFalso, silencioso: true });
-      // Durante la carga el propio guion ya levanta su worker del canal
-      // "latido" (perro guardián), antes de que este caso pudiera poner su
-      // espía. Se reinicia el estado del reloj para que _relojCada tenga
-      // que construir OTRO worker, ya bajo el espía de la URL.
+      // v18.2 (P11) — el canal "latido" (perro guardián) ya NO se registra al
+      // evaluar el guion: lo instala boot() tras el consentimiento, vía
+      // _instalarLatidosBase(). Se instala aquí a mano para reproducir el
+      // mundo real (ese worker ya existe) y luego se reinicia el estado del
+      // reloj para que _relojCada tenga que construir OTRO worker, ya bajo
+      // el espía de la URL.
+      r.api._instalarLatidosBase();
       r.api._relojAjustarParaTest({ worker: null, ok: false, motivo: "" });
       let creadas = 0, revocadas = 0;
       const originales = { c: r.env.win.URL.createObjectURL, r: r.env.win.URL.revokeObjectURL };
@@ -466,6 +477,11 @@ module.exports = {
       let desconectados = 0;
       const original = observador.disconnect;
       observador.disconnect = () => { desconectados++; };
+      // v18.2 (P11) — desde la compuerta de consentimiento el registro de navegación ya
+      // NO se instala al evaluar el script: lo instala boot() tras el consentimiento
+      // (y tras el kill-switch). Aquí se instala a mano para seguir verificando B13:
+      // que el apagado de emergencia lo detiene de verdad.
+      r.api._instalarLatidosBase();
       let navVivo = null;
       for (const [, entrada] of r.env.intervalos) {
         if (String(entrada.f).indexOf("UrlChanged") >= 0) { navVivo = entrada; break; }

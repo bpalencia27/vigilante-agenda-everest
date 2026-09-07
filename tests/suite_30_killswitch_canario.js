@@ -295,5 +295,51 @@ module.exports = {
         "al pintar el aviso de Pausa de seguridad, el modo oculto se apaga");
     });
 
+    // =================================================================
+    //  v18.3.4 — HIGIENE DEL KILL-SWITCH (frente T4 del enjambre).
+    //
+    //  (a) startNag/startFlash crean intervalos PROPIOS (nagTimer/flashTimer,
+    //      fuera de state.timers): un kill durante un aviso ROJO activo dejaba el
+    //      tono insistente sonando hasta ~6 min con la UI ya borrada y sin modal
+    //      que permitiera reconocerlo (acknowledge() es inalcanzable tras retirar
+    //      el DOM). emergencyTeardown ahora los apaga.
+    //  (b) _vglInstalarVigilanciaDom dejaba su MutationObserver y sus 3 listeners
+    //      de captura en variables LOCALES: el kill no podía recogerlos y el
+    //      script "muerto" seguía observando el DOM. Las referencias ahora viven
+    //      a nivel de módulo y el teardown las suelta (patrón B13).
+    //  LIMITACIÓN del arnés: MutationObserver.disconnect y removeEventListener son
+    //  no-ops aquí, así que lo observable es el ciclo de vida de las referencias
+    //  (__vglDomVigilanciaParaTest) y de los intervalos (env.intervalos).
+    // =================================================================
+    await t.casoAsync("v18.3.4 — kill con aviso activo: nag y flash mueren con el script y la vigilancia de DOM queda suelta", async () => {
+      const c = cargar({ silencioso: true });
+
+      // Montaje: insistir y parpadeo van apagados de fábrica; se encienden solo aquí
+      // y se disparan ambos canales como en un aviso ROJO real.
+      c.api.__S.insistir = true;
+      c.api.__S.parpadeo = true;
+      const vivosBase = new Set([...c.env.intervalos.entries()].filter(([, r]) => r.vivo).map(([id]) => id));
+      c.api.startNag("ROJO");
+      c.api.startFlash("Atención extemporánea", "ROJO");
+      const nuevos = [...c.env.intervalos.entries()].filter(([id, r]) => r.vivo && !vivosBase.has(id)).map(([id]) => id);
+      t.cierto(nuevos.length >= 2, "montaje: nag y flash registraron sus intervalos propios (" + nuevos.length + " nuevos vivos)");
+
+      // El observador de DOM se instala perezosamente desde la compuerta de cosecha.
+      t.cierto(c.api._vglDomEstaSucia() === true, "la compuerta de cosecha responde (con ella se instala la vigilancia de DOM)");
+      const vig = c.api.__vglDomVigilanciaParaTest();
+      t.cierto(!!vig.obs, "montaje: el observer de DOM quedó referenciado a nivel de módulo");
+      t.cierto(typeof vig.alTocar === "function", "montaje: los listeners de captura quedaron referenciados");
+      t.cierto(vig.instalado === true, "montaje: el latch de instalación está en true");
+
+      c.api.emergencyTeardown("Higiene T4 de prueba");
+
+      const nuevosVivos = nuevos.filter((id) => { const r = c.env.intervalos.get(id); return r && r.vivo; });
+      t.igual(nuevosVivos, [], "tras el kill no queda vivo ningún intervalo de nag/flash: el aviso murió con el script");
+      const vig2 = c.api.__vglDomVigilanciaParaTest();
+      t.igual(vig2.obs, null, "tras el kill el observer de DOM quedó desconectado y sin referencia");
+      t.igual(vig2.alTocar, null, "tras el kill los listeners de captura quedaron retirados y sin referencia");
+      t.cierto(vig2.instalado === true, "el latch de instalación sigue en true: una llamada tardía a la compuerta no reinstala el observador de un script muerto");
+    });
+
   }
 };

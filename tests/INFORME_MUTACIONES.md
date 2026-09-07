@@ -13463,4 +13463,75 @@ suite_82 **22 pasan / 0 fallan**. Cronología y expedientes en
 |---|---|---|---|
 | user.js ~L37040 (TERMINOS_TEXTO, cláusula T-32) | «**Doce meses**» → «**Doce mesee**» dentro del template embebido (el archivo docs/ queda intacto) | NO | Ninguna: *suite_82: P11·9 — «TERMINOS_TEXTO === docs/… — primera diferencia en el carácter 13605»* — mutante 21 pasan / 1 falla; restaurado 22/0 |
 | user.js L36797 (TERMINOS_VERSION) | `"1.2"` → `"9.9"` sin tocar documento ni template (constancia y vigencia firman una versión que ningún texto respalda) | NO | Ninguna: *suite_82: 5 casos en rojo* — P11·4 «constancia con versión y fecha-hora», P11·7 «constancia vigente aunque antigua: NO se re-pregunta», P11·9 «la versión vigente de la constante: esperaba “1.2” y obtuvo “9.9”», P11·15 «la constancia firma con el login de sesión…» y P11·16 «constancia vigente + sin identidad = arranque directo» — mutante 17 pasan / 5 fallan; restaurado 22/0 |
+| user.js L8842 (_vglFeedbackBoton, v18.4.1) | `escapeHtml(texto)` → `texto` a pelo (el aviso del botón vuelve a entrar CRUDO al sumidero innerHTML) | NO | Ninguna: *suite_31: «v18.3.6 XSS — _vglFeedbackBoton escapa el aviso: un payload HTML se VE, no se ejecuta»* — mutante 53 pasan / 1 falla; restaurado 54/0 |
+| user.js L24833 (plantilla del modal de Laboratorios, v18.4.1) | reponer `onclick="this.closest('#vgl-labs-modal').remove()"` en el botón Cerrar (regresa el único onclick inline del archivo, saltándose closeMod) | NO | Ninguna: *suite_31: «v18.3.6 — el modal de Laboratorios cierra SOLO por closeMod: cero onclick inline»* — mutante 53 pasan / 1 falla; restaurado 54/0 |
+| user.js ~L20875 (hoja maestra de buildOverlay, v18.4.1) | reponer la regla `@media (prefers-reduced-motion:reduce)` duplicada que la auditoría retiró (regresan 2 !important muertos y la copia doble) | NO | Ninguna: *suite_25: «la fusión de hojas de v12.3.13 no dejó reglas duplicadas exactas»* Y «Regla G — total de !important» (656 ≠ 654) — mutante 31 pasan / 2 fallan; restaurado 33/0 |
+| user.js ~L5202 (_vglCosechaPersistir, v18.4.3) | en el persist de la memoria clínica, ignorar el sobre cifrado y volver a escribir `JSON.stringify(todo)` en claro (H5 desactivado) | NO | Ninguna: *suite_89: 6 casos en rojo* — el disco sin sobre «VGLC1:», la redonda por disco, la migración, el otro-equipo y nosh — mutante 20 pasan / 6 fallan; restaurado 26/0 |
+| user.js ~L5174 (_vglCosechaHidratar, v18.4.3) | borrar la guarda PENDING: una hidratación tardía puede pisar la escritura en vuelo con el disco viejo | NO | Ninguna: *suite_89: «H5 — CARRERA: una escritura en vuelo (PENDING) no puede ser pisada…»* y 3 casos dependientes — mutante 22 pasan / 4 fallan; restaurado 26/0 |
+| user.js L36354 (checkVersionMinimum, rama post-recarga, v18.4.1) | anular `aplicarBloqueoVersionObsoleta(minVer)` y devolver el aviso pasivo `setSummary` de antes (la versión obsoleta vuelve a poder usarse indefinidamente) | NO | Ninguna: *suite_17: «checkVersionMinimum: tras recarga sin efecto, la versión vieja se BLOQUEA»* — 4 aserciones en rojo («bloqueo», candado GM, modal, telemetría verlock) — mutante 53 pasan / 4 fallan; restaurado 57/0 |
+| user.js L36336 (guard de historia clínica en checkVersionMinimum, v18.4.1) | `if (seccionActiva() === "historia")` → `if (false && …)`: el bloqueo por versión cae aunque haya consulta activa | NO | Ninguna: *suite_17: «con historia clínica abierta el bloqueo se DIFIERE (nunca interrumpe la consulta)»* — «en consulta activa no se bloquea» y candado GM en rojo — mutante 55 pasan / 2 fallan; restaurado 57/0 (verificado en copia aislada del banco por escrituras paralelas en el repo) |
+| user.js L36079 (_vglCandadoVersionArranque, v18.4.1) | `GM_deleteValue(VGL_VERSION_LOCK_GM)` → `if (false && …)`: el candado jamás se limpia y la versión NUEVA seguiría bloqueada al arrancar | NO | Ninguna: *suite_17: «_vglCandadoVersionArranque: con la versión ya instalada el candado se limpia solo y arranca normal»* — «candado limpio automáticamente: esperaba undefined y obtuvo "0.0.1"» — mutante 56 pasan / 1 fallan; restaurado 57/0 (verificado en copia aislada del banco) |
 
+## v18.4 — Telemetría: carril prioritario, muestreo por prioridad, beacon de último recurso y alertas del tablero
+
+Nacido del export real del tablero (docs/TELEMETRIA_20260901.md): el 27-ago seis
+equipos en v18.0.4 emitieron 81 errores que nunca llegaron y la demora de la cola
+era el temporizador completo de 10 min. Tres cambios en el userscript
+(carril prioritario en `reportar`/`repFlush` con autolimitación de 1 min tras
+fallo propio, muestreo por prioridad P0 error.*/rep.* → P1 uso → P2 rum.*/api.*
+en `uxEnviarVentana`, y beacon de único recurso al descartar tras 3 rechazos) y
+las alertas del lado servidor en TABLERO/Codigo.gs (`calcularAlertas` pura:
+canal-mudo/tormenta/z-score/api-degradada; `revisarAlertas` con dedup
+día+equipo+tipo; menú + trigger diario). Suite nueva: `tests/suite_87_telemetria_v18_4.js`
+(la 86 está tomada por la cadena de auditoría de arranque); simulador extendido:
+`TABLERO/simulacion_local.js` bloque «v18.4.0 — ALERTAS DEL TABLERO».
+Verificación final tras restaurar TODAS las mutaciones: `node tests/runner.js
+suite_87` → 6/6 verde; `node TABLERO/simulacion_local.js` → exit 0 con
+«alertas v18.4: TODO OK». NOTA de escrituras paralelas en el repo: durante esta
+tarea otra tarea guardaba el userscript desde instantáneas que contenían
+mutaciones transitorias y las RESUCITÓ dos veces (MUTACIÓN-1) y una vez (M-6/M-7);
+cada resurrección se detectó porque el banco la ponía roja y se restauró de
+inmediato — al cierre, `grep MUTACION-` no encuentra nada en user.js ni Codigo.gs.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| user.js L12281 (repFlush, v18.4) | `if (idx < 0) idx = 0; idx = 0;`: la selección de evidencia se calcula y se tira — la cola vuelve a ser FIFO puro y un error espera detrás de 79 filas de uso | NO | Ninguna: *suite_87: «en el ciclo de repFlush la evidencia sale ANTES que el uso que la precede»* — «el error sale primero aunque era el tercero en la cola: esperaba "error" y obtuvo "entorno"» |
+| user.js L12381 (reportar, v18.4) | carril `if ((evento === "error" \|\| evento === "fraude") && false)`: la evidencia vuelve a esperar el backoff de 3 min y el temporizador de 10 min | NO | Ninguna: *suite_87: «con backoff activo (fallo fresco) la evidencia sale igual y el uso espera»* — «la evidencia intenta salir aunque el backoff esté fresco (obtuvo false)» |
+| user.js L12382 (reportar, v18.4) | throttle `if (true)`: el carril reintenta en cada error contra un panel caído — la tormenta de red que el backoff de v17.6.14 cerró | NO | Ninguna: *suite_87: «tras un fallo del carril, la ráfaga siguiente NO martillea el panel»* — «esperaba 1 y obtuvo 2» llamadas de red |
+| user.js L13290 (uxEnviarVentana, v18.4) | `_prioMuestreo` plano (toda clase → 1): al desbordar el presupuesto se omite por orden de inserción y la evidencia de fallo (última en el objeto) queda fuera del envío | NO | Ninguna: *suite_87: «si la ventana no cabe, se sacrifican rum.*/api.* antes que error.*/rep.*»* — «la contabilidad de la cola también: esperaba 1 y obtuvo undefined» |
+| user.js L12301 (repFlush descarte, v18.4) | beacon de último recurso `if (false && repBeacon(fila))`: la fila descartada se pierde sin el intento final | NO | Ninguna: *suite_87: «la fila de error descartada tras 3 rechazos sale por beacon una última vez…»* — «0 beacon(s)» y «rep.descarte.beacon» ausente |
+| TABLERO/Codigo.gs L1038 (calcularAlertas) | regla canal-mudo `if (false && …)`: el defecto de la v17.2.0 (errores detectados, cero entregados) vuelve a ser invisible | NO | Ninguna: *simulador TABLERO/simulacion_local.js: «FALLA alertas: canal-mudo no disparó»* (exit 1); restaurado exit 0 |
+| TABLERO/Codigo.gs L990 (_alertasAgregar) | dedup por lote `if (lote && false)`: el reenvío de la misma ventana cuenta doble (66 en vez de 33) e infla todas las alertas | NO | Ninguna: *simulador: «FALLA alertas: canal-mudo contó 66 errores detectados… (33 esperados: ¿dedup por lote roto?)»* (exit 1); restaurado exit 0 |
+| TABLERO/Codigo.gs L1093 (revisarAlertas) | dedup de la hoja `if (ya[clave] && false) return;`: cada re-ejecución reescribe las mismas alertas | NO | Ninguna: *simulador: «FALLA alertas: … re-visión duplicó filas: 4 -> 8»* (exit 1); restaurado exit 0 |
+
+## v18.4.2 â€” 06-sep-2026 (Panel Â«PrÃ³ximos exÃ¡menes RCVÂ» del paciente abierto, suite_88)
+
+Mutaciones aplicadas sobre el archivo de producciÃ³n y restauradas DE INMEDIATO, una por
+una (regla del proyecto: cada mutaciÃ³n se restaura antes de pasar a la siguiente). Cada
+corrida dejÃ³ roja la aserciÃ³n especÃ­fica y la suite_88 volviÃ³ a 19/19 al restaurar.
+
+| LÃ­nea | MutaciÃ³n Aplicada | Â¿SobreviviÃ³? | AserciÃ³n Faltante (si sobreviviÃ³) |
+|---|---|---|---|
+| user.js L7185 (rcvPendientesDebeVerse, v18.4.2) | Retirada la condiciÃ³n `o.autorizado === true &&` de la compuerta (el panel se pinta para cualquier mÃ©dico, sin permiso del padrÃ³n) | NO | Ninguna: *suite_88: Â«debeVerse: las CUATRO condiciones a la vezÂ»* â€” Â«sin permiso (obtuvo true)Â»; y la integraciÃ³n Â«PÃšBLICO, LABORATORIOS, BLOQUEADO y sin identidad NO ven el panelÂ» cayÃ³ a rojo. |
+| user.js L7167 (rcvPendientesCalcular, v18.4.2) | Borde de vencimiento `dias < 0` â†’ `dias <= 0` (un examen que vence HOY pasa a VENCIDO en rojo) | NO | Ninguna: *suite_88: Â«vence HOY: prÃ³ximo, no vencido: esperaba "proximo" y obtuvo "vencido"Â»*. |
+| user.js L36014 (hook de tick(), v18.4.2) | Enganche `_rumTramo("tick.widget.rcvpendientes", rcvPendientesTick)` vaciado (`try { }`): el panel solo existirÃ­a llamÃ¡ndolo a mano â€” la ruta de producciÃ³n nunca lo pinta | NO | Ninguna: *suite_88: Â«enganche real: tick() (la ruta de producciÃ³n) pinta el panel sin llamarlo a manoÂ» â€” Â«el hook _rumTramo vive (obtuvo false)Â»*. |
+
+Guardianes acompaÃ±antes ajustados por el mismo cambio (no mutaciones): suite_25 Regla J
+(z-widget 6 â†’ 7 sitios: #vgl-rcv-pendientes) y Regla G (total !important 654 â†’ 668: 13
+reglas de color del panel + 1 menciÃ³n en su comentario; el censo cuenta texto crudo).
+
+| user.js L24419 (_recordatorioLabHtml, v18.4.2) | \.rc-card{width:578px�}\ ? \width:680px\ (la tarjeta del recordatorio de laboratorio vuelve al ancho viejo: la reducci�n al 85% desaparece SIN tocar el resto de la escala) | NO | Ninguna: *suite_62: �recordatorio de la toma (v18.4.2): todas las medidas quedaron al 85% de la escala anterior�* � aserci�n �tarjeta: 680px ? 578px (�0,85)� en rojo � mutante 59 pasan / 1 falla; restaurado 60/0 |
+| user.js L24369 (imprimirRecordatorioCita, rama de respaldo, v18.4.2) | anular el \setTimeout(� pestana.print() �, 900)\ del respaldo (la ventana de impresi�n del recordatorio de cita de control ya NO se abre sola: vuelve a quedar solo la pesta�a con el PDF) | NO | Ninguna: *suite_15: �imprimirRecordatorioCita (v18.4.2): tras abrir la pesta�a, print() se dispara SOLO � sin pasos intermedios�* � �esperaba 1 y obtuvo 0� en rojo � mutante 270 pasan / 1 falla; restaurado 271/0 |
+| user.js L28891 (cargarHoras, filtro de agendas, v18.4.2) | \
+ombreObjetivo = esPropia ? doctorName : _medicoFiltro\ ? \
+ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre filtra por la agenda propia y la de OTRO m�dico jam�s se muestra) | NO | Ninguna: *suite_15: �openAgendamientoModal (v18.4.2): el selector de m�dico permite buscar y elegir la agenda de OTRO m�dico�* � �el turno del OTRO m�dico aparece y es seleccionable (obtuvo false)� en rojo � mutante 270 pasan / 1 falla; restaurado 271/0 |
+| user.js avisoUniversal presupuesto (M1/NT-101) | `const exentoR3 = !!(abandono \|\| prioridadRcv)` ? `false` (el presupuesto vuelve a poder callar un ABANDONO RCV R=3 con el cupo agotado) | NO | Ninguna: *suite_89: �M1/NT-101: presupuesto agotado calla PyM (R=2) pero NUNCA al abandono RCV (R=3)�* � �pasa SIEMPRE (obtuvo false)� en rojo � mutante 19 pasan / 1 falla; restaurado 20/0 |
+| user.js avisoUniversal carrera (M2/NT-102) | desactivar el re-chequeo pre-appendChild (`if (false && uidAviso �)`): la pesta�a que pierde la carrera vuelve a pintar el modal duplicado | NO | Ninguna: *suite_89: �M2/NT-102: el modal que pierde la carrera de pesta�as no pinta ni gasta cupo�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js osNotify fb (M3/NT-104) | respaldo sin revertir la marca ni gatear HCHealth (el aviso vuelve a quedar �contado y nunca visto� tras SO suprimido + pantalla ajena) | NO | Ninguna: *suite_89: �M3/NT-104: SO suprimido + fallback bloqueado ? la marca se REVIERTE�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible soBody (M9/NT-106) | quitar `p.soBody` de la llamada al SO (el Centro de actividades de Windows vuelve a recibir nombre+c�dula) | NO | Ninguna: *suite_89: �M9/NT-106: el cuerpo del SO identifica por HORA, sin nombre ni c�dula�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _encolarAvisoPendiente (M10/NT-107) | re-agregar `body: p.body` al payload de la cola (PHI en claro en localStorage) | NO | Ninguna: *suite_89: �M10/NT-107: la cola localStorage guarda SIN nombre ni c�dula��* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible VERDE (M13) | `if (p.color === "VERDE" && false) return true` (un VERDE R=1 vuelve a gastar notificaci�n del SO con pesta�a desatendida) | NO | Ninguna: *suite_89: �M13: un VERDE con la pesta�a desatendida NO sale al SO�* � �cero notificaciones de Windows (obtuvo 1)� en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible ROJO forzar (Q2/NT-109b) | `startNag("ROJO", false)` (el tono del ROJO vuelve a caer dentro del �Silenciar 15 min� y perderse para siempre) | NO | Ninguna: *suite_89: �Q2/NT-109b: el tono del ROJO suena DENTRO del silencio temporal�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js avisoPacHistPodar corte (M21/NT-123) | `const corte = 0` (la purga temporal de 90 d�as desaparece: c�dulas para siempre en localStorage) | NO | Ninguna: *suite_89: �M21/NT-123: el hist�rico� purga los ts de hace m�s de 90 d�as�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js muteFor sello (M4/NT-109a) | no escribir `vgl_mute_hasta` en localStorage (el silencio vuelve a ser privado de cada pesta�a) | NO | Ninguna: *suite_89: �M4/NT-109a: el silencio de una pesta�a lo ve la otra�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _vglTopeHora (M5/NT-108) | `if (false && arr.length >= tope)` (el tope 3/hora del aviso �3+ PyM� queda anulado) | NO | Ninguna: *suite_89: �M5/NT-108: 3+ PyM avisa UNA vez por cita (silencioso), con tope 3/hora�* en rojo � mutante 19/1; restaurado 20/0 |

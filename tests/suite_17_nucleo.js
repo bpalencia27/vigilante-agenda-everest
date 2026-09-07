@@ -375,8 +375,6 @@ module.exports = {
           ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
           ".fw-bold.mb-0": { textContent: "Presencial" },
         }[sel] || null),
-        // fix 18 M2M: _cedulaDelContenedor recorre el contenedor con querySelectorAll
-        querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "12345678" }] : []),
       };
       const nodoHora = {
         textContent: "07:00 AM",
@@ -415,8 +413,6 @@ module.exports = {
           ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
           ".fw-bold.mb-0": { textContent: "Presencial" },
         }[sel] || null),
-        // fix 18 M2M: igual que el caso anterior — el contenedor aprende querySelectorAll
-        querySelectorAll: (sel) => (sel === ".text-muted" ? [{ textContent: "12345678" }] : []),
       };
       const nodoHora = {
         textContent: "07:00 AM",
@@ -523,16 +519,32 @@ module.exports = {
         "estando en la agenda no se declara ciego: el scrape del DOM es la fuente, y decir lo contrario sería un falso aviso");
     });
 
-    t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
+    // [Q3 — 07-sep, opción (b), pendiente de ratificación del médico] — la caducidad
+    // del cartel en cola pasó de 10 a 30 min SOLO para el ROJO: la atención
+    // extemporánea sigue siendo un hecho vigente a los 11 minutos (NT-120: el aviso
+    // que se pierde no es el ruido, es el fraude). MORADO/AMBAR conservan los 10 min.
+    t.caso("_flushAvisosPendientes v14.1.5: un cartel ROJO rancio (más de 30 minutos) ya no se pinta — el aviso se dio en su momento", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
       c.api.__S.cartel = true;
-      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 660000 });
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 1860000 });
 
       c.api._flushAvisosPendientes();
 
-      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 11 minutos NO se pinta: haría atender una llegada que ya pasó");
+      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 31 minutos NO se pinta: haría atender una llegada que ya pasó");
       t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "la cola queda vacía en cualquier caso");
+    });
+
+    t.caso("[Q3] un cartel ROJO de 11 minutos SÍ se pinta: caduca a los 30, no a los 10", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      c.api.__S.cartel = true;
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "reciente", body: "b", persist: true, uid: "oncin|ROJO", flashText: "t", ts: Date.now() - 660000 });
+
+      c.api._flushAvisosPendientes();
+
+      t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un ROJO de 11 minutos sigue siendo un hecho vigente y se pinta");
+      t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "y la cola queda vacía tras pintarlo");
     });
 
     // ---------- downloadDiagnostic ----------
@@ -775,7 +787,10 @@ module.exports = {
       const c = cargar({
         silencioso: true,
         gmxhr: (o) => {
-          if (!String(o.url).includes("script.google.com")) return;
+          // v18.4.1 — solo el chequeo de versión es GET; el POST de telemetría del
+          // propio bloqueo (verlock) también va a script.google.com y NO debe servirse
+          // aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
+          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
           llamadas.push(o.url);
           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
         },
@@ -822,6 +837,87 @@ module.exports = {
       t.igual(llamadas.length, 2);
       t.igual(Object.keys(c.env.win.sessionStorage._d).length, 0, "en historia clínica se pospone: ni marca ni recarga");
       t.igual(c.env.almacen["vgl_pym_dia"], "intacto", "y no se limpia nada");
+    });
+
+    // ---------- v18.4.1: bloqueo irreversible por versión obsoleta ----------
+    t.caso("checkVersionMinimum: tras recarga sin efecto, la versión vieja se BLOQUEA (regla de actualización obligatoria)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          // solo GET del chequeo de versión: el POST "verlock" debe quedarse en la cola
+          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
+          o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+        },
+      });
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "primer aviso: recarga programada, aún sin bloqueo");
+      // segunda vuelta REAL (marca de sesión puesta): la recarga no alcanzó a actualizar
+      c.api.__state.lastVersionCheck = 0;
+      c.env.almacen["vgl_pym_dia"] = "intacto";
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === true, "equipo aún viejo tras recargar: bloqueo");
+      t.igual(c.env.gm["vgl_version_lock"], "99.0.0", "candado persistente propio");
+      t.cierto(c.env.gm["vgl_kill_active"] !== true, "no contamina el candado del kill-switch remoto");
+      const modal = c.env.doc.getElementById("vgl-bloqueo-version");
+      t.cierto(!!modal, "modal de bloqueo presente");
+      const botones = (modal.children[0] || { children: [] }).children.filter((n) => n.tagName === "BUTTON");
+      t.igual(botones.length, 1, "la única acción del modal es el botón de actualizar");
+      t.cierto(String(botones[0].textContent).includes("Actualizar"), "…y el botón dice actualizar");
+      t.cierto(String(c.env.gm["vgl_repq"] || "").includes('"verlock"'), "el caso queda registrado en la cola de telemetría (GM vgl_repq)");
+      t.igual(c.env.almacen["vgl_pym_dia"], "intacto", "el bloqueo no toca más almacenamiento del día");
+      // tercera vuelta: con state.killed el chequeo ya no corre ni desbloquea nada
+      c.api.__state.lastVersionCheck = 0;
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === true, "el bloqueo sobrevive a ciclos posteriores");
+    });
+
+    t.caso("checkVersionMinimum: con historia clínica abierta el bloqueo se DIFIERE (nunca interrumpe la consulta)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          if (!String(o.url).includes("script.google.com")) return;
+          o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+        },
+      });
+      // simular "ya recargó y sigue viejo": marca de sesión pre-puesta
+      c.env.win.sessionStorage._d["vgl_upd|99.0.0"] = "1";
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "en consulta activa no se bloquea");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "sin candado mientras la historia está abierta");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal mientras la historia está abierta");
+    });
+
+    t.caso("checkVersionMinimum: fallo de red => fail-open, ni marcas ni bloqueo (sin falsos bloqueos)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          if (!String(o.url).includes("script.google.com")) return;
+          o.onerror({});
+        },
+      });
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "error de red NO es versión obsoleta: sin bloqueo");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "sin candado");
+      t.igual(Object.keys(c.env.win.sessionStorage._d).length, 0, "sin marcas de sesión");
+    });
+
+    t.caso("_vglCandadoVersionArranque: candado vigente aborta el arranque y deja solo la opción de actualizar", () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_version_lock"] = "99.0.0";
+      t.cierto(c.api._vglCandadoVersionArranque() === true, "versión local menor que la exigida: arranque abortado");
+      t.cierto(c.api.__state.killed === true, "state.killed al arrancar");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "modal de actualización al arrancar");
+      t.igual(c.env.gm["vgl_version_lock"], "99.0.0", "el candado NO se limpia: sigue vigente para la próxima recarga");
+    });
+
+    t.caso("_vglCandadoVersionArranque: con la versión ya instalada el candado se limpia solo y arranca normal", () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_version_lock"] = "0.0.1";
+      t.cierto(c.api._vglCandadoVersionArranque() === false, "versión al día: sin bloqueo (sin falsos positivos)");
+      t.cierto(c.api.__state.killed === false, "el arranque continúa");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "candado limpio automáticamente");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal");
     });
 
     // ---------- resolverMedicoPorPerfil ----------
@@ -899,16 +995,20 @@ module.exports = {
         ? [{ closest: () => null, textContent: "CC 12.345.678" }]
         : []);
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
-      t.cierto(llamadas[0].includes("BusquedaPaciente"));
-      t.cierto(llamadas[1].includes("BuscarPaciente"));
+      // v18.3 (P13) — el nacimiento del id de equipo emite «obs.equipo.nuevo»
+      // diferido un tick hacia el TABLERO (script.google.com). Esta prueba mide
+      // las llamadas a ATENEA: contar solo las del dominio de Everest.
+      const llamadasAthenea = llamadas.filter((u) => String(u).includes("atheneasoluciones"));
+      t.igual(llamadasAthenea.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
+      t.cierto(llamadasAthenea[0].includes("BusquedaPaciente"));
+      t.cierto(llamadasAthenea[1].includes("BuscarPaciente"));
       t.cierto(datosPaso2.includes('name="numId"') && datosPaso2.includes("12345678"), "la cédula sale limpia de puntos y espacios en el campo numId del multipart");
       const logs1 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
       t.igual(logs1.length, 1);
       t.igual(logs1[0].det.section, "historia");
       // mismo paciente: no se vuelve a consultar (guarda lastAutoFetchedDoc)
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 2, "guarda anti-repetición: mismo paciente, ninguna llamada nueva");
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 2, "guarda anti-repetición: mismo paciente, ninguna llamada nueva");
       const logs2 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
       t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora al repetir");
     });
@@ -942,13 +1042,15 @@ module.exports = {
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ closest: () => null, textContent: "CC 12.345.678" }] : []);
 
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
+      // v18.3 (P13) — ídem: el aviso «obs.equipo.nuevo» del primer arranque viaja
+      // a script.google.com y no cuenta como llamada a Athenea.
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
 
       // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min
       // de la pre-carga (que ahora sí quedó fijada, aunque haya sido con 0 laboratorios).
       ahora += 31000;
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
+      t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
     });
 
     // v12.3.14 — initLabMutationObserver fue ERRADICADA (observaba document.body ENTERO con
@@ -1023,6 +1125,10 @@ module.exports = {
     // tPymCaptador + los tres de acceso del v18.1: tAccesoBoot, tAccesoLoop,
     // tAccesoUid) y el handle del chequeo de versión escalonado (setTimeout 4 s)
     // tiene que estar entre ellos.
+    // v18.2 (P11, R5.1-bis): +2 — los dos setInterval literales de
+    // _instalarLatidosBase() (navLog 5 s y vigía del reloj 30 s, que boot() llama
+    // tras el kill-switch) también se registran, para que el apagado remoto los
+    // cancele igual que al resto. Total: 17 + 2 = 19.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -1036,8 +1142,8 @@ module.exports = {
       c.api.boot();
       const timers = c.api.__state.timers;
 
-      t.igual(timers.length, antes + 17,
-        "boot registra los 17 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid)");
+      t.igual(timers.length, antes + 19,
+        "boot registra los 19 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador, tAccesoBoot, tAccesoLoop, tAccesoUid + los 2 latidos base v18.2: navLog, vigiaReloj)");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");

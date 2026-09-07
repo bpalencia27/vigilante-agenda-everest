@@ -131,78 +131,6 @@ for (const v of [['"2026-06-28"', 14], ['"2026-07-11"', 1], ['"2026-07-11"', 2],
   DIVERGENCIAS["sumar_dias_habiles|[" + v[0] + "," + v[1] + "]"] = DIV_FESTIVO_EXTRA_PY;
 }
 
-// fix 5 M2M — el mensaje del apixabán con CrCl 15-29 sugería reducir a
-// 2.5 mg c/12h por el CrCl solo, cuando la ficha técnica de Eliquis (sección 4.2)
-// manda reducir solo si el paciente cumple 2 de 3: edad >= 80 años, peso <= 60 kg,
-// creatinina sérica >= 1.5 mg/dL. El orquestador portado no recibe edad/peso/
-// creatinina, así que el mensaje se corrigió para pedirle al médico que verifique
-// esos 3 criterios en lugar de sugerir la reducción. El Copiloto Python conserva
-// el mensaje viejo: estos 35 vectores se declaran divergentes a propósito y la
-// conducta (CAP_DOSIS/HIGH) no cambia. Decisión del médico (05-sep-2026).
-const DIV_APIXABAN_SPC_42 =
-  "El Vigilante ya no sugiere reducir apixabán a 2.5 mg c/12h por CrCl solo: la ficha " +
-  "técnica de Eliquis (sección 4.2) solo reduce con 2 de 3 (edad >= 80 años, peso <= 60 kg, " +
-  "creatinina sérica >= 1.5 mg/dL) y el mensaje pide verificar esos criterios. El Python " +
-  "conserva el mensaje viejo. Fix 5 M2M (05-sep-2026).";
-for (const cg of [15.0, 16.0, 20.0, 25.0, 29.0]) {
-  for (const k of [null, 3.0, 4.0, 5.0, 5.1, 5.5, 6.0]) {
-    DIVERGENCIAS["_regla_doac|" + JSON.stringify(["apixaban 5", cg, k])] = DIV_APIXABAN_SPC_42;
-  }
-}
-
-// fix 12 M2M — el mensaje de atenolol/nadolol con eGFR < 15 ofrecía "máximo
-// 25 mg/día o 50 mg interdiarios", pero la ficha FDA de Tenormin (sección
-// posología, ajuste renal) solo respalda 50 mg cada 48 horas con CrCl < 15:
-// el "25 mg/día" era un añadido sin fuente. El Copiloto Python conserva el
-// mensaje viejo: estas 63 entradas (los 3 fármacos del dorado, incluido el
-// "control negativo" carvedilol, porque el generador llama la regla sin
-// clasificar por grupo y la rama < 15 no mira el nombre) se declaran
-// divergentes a propósito y la conducta (CAP_DOSIS/HIGH) no cambia.
-// Decisión del médico (05-sep-2026).
-const DIV_ATENOLOL_48H =
-  "El Vigilante ya no ofrece '25 mg/día' de atenolol con eGFR < 15: la ficha FDA de " +
-  "Tenormin manda 50 mg cada 48 horas. El Python conserva el mensaje viejo. Fix 12 M2M (05-sep-2026).";
-for (const m of ["ATENOLOL 50 MG", "nadolol", "CARVEDILOL 6.25"]) {
-  for (const e of [5.0, 10.0, 14.0]) {
-    for (const k of [null, 3.0, 4.0, 5.0, 5.1, 5.5, 6.0]) {
-      DIVERGENCIAS["_regla_betabloqueador_hidrofilico|" + JSON.stringify([m, e, k])] = DIV_ATENOLOL_48H;
-    }
-  }
-}
-
-// fix 23 M2M — la rama eGFR < 20 del iSGLT2 ordenaba SUSPENDER/CRITICAL, pero
-// KDIGO 2024 mantiene el iSGLT2 YA TOLERADO hasta eGFR ~20 (renoprotección) y
-// solo prohíbe INICIARLO por debajo: suspender de forma automática un
-// renoprotector tolerado es un daño. Cambia a EVITAR/HIGH con mensaje de
-// continuación. El Copiloto Python conserva SUSPENDER/CRITICAL: estas 180
-// entradas (los 6 fármacos del dorado, incluida la "metformina" control,
-// porque el generador llama la regla sin clasificar por grupo y la rama < 20
-// no mira el nombre) se declaran divergentes a propósito. Decisión del
-// médico (05-sep-2026).
-const DIV_SGLT2_MANTENER =
-  "El Vigilante ya no ordena SUSPENDER el iSGLT2 con eGFR < 20: pasa a EVITAR/HIGH con el " +
-  "mensaje de NO iniciar pero CONTINUAR si ya lo tolera (KDIGO 2024). El Python conserva " +
-  "SUSPENDER/CRITICAL. Fix 23 M2M (05-sep-2026).";
-for (const m of ["EMPAGLIFLOZINA 25 MG", "empagliflozina 10", "DAPAGLIFLOZINA 10 MG", "canagliflozina 100", "ertugliflozina", "metformina"]) {
-  for (const e of [5.0, 10.0, 14.0, 15.0, 16.0]) {
-    for (const h of [null, 6.5, 8.0, 8.1, 9.5, 12.0]) {
-      DIVERGENCIAS["_regla_sglt2|" + JSON.stringify([m, e, null, h])] = DIV_SGLT2_MANTENER;
-    }
-  }
-}
-
-// fix 12 + 23 M2M — el orquestador llama esas dos reglas por dentro, así que
-// sus 4 vectores con eGFR 10 heredan la divergencia. Hasta hoy este contraste
-// no tenía mecanismo de excepciones: se le dio el mismo DIVERGENCIAS (con
-// auto-poda) que usa el resto de la suite, en lugar de ocultar los vectores.
-const DIV_ORQ_HEREDADA =
-  "Vector del orquestador con eGFR 10 que atraviesa las reglas divergentes de los fixes " +
-  "12 y 23 M2M (atenolol < 15 e iSGLT2 < 20): su salida ya no calca al Copiloto. (05-sep-2026).";
-for (const k of [null, 5.5]) {
-  DIVERGENCIAS[ORQUESTADOR.py + "|" + JSON.stringify([["HIDROCLOROTIAZIDA 25 MG", "ATENOLOL 50 MG", "ALOPURINOL 300 MG"], 10, 10.5, k, null, null, null, null])] = DIV_ORQ_HEREDADA;
-  DIVERGENCIAS[ORQUESTADOR.py + "|" + JSON.stringify([["EMPAGLIFLOZINA 10 MG", "FUROSEMIDA 40 MG", "COLCHICINA 0.5 MG"], 10, 10.5, k, null, null, null, null])] = DIV_ORQ_HEREDADA;
-}
-
 function norm(v, campoConjunto) {
   if (campoConjunto && Array.isArray(v)) {
     v = v.map((x) => {
@@ -307,19 +235,9 @@ module.exports = {
         const e = v.entrada;
         t.cierto(e[5] === null && e[6] === null,
           "este vector usa indicaciones/dosis_mg, que NO están portadas: no debe contrastarse como si lo estuvieran");
-        const clave = ORQUESTADOR.py + "|" + JSON.stringify(e);
         const obtenido = fn(e[0], e[1], e[2], e[3], e[4], e[7]);
-        n++;
-        if (DIVERGENCIAS[clave] !== undefined) {
-          // fix 12+23 M2M — el orquestador hereda por dentro las divergencias
-          // de las reglas que llama: se vigilan igual que las demás, con poda.
-          usadas.add(clave);
-          t.cierto(norm(obtenido) !== norm(v.salida),
-            "DIVERGENCIA DECLARADA QUE YA NO DIVERGE: " + clave + ". Ahora los dos dan " +
-            norm(v.salida) + ". Bórrala de la lista — una excepción que sobra es donde se esconde el próximo fallo.");
-          continue;
-        }
         t.igual(norm(obtenido), norm(v.salida), ORQUESTADOR.js + "(" + JSON.stringify(e.slice(0, 3)) + ")");
+        n++;
       }
       t.cierto(n >= 140, "solo se contrastaron " + n + " listas de medicamentos");
     });

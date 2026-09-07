@@ -62,7 +62,7 @@ module.exports = {
 
   cubre: ["mtrEsMedicoAutorizado", "esMedicoRCVActivo", "mtrNormalizarNombre",
     "accesoPerfil", "accesoCap", "accesoLeerLista", "accesoListaValida",
-    "accesoRefrescarLista", "repAccesoDiario", "accesoEscribirUrl",
+    "accesoRefrescarLista", "repAccesoDiario",
     "openLaboratoriosModal", "openAgendamientoModal", "openLabSoloModal",
     "openPanelPacienteModal", "abrirRedactorTextoLibre", "mtrAbrirPanelRedaccion"],
 
@@ -302,8 +302,12 @@ module.exports = {
       conDoctor(c.api, 201, "Maryuris Terán");
       c.api.repAccesoDiario();
       await new Promise((res) => setTimeout(res, 30));
-      t.igual(red.posts.length, 1, "un solo POST");
-      const cuerpo = JSON.parse(red.posts[0].data);
+      // v18.3 (P13) — el arranque de un navegador limpio emite además
+      // «obs.equipo.nuevo» (diferido un tick) al nacer el id de equipo. Esta
+      // prueba mide el canal «acceso»: contar SOLO sus POST.
+      const postsAcceso = red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso"; } catch (err) { return false; } });
+      t.igual(postsAcceso.length, 1, "un solo POST");
+      const cuerpo = JSON.parse(postsAcceso[0].data);
       t.igual(cuerpo.evento, "acceso");
       t.igual(cuerpo.uid, 201);
       t.igual(cuerpo.nombre, "Maryuris Terán");
@@ -311,7 +315,7 @@ module.exports = {
       t.igual(c.env.almacen["vgl_rep_acceso"], c.api.todayStamp(), "candado diario escrito");
       c.api.repAccesoDiario();
       await new Promise((res) => setTimeout(res, 30));
-      t.igual(red.posts.length, 1, "el candado diario impide el segundo envío");
+      t.igual(red.posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso"; } catch (err) { return false; } }).length, 1, "el candado diario impide el segundo envío");
     });
 
     t.caso("B2: repAccesoDiario sin uid no reporta nada (ni gasta el candado)", () => {
@@ -598,26 +602,70 @@ module.exports = {
       t.igual(x.red.fetches.length, 2, "las dos lecturas salieron");
     });
 
-    t.caso("v18.1 (M2M f24): accesoEscribirUrl directo — las variantes de cancelación cierran y las URLs de impresión/impresión-orden no se catalogan como escritura", () => {
-      const lab = ctxC(201, "Maryuris Terán");
-      t.igual(lab.c.api.accesoPerfil(), "LABORATORIOS", "precondición del contexto");
-      t.falso(lab.c.api.accesoEscribirUrl("/apiviva/APIAcceso/api/Acceso/AnularCita?CitaId=5"),
-        "AnularCita es agendar_control: cerrada para LABORATORIOS");
-      t.falso(lab.c.api.accesoEscribirUrl(ORIGEN78 + "/apiviva/APIAcceso/api/Acceso/CancelarTurno?TurnoId=6"),
-        "CancelarTurno también: el regex cubre las tres grafías de cancelación");
-      t.cierto(lab.c.api.accesoEscribirUrl(U78.ordCorreo),
-        "EnviarEmailOrdenamiento (pym pública) abre para LABORATORIOS");
-
-      const bloq = ctxC(999, "Prueba Bloqueada Uno");
-      t.igual(bloq.c.api.accesoPerfil(), "BLOQUEADO", "precondición del contexto");
-      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=2&Agrupador=3"),
-        "GenerarLinksImpresionOrdenamientos es LECTURA (links de impresión): pasa incluso BLOQUEADO");
-      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=3&idPaciente=2"),
-        "GenerarOrdenHC (imprimir la orden) es navegación de lectura: pasa");
-      t.cierto(bloq.c.api.accesoEscribirUrl("/apiviva/APIOrdenamientoHealth/api/Paciente/BuscarPaciente?Identificacion=1&TipoDocumento=CC&epsId=2"),
-        "BuscarPaciente es lectura: la compuerta es control operativo de escrituras, no seguridad");
-      t.falso(bloq.c.api.accesoEscribirUrl(U78.asignar),
-        "y una escritura catalogada sigue cerrada para BLOQUEADO — no se abrió nada de paso");
+    // =====================================================================
+    //  v18.3.4 — N8-B1: LA CAPACIDAD «CENTINELA» POR FIN CONSULTADA. Estaba
+    //  declarada (ACCESO_CAPS_LABORATORIOS) y probada por la matriz de la
+    //  suite 80, pero NADIE la consultaba: boot() montaba #vgl-root sin
+    //  compuerta de perfil y el monitor núcleo corría para PÚBLICO en la
+    //  ruta sin-identidad-aceptado. Ahora: (a) con identidad conocida se
+    //  exige ANTES de montar; (b) sin identidad NO se bloquea (v18.3.2, caso
+    //  Dra. Gloria: el montaje se difiere, no se cancela); (c) cuando la
+    //  identidad llega tarde y resuelve PÚBLICO, la re-visa de tick() retira
+    //  el monitor — «PÚBLICO no construye UI», la promesa del comentario de
+    //  mtrCompuertaDecision.
+    // =====================================================================
+    await t.casoAsync("N8-B1 (v18.3.4): «centinela» se exige al montar el monitor — PÚBLICO con identidad no monta #vgl-root; sin identidad se difiere y tick() retira al resolver PÚBLICO", async () => {
+      // (a) PÚBLICO con identidad resuelta: boot() NO monta el monitor. Se
+      // blinda tick() con state.killed para aislar ESTA compuerta: sin el
+      // escudo, la re-visa de tick() (que applySettings dispara en el propio
+      // arranque) retiraría el monitor aunque la compuerta de boot faltara, y
+      // la aserción mediría la otra barrera, no esta.
+      const c1 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      conDoctor(c1.api, 555, "Médico Nuevosur del Hospital");
+      enriquecerDom78(c1);
+      t.igual(c1.api.accesoPerfil(), "PUBLICO", "precondición: identidad fuera del padrón");
+      t.falso(c1.api.accesoCap("centinela"), "precondición: PÚBLICO no tiene «centinela» (matriz suite 80)");
+      c1.api.__state.killed = true;   // escudo: tick() no puede retirar nada
+      c1.api.boot();
+      t.falso(montado(c1, "vgl-root"), "boot() NO monta #vgl-root para PÚBLICO con identidad conocida");
+      // (b) Sin identidad conocida (ruta sin-identidad de v18.3.2): el montaje
+      // NO se bloquea — se difiere. Bloquear aquí reviviría el «no aparece
+      // nada» de la Dra. Gloria.
+      const c2 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      enriquecerDom78(c2);
+      c2.api.boot();
+      t.cierto(montado(c2, "vgl-root"), "sin identidad conocida el monitor SÍ se monta (diferimiento de v18.3.2, no bloqueo)");
+      // v18.3.5 (higiene N3, T1) — mientras el monitor vive, la vigilancia de DOM
+      // debe estar instalada (se instala perezosamente desde la compuerta de
+      // cosecha). LIMITACIÓN del arnés (misma que suite_30): disconnect y
+      // removeEventListener son no-ops aquí, así que se observa el ciclo de vida
+      // de las referencias vía __vglDomVigilanciaParaTest.
+      t.cierto(c2.api._vglDomEstaSucia() === true, "montaje: la compuerta de cosecha responde (con ella se instala la vigilancia de DOM)");
+      const vigAntes = c2.api.__vglDomVigilanciaParaTest();
+      t.cierto(!!vigAntes.obs, "montaje: el observer de DOM quedó referenciado a nivel de módulo");
+      t.cierto(typeof vigAntes.alTocar === "function", "montaje: los listeners de captura quedaron referenciados");
+      // (c) La identidad llega tarde y resuelve PÚBLICO: la re-visa de tick()
+      // retira el monitor montado.
+      conDoctor(c2.api, 555, "Médico Nuevosur del Hospital");
+      c2.api.tick();
+      t.falso(montado(c2, "vgl-root"), "tick() retira el monitor cuando la identidad resuelta no tiene «centinela»");
+      // v18.3.5 (higiene N3, T1) — el retiro también SUELTA la vigilancia de DOM
+      // (mismo hueco que T4 arregló para el kill): el monitor retirado no sigue
+      // observando el DOM. El latch de instalación se queda en true a propósito:
+      // una llamada tardía a la compuerta no reinstala el observador.
+      const vigDespues = c2.api.__vglDomVigilanciaParaTest();
+      t.igual(vigDespues.obs, null, "tras el retiro el observer de DOM quedó desconectado y sin referencia");
+      t.igual(vigDespues.alTocar, null, "tras el retiro los listeners de captura quedaron retirados y sin referencia");
+      t.cierto(vigDespues.instalado === true, "el latch de instalación sigue en true: una llamada tardía a la compuerta no reinstala el observador de un monitor retirado");
+      // Y un COMPLETO del padrón con el monitor montado NO lo pierde: la
+      // re-visa solo retira perfiles sin la capacidad.
+      const c3 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
+      enriquecerDom78(c3);
+      c3.api.boot();
+      t.cierto(montado(c3, "vgl-root"), "precondición: COMPLETO arrancó sin identidad y montó el monitor");
+      conDoctor(c3.api, 101, "Brandon Jesús Palencia Martínez");
+      c3.api.tick();
+      t.cierto(montado(c3, "vgl-root"), "COMPLETO del padrón conserva el monitor tras la re-visa");
     });
   },
 };

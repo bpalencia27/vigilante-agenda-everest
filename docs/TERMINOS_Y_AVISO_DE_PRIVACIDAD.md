@@ -1,5 +1,5 @@
 # Términos de uso y aviso de privacidad — Asistente Centinela
-**Versión 1.2 · 6 de septiembre de 2026**
+**Versión 1.3 · 7 de septiembre de 2026**
 
 > **Nota de estado.** Este es un borrador de trabajo redactado para decir la verdad sobre lo que el
 > programa hace. No es asesoría jurídica y no sustituye la revisión de un abogado colegiado. Los
@@ -266,6 +266,22 @@ la hora, y su identificador. Nada más.
 
 ---
 
+### T-47 · Avisos y notificaciones [NUEVA]
+1. Los avisos que el programa muestra DENTRO de la página (tarjetas de la agenda, toasts,
+   cuadro de pendientes) pueden mostrar nombre y hora de la cita: solo usted los ve, en la
+   misma pantalla clínica donde ya trabaja.
+2. Las notificaciones del SISTEMA (Centro de actividades de Windows, visible en
+   computadores compartidos) NO llevan nombre ni documento del paciente: la cita se
+   identifica solo por su hora (Ley 1581 de 2012, artículos 3 y 4).
+3. La cola temporal de avisos pendientes del navegador se guarda en su equipo SIN nombre
+   ni documento del paciente, y se purga sola por tiempo.
+4. El histórico local del aviso «paciente nuevo» guarda solo documento y hora, sin
+   nombres, con purga automática a los 90 días.
+5. La bitácora local de la jornada sí contiene nombres de pacientes: vive SOLO en su
+   equipo, sale únicamente cuando usted exporta la bitácora, y jamás por telemetría.
+
+---
+
 ## T-45 · Promesas verificables [NUEVA]
 Cada afirmación de este documento que dice que el programa «no puede» hacer algo está respaldada
 por una prueba automática del proyecto que se rompe si el comportamiento cambia. En particular:
@@ -274,6 +290,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 3. Ningún nombre, documento o nota clínica puede salir por telemetría.
 4. La constancia de aceptación contiene solo versión, fecha-hora e identificador.
 5. Actualizar el programa sin cambiar el texto no vuelve a pedir autorización; cambiarlo, sí.
+6. Las notificaciones del sistema no llevan nombre ni documento del paciente.
 
 ---
 
@@ -306,6 +323,10 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 5. **Hecho — Versionado:** historial abajo; la versión vigente se muestra en el panel de ajustes.
 
 ### Historial de versiones
+- **1.3 · 7 de septiembre de 2026** — cláusula nueva de avisos y notificaciones (T-47):
+  qué se muestra dentro de la página, qué no sale al sistema operativo, la cola local sin
+  identificación, la purga a 90 días del histórico de pacientes nuevos y el alcance de la
+  bitácora local; promesa verificable n.º 6 en T-45.
 - **1.2 · 6 de septiembre de 2026** — anonimización del texto (el documento ya no identifica al
   Desarrollador); cláusulas nuevas de responsabilidad (T-38), versionado (T-39), base del
   tratamiento (T-40), transferencia internacional (T-30), seguridad (T-42), procesamiento local

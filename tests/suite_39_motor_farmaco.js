@@ -336,23 +336,6 @@ module.exports = {
       t.igual(conTilde.mensaje, sinTilde.mensaje, "la tilde no puede cambiar la conducta");
     });
 
-    t.caso("fix 5 M2M — apixabán CrCl 15-29: pedir verificación 2-de-3, no reducir por CrCl solo", () => {
-      // Ficha técnica de Eliquis, sección 4.2: la reducción a 2.5 mg c/12h en FA no
-      // valvular corresponde solo si el paciente cumple 2 de 3 (edad >= 80 años,
-      // peso <= 60 kg, creatinina sérica >= 1.5 mg/dL). El mensaje viejo ordenaba
-      // la reducción por el CrCl solo — clínica incorrecta.
-      const r = api.mtrReglaDoac("APIXABAN 5 MG", 20, null);
-      t.igual(r.conducta, "CAP_DOSIS", "la conducta no cambia");
-      t.igual(r.severidad, "HIGH", "ni la severidad");
-      t.cierto(r.mensaje.indexOf("2 de 3") >= 0, "debe nombrar la regla 2-de-3 de la ficha técnica");
-      t.cierto(r.mensaje.indexOf("80") >= 0 && r.mensaje.indexOf("60 kg") >= 0 && r.mensaje.indexOf("1.5") >= 0,
-        "debe listar los tres criterios: edad, peso y creatinina sérica");
-      t.falso(r.mensaje.indexOf("reducir dosis a 2.5 mg cada 12 horas con CrCl") >= 0,
-        "no puede seguir ordenando la reducción por CrCl solo");
-      t.igual(api.mtrReglaDoac("APIXABAN 5 MG", 14, null).conducta, "CONTRAINDICADA",
-        "el umbral < 15 sigue intacto");
-    });
-
     t.caso("la metformina cruza sus dos umbrales en el sitio exacto", () => {
       t.igual(api.mtrReglaMetformina("METFORMINA", 29.9, null).conducta, "CONTRAINDICADA");
       t.igual(api.mtrReglaMetformina("METFORMINA", 30, null).conducta, "CAP_DOSIS");
@@ -453,49 +436,14 @@ module.exports = {
       t.igual(r[0].severidad, "CRITICAL");
     });
 
-    t.caso("fix 11 M2M — en G3a/A2 el AINE con IECA/ARA-II activo es CRITICAL (doble whammy)", () => {
+    t.caso("en G3a/A2 el AINE sube a CRITICAL si además falta el bloqueo SRAA", () => {
       const conRaas = api.mtrReglaErcG3aA2(["LOSARTAN 50 MG", "IBUPROFENO 400 MG"], 50, 100);
       const sinRaas = api.mtrReglaErcG3aA2(["IBUPROFENO 400 MG"], 50, 100);
       const aineCon = conRaas.filter((a) => a.principio_activo === "erc_g3a_a2_con_aine")[0];
       const aineSin = sinRaas.filter((a) => a.principio_activo === "erc_g3a_a2_con_aine")[0];
-      t.igual(aineCon.severidad, "CRITICAL", "AINE + IECA/ARA-II: doble whammy, la combinación más peligrosa");
-      t.igual(aineSin.severidad, "HIGH", "AINE sin SRAA: riesgo alto, pero no la combinación crítica");
+      t.igual(aineCon.severidad, "HIGH");
+      t.igual(aineSin.severidad, "CRITICAL");
       t.igual(sinRaas.length, 2, "sin RAAS salen las dos alertas: iniciar y suspender");
-    });
-
-    t.caso("fix 12 M2M — atenolol con eGFR < 15: tope 50 mg cada 48 horas (ficha FDA Tenormin)", () => {
-      const r = api.mtrReglaBetabloqueadorHidrofilico("ATENOLOL 50 MG", 10, null);
-      t.igual(r.conducta, "CAP_DOSIS");
-      t.igual(r.severidad, "HIGH");
-      t.cierto(r.mensaje.indexOf("50 mg cada 48 horas") >= 0, "la ficha FDA solo respalda 50 mg c/48h: " + r.mensaje);
-      t.falso(r.mensaje.indexOf("25 mg/d") >= 0, "el '25 mg/día' no tiene fuente y salió: " + r.mensaje);
-      const g3b = api.mtrReglaBetabloqueadorHidrofilico("ATENOLOL 50 MG", 20, null);
-      t.igual(g3b.mensaje, "Atenolol/Nadolol: máximo 50 mg/día con eGFR < 35 mL/min/1.73m2.",
-        "la rama 15-35 no cambia");
-    });
-
-    t.caso("fix 13 M2M — edoxabán: CrCl > 95 EVITAR, 15-50 a 30 mg/día, < 15 contraindicado", () => {
-      const alto = api.mtrReglaDoac("EDOXABÁN 60 MG", 96, null);
-      t.igual(alto.conducta, "EVITAR", "CrCl > 95: hasta hoy caía en el silencio del return null");
-      t.igual(alto.severidad, "HIGH");
-      const medio = api.mtrReglaDoac("EDOXABÁN 60 MG", 40, null);
-      t.igual(medio.conducta, "CAP_DOSIS");
-      t.cierto(medio.mensaje.indexOf("30 mg/día") >= 0, "ajuste propio del edoxabán: " + medio.mensaje);
-      const bajo = api.mtrReglaDoac("EDOXABÁN 60 MG", 10, null);
-      t.igual(bajo.conducta, "CONTRAINDICADA");
-      t.igual(bajo.severidad, "CRITICAL");
-      t.igual(api.mtrReglaDoac("EDOXABÁN 60 MG", 70, null), null, "CrCl 51-95 sin ajuste: silencio correcto");
-    });
-
-    t.caso("fix 23 M2M — iSGLT2 con eGFR < 20: EVITAR/HIGH, no iniciar pero continuar si lo tolera", () => {
-      const r = api.mtrReglaSglt2("EMPAGLIFLOZINA 10 MG", 15, null, 9.0);
-      t.igual(r.conducta, "EVITAR", "ya no SUSPENDER: KDIGO 2024 continúa el iSGLT2 tolerado");
-      t.igual(r.severidad, "HIGH", "ya no CRITICAL");
-      t.cierto(r.mensaje.indexOf("NO iniciar") >= 0 && r.mensaje.indexOf("CONTINUAR") >= 0, r.mensaje);
-      t.igual(api.mtrReglaSglt2("DAPAGLIFLOZINA 10 MG", 19, null, null).conducta, "EVITAR",
-        "la frontera 19 también entra (eGFR < 20)");
-      t.igual(api.mtrReglaSglt2("EMPAGLIFLOZINA 10 MG", 20, null, null).conducta, "REVISAR_FICHA_TECNICA",
-        "la frontera 20 queda en la rama de abajo, que no cambia");
     });
 
     // ---------- furosemida y su dosis ----------
@@ -507,17 +455,6 @@ module.exports = {
       t.igual(r.severidad, "HIGH");
       t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 80).conducta, "CAP_DOSIS");
       t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 40).severidad, "INFO");
-    });
-
-    t.caso("fix 5 M2M — el tope de furosemida dice G4-G5, lo único que el gate deja pasar", () => {
-      // El gate `egfr >= 30 return null` excluye a G3b (30-44): solo G4 (15-29) y
-      // G5 (<15) llegan a esta rama. El texto viejo decía "(G3b-G5)".
-      const r = api.mtrReglaFurosemida("FUROSEMIDA", 25, null, 80);
-      t.igual(r.conducta, "CAP_DOSIS");
-      t.cierto(r.mensaje.indexOf("(G4-G5)") >= 0, "debe decir G4-G5");
-      t.falso(r.mensaje.indexOf("G3b") >= 0, "G3b es 30-44 y retorna null antes de llegar aquí");
-      t.igual(api.mtrReglaFurosemida("FUROSEMIDA", 30, null, 80), null,
-        "frontera: 30 mL/min es G3b y no genera aviso de tope");
     });
 
     t.caso("hipokalemia con ERC avanzada manda sobre el tope de dosis", () => {

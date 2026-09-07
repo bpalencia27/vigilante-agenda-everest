@@ -783,7 +783,9 @@ module.exports = {
       c.api._noShowGuardar({ "0099900042": { total: 3, ultima: "2026-08-01" } });
       const total = c.api._noShowRegistrar("99900042");
       t.igual(total, 4, "sigue contando desde 3, no empieza de cero");
-      const h = JSON.parse(c.env.almacen["vgl_nosh_hist"] || "{}");
+      // v18.4.3 (H5): el disco guarda un sobre cifrado y se escribe ASYNC — el
+      // historial vivo se lee del memo sincrono (_noShowLeer), no del localStorage.
+      const h = c.api._noShowLeer();
       t.igual(Object.keys(h).length, 1, "y no se crea una segunda ficha para el mismo paciente");
     });
 

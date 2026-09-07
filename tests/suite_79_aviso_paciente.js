@@ -89,14 +89,20 @@ module.exports = {
       t.igual(api.avisoPacToastsRecientes(ts, AHORA).length, 2, "de 3 toasts, 2 son de la última hora");
       t.igual(api.avisoPacToastsRecientes([], AHORA).length, 0, "sin toasts, presupuesto lleno");
       // La poda solo actúa sobre el máximo y conserva los más recientes.
+      // [M21] los ts del fixture son RECIENTES (relativos a ahora): la purga temporal
+      // de 90 días no debe interferir con lo que este caso mide, que es la poda por CONTEO.
       const muchos = {};
-      for (let i = 0; i < 2001; i++) muchos["d" + i] = i;   // d2000 = el más reciente
+      const _base = Date.now();
+      for (let i = 0; i < 2001; i++) muchos["d" + i] = _base + i * 1000;   // d2000 = el más reciente
       const podado = api.avisoPacHistPodar(muchos);
       t.cierto(!!podado, "con 2001 conocidos debe podar");
       t.igual(Object.keys(podado).length, 1500, "la poda deja 1500");
       t.cierto(podado["d2000"] !== undefined, "conserva los más recientes");
       t.falso(podado["d0"] !== undefined, "suelta los más viejos");
-      t.igual(api.avisoPacHistPodar({ a: 1 }), null, "por debajo del máximo no toca nada");
+      t.igual(api.avisoPacHistPodar({ a: Date.now() }), null, "por debajo del máximo (y reciente) no toca nada");
+      // [M21/NT-123] la purga TEMPORAL sí actúa aunque el conteo no llegue al tope.
+      const _podaTemp = api.avisoPacHistPodar({ a: Date.now() - 91 * 24 * 3600 * 1000, b: Date.now() });
+      t.cierto(!!_podaTemp && !("a" in _podaTemp) && "b" in _podaTemp, "un registro de hace 91 días sale aunque el histórico no esté lleno");
     });
 
     t.caso("B5 capa a: PÚBLICO (sin padrón) no evalúa NI APRENDE nada", () => {
@@ -261,7 +267,8 @@ module.exports = {
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
       const docs = {};
-      for (let i = 0; i < 2005; i++) docs["viejo" + i] = i;   // ordenados del más viejo al más nuevo
+      const _base2 = Date.now();
+      for (let i = 0; i < 2005; i++) docs["viejo" + i] = _base2 + i * 1000;   // ordenados del más viejo al más nuevo, todos recientes ([M21] sin purga temporal)
       almacen["vgl_aviso_hist_201"] = JSON.stringify({ docs: docs });
       const r = c.api.avisoPacEval([cita("950", "La Que Poda", "16:00")], { ahora: AHORA, toast: grabadora().toast });
       t.igual(r.nuevos, 1, "la nueva cuenta");

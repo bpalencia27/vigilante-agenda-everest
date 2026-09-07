@@ -1,0 +1,41 @@
+[Vigilante] hora no interpretable: invalido
+[Vigilante] La tabla de festivos caducó, hay que actualizarla.
+[Vigilante Athenea] latido de sesión falló: Error: NetErr
+    at Object.onerror (vigilante_agenda.user.js:2016:96)
+    at Timeout._onTimeout (E:\CENTINELA\vigilante-agenda-everest\tests\harness.js:212:66)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles: [ 'codigo', 'nombre', 'Resultado' ]
+[Vigilante] Auto-Labs: COLESTEROL_TOTAL = 1,2 no quedó escrito en la casilla (rechazado por el navegador).
+[Vigilante] repetición del mismo analito, se conserva el candidato vigente: UROANALISIS
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.
+[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.
+[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.
+[Vigilante] uroanálisis: no se escribió la fecha porque NO se encontró su casilla (ni como hermana input[type=date] del .input-group, ni por el id fechaResultUroanalisis).
+[Vigilante] repetición del mismo analito, se conserva el candidato vigente: GLUCOSA
+[Vigilante] RAC vacía, restaurando valor del robot (1/2). Si la borra otra vez, se respeta.
+[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.
+[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.
+[Vigilante] RAC vacía, restaurando valor del robot (1/2). Si la borra otra vez, se respeta.
+[Vigilante] RAC vacía, restaurando valor del robot (2/2). Si la borra otra vez, se respeta.
+[Vigilante] RAC: la casilla se vació de nuevo tras 2 restauraciones. Se deja como el médico la dejó y no se vuelve a tocar.
+[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa): TypeError: resp.blob is not a function
+    at vigilante_agenda.user.js:24348:33
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at listOnTimeout (node:internal/timers:567:9)
+    at process.processTimers (node:internal/timers:541:7)
+[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa): TypeError: resp.blob is not a function
+    at vigilante_agenda.user.js:24348:33
+[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa): TypeError: resp.blob is not a function
+    at vigilante_agenda.user.js:24348:33
+[Vigilante Athenea] latido de sesión falló: Error: NetErr
+    at Object.onerror (vigilante_agenda.user.js:2016:96)
+    at Timeout._onTimeout (E:\CENTINELA\vigilante-agenda-everest\tests\harness.js:212:66)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[Vigilante] Auto-Labs NO escribió CREATININA = 88: fuera del rango que la IPS declara (0.2–20 mg/dL).
+[Vigilante] Se detectó otra instancia activa de Vigilante de Agenda (v14.0.0). Esta instancia (v18.4.3) aborta su inicio para evitar duplicidad.
+[Vigilante] Se detectó instancia duplicada por marcador en DOM (v13.5.0). Abortando inicio.

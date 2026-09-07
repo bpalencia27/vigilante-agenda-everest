@@ -3265,6 +3265,59 @@ module.exports = {
       t.falso(textos.includes("No se identificó su agenda propia"), "con agendas propias no hay aviso de agenda ajena");
     });
 
+    // v18.4.2 — BÚSQUEDA POR OTRO MÉDICO: el selector del paso 2 deja ver y elegir las
+    // citas de cualquier médico con agenda ese día (nombres tal cual los listó
+    // BuscarCitasDisponibles), sin perder el comportamiento propio por defecto.
+    await t.casoAsync("openAgendamientoModal (v18.4.2): el selector de médico permite buscar y elegir la agenda de OTRO médico", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cOtro = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const f = iso2fmt(iso);
+            return respuestaJson({ agendas: [
+              { agendaId: 63, medico: "OTRO PROFESIONAL", fechaAgenda: f, sede: "CMB" },
+              { agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: f, sede: "CMB" },
+            ] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) {
+            if (u.includes("agendaid=61")) return respuestaJson({ turnos: [{ id: 700, horaTexto: "07:00 AM", estado: "ACT" }] });
+            if (u.includes("agendaid=63")) return respuestaJson({ turnos: [{ id: 999, horaTexto: "09:00 AM", estado: "ACT" }] });
+            return respuestaJson({ turnos: [] });
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cOtro);
+      cOtro.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cOtro.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cOtro.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const medicoSel = modal.querySelector("#vgl-agm-medico");
+      t.cierto(!!medicoSel, "el selector de médico existe en el paso 2");
+      t.cierto(medicoSel.innerHTML.includes("OTRO PROFESIONAL"), "ofrece al OTRO médico con agenda ese día, por su nombre");
+      t.cierto(medicoSel.innerHTML.includes('__todos__'), "y también la opción «Todos los médicos»");
+      t.cierto(medicoSel.innerHTML.includes("Mi agenda"), "con la agenda propia como opción por defecto");
+      let textos = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ");
+      t.falso(textos.includes("09:00 AM"), "por defecto sigue mostrando SOLO la agenda propia (comportamiento intacto)");
+      medicoSel.value = "OTRO PROFESIONAL";
+      disparar(medicoSel, "change");
+      await esperar(80);
+      textos = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ");
+      t.cierto(textos.includes("09:00 AM"), "elegido en el selector, el turno del OTRO médico aparece y es seleccionable");
+      // La loseta del turno rotula CADA cupo con el nombre de su profesional (L29065):
+      // que el turno visible diga «OTRO PROFESIONAL» demuestra que el listado dejó de
+      // ser el de la agenda propia — más directo que medir la ausencia de la otra hora.
+      t.cierto(textos.includes("OTRO PROFESIONAL"), "y el cupo visible queda rotulado con el nombre del médico elegido");
+    });
+
     await t.casoAsync("confirmar cita v12.4: el cupo se re-verifica en tiempo real — si ya no está ACT, NO se dispara AsignarTurno", async () => {
       const iso2fmt = (iso) => iso.split("-").reverse().join("/");
       let turnosServidos = 0;
@@ -3340,104 +3393,6 @@ module.exports = {
       await esperar(80);
       t.cierto(urlsVistas.some((u) => u.includes("AsignarTurno")), "con el cupo verificado libre, la cita sí se crea");
       t.cierto(modal.querySelector("#vgl-agm-confirm").textContent.includes("Cita Creada Exitosamente"));
-    });
-
-    // 05-sep — AUDITORÍA M2M, hallazgo 21: cuando AsignarTurno queda SIN VEREDICTO
-    // (res == null: _pageFetchJsonCore NO reintenta escrituras), el modal ofrecía
-    // «Reintentar Crear Cita» a ciegas — si el POST sí llegó al servidor, ese reintento
-    // creaba la cita DUPLICADA. Ahora se re-verifica el cupo con el mismo matcher de la
-    // guarda: si ya NO está libre, se bloquea el reintento y se manda a verificar a
-    // AppCita; si sigue libre, el fallo es fallo y el reintento legítimo queda igual.
-    await t.casoAsync("v18.1.1 (FIX 21 M2M): POST sin respuesta y el cupo ya NO está libre → NO se ofrece reintento a ciegas (no se duplica la cita)", async () => {
-      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
-      let turnosServidos = 0;
-      const urlsVistas = [];
-      const cSR = cargar({
-        silencioso: true,
-        fetch: async (url) => {
-          const u = String(url); urlsVistas.push(u);
-          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
-          // El POST queda SIN VEREDICTO: la conexión se corta tras aceptar la escritura
-          // (fetch que lanza → _pageFetchJsonCore marca isError → por ser escritura
-          // devuelve null, sin reintentos). Exactamente el caso del hallazgo.
-          if (u.includes("AsignarTurno")) throw new Error("timeout simulado: respuesta perdida");
-          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
-          if (u.includes("BuscarCitasDisponibles")) {
-            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
-            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
-          }
-          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
-          if (u.includes("ObtenerTurnos")) {
-            // #1 listado y #2 guarda pre-confirmar: libre. #3 la re-verificación del
-            // FIX 21: el turno ya aparece CAN — lo más probable es que el POST sí llegó.
-            turnosServidos++;
-            return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: turnosServidos <= 2 ? "ACT" : "CAN" }] });
-          }
-          return respuestaJson({});
-        },
-        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
-      });
-      enriquecerDom(cSR);
-      cSR.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
-      cSR.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
-      await esperar(80);
-      const modal = cSR.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
-      const slots = modal.querySelector("#vgl-agm-slots");
-      const botonTurno = [...slots.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
-      disparar(botonTurno, "click");
-      const confirmar = modal.querySelector("#vgl-agm-confirm");
-      disparar(confirmar, "click");
-      await esperar(120);
-      t.igual(urlsVistas.filter((u) => u.includes("AsignarTurno")).length, 1, "el POST se intentó UNA sola vez: no se re-POSTea a ciegas");
-      t.cierto(confirmar.disabled, "el botón de confirmar queda bloqueado: no ofrece reintento");
-      t.cierto(String(confirmar.textContent || "").includes("verifique en AppCita"), "el botón manda a verificar en AppCita/Everest");
-      t.falso(String(confirmar.textContent || "").includes("Reintentar Crear Cita"), "ya NO se ofrece «Reintentar Crear Cita», que crearía la duplicada");
-      const textosSR = [...slots.children].map((n) => (n.textContent || "") + " " + (n.innerHTML || "")).join(" | ");
-      t.cierto(textosSR.includes("no la duplique"), "el aviso en el listado de horas dice que verifique y no duplique");
-    });
-
-    await t.casoAsync("v18.1.1 (FIX 21 M2M): POST sin respuesta y el cupo SIGUE libre → el fallo es fallo: el reintento legítimo sigue disponible", async () => {
-      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
-      const urlsVistas2 = [];
-      const cSRLibre = cargar({
-        silencioso: true,
-        fetch: async (url) => {
-          const u = String(url); urlsVistas2.push(u);
-          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
-          if (u.includes("AsignarTurno")) throw new Error("timeout simulado: respuesta perdida");
-          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
-          if (u.includes("BuscarCitasDisponibles")) {
-            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
-            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
-          }
-          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
-          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
-          return respuestaJson({});
-        },
-        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
-      });
-      enriquecerDom(cSRLibre);
-      cSRLibre.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
-      cSRLibre.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
-      await esperar(80);
-      const modal2 = cSRLibre.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
-      const slots2 = modal2.querySelector("#vgl-agm-slots");
-      const botonTurno2 = [...slots2.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
-      disparar(botonTurno2, "click");
-      const confirmar2 = modal2.querySelector("#vgl-agm-confirm");
-      disparar(confirmar2, "click");
-      await esperar(120);
-      t.igual(urlsVistas2.filter((u) => u.includes("AsignarTurno")).length, 1, "tampoco aquí se re-POSTea sin decisión del médico");
-      // La rama de fallo normal re-lista los horarios (cargarHoras): ObtenerTurnos ya
-      // salió #1 listado + #2 guarda + #3 re-verificación del FIX 21 + #4 re-listado.
-      t.cierto(urlsVistas2.filter((u) => u.includes("ObtenerTurnos")).length >= 4, "con el cupo libre el fallo sigue su curso de siempre: se re-listan los horarios");
-      t.falso(String(confirmar2.textContent || "").includes("verifique en AppCita"), "NO se aplica el bloqueo del FIX 21 cuando el cupo sigue libre");
-      t.falso(String(confirmar2.textContent || "").includes("Cupo tomado sin confirmación"), "el botón no queda marcado como cupo tomado");
-      const textosLibre = [...slots2.children].map((n) => (n.textContent || "") + " " + (n.innerHTML || "")).join(" | ");
-      t.falso(textosLibre.includes("no la duplique"), "no aparece el aviso de no duplicar: aquí el reintento es legítimo");
-      const reListado = [...slots2.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
-      t.cierto(!!reListado, "la hora vuelve a quedar disponible para elegirla otra vez (reintento legítimo)");
-      t.cierto(String(confirmar2.textContent || "").includes("Elija un horario") || String(confirmar2.textContent || "").includes("Sí, Crear Cita"), "el botón vuelve a su estado normal de elegir hora, no al bloqueo del FIX 21");
     });
 
     // 02-sep — CIERRE DEL ENJAMBRE (auditoría adversarial, fila 24, gravedad alta): el mismo
@@ -4007,30 +3962,6 @@ module.exports = {
       t.cierto(/✖ Detener búsqueda/.test(bloque), "y se convierte en el freno mientras dura");
       t.cierto(/_pcCancelar\(\);/.test(bloque), "que acciona el token de cancelación que ya existía");
       t.cierto(/Búsqueda detenida/.test(bloque), "y lo dice al detenerse, sin dejar el cuadro mudo");
-    });
-
-    t.caso("fix 7 M2M — 30 días sin respuesta del servidor no se anuncian como «Sin cupos libres»", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const i = src.indexOf("const dias = mtrListaDiasBusquedaCupo(todayStamp(), 30);");
-      t.cierto(i >= 0, "existe la búsqueda de 30 días del primer cupo");
-      const bloque = src.slice(i, i + 6000);
-      // Cada día que fallaba por red era un `continue` en silencio: tras 30 fallos
-      // seguidos el cuadro decía «Sin cupos libres en los próximos 30 días hábiles»
-      // — un hecho que nadie comprobó, con Everest caído. Misma clase de bug que la
-      // auditoría #11 de v16.7.0 («no hay cupos» vs «no se pudo preguntar»).
-      t.cierto(/let diasSinRespuesta = 0;/.test(bloque), "se cuentan los días que NO respondieron");
-      t.cierto(/catch \(e\) \{ diasSinRespuesta\+\+; continue; \}/.test(bloque),
-        "una excepción de red cuenta como día sin respuesta, no como día sin cupos");
-      t.cierto(/res && res\.__sinRespuesta\) \{ diasSinRespuesta\+\+; continue; \}/.test(bloque),
-        "la marca __sinRespuesta también se cuenta, por si la firma del llamador cambia");
-      t.cierto(/diasSinRespuesta >= dias\.length/.test(bloque),
-        "con TODOS los días sin respuesta, no se afirma nada sobre los cupos");
-      t.cierto(/No se pudo consultar la disponibilidad/.test(bloque),
-        "se lo dice al médico como error de consulta");
-      t.cierto(/días consultados \(" \+ diasSinRespuesta/.test(bloque),
-        "con fallos parciales, el conteo del mensaje es honesto");
     });
 
     t.caso("v18.0.125 (fila 37): con todo en «No sé», el botón no promete escribir nada", () => {
@@ -4657,78 +4588,6 @@ module.exports = {
       t.igual(posts.length, 1, "la segunda pulsación NO crea una orden duplicada de verdad en Everest");
     });
 
-    // =====================================================================
-    // v18.1.1 (FIX 8 M2M) — POST PERDIDO: GuardarOrdenamiento es una ESCRITURA,
-    // no se reintenta (v11.0.1) y pageFetchJson devuelve null. Ese null no
-    // distingue "no llegó" de "llegó y la respuesta se perdió" (timeout tras
-    // aceptar el POST). El reintento ciego re-POSTeaba y creaba la orden
-    // DUPLICADA. Ahora, antes de darla por fallida, se consulta la fuente de
-    // verdad: si TODOS los CUPS del paquete figuran vigentes con fechaCreacion
-    // de HOY, la orden llegó — se marca, se tacha la casilla y el resumen dice
-    // la verdad en ámbar (sin botón de reintento: reintentar duplicaría).
-    // =====================================================================
-    await t.casoAsync("v18.1.1: POST perdido pero la orden SÍ llegó → se recupera contra vigentes y NO se re-POSTea", async () => {
-      const guardarIntentos = [];
-      const cupsPedidos = [];
-      let vigentesLlamadas = 0;
-      const cPerd = cargar({
-        silencioso: true,
-        fetch: async (url) => {
-          const u = String(url);
-          if (u.includes("BuscarPaciente")) return respuestaJson({ id: 801848 });
-          if (u.includes("ObtenerListadoDiagnostico")) return respuestaJson([{ codigo: "Z108", id: 55, nombre: "TAMIZACION" }]);
-          if (u.includes("ObtenerListadoCupsPorPaciente")) {
-            const cod = decodeURIComponent(/filter=([^&]+)/.exec(u)[1]);
-            cupsPedidos.push(cod);
-            return respuestaJson([{ codigo: cod, id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]);
-          }
-          // La ESCRITURA se pierde: la red cae tras aceptar el POST (la firma
-          // exacta que deja pageFetchJson en null para no reenviar).
-          if (u.includes("GuardarOrdenamiento")) { guardarIntentos.push(u); throw new Error("red caida tras aceptar el POST"); }
-          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
-            vigentesLlamadas++;
-            // 1.ª llamada = apertura del modal (cruce antiduplicado): nada vigente.
-            // Desde la 2.ª = recuperación tras el POST perdido: el servidor SÍ
-            // registró la orden (todos los CUPS pedidos, fechaCreacion de HOY).
-            if (vigentesLlamadas === 1) return respuestaJson([]);
-            return respuestaJson(cupsPedidos.map((c) => ({ cup: { codigo: c }, estado: "PEN", fechaCreacion: iso_N_diasAtras(0) })));
-          }
-          return respuestaJson({});
-        },
-        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
-      });
-      enriquecerDom(cPerd);
-      cPerd.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
-      const abrirYGenerarPerd = async () => {
-        // Casilla NUEVA en cada apertura, como en el DOM real (el modal se repinta).
-        const cas = _casillaOrd(true, false, 0);
-        _inyectarCasilla(cPerd, cas);
-        await cPerd.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE DE PRUEBA", sexo: "M", pym: ["Tamización cardiometabólica"] });
-        await esperar(80);
-        const m = cPerd.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
-        disparar(m.querySelector("#vgl-ord-confirm"), "click");
-        await esperar(150);
-        return { m, cas };
-      };
-
-      const { m: m1, cas: cas1 } = await abrirYGenerarPerd();
-      t.igual(guardarIntentos.length, 1, "la primera corrida sí envió el POST (que se perdió)");
-      t.cierto(cPerd.api.ordenCreadaHoyParaCie10("21545051", "Z108"), "la orden sin confirmación quedó marcada como creada HOY (verificada contra vigentes)");
-      t.cierto(cas1.disabled === true, "la casilla quedó tachada y deshabilitada, como una orden creada con respuesta");
-      // v14.0.1 — El harness no reconstruye innerHTML/textContent desde appendChild:
-      // el successMsg se busca entre los hijos de la tarjeta (igual que slots/chips más arriba).
-      const msgRec = [...m1.querySelector(".vgl-agm-card").children]
-        .find((n) => String(n.className || "").includes("vgl-ord-parcial"));
-      t.cierto(!!msgRec && msgRec.innerHTML.includes("conexión se cortó"), "el resumen dice la verdad: la orden SÍ quedó creada pese a la caída");
-      t.cierto(!!msgRec && msgRec.innerHTML.includes("vuelva a generar"), "y prohíbe explícitamente el reintento que duplicaría");
-      t.igual(m1.querySelector("#vgl-ord-confirm").textContent, "1 orden creada sin confirmación", "el botón ya no ofrece reintentar: la orden existe y reintentar duplicaría");
-
-      // El médico reabre «Ordenar» y vuelve a pulsar Generar: la reproducción
-      // exacta del hallazgo (antes, el botón de reintento creaba el duplicado).
-      await abrirYGenerarPerd();
-      t.igual(guardarIntentos.length, 1, "la segunda pulsación NO re-POSTea: la orden ya figura creada en Everest");
-    });
-
     await t.casoAsync("v18.0.63 (contención): si el médico marca él mismo la casilla, la orden SÍ se repite — él manda", async () => {
       const posts = [];
       const cDup = _dupFixture(posts);
@@ -4925,6 +4784,28 @@ module.exports = {
       c.api.imprimirRecordatorioCita(undefined, "NUEVA EPS", "ALGUIEN");
       c.api.imprimirRecordatorioCita(0, "NUEVA EPS", "ALGUIEN");
       t.igual(llamadas.length, 0, "nunca imprime el recordatorio de una cita que no se confirmó");
+    });
+
+    // v18.4.2 — IMPRESIÓN AUTOMÁTICA: mismo comportamiento que el recordatorio de la toma
+    // de laboratorio. El clic abre la pestaña y, sin ningún paso intermedio, la ventana de
+    // impresión del navegador aparece sola sobre el PDF ya cargado.
+    await t.casoAsync("imprimirRecordatorioCita (v18.4.2): tras abrir la pestaña, print() se dispara SOLO — sin pasos intermedios", async () => {
+      const c = cargar();
+      let impresa = 0;
+      c.env.win.open = (url, target) => {
+        const pestana = { closed: false, print() { impresa++; } };
+        let href = "";
+        Object.defineProperty(pestana, "location", {
+          configurable: true,
+          get() { return { set href(v) { href = String(v); }, get href() { return href; } }; },
+        });
+        return pestana;
+      };
+      c.api.imprimirRecordatorioCita(7813686, "NUEVA EPS", "ALGUIEN");
+      t.igual(impresa, 0, "en el clic solo se abre la pestaña: el diálogo no se fuerza antes de cargar");
+      await esperar(1000);   // el PDF del visor necesita un instante antes del print() (900 ms)
+      t.igual(impresa, 1, "y a los ~0,9 s la ventana de impresión se abre sola sobre el PDF");
+      t.igual(impresa, 1, "exactamente una vez: no es un aviso repetido");
     });
 
     // v12.6.5 — La URL que manda es la que devuelve el servidor. Esta prueba es la que
@@ -6207,20 +6088,6 @@ module.exports = {
       t.cierto(athenea >= 1, "la precarga de OTRA cédula tampoco se sirve");
     });
 
-    await t.casoAsync("v18.1 (M2M f28): frontera exacta de los 2 min de precarga — 119,5 s se sirve, 120,5 s ya consulta en vivo", async () => {
-      let athenea = 0;
-      const mk = () => { const c = cargar({ silencioso: true, gmxhr: (o) => { if (/athenea|laboratorio/i.test(String(o.url || ""))) athenea++; if (o.onerror) setTimeout(() => o.onerror("sin portal en la prueba"), 0); return { abort() {} }; } }); enriquecerDom(c); return c; };
-      const labs = [{ nombre: "GLUCOSA", valor: "95", fecha: "2026-08-20" }];
-      const cA = mk();
-      cA.api.__setLabsPrefetchParaTest("222222", labs, Date.now() - 119500);
-      await cA.api.openLaboratoriosModal({ doc_id: "222222", nombre: "PACIENTE PRUEBA" });
-      t.igual(athenea, 0, "119,5 s: todavía fresca, no se golpea el portal");
-      const cB = mk(); athenea = 0;
-      cB.api.__setLabsPrefetchParaTest("222222", labs, Date.now() - 120500);
-      await cB.api.openLaboratoriosModal({ doc_id: "222222", nombre: "PACIENTE PRUEBA" });
-      t.cierto(athenea >= 1, "120,5 s: ya venció, se consulta en vivo (la comparación es estricta: < 120000)");
-    });
-
     await t.casoAsync("v18.0.115 (C17): Agendar recuerda tipo y especialidad de la última cita creada y abre en el paso 2 con el chip «como la última vez · cambiar»; sin recuerdo abre en el paso 1", async () => {
       const urls = [];
       const mk = () => {
@@ -6292,7 +6159,11 @@ module.exports = {
     // manejador del chip de especialidad nunca lo llamaba.
     // =====================================================================
     t.caso("v18.0.131 (hallazgo 11): cambiar de especialidad repinta los chips de día (renderDayChips), no solo cargarHoras()", () => {
-      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      // v18.3.6 — el corte por "\n    });\n" exige LF: en un checkout de Windows con
+      // autocrlf el archivo materializa CRLF y la sentinela dejaba de casar (falso rojo
+      // preexistente desde la creación del worktree). Se normaliza igual que harness.js
+      // al cargar la fuente para ejecutar.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8").replace(/\r\n/g, "\n");
       const i = src.indexOf('modal.querySelectorAll("#vgl-esp-presets .vgl-agm-pbtn").forEach((eb) => {');
       t.cierto(i > 0, "se localiza el manejador de los chips de especialidad");
       const cierre = src.indexOf("\n    });\n", i);

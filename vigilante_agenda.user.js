@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.4.1
+// @version      18.4.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5123,10 +5123,111 @@
   // (o de una prueba que toque `vgl_cosecha` directo) se ve en cuanto el texto difiera.
   let _vglCosechaCacheRaw = null;
   let _vglCosechaCacheTodo = null;
+  // =====================================================================
+  //  v18.4.3 (H5, auditoría integral 06-sep) — CIFRADO EN REPOSO de la
+  //  memoria clínica (vgl_cosecha) y del historial de inasistencias
+  //  (vgl_nosh_hist). Estos almacenes llevan cédulas como clave y hechos
+  //  clínicos como contenido: PHI en claro en el localStorage de un PC de
+  //  consultorio compartido. Se reutiliza la MISMA clave de equipo de la
+  //  carpeta cifrada (v18.0.144: aleatoria por equipo, HKDF→AES-GCM): el
+  //  disco guarda un sobre "VGLC1:{v,iv,datos}" y el claro solo vive en
+  //  memoria. Decisión inversa a la carpeta ante la falta de WebCrypto:
+  //  la carpeta es caché derivable y falla cerrada; esta memoria es
+  //  CLÍNICA y degrada a texto claro con aviso — no se pierde lo aprendido
+  //  del paciente por falta de crypto en un navegador viejo.
+  // =====================================================================
+  const VGL_CIFRA_PREFIJO = "VGLC1:";
+  const _VGL_COSECHA_PENDIENTE = "\u0000vgl-pendiente";   // sello mientras el cifrado vuela
+  let _vglCosechaHidratarPromise = null;
+  let _vglCosechaHidrataEnVuelo = false;
+  async function _vglSobreCifrar(texto) {
+    try {
+      const clave = await _vglCarpetaClaveAes();
+      if (!clave) return null;
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, clave, new TextEncoder().encode(texto));
+      return VGL_CIFRA_PREFIJO + JSON.stringify({ v: 1, iv: _vglBytesAB64(iv), datos: _vglBytesAB64(new Uint8Array(ct)) });
+    } catch (e) { return null; }
+  }
+  async function _vglSobreDescifrar(valor) {
+    try {
+      const sobre = JSON.parse(String(valor).slice(VGL_CIFRA_PREFIJO.length));
+      if (!sobre || sobre.v !== 1 || typeof sobre.iv !== "string" || typeof sobre.datos !== "string") return null;
+      const clave = await _vglCarpetaClaveAes();
+      if (!clave) return null;
+      const plano = await crypto.subtle.decrypt({ name: "AES-GCM", iv: _vglB64ABytes(sobre.iv) }, clave, _vglB64ABytes(sobre.datos));
+      return new TextDecoder().decode(plano);
+    } catch (e) { return null; }
+  }
+  async function _vglCosechaHidratar() {
+    _vglCosechaHidrataEnVuelo = true;
+    try {
+      const raw = localStorage.getItem(VGL_COSECHA_KEY) || "";
+      if (raw.slice(0, VGL_CIFRA_PREFIJO.length) !== VGL_CIFRA_PREFIJO) {
+        // Texto claro legado (o vacío): se adopta tal cual y se programa su re-cifrado —
+        // la migración ocurre en el primer arranque que tenga crypto, sin perder nada.
+        if (raw && raw !== "{}") { try { _vglCosechaPersistir(JSON.parse(raw)); } catch (e2) {} }
+        return true;
+      }
+      const plano = await _vglSobreDescifrar(raw);
+      // GUARDA DE CARRERA: si una escritura quedó en vuelo (sello PENDIENTE) mientras
+      // esta hidratación leía el disco VIEJO, el memo fresco manda — jamás se regresa a
+      // lo que el disco tenía antes de la escritura en curso.
+      if (_vglCosechaCacheRaw === _VGL_COSECHA_PENDIENTE) return false;
+      if (plano == null) {
+        // Clave de otro equipo o sobre corrupto: como en la carpeta, se descarta (es
+        // memoria derivada de pantalla, no historia primaria) — pero se DICE, nunca en
+        // silencio total.
+        try { console.warn("[Vigilante] La memoria clínica local no se pudo descifrar en este equipo (¿se movió de computador?): parte de vacío."); } catch (e3) {}
+        _vglCosechaCacheTodo = {}; _vglCosechaCacheRaw = raw;
+        return false;
+      }
+      try { _vglCosechaCacheTodo = JSON.parse(plano); } catch (e4) { _vglCosechaCacheTodo = {}; }
+      _vglCosechaCacheRaw = raw;
+      return true;
+    } finally { _vglCosechaHidrataEnVuelo = false; }
+  }
+  function _vglCosechaHidratarKick() {
+    if (_vglCosechaHidrataEnVuelo || _vglCosechaHidratarPromise) return _vglCosechaHidratarPromise;
+    _vglCosechaHidratarPromise = _vglCosechaHidratar().catch(() => {}).finally(() => { _vglCosechaHidratarPromise = null; });
+    return _vglCosechaHidratarPromise;
+  }
+  function _vglCosechaPersistir(todo, alFALLAR, alOK) {
+    // Sirve `todo` DESDE YA por el memo (sello PENDIENTE): ninguna lectura puede
+    // re-hidratar el disco viejo y pisar esta escritura mientras el cifrado vuela —
+    // el mismo problema de carrera que la v18.0.4 cerró entre pestañas, ahora entre
+    // la escritura y el propio disco.
+    _vglCosechaCacheTodo = todo;
+    _vglCosechaCacheRaw = _VGL_COSECHA_PENDIENTE;
+    _vglSobreCifrar(JSON.stringify(todo)).then((sobre) => {
+      const texto = sobre == null ? JSON.stringify(todo) : sobre;
+      if (sobre == null) { try { console.warn("[Vigilante] Sin WebCrypto en este navegador: la memoria clínica local se guarda en claro."); } catch (e0) {} }
+      let ok = false;
+      try { localStorage.setItem(VGL_COSECHA_KEY, texto); ok = true; }
+      catch (e) { try { purgaPorCuota(); localStorage.setItem(VGL_COSECHA_KEY, texto); ok = true; } catch (e2) {} }
+      if (ok) {
+        _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || texto;
+        if (typeof alOK === "function") { try { alOK(); } catch (e3) {} }
+      } else if (typeof alFALLAR === "function") {
+        // El memo sigue sirviendo `todo` durante la sesión aunque el disco no cambió —
+        // la misma argucia del rescate de cuota de la v18.0.136.
+        try { alFALLAR(todo); } catch (e4) {}
+      }
+    }).catch(() => { if (typeof alFALLAR === "function") { try { alFALLAR(todo); } catch (e5) {} } });
+  }
   function _vglCosechaTodo() {
     try {
+      // Escritura en vuelo: lo fresco ya vive en el memo — el disco va detrás.
+      if (_vglCosechaCacheRaw === _VGL_COSECHA_PENDIENTE && _vglCosechaCacheTodo) return _vglCosechaCacheTodo;
       const raw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
       if (raw === _vglCosechaCacheRaw && _vglCosechaCacheTodo) return _vglCosechaCacheTodo;
+      // Sobre cifrado en disco: JAMÁS se parsea en crudo. Mientras la hidratación (async)
+      // corre se sirve el objeto en memoria; si el sobre cambió (otra pestaña escribió),
+      // se re-hidrata y el contenido fresco llega en la vuelta siguiente del reloj.
+      if (raw.slice(0, VGL_CIFRA_PREFIJO.length) === VGL_CIFRA_PREFIJO) {
+        if (raw !== _vglCosechaCacheRaw && !_vglCosechaHidrataEnVuelo) _vglCosechaHidratarKick();
+        return _vglCosechaCacheTodo || {};
+      }
       _vglCosechaCacheTodo = JSON.parse(raw);
       _vglCosechaCacheRaw = raw;
       return _vglCosechaCacheTodo;
@@ -5434,23 +5535,19 @@
       // VGL_ESPEJO_CLAVES, así que sale por su propia guarda sin hacer nada.
       // Si aun tras purgar no cabe, se DICE: perder la memoria del paciente sin avisar es
       // peor que interrumpir un momento al médico.
-      const escrito = safeWriteJSON(VGL_COSECHA_KEY, todo);
-      // v18.0.134 — el memo de lectura de _vglCosechaTodo queda viejo con esta escritura:
-      // se invalida SIEMPRE tras el intento (aunque safeWriteJSON haya purgado por cuota,
-      // el texto del disco ya no es el que el memo recuerda).
-      _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
-      if (!escrito) {
-        // v18.0.136 — BLINDAJE DE CUOTA LLENA (el síntoma de campo que motivó esta
-        // versión). El navegador rechazó la memoria del paciente, pero si hay carpeta
-        // autorizada el disco la rescata YA, sin retardo: el espejo vuela con la fusión
-        // recién calculada y esta consulta no pierde nada. El memo se rellena con el
-        // objeto FRESCO y el raw VIEJO del disco (la misma argucia del restaurador), así
-        // la sesión entera sirve los datos nuevos aunque localStorage siga sin poder.
+      // v18.4.3 (H5) — el disco recibe un sobre AES-GCM (ver _vglCosechaPersistir). La
+      // fusión queda servida en memoria DE INMEDIATO; el desenlace del disco (rescate por
+      // carpeta si la cuota no da, o el vuelco continuo a la carpeta) llega por callbacks.
+      _vglCosechaPersistir(todo, () => {
+        // v18.0.136 — BLINDAJE DE CUOTA LLENA, ahora asíncrono: el navegador rechazó la
+        // memoria del paciente, pero si hay carpeta autorizada el disco la rescata YA.
         if (vglCarpetaElegida()) {
-          _vglCosechaCacheTodo = todo;
-          _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
           vglDiscoRescatarCosecha(id, fusion, todo).then((okDisco) => {
             try {
+              // [NT-118/M19] — dedup por JORNADA: sin esto, el fallo de cuota repetía el
+              // toast en CADA intento de cosecha (varios por consulta).
+              if (avisoYaVisto("memfail|cuota")) return;
+              avisoMarcarVisto("memfail|cuota");
               showToast(okDisco ? "AMBAR" : "ROJO", "No se pudo guardar la memoria del paciente",
                 okDisco
                   ? "El almacenamiento del navegador está lleno, así que la memoria del paciente quedó archivada en la carpeta «Vigilante de Agenda» de su computador; cada arranque la recupera de allá. Cuando pueda, libere espacio del navegador."
@@ -5458,20 +5555,23 @@
                 true, "cosecha|cuota");
             } catch (e3) {}
           }).catch(() => {});
-          return fusion;
+        } else {
+          try {
+            if (!avisoYaVisto("memfail|cuota")) {   // [NT-118/M19] dedup por jornada
+              avisoMarcarVisto("memfail|cuota");
+              showToast("AMBAR", "No se pudo guardar la memoria del paciente",
+                "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Autorice la carpeta de historias en el panel de Ajustes para que la memoria se guarde en su computador; y avísele al programador.", true, "cosecha|cuota");
+            }
+          } catch (e3) {}
         }
-        try {
-          showToast("AMBAR", "No se pudo guardar la memoria del paciente",
-            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Autorice la carpeta de historias en el panel de Ajustes para que la memoria se guarde en su computador; y avísele al programador.", true, "cosecha|cuota");
-        } catch (e3) {}
-        return null;
-      }
-      // v18.0.136 — espejo continuo: con la carpeta autorizada, cada guarda exitosa
-      // programa (con retardo de calma) el vuelco del almacén a Memoria/ y la historia
-      // .md del día de este paciente.
-      if (vglCarpetaElegida()) {
-        try { vglDiscoMemoriaProgramar(); vglDiscoHistoriaProgramar(id); } catch (e4) {}
-      }
+      }, () => {
+        // v18.0.136 — espejo continuo: con la carpeta autorizada, cada guarda exitosa
+        // programa (con retardo de calma) el vuelco del almacén a Memoria/ y la historia
+        // .md del día de este paciente.
+        if (vglCarpetaElegida()) {
+          try { vglDiscoMemoriaProgramar(); vglDiscoHistoriaProgramar(id); } catch (e4) {}
+        }
+      });
       return fusion;
     } catch (e) { return null; }
   }
@@ -6983,6 +7083,208 @@
       const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
       widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
       widget.innerHTML = '<div class="vgl-cw-badge">🧪' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+    } catch (e) {}
+  }
+
+  // =====================================================================
+  //  v18.4.2 — PANEL «PRÓXIMOS EXÁMENES RCV» DEL PACIENTE ABIERTO
+  //  -------------------------------------------------------------------
+  //  Encargo del equipo de riesgo cardiovascular (06-sep-2026): ver, DENTRO
+  //  de la historia clínica de cada paciente, qué exámenes hay que asignar
+  //  pronto, con la fecha de la última orden y la de vencimiento, alineados
+  //  al programa RCV del paciente (ERC/DM2/HTA del resumen clínico).
+  //
+  //  Restricciones de visibilidad — las CUATRO se re-visan en cada tick:
+  //   1. PERMISO: esMedicoRCVActivo() — la capacidad «rcv» del padrón de
+  //      acceso (perfil COMPLETO: el equipo de RCV). Los nombres de las
+  //      cuentas NO viven en este archivo (núcleo ACCESO, entrevista 7A);
+  //      los concede y retira el dueño del padrón remoto.
+  //   2. RUTA VÁLIDA: _enModuloHCHealth() — solo el módulo clínico
+  //      /viva/HCHealth/; el subárbol /viva/EverHealth/ queda fuera.
+  //   3. SECCIÓN: seccionActiva() === "historia" — el marcador #anamesis
+  //      solo existe en la historia clínica del paciente.
+  //   4. PACIENTE: extractPacienteAbierto() — cédula en pantalla. Sin
+  //      paciente no hay a quién mostrar exámenes.
+  //
+  //  Anti-fatiga / no intrusivo: esquina inferior izquierda, sin animación
+  //  alguna (nada que parpadee en la periferia durante la consulta), firma
+  //  de repintado para no tocar el DOM cuando nada cambió, y colores del
+  //  sistema de tokens (rojo=vencido, ámbar=próximo, azul=pendiente,
+  //  verde=al día).
+  //
+  //  UNA sola tabla de vigencias (D4): reusa el paquete RCV exprés (I10X)
+  //  de PYM_CATALOG — el mismo RCV_VIGENCIA_DIAS (180) que rige el cruce
+  //  antiduplicado del modal de Ordenar. No se inventa periodicidad nueva.
+  //  Y la misma prudencia de pymCubiertoPorOrdenVigente: sin órdenes
+  //  consultables, TODO queda PENDIENTE y se dice en el pie — jamás se
+  //  oculta un pendiente por un fallo de red.
+  // =====================================================================
+  // Umbral PURAMENTE visual de pre-alerta: cuántos días antes del
+  // vencimiento un examen pasa de azul (al día) a ámbar (próximo). No es
+  // una periodicidad clínica — la vigencia real sigue siendo la del paquete.
+  const RCV_PENDIENTES_UMBRAL_DIAS = 30;
+
+  // PURA: arma la fila de cada examen del paquete RCV con su última fecha
+  // de orden (la MÁS RECIENTE por CUPS entre las órdenes vigentes de
+  // Everest) y su fecha de vencimiento (última + vigenciaDias del paquete).
+  // Estados: "vencido" (la fecha de vencimiento ya pasó), "proximo" (vence
+  // dentro del umbral visual), "pendiente" (sin registro de orden, o sin
+  // vigencia confirmada, o sin "hoy" fiable — D4) y "aldia".
+  function rcvPendientesCalcular(paquete, ordenes, hoy) {
+    const cups = (paquete && Array.isArray(paquete.cups)) ? paquete.cups : [];
+    const vigenciaDias = (paquete && Number.isFinite(paquete.vigenciaDias) && paquete.vigenciaDias > 0) ? paquete.vigenciaDias : null;
+    const hoyInfo = _parseFechaHoraLike(hoy);
+    const hoyMs = hoyInfo ? new Date(hoyInfo.iso + "T00:00:00").getTime() : null;
+    // Por CUPS, la fecha de creación más reciente entre las órdenes vigentes
+    // (misma regla que pymCubiertoPorOrdenVigente: fecha ilegible o futura
+    // no cuenta como cobertura — por prudencia, esa orden no existe aquí).
+    const masRecientePorCup = new Map();
+    if (hoyMs !== null && Array.isArray(ordenes)) {
+      for (const o of ordenes) {
+        if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
+        const fc = _parseFechaHoraLike(o.fechaCreacion);
+        if (!fc) continue;
+        const fcMs = new Date(fc.iso + "T00:00:00").getTime();
+        if (fcMs > hoyMs) continue;
+        const cup = String(o.cup.codigo);
+        const prev = masRecientePorCup.get(cup);
+        if (prev === undefined || fcMs > prev) masRecientePorCup.set(cup, fcMs);
+      }
+    }
+    const isoDe = (ms) => {
+      const d = new Date(ms);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    };
+    const filas = cups.map((ex) => {
+      const codigo = (ex && ex.codigo !== undefined && ex.codigo !== null) ? String(ex.codigo) : "";
+      const desc = (ex && ex.desc) ? String(ex.desc) : (codigo || "examen");
+      const ultimaMs = codigo ? masRecientePorCup.get(codigo) : undefined;
+      if (vigenciaDias === null || ultimaMs === undefined || hoyMs === null) {
+        return { codigo: codigo, desc: desc, ultima: null, vence: null, dias: null, estado: "pendiente" };
+      }
+      const venceMs = ultimaMs + vigenciaDias * 86400000;
+      const dias = Math.round((venceMs - hoyMs) / 86400000);
+      const estado = dias < 0 ? "vencido" : (dias <= RCV_PENDIENTES_UMBRAL_DIAS ? "proximo" : "aldia");
+      return { codigo: codigo, desc: desc, ultima: isoDe(ultimaMs), vence: isoDe(venceMs), dias: dias, estado: estado };
+    });
+    // Jerarquía de lectura: lo más urgente arriba (vencido > próximo >
+    // pendiente > al día) — el médico escanea la cara superior del panel.
+    const ordenUrgencia = { vencido: 0, proximo: 1, pendiente: 2, aldia: 3 };
+    filas.sort((a, b) => (ordenUrgencia[a.estado] !== undefined ? ordenUrgencia[a.estado] : 9)
+      - (ordenUrgencia[b.estado] !== undefined ? ordenUrgencia[b.estado] : 9));
+    return {
+      vigenciaDias: vigenciaDias,
+      sinDatosOrdenes: !Array.isArray(ordenes) || !ordenes.length,
+      filas: filas,
+      nPendientes: filas.filter((f) => f.estado !== "aldia").length,
+    };
+  }
+
+  // PURA: la compuerta COMPLETA de visibilidad. Las cuatro condiciones son
+  // necesarias A LA VEZ — con una sola falsa el panel no se pinta.
+  function rcvPendientesDebeVerse(opts) {
+    const o = opts || {};
+    return !!(o.autorizado === true && o.enHCHealth === true && o.seccion === "historia" && o.docId);
+  }
+
+  // PURA: rótulo legible del programa RCV del paciente, tolerante a las dos
+  // formas que el resumen guarda (string "HTA" o bloque {rector} del plan).
+  function rcvPendientesRotuloPrograma(resumen) {
+    const p = resumen && resumen.programa;
+    if (typeof p === "string" && p) return MTR_PROGRAMA_ROTULO[p] || p;
+    const rector = (p && typeof p === "object" && p.rector)
+      || (resumen && resumen.plan && resumen.plan.programa)
+      || null;
+    return rector ? (MTR_PROGRAMA_ROTULO[rector] || String(rector)) : "";
+  }
+
+  // PURA: el HTML del panel. Solo presentación de lo que rcvPendientesCalcular
+  // armó — ninguna decisión nueva aquí. El par Última→Vence va SIEMPRE visible
+  // en cada fila (requisito del encargo), con chip de estado por color.
+  function rcvPendientesHtml(datos, programaRotulo) {
+    const d = datos || { filas: [], nPendientes: 0, vigenciaDias: null, sinDatosOrdenes: true };
+    const chips = { vencido: "VENCIDO", proximo: "PRÓXIMO", pendiente: "PENDIENTE", aldia: "AL DÍA" };
+    const filasHtml = (d.filas || []).map((f) => {
+      const venceTxt = f.vence
+        ? escapeHtml(f.vence) + (f.dias !== null ? (f.dias < 0 ? " (hace " + Math.abs(f.dias) + " d)" : " (en " + f.dias + " d)") : "")
+        : "—";
+      const fechas = f.ultima
+        ? "Última: " + escapeHtml(f.ultima) + " · Vence: " + venceTxt
+        : "Última: sin registro · Vence: " + venceTxt;
+      return '<div class="vgl-rcvp-fila vgl-rcvp-f-' + f.estado + '">'
+        + '<span class="vgl-rcvp-chip vgl-rcvp-chip-' + f.estado + '">' + (chips[f.estado] || escapeHtml(f.estado)) + '</span>'
+        + '<div class="vgl-rcvp-nom">' + escapeHtml(f.desc) + '</div>'
+        + '<div class="vgl-rcvp-fechas">' + fechas + '</div>'
+        + '</div>';
+    }).join("");
+    const nota = d.sinDatosOrdenes
+      ? '<div class="vgl-rcvp-nota">Sin órdenes vigentes consultables: todo queda como PENDIENTE (ante la duda, se muestra).</div>'
+      : "";
+    const rotulo = String(programaRotulo || "");
+    return '<div class="vgl-rcvp-head">'
+      + '<div class="vgl-rcvp-tit">Próximos exámenes · Riesgo cardiovascular</div>'
+      + (rotulo ? '<div class="vgl-rcvp-prog">Programa: ' + escapeHtml(rotulo) + '</div>' : "")
+      + '<div class="vgl-rcvp-cont">' + (d.nPendientes || 0) + ' por asignar</div>'
+      + '</div>'
+      + filasHtml
+      + nota
+      + '<div class="vgl-rcvp-pie">Vigencia RCV: ' + (d.vigenciaDias || 0) + ' días · se actualiza solo · el médico decide</div>';
+  }
+
+  let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
+  function _rcvpResetParaTest() { _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false; }
+  function _rcvpOcultar() {
+    try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
+  }
+
+  // El tick del panel. Asíncrono solo por la consulta de órdenes vigentes
+  // (caché TTL 10 min; marcarOrdenGenerada la invalida al guardar una orden
+  // nueva, así el panel refleja el cambio en el siguiente tick, sin recargar).
+  async function rcvPendientesTick(doc) {
+    try {
+      // Compuerta completa re-visada EN CADA TICK: la identidad puede llegar
+      // tarde y el padrón puede retirar el permiso a mitad de jornada.
+      const secc = seccionActiva();
+      const docId = extractPacienteAbierto();
+      if (!rcvPendientesDebeVerse({ autorizado: esMedicoRCVActivo(), enHCHealth: _enModuloHCHealth(), seccion: secc, docId: docId })) {
+        _rcvpOcultar();
+        _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
+        return;
+      }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { _rcvpOcultar(); return; }   // sin programa identificado no hay a qué alinear el panel
+      const paquete = PYM_CATALOG.find((p) => p && p.cie10 === "I10X") || null;
+      if (!paquete) { _rcvpOcultar(); return; }
+      let ordenes = null;
+      const pid = (resumen && resumen._pacienteIdLabs) || null;
+      if (pid) {
+        if (_rcvpEnVuelo) return;                 // un solo vuelo de red por vez
+        _rcvpEnVuelo = true;
+        try { ordenes = await apiHcObtenerOrdenamientosVigentes(pid); }
+        catch (e) { ordenes = null; }
+        finally { _rcvpEnVuelo = false; }
+        // Guarda anti-cruce (misma regla que el botón de Conducta): si el
+        // médico cambió de paciente mientras salía la consulta, nada del
+        // anterior se pinta en la historia del nuevo.
+        if (extractPacienteAbierto() !== docId || seccionActiva() !== "historia") { _rcvpOcultar(); return; }
+      }
+      if (docId !== _rcvpDocPrevio) { _rcvpDocPrevio = docId; _rcvpFirma = ""; }
+      const datos = rcvPendientesCalcular(paquete, ordenes, todayStamp());
+      const html = rcvPendientesHtml(datos, rcvPendientesRotuloPrograma(resumen));
+      // Firma barata: si nada cambió, no se toca el DOM (sin parpadeo).
+      const firma = docId + "|" + datos.nPendientes + "|" + html.length;
+      if (firma === _rcvpFirma) return;
+      _rcvpFirma = firma;
+      let widget = document.getElementById("vgl-rcv-pendientes");
+      if (!widget) {
+        widget = document.createElement("div");
+        widget.id = "vgl-rcv-pendientes";
+        document.body.appendChild(widget);
+      }
+      widget.className = isLight() ? "light" : "";
+      widget.style.display = "";
+      widget.innerHTML = html;
     } catch (e) {}
   }
 
@@ -8839,7 +9141,7 @@
   }
   function _vglFeedbackBoton(btn, texto, tono, rotuloOriginal) {
     try {
-      btn.textContent = texto;   // v18.3.6 (aud. 2026-09-06): texto plano — cierra el sumidero HTML (los llamadores nunca pasan marcado)
+      btn.innerHTML = escapeHtml(texto);   // v18.3.6 (aud. 2026-09-06): escapado en el sumidero — un dato externo en `texto` se VE, no se ejecuta
       btn.style.boxShadow = "inset 0 0 0 2px " + (tono === "verde" ? "var(--c-verde,#4ff0b8)" : "var(--c-ambar,#ffcf5c)");
       setTimeout(() => { try { btn.innerHTML = escapeHtml(rotuloOriginal); btn.style.boxShadow = ""; } catch (e) {} }, 8000);
     } catch (e) {}
@@ -9061,7 +9363,7 @@
 
 
 
-  const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window;
+  const PAGEWIN = window;   // v18.4.3 (H10, aud. 06-sep): sin @grant unsafeWindow la referencia muerta siempre caía a window
 
   // =====================================================================
   //  SECOPS Y ESTABILIDAD (VIGILANTE DE AGENDA)
@@ -9850,7 +10152,7 @@
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn", "#vgl-rcv-pendientes",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -10832,6 +11134,12 @@
   const AVISO_PAC_HIST_MAX = 2000;    // sobre esto, se poda
   const AVISO_PAC_HIST_KEEP = 1500;   // a esto se reduce al podar
   const AVISO_PAC_TOASTS_HORA = 3;    // presupuesto de toasts por hora corrida
+  // [NT-123/M21] — purga TEMPORAL del histórico: además del tope por conteo, ninguna
+  // cédula del histórico de pacientes nuevos vive más de 90 días en localStorage
+  // (minimización y conservación proporcionales a la finalidad — el aviso solo importa
+  // para la jornada y su memoria inmediata). Ley 1581/2012 art. 4.
+  const AVISO_PAC_HIST_DIAS = 90;
+  const AVISO_PAC_HIST_MS = AVISO_PAC_HIST_DIAS * 24 * 60 * 60 * 1000;
 
   function avisoPacHistKey(uid) { return "vgl_aviso_hist_" + (Number(uid) || 0); }
   function avisoPacDiaKey(dia) { return "vgl_aviso_pacientes_" + (dia || todayStamp()); }
@@ -10847,11 +11155,19 @@
   // null si no había nada que podar (el llamador no toca el disco entonces).
   function avisoPacHistPodar(docs) {
     const d = docs || {};
-    const llaves = Object.keys(d);
-    if (llaves.length <= AVISO_PAC_HIST_MAX) return null;
-    llaves.sort(function (a, b) { return (d[b] || 0) - (d[a] || 0); });
+    // [NT-123/M21] — primero la purga TEMPORAL (los ts de hace más de 90 días salen
+    // siempre, aunque el conteo no haya llegado al tope); después, si el resto sigue
+    // sobre el máximo, la poda por conteo de toda la vida.
+    const corte = Date.now() - AVISO_PAC_HIST_MS;
+    const vivos = {};
+    let huboviejos = false;
+    Object.keys(d).forEach(function (k) { if (Number(d[k]) >= corte) vivos[k] = d[k]; else huboviejos = true; });
+    const llaves = Object.keys(vivos);
+    if (!huboviejos && llaves.length <= AVISO_PAC_HIST_MAX) return null;
+    if (llaves.length <= AVISO_PAC_HIST_KEEP) return vivos;
+    llaves.sort(function (a, b) { return (vivos[b] || 0) - (vivos[a] || 0); });
     const out = {};
-    for (let i = 0; i < AVISO_PAC_HIST_KEEP; i++) out[llaves[i]] = d[llaves[i]];
+    for (let i = 0; i < AVISO_PAC_HIST_KEEP; i++) out[llaves[i]] = vivos[llaves[i]];
     return out;
   }
 
@@ -12268,6 +12584,7 @@
     // ANOTA para que se vea. Un fallo de red sigue rompiendo el bucle como antes: tres
     // intentos son tres vueltas del temporizador de 10 minutos, media hora, mucho más de
     // lo que dura un corte.
+    let enviadas = 0, fallo = false;
     try {
       let g = 0;
       while (repQ.length && g++ < 10) {
@@ -12309,6 +12626,7 @@
       }
     }
     finally { repFlushing = false; }
+    return { enviadas: enviadas, fallo: fallo };
   }
   // v17.49.0 (D4) — Vive como funcion CON NOMBRE, no como un closure dentro de boot(),
   // por la misma razon que _vaciarTelemetriaAlSalir: para que el banco pueda ejercerla.
@@ -13953,8 +14271,11 @@
       state.pymFallback = false;
       applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name, true);
       if (!silent || eraRespaldo || !teniaPymPreviamente) {
+        // [NT-118/M19] — uid explícito por día y tipo: antes dependía del hash del texto
+        // (contador de pacientes cambiante = aviso "nuevo" en cada re-subida, sin tope).
         notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
-          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false,
+          "pymupd|" + todayStamp() + (eraRespaldo ? "|respaldo" : teniaPymPreviamente ? "|actualizado" : "|primera"));
       }
       return true;
     } catch (e) {
@@ -14812,12 +15133,34 @@
   }
 
   let audioCtx = null;
-  function beep(freq, ms, off) { try { if (!S.sonido || muted()) return; audioCtx = audioCtx || new (PAGEWIN.AudioContext || PAGEWIN.webkitAudioContext || window.AudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(clampNum(S.volumen, 0.02, 0.6, 0.15), t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
+  // [NT-109/Q2] — `forzar`: lo usa el ROJO (vía startNag/playTone) para sonar AUN dentro
+  // del silencio temporal. Su tono es edge una-sola-vez por cita: no hay segunda
+  // oportunidad si la ventana de mute se lo traga. Nadie más lo pasa.
+  function beep(freq, ms, off, forzar) { try { if ((!S.sonido && !forzar) || (muted() && !forzar)) return; audioCtx = audioCtx || new (PAGEWIN.AudioContext || PAGEWIN.webkitAudioContext || window.AudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(clampNum(S.volumen, 0.02, 0.6, 0.15), t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
   // Silencio temporal ("Silenciar 15 min"): calla sonido/ventana/cartel, pero NUNCA deja
   // de registrar el evento ni de mostrarlo en el panel.
-  function muted() { return Date.now() < state.muteUntil; }
-  function muteFor(min) { state.muteUntil = Date.now() + min * 60000; stopNag(); paintMute(); setSummary("Silenciado " + min + " min. El registro sigue activo."); }
-  function unmute() { state.muteUntil = 0; paintMute(); setSummary("Sonido reactivado."); }
+  // [NT-109a/M4] — el silencio ahora vive en localStorage (`vgl_mute_hasta`): lo que una
+  // pestaña silencia lo calla también en las demás (antes solo callaba la suya y el
+  // flush de cola / el tono de una pestaña hermana seguían saliendo).
+  const VGL_MUTE_HASTA_KEY = "vgl_mute_hasta";
+  function muted() {
+    try {
+      const _compartido = +(localStorage.getItem(VGL_MUTE_HASTA_KEY) || 0);
+      if (_compartido > state.muteUntil) state.muteUntil = _compartido;
+    } catch (e) {}
+    return Date.now() < state.muteUntil;
+  }
+  function muteFor(min) {
+    state.muteUntil = Date.now() + min * 60000;
+    try { localStorage.setItem(VGL_MUTE_HASTA_KEY, String(state.muteUntil)); } catch (e) {}
+    try { uxTrack("mute.activado", { min: min }); } catch (eT) {}   // [NT/M18] el silencio como señal de fatiga, medible
+    stopNag(); paintMute(); setSummary("Silenciado " + min + " min. El registro sigue activo.");
+  }
+  function unmute() {
+    state.muteUntil = 0;
+    try { localStorage.setItem(VGL_MUTE_HASTA_KEY, "0"); } catch (e) {}
+    paintMute(); setSummary("Sonido reactivado.");
+  }
 
   // =====================================================================
   //  CANALES DE AVISO QUE **NO** DEPENDEN DE WINDOWS
@@ -14825,12 +15168,12 @@
   //   notificaciones del sistema). Todos se apagan al "reconocer".
   // =====================================================================
   const TONE = { ROJO: [1000, 1240], MORADO: [900, 680], AMBAR: [760, 620], VERDE: [680, 1020], AZUL: [620, 820], PES: [520, 780] };
-  function playTone(color) { const t = TONE[color] || TONE.AZUL; beep(t[0], 380, 0); beep(t[1], 380, 0.42); }
+  function playTone(color, forzar) { const t = TONE[color] || TONE.AZUL; beep(t[0], 380, 0, forzar); beep(t[1], 380, 0.42, forzar); }
 
   // (1) SONIDO INSISTENTE: el audio suena aunque el navegador esté minimizado o
   //     estés en Word. Se repite hasta que reconozcas la alerta.
   let nagTimer = null, nagLeft = 0, nagColor = "ROJO";
-  function startNag(color) { stopNag(); if (!S.insistir) { playTone(color); return; } nagColor = color; nagLeft = 40; playTone(color); nagTimer = setInterval(() => { if (nagLeft-- <= 0) { stopNag(); return; } playTone(nagColor); }, 9000); }
+  function startNag(color, forzar) { const _fz = !!forzar; stopNag(); if (!S.insistir) { playTone(color, _fz); return; } nagColor = color; nagLeft = 40; playTone(color, _fz); nagTimer = setInterval(() => { if (nagLeft-- <= 0) { stopNag(); return; } playTone(nagColor, _fz); }, 9000); }
   function stopNag() { if (nagTimer) clearInterval(nagTimer); nagTimer = null; }
 
   // (2) PESTAÑA QUE PARPADEA: título + favicon. Visible en la barra de pestañas
@@ -14860,6 +15203,12 @@
   function startFlash(text, color) {
     stopFlash();
     if (!S.parpadeo) return;
+    // [NT-126/M17] — prefers-reduced-motion: el parpadeo rutinario se apaga cuando el
+    // sistema lo pide; el ROJO lo conserva (es su única señal persistente fuera de la
+    // pestaña — señal crítica, no decoración).
+    try {
+      if (color !== "ROJO" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    } catch (eM) {}
     origTitle = document.title;
     try { const cur = document.querySelector("link[rel~='icon']:not([data-vgl])"); origIcon = cur ? cur.href : null; } catch (e) {}
     flashTimer = setInterval(() => {
@@ -15311,7 +15660,13 @@
   function bigAlert(color, title, body) {
     try {
       let ov = document.getElementById("vgl-modal");
-      if (ov) ov.remove();
+      // [NT-128/M8] — el modal saliente ya no muere en silencio: si traía nag vivo y el
+      // entrante NO es ROJO, se reconoce (apaga tono y parpadeo); entre ROJO y ROJO el
+      // nag continúa (es el mismo hecho crítico) y el reemplazo queda registrado.
+      if (ov) {
+        try { if (color !== "ROJO") acknowledge(); else uxTrack("cartel.reemplazado", {}); } catch (eT) {}
+        ov.remove();
+      }
       const c = COLORS[color] || COLORS.AZUL;
       ov = document.createElement("div"); ov.id = "vgl-modal";
       ov.setAttribute("role", "alertdialog");
@@ -15336,7 +15691,10 @@
   }
 
   // Reconocer: apaga sonido insistente, parpadeo y cartel.
-  function acknowledge() { stopNag(); stopFlash(); const m = document.getElementById("vgl-modal"); if (m) m.remove(); }
+  function acknowledge() {
+    if (nagTimer) { try { uxTrack("nag.reconocido", {}); } catch (eT) {} }   // [NT/M18] cuánto insistió el ROJO antes del «Reconocer»
+    stopNag(); stopFlash(); const m = document.getElementById("vgl-modal"); if (m) m.remove();
+  }
 
   // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiraron los tres
   // renderizadores modales viejos (`pymAlert`, `abandonoPESAlert`,
@@ -15388,7 +15746,8 @@
     _avisoUnivSinResumen.clear(); _avisoUnivFirmaLabs.clear();
   }
 
-  function avisoUniversal(nombre, datos, esPrueba) {
+  function avisoUniversal(nombre, datos, esPrueba, uidAviso) {
+    let _consumidoPresupuesto = false;   // [NT-102/M2] visible también en el catch, para reembolsar el cupo si no se pintó
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
@@ -15400,11 +15759,21 @@
       // la señal que a ese perfil le importa: "este paciente necesita atención de riesgo
       // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
       const prioridadRcv = !!datos.prioridadRcv;
-      if (!abandono && !pym.length && !labs.length && !adelantar.length) return; // nada que mostrar
+      if (!abandono && !pym.length && !labs.length && !adelantar.length) return false; // nada que mostrar
       // v18.3 (P13·4.4) — PRESUPUESTO de interrupciones por equipo y día: medido
       // ≈4.020 en 14 días (≈72/equipo/día, prompt 07). `esPrueba` queda exento y un
       // fallo de almacenaje NO tapa el aviso (fall-open en obsPresupuestoConsumir).
-      if (!esPrueba && !obsPresupuestoConsumir()) return;
+      // [NT-101/M1] — el presupuesto NUNCA calla lo R=3: abandono RCV / prioridadRcv
+      // quedan EXENTOS (axioma §1.1 — el nivel 3 está reservado a ellos). Lo que el
+      // tope traga, ahora se mide por sección (aviso.universal.suprimido).
+      const exentoR3 = !!(abandono || prioridadRcv);
+      if (!esPrueba && !exentoR3) {
+        if (!obsPresupuestoConsumir()) {
+          try { uxTrack("aviso.universal.suprimido", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 }); } catch (eT) {}
+          return false;
+        }
+        _consumidoPresupuesto = true;
+      }
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
@@ -15490,9 +15859,23 @@
       _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 });
       _activarAccesibilidadModal(ov, closeMod);
+      // [NT-102/M2] — re-chequeo de la carrera justo antes de pintar: si otra pestaña
+      // ya mostró y marcó este uid, esta no pinta y devuelve el cupo del presupuesto.
+      if (uidAviso && !esPrueba && avisoYaVisto(uidAviso)) {
+        try { ov.remove(); } catch (eR2) {}
+        if (_consumidoPresupuesto) { try { obsPresupuestoReembolsar(); } catch (eR3) {} }
+        return false;
+      }
       document.body.appendChild(ov);
       // v15.4.0 — Sin tono: el propio modal en pantalla ES el aviso (un canal por función).
-    } catch (e) {}
+      return true;   // [NT-102/M2] pintó: recién ahora el llamador puede marcar visto
+    } catch (e) {
+      // [NT-102/M2] — el catch deja de ser mudo para el presupuesto: la mitigación
+      // v17.6.8 (pintar→marcar) dependía de que el error de render se propagara, y el
+      // catch lo tragaba. Si no se pintó, el cupo se devuelve y el aviso queda pendiente.
+      if (_consumidoPresupuesto) { try { obsPresupuestoReembolsar(); } catch (eR) {} }
+      return false;
+    }
   }
   // v18.0.127 — QUÉ TIENE PENDIENTE ESTE PACIENTE, en una sola función. Esto vivía dentro de
   // `checkAvisoUniversal`, mezclado con las compuertas de «ya se avisó hoy» y «espera a que
@@ -15591,6 +15974,10 @@
   }
   function checkAvisoUniversal() {
     try {
+      // [NT-103] — modo oculto: el modal es display:none, pero se marcaba visto y
+      // consumía presupuesto INVISIBLEMENTE. Se difiere: la condición sigue viva y el
+      // aviso saldrá en cuanto el modo oculto se levante.
+      if (document.body && document.body.classList && document.body.classList.contains("vgl-modo-oculto")) return;
       const doc = extractPacienteAbierto(); if (!doc) return;
       const key = normalizeKey(doc); if (!key) return;
       if (document.getElementById("vgl-pym-modal")) return; // ya hay un aviso en pantalla
@@ -15651,7 +16038,11 @@
           _avisoUnivSinResumen.delete(key);
           _avisoUnivFirmaLabs.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
+          // [NT-113/M12] — el re-aviso de labs es R=2: C1 persistente, no un modal C4
+          // interrumpiendo la consulta del paciente siguiente. El detalle completo
+          // sigue disponible en la pastilla 🩺 Pendientes del dock.
+          if (_enModuloHCHealth()) showToast("AMBAR", "🧪 Laboratorios RCV recién evaluados",
+            faltantes.length + " examen(es) sin resultado vigente" + (adelantar.length ? " · " + adelantar.length + " vigente(s) fuera de metas" : "") + ". Detalle en la pastilla 🩺 Pendientes.", true, "avisounivlab|" + key);
         }
         return;
       }
@@ -15674,8 +16065,8 @@
         // "visto" sin haberse mostrado y no volvía en toda la jornada. Ahora se pinta
         // primero y se marca después: una falla de render deja el aviso pendiente y el
         // siguiente tick lo reintenta.
-        avisoUniversal(nombreDe(), { abandono, pym, labs: [] });
-        avisoMarcarVisto(uid);
+        // [NT-102/M2] — avisoUniversal ahora REPORTA si pintó: solo entonces se marca.
+        if (avisoUniversal(nombreDe(), { abandono, pym, labs: [] }, false, uid)) avisoMarcarVisto(uid);
         return;
       }
       _avisoUnivEspera.delete(key); // labs ya resueltos: ya no hay nada que esperar para esta key
@@ -15687,9 +16078,14 @@
       // firma evita repetir las mismas en el re-aviso corregido).
       if (_sinResumenAviso) _avisoUnivSinResumen.add(key);
       _avisoUnivFirmaLabs.set(key, faltantes.map((f) => f.key).sort().join(","));
+      // v18.0.120 (REPORTE EN VIVO 02-sep) manda: el hallazgo «fuera de metas» del aviso
+      // de entrada sale como aviso completo — el médico tiene que enterarse del LDL 160
+      // con meta <100 aunque el examen siga vigente 80 días. [NT-112/M11] La degradación
+      // C4→C1 de los «solo-adelantables» se DESESTIMÓ: contradice ese contrato y
+      // convertiría un hallazgo clínico en un toast pasajero (ver desviaciones del cierre).
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv });
-      avisoMarcarVisto(uid);
+      // [NT-102/M2] — solo se marca si de verdad se pintó.
+      if (avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv }, false, uid)) avisoMarcarVisto(uid);
     } catch (e) {}
   }
 
@@ -15761,18 +16157,44 @@
       writeJSON(SEEN_KEY, o);
     } catch (e) {}
   }
+  // [NT-104/M3] — reverso de avisoMarcarVisto: si el aviso quedó "visto" pero NINGÚN
+  // canal llegó a pintarlo (SO suprimido + fallback bloqueado por el gate HCHealth),
+  // se quita la marca para que un intento posterior pueda volver a dispararlo —
+  // antes quedaba "contado y nunca visto" el resto de la jornada.
+  function avisoOlvidar(uid) {
+    if (!uid) return;
+    try {
+      const o = readJSON(SEEN_KEY, {}) || {};
+      if (o && o._dia === todayStamp() && o[uid] !== undefined) { delete o[uid]; writeJSON(SEEN_KEY, o); }
+    } catch (e) {}
+  }
   function osNotify(color, title, body, persist, uid) {
     if (avisoYaVisto(uid)) return;                       // ya se mostró hoy: NUNCA repetir
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") { avisoMarcarVisto(uid); showToast(color, title, body, persist); return; }
+    // [NT-104/M3] — sin permiso del sitio, el respaldo in-page SOLO cuenta si puede
+    // pintarse (gate HCHealth de showToast). Si no puede, NO se marca visto: el aviso
+    // queda pendiente y el flujo lo reintenta — no se gasta el único aviso del día.
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      if (_enModuloHCHealth()) { avisoMarcarVisto(uid); showToast(color, title, body, persist); }
+      return;
+    }
     if (crossTabDup("os|" + (uid || title))) return;
     avisoMarcarVisto(uid);
-    let done = false; const fb = () => { if (done) return; done = true; showToast(color, title, body, persist); };
+    let done = false;
+    // [NT-104/M3] — el respaldo ya no pinta a ciegas: si el gate HCHealth lo bloquea,
+    // se REVIERTE la marca en vez de dar por entregado lo que nadie vio.
+    const fb = () => {
+      if (done) return; done = true;
+      if (!_enModuloHCHealth()) { avisoOlvidar(uid); return; }
+      showToast(color, title, body, persist);
+    };
     try {
       // requireInteraction SOLO para el fraude (persist): lo demás se cierra solo. Las
       // notificaciones persistentes que nadie cierra quedan vivas en el Centro de
       // actividades de Windows y REAPARECEN horas después — el famoso aviso fantasma.
       const n = new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: !!persist, tag: "vgl-" + (uid || title) });
-      try { n.onshow = () => { done = true; }; n.onerror = fb; n.onclick = () => { try { window.focus(); } catch (e2) {} try { n.close(); } catch (e2) {} }; } catch (e) {}
+      // [NT-105/M3] — si Windows demoró más que la escalada de 1,6 s y el toast YA se
+      // pintó, la notificación tardía se CIERRA al llegar: un aviso = un canal visible.
+      try { n.onshow = () => { if (done) { try { n.close(); } catch (eC) {} } else { done = true; } }; n.onerror = fb; n.onclick = () => { try { window.focus(); } catch (e2) {} try { n.close(); } catch (e2) {} }; } catch (e) {}
       // Cierre automático: 20 s los avisos normales, 3 min el fraude (el sonido insistente
       // sigue por su lado hasta reconocer). Así nada queda pegado en el Centro de actividades.
       setTimeout(() => { try { n.close(); } catch (e2) {} }, persist ? 180000 : 20000);
@@ -15814,12 +16236,26 @@
   };
   const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" };
 
+  // [NT/M18] — ¿está el médico ESCRIBIENDO en la historia? (textarea/input de texto o
+  // contentEditable con foco). Solo para telemetría anónima de interrupciones: nunca
+  // para suprimir avisos (la supresión durante escritura quedó descartada por D4).
+  function _vglEscribiendoHC() {
+    try {
+      const _el = document.activeElement;
+      if (!_el) return false;
+      if (_el.tagName === "TEXTAREA") return true;
+      if (_el.tagName === "INPUT" && /^(text|search)$/i.test(_el.type || "")) return true;
+      if (_el.isContentEditable) return true;
+    } catch (e) {}
+    return false;
+  }
   function _renderToast(color, title, body, persist, apptKey) {
     try {
       const wrap = document.getElementById("vgl-toasts"); if (!wrap) return;
       if (apptKey) {
         [...wrap.children].forEach((n) => {
           if (n && n.__vglApptKey === apptKey && n.classList && !n.classList.contains("out")) {
+            try { uxTrack("toast.desenlace", { color: n.__vglColor || "", via: "reemplazo" }); } catch (eT) {}   // [NT/M18]
             try { n.remove(); } catch (e2) {}
           }
         });
@@ -15827,6 +16263,7 @@
       const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
       const t = document.createElement("div"); t.className = "vgl-toast";
       t.__vglApptKey = apptKey || "";
+      t.__vglColor = color;   // [NT/M18] para el desenlace del toast
       // [v12.3.13] El CSS estático del toast vive al final de la hoja maestra de buildOverlay()
       // (antes CADA toast traía su propia copia y el motor la re-parseaba por aviso). El único
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
@@ -15839,18 +16276,34 @@
       if (emoji && titulo.indexOf(emoji) === 0) titulo = titulo.slice(emoji.length).replace(/^\s+/, "");
       t.querySelector(".vgl-toast-title").textContent = titulo;
       t.querySelector(".vgl-toast-b").textContent = body;
-      const cerrar = () => { t.classList.add("out"); setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260); };
-      t.addEventListener("click", cerrar);
       const critico = color === "ROJO" || color === "MORADO" || color === "AMBAR";
+      // [NT-115/M15] — accesibilidad: lo crítico anuncia por role="alert" (assertive);
+      // lo rutinario por role="status" (polite). Y el toast es cerrable con TECLADO
+      // (Tab lo enfoca, Esc/Enter lo cierra): antes la «×» era decorativa y el cierre
+      // solo existía con clic — los críticos NUNCA se autocierran.
+      t.tabIndex = 0;
+      t.setAttribute("role", critico ? "alert" : "status");
+      const cerrar = (via) => {
+        try { uxTrack("toast.desenlace", { color: color, via: via || "clic" }); } catch (eT) {}   // [NT/M18] clic vs auto vs teclado: lectura real
+        t.classList.add("out"); setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
+      };
+      t.addEventListener("click", () => cerrar("clic"));
+      t.addEventListener("keydown", (ev) => {
+        try {
+          if (ev.key === "Escape" || ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); cerrar("teclado"); }
+        } catch (eK) {}
+      });
       t.__vglCritico = critico;
+      if (_vglEscribiendoHC()) { try { uxTrack("aviso.durante_escritura", { color: color, canal: "toast" }); } catch (eT) {} }   // [NT/M18]
       // v18.0.109 (S+ flujo, C14) — `persist` también manda en VERDE/AZUL: la leyenda de colores y
       // «Órdenes generadas» (persist=true) se cerraban solos a los 9 s.
-      if (critico) wrap.prepend(t); else { wrap.appendChild(t); if (persist !== true) setTimeout(cerrar, 9000); }
+      if (critico) wrap.prepend(t); else { wrap.appendChild(t); if (persist !== true) setTimeout(() => cerrar("auto"), 9000); }
       const vivos = () => [...wrap.children].filter((n) => !n.classList.contains("out"));
       while (vivos().length > 4) {
         const lista = vivos();
         const quitar = [...lista].reverse().find((n) => !n.__vglCritico) || lista[lista.length - 1];
         if (!quitar) break;
+        try { uxTrack("toast.desenlace", { color: quitar.__vglColor || "", via: "recorte" }); } catch (eT) {}   // [NT/M18] la bandeja saturó sus 4 vivos
         quitar.remove();
       }
     } catch (e) {}
@@ -15929,6 +16382,7 @@
         toastFlushTimer = null;
         // v17.6.9 — regla 2: se agrupa por paciente antes de decidir el modo "Alerta Múltiple".
         const agrupados = _agruparToasts(toastQueue);
+        try { uxTrack("avisos.canal.hora", { c1: agrupados.length }); } catch (eT) {}   // [NT/M18] carga C1 por flush (línea base de fatiga)
         if (agrupados.length > 3) {
           const criticos = agrupados.filter(t => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR").length;
           // v17.11.0 — mismo defecto que en _agruparToasts, y aquí afecta a MÁS avisos a la
@@ -16027,9 +16481,18 @@
   const AVISOS_PENDIENTES_KEY = "vgl_avisos_pendientes";
   function _encolarAvisoPendiente(p) {
     try {
-      const cola = readJSON(AVISOS_PENDIENTES_KEY, []) || [];
+      // [NT-107/M10] — la cola vive en localStorage COMPARTIDO: NADA de PHI en el
+      // payload persistido. El cartel se reconstruye con `title` (hora+estado, nunca
+      // llevó nombre) y, si hace falta cuerpo, el genérico por color (ver
+      // _dispararAvisoCartel). Ley 1581/2012 art. 4 · Circular Ext. 005/2017 SIC.
+      // La purga por tiempo corre AL ESCRIBIR (no solo al hacer flush): un ROJO que
+      // nadie pintó deja de vivir indefinidamente en el disco.
+      const _ahoraEn = Date.now();
+      const cola = (readJSON(AVISOS_PENDIENTES_KEY, []) || [])
+        .filter((x) => x && !(x.ts && (_ahoraEn - x.ts) > _avisoCartelCaducaMs(x.color)));
       if (cola.some((x) => x && x.uid === p.uid)) return;    // ya en cola: no duplicar
-      cola.push(p);
+      cola.push({ color: p.color, title: p.title, hora: p.hora || "", estado: p.estado || "", persist: p.persist, uid: p.uid, apptKey: p.apptKey, flashText: p.flashText, ts: p.ts || _ahoraEn });
+      if (cola.length > 50) { try { uxTrack("cola.descartado", { motivo: "tope" }); } catch (eT) {} }   // [NT-120/M18] el descarte ya no es invisible
       writeJSON(AVISOS_PENDIENTES_KEY, cola.slice(-50));      // tope defensivo
     } catch (e) {}
   }
@@ -16038,7 +16501,13 @@
   // un cartel de hace media hora NO puede salir como si el paciente acabara de llegar.
   // Pasados 10 minutos se descarta — el aviso ya se dio, y repetirlo tarde solo consigue
   // que el médico atienda una llegada que ya pasó.
+  // [Q3/NT-125 — instrucción 07-sep, opción (b), pendiente de ratificación del médico]
+  // El ROJO es evidencia de fraude: su cartel caduca a los 30 MINUTOS, el resto
+  // sigue a los 10. El diseño v14.1.5 («no recordar llegadas ya pasadas») se conserva
+  // para todo lo demás.
   const AVISO_CARTEL_CADUCA_MS = 600000;
+  const AVISO_CARTEL_CADUCA_ROJO_MS = 1800000;
+  function _avisoCartelCaducaMs(color) { return color === "ROJO" ? AVISO_CARTEL_CADUCA_ROJO_MS : AVISO_CARTEL_CADUCA_MS; }
   function _flushAvisosPendientes() {
     if (!_enModuloHCHealth()) return;
     let cola;
@@ -16055,19 +16524,22 @@
     const seQuedan = [];
     cola.forEach((p) => {
       if (!p) return;
-      if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
+      if (p.ts && (ahora - p.ts) > _avisoCartelCaducaMs(p.color)) { caducados++; return; }
       // v18.0.4 — ENJAMBRE (31-ago): el cartel respeta muted() (v17.19.0) pero el FLUSH
       // no lo miraba: decidía "puedo pintar", llamaba _dispararAvisoCartel (que callaba
       // por el silencio temporal) y daba por pintado el aviso — el cartel ROJO de fraude
-      // se consumía sin mostrarse nunca. Con `!muted()` aquí, un aviso que no se pudo
-      // pintar por silencio activo SE QUEDA en la cola y sale en el siguiente ciclo.
-      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted();
+      // se consumía sin mostrarse nunca. [Q2 — 07-sep] el ROJO queda exento del silencio
+      // (ver _dispararAvisoCartel): aquí ya no hay guarda de mute para él.
+      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
       if (puedePintar) { _dispararAvisoCartel(p); return; }
-      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta o silencio activo: esperará
+      if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta: esperará
       // No-ROJO o cartel apagado: jamás se pintará como cartel — su canal ya sonó. Se suelta.
     });
     try { writeJSON(AVISOS_PENDIENTES_KEY, seQuedan); } catch (e) {}
-    if (caducados) console.log("[Vigilante] " + caducados + " cartel(es) en cola ya no se muestran: el aviso sonó en su momento y han pasado más de 10 minutos.");
+    if (caducados) {
+      try { uxTrack("cola.descartado", { n: caducados, motivo: "caducado" }); } catch (eT) {}   // [NT-120/M18]
+      console.log("[Vigilante] " + caducados + " cartel(es) en cola ya no se muestran: el aviso sonó en su momento y caducó.");
+    }
   }
   // v14.1.5 — TERCERA CAUSA DE LOS AVISOS TARDÍOS, y la más torcida de las tres.
   //
@@ -16111,8 +16583,15 @@
   function _vglSinCedulas(texto) {
     return String(texto == null ? "" : texto).replace(/\b\d{6,12}\b/g, (m) => "●●●" + m.slice(-3));
   }
-  function _notificarSistema(color, title, body, persist, uid) {
-    const titleSO = _vglSinCedulas(title), bodySO = _vglSinCedulas(body);
+  function _notificarSistema(color, title, body, persist, uid, soBody) {
+    // [NT-106/M9] — el canal del SO (Centro de actividades de Windows, en un PC
+    // compartido) no lleva NOMBRE ni cédula del paciente cuando el llamador provee el
+    // cuerpo sin PHI (`soBody`, eventos de agenda): la cita se identifica por su HORA,
+    // que ya viaja en el título. Ley 1581/2012 art. 3-4. El texto completo sigue
+    // saliendo en los canales DENTRO de la página (toast/cartel), ante el médico
+    // tratante. Los llamadores directos sin soBody conservan su texto (solo cédula
+    // enmascarada, política v18.0.109).
+    const titleSO = _vglSinCedulas(title), bodySO = _vglSinCedulas(soBody || body);
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       osNotify(color, titleSO, bodySO, persist, uid);   // con su propia escalada interna si Windows lo suprime
       return true;
@@ -16122,8 +16601,15 @@
   function _dispararAvisoAudible(p) {
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     if (!_avisoUnaVezPorNavegador("aviso|" + p.uid)) return false;   // v18.0.113 — y solo una vez en la jornada, sea cual sea la pestaña o el canal
-    if (p.color === "ROJO") startNag("ROJO");
-    else if (p.color === "MORADO") playTone("MORADO");
+    // [NT-109/Q2 — instrucción 07-sep, opción (a), pendiente de ratificación del médico]
+    // El ROJO es edge UNA-SOLA-VEZ por cita: si su único tono caía dentro de un
+    // «Silenciar 15 min», se perdía para siempre (NT-109b). El silencio temporal sigue
+    // callando TODO lo demás (MORADO incluido, salvo `p.silencioso` que es el nuevo
+    // aviso de 3+ PyM, silencioso por diseño). El registro del hecho no cambia: eso
+    // ya ocurrió en colorAndAlert/maybeNotify.
+    if (p.color === "ROJO") startNag("ROJO", true);
+    else if (p.color === "MORADO" && !p.silencioso) playTone("MORADO");
+    if (p.color === "ROJO" || (p.color === "MORADO" && !p.silencioso)) { try { uxTrack("tono.disparado", { color: p.color }); } catch (eT) {} }   // [NT/M18] peso acústico real de la jornada
     // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): "Silenciar 15 min" callaba solo el tono
     // (beep() ya mira muted()); toast y notificación de Windows seguían saliendo igual,
     // justo el ruido que pidió apagar ("mejor dejarlo lo más minimalista posible"). El
@@ -16131,7 +16617,8 @@
     // maybeNotify, antes de llegar aquí — y devolver `true` (no `false`) deja intacto
     // que el cartel pendiente se siga encolando para cuando el médico entre a la
     // historia, aunque el silencio ya haya vencido para entonces.
-    if (muted()) return true;
+    // [Q2] — con la exención del ROJO arriba, esta guarda solo calla los NO-ROJO.
+    if (muted() && p.color !== "ROJO") return true;
     // v18.0.135 (Avisos #4) — LA FUGA REPORTADA: una pestaña ajena VISIBLE (Acceso, otra
     // ventana de Everest) entraba por la rama «pestaña visible» de abajo y pintaba el
     // toast sobre una pantalla que no es la clínica («la notificación azul cian/anaranjada
@@ -16142,7 +16629,13 @@
     // v14.1.5 — el aviso suena esté donde esté el médico), y el parpadeo del título sigue
     // siendo la señal de lo crítico en cualquier pestaña del navegador.
     if (_pestanaSinAtencion() || !_enModuloHCHealth()) {
-      if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
+      // [NT/M13 — regla de oro, corregida contra el banco v14.1.5] — un VERDE es R=1:
+      // con la pestaña VISIBLE fuera de HCHealth no gasta el canal del SO (su C0 es la
+      // tarjeta verde del panel al volver). Pero con la pestaña DESATENDIDA el SO es su
+      // ÚNICO canal posible y el invariante v14.1.5 (el médico se entera AHORA, esté
+      // donde esté) manda: callar el único canal restante sería perder el aviso.
+      if (p.color === "VERDE" && !_pestanaSinAtencion()) return true;
+      if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid, p.soBody)) {
         if (_enModuloHCHealth()) showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
         if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
       }
@@ -16157,11 +16650,15 @@
   // El cartel dentro de la página: solo ROJO, solo si el médico lo activó, y solo con la
   // pestaña visible (oculta, el canal ya fue la notificación del sistema).
   function _dispararAvisoCartel(p) {
-    // v17.19.0 — el comentario original de "Silencio temporal" (línea ~10364) ya prometía
-    // "calla sonido/ventana/cartel", pero el cartel nunca miró muted(): la promesa era
-    // falsa. Se cierra la brecha aquí, único punto del que cuelgan los tres llamadores
-    // reales de este disparador (inmediato, cola diferida y el de _dispararAvisoReal).
-    if (S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted()) bigAlert("ROJO", p.title, p.body);
+    // v17.19.0 — el cartel respetaba muted() desde esa versión. [Q2 — 07-sep] el ROJO
+    // queda EXENTO del silencio temporal (mismo fundamento que su tono: edge único por
+    // cita, no hay segunda oportunidad). Aquí solo llega ROJO, así que la guarda de
+    // mute se retira; S.cartel y la visibilidad siguen mandando.
+    // [NT-107/M10] — el cuerpo puede venir reconstruido desde la cola (sin PHI):
+    // título (hora+estado) + etiqueta del color bastan para el cartel.
+    if (S.cartel && p.color === "ROJO" && !_pestanaSinAtencion()) {
+      bigAlert("ROJO", p.title, p.body || ((p.hora ? "Paciente de la cita de las " + p.hora + ". " : "") + ((NOTIFY.ROJO && NOTIFY.ROJO.label) || "")));
+    }
   }
   function _dispararAvisoReal(p) {
     // Si el cartel va a salir (ROJO + S.cartel + pestaña visible, y aquí solo se llega
@@ -16553,13 +17050,39 @@
     return true;
   }
 
+  // [M5/M19/M20] — ventana móvil de N por hora corrida: el patrón del aviso de paciente
+  // nuevo (AVISO_PAC_TOASTS_HORA), convertido en utilidad reutilizable. Fall-open:
+  // ante cualquier error de estado, PERMITE (un tope que calla por fallo propio es
+  // peor que ningún tope — asimetría D4).
+  function _vglTopeHora(clave, tope) {
+    try {
+      const ahora = Date.now();
+      state.topeHora = state.topeHora || {};
+      const arr = (state.topeHora[clave] || []).filter((ts) => ahora - ts < 3600000);
+      if (arr.length >= tope) { state.topeHora[clave] = arr; return false; }
+      arr.push(ahora); state.topeHora[clave] = arr; return true;
+    } catch (e) { return true; }
+  }
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
     // La siembra compartida se mantiene al día con cada aviso: si se quedara en la foto
     // de la mañana, un relevo a media jornada heredaría un mapa viejo y volvería a
     // tragarse en silencio todo lo avisado desde entonces — el mismo fallo, más tarde.
     _siembraCompartidaGuardar(state.notified);
-    if (a.color === "MORADO" && a.reason !== "tiempo") return;
+    if (a.color === "MORADO" && a.reason !== "tiempo") {
+      // [NT-108/M5 — Q5, instrucción del 07-sep] — «3+ PyM» deja de ser solo color: UN
+      // aviso C1 por cita y jornada, SILENCIOSO (sin tono: el que suena es el MORADO de
+      // tiempo), con tope 3/hora (patrón del paciente nuevo). Solo en transición real
+      // (prev definido: la siembra del primer snapshot no avisa). No toca B02/B04/B05.
+      const uidPym3 = "pym3|" + a.key;
+      if (prev !== undefined && !avisoYaVisto(uidPym3) && _vglTopeHora("pym3", 3)) {
+        avisoMarcarVisto(uidPym3);
+        if (_enModuloHCHealth()) showToast("MORADO", "⏳ " + a.hora_texto + " · 3+ actividades PyM",
+          `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\nTres o más actividades preventivas pendientes: vea la tarjeta morada de la agenda.`,
+          false, a.key);
+      }
+      return;
+    }
     // v12.4.0 — Rescate de las DOS guardias originales (v8.2.0/bea69e6), perdidas en la
     // refactorización v11.0 y consolidada la pérdida en la unificación v12.0.0:
     //  (1) SIEMBRA SILENCIOSA: la primera pasada tras arrancar solo registra el estado
@@ -16633,7 +17156,11 @@
     // v17.0.3 — `apptKey` (a.key, SIN el color) viaja aparte del `uid` (que sí lo lleva):
     // es lo que deja que _renderToast reconozca "esto es una actualización de la MISMA
     // cita" y retire el cartel anterior en vez de apilarlo al lado (ver _renderToast).
-    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, apptKey: a.key, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}`, ts: Date.now() };
+    // [NT-106/M9] — `soBody`: cuerpo SIN nombre ni cédula para el canal del sistema
+    // (la cita se identifica por su hora, que ya va en el título). [NT-107/M10] —
+    // `hora`/`estado` viajan aparte para que la cola localStorage pueda reconstruir
+    // el cartel sin guardar PHI.
+    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, apptKey: a.key, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}`, hora: a.hora_texto, estado: a.estado, soBody: `Paciente de la cita de las ${a.hora_texto}.\n${cfg.label}${sello}`, ts: Date.now() };
     // v14.1.5 — El aviso SIEMPRE suena y sale al sistema operativo, aquí y ahora, esté el
     // médico en el módulo que esté. Lo único que puede quedar esperando es el cartel de
     // dentro de la página, porque ese necesita una pestaña donde pintarse.
@@ -17100,6 +17627,7 @@
     API.ultimo = Date.now();
     const currentEpoch = state.sessionEpoch;
     apiLeerAgenda().then((citas) => {
+      if (state.killed) return;   // [NT-119/M7] teardown hecho: ni avisos ni toasts póstumos (avisoPacEval consume presupuesto/marcas)
       if (currentEpoch !== state.sessionEpoch) return; // KR-02: Descartes de datos de ayer
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
       // v18.1.0 — B5: el aviso de paciente nuevo se evalúa con la MISMA lectura
@@ -17296,7 +17824,7 @@
         }
         .vgl-tip-btn[aria-expanded="true"]{background:var(--c-azul) !important;color:var(--bg-solid) !important}
         #vgl-tip-pop{
-          position:fixed;z-index:2147483000;max-width:260px;
+          position:fixed;z-index:calc(var(--z-alerta) - 1);max-width:260px;
           background:var(--bg-solid,#12161f) !important;color:var(--fg,#f2f2f4) !important;
           border:1px solid var(--edge,rgba(255,255,255,.16));border-radius:var(--r-card,12px);
           box-shadow:var(--shadow-float,0 10px 30px rgba(0,0,0,.35));padding:10px 12px;
@@ -17460,7 +17988,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes{
         /* Vidrio frost sobre negro OLED */
         /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
         /* v18.0.123 (UI/UX UI#4) — el vidrio se calibró «sobre OLED» y en la vida real vive
@@ -17562,7 +18090,7 @@
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light,#vgl-rcv-pendientes.light{
         --bg:rgba(249,250,252,.90);
         --bg-sidebar:rgba(243,246,250,.84);
         --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
@@ -17714,7 +18242,8 @@
         #vgl-ia-modal,#vgl-ia-modal *,#vgl-panel-modal,#vgl-panel-modal *,#vgl-ficha-modal,#vgl-ficha-modal *,
         #vgl-tablero-modal,#vgl-tablero-modal *,#vgl-confirma-modal,#vgl-confirma-modal *,#vgl-llenar-modal,#vgl-llenar-modal *,
         #vgl-riesgo-modal,#vgl-riesgo-modal *,#vgl-min-bar,#vgl-min-bar *,#vgl-acomp-burbuja,#vgl-acomp-burbuja *,
-        #vgl-tip-pop,#vgl-examen-normalidad,.vgl-ia-inj,#vgl-deshacer-llenado{
+        #vgl-tip-pop,#vgl-examen-normalidad,.vgl-ia-inj,#vgl-deshacer-llenado,
+        #vgl-paquete-modal,#vgl-paquete-modal *,#vgl-chooser-modal,#vgl-chooser-modal *{
           animation:none !important;transition:none !important;
         }
       }
@@ -17815,9 +18344,9 @@
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
       body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
-      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn{display:none !important}
+      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn,body.vgl-modo-oculto #vgl-rcv-pendientes{display:none !important}
       #vgl-visib-pill{
-        position:fixed;bottom:10px;right:10px;z-index:2147483646;
+        position:fixed;bottom:10px;right:10px;z-index:calc(var(--z-toast) - 1);
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
         background:rgba(20,26,40,.55) !important;color:#cfd8ea !important;
         font:700 12px/24px var(--font-stack,sans-serif);text-align:center;cursor:pointer;
@@ -18172,6 +18701,41 @@
       #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-examenes :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where(): ver la nota del blindaje general */
+      /* v18.4.2 — panel «Próximos exámenes RCV» (v18.4.2). Vive en document.body,
+         FUERA de #vgl-root: cada color de clase lleva !important sin excepción
+         (CLAUDE.md — el CSS de Everest es una caja negra que puede ganarle a una
+         regla sin marca). Anti-fatiga: CERO animaciones — nada que parpadee en la
+         periferia durante la consulta; esquina inferior izquierda, lejos del panel
+         Centinela (inferior derecha) y del dock de acciones (superior izquierda). */
+      #vgl-rcv-pendientes{
+        position:fixed;left:16px;bottom:16px;z-index:var(--z-widget);
+        width:330px;max-width:calc(100vw - 32px);max-height:64vh;overflow-y:auto;
+        font-family:var(--font-stack);background:var(--bg-solid);
+        border:1px solid var(--edge);border-radius:var(--r-card);
+        box-shadow:var(--shadow-float);padding:12px 14px;color:var(--fg) !important
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+      #vgl-rcv-pendientes .vgl-rcvp-tit{font-size:var(--t-small);font-weight:800;color:var(--fg) !important}
+      #vgl-rcv-pendientes .vgl-rcvp-prog{font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-rcv-pendientes .vgl-rcvp-cont{font-size:var(--t-micro);font-weight:700;color:var(--c-panel) !important}
+      #vgl-rcv-pendientes .vgl-rcvp-fila{border-top:1px solid var(--line);padding:7px 0 6px;display:flex;flex-direction:column;gap:2px}
+      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-vencido{border-left:3px solid var(--c-rojo);padding-left:8px}
+      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-proximo{border-left:3px solid var(--c-ambar);padding-left:8px}
+      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-pendiente{border-left:3px solid var(--c-azul);padding-left:8px}
+      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-aldia{border-left:3px solid var(--c-verde);padding-left:8px}
+      #vgl-rcv-pendientes .vgl-rcvp-nom{font-size:var(--t-mini);font-weight:700;color:var(--fg) !important;line-height:1.35}
+      #vgl-rcv-pendientes .vgl-rcvp-fechas{font-size:var(--t-micro);color:var(--fg2) !important;font-variant-numeric:tabular-nums}
+      #vgl-rcv-pendientes .vgl-rcvp-chip{
+        display:inline-block;align-self:flex-start;font-size:var(--t-nano);font-weight:800;letter-spacing:.6px;
+        padding:2px 8px;border-radius:var(--r-pill)
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-chip-vencido{background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.38)}
+      #vgl-rcv-pendientes .vgl-rcvp-chip-proximo{background:rgba(var(--rgb-ambar),.16);color:var(--c-ambar) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.38)}
+      #vgl-rcv-pendientes .vgl-rcvp-chip-pendiente{background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38)}
+      #vgl-rcv-pendientes .vgl-rcvp-chip-aldia{background:rgba(var(--rgb-verde),.14);color:var(--c-verde) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.34)}
+      #vgl-rcv-pendientes .vgl-rcvp-nota{margin-top:8px;font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
+      #vgl-rcv-pendientes .vgl-rcvp-pie{margin-top:8px;font-size:var(--t-nano);color:var(--fg3) !important}
+      #vgl-rcv-pendientes :where(:not([class])){color:inherit !important}
       /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
          ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
          Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
@@ -19256,7 +19820,7 @@
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
       .vgl-pym-headtxt{min-width:0}
-      .vgl-pym-t{font-size:11.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:3px;letter-spacing:1.3px;text-transform:uppercase}
+      .vgl-pym-t{font-size:var(--t-micro);font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:3px;letter-spacing:1.3px;text-transform:uppercase}
       .vgl-pym-n{font-size:20px;font-weight:800;color:var(--fg) !important;line-height:1.18;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.28);overflow-wrap:anywhere}
       .vgl-pym-body{padding:16px 24px 6px;display:flex;flex-direction:column;gap:12px}
       .vgl-pym-sec,.vgl-pym-sec-pes,.vgl-pym-sec-rojo,.vgl-pym-sec-ambar{
@@ -19274,7 +19838,7 @@
       .vgl-pym-sec-ic{font-size:var(--t-strong);line-height:1}
       .vgl-pym-sec-t{font-size:12.5px;font-weight:800;letter-spacing:.2px;color:var(--sec-accent) !important}
       .vgl-pym-sec-b{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
-      .vgl-pym-lead{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--fg2) !important;margin-bottom:9px}
+      .vgl-pym-lead{font-size:var(--t-micro);font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--fg2) !important;margin-bottom:9px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px
       }
@@ -23781,6 +24345,14 @@
         const blobUrl = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "application/pdf" }));
         if (pestana && !pestana.closed) pestana.location.href = blobUrl;
         else window.open(blobUrl, "_blank");
+        // v18.4.2 — IMPRESIÓN AUTOMÁTICA (pedido: mismo comportamiento que ya tiene el
+        // recordatorio de la toma de laboratorio — abrir directo la ventana de impresión,
+        // sin pasos intermedios). El PDF carga en el visor interno de Chrome y print()
+        // sobre ESA pestaña abre el diálogo ya preconfigurado. Se espera un poco más que
+        // en el de laboratorio (HTML estático) porque aquí el visor primero tiene que
+        // descargar y renderizar el PDF. try/catch: si el visor no expone print(), no
+        // se rompe nada — queda el PDF en pantalla como siempre.
+        setTimeout(() => { try { if (pestana && !pestana.closed) pestana.print(); } catch (e) {} }, 900);
         // Se libera bastante después: el navegador ya tuvo tiempo de cargar el PDF en la
         // pestaña — liberarlo antes la dejaría en blanco.
         setTimeout(() => { try { URL.revokeObjectURL(blobUrl); } catch (e) {} }, 60000);
@@ -23788,6 +24360,9 @@
         console.warn("[Vigilante] No se pudo traer el PDF para forzar el visor de Chrome; se abre directo (Windows/Chrome deciden el programa):", e);
         if (pestana && !pestana.closed) pestana.location.href = url;
         else window.open(url, "_blank");
+        // v18.4.2 — misma impresión automática en el respaldo: el objetivo del botón es
+        // la ventana de impresión, no la pestaña con el PDF.
+        setTimeout(() => { try { if (pestana && !pestana.closed) pestana.print(); } catch (e2) {} }, 900);
       }
     })();
   }
@@ -23827,35 +24402,42 @@
     const fila = (rot, val) => val ? `<div class="rc-row"><span class="rc-k">${esc(rot)}</span><span class="rc-v">${esc(String(val))}</span></div>` : "";
     return `<!doctype html><html lang="es"><head><meta charset="utf-8">`
       + `<title>Recordatorio de toma de laboratorio</title><style>`
+      // v18.4.2 — REDUCCIÓN AL 85% (pedido: recordatorio un 15% más pequeño sin perder
+      // legibilidad ni proporciones). TODAS las medidas (anchos, paddings, tipografías,
+      // radios, íconos) se multiplicaron por 0,85 — escala uniforme, así la proporción
+      // entre componentes queda idéntica y ningún texto queda por debajo del mínimo que
+      // ya se leía (el más pequeño pasa de 10px a 8,5px, aún legible impreso en Letter).
+      // En @media print la tarjeta pasa de 100% a 85% del área imprimible para que la
+      // reducción también exista EN PAPEL y no solo en pantalla.
       + `@page{size:Letter portrait;margin:12mm}`
       + `*{box-sizing:border-box;margin:0;padding:0}`
-      + `body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:#eef1f4;color:#17212b;display:flex;justify-content:center;padding:20px}`
-      + `.rc-card{width:680px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 18px 50px -20px rgba(15,50,60,.45);display:flex;flex-direction:column;min-height:calc(100vh - 40px)}`
-      + `.rc-bar{background:#0d9488;color:#ffffff;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:10px}`
-      + `.rc-bar-l{font-size:12.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:8px}`
-      + `.rc-bar-r{font-size:12px;font-weight:700;opacity:.94;text-align:right;line-height:1.35}`
-      + `.rc-body{padding:26px 30px 30px;display:flex;flex-direction:column;flex:1}`
-      + `.rc-title{font-size:23px;font-weight:800;letter-spacing:-.01em;line-height:1.2}`
-      + `.rc-sub{font-size:13px;color:#5b6b7b;margin-top:4px}`
-      + `.rc-fh{display:grid;grid-template-columns:1.35fr 1fr;gap:12px;margin:18px 0 4px}`
-      + `.rc-fh-cell{border:1.5px solid #0d9488;background:#f0fdfa;border-radius:10px;padding:14px 16px}`
-      + `.rc-fh-lbl{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e}`
-      + `.rc-fh-val{font-size:21px;font-weight:800;color:#0f3d3a;margin-top:3px;line-height:1.25}`
-      + `.rc-fh-val small{font-size:12px;font-weight:700;color:#0f766e}`
-      + `.rc-sec{margin-top:16px}`
-      + `.rc-sec-t{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#8a99a8;border-bottom:1px solid #e3e9ef;padding-bottom:5px;margin-bottom:8px}`
-      + `.rc-row{display:flex;gap:8px;align-items:baseline;font-size:14px;padding:4px 0}`
-      + `.rc-k{min-width:130px;color:#5b6b7b;font-weight:600}`
+      + `body{font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:#eef1f4;color:#17212b;display:flex;justify-content:center;padding:17px}`
+      + `.rc-card{width:578px;max-width:100%;background:#ffffff;border-radius:10.2px;overflow:hidden;box-shadow:0 18px 50px -20px rgba(15,50,60,.45);display:flex;flex-direction:column;min-height:calc(100vh - 34px)}`
+      + `.rc-bar{background:#0d9488;color:#ffffff;padding:11.9px 22.1px;display:flex;align-items:center;justify-content:space-between;gap:8.5px}`
+      + `.rc-bar-l{font-size:10.6px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:6.8px}`
+      + `.rc-bar-r{font-size:10.2px;font-weight:700;opacity:.94;text-align:right;line-height:1.35}`
+      + `.rc-body{padding:22.1px 25.5px 25.5px;display:flex;flex-direction:column;flex:1}`
+      + `.rc-title{font-size:19.6px;font-weight:800;letter-spacing:-.01em;line-height:1.2}`
+      + `.rc-sub{font-size:11px;color:#5b6b7b;margin-top:3.4px}`
+      + `.rc-fh{display:grid;grid-template-columns:1.35fr 1fr;gap:10.2px;margin:15.3px 0 3.4px}`
+      + `.rc-fh-cell{border:1.3px solid #0d9488;background:#f0fdfa;border-radius:8.5px;padding:11.9px 13.6px}`
+      + `.rc-fh-lbl{font-size:8.9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e}`
+      + `.rc-fh-val{font-size:17.9px;font-weight:800;color:#0f3d3a;margin-top:2.6px;line-height:1.25}`
+      + `.rc-fh-val small{font-size:10.2px;font-weight:700;color:#0f766e}`
+      + `.rc-sec{margin-top:13.6px}`
+      + `.rc-sec-t{font-size:8.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#8a99a8;border-bottom:1px solid #e3e9ef;padding-bottom:4.3px;margin-bottom:6.8px}`
+      + `.rc-row{display:flex;gap:6.8px;align-items:baseline;font-size:11.9px;padding:3.4px 0}`
+      + `.rc-k{min-width:110.5px;color:#5b6b7b;font-weight:600}`
       + `.rc-v{font-weight:700;color:#17212b}`
-      + `.rc-call{display:flex;gap:10px;align-items:flex-start;margin-top:14px;border-radius:9px;padding:12px 14px;font-size:12.5px;line-height:1.55}`
-      + `.rc-call svg{width:16px;height:16px;flex:none;margin-top:1px}`
+      + `.rc-call{display:flex;gap:8.5px;align-items:flex-start;margin-top:11.9px;border-radius:7.7px;padding:10.2px 11.9px;font-size:10.6px;line-height:1.55}`
+      + `.rc-call svg{width:13.6px;height:13.6px;flex:none;margin-top:1px}`
       + `.rc-call.arrive{background:#f0fdfa;border:1px solid #99f6e4;color:#134e4a}`
       + `.rc-call.arrive svg{color:#0d9488}`
       + `.rc-call.prep{background:#fffbeb;border:1px solid #fde68a;color:#713f12}`
       + `.rc-call.prep svg{color:#d97706}`
-      + `.rc-call b{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}`
-      + `.rc-pie{margin-top:auto;padding-top:14px;border-top:1px solid #e3e9ef;font-size:11px;color:#8a99a8;line-height:1.5}`
-      + `@media print{body{background:#ffffff;padding:0}.rc-card{width:100%;min-height:auto;box-shadow:none;border-radius:0}}`
+      + `.rc-call b{display:block;font-size:9.8px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2.6px}`
+      + `.rc-pie{margin-top:auto;padding-top:11.9px;border-top:1px solid #e3e9ef;font-size:9.4px;color:#8a99a8;line-height:1.5}`
+      + `@media print{body{background:#ffffff;padding:0}.rc-card{width:85%;min-height:auto;box-shadow:none;border-radius:0}}`
       + `</style></head><body>`
       + `<div class="rc-card">`
       + `<div class="rc-bar"><span class="rc-bar-l">VIVA 1A IPS</span><span class="rc-bar-r">${esc(sede)}</span></div>`
@@ -27571,6 +28153,15 @@
               <button type="button" class="vgl-agm-lnk" id="vgl-agm-vertablero" style="margin-top:6px">❤️ Ver riesgo cardiovascular y vigencias de exámenes</button>
               <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
               <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px" aria-live="polite">Calculando fecha deseada...</div>
+              <!-- v18.4.2 — BÚSQUEDA POR OTRO MÉDICO (pedido): en Med. General (Control) el
+                   módulo solo ofrecía la agenda del médico autenticado. Este selector deja
+                   ver y elegir las citas de CUALQUIER médico con agenda ese día (lista real
+                   que devuelve BuscarCitasDisponibles), incluida la opción «Todos». Oculto
+                   para otras especialidades, donde nunca hubo filtro. -->
+              <div id="vgl-agm-medico-box" class="vgl-agm-fieldrow vgl-d-none" style="margin-top:6px">
+                <label for="vgl-agm-medico" style="font-size:12px;font-weight:600">Agenda de qué médico:</label>
+                <select id="vgl-agm-medico" class="vgl-agm-input" style="max-width:420px"></select>
+              </div>
             </div>
 
             <!-- Píldora explicativa de Complejidad Clínica -->
@@ -27960,6 +28551,39 @@
       });
     }
 
+    // v18.4.2 — BÚSQUEDA DE CITAS POR OTRO MÉDICO. "__propia__" conserva intacto el
+    // comportamiento de siempre (agenda del médico autenticado + salto al día más
+    // cercano con ella); "__todos__" muestra las agendas de todos los médicos del día;
+    // cualquier otro valor es el nombre EXACTO de otro médico, tal cual lo devolvió
+    // BuscarCitasDisponibles — sin inventar nombres que el servidor no haya listado.
+    let _medicoFiltro = "__propia__";
+    const medicoSel = modal.querySelector("#vgl-agm-medico");
+    const medicoBox = modal.querySelector("#vgl-agm-medico-box");
+    const _medicoDeAgenda = (a) => String((a && (a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre)) || "").trim();
+    const _nombreObjetivoAgenda = () => _medicoFiltro === "__propia__" ? doctorName : (_medicoFiltro === "__todos__" ? null : _medicoFiltro);
+    const _pintarSelectorMedicos = (agendasDelDia) => {
+      if (!medicoSel || !medicoBox) return;
+      if (selectedEspId !== 12) { medicoBox.classList.add("vgl-d-none"); return; }
+      const nombres = [...new Set((agendasDelDia || []).map(_medicoDeAgenda).filter(Boolean))]
+        .sort((x, y) => x.localeCompare(y, "es"));
+      medicoSel.innerHTML = '<option value="__propia__">Mi agenda — ' + escapeHtml(doctorName || "(médico no identificado)") + '</option>'
+        + '<option value="__todos__">Todos los médicos (' + nombres.length + ' con agenda este día)</option>'
+        + nombres.map((n) => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
+      // La elección del médico se conserva entre recargas de día/especialidad solo si
+      // sigue disponible en el nuevo listado; si no, vuelve a la propia (nunca a ciegas).
+      // (Sin select.options: el arnés DOM del banco no lo implementa, y .value basta.)
+      if (_medicoFiltro !== "__propia__" && _medicoFiltro !== "__todos__" && nombres.indexOf(_medicoFiltro) < 0) {
+        _medicoFiltro = "__propia__";
+      }
+      try { medicoSel.value = _medicoFiltro; } catch (e) {}
+      medicoBox.classList.remove("vgl-d-none");
+    };
+    if (medicoSel) medicoSel.addEventListener("change", () => {
+      _medicoFiltro = medicoSel.value;
+      try { uxTrack("fn.agendar.medico_filtro", { propio: _medicoFiltro === "__propia__" ? 1 : 0 }); } catch (e) {}
+      cargarHoras();   // re-pinta con el filtro nuevo; cargarHoras ya está declarada (hoisting)
+    });
+
     async function _buscarDiaConAgendaPropia(tokenOriginal) {
       const centroIso = selectedDateInfo.iso;
       const centroMs = new Date(centroIso + "T12:00:00").getTime();
@@ -28253,15 +28877,25 @@
       }
 
       let agendasFiltradas = agendasDelDia;
-      if (selectedEspId === 12) {
-        const misAgendas = _agendasPropias(agendasDelDia, doctorName);
+      _pintarSelectorMedicos(agendasDelDia);
+      if (selectedEspId === 12 && _medicoFiltro !== "__todos__") {
+        // v18.4.2 — el objetivo del filtro puede ser la agenda propia (comportamiento
+        // histórico, con salto al día más cercano que la tenga) o el de OTRO médico
+        // elegido en el selector (sin salto: ese médico solo se muestra los días que
+        // tiene agenda, y se le dice al médico cuándo no hay).
+        const esPropia = _medicoFiltro === "__propia__";
+        const nombreObjetivo = esPropia ? doctorName : _medicoFiltro;
+        const misAgendas = _agendasPropias(agendasDelDia, nombreObjetivo);
         if (misAgendas.length) {
           agendasFiltradas = misAgendas;
+        } else if (!esPropia) {
+          slotsEl.innerHTML = `<div class="vgl-agm-err">${escapeHtml(nombreObjetivo)} no tiene agenda de ${escapeHtml(selectedEspName)} el ${escapeHtml(selectedDateInfo.fmt)}. Elija otro médico o «Todos los médicos» en el selector de arriba.</div>`;
+          return;
         } else {
-          slotsEl.innerHTML = `<div class="vgl-agm-loading">Este día solo tiene agenda de otro profesional — buscando el día más cercano con SU agenda propia...</div>`;
-          const otroDia = await _buscarDiaConAgendaPropia(token);
-          if (!vivo() || token !== _cargarHorasToken) return;
-          if (otroDia) {
+        slotsEl.innerHTML = `<div class="vgl-agm-loading">Este día solo tiene agenda de otro profesional — buscando el día más cercano con SU agenda propia...</div>`;
+        const otroDia = await _buscarDiaConAgendaPropia(token);
+        if (!vivo() || token !== _cargarHorasToken) return;
+        if (otroDia) {
             // v18.0.122 — el día que se abandona se APAGA, con el mismo tratamiento que ya
             // recibe cualquier día sin agenda propia (v18.0.118): tachado, deshabilitado y
             // con el porqué. Antes solo se le quitaba la marca de seleccionado y seguía
@@ -28766,8 +29400,11 @@
         try {
           const res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId, true);
           const agendasDelDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === item.fmt);
-          hayAgenda = selectedEspId === 12
-            ? _agendasPropias(agendasDelDia, doctorName).length > 0
+          // v18.4.2 — el sondeo de chips respeta el selector de médico: con «Todos»
+          // cualquier agenda cuenta; con otro médico, solo la de él apaga/enciende chips.
+          const objetivoSondeo = _nombreObjetivoAgenda();
+          hayAgenda = (selectedEspId === 12 && objetivoSondeo)
+            ? _agendasPropias(agendasDelDia, objetivoSondeo).length > 0
             : agendasDelDia.length > 0;
         } catch (e) { hayAgenda = true; }
         if (!vivo() || miToken !== _sweepAgendaToken) return;
@@ -28945,7 +29582,10 @@
               agendasDelDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === fmt);
             } catch (e) { continue; }
             if (!vivo() || miTok !== _pcToken) return;
-            if (selectedEspId === 12) agendasDelDia = _agendasPropias(agendasDelDia, doctorName);
+            // v18.4.2 — «Primer cupo» respeta el selector de médico: la propia (como
+            // siempre), la de otro médico elegido, o la de todos si así se pidió.
+            const objetivoPc = _nombreObjetivoAgenda();
+            if (selectedEspId === 12 && objetivoPc) agendasDelDia = _agendasPropias(agendasDelDia, objetivoPc);
             if (!agendasDelDia.length) continue;
             let libres = 0;
             for (const ag of agendasDelDia.slice(0, 3)) {
@@ -33310,26 +33950,23 @@
         if ((r.ts || 0) > (a.ts || 0)) { mezcla[k] = r; fusiono = true; }
       }
       if (!fusiono) return false;
-      const escribio = safeWriteJSON(VGL_COSECHA_KEY, mezcla);
-      if (escribio) {
-        _vglCosechaCacheRaw = null; _vglCosechaCacheTodo = null;
+      // v18.4.3 (H5) — la restauración también persiste en sobre cifrado; el memo sirve
+      // la fusión desde ya (sello PENDIENTE), y los avisos llegan por callback.
+      _vglCosechaPersistir(mezcla, () => {
+        // El navegador SIGUE sin poder persistir: la fusión se sirve igual durante esta
+        // sesión por el memo — la misma argucia del rescate de cuota.
+        try {
+          showToast("AMBAR", "Memoria de pacientes solo en esta sesión",
+            "El navegador sigue sin espacio para guardar la memoria de sus pacientes. Lo aprendido está a salvo en la carpeta de su computador y funciona durante esta consulta; cuando pueda, libere espacio del navegador.",
+            true, "disco|solo-sesion");
+        } catch (e2) {}
+      }, () => {
         try {
           showToast("VERDE", "Memoria de pacientes recuperada",
             "El navegador había perdido parte de la memoria de sus pacientes (espacio lleno); se recuperó desde la carpeta de su computador. Si este aviso se repite, conviene liberar espacio del navegador.",
             true, "disco-restaurada");
         } catch (e2) {}
-        return true;
-      }
-      // El navegador SIGUE sin poder persistir: la fusión se sirve igual durante esta
-      // sesión por el memo (texto viejo del disco + objeto fresco), la misma argucia del
-      // rescate de cuota de _vglCosechaGuardar.
-      _vglCosechaCacheTodo = mezcla;
-      _vglCosechaCacheRaw = localStorage.getItem(VGL_COSECHA_KEY) || "{}";
-      try {
-        showToast("AMBAR", "Memoria de pacientes solo en esta sesión",
-          "El navegador sigue sin espacio para guardar la memoria de sus pacientes. Lo aprendido está a salvo en la carpeta de su computador y funciona durante esta consulta; cuando pueda, libere espacio del navegador.",
-          true, "disco|solo-sesion");
-      } catch (e2) {}
+      });
       return true;
     } catch (e) { return false; }
   }
@@ -33455,7 +34092,7 @@
       const css = document.createElement("style");
       css.id = "vgl-disco-banner-css";
       css.textContent = [
-        "#vgl-disco-banner{position:fixed;right:16px;bottom:16px;z-index:2147482000;max-width:340px;background:#101418;color:#f2f5f7;border:1px solid #2a3340;border-radius:12px;padding:14px 16px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45)}",
+        "#vgl-disco-banner{position:fixed;right:16px;bottom:16px;z-index:var(--z-panel,2147482000);max-width:340px;background:#101418;color:#f2f5f7;border:1px solid #2a3340;border-radius:12px;padding:14px 16px;font:13px/1.45 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45)}",
         "#vgl-disco-banner h3{margin:0 0 6px;font-size:14px;color:#7fd1a8}",
         "#vgl-disco-banner p{margin:0 0 10px}",
         "#vgl-disco-banner .vgl-disco-botones{display:flex;gap:8px;flex-wrap:wrap}",
@@ -34654,8 +35291,51 @@
   // y, si aún quedan más de 500, las más viejas por "ultima". "ultima" es YYYY-MM-DD, así que
   // comparar strings es comparar fechas.
   const NO_SHOW_TTL_DIAS = 180, NO_SHOW_MAX_ENTRADAS = 500;
-  function _noShowLeer() { try { return JSON.parse(localStorage.getItem(NO_SHOW_KEY) || "{}"); } catch (e) { return {}; } }
-  function _noShowGuardar(h) { try { localStorage.setItem(NO_SHOW_KEY, JSON.stringify(h)); } catch (e) {} }
+  // v18.4.3 (H5, auditoría 06-sep) — mismo sobre AES-GCM que vgl_cosecha: el historial de
+  // inasistencias lleva cédulas como clave y ahora también descansa cifrado en disco.
+  let _noShowCache = null, _noShowCacheRaw = null, _noShowHidrataEnVuelo = false;
+  async function _noShowHidratar() {
+    _noShowHidrataEnVuelo = true;
+    try {
+      const raw = localStorage.getItem(NO_SHOW_KEY) || "";
+      if (raw.slice(0, VGL_CIFRA_PREFIJO.length) !== VGL_CIFRA_PREFIJO) {
+        if (raw) { try { const h = JSON.parse(raw); _noShowCacheRaw = raw; _noShowGuardar(h); } catch (e) {} }
+        return true;
+      }
+      const plano = await _vglSobreDescifrar(raw);
+      if (_noShowCacheRaw === _VGL_COSECHA_PENDIENTE) return false;   // la escritura en vuelo manda
+      try { _noShowCache = plano == null ? {} : JSON.parse(plano); } catch (e2) { _noShowCache = {}; }
+      _noShowCacheRaw = raw;
+      return plano != null;
+    } finally { _noShowHidrataEnVuelo = false; }
+  }
+  let _noShowHidratarPromise = null;
+  function _noShowHidratarKick() {
+    if (_noShowHidrataEnVuelo) return _noShowHidratarPromise;
+    _noShowHidrataEnVuelo = true;
+    _noShowHidratarPromise = Promise.resolve(_noShowHidratar().catch(() => {})).finally(() => { _noShowHidrataEnVuelo = false; _noShowHidratarPromise = null; });
+    return _noShowHidratarPromise;
+  }
+  function _noShowLeer() {
+    try {
+      if (_noShowCacheRaw === _VGL_COSECHA_PENDIENTE && _noShowCache) return _noShowCache;
+      const raw = localStorage.getItem(NO_SHOW_KEY) || "{}";
+      if (raw === _noShowCacheRaw && _noShowCache) return _noShowCache;
+      if (raw.slice(0, VGL_CIFRA_PREFIJO.length) === VGL_CIFRA_PREFIJO) {
+        if (raw !== _noShowCacheRaw && !_noShowHidrataEnVuelo) _noShowHidratarKick();
+        return _noShowCache || {};
+      }
+      _noShowCache = JSON.parse(raw); _noShowCacheRaw = raw; return _noShowCache;
+    } catch (e) { return _noShowCache || {}; }
+  }
+  function _noShowGuardar(h) {
+    _noShowCache = h;
+    _noShowCacheRaw = _VGL_COSECHA_PENDIENTE;
+    _vglSobreCifrar(JSON.stringify(h)).then((sobre) => {
+      const texto = sobre == null ? JSON.stringify(h) : sobre;
+      try { localStorage.setItem(NO_SHOW_KEY, texto); _noShowCacheRaw = localStorage.getItem(NO_SHOW_KEY) || texto; } catch (e) {}
+    }).catch(() => {});
+  }
   // v17.53.0 — TOLERANTE A LOS CEROS DE RELLENO, igual que vgl_cosecha y vgl_proc_today
   // desde la v17.48.0. Este almacén se quedó fuera de aquella entrega y es el que peor lo
   // llevaba: NO caduca por día. Guarda el historial de inasistencias del paciente, y ese
@@ -34810,6 +35490,11 @@
       // notar un seguimiento pendiente. Mismos otros dos sitios en abandonoPESAlert() y en
       // el rótulo de Ajustes.
       const pesFlag = esPes ? `<span class="vgl-flag pes">❤ ABANDONO PROGRAMA RCV</span>` : ""; // [COPY-UX]
+      // [NT-108/M5 — axioma §1.5] — la pre-alerta «3+ PyM» deja de ser SOLO COLOR
+      // (un daltónico no la distinguía de una AZUL informativa): bandera de TEXTO,
+      // igual de explícita que la de fraude y la de abandono.
+      const pym3Flag = (a.color === "MORADO" && a.reason === "pym")
+        ? `<span class="vgl-flag" title="Tres o más actividades preventivas pendientes: vea los chips de esta tarjeta.">⏳ 3+ ACTIVIDADES PyM</span>` : ""; // [COPY-UX]
       // v14.2.0 — Recordatorio OPERATIVO (no clínico): el médico eligió un turno para este
       // paciente y no llegó a crear la cita. Ámbar, no rojo — no compite con la bandera de
       // fraude ni con la de abandono del programa. isAgendamientoPendiente ya se auto-anula
@@ -34905,7 +35590,7 @@
             })()}
           </div>
           <div class="vgl-card-badges-wrap">
-            ${flag}${pesFlag}${agendPend}${adicFlag}
+            ${flag}${pesFlag}${pym3Flag}${agendPend}${adicFlag}
             <!-- v18.0.123 (UI/UX UI#5) — tinte del badge al 10 % en claro (el .16 dejaba «Confirmada» en 3,48:1) -->
             <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(isLight() ? ".10" : ".16")};color:${badgeCol} !important;box-shadow:inset 0 0 0 1px ${badgeRgba(isLight() ? ".26" : ".32")}">${escapeHtml(a.estado)}</span>
           </div>
@@ -35333,6 +36018,10 @@
         try { _rumTramo("tick.widget.conducta", mtrWidgetConductaTick); } catch (e) {}
         try { _rumTramo("tick.widget.ordenar", mtrWidgetOrdenarConductaTick); } catch (e) {}
         try { _rumTramo("tick.widget.farmaco", mtrWidgetFarmacoTick); } catch (e) {}
+        // v18.4.2 — panel «Próximos exámenes RCV»: solo dentro de la historia
+        // clínica (la compuerta interna re-visa permiso, ruta, sección y
+        // paciente en cada tick — ver rcvPendientesTick).
+        try { _rumTramo("tick.widget.rcvpendientes", rcvPendientesTick); } catch (e) {}
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {
           const dockEl = document.getElementById("vgl-acciones-dock");
@@ -35389,7 +36078,7 @@
         // colgados de document.body y Everest no recarga la página al navegar, así que sin
         // esto se quedarían flotando sobre la lista de Citas del día. Es exactamente el
         // reporte de campo que la v16.1.0 tuvo que arreglar con Auto-Labs.
-        ["vgl-lab-injector", "vgl-examen-normalidad", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
+        ["vgl-lab-injector", "vgl-examen-normalidad", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an", "vgl-rcv-pendientes"].forEach((id) => {
           try { const n = document.getElementById(id); if (n) n.remove(); } catch (e) {}
         });
         // v17.0.3 — REPORTE DE CAMPO (pantallazo): la burbuja de la guía paso a paso
@@ -35482,11 +36171,22 @@
       // vez. Con la URL aprendida y cero intentos, no se sabe nada todavía y no hay nada
       // honesto que avisar. Sin URL aprendida, el mensaje sí es cierto y sale igual.
       const _intentoLeerApi = !API.url || (API.ok + API.fallos) > 0;
+      // [NT-111/M6+M14] — el aviso de ceguera ya no se quema UNA vez al día: se re-arma
+      // por EPISODIO (cada 30 min de ceguera continua abre un episodio con uid propio)
+      // y sale por notify(), que respeta la visibilidad (C1 en la página atendida; C3 al
+      // SO solo si la pestaña está desatendida) en vez de forzar el canal del SO. La
+      // marca C0 del resumen del panel vive mientras dure la condición.
       if (leader && _enModuloHCHealth() && secc !== "agenda" && _intentoLeerApi && (!data || !data.citas.length)) {
-        osNotify("AMBAR", "⚠ Vigilante sin lectura de la agenda",
-          "Aún no aprendió la conexión de 'Citas del día' esta sesión: mientras tanto NO puede avisar llegadas ni confirmaciones. Pase un momento por esa pantalla para que se active.",
-          false, "vgl-sin-datos-agenda");
-      }
+        if (!state.sinAgendaEp) state.sinAgendaEp = { desde: Date.now(), avisado: 0 };
+        if ((Date.now() - state.sinAgendaEp.desde) > 1800000) state.sinAgendaEp = { desde: Date.now(), avisado: 0 };
+        if (!state.sinAgendaEp.avisado) {
+          state.sinAgendaEp.avisado = 1;
+          osNotify("AMBAR", "⚠ Vigilante sin lectura de la agenda",
+            "Aún no aprendió la conexión de 'Citas del día' esta sesión: mientras tanto NO puede avisar llegadas ni confirmaciones. Pase un momento por esa pantalla para que se active.",
+            false, "vgl-sin-datos-agenda|" + state.sinAgendaEp.desde);
+          setSummary("Sin lectura de la agenda: los avisos de llegadas están pausados.");   // [M6] marca C0 persistente mientras viva la condición
+        }
+      } else if (state.sinAgendaEp) state.sinAgendaEp = null;
       if (data && data.citas.length) {
         // v14.2.0 (auditoría pre-producción) — antes, una sola cita con datos atípicos que
         // hiciera lanzar a colorAndAlert abortaba TODO el .map(): el catch de tick() (más
@@ -35973,10 +36673,15 @@
       if (aviso) aviso.remove();
       aviso = document.createElement("div");
       aviso.id = "vgl-pausa-clinica";
-      aviso.style.cssText = "position:fixed;top:10px;right:10px;z-index:2147483647;background:var(--c-rojo,#991b1b);color:var(--fg,#ffffff) !important;padding:12px 18px;border-radius:var(--r-card,12px);font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);font-weight:600;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));";
+      aviso.setAttribute("role", "alert");
+      // [NT-110/M16] — CONTRASTE AAA medido: los tokens resolvían #ff8177 sobre #f7fafc
+      // = 2,31:1 (ilegible en ambos temas). Este aviso es el KILL-SWITCH (R=3): usa el
+      // par fijo #991b1b/#ffffff = 8,31:1 (WCAG AAA), sin depender de tokens que el
+      // tema pueda girar. Ver WCAG 2.1 §1.4.3/1.4.6.
+      aviso.style.cssText = "position:fixed;top:10px;right:10px;z-index:var(--z-toast,2147483647);background:#991b1b;color:#ffffff !important;padding:12px 18px;border-radius:var(--r-card,12px);font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);font-weight:600;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));";
       const texto = "🛡️ Pausa de seguridad remota activa: " + (motivo || "Asistente clínico desactivado remotamente para proteger la historia clínica.");
       const span = document.createElement("span");
-      span.style.cssText = "color:var(--fg,#ffffff) !important;";
+      span.style.cssText = "color:#ffffff !important;";
       span.textContent = texto;
       aviso.appendChild(span);
       document.body.appendChild(aviso);
@@ -36016,7 +36721,7 @@
       // pointer-events:none en el contenedor y auto SOLO en la tarjeta: el aviso es
       // imposible de cerrar para el VIGILANTE, pero no secuestra los clics de Everest.
       // Colores con fallback + !important: cuelga directo de body (regla del proyecto).
-      aviso.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;pointer-events:none;background:transparent;";
+      aviso.style.cssText = "position:fixed;inset:0;z-index:var(--z-toast,2147483647);display:flex;align-items:center;justify-content:center;pointer-events:none;background:transparent;";
       const card = document.createElement("div");
       card.style.cssText = "pointer-events:auto;background:var(--c-rojo,#991b1b);color:var(--fg,#ffffff) !important;border:2px solid var(--fg,#ffffff);border-radius:var(--r-card,12px);padding:22px 26px;max-width:560px;font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);line-height:1.55;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));text-align:left;";
       const titulo = document.createElement("div");
@@ -36034,7 +36739,7 @@
       });
       const pasos = document.createElement("div");
       pasos.style.cssText = "color:var(--fg,#ffffff) !important;white-space:pre-line;opacity:0.95;";
-      pasos.textContent = "1. Pulse «Actualizar ahora» y confirme la instalación en Tampermonkey (o: icono de Tampermonkey → Utilidades → «Buscar actualizaciones de userscripts»).\n2. Recargue Everest (F5): el asistente vuelve solo, ya sin bloqueo.\nEverest sigue funcionando con normalidad; lo deshabilitado es el asistente.";
+      pasos.textContent = "1. Pulse «Actualizar ahora» y confirme la instalación en Tampermonkey. Si lo prefiere a mano: Actualícela desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».\n2. Recargue Everest (F5): el asistente vuelve solo, ya sin bloqueo.\nEverest sigue funcionando con normalidad; lo deshabilitado es el asistente.";
       card.appendChild(titulo);
       card.appendChild(cuerpo);
       card.appendChild(btn);
@@ -36128,7 +36833,7 @@
       aviso.id = "vgl-instancia-duplicada";
       aviso.setAttribute("role", "alert");
       aviso.setAttribute("aria-live", "assertive");
-      aviso.style.cssText = "position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:2147483647;background:var(--bg-solid,#78350f);color:var(--c-ambar,#fef3c7) !important;border:2px solid var(--c-ambar,#f59e0b);padding:14px 20px;border-radius:var(--r-card,10px);font-family:var(--font-stack,system-ui,-apple-system,sans-serif);font-size:var(--t-body,14px);font-weight:500;line-height:1.5;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.6));max-width:650px;display:flex;align-items:center;gap:14px;";
+      aviso.style.cssText = "position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:var(--z-toast,2147483647);background:var(--bg-solid,#78350f);color:var(--c-ambar,#fef3c7) !important;border:2px solid var(--c-ambar,#f59e0b);padding:14px 20px;border-radius:var(--r-card,10px);font-family:var(--font-stack,system-ui,-apple-system,sans-serif);font-size:var(--t-body,14px);font-weight:500;line-height:1.5;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.6));max-width:650px;display:flex;align-items:center;gap:14px;";
 
       const span = document.createElement("span");
       span.style.cssText = "color:var(--c-ambar,#fef3c7) !important;";
@@ -36662,6 +37367,10 @@
   }
   function boot() {
     try { _vglRestaurarDeEspejo(); } catch (e) {}   // v16.5.1 — antes de leer nada: si el navegador perdió el resumen, vuelve del espejo
+    // v18.4.3 (H5) — hidratar la memoria clínica y el historial de inasistencias cifrados
+    // lo antes posible: el primer tick del reloj (2-5 s) ya encontrará el memo servido.
+    try { _vglCosechaHidratarKick(); } catch (e) {}
+    try { _noShowHidratarKick(); } catch (e) {}
     // v17.9.0 — la escucha de la historia clínica, lo antes posible: si el médico guarda
     // antes de que el widget termine de montarse, ese guardado no se pierde. Va en su
     // try/catch porque NADA de esto puede impedir el arranque, y la propia función no
@@ -36963,7 +37672,7 @@
   //   · En SharePoint no hay localStorage de Everest: el padrón no es
   //     evaluable allí, así que la compuerta decide SOLO consentimiento.
   // =====================================================================
-  const TERMINOS_VERSION = "1.2";
+  const TERMINOS_VERSION = "1.3";
   const TERMINOS_GM_ACEPTA = "vgl_terminos_acepta";
   const TERMINOS_GM_RECHAZO = "vgl_terminos_rechazo";
   const TERMINOS_RECHAZO_MS = 12 * 60 * 60 * 1000;   // re-pregunta a las 12 h (2 h no, 13 h sí)
@@ -36978,7 +37687,7 @@
   // obliga a repasar esta constante Y a subir TERMINOS_VERSION (re-pregunta al médico).
   // La vinculación versión↔texto la garantiza esa prueba, no la memoria de nadie.
   const TERMINOS_TEXTO = `# Términos de uso y aviso de privacidad — Asistente Centinela
-**Versión 1.2 · 6 de septiembre de 2026**
+**Versión 1.3 · 7 de septiembre de 2026**
 
 > **Nota de estado.** Este es un borrador de trabajo redactado para decir la verdad sobre lo que el
 > programa hace. No es asesoría jurídica y no sustituye la revisión de un abogado colegiado. Los
@@ -37245,6 +37954,22 @@ la hora, y su identificador. Nada más.
 
 ---
 
+### T-47 · Avisos y notificaciones [NUEVA]
+1. Los avisos que el programa muestra DENTRO de la página (tarjetas de la agenda, toasts,
+   cuadro de pendientes) pueden mostrar nombre y hora de la cita: solo usted los ve, en la
+   misma pantalla clínica donde ya trabaja.
+2. Las notificaciones del SISTEMA (Centro de actividades de Windows, visible en
+   computadores compartidos) NO llevan nombre ni documento del paciente: la cita se
+   identifica solo por su hora (Ley 1581 de 2012, artículos 3 y 4).
+3. La cola temporal de avisos pendientes del navegador se guarda en su equipo SIN nombre
+   ni documento del paciente, y se purga sola por tiempo.
+4. El histórico local del aviso «paciente nuevo» guarda solo documento y hora, sin
+   nombres, con purga automática a los 90 días.
+5. La bitácora local de la jornada sí contiene nombres de pacientes: vive SOLO en su
+   equipo, sale únicamente cuando usted exporta la bitácora, y jamás por telemetría.
+
+---
+
 ## T-45 · Promesas verificables [NUEVA]
 Cada afirmación de este documento que dice que el programa «no puede» hacer algo está respaldada
 por una prueba automática del proyecto que se rompe si el comportamiento cambia. En particular:
@@ -37253,6 +37978,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 3. Ningún nombre, documento o nota clínica puede salir por telemetría.
 4. La constancia de aceptación contiene solo versión, fecha-hora e identificador.
 5. Actualizar el programa sin cambiar el texto no vuelve a pedir autorización; cambiarlo, sí.
+6. Las notificaciones del sistema no llevan nombre ni documento del paciente.
 
 ---
 
@@ -37285,6 +38011,10 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 5. **Hecho — Versionado:** historial abajo; la versión vigente se muestra en el panel de ajustes.
 
 ### Historial de versiones
+- **1.3 · 7 de septiembre de 2026** — cláusula nueva de avisos y notificaciones (T-47):
+  qué se muestra dentro de la página, qué no sale al sistema operativo, la cola local sin
+  identificación, la purga a 90 días del histórico de pacientes nuevos y el alcance de la
+  bitácora local; promesa verificable n.º 6 en T-45.
 - **1.2 · 6 de septiembre de 2026** — anonimización del texto (el documento ya no identifica al
   Desarrollador); cláusulas nuevas de responsabilidad (T-38), versionado (T-39), base del
   tratamiento (T-40), transferencia internacional (T-30), seguridad (T-42), procesamiento local
@@ -37453,7 +38183,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     velo.setAttribute("aria-modal", "true");
     velo.setAttribute("aria-label", "Términos de uso y aviso de privacidad");
     velo.setAttribute("tabindex", "-1");
-    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:calc(var(--z-toast,2147483647) - 1);background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
     const tarjeta = document.createElement("div");
     tarjeta.id = "vgl-terminos-tarjeta";
     tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(720px,92vw);max-height:86vh;overflow:auto;border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:26px 30px;";
@@ -37532,7 +38262,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     velo.id = "vgl-terminos-rechazo-velo";
     velo.setAttribute("role", "dialog");
     velo.setAttribute("aria-modal", "true");
-    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:calc(var(--z-toast,2147483647) - 1);background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
     const tarjeta = document.createElement("div");
     tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(520px,92vw);border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:24px 28px;";
     const p1 = document.createElement("p");
@@ -48289,7 +49019,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
             // del `cssText`, y aquí el color vive en la segunda (ver la corrección de la
             // regla en suite_25, misma ceguera que ya se cerró en la v18.0.42 para la otra
             // rama). Con !important el estilo en línea vuelve a ser inalcanzable.
-            pill.style.cssText = "position:fixed;bottom:18px;right:18px;z-index:2147483647;pointer-events:auto;" +
+            pill.style.cssText = "position:fixed;bottom:18px;right:18px;z-index:var(--z-toast,2147483647);pointer-events:auto;" +
               "background:var(--bg-solid);color:var(--fg) !important;border:1px solid var(--edge);border-radius:999px;" +
               "padding:10px 16px;font:700 13px/1.3 var(--font-stack);box-shadow:var(--shadow-card)";
             modal.appendChild(pill);
@@ -51593,6 +52323,14 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       if (st.limite > 0) obsGmGuardar(OBS_PRESUPUESTO_GM, { dia: st.dia, usados: st.usados + 1 });
       return true;
     } catch (e) { return true; }   // fall-open: el presupuesto no puede tapar el aviso por un fallo de almacenaje
+  }
+  // [NT-102/M2] — reembolso del cupo cuando el aviso que lo consumió no llegó a pintarse
+  // (render fallido o carrera perdida). Solo baja el contador del día corriente, nunca < 0.
+  function obsPresupuestoReembolsar() {
+    try {
+      const st = obsPresupuestoEstado();
+      if (st.limite > 0 && st.usados > 0) obsGmGuardar(OBS_PRESUPUESTO_GM, { dia: st.dia, usados: st.usados - 1 });
+    } catch (e) {}
   }
 
 })();

@@ -947,5 +947,82 @@ module.exports = {
       }
     });
 
+    // =====================================================================
+    // v18.3.0 — INCIDENCIA 4 (paridad con el hotfix v18.1.4/v18.1.5 del gist):
+    // `mtrResumenDesdeModalLabs` era la ÚNICA llamada del motor sin red de
+    // seguridad dentro de `mtrCalcularResumenClinico`. Un throw suyo (cualquier
+    // bug futuro del motor) escalaba hasta el Panel y pintaba «No se pudo leer
+    // al paciente ahora (los laboratorios no respondieron)» — culpar a los
+    // laboratorios de un error interno nuestro, en TODOS los pacientes.
+    //
+    // Cómo se provoca el throw SIN tocar el motor: un `doc_id` con getter que
+    // solo lanza cuando la pila de llamada pasa por mtrResumenDesdeModalLabs.
+    // Las lecturas de fuera (la guarda de apertura, la caché, el guardado)
+    // reciben la cédula normal, así que la mutación M2 (guardar el resumen
+    // degradado) sí deja rastro en la caché y la prueba la caza.
+    // =====================================================================
+    await t.casoAsync("v18.3.0 (Incidencia 4): un throw del motor degrada a «sin dato» sin culpar a los laboratorios ni envenenar la caché", async () => {
+      const c = await cargar({ silencioso: true });
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      let booms = 0;
+      const apt = { nombre: "PACIENTE DE PRUEBA" };
+      Object.defineProperty(apt, "doc_id", { enumerable: true, get() {
+        const st = String(new Error().stack || "");
+        if (st.indexOf("mtrResumenDesdeModalLabs") >= 0) { booms++; throw new Error("boom-incidencia-4"); }
+        return "777888999";
+      } });
+
+      const res = await c.api.mtrCalcularResumenClinico(apt, () => true);
+      t.cierto(booms > 0, "el sabotaje detonó de verdad dentro del motor (si no, esta prueba no midió nada)");
+      t.cierto(!!res, "la promesa se RESUELVE con un resumen en vez de reventar (antes: el throw escalaba al Panel)");
+      t.cierto(!!res && res._resumenDegradado === true, "y va marcado como degradado, no como lectura buena");
+      t.igual(c.api.mtrCacheResumenLeer("777888999"), null,
+        "el resumen degradado NO se guarda: un «sin dato» por error interno no pisa la última lectura buena");
+      const html = String(c.api.mtrPanelResumenHtml(res) || "");
+      t.falso(html.indexOf("No se pudo leer al paciente ahora") >= 0,
+        "el Panel ya no le echa la culpa a los laboratorios por un error interno del motor");
+      t.cierto(html.indexOf("sin dato") >= 0, "se degrada con honestidad («sin dato»), no inventa");
+
+      // ---- el contrato escrito en el código: la llamada envuelta y la guarda de caché ----
+      const iFn = src.indexOf("async function mtrCalcularResumenClinico");
+      t.cierto(iFn > 0, "se localiza mtrCalcularResumenClinico");
+      const bloque = src.slice(iFn, iFn + 7000);
+      t.cierto(/try\s*\{\s*resumen = mtrResumenDesdeModalLabs\(/.test(bloque),
+        "la llamada al motor está envuelta en try/catch (Incidencia 4)");
+      t.cierto(/if \(resumen && !_resumenDegradado\) \{/.test(bloque),
+        "el guardado de caché exige resumen no degradado");
+
+      // ---- y la guarda de grounding del redactor IA (paridad v18.1.5) ----
+      const iRed = src.indexOf("async function abrirRedactorTextoLibre");
+      t.cierto(iRed > 0, "se localiza abrirRedactorTextoLibre");
+      const bloqueRed = src.slice(iRed, iRed + 3500);
+      const iCalc = bloqueRed.indexOf("await mtrCalcularResumenClinico(apt, () => true)");
+      // M3 (05-sep) — se exige la sentencia COMPLETA (con su `if (resumen &&`): una mutación
+      // que neutralice la guarda con un `false &&` delante deja intacto el fragmento corto
+      // y la aserción daba verde sin haber medido nada.
+      const iGuarda = bloqueRed.indexOf("if (resumen && resumen._resumenDegradado) resumen = null;");
+      t.cierto(iCalc >= 0 && iGuarda > iCalc,
+        "el redactor IA descarta (grounding) un resumen degradado antes de usarlo como hoja de hechos");
+    });
+
+    // =====================================================================
+    // v18.3.0 — INCIDENCIA 4, CAUSA RAÍZ: `atheneaPrincipalFallo` vivía declarada
+    // DENTRO del try de Athenea (scope de bloque) y se leía en el guardado de caché,
+    // fuera de ese bloque → ReferenceError en TODA llamada que llegaba al final con el
+    // motor sano: la promesa rechazaba y el Panel pintaba «No se pudo leer al paciente
+    // ahora (los laboratorios no respondieron)» en todos los pacientes. Este caso
+    // ejercita JUSTO esa rama (motor sin sabotaje → no degradado → entra al guardado).
+    // =====================================================================
+    await t.casoAsync("v18.3.0 (Incidencia 4, causa raíz): sin fallo interno el resumen llega al guardado de caché sin ReferenceError de scope", async () => {
+      const c = await cargar({ silencioso: true });
+      const apt = { nombre: "PACIENTE DE PRUEBA", doc_id: "777888999" };
+      const res = await c.api.mtrCalcularResumenClinico(apt, () => true);
+      t.cierto(!!res, "la promesa se RESUELVE (con el bug de scope esta línea rechazaba con «atheneaPrincipalFallo is not defined»)");
+      t.falso(!!res && res._resumenDegradado === true,
+        "sin sabotaje el motor NO degrada — solo así esta prueba ejercita de verdad la rama del guardado que leía la variable mal scopeada");
+    });
   },
 };
