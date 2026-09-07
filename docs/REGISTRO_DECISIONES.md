@@ -21,3 +21,4 @@ una corrección es una fila nueva.
   se aceptó con la decisión «todas las filas»; si en consultorio se ve un chip ya resuelto,
   la revisión es: ¿actualizaron la fila del paciente en el libro? ¿pedir filtro por
   `Fecha_Cita` máxima por documento?
+| 2026-09-07 | Entrega | ¿Commitear/publicar v18.6.0? | **SÍ, ordenado y ejecutado**: commit `309f984` en `claude/sf-simulacion-flujos` (+push) y Gist `d231aab6f54de51a5c472b392aac1b91` (gistfile1.txt) verificado **byte a byte** — SHA-256 `b8cf6406acef5d63a51a27aaabbf72e39d580a30604b64e919b9640269203dfa` local ≡ remoto, `@version 18.6.0`. Banco 3542/3542 (97 suites). Corrige la fila anterior «no commitear» | — | `309f984` |
