@@ -1,6 +1,20 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.11.1 — 07-09-2026 (revisión exhaustiva post-modificaciones):
+ *   1. REGRESIÓN CAZADA: _listaAccesoRespuesta NO emitía `caps` (la 6ª columna
+ *      de "acceso"), aunque la semilla la siembra y el cliente v18.4.4+ las
+ *      exige (accesoCapExtra → Array.isArray(e.caps)). Producción sí las emite
+ *      (parche del 07-sep): desplegar el repo tal cual REGRESABA pym_opcional
+ *      de la Dra. Gloria en silencio. Restaurada la emisión: caps:[...]
+ *      (minúsculas, sin vacíos) en cada entrada de perfiles.
+ *   2. ROBUSTEZ: _sincronizarAccesoUid lee las columnas de "acceso_uid" por
+ *      NOMBRE de encabezado (recibido/uid/nombre) con fallback a los índices
+ *      canónicos — misma lección del v12.10.13: _hoja() migra columnas al
+ *      FINAL y una hoja histórica puede tener otro orden.
+ *   Verificado: node --check + standalone Node (13 aserciones: sincronización con
+ *      encabezado canónico y migrado, caps, mutaciones blindaje/ambigüedad/caps).
+ *
  * v12.11.0 — 07-09-2026: SINCRONIZACIÓN AUTOMÁTICA DE UIDS (acceso_uid → acceso).
  * Incidencia real (Eliseth Estrada): su fila de "acceso" tiene uid VACÍO, así que el
  * matching del cliente va por NOMBRE EXACTO y basta con que Everest reporte su nombre
@@ -472,7 +486,16 @@ function _listaAccesoRespuesta(ss) {
         blocklist.push({ uid: uid, nombre: nombre, motivo: _celda(fila[4], 60).trim() });
         continue;
       }
-      perfiles[perfil].push({ uid: uid, nombre: nombre });
+      // v18.4.4 — CAPS EXTRA (col 6, separadas por coma, en minúsculas). El cliente
+      // las lee con accesoCapExtra(), que exige Array.isArray(e.caps): si esta
+      // respuesta no las emite, un permiso individual (p. ej. pym_opcional de la
+      // Dra. Gloria) muere en silencio en toda la flota. Producción ya las emite
+      // (parche del 07-sep); este archivo no puede quedarse atrás o desplegar
+      // desde el repo REGRESA el permiso sin ningún error visible.
+      var caps = String(fila[5] == null ? "" : fila[5]).split(",")
+        .map(function (s) { return s.trim().toLowerCase(); })
+        .filter(function (s) { return s.length > 0; });
+      perfiles[perfil].push({ uid: uid, nombre: nombre, caps: caps });
     }
   } catch (e) {}
   var version = "v" + _djb2(JSON.stringify(perfiles) + "|" + JSON.stringify(blocklist));
@@ -526,22 +549,31 @@ function _sincronizarAccesoUid(ss) {
   var rep = { llenados: [], corregidos: [], sinDato: [], ambiguos: [], conflictoUid: [], escrituras: 0 };
   try {
     // Última identidad reportada por Everest para cada nombre normalizado.
-    // Columnas de "acceso_uid": 0 recibido | 6 uid | 7 nombre | 8 perfil.
+    // v12.11.0 (revisión del 07-sep) — las columnas se buscan por NOMBRE de
+    // encabezado, no por posición fija: la lección del v12.10.13 es que _hoja()
+    // migra las columnas que faltan AL FINAL y una hoja histórica puede tener
+    // otro orden. Si el encabezado no se puede leer, caen los índices canónicos
+    // (recibido=0 … lote=5 | uid=6 | nombre=7 | perfil=8).
     var hUid = ss.getSheetByName("acceso_uid");
     if (!hUid || hUid.getLastRow() < 2) {
       rep.sinDato.push("(la hoja acceso_uid aún no tiene reportes)");
       return rep;
     }
     var filasUid = hUid.getDataRange().getValues();
+    var hdUid = filasUid[0] || [];
+    var colUid = hdUid.indexOf("uid"); var colNombre = hdUid.indexOf("nombre"); var colRecibido = hdUid.indexOf("recibido");
+    if (colUid < 0) colUid = 6;
+    if (colNombre < 0) colNombre = 7;
+    if (colRecibido < 0) colRecibido = 0;
     var porNombre = {};
     for (var i = 1; i < filasUid.length; i++) {
       var f = filasUid[i] || [];
-      var uid = toNumero(f[6]);
-      var nombre = _celda(f[7], 100).trim();
+      var uid = toNumero(f[colUid]);
+      var nombre = _celda(f[colNombre], 100).trim();
       if (!(uid > 0) || !nombre) continue;
       var k = _normNombreAcceso(nombre);
       if (!k) continue;
-      var t = (f[0] && typeof f[0].getTime === "function") ? f[0].getTime() : 0;
+      var t = (f[colRecibido] && typeof f[colRecibido].getTime === "function") ? f[colRecibido].getTime() : 0;
       var prev = porNombre[k];
       if (!prev || t >= prev.t) porNombre[k] = { uid: uid, nombre: nombre, t: t }; // el más reciente manda
     }
