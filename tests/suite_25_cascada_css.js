@@ -826,11 +826,15 @@ module.exports = {
       // v18.4.1 (auditoría 06-sep) — 656 -> 654: la deduplicación de la regla @media
       // prefers-reduced-motion copiada dos veces desde la fusión de hojas de la v12.3.13
       // retiró 2 !important que el navegador ya ignoraba (la segunda copia era idéntica).
+      // v18.6.0 — 668 -> 664: RETIRADAS las 4 reglas del chip/línea del respaldo
+      // (v18.0.43: .vgl-chip-resp y .vgl-none.resp con sus gemelas oscuras, 1 !important
+      // cada una). Sus únicos emisores murieron con la consulta al respaldo del extinto
+      // archivo diario: la base única no pinta chips "Del respaldo". Residuo puro.
       // v18.4.2 — 654 -> 668: el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes,
       // flotante de la historia clínica pegado a document.body) trae sus 13 reglas de
       // color con !important (CLAUDE.md, fuera de #vgl-root) + 1 mención de la palabra
       // en su propio comentario de cabecera (el censo cuenta texto crudo).
-      t.cierto(importantTotal === 668, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal y los 14 del panel RCV de la v18.4.2 (13 reglas de color + 1 en su comentario; esperado 654 base + 14 = 668; salió ${importantTotal})`);
+      t.cierto(importantTotal === 664, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal y los 14 del panel RCV de la v18.4.2 (13 reglas de color + 1 en su comentario; esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba

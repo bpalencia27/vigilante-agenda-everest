@@ -309,10 +309,15 @@ module.exports = {
       t.cierto(/state\.killed/.test(bloque), "el .then mira state.killed antes de tocar avisos o presupuesto");
     });
 
-    // ── M19 (NT-118): uid explícito del PyM actualizado ────────────────
-    t.caso("M19/NT-118: el aviso «PyM del día cargado/actualizado» lleva uid explícito por día y tipo", () => {
-      const i = FUENTE.indexOf('"pymupd|" + todayStamp()');
-      t.cierto(i > 0, "el uid ya no depende del hash del texto (contador cambiante = aviso nuevo sin tope)");
+    // ── M19 (NT-118): uid explícito de los avisos de la base ────────────────
+    // v18.6.0 — los avisos del extinto PyM diario («pymupd|») fueron retirados con
+    // loadPymDiario. La lección (uid explícito por día y tipo, jamás hash del texto
+    // cambiante) vive en los DOS avisos de la base única:
+    t.caso("M19/NT-118: los avisos de la base única llevan uid explícito por día/tipo y por ventana", () => {
+      t.cierto(FUENTE.indexOf('"basecarga|" + todayStamp()') > 0,
+        "carga inicial: uid basecarga|<hoy> — no depende del hash del texto (contador cambiante = aviso nuevo sin tope)");
+      t.cierto(FUENTE.indexOf('"baseupd|" + v.sello') > 0,
+        "refresco: uid baseupd|<día|ventana> — un aviso por ventana 06:00/12:00, no uno por re-descarga");
     });
 
     // ── v18.4.4: permiso pym_opcional cableado en la guarda del modal ──

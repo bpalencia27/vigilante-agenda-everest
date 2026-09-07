@@ -1,5 +1,5 @@
 # Términos de uso y aviso de privacidad — Asistente Centinela
-**Versión 1.3 · 7 de septiembre de 2026**
+**Versión 1.4 · 7 de septiembre de 2026**
 
 > **Nota de estado.** Este es un borrador de trabajo redactado para decir la verdad sobre lo que el
 > programa hace. No es asesoría jurídica y no sustituye la revisión de un abogado colegiado. Los

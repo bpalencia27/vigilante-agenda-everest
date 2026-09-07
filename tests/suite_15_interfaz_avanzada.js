@@ -4270,48 +4270,47 @@ module.exports = {
       // pudo comprobar. El aviso es de "no sé", el botón no invita a nada, y los items
       // siguen en cero.
       cOrd.api.__state.pymFile = null;
-      cOrd.api.__state.pymDia = null;
       cOrd.api.__state.pymTodos = null;
       await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
       const modalSinLista = ultimoOrd();
-      t.cierto(modalSinLista.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
-        "sin lista, el modal lo dice: el hueco es del sistema, no del paciente");
-      t.cierto(modalSinLista.innerHTML.includes("No hay lista de prevención"),
+      t.cierto(modalSinLista.innerHTML.includes("No tengo cargada la base de prevención"),
+        "sin base, el modal lo dice: el hueco es del sistema, no del paciente");
+      t.cierto(modalSinLista.innerHTML.includes("No hay base de prevención"),
         "y el botón no invita a ordenar nada (antes decía 'Sin actividades', afirmando lo que no se sabía)");
       t.igual(modalSinLista.innerHTML.split("vgl-ord-item").length - 1, 0, "tampoco aquí se ofrece ningún ítem");
     });
 
-    await t.casoAsync("openOrdenamientoModal: RESPALDO ACTIVO — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139)", async () => {
-      // Pedido del médico (4-sep): con la base de respaldo activa, el modal decía «NO he
-      // podido mirar qué le corresponde a este paciente»... aunque el respaldo ES la base
-      // que getActivities() consulta cuando pymFallback está en true. Eso se leyó como
-      // que "se negó a mostrar" los pendientes. Ahora: quien figura en la base sin
-      // actividades dice que figura; quien no cruza en la base dice que no cruza. Y el
-      // botón deshabilitado acompaña a cada caso.
+    await t.casoAsync("openOrdenamientoModal: BASE ÚNICA ACTIVA — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139 → v18.6.0)", async () => {
+      // Pedido original del médico (4-sep): con la base activa, el modal decía «NO he
+      // podido mirar qué le corresponde a este paciente»... aunque esa base ES la que
+      // getActivities() consulta. Eso se leyó como que "se negó a mostrar" los
+      // pendientes. La lección sobrevive a la migración: quien figura en la base sin
+      // actividades dice que figura; quien no cruza dice que no cruza. Y el botón
+      // deshabilitado acompaña a cada caso.
       const s = cOrd.api.__state;
       // Lección de la mutación M3 de esta misma versión: el framework aborta el caso
       // en la primera aserción fallida, así que un reset al final del cuerpo no corre
       // y la fuga de estado (pymFile="BASE PILOTO.xlsx") contamina casos posteriores.
       // try/finally garantiza la vuelta a fábrica pase lo que pase.
       try {
-        s.pymFile = "BASE PILOTO.xlsx"; s.pymFallback = true;
-        s.pymDia = cOrd.api.todayStamp(); s.pymTodos = new Set(["999"]);
+        s.pymFile = "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx"; s.pymOrigen = "base";
+        s.pymTodos = new Set(["999"]);
         await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
         let m = ultimoOrd();
-        t.cierto(m.innerHTML.includes("SÍ figura en la base de respaldo"),
+        t.cierto(m.innerHTML.includes("está en la base de prevención y no tiene actividades pendientes"),
           "el paciente está en la base activa y el aviso lo dice: no fue una negativa");
         t.falso(m.innerHTML.includes("NO he podido mirar"),
           "la frase que se leyó como «se negó a mostrarme» ya no sale para quien sí se miró");
         t.cierto(m.innerHTML.includes("Sin actividades para ordenar"),
-          "y el botón ya no dice «No hay lista» para quien sí está en la base activa");
+          "y el botón ya no dice «No hay base» para quien sí está en la base activa");
 
         s.pymTodos = new Set(["111"]);
         await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
         m = ultimoOrd();
-        t.cierto(m.innerHTML.includes("NO figura en la base de respaldo"),
-          "la ausencia sale con su dirección: no cruza en el respaldo");
-        t.cierto(m.innerHTML.includes("No hay lista de prevención"),
-          "y el botón remite a la lista, no a un «al día»");
+        t.cierto(m.innerHTML.includes("NO aparece en la base de prevención"),
+          "la ausencia sale con su dirección: no cruza en el libro de la sede");
+        t.cierto(m.innerHTML.includes("Paciente fuera de la base"),
+          "y el botón lo dice, no un «al día»");
       } finally {
         // Estado de fábrica de vuelta: nada de este caso debe filtrarse al resto.
         s.pymFile = ""; s.pymTodos = null; s.pymFallback = false; s.pymDia = "";
@@ -4381,7 +4380,7 @@ module.exports = {
       t.falso(modal.innerHTML.includes("PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS"), "el paquete RCV exprés ya no se ofrece en el módulo");
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "al ser el único match, no queda ninguna tarjeta por ofrecer");
       t.falso(modal.innerHTML.includes(" checked"), "sin tarjetas no hay nada premarcado");
-      t.cierto(modal.innerHTML.includes("no tiene pendientes") || modal.innerHTML.includes("No tengo cargada la lista"), "el modal avisa con honestidad por qué no hay nada que ordenar");
+      t.cierto(modal.innerHTML.includes("no tiene actividades pendientes") || modal.innerHTML.includes("No tengo cargada la base") || modal.innerHTML.includes("NO aparece en la base"), "el modal avisa con honestidad por qué no hay nada que ordenar");
     });
 
     await t.casoAsync("openOrdenamientoModal v14: un fallo de red al verificar vigentes NO bloquea el premarcado normal", async () => {
@@ -5390,8 +5389,14 @@ module.exports = {
       const ustedes = [
         /Ya tiene la última versión/,
         /Lleva \$\{dias\} días/,
-        /Repórtelo\./,
-        /Ábralo una vez con su usuario/,
+        // v18.6.0 — «Repórtelo.» vivía en el mensaje de caché demasiado grande de
+        // savePymCache, retirada con el archivo diario. Su relevo en la misma familia:
+        // la descarga fallida de la base única remite al administrador, en usted.
+        /avise al administrador del asistente/,
+        // v18.6.0 — «Ábralo una vez con su usuario» vivía en el toast del captador de
+        // la pestaña SharePoint (bootSharepointLite), retirado con el archivo diario.
+        // Su relevo en la misma familia: el recordatorio de la base, en usted.
+        /pulse 📂 «Abrir PyM»/,
         /Navegador sin soporte \.xlsx; use \.csv/,
         /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Pruebe \.csv/,
         /Notificaciones BLOQUEADAS:.*recargue\./,
@@ -5574,8 +5579,8 @@ module.exports = {
       // afirmación sobre el paciente, y en este mismo vector no se ha cargado ninguna lista
       // de PyM: no se miró nada. La prueba fijaba el defecto, no la regla — la misma clase
       // de error que ya se documentó siete veces en INFORME_MUTACIONES.md.
-      t.cierto(modal.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
-        "sin lista cargada se dice ESO, no que el paciente no tenga nada");
+      t.cierto(modal.innerHTML.includes("No tengo cargada la base de prevención"),
+        "sin base cargada se dice ESO, no que el paciente no tenga nada");
       t.cierto(modal.innerHTML.includes("no lo sé"),
         "y se dice explícitamente que es ignorancia, no un hallazgo");
       t.falso(/pendientes[^<]{0,40}para este paciente/i.test(modal.innerHTML),
@@ -5584,14 +5589,14 @@ module.exports = {
       // v16.2.0 — orden del médico: sin coincidencia NO se ofrece el catálogo entero para
       // marcar a mano (era el riesgo de sobre-ordenar); no se pinta ni un ítem.
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "sin coincidencia no se ofrece ninguna actividad");
-      // v18.0.x — el rótulo real de esa rama es "No hay lista de prevención"
-      // (vigilante_agenda.user.js:25479, rama `_pymSinAct.motivo !== "sin_pendientes"`).
-      // Sigue diciendo lo mismo que exigía este caso: falta la LISTA, no las actividades
-      // — el rótulo de "Sin actividades para ordenar" está reservado a `sin_pendientes`.
-      t.cierto(modal.innerHTML.includes("No hay lista de prevención"),
-        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay lista");
+      // v18.6.0 — el rótulo de esa rama es "No hay base de prevención" (la lista de
+      // hoy ya no existe como concepto). Sigue diciendo lo mismo que exigía este caso:
+      // falta la BASE, no las actividades — el rótulo de "Sin actividades para ordenar"
+      // está reservado a `sin_pendientes`.
+      t.cierto(modal.innerHTML.includes("No hay base de prevención"),
+        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay base");
       t.falso(modal.innerHTML.includes("Sin actividades para ordenar"),
-        "y NO usa el rótulo del caso 'está en la lista y no tiene nada': eso afirmaría lo que no se miró");
+        "y NO usa el rótulo del caso 'está en la base y no tiene nada': eso afirmaría lo que no se miró");
     });
 
     await t.casoAsync("v17.16.0 — si no se pudo consultar Athenea, el modal lo DICE en vez de callarlo", async () => {

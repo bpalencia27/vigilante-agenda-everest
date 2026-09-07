@@ -34,6 +34,59 @@ médico), errores del servidor y brechas de captura restantes. Informes:
 
 ---
 
+## [Versión 18.6.0] — 2026-09-07 (Base única SEPTIEMBRE1: adiós al Agenda Día, refrescos 06:00/12:00)
+
+### 🎯 El mandato
+El médico decretó la migración total: **todo el sistema —panel del Centinela y cada
+componente del script— se alimenta EXCLUSIVAMENTE de «BASE PILOTO DE CONSULTA  BELLO
+SEPTIEMBRE1.xlsx»** (GUID `6594b356-…`, 22,5 MB, enlace anónimo verificado), con refresco
+**a las 06:00 y a las 12:00 (UTC-5 Bogotá)** y cero dependencia del extinto archivo diario
+«Agenda_Dia_CMB». Auditoría completa con el archivo REAL descargado en
+`AUDITORIA/INFORME_BASE_PILOTO_SEP_20260907.md`.
+
+### 🔬 Lo que la auditoría empírica evitó
+Simular el comportamiento del script contra el libro real demostró que la migración
+«solo cambiar el GUID» habría dejado el módulo **muerto en silencio**: la selección de hoja
+por puntaje elegía «CITASDIA AGOSTO» (histórico de 97,6 MB, puntaje máximo 400) y ahí la
+columna de identificación se resolvía a **«TIPO_DOCUMENTO»** («CC», «TI»…) en vez de
+«NRO_IDENTIFICACION» → 0 pacientes indexados → todas las tarjetas en «sin registro en PyM»
+sin un solo error visible. Correcciones: hoja fuente **fijada por configuración**
+(«citas dia regional»), `DOC_EXACT` ampliado («NRO IDENTIFICACION» con espacio, etc.),
+fallback blando que jamás elige una columna «TIPO …», y guardián de índice vacío que
+rechaza el libro sin tocar la caché buena.
+
+### 🔧 La base única
+- **Hojas fijadas**: «citas dia regional» (citas operativas: Identificacion + Susceptible +
+  Abandonados_PES) **+ hoja PROCEX** indexada con traductor nuevo: «Aplica Cobertura/Fenix
+  VPH/CCU» = pendiente → chips de cérvix VPH/CCU, mamografía, PSA y SOMF (opción B
+  confirmada por el médico: recupera las tamizaciones que el archivo diario traía). Se
+  indexan todas las filas, sin filtro por fecha de cita.
+- **Refresco 06:00 y 12:00 Bogotá** (UTC-5 fijo, calculado desde UTC: el huso del equipo no
+  puede adelantar ni saltar ventanas). Minutero que vigila la compuerta; el sello de cada
+  ventana se pone SOLO si los metadatos (1 KB) respondieron — una falla de red a las 06:05
+  reintenta al minuto siguiente, no deja la copia vieja hasta el mediodía.
+- **Eliminado por completo** el flujo del diario: listado de carpetas, selección por nombre
+  con tokens de fecha, captador de la pestaña SharePoint, caché `vgl_pym` (con limpieza de
+  migración que devuelve hasta 12 MB al almacén), recordatorio «Falta el PyM de hoy»,
+  consulta al respaldo y todos sus mensajes. `spFallbackUrls` queda en 2 vías por GUID — la
+  tercera (shareId de MAYO) se retiró porque habría entregado el libro de un mes pasado.
+- **Mantenimiento (requisito del médico)**: log de actualizaciones `vgl_base_log` (anillo de
+  60 filas, fase/ms/MB/mtime/errores, SIN PHI); integridad post-descarga (firma PK + ZIP +
+  hoja fijada + índice no vacío); **rollback automático** — la caché solo se reemplaza tras
+  validar el índice nuevo, en fallo se sirve la última copia buena y se reintenta; métricas
+  al tablero (`base.descarga.ms.*`, `base.indice.pacientes.*`) que alimentan las alertas de
+  flota ya existentes; reintentos con renovación de cookie ante 401/403.
+- **T_DESCARGA 120 s → 180 s** (la base pesa 22,5 MB, 60 % más que la de mayo).
+- **Bug latente heredado corregido**: `FRIENDLY_NORM` no viajaba serializado al Web Worker
+  (desde v18.0.92 cualquier entorno con Worker real moría con ReferenceError al indexar la
+  primera celda; en producción no explotaba porque el CSP de Everest fuerza el hilo
+  principal).
+
+Pruebas y mutaciones: suites 03/12/05/16 reescritas + nueva **suite 92 de staging**
+(ventanas de refresco con reloj congelado, rollback, integridad, recuperación, log).
+
+---
+
 ## [Versión 18.5.0] — 2026-09-07 (Pacientes nuevos por turno: fuera el botón «NUEVOS», toast FUCSIA)
 
 ### 🐞 La causa del «todos son nuevos» de la mañana

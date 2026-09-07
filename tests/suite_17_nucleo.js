@@ -708,12 +708,14 @@ module.exports = {
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], undefined, "antes de la hora no se marca nada");
       t.igual(capturas.length, 0);
-      // 08:00 > 07:30 y sin PyM cargado: avisa y deja la marca del día
+      // 08:00 > 07:30 y sin base cargada: avisa y deja la marca del día
       mockIso = "2026-08-10T08:00:00";
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], "2026-08-10");
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Falta el PyM de hoy"));
+      // v18.6.0 — el título habla de la BASE única (antes «Falta el PyM de hoy»)
+      t.cierto(capturas[0].title.includes("Falta la base de prevención"));
+      t.cierto(capturas[0].body.includes("reintento es automático"), "el texto remite al reintento automático, no solo al botón manual");
       // segunda pasada del mismo día: silencio
       c.api.pymReminderCheck();
       t.igual(capturas.length, 1, "una sola vez al día");
@@ -722,11 +724,11 @@ module.exports = {
       c.api.__S.recordatorio = "";
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], undefined, "recordatorio '' = nunca");
-      // con el PyM ya cargado tampoco
+      // con la base ya cargada tampoco
       c.api.__S.recordatorio = "07:30";
-      c.api.__state.pymFile = "PyM_del_dia.xlsx";
+      c.api.__state.pymFile = "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx";
       c.api.pymReminderCheck();
-      t.igual(c.env.almacen["vgl_rem"], undefined, "si ya hay PyM no hay nada que recordar");
+      t.igual(c.env.almacen["vgl_rem"], undefined, "si ya hay base no hay nada que recordar");
     });
 
     // ---------- avisarSiActualizado ----------
@@ -782,7 +784,7 @@ module.exports = {
     });
 
     // ---------- checkVersionMinimum ----------
-    t.caso("checkVersionMinimum: versión vieja => marca de sesión, limpia SOLO vgl_pym_dia y respeta el candado 5 min", () => {
+    t.caso("checkVersionMinimum: versión vieja => marca de sesión, abre la ventana de refresco de la base y respeta el candado 5 min", () => {
       const llamadas = [];
       const c = cargar({
         silencioso: true,
@@ -795,22 +797,25 @@ module.exports = {
           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
         },
       });
-      c.env.almacen["vgl_pym_dia"] = "2026-01-01";
+      // v18.6.0 — la invalidación de la recarga forzada ya no toca vgl_pym_dia (clave
+      // del extinto diario): abre la VENTANA DE REFRESCO de la base única para que la
+      // versión nueva revise frescura apenas arranque.
+      c.env.gm["vgl_piloto_chk"] = "2026-01-01|0";
       c.env.almacen["vgl_ev_20260101"] = "[]";   // bitácora de auditoría: NO debe tocarse
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 1);
       t.igual(c.env.win.sessionStorage._d["vgl_upd|99.0.0"], "1", "marca anti-bucle de recarga en sessionStorage");
-      t.igual(c.env.almacen["vgl_pym_dia"], undefined, "solo se limpia la marca del PyM del día");
+      t.igual(c.env.gm["vgl_piloto_chk"], "", "la ventana de refresco queda ABIERTA para la versión nueva");
       t.igual(c.env.almacen["vgl_ev_20260101"], "[]", "la bitácora de auditoría queda intacta");
       // candado: dentro de los 5 minutos no vuelve a consultar
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 1, "máximo una consulta cada 5 minutos");
       // segunda vuelta REAL con la marca ya puesta: no vuelve a limpiar ni a recargar
       c.api.__state.lastVersionCheck = 0;
-      c.env.almacen["vgl_pym_dia"] = "otra-vez";
+      c.env.gm["vgl_piloto_chk"] = "2026-01-01|1";
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 2);
-      t.igual(c.env.almacen["vgl_pym_dia"], "otra-vez", "con la marca de sesión puesta ya no toca nada");
+      t.igual(c.env.gm["vgl_piloto_chk"], "2026-01-01|1", "con la marca de sesión puesta ya no toca nada");
     });
 
     t.caso("checkVersionMinimum: al día no hace nada, y con historia clínica abierta NUNCA recarga", () => {

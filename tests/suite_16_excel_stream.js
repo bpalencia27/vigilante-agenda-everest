@@ -17,6 +17,12 @@
 //   · progreso() escribe en el panel SOLO si existe (el boot nunca corre en
 //     las pruebas): su contrato observable aquí es "jamás lanza", que es
 //     exactamente lo que protege el try/catch de producción.
+//   · v18.6.0 — opts {main, extra}: la base única de septiembre FIJA sus hojas
+//     por nombre. Los libros sintéticos multi-hoja (crearLibroPrueba) reproducen
+//     el incidente real de la auditoría H1: una hoja histórica ruidosa gana por
+//     puntaje y la hoja fijada tiene que ganar por configuración; la hoja PROCEX
+//     («Aplica Fenix VPH»/«Aplica Cobertura») se indexa aparte y se FUSIONA con
+//     dedup de etiquetas. Todos los documentos son sintéticos.
 // =====================================================================
 const zlib = require("zlib");
 
@@ -87,12 +93,40 @@ function crearZipPrueba(archivos) {
   return buf.buffer.slice(0, pos);
 }
 
+// ---- v18.6.0: libros multi-hoja para probar opts {main, extra} ----------------
+// hojaXML arma una hoja con celdas inlineStr y referencias de columna (r="B3"):
+// sin sharedStrings que mantener y con los huecos de celda bien alineados, igual
+// que las hojas reales (que saltan celdas vacías y el lector debe rellenar).
+const LETRAS_COL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function hojaXML(filas) {
+  const celda = (v, fila, col) =>
+    (v === "" || v === null || v === undefined) ? "" :
+      `<c r="${LETRAS_COL[col]}${fila}" t="inlineStr"><is><t>${v}</t></is></c>`;
+  return "<worksheet><sheetData>" + filas.map((f, i) =>
+    `<row r="${i + 1}">` + f.map((v, j) => celda(v, i + 1, j)).join("") + "</row>"
+  ).join("") + "</sheetData></worksheet>";
+}
+// Recibe {NombreDeHoja: filas} y arma workbook.xml + rels + hojas, en orden.
+function crearLibroPrueba(hojasPorNombre) {
+  const nombres = Object.keys(hojasPorNombre);
+  const entradas = {
+    "xl/workbook.xml": "<workbook><sheets>" +
+      nombres.map((n, i) => `<sheet name="${n}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("") +
+      "</sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<Relationships>" +
+      nombres.map((_, i) => `<Relationship Id="rId${i + 1}" Target="worksheets/sheet${i + 1}.xml"/>`).join("") +
+      "</Relationships>",
+  };
+  nombres.forEach((n, i) => { entradas["xl/worksheets/sheet" + (i + 1) + ".xml"] = hojaXML(hojasPorNombre[n]); });
+  return crearZipPrueba(entradas);
+}
+
 module.exports = {
   nombre: "Lectura en flujo del Excel PyM",
   cubre: [
     "getActivities", "makeIndexer", "indexRowsAsync", "parseCSV",
     "inflateRaw", "_readPymWorkbookStreamCore", "readPymWorkbookStream",
-    "progreso", "afterPymLoaded", "pymFP", "applyPymIdx"
+    "readPym", "progreso", "afterPymLoaded", "pymFP", "applyPymIdx"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -348,6 +382,127 @@ module.exports = {
     });
 
     // =================================================================
+    //  v18.6.0 — opts {main, extra}: hojas FIJADAS de la base única
+    //
+    //  Incidente real (auditoría H1, libro piloto de septiembre): el archivo
+    //  trae varias hojas y la selección por puntaje elegía una HISTÓRICA llena
+    //  de «Susceptible» en vez de la hoja de citas, y el índice quedaba en 0
+    //  pacientes la jornada entera. Con la base única ya no existe «el archivo
+    //  de hoy»: la fuente es CONFIG.SP.base y su hoja se FIJA por nombre. Estas
+    //  pruebas fijan ese contrato contra libros sintéticos multi-hoja; la
+    //  selección por puntaje de siempre (carga manual «Abrir PyM») debe seguir
+    //  intacta cuando opts llega vacío. Documentos 100% sintéticos.
+    // =================================================================
+    await t.casoAsync("_readPymWorkbookStreamCore con opts.main: la hoja FIJADA gana aunque su puntaje sea menor que el de la hoja ruidosa", async () => {
+      // «Basura» acumula 24 celdas «Susceptible» (puntaje ≈124); «citas dia regional»
+      // tiene UN pendiente (puntaje ≈101). Sin opts gana Basura; con opts.main gana la
+      // fijada: la configuración manda sobre el puntaje, que era lo que fallaba en vivo.
+      const filasBasura = [["DOCUMENTO", "TAMIZACION_VIH", "TAMIZACION_CMB", "TAMIZACION_PROSTATA"]];
+      for (let i = 0; i < 8; i++) filasBasura.push([String(51500000 + i), "Susceptible", "Susceptible", "Susceptible"]);
+      const libro = crearLibroPrueba({
+        "Basura": filasBasura,
+        "citas dia regional": [["Identificacion", "VALORACION_INTEGRAL"], ["99887766", "Susceptible"]],
+      });
+      // Sin opts (opts null): la selección por puntaje de siempre, intacta.
+      const sinOpts = await cz.api._readPymWorkbookStreamCore(libro, null);
+      t.igual(sinOpts.sheetName, "Basura", "sin opts el puntaje sigue mandando: la hoja ruidosa gana");
+      t.cierto(sinOpts.map.has("51500000"), "y el índice es el de la hoja ruidosa");
+      t.falso(sinOpts.map.has("99887766"), "la hoja de citas no se rozó siquiera");
+      // Con opts.main: la hoja fijada aunque puntúe menos.
+      const fijada = await cz.api._readPymWorkbookStreamCore(libro, { main: "citas dia regional" });
+      t.igual(fijada.sheetName, "citas dia regional");
+      t.igual(fijada.map.get("99887766"), ["Valoración integral de salud"]);
+      t.falso(fijada.map.has("51500000"), "de la hoja ruidosa no debe quedar ni un paciente");
+      t.igual(fijada.sheetExtra, "", "sin opts.extra no hay hoja extra");
+
+      // v18.6.0 (revisión adversarial, CRÍTICO): el FALLBACK del Worker —el constructor
+      // lanza, que es el camino de producción cuando el CSP de Everest lo bloquea—
+      // debe conservar las hojas fijadas. El bug era llamar al core SIN opts ahí.
+      const cw2 = cargar({ silencioso: true });
+      cw2.ctx.URL = { createObjectURL: () => "blob:falso", revokeObjectURL: () => {} };
+      cw2.ctx.Worker = function WorkerQueLanza() { throw new Error("CSP bloquea workers"); };
+      const viaFallback = await cw2.api.readPymWorkbookStream(libro, { main: "citas dia regional" });
+      t.igual(viaFallback.sheetName, "citas dia regional",
+        "sin Worker utilizable, el parseo en hilo principal RESPETA la hoja fijada (camino de producción bajo CSP)");
+      t.falso(viaFallback.map.has("51500000"), "y no se cae a la hoja ruidosa que ganaría por puntaje");
+    });
+
+    await t.casoAsync("_readPymWorkbookStreamCore con opts.main inexistente: lanza «no encontré la hoja» repitiendo el nombre pedido", async () => {
+      // El nombre viene de CONFIG: si el hospital renombra la hoja, el error tiene que
+      // decir QUÉ hoja buscó, para que corregir la configuración sea posible.
+      const libro = crearLibroPrueba({
+        "citas dia regional": [["Identificacion", "VALORACION_INTEGRAL"], ["99887766", "Susceptible"]],
+      });
+      let msg = "";
+      try { await cz.api._readPymWorkbookStreamCore(libro, { main: "Agenda Dia CMB" }); } catch (e) { msg = e.message; }
+      t.cierto(msg.includes("no encontré la hoja"), "esperaba el error de hoja inexistente y llegó: " + msg);
+      t.cierto(msg.includes("Agenda Dia CMB"), "el mensaje repite el nombre pedido (el del diario extinto, que ya no existe)");
+    });
+
+    await t.casoAsync("_readPymWorkbookStreamCore con opts {main, extra}: fusiona los pendientes de AMBAS hojas con dedup de etiquetas", async () => {
+      // La hoja PROCEX habla otro idioma: «Aplica Fenix VPH»/«Aplica Cobertura» en vez de
+      // «Susceptible». El MISMO documento puede tener pendientes en las dos hojas, y una
+      // etiqueta que sale de ambas («Mamografía», por TAMIZACION_MAMA aquí y por MAMA
+      // allí) debe quedar UNA sola vez en el chip fusionado.
+      const libroMerge = crearLibroPrueba({
+        "citas dia regional": [
+          ["Identificacion", "VALORACION_INTEGRAL", "TAMIZACION_MAMA"],
+          ["5150076", "Susceptible", "Susceptible"],
+        ],
+        "PROCEXDTAGOSTO": [
+          ["NRO IDENTIFICACION", "CERVIX", "MAMA", "PSA", "SOMF"],
+          ["5150076", "Aplica Fenix VPH", "Aplica Cobertura", "No Aplica", "Con Tamizacion vigente"],
+          ["99887766", "", "", "Aplica Cobertura", ""],
+        ],
+      });
+      const res = await cz.api._readPymWorkbookStreamCore(libroMerge, { main: "citas dia regional", extra: "PROCEXDT" });
+      t.igual(res.sheetName, "citas dia regional", "la principal sigue siendo la fijada");
+      t.igual(res.sheetExtra, "PROCEXDTAGOSTO", "la extra se encuentra por SUBCADENA («PROCEXDT»)");
+      t.igual(res.extraDocs, 2, "los dos documentos de la PROCEX quedan contados");
+      t.igual(res.map.get("5150076"), ["Valoración integral de salud", "Mamografía", "Cáncer de cuello uterino — VPH"],
+        "chip fusionado de las dos hojas, con «Mamografía» UNA sola vez aunque viene de ambas");
+      t.igual(res.map.get("99887766"), ["PSA (antígeno de próstata)"],
+        "un paciente que SOLO está en la extra también entra al índice fusionado");
+      t.cierto(res.todos.has("5150076") && res.todos.has("99887766"), "la unión de documentos cubre ambas hojas");
+    });
+
+    await t.casoAsync("_readPymWorkbookStreamCore con opts.main y hoja sin NI UN documento legible: lanza en vez de instalar un índice vacío", async () => {
+      // Auditoría H8: con hoja fijada, un índice vacío se cacheaba en silencio y el panel
+      // pasaba el día entero diciendo «sin registro en PyM» sin error visible. Ahora no se
+      // instala nada y el error nombra la causa y la hoja.
+      const libro = crearLibroPrueba({
+        "citas dia regional": [
+          ["Identificacion", "VALORACION_INTEGRAL"],
+          ["", "Susceptible"],               // fila con pendiente pero SIN documento
+          ["no-es-numero", "Susceptible"],   // texto que no deja ni un dígito: tampoco es documento
+        ],
+      });
+      let msg = "";
+      try { await cz.api._readPymWorkbookStreamCore(libro, { main: "citas dia regional" }); } catch (e) { msg = e.message; }
+      t.cierto(msg.includes("no produjo ningún paciente"), "esperaba el guardián de índice vacío y llegó: " + msg);
+      t.cierto(msg.includes("citas dia regional"), "el error nombra la hoja fijada");
+    });
+
+    await t.casoAsync("_readPymWorkbookStreamCore con opts.main y portada: el espía halla el encabezado en la fila 3 igual que scoreSheet", async () => {
+      // La hoja real de la base piloto abre con título y subtítulo ANTES del encabezado:
+      // opts.main no puede asumir que la fila 1 es el encabezado — usa el MISMO espía
+      // (scanSheetRows + scoreSheet) que la selección automática, y arranca desde ahí.
+      const libro = crearLibroPrueba({
+        "citas dia regional": [
+          ["BASE PILOTO DE CONSULTA BELLO"],
+          ["Reporte de citas", "Corte 06:00"],
+          ["Identificacion", "VALORACION_INTEGRAL"],
+          ["99887766", "Susceptible"],
+        ],
+      });
+      const res = await cz.api._readPymWorkbookStreamCore(libro, { main: "citas dia regional" });
+      t.igual(res.sheetName, "citas dia regional");
+      t.igual(res.headers, ["Identificacion", "VALORACION_INTEGRAL"], "el encabezado es el de la fila 3, crudo como viene");
+      t.igual(res.map.get("99887766"), ["Valoración integral de salud"], "las filas de título no se indexan como datos");
+      t.igual(res.rowCount, 4, "las 4 filas de la hoja se leyeron");
+    });
+
+    // =================================================================
     //  readPymWorkbookStream — envoltorio del Web Worker (Worker simulado)
     //  El harness recorta los setTimeout a 1 ms: el watchdog de 90 s se
     //  dispara casi al instante, lo que permite probarlo de verdad.
@@ -359,7 +514,9 @@ module.exports = {
       return function FalsoWorker() {
         this.onmessage = null; this.onerror = null; this.terminado = false;
         this.terminate = () => { this.terminado = true; };
-        this.postMessage = (datos) => { comportamiento(this, datos); };
+        // v18.6.0 — el mensaje real es postMessage({buf,opts},[buf]): el comportamiento
+        // recibe también la lista de transferencia, para poder verificarla.
+        this.postMessage = (datos, transfer) => { comportamiento(this, datos, transfer); };
         workerFalso.ultimo = this;
       };
     }
@@ -409,6 +566,90 @@ module.exports = {
       try { await cw.api.readPymWorkbookStream(new ArrayBuffer(8)); } catch (e) { msg = e.message; }
       t.igual(msg, "no se pudo transferir");
       t.cierto(workerFalso.ultimo.terminado);
+    });
+
+    await t.casoAsync("readPymWorkbookStream: el mensaje al Worker es {buf, opts} con el buffer en la lista de transferencia (e.data.buf / e.data.opts)", async () => {
+      // v18.6.0 — opts viaja CON el buffer dentro del postMessage. Si la forma del
+      // mensaje volviera a ser el buffer pelado (como era antes), el worker no tendría
+      // cómo saber qué hoja fijar y la base única se leería por puntaje otra vez.
+      let captura = null;
+      cw.ctx.Worker = workerFalso((w, datos, transfer) => {
+        captura = { datos, transfer };
+        w.onmessage({ data: { type: "done", result: { ok: 1 } } });
+      });
+      const buf = new ArrayBuffer(8);
+      await cw.api.readPymWorkbookStream(buf, { main: "citas dia regional" });
+      t.cierto(captura.datos && captura.datos.buf === buf, "e.data.buf debe ser EXACTAMENTE el buffer entregado");
+      t.igual(captura.datos && captura.datos.opts && captura.datos.opts.main, "citas dia regional",
+        "e.data.opts viaja con la hoja fijada");
+      t.igual(captura.transfer && captura.transfer.length, 1, "la lista de transferencia lleva un solo objeto");
+      t.igual(captura.transfer && captura.transfer[0], buf, "y ese objeto es el buffer: se transfiere, no se copia");
+      // Sin opts el campo viaja en null explícito: el worker no puede distinguir «sin
+      // hojas fijadas» de «opts perdido en el camino» si llegara undefined.
+      let captura2 = null;
+      cw.ctx.Worker = workerFalso((w, datos, transfer) => {
+        captura2 = { datos, transfer };
+        w.onmessage({ data: { type: "done", result: { ok: 1 } } });
+      });
+      const buf2 = new ArrayBuffer(4);
+      await cw.api.readPymWorkbookStream(buf2);
+      t.igual(captura2.datos && captura2.datos.opts, null, "sin opts el campo viaja en null, no en undefined");
+      t.igual(captura2.transfer && captura2.transfer[0], buf2, "la transferencia del buffer ocurre igual sin opts");
+    });
+
+    await t.casoAsync("readPymWorkbookStream: el worker falso ejecuta el core con e.data.buf/e.data.opts y el resultado honra la hoja fijada", async () => {
+      // Circuito completo: este worker reproduce el onmessage del worker REAL — llama al
+      // core con e.data.buf y e.data.opts TAL CUAL llegaron y devuelve el resultado por
+      // 'done'. Con un libro de dos hojas donde la ruidosa gana por puntaje, la única
+      // forma de que el resultado final sea la hoja fijada es que opts sobreviva ENTERO
+      // al viaje de ida.
+      const filasBasura = [["DOCUMENTO", "TAMIZACION_VIH"]];
+      for (let i = 0; i < 8; i++) filasBasura.push([String(51500000 + i), "Susceptible"]);
+      const libro = crearLibroPrueba({
+        "Basura": filasBasura,
+        "citas dia regional": [["Identificacion", "VALORACION_INTEGRAL"], ["99887766", "Susceptible"]],
+      });
+      cw.ctx.Worker = workerFalso(async (w, datos) => {
+        try {
+          const result = await cw.api._readPymWorkbookStreamCore(datos.buf, datos.opts || null);
+          w.onmessage({ data: { type: "done", result } });
+        } catch (err) {
+          w.onmessage({ data: { type: "error", error: err.message, stack: err.stack } });
+        }
+      });
+      const res = await cw.api.readPymWorkbookStream(libro, { main: "citas dia regional" });
+      t.igual(res.sheetName, "citas dia regional", "la respuesta del worker refleja la hoja fijada, no la de mayor puntaje");
+      t.igual(res.map.get("99887766"), ["Valoración integral de salud"]);
+      t.falso(res.map.has("51500000"), "la hoja ruidosa quedó fuera del circuito completo");
+      t.cierto(workerFalso.ultimo.terminado, "el worker se termina al resolver");
+    });
+
+    // =================================================================
+    //  readPym — la puerta común: opts SOLO llega al XLSX; el CSV los ignora
+    // =================================================================
+    await t.casoAsync("readPym: pasa opts al lector de XLSX (fija hoja y pymHoja) y el CSV los ignora aunque apunten a hojas inexistentes", async () => {
+      // El CSV no tiene hojas: un opts.main heredado de la configuración de la base no
+      // puede romper la carga manual de un archivo plano del médico.
+      const csvU8 = new TextEncoder().encode("DOCUMENTO,TAMIZACION_MAMA\n5150076,Susceptible\n71889900,\n");
+      const csvBuf = csvU8.buffer.slice(csvU8.byteOffset, csvU8.byteOffset + csvU8.byteLength);
+      const rCsv = await cz.api.readPym("lista.csv", csvBuf, { main: "HOJA QUE NO EXISTE" });
+      t.igual(rCsv.map.get("5150076"), ["Mamografía"], "el CSV se indexa con normalidad pese al opts.main basura");
+      t.falso(rCsv.map.has("71889900"), "el paciente al día no entra al mapa");
+      t.igual(Array.from(rCsv.todos).sort(), ["5150076", "71889900"]);
+      t.igual(cz.api.__state.pymHoja, "", "el CSV no toca pymHoja (no tiene hojas)");
+      // El XLSX sí recibe opts: la hoja fijada gana y pymHoja queda registrada (el Diag
+      // la muestra como «Hoja elegida», así que es la evidencia visible de la elección).
+      const filasBasura = [["DOCUMENTO", "TAMIZACION_VIH"]];
+      for (let i = 0; i < 8; i++) filasBasura.push([String(51500000 + i), "Susceptible"]);
+      const libro = crearLibroPrueba({
+        "Basura": filasBasura,
+        "citas dia regional": [["Identificacion", "VALORACION_INTEGRAL"], ["99887766", "Susceptible"]],
+      });
+      const rX = await cz.api.readPym("BASE PILOTO.xlsx", libro, { main: "citas dia regional" });
+      t.igual(cz.api.__state.pymHoja, "citas dia regional", "pymHoja refleja la hoja elegida de verdad");
+      t.igual(rX.map.get("99887766"), ["Valoración integral de salud"]);
+      t.falso(rX.map.has("51500000"), "la hoja ruidosa quedó fuera");
+      t.igual(rX.abandono.size, 0);
     });
 
     // =================================================================
@@ -470,7 +711,7 @@ module.exports = {
     // =================================================================
     //  applyPymIdx — aplica un índice ya construido al estado
     // =================================================================
-    t.caso("applyPymIdx: aplica el índice, arma la huella con el nombre CRUDO y marca el día en localStorage", () => {
+    t.caso("applyPymIdx: aplica el índice, arma la huella con el nombre CRUDO y marca el día de la carga", () => {
       const c = cargar({ silencioso: true });
       const idx = {
         map: new Map([["111", ["Tamización de VIH"]]]),
@@ -487,7 +728,11 @@ module.exports = {
       t.igual(c.api.__state.pymFP, "Base.xlsx|2026-08-10T05:00:00Z");
       t.igual(c.api.__state.pymFile, "Base.xlsx (PyM de hoy)", "el nombre mostrado sí lleva la etiqueta");
       t.igual(c.api.__state.lastSnapshot.list[0].pym, ["Tamización de VIH"], "afterPymLoaded recruza el snapshot");
-      t.igual(c.env.almacen["vgl_pym_dia"], c.api.todayStamp(), "la clave diminuta del día debe quedar escrita");
+      // v18.6.0 — la marca del día ya NO vive en localStorage: la clave «vgl_pym_dia» es
+      // legacy (la purga diaria la borra) y afterPymLoaded escribe el día de la carga en
+      // state.pymCargadoDia, que es donde el relevo de medianoche lo consulta de verdad.
+      t.igual(c.api.__state.pymCargadoDia, c.api.todayStamp(), "el día de la carga queda en state.pymCargadoDia");
+      t.cierto(!("vgl_pym_dia" in c.env.almacen), "la clave legacy vgl_pym_dia no se escribe más");
     });
 
     t.caso("applyPymIdx: sin abandono ni mtime — Set vacío de respaldo y huella con cola vacía", () => {

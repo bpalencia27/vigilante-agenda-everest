@@ -341,17 +341,21 @@ module.exports = {
       t.igual(CONFIG.EXCLUDE_PYM, [], "cadena vacía = no excluir nada");
     });
 
-    t.caso("applySettings: un respaldoId inválido no toca el respaldo de fábrica", () => {
+    // v18.6.0 — el ajuste respaldoId ahora sobreescribe la BASE ÚNICA (CONFIG.SP.base),
+    // ya no existe CONFIG.SP.respaldo. Un enlace personalizado cambia el GUID y conserva
+    // el resto de la configuración (hojas fijadas, ventanas de refresco).
+    t.caso("applySettings: un respaldoId inválido no toca la base de fábrica", () => {
       S.respaldoId = "esto-no-es-un-guid";
       A.applySettings();
-      t.igual(CONFIG.SP.respaldo.id, "809a098b-69d1-44fe-9e51-b01f07290807");
+      t.igual(CONFIG.SP.base.id, "6594b356-f608-4c56-bb6f-6a90f2125a3f");
     });
 
-    t.caso("applySettings: un enlace con sourcedoc reemplaza el respaldo por el personalizado", () => {
+    t.caso("applySettings: un enlace con sourcedoc reemplaza el GUID de la base", () => {
       S.respaldoId = "https://viva1aips-my.sharepoint.com/:x:/r/personal/x/_layouts/15/Doc.aspx?sourcedoc={2B3C4D5E-1111-2222-3333-444455556666}&action=view";
       A.applySettings();
-      t.igual(CONFIG.SP.respaldo.id, "2b3c4d5e-1111-2222-3333-444455556666", "el guid queda en minúsculas");
-      t.igual(CONFIG.SP.respaldo.name, "Base PyM (enlace personalizado)");
+      t.igual(CONFIG.SP.base.id, "2b3c4d5e-1111-2222-3333-444455556666", "el guid queda en minúsculas");
+      t.igual(CONFIG.SP.base.sheet, "citas dia regional", "las hojas fijadas se conservan");
+      t.igual(CONFIG.SP.base.horasRefresco.join(","), "6,12", "las ventanas de refresco se conservan");
       S.respaldoId = "";
     });
 

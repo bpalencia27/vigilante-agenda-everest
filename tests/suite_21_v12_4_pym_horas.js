@@ -4,7 +4,7 @@
 // REALES vistos en campo (tarjetas de Athenea, valores ASP.NET /Date(ms)/).
 module.exports = {
   nombre: "v12.4: horas, panel PyM y tabla CUPS",
-  cubre: ["_parseFechaHoraLike", "pymPendientesRestantes", "debeBuscarPymDiario", "pymCubiertoPorOrdenVigente"],
+  cubre: ["_parseFechaHoraLike", "pymPendientesRestantes", "afterPymLoaded", "pymCubiertoPorOrdenVigente"],
   pruebas(t, api, env, cargar) {
 
     // ---------- _parseFechaHoraLike ----------
@@ -171,40 +171,17 @@ module.exports = {
       t.igual(c.api.pymPendientesRestantes("888"), ["VIH", "Mamografía", "Remisión a Odontología"]);
     });
 
-    t.caso("afterPymLoaded v12.4.1: un archivo que NO es el diario real de hoy no detiene la re-búsqueda", () => {
-      // «Abrir PyM» con el Excel de AYER (lo que induce el recordatorio de las 7:30 si
-      // la red falló) apagaba la búsqueda del real de hoy para toda la jornada.
+    // v18.6.0 — afterPymLoaded ya no distingue "diario real de hoy" (no hay diario):
+    // aplica el índice y fija el origen. La parada de la re-búsqueda del diario
+    // (debeBuscarPymDiario) fue retirada con el archivo diario; su paraqué lo cubren
+    // ahora las ventanas de refresco 06:00/12:00 (suites 03/12/92).
+    t.caso("afterPymLoaded v18.6.0: aplica y fija el origen de la carga", () => {
       const c = cargar();
-      c.api.__state.pymFallback = false;
-      c.api.afterPymLoaded("Agenda_Dia_CMB_20200101.xlsx (manual)", false);
-      t.cierto(c.api.debeBuscarPymDiario(), "carga que no es el diario de hoy: seguir buscando");
-      c.api.afterPymLoaded("Agenda_Dia_CMB_hoy.xlsx (PyM de hoy)", true);
-      t.falso(c.api.debeBuscarPymDiario(), "diario real de hoy: parar");
-    });
-
-    // ---------- parada del polling del PyM diario ----------
-    t.caso("debeBuscarPymDiario: sin nada cargado o con la piloto, se sigue buscando", () => {
-      const c = cargar();
-      c.api.__state.pymFile = ""; c.api.__state.pymFallback = false; c.api.__state.pymDia = "";
-      t.cierto(c.api.debeBuscarPymDiario(), "sin archivo: buscar");
-      c.api.__state.pymFile = "BASE PILOTO.xlsx"; c.api.__state.pymFallback = true; c.api.__state.pymDia = c.api.todayStamp();
-      t.cierto(c.api.debeBuscarPymDiario(), "con piloto: buscar (es respaldo)");
-    });
-
-    t.caso("debeBuscarPymDiario: con el PyM REAL de hoy cargado, la re-búsqueda PARA", () => {
-      const c = cargar();
-      c.api.__state.pymFile = "Agenda_Dia_CMB_20260811.xlsx";
-      c.api.__state.pymFallback = false;
-      c.api.__state.pymDia = c.api.todayStamp();
-      t.falso(c.api.debeBuscarPymDiario(), "real de hoy: parar");
-    });
-
-    t.caso("debeBuscarPymDiario: un PyM cargado OTRO día (pestaña que cruzó medianoche) reactiva la búsqueda", () => {
-      const c = cargar();
-      c.api.__state.pymFile = "Agenda_Dia_CMB_20260810.xlsx";
-      c.api.__state.pymFallback = false;
-      c.api.__state.pymDia = "2026-08-10";
-      t.cierto(c.api.debeBuscarPymDiario());
+      c.api.__state.pymOrigen = "";
+      c.api.afterPymLoaded("BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx");
+      t.igual(c.api.__state.pymFile, "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx");
+      t.cierto(!!c.api.__state.pymCargadoDia, "estampa el día de la carga (detección de medianoche)");
+      t.falso(c.api.__state.pymDeAyer, "una carga recién hecha no es de ayer");
     });
 
     // ---------- tabla oficial de CUPS ----------

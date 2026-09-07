@@ -240,6 +240,7 @@ module.exports = {
       conDoctor(c.api, 201, "Maryuris Terán");
       const hoy = c.api.todayStamp();
       const c2 = cargar({ silencioso: true, almacen: almacen });   // foto ya hecha por la otra pestaña
+      conDoctor(c2.api, 201, "Maryuris Terán");   // la otra pestaña es del MISMO médico (mismo consultorio)
       // Otra pestaña acaba de tostar esta cita (registro vgl_vistos del día).
       almacen["vgl_vistos"] = JSON.stringify({ _dia: hoy, "pacNuevoTurno|820@15:00": Date.now() - 5000 });
       const g = grabadora();

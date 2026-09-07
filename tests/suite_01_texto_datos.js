@@ -5,7 +5,7 @@ module.exports = {
   nombre: "Texto y datos del paciente",
   cubre: ["limpio", "normalizeKey", "extractDoc", "isPending", "esSi", "stripAccents",
     "friendly", "activityLabel", "isExcludedActivity", "detalleTipoCervix", "escapeHtml",
-    "csvCell", "clampNum", "unescXml", "colToIdx", "normName", "nameHasToken",
+    "csvCell", "clampNum", "unescXml", "colToIdx",
     "sanitizePII", "debounceVgl", "fuzzyMatch", "mtrTextoOpinaSobre"],
 
   pruebas(t, api) {
@@ -217,14 +217,10 @@ module.exports = {
       t.igual(api.colToIdx(""), -1);
     });
 
-    // ---------- normName / nameHasToken: detección del PyM del día ----------
-    t.caso("normName deja el nombre comparable", () => {
-      t.igual(api.normName("Agenda_Dia_CMB 2026-08-10.xlsx"), "agendadiacmb20260810xlsx");
-    });
-    t.caso("nameHasToken no acepta el token pegado a otro número", () => {
-      t.cierto(api.nameHasToken("agenda6deagosto", "6deagosto"));
-      t.falso(api.nameHasToken("agenda26deagosto", "6deagosto"), "el 6 es la cola del 26");
-    });
+    // ---------- (v18.6.0) normName / nameHasToken: detección del PyM del día ----------
+    // RETIRADAS con el archivo diario: la base única se direcciona por GUID y hojas
+    // fijadas, no por nombre de archivo con fecha. Sus pruebas vivían aquí solo como
+    // utilidades generales; el comportamiento que blindaban ya no existe en producción.
 
     // ---------- sanitizePII: la bitácora no debe llevar cédulas ----------
     t.caso("sanitizePII censura los números largos", () => {

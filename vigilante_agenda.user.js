@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.5.2
+// @version      18.6.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -651,9 +651,10 @@
      903817 queda solo en el RCV exprés de crónicos ERC/HTA/DM2 — aclarado en consulta);
      fuera Hepatitis C (906225) y VDRL (906039): de las ETS solo se tamiza VIH. Keyword
      'cardiometabolic' arregla el premarcado de Z108 que el género -a/-o dejaba inerte.
-  5. PyM DIARIO CON PARADA: se busca el Agenda_Dia_CMB de hoy cada 10 min durante toda la
-     jornada (mientras tanto manda la base piloto), y en cuanto el REAL de hoy carga, la
-     re-búsqueda PARA (debeBuscarPymDiario) — pedido explícito; «Abrir PyM» siempre manda.
+  5. PyM BASE ÚNICA (v18.6.0): el extinto Agenda_Dia_CMB fue retirado por completo; todo el
+     sistema se alimenta de «BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx» por GUID, con
+     las hojas fijadas «citas dia regional» + PROCEX, refresco a las 06:00 y 12:00 Bogotá y
+     rollback a la última copia validada; «Abrir PyM» manual siempre manda.
   6. PUNTUALIDAD RESCATADA (semántica original v8.2.0, decisión A): siembra silenciosa +
      VERDE solo en llegada EN VIVO (a.arrival por fin se consume); textos precisos y
      neutros — ROJO "Llegada confirmada fuera del tiempo de confirmación", MORADO "última
@@ -1035,7 +1036,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.5.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10169,7 +10170,7 @@
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
     CONFIG.POLL_MS = clampNum(S.refresco, 2, 120, DEFAULTS.refresco) * 1000;
     CONFIG.EXCLUDE_PYM = String(S.excluir || "").split(",").map((x) => stripAccents(x.trim().toLowerCase())).filter(Boolean);
-    if (S.respaldoId && /\S/.test(S.respaldoId)) { const g = parseSpDocId(S.respaldoId); if (g) CONFIG.SP.respaldo = { id: g, name: "Base PyM (enlace personalizado)" }; }
+    if (S.respaldoId && /\S/.test(S.respaldoId)) { const g = parseSpDocId(S.respaldoId); if (g) CONFIG.SP.base = Object.assign({}, CONFIG.SP.base, { id: g }); }
     applyTheme();
     aplicarTamanoLetra();
     restartPolling();
@@ -10275,8 +10276,10 @@
         // fallaran. Para el archivo nuevo las dos vías por id bastan; si algún día se
         // reemplaza el archivo con otro GUID, pedir el vínculo nuevo y actualizar id.
         shareId: "",
-        // Hora local Bogotá (UTC-5 fijo, sin DST) del refresco diario único.
-        horaRefresco: 6,
+        // Horas locales Bogotá (UTC-5 fijo, sin DST) del refresco: ventana de la MAÑANA
+        // (06:00) y ventana de la TARDE (12:00) — pedido del médico 07-sep. Cada ventana
+        // se revisa UNA vez: meta de 1 KB y descarga solo si cambió el TimeLastModified.
+        horasRefresco: [6, 12],
       },
       // v7.8.3: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
       // → "Cualquier persona con el vínculo" / "Personas de la organización"). Visitarlo
@@ -10370,25 +10373,16 @@
   };
 
   const rawState = {
-    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "",
-    // v18.0.43 — SEGUNDO ÍNDICE, DE SOLO CONSULTA: la base piloto (el respaldo), viva a la
-    // vez que la lista oficial del día, no en su lugar. Pedido del médico (1-sep): "SI ES
-    // POSIBLE QUE SOLAMENTE EN ESOS CASOS QUE 'Dato faltante: sin registro en PyM' SE PUEDA
-    // CONSULTAR LA BASE PILOTO (EL RESPALDO) A VER SI EL PACIENTE TIENE ACTIVIDADES
-    // PENDIENTES PORQUE ESO SIGNIFICA QUE NO APARECE EN LA LISTA DEL CMB OFICIAL PERO PODRÍA
-    // APARECER EN EL RESPALDO".
-    //
-    // POR QUÉ APARTE Y NO MEZCLADO. `state.pym` es la lista oficial del día y sigue siendo
-    // la única verdad: quien está en ella se lee SOLO de ella, incluido su "al día". Este
-    // índice existe para los pacientes que la oficial NO conoce —y solo para ellos—, así
-    // que no puede vivir en el mismo mapa: fusionarlos haría imposible distinguir de dónde
-    // salió cada dato, y un pendiente de mayo pasaría por un pendiente de hoy.
-    pymResp: new Map(), pymRespTodos: null, pymRespNombre: "", pymRespMTime: "", pymRespCargado: "",
-    // v18.0.11 — POR QUÉ no hay lista de prevención. Los tres mensajes que lo explicaban
-    // vivían dentro de `if (!silent)` y las TRES llamadas de producción pasan silent=true
-    // (ver loadPymDiario): el diagnóstico se calculaba y se tiraba en cada vuelta, y el
-    // médico se quedaba con un «PyM sin cargar» mudo. Reporte suyo, textual: «no sé por
-    // qué». Ahora la razón se guarda aquí y se enseña donde él ya mira —la línea de estado
+    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymHoja: "",
+    // v18.6.0 — origen de la carga activa: "base" (la base única, por caché o descarga)
+    // o "manual" («Abrir PyM»). Reemplaza a pymFallback/pymDia, que existían para el
+    // extinto archivo diario.
+    pymOrigen: "",
+    // v18.0.11 — POR QUÉ no hay base de prevención. Los mensajes que lo explicaban
+    // vivían dentro de `if (!silent)` en las llamadas silent=true de producción: el
+    // diagnóstico se calculaba y se tiraba en cada vuelta, y el médico se quedaba con
+    // un «PyM sin cargar» mudo. Ahora la razón se guarda aquí y se enseña donde él ya
+    // mira —la línea de estado
     // del panel y el informe de Diag—, sin interrumpir nada.
     pymUltimoFallo: "", historical: new Map(),
     // v17.6.21 — candidato de estado sin confirmar (ver colorAndAlert): una lectura que
@@ -11334,136 +11328,11 @@
   }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
 
-  // =====================================================================
-  //  v18.0.43 — CONSULTA AL RESPALDO, SOLO PARA QUIEN NO ESTÁ EN LA OFICIAL
-  //  ------------------------------------------------------------------
-  //  Pedido del médico (1-sep). Un paciente puede no aparecer en el Agenda_Dia_CMB de
-  //  hoy —es nuevo, lo agregaron tarde, su identificación no cruza— y sí estar en la base
-  //  piloto. Hasta esta versión eso salía como "Dato faltante: sin registro en PyM" y ahí
-  //  moría, aunque el respaldo estuviera cargado en la misma máquina.
-  //
-  //  LAS CUATRO REGLAS QUE HACEN QUE ESTO NO ROMPA NADA:
-  //   1. NUNCA sustituye a la oficial. Se consulta SOLO cuando `pymTodos` (la oficial) no
-  //      tiene al paciente. Quien está en la oficial se lee solo de la oficial, incluido
-  //      su "al día" — si la oficial dice que no le falta nada, eso manda.
-  //   2. NUNCA se mezcla en `state.pym`. Vive en su propio mapa, así que ningún consumidor
-  //      existente (getActivities, pymPendientesRestantes, el módulo de ordenamiento, el
-  //      aviso al abrir la historia) cambia de comportamiento sin pedirlo.
-  //   3. NUNCA se presenta como dato de hoy. El respaldo es una base de referencia, con
-  //      fecha propia y meses de antigüedad posibles: todo lo que salga de aquí viaja con
-  //      su procedencia pegada, para que el médico lo pese. Es la Regla D del proyecto —
-  //      un mensaje tranquilizador exige evidencia—, y aquí también al revés: un pendiente
-  //      de mayo no puede presentarse como un pendiente de hoy.
-  //   4. NUNCA dice "al día". Si el respaldo tiene al paciente y sin pendientes, eso NO
-  //      prueba que hoy no le falte nada: solo prueba que en esa base no había nada
-  //      anotado. Se dice exactamente eso.
-  //
-  //  De dónde sale el dato: de la MISMA copia que el script ya guarda (`vgl_piloto`,
-  //  escrita por pilotoGuardar desde v7.8.1). No se descarga nada nuevo por esta función;
-  //  si esa copia no existe todavía, el respaldo sencillamente no responde y la pantalla
-  //  se queda como estaba.
-  // =====================================================================
-  let _respCargaEnCurso = null;
-  async function cargarRespaldoParaConsulta() {
-    // Ya cargado hoy: nada que hacer. Se reintenta al día siguiente por si la copia cambió.
-    if (state.pymRespCargado === todayStamp()) return true;
-    if (_respCargaEnCurso) return _respCargaEnCurso;
-    _respCargaEnCurso = (async () => {
-      try {
-        if (typeof GM_getValue === "undefined") return false;
-        const raw = GM_getValue(PILOTO_KEY, "");
-        if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return false;
-        const u = await unpackPym(raw, makeYielder(15));
-        if (!u || !u.map) return false;
-        state.pymResp = u.map;
-        state.pymRespTodos = u.todos || null;
-        state.pymRespNombre = (u.meta && u.meta.name) || "Base piloto";
-        state.pymRespMTime = (u.meta && u.meta.mtime) || "";
-        state.pymRespCargado = todayStamp();
-        return true;
-      } catch (e) { return false; } finally { _respCargaEnCurso = null; }
-    })();
-    return _respCargaEnCurso;
-  }
-
-  // v18.0.43 — EL HUECO QUE HABÍA QUE CERRAR PARA QUE ESTO SIRVA DE VERDAD. La copia
-  // `vgl_piloto` solo se escribe cuando el respaldo se carga como lista ACTIVA, y eso solo
-  // pasa los días en que la lista de la sede llega tarde (loadPymBase corta en seco con
-  // `if (state.pymFile) return true`). En una máquina donde el Agenda_Dia_CMB llega puntual
-  // varios días seguidos, la copia puede no existir o ser vieja — y entonces la consulta al
-  // respaldo, que es justo lo que el médico pidió, no respondería nunca.
-  //
-  // Así que se trae UNA VEZ AL DÍA, y con todas las cautelas:
-  //   · solo la pestaña líder (heartbeat), para no bajar el archivo N veces;
-  //   · solo con la base automática encendida (S.baseAuto — el interruptor que el médico ya
-  //     tiene en Ajustes sirve también para esto, no se inventa uno nuevo);
-  //   · DESPUÉS de que la lista del día ya esté cargada, nunca compitiendo con ella;
-  //   · y sin tocar NADA de la lista activa: no pasa por applyPymIdx, no toca state.pym,
-  //     state.pymFile ni state.pymFallback. Solo llena el índice de consulta y la copia.
-  // Cuesta una descarga (~14 MB) al día en la pestaña líder. Se apaga con el mismo
-  // interruptor de la base automática.
-  const RESP_DL_KEY = "vgl_resp_dl";
-  const RESP_INTENTOS_MAX = 3;
-  let _respIntentos = 0;
-  async function traerRespaldoSoloParaConsulta() {
-    try {
-      if (!S.baseAuto || typeof GM_getValue === "undefined" || typeof GM_xmlhttpRequest === "undefined") return false;
-      if (!heartbeat()) return false;                       // solo la pestaña líder
-      // La marca del día se pone SOLO al conseguirlo (abajo). El primer diseño la ponía
-      // aquí arriba "para no reintentar en bucle", y eso significaba que UN fallo de red
-      // —la sesión de SharePoint a medio despertar al arrancar la jornada, que es
-      // exactamente cuando esto corre— dejaba al respaldo sin responder el día entero, que
-      // es justo lo que el médico pidió evitar. El bucle se corta con un contador en
-      // memoria: como mucho RESP_INTENTOS_MAX por pestaña, y la marca del día impide que
-      // otra pestaña vuelva a bajar 14 MB una vez que ya se consiguió.
-      if (GM_getValue(RESP_DL_KEY, "") === todayStamp()) return false;   // ya se consiguió hoy
-      if (_respIntentos >= RESP_INTENTOS_MAX) return false;
-      _respIntentos++;
-      const fb = CONFIG.SP.respaldo;
-      if (!fb || !fb.id) return false;
-      let buf = null;
-      for (const url of spFallbackUrls(fb.id)) {
-        try {
-          const dl = await gmGet(url, "arraybuffer", "", T_DESCARGA);
-          if (!esLibroValido(dl.response, fb.name)) continue;
-          buf = dl.response; break;
-        } catch (e) {}
-      }
-      if (!buf) return false;
-      const idx = await readPym(fb.name, buf);
-      if (!idx || !idx.todos || !idx.todos.size) return false;
-      const meta = await pilotoMeta();
-      await pilotoGuardar(idx, { name: (meta && meta.name) || fb.name, mtime: (meta && meta.mtime) || "", fp: pymFP(fb.name, (meta && meta.mtime) || "") });
-      // Solo el índice de consulta. La lista activa no se entera de que esto pasó.
-      state.pymResp = idx.map;
-      state.pymRespTodos = idx.todos;
-      state.pymRespNombre = (meta && meta.name) || fb.name;
-      state.pymRespMTime = (meta && meta.mtime) || "";
-      state.pymRespCargado = todayStamp();
-      GM_setValue(RESP_DL_KEY, todayStamp());               // solo al conseguirlo: ver arriba
-      return true;
-    } catch (e) { return false; }
-  }
-
-  // PURA sobre el estado: qué dice el respaldo de este paciente. Devuelve null cuando no
-  // hay nada que decir —sin respaldo cargado, o el paciente sí está en la oficial, o el
-  // respaldo ES la lista activa (entonces consultarlo sería preguntarle dos veces a la
-  // misma fuente)—, y en ese caso la pantalla se queda exactamente como antes.
-  //   { estado: "con_pendientes", lista: [...], fuente, fecha }
-  //   { estado: "sin_pendientes", lista: [],    fuente, fecha }
-  //   { estado: "tampoco_esta",                 fuente, fecha }
-  function respaldoDiceDe(docId, est) {
-    const e = est || state;
-    if (!docId) return null;
-    if (e.pymFallback === true) return null;                       // la activa YA es el respaldo
-    if (!e.pymTodos || !e.pymTodos.size) return null;              // sin oficial cargada no se compara nada
-    if (e.pymTodos.has(normalizeKey(docId))) return null;          // está en la oficial: manda ella
-    if (!e.pymRespTodos || !e.pymRespTodos.size) return null;      // no hay respaldo que consultar
-    const info = { fuente: e.pymRespNombre || "Base piloto", fecha: e.pymRespMTime || "" };
-    if (!e.pymRespTodos.has(normalizeKey(docId))) return Object.assign({ estado: "tampoco_esta" }, info);
-    const lista = (e.pymResp && e.pymResp.get(normalizeKey(docId))) || [];
-    return Object.assign({ estado: lista.length ? "con_pendientes" : "sin_pendientes", lista: lista }, info);
-  }
+  // v18.6.0 — la CONSULTA AL RESPALDO (v18.0.43: cargarRespaldoParaConsulta /
+  // traerRespaldoSoloParaConsulta / respaldoDiceDe) fue RETIRADA: con la base única ya
+  // no existe la dualidad "lista oficial de hoy vs base de referencia" — el índice
+  // activo ES la base. Quien no figura en ella sale como "sin registro en PyM", y el
+  // «Abrir PyM» manual sigue disponible para cualquier libro puntual.
   // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS de la tarjeta, por
   // pedido del consultorio: saturaban la fila y no son órdenes que se generen desde ahí.
   // SIGUEN en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra igual.
@@ -12071,6 +11940,12 @@
           ${isPending.toString()}
           ${esSi.toString()}
           ${stripAccents.toString()}
+          /* v18.6.0 — BUG LATENTE heredado de v18.0.92 (hallazgo #44): friendly() usa
+             FRIENDLY_NORM, pero el worker solo serializaba FRIENDLY. Se construye el
+             índice normalizado DENTRO del worker, después de stripAccents. (Comentario
+             de bloque a propósito: la Regla H prohíbe líneas // dentro de plantillas.) */
+          const FRIENDLY_NORM = {};
+          for (const _kFriendly of Object.keys(FRIENDLY)) FRIENDLY_NORM[stripAccents(_kFriendly).toUpperCase()] = FRIENDLY[_kFriendly];
           ${friendly.toString()}
           ${activityLabel.toString()}
           ${isExcludedActivity.toString()}
@@ -12111,7 +11986,10 @@
       } catch (eInit) {
         if (workerUrl) try { URL.revokeObjectURL(workerUrl); } catch (e) {}
         console.warn("[Vigilante] Web Worker no disponible (CSP o entorno), ejecutando en hilo principal:", eInit);
-        return _readPymWorkbookStreamCore(arrayBuffer).then(resolve).catch(reject);
+        // v18.6.0 — CRÍTICO (revisión adversarial): este fallback es el camino de
+        // PRODUCCIÓN cuando el CSP de Everest bloquea el Worker, y perdía las hojas
+        // fijadas de la base única por no pasar opts.
+        return _readPymWorkbookStreamCore(arrayBuffer, opts || null).then(resolve).catch(reject);
       }
 
       // [BLINDADO v8.2.0 MEM-01] Declarar watchdog ANTES de los handlers para evitar TDZ con const.
@@ -12163,46 +12041,16 @@
       }
     });
   }
-  function afterPymLoaded(fileName, esDiarioRealDeHoy) {
+  // v18.6.0 — con la base única ya no hay "diario real de hoy" ni "respaldo de
+  // consulta": esta función queda reducida a aplicar el índice y repintar.
+  function afterPymLoaded(fileName) {
     state.pymFile = fileName;
     state.pymCargadoDia = todayStamp();   // v16.7.0 (auditoría #9) — para detectar la base de AYER tras medianoche
     state.pymDeAyer = false;
-    // v12.4.0 — Día en que se aplicó ESTA carga: con él, la re-búsqueda del diario sabe
-    // distinguir "ya tengo el PyM real DE HOY" (parar) de "sigo con el de ayer" (buscar).
-    // v12.4.1 — Hallazgo ALTO de la revisión adversarial: estampar el día SIEMPRE hacía
-    // que una carga manual de un archivo VIEJO ("Abrir PyM" con el Excel de ayer, justo
-    // lo que induce el recordatorio de las 7:30 cuando la red falló) apagara la búsqueda
-    // del real de hoy para toda la jornada. Ahora el día solo se estampa cuando quien
-    // llama SABE que lo cargado es el diario real de hoy; en cualquier otro caso queda
-    // vacío y debeBuscarPymDiario() sigue buscando — el real reemplaza al llegar.
-    state.pymDia = esDiarioRealDeHoy ? todayStamp() : "";
     if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
     state.lastSignature = ""; tick();
-    // v18.0.43 — el respaldo se deja listo EN SEGUNDO PLANO para poder consultarlo por los
-    // pacientes que la lista oficial no conozca. No descarga nada: lee la copia que el
-    // script ya guarda (`vgl_piloto`). Si no hay copia, no pasa nada y todo sigue igual.
-    // Se repinta al terminar porque la primera tarjeta ya se dibujó sin él.
-    try {
-      cargarRespaldoParaConsulta().then((ok) => {
-        if (ok && state.pymRespTodos && state.pymRespTodos.size) { state.lastSignature = ""; tick(); return; }
-        // Sin copia guardada (o vacía): se trae una vez al día, en la pestaña líder, sin
-        // tocar la lista activa. Ver traerRespaldoSoloParaConsulta.
-        return traerRespaldoSoloParaConsulta().then((ok2) => {
-          if (ok2) { state.lastSignature = ""; tick(); }
-        });
-      }).catch(() => {});
-    } catch (e) {}
     // [COPY-UX]
     setSummary(`Actividades preventivas cargadas: ${state.pym.size} paciente(s) — ${fileName}`);
-  }
-  // v12.4.0 — ¿Hay que seguir BUSCANDO el Agenda_Dia_CMB de hoy en SharePoint? Sí,
-  // mientras no esté cargado el PyM REAL DE HOY: sin nada cargado, con la base piloto
-  // (fallback), o con un PyM que se cargó otro día (pestaña que cruzó la medianoche).
-  // En cuanto el real de hoy está puesto, la re-búsqueda PARA (pedido explícito del
-  // consultorio: el archivo lo suben en el transcurso de la mañana; buscarlo cada 10
-  // minutos solo tiene sentido hasta encontrarlo).
-  function debeBuscarPymDiario() {
-    return !state.pymFile || state.pymFallback === true || state.pymDia !== todayStamp();
   }
   // v17.16.0 — TANDA 4, REGLA D («un mensaje tranquilizador exige evidencia de que se
   // evaluó algo»). El modal de Órdenes decía, sin coincidencias:
@@ -12238,63 +12086,26 @@
   // v18.3 (P12 saneamiento) — PYM_SIN_ACT_MOTIVOS, el array que duplicaba estos
   // literales sin ningún lector (grep de uso: solo su definición), se retiró. Los
   // motivos vivos son exactamente los que esta función devuelve en línea.
+  // v18.6.0 — reescrita para la base única: ya no hay "lista de hoy" ni "respaldo".
+  // La Regla D se conserva íntegra: distinguir "no pude mirar" (sin base) de "miré y
+  // no figura" (paciente fuera del libro) de "miré y no tiene pendientes".
   function pymMotivoSinActividades(est) {
     const e = est || {};
-    // v18.0.139 — RESPALDO ACTIVO: primero lo que sí se sabe de esa base. Si el paciente
-    // figura en ella, el viejo "sin_lista" era literalmente falso (no es que no se miró:
-    // se miró y no salió nada, o sus únicas actividades quedaron fuera por sexo o por
-    // exclusión del catálogo — el mismo matiz que ya carga "sin_pendientes" con la
-    // oficial). Solo cuando no se puede comprobar la pertenencia se cae al "no lo sé".
-    if (e.esBasePiloto && e.pacienteEnLista === true) {
+    if (!e.listaCargada) {
       return {
-        motivo: "piloto_esta_sin_pendientes",
-        texto: "Este paciente SÍ figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—, pero de esa base no salió ninguna actividad para ofrecerle en este módulo (puede no tener nada anotado, o ser actividades que el módulo no ofrece por sexo o por exclusión del catálogo). Eso NO prueba que esté al día: el respaldo es una base de referencia, no la lista de hoy. Si quiere la respuesta de hoy, cargue la lista con «Abrir PyM»; si algo aplica, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
-      };
-    }
-    if (e.esBasePiloto && e.pacienteEnLista === false) {
-      return {
-        motivo: "piloto_no_esta",
-        texto: "Este paciente NO figura en la base de respaldo —es la base activa ahora porque la lista de hoy de la sede no está cargada—: su identificación no cruza en esa base (puede ser nuevo, de otra sede, o una base desactualizada). Esto no dice que no tenga nada pendiente: dice que ni en el respaldo lo puedo ver. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
-      };
-    }
-    if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
-      return {
-        motivo: "sin_lista",
-        texto: "No tengo cargada la lista de prevención de hoy" + (e.esBasePiloto ? " (estoy con la base de respaldo, no con la de la sede)" : e.diaDistinto ? " (la que tengo es de otro día)" : "") + ", así que NO he podido mirar qué le corresponde a este paciente. Esto no dice que no tenga nada pendiente: dice que no lo sé. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
+        motivo: "sin_base",
+        texto: "No tengo cargada la base de prevención —el libro de la sede no ha podido descargarse todavía—, así que NO he podido mirar qué le corresponde a este paciente. Esto no dice que no tenga nada pendiente: dice que no lo sé. Cargue el libro con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
       };
     }
     if (e.pacienteEnLista === false) {
-      // v18.0.43 — PEDIDO DEL MÉDICO (1-sep): justo en este caso —y SOLO en este— se
-      // consulta el respaldo. No aparecer en el CMB oficial no significa que no haya nada
-      // pendiente; puede significar que el paciente entró por otra vía. Lo que conteste el
-      // respaldo sale con su procedencia pegada y nunca se presenta como dato de hoy: es
-      // una base de referencia que puede llevar meses. Y si el respaldo no tiene nada
-      // anotado NO se dice "al día" — eso sería la Regla D al revés.
-      const r = e.respaldo;
-      const deDonde = r ? (" (" + r.fuente + (r.fecha ? ", " + String(r.fecha).slice(0, 10) : "") + ")") : "";
-      if (r && r.estado === "con_pendientes" && r.lista && r.lista.length) {
-        return {
-          motivo: "no_esta_en_lista_pero_en_respaldo",
-          texto: "Este paciente NO aparece en la lista de prevención de hoy, pero SÍ está en la base de respaldo" + deDonde
-            + ", y allí figura con: " + r.lista.join(", ") + ". Ojo: el respaldo es una base de referencia, no la agenda de hoy — puede estar desactualizado, así que confírmelo antes de ordenar. Si aplica, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
-        };
-      }
-      if (r && r.estado === "sin_pendientes") {
-        return {
-          motivo: "no_esta_en_lista_respaldo_vacio",
-          texto: "Este paciente NO aparece en la lista de prevención de hoy. Sí está en la base de respaldo" + deDonde
-            + ", donde no tiene ninguna actividad anotada — pero eso NO quiere decir que esté al día: esa base no es la lista de hoy. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
-        };
-      }
       return {
-        motivo: "no_esta_en_lista",
-        texto: "Este paciente NO aparece en la lista de prevención de hoy" + (r && r.estado === "tampoco_esta" ? ", ni en la base de respaldo" + deDonde : "")
-          + " (puede ser nuevo, o su identificación no cruza con la del archivo). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+        motivo: "no_esta_en_base",
+        texto: "Este paciente NO aparece en la base de prevención de la sede (puede ser nuevo, de otra sede, o su identificación no cruza con la del libro). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
       };
     }
     return {
       motivo: "sin_pendientes",
-      texto: "Este paciente está en la lista de prevención de hoy y no tiene actividades pendientes. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+      texto: "Este paciente está en la base de prevención y no tiene actividades pendientes. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
     };
   }
 
@@ -12357,15 +12168,10 @@
 
   // v7.8: se aplica un ÍNDICE ya construido ({map, todos, abandono}) — el lector en
   // streaming lo entrega directo, sin pasar por una tabla intermedia de filas.
-  function applyPymIdx(idx, fileName, mtime, nombreReal, esDiarioRealDeHoy) {
-    // v18.0.11 — LA GUARDA, AQUÍ, PARA QUE VALGA EN TODOS LOS CAMINOS. La v18.0.7 la puso
-    // en la descarga automática y en el captador de SharePoint, pero a `applyPymIdx` se
-    // llega además desde la base piloto y desde el selector manual de archivo — y aquí es
-    // donde se hace el daño de verdad: `afterPymLoaded` sella el día, con lo que
-    // `debeBuscarPymDiario()` pasa a decir «ya está» y el reloj de 10 minutos DEJA de
-    // buscar la lista real hasta medianoche; y `savePymCache` persiste el índice malo, que
-    // se readmite en cada recarga. Un libro con cientos de documentos y CERO actividades no
-    // se instala, no sella el día y no se cachea — y se dice por qué.
+  function applyPymIdx(idx, fileName, mtime, nombreReal) {
+    // v18.0.11 — LA GUARDA, AQUÍ, PARA QUE VALGA EN TODOS LOS CAMINOS (descarga
+    // automática, caché y selector manual). Un libro con cientos de documentos y CERO
+    // actividades no se instala ni se cachea — y se dice por qué.
     if (typeof mtrLibroNoParecePym === "function" && mtrLibroNoParecePym(idx)) {
       const cuantos = (idx && idx.todos && idx.todos.size) || 0;
       _pymAnotarFallo("«" + (nombreReal || fileName || "el archivo") + "» tiene " + cuantos + " documentos y ninguna actividad pendiente: no es la lista de prevención");
@@ -12380,28 +12186,8 @@
     // La huella usa el nombre CRUDO del archivo (sin las etiquetas que se le añaden para
     // mostrar), para que coincida con lo que devuelve SharePoint en la siguiente ronda.
     state.pymFP = pymFP(nombreReal || fileName, mtime);
-    afterPymLoaded(fileName, esDiarioRealDeHoy);
-    // La caché se escribe DESPUÉS y por tandas: el panel ya está usable.
-    savePymCache(fileName);
-    try {
-      // La fecha va TAMBIÉN en una clave diminuta: así comprobar "¿la caché es de hoy?"
-      // no obliga a interpretar varios MB de JSON cada ronda.
-      localStorage.setItem("vgl_pym_dia", todayStamp());
-    } catch (e) {}
+    afterPymLoaded(fileName);
     return true;
-  }
-  async function savePymCache(fileName) {
-    try {
-      if (typeof GM_setValue === "undefined") return;
-      const txt = await packPym(state.pym, state.pymTodos, state.pymAbandono, { date: todayStamp(), name: fileName, mtime: state.pymMTime, fp: state.pymFP, fb: !!state.pymFallback }, makeYielder(15));
-      if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", state.pymFallback ? "1" : ""); }
-      else {
-        // Ya NO es un fallo silencioso (v7.8): con el formato compacto esto exigiría una
-        // base ~4 veces mayor que la actual; si algún día pasa, que se sepa.
-        GM_setValue("vgl_pym", ""); GM_setValue("vgl_pym_dia", "");
-        setSummary("La lista de prevención de hoy es demasiado grande para guardarla en este equipo (" + Math.round(txt.length / 1048576) + " MB): cada recarga volverá a leerla. Repórtelo.", "warn");
-      }
-    } catch (e) {}
   }
 
   // =====================================================================
@@ -13850,62 +13636,11 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
   function spBase() { return "https://" + CONFIG.SP.host + CONFIG.SP.web; }
-  // v7.7: encuentra el archivo del PyM de HOY en la carpeta de SharePoint, por su
-  // nombre — sin adivinar formatos raros: prueba las variantes de fecha más comunes
-  // (20260806, 2026-08-06, 06-08-2026, 6/8/2026…) y solo acepta una coincidencia
-  // EXACTA con hoy. Si no hay ninguna, no elige "el más reciente" a ciegas — mejor
-  // caer al piloto que cargar sin darse cuenta la agenda de otro día.
-  function todayTokens() {
-    const d = new Date(), p = (n) => String(n).padStart(2, "0");
-    const Y = d.getFullYear(), M = p(d.getMonth() + 1), D = p(d.getDate()), m = d.getMonth() + 1, day = d.getDate();
-    // v7.8: también el mes EN LETRAS ("6 de agosto", "06 agosto"), por si algún día
-    // suben el archivo con el nombre escrito así en vez de con la fecha numérica.
-    const MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][d.getMonth()];
-    return [`${Y}${M}${D}`, `${Y}-${M}-${D}`, `${Y}_${M}_${D}`, `${D}${M}${Y}`, `${D}-${M}-${Y}`, `${D}_${M}_${Y}`, `${day}-${m}-${Y}`, `${day}/${m}/${Y}`,
-      `${day} de ${MES}`, `${D} de ${MES}`, `${day} ${MES}`, `${D} ${MES}`];
-  }
-  function normName(s) { return String(s || "").replace(/[.\s_\-\/]/g, "").toLowerCase(); }
-  // ¿El nombre contiene el token SIN que sea cola de otro número? Evita que el día 6
-  // acepte un archivo del "26 de agosto" (el "6deagosto" vive dentro de "26deagosto").
-  // OJO: esta guarda SOLO aplica a los tokens con mes en letras. A los numéricos NO:
-  // un "Agenda_v2_20260806.xlsx" real quedaría rechazado porque al normalizar la "2"
-  // de "v2" queda pegada a la fecha (medido en el banco de pruebas) — esos conservan
-  // la coincidencia simple de siempre.
-  //
-  // v18.0.71 — `exigirBordeCompleto`: además de que no haya un dígito ANTES (lo de
-  // siempre), exige que no haya un dígito DESPUÉS tampoco. Sin esto, un token numérico
-  // podía vivir EMPOTRADO a mitad de un número más largo con dígitos a los dos lados
-  // ("Reporte_45192026_Final": "192026" con "45" antes) — la guarda vieja solo miraba un
-  // lado. Se pide aparte (no siempre) porque ese mismo dígito pegado a la izquierda es
-  // justo lo que necesita seguir aceptando "Agenda_v2_20260806.xlsx" en la raíz.
-  function nameHasToken(n, t, exigirBordeCompleto) {
-    let i = -1;
-    while ((i = n.indexOf(t, i + 1)) >= 0) {
-      const prev = n[i - 1];
-      if (prev >= "0" && prev <= "9") continue;
-      if (exigirBordeCompleto) {
-        const next = n[i + t.length];
-        if (next >= "0" && next <= "9") continue;
-      }
-      return true;
-    }
-    return false;
-  }
-  // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores no
-  // lo tumbaron. `fueraDeLaRaiz`: cuando el archivo NO vive suelto en la carpeta principal
-  // (ver pickTodaysFile), los tokens numéricos pasan TAMBIÉN por nameHasToken, con el borde
-  // completo exigido — cerrando el hueco que dejaba `n.includes(t)` a pelo. Dentro de la
-  // raíz nada cambia: la coincidencia simple de siempre, para no tocar el caso real ya
-  // conocido y protegido.
-  function esNombreDeHoy(name, fueraDeLaRaiz) {
-    const toks = todayTokens().map(normName);
-    const n = normName(name);
-    return toks.some((t) => {
-      if (/[a-z]/.test(t)) return nameHasToken(n, t);
-      if (fueraDeLaRaiz) return nameHasToken(n, t, true);
-      return n.includes(t);
-    });
-  }
+  // v18.6.0 — LA SELECCIÓN DEL ARCHIVO DIARIO POR NOMBRE (todayTokens/normName/
+  // nameHasToken/esNombreDeHoy) fue RETIRADA con el flujo del «Agenda Día»: la base
+  // única se direcciona por GUID, no por nombre con fecha. Hoy la fecha de un dato se
+  // controla comparando el TimeLastModified del GUID (pilotoFreshCheck), no leyendo
+  // nombres de archivo.
   // =====================================================================
   //  v18.0.7 — GUARDA DEL LIBRO EQUIVOCADO
   // =====================================================================
@@ -13946,108 +13681,10 @@
     const conPendientes = (idx.map && typeof idx.map.size === "number") ? idx.map.size : 0;
     return docs >= MTR_PYM_DOCS_SOSPECHA && conPendientes === 0;
   }
-  // Huellas de libros ya rechazados HOY: sin esto, el chequeo cada 10 minutos volvería a
-  // descargar y a rechazar el mismo archivo toda la jornada, y a repetir el aviso.
-  const _pymRechazados = new Set();
-
-  // 02-sep (cierre adversarial, fila 27) — sacada de pickTodaysFile para que xlsViejoDeHoy,
-  // su gemelo sobre las MISMAS filas, aplique la misma guarda (antes un .xls ajeno en una
-  // subcarpeta con la fecha de hoy empotrada en un consecutivo disparaba el aviso «PyM en
-  // formato antiguo» una vez al día, con el mismo token que la regla 1 acababa de rechazar).
-  function _pymSueltoEnLaRaiz(f) {
-    const raiz = String((CONFIG.SP && CONFIG.SP.folder) || "").replace(/\/+$/, "");
-    const ruta = String((f && f.ServerRelativeUrl) || "");
-    if (!raiz || !ruta) return false;
-    if (ruta.toLowerCase().indexOf(raiz.toLowerCase() + "/") !== 0) return false;
-    return ruta.slice(raiz.length + 1).indexOf("/") < 0;    // sin subcarpetas de por medio
-  }
-  function pickTodaysFile(files) {
-    const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
-    if (!xls.length) return null;
-    // v18.0.71 — subida aquí arriba (antes solo la usaba la regla 2) para que la regla 1
-    // también sepa si un archivo vive suelto en la raíz. Ver el porqué junto a
-    // esNombreDeHoy, unas líneas más abajo — es el mismo blindaje de v18.0.7, aplicado
-    // ahora también al MATCH POR NOMBRE, no solo al de "modificado hoy sin fecha".
-    const sueltoEnLaRaiz = _pymSueltoEnLaRaiz;
-    // 1. Coincidencia EXACTA con el nombre de HOY (ej: Agenda_Dia_CMB_20260808.xlsx)
-    // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
-    // no lo tumbaron. `esNombreDeHoy` solo aplica la guarda "no cola de otro número"
-    // (nameHasToken) a los tokens con MES EN LETRAS; los numéricos usaban `n.includes(t)` a
-    // pelo, sin ninguna protección de borde — ni siquiera la del lado izquierdo que sí
-    // tienen los de letras. Un consecutivo/factura/radicado de 6-8 dígitos que por
-    // casualidad trae la fecha de hoy EMPOTRADA (p. ej. "Reporte_45192026_Final.xlsx" el
-    // día 1 de septiembre: "192026" vive dentro de "45192026") se tomaba como el PyM de
-    // hoy en CUALQUIER subcarpeta que fetchSpFilesMultiFolder junte — no solo la raíz.
-    //
-    // Fuera de la raíz se exige la guarda COMPLETA (ni antes ni después del token puede
-    // haber otro dígito): eso rechaza "Reporte_45192026_Final" y "Factura_00192026" sin
-    // tocar el caso real y ya conocido, "Agenda_v2_20260806.xlsx" en la raíz, que necesita
-    // seguir aceptando un dígito pegado a la izquierda (la "2" de "v2") — es EXACTAMENTE
-    // el caso que el comentario de nameHasToken ya documentaba como motivo de no aplicar
-    // la guarda a los numéricos, y sigue intacto: solo se activa fuera de la raíz.
-    const matchName = xls.find((f) => esNombreDeHoy(f.Name, !sueltoEnLaRaiz(f)));
-    if (matchName) return matchName;
-
-    // 2. Si no hay coincidencia por nombre, buscar archivos modificados HOY que NO sean de fechas futuras
-    // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): TimeLastModified llega en UTC
-    // (SharePoint); comparar su string crudo contra la fecha LOCAL con startsWith rompía
-    // en Colombia (UTC-5): un archivo modificado entre las 19:00 y las 24:00 hora local
-    // ya cae en el día UTC siguiente, así que el DÍA SIGUIENTE (hora local) ese archivo
-    // pasaba el startsWith y se tomaba como "el de hoy" — apagando la re-búsqueda del
-    // archivo real durante toda la jornada. Ahora ambos lados se reducen a fecha LOCAL.
-    const todayStr = todayStamp();
-    // =====================================================================
-    // v18.0.7 — LA SEGUNDA REGLA, BLINDADA. Era el agujero por el que se coló el libro
-    // equivocado (reporte en vivo del 31-ago, con diagnóstico del equipo del médico).
-    //
-    // QUÉ PASÓ. Esta regla acepta un .xlsx modificado hoy cuyo nombre no lleve fecha. El
-    // listado NO es de una carpeta: `fetchSpFilesMultiFolder` junta las TRES de CONFIG.SP
-    // .folders, y una de ellas es «ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE
-    // BELLO», donde vive «ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx» — un libro de
-    // productividad que alguien edita a diario. Sin fecha en el nombre y modificado hoy:
-    // cumplía las dos condiciones, se eligió como «el PyM de hoy» y hasta se etiquetó así.
-    //
-    // EL DAÑO ERA DOBLE, y por eso el médico se quedó sin aviso toda la jornada:
-    //   1. El índice salía vacío (ese libro no tiene columnas de actividades), así que el
-    //      aviso de PyM y el de abandono de RCV no tenían nada que decir y se callaban;
-    //   2. al haber «encontrado el de hoy», `state.pymFP` quedaba puesto, la comparación de
-    //      huella cortaba por lo sano en el siguiente chequeo, y NUNCA se caía al respaldo
-    //      de la base piloto ni se seguía buscando el CMB real. La regla que el médico dejó
-    //      escrita —«mientras no esté subido el CMB del día se usa la base piloto, y cada X
-    //      minutos se rectifica si ya subieron el oficial»— quedaba desactivada.
-    //
-    // EL BLINDAJE: esta regla solo mira archivos SUELTOS EN LA CARPETA PRINCIPAL, que es
-    // donde el propio CONFIG dice que aparece el PyM del día («archivo suelto en la raíz»,
-    // v7.7). Nada de las subcarpetas de estrategias o de citas por sede puede volver a
-    // presentarse como la lista de prevención del día. Y si un libro ya se rechazó hoy por
-    // no traer ni una actividad (mtrLibroNoParecePym), se SALTA y se prueba el siguiente,
-    // en vez de reintentar el mismo cada diez minutos.
-    // =====================================================================
-    // v18.0.71 — `raiz`/`sueltoEnLaRaiz` se subieron al principio de la función: ahora las
-    // usa también la regla 1. Se queda un solo sitio que las define.
-    const matchMod = xls.find((f) => {
-      if (!f.TimeLastModified || /20\d{6}/.test(f.Name)) return false;
-      if (!sueltoEnLaRaiz(f)) return false;
-      try {
-        if (todayStamp(new Date(f.TimeLastModified)) !== todayStr) return false;
-        return !_pymRechazados.has(pymFP(f.Name, f.TimeLastModified));
-      } catch (e) { return false; }
-    });
-    if (matchMod) return matchMod;
-
-    return null;
-  }
-  // v7.8: si el PyM de HOY subió en formato .xls ANTIGUO (binario de Excel 97-2003),
-  // no se puede leer desde el navegador — pero callarlo sería peor: se detecta y se
-  // avisa UNA vez al día, para que pidan re-guardarlo como .xlsx.
-  function xlsViejoDeHoy(files) {
-    // 02-sep (fila 27) — misma guarda de borde completo fuera de la raíz que pickTodaysFile.
-    return (files || []).find((f) => /\.xls$/i.test(f.Name || "") && !/^~\$/.test(f.Name || "") && esNombreDeHoy(f.Name, !_pymSueltoEnLaRaiz(f))) || null;
-  }
-  // encodeURI (no encodeURIComponent): las barras del camino deben quedar como barras.
-  function spListUrl(folder) { return spBase() + "/_api/web/GetFolderByServerRelativeUrl('" + encodeURI(folder || CONFIG.SP.folder) + "')/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$orderby=TimeLastModified%20desc&$top=60"; }
-  const spRows = (j) => (j && (j.value || (j.d && j.d.results))) || [];
-  function spDownloadUrl(sru) { return spBase() + "/_api/web/GetFileByServerRelativeUrl('" + encodeURI(sru) + "')/$value"; }
+  // v18.6.0 — pickTodaysFile/xlsViejoDeHoy/_pymSueltoEnLaRaiz/_pymRechazados y las URLs
+  // de listado/descarga por ruta (spListUrl/spRows/spDownloadUrl) fueron RETIRADAS con el
+  // archivo diario. La base única usa: GetFileById por GUID (spFallbackUrls), metadatos
+  // (pilotoMeta) y el enlace compartido de la carpeta para cebar la cookie.
   // Listado (JSON), vía Everest con GM_xmlhttpRequest + cookies de SharePoint. Corto:
   // si la carpeta no responde en 12 s, no va a responder — mejor no dejar el panel quieto.
   const gmJson = async (url) => { const r = await gmGet(url, "json", "application/json;odata=nometadata", 12000); return r.response || (r.responseText ? JSON.parse(r.responseText) : {}); };
@@ -14117,36 +13754,20 @@
   // de un solo golpe EN PLENA CARGA de la página (340 ms medidos en CPU rápida; segundos
   // en los equipos del consultorio, multiplicado por pestaña). Ahora: comprobación de
   // fecha barata sin desempaquetar, y el desempaquetado cede el hilo cada ~15 ms.
-  let cacheCargando = false;
-  async function loadPymFromCache() {
-    if (cacheCargando) return false;
-    cacheCargando = true;
+  // v18.6.0 — LIMPIEZA DE MIGRACIÓN: las claves del archivo diario (vgl_pym de hasta
+  // 12 MB, su marca de día y su bandera de fallback) ya no se escriben ni se leen.
+  // Se borran UNA vez al arrancar para devolverle el espacio al almacén de
+  // Tampermonkey y que ningún pedazo de dato de jornadas pasadas sobre viva allí.
+  function _vglPurgarCacheDiariaLegacy() {
     try {
-      if (typeof GM_getValue === "undefined") return false;
-      const raw = GM_getValue("vgl_pym", ""); if (!raw) return false;
-      // Purga de días anteriores: no conservamos datos de pacientes de jornadas pasadas.
-      // OJO: se borra TAMBIÉN la marca "vgl_pym_dia"; si queda puesta, el captador de la
-      // pestaña de SharePoint cree que la base de hoy ya está y no vuelve a capturarla.
-      const purgar = () => { try { GM_setValue("vgl_pym", ""); GM_setValue("vgl_pym_dia", ""); } catch (e2) {} };
-      // Un paquete que no sea v3 (p. ej. la caché v2 del día de la actualización) se
-      // descarta por el PREFIJO, sin pagar el JSON.parse de varios MB solo para tirarlo.
-      if (raw.lastIndexOf('{"v":3', 0) !== 0) { purgar(); return false; }
-      // La fecha viaja al FINAL del paquete (los metadatos van tras los datos): mirar la
-      // cola evita desempaquetar varios MB solo para descubrir que es de ayer.
-      const rapida = /"date":"(\d{4}-\d{2}-\d{2})"/.exec(raw.slice(-800));
-      if (rapida && rapida[1] !== todayStamp()) { purgar(); return false; }
-      const u = await unpackPym(raw, makeYielder(15));
-      if (!u) { purgar(); return false; }               // formato v2 u otro: se re-indexa
-      if (u.meta.date !== todayStamp()) { purgar(); return false; }
-      // v18.0.7 — la caché de HOY puede traer ya indexado el libro equivocado (es lo que le
-      // pasó al médico el 31-ago: el índice cacheado tenía 1.396 documentos y CERO
-      // pacientes con pendientes). Sin esto, la guarda de la descarga no serviría de nada:
-      // toda pestaña que arrancara volvería a cargar el índice malo desde la caché y el
-      // aviso seguiría mudo el día entero. Se purga y se vuelve a buscar el archivo bueno.
-      if (mtrLibroNoParecePym(u)) { purgar(); return false; }
-      if (state.pymFile) return true;                    // algo se cargó mientras se desempaquetaba
-      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)", !u.meta.fb); return true;
-    } catch (e) { return false; } finally { cacheCargando = false; } }
+      if (typeof GM_deleteValue === "function") {
+        GM_deleteValue("vgl_pym"); GM_deleteValue("vgl_pym_dia"); GM_deleteValue("vgl_pym_esfallback");
+      } else if (typeof GM_setValue !== "undefined") {
+        GM_setValue("vgl_pym", ""); GM_setValue("vgl_pym_dia", ""); GM_setValue("vgl_pym_esfallback", "");
+      }
+      try { localStorage.removeItem("vgl_pym_dia"); } catch (x) {}
+    } catch (e) {}
+  }
   // ¿La respuesta es de verdad un Excel? (.xlsx = ZIP, empieza por "PK"). Si SharePoint
   // devuelve la página de inicio de sesión con estado 200, aquí se cae la careta.
   function esLibroValido(buf, nombre) {
@@ -14207,10 +13828,21 @@
     const p = (n) => String(n).padStart(2, "0");
     return { dia: d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()), hora: d.getUTCHours() + d.getUTCMinutes() / 60 };
   }
-  // ¿Ya pasó la hora del refresco de hoy (06:00 Bogotá por defecto)?
-  function basePasoHoraRefresco() {
-    const hora = (CONFIG.SP.base && CONFIG.SP.base.horaRefresco) || 6;
-    return bogotaAhora().hora >= hora;
+  // v18.6.0 — ventanas de refresco (06:00 y 12:00 Bogotá): la mañana abre a las 06:00 y
+  // la tarde a las 12:00. Cada una se revisa UNA vez por día. Devuelve {sello, toca}:
+  // sello = "YYYY-MM-DD|m|t" de la ventana vigente; toca = false antes de su hora o si
+  // esa ventana ya quedó revisada hoy.
+  function baseVentanaRefresco() {
+    const horas = (CONFIG.SP.base && Array.isArray(CONFIG.SP.base.horasRefresco) && CONFIG.SP.base.horasRefresco.length)
+      ? CONFIG.SP.base.horasRefresco.slice().sort((a, b) => a - b) : [6, 12];
+    const b = bogotaAhora();
+    // La ventana vigente es la última cuya hora de apertura ya pasó HOY (mientras no
+    // abra la siguiente, sigue vigente la anterior y no se re-sella).
+    let vigente = null;
+    for (const h of horas) if (b.hora >= h) vigente = h;
+    if (vigente === null) return { sello: b.dia + "|pre", toca: false };  // aún no abre la primera
+    const idx = horas.indexOf(vigente);
+    return { sello: b.dia + "|" + idx, toca: true };
   }
   async function pilotoDesdeCache() {
     try {
@@ -14235,6 +13867,10 @@
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymOrigen = "base";
       uxTrack("base.cache.ok");
+      // v18.6.0 (revisión adversarial): el camino de caché es el PRINCIPAL de cada
+      // mañana — sin esta marca, el globo de Estado mentía "sin actividad todavía en
+      // esta sesión" con la base cargada y funcionando.
+      try { _saludMarca("pym", true); } catch (e) {}
       afterPymLoaded(u.meta.name || "Base de prevención");
       baseLog({ fase: "cache", ok: true, pacientes: u.map.size, mtime: u.meta.mtime || "" });
       return true;
@@ -14255,141 +13891,201 @@
       return (o && o.TimeLastModified) ? { name: o.Name || "", mtime: o.TimeLastModified } : null;
     } catch (e) { return null; }
   }
-  // v18.6.0 — REFRESCO DIARIO ÚNICO (mandato del médico): a partir de las 06:00 de
-  // Bogotá (UTC-5 fijo) y UNA sola vez por día, se pregunta a SharePoint por el
-  // TimeLastModified del GUID (1 KB); solo si cambió se bajan los ~22,5 MB. El sello
-  // del día se pone SOLO si los metadatos respondieron: una falla de red a las 06:05
-  // reintenta en la vuelta siguiente del intervalo, no deja la copia vieja clavada.
+  // v18.6.0 — REFRESCOS A LAS 06:00 Y LAS 12:00 DE BOGOTÁ (mandato del médico, 07-sep):
+  // en cada ventana se pregunta a SharePoint por el TimeLastModified del GUID (1 KB) y
+  // solo si cambió se bajan los ~22,5 MB. El sello de la ventana se pone SOLO en los
+  // desenlaces TERMINALES (sin cambios, o descarga exitosa): una falla de red a las
+  // 06:05 reintenta en la vuelta siguiente del minutero — hasta BASE_DESCARGA_REINTENTOS
+  // veces, para no martillar 22 MB cada minuto contra una red caída; agotados, se sella,
+  // se avisa UNA vez y sigue la copia buena hasta la ventana siguiente.
   let pilotoChkEnCurso = false;
+  let baseMetaFallos = 0, baseDescargaFallos = 0;
+  const BASE_DESCARGA_REINTENTOS = 5;
   async function pilotoFreshCheck() {
     try {
       if (pilotoChkEnCurso || !S.baseAuto || typeof GM_getValue === "undefined") return;
       if (!heartbeat()) return;
-      const hoy = bogotaAhora().dia;
-      if (GM_getValue(PILOTO_CHK, "") === hoy) return;   // ya se revisó hoy
-      if (!basePasoHoraRefresco()) return;               // antes de las 06:00 Bogotá: no toca
+      const v = baseVentanaRefresco();
+      if (!v.toca) return;                               // aún no abre la ventana de hoy
+      if (GM_getValue(PILOTO_CHK, "") === v.sello) return;   // esta ventana ya se revisó
       pilotoChkEnCurso = true;
       const t0 = Date.now();
-      const m = await pilotoMeta();
-      if (!m) { baseLog({ fase: "meta", ok: false, ms: Date.now() - t0, err: "sin metadatos" }); return; }
-      GM_setValue(PILOTO_CHK, hoy);                      // respondió: hoy queda revisado
+      let m = await pilotoMeta();
+      if (!m) {
+        // Autosuficiencia (revisión adversarial): en los equipos que dependen de la
+        // cookie anónima del enlace (~25 min de vida) el meta da null en vez de 401.
+        // Se renueva el enlace y se reintenta UNA vez antes de rendirse.
+        await primeShareAccess(true);
+        m = await pilotoMeta();
+      }
+      if (!m) {
+        // Sin sello: reintenta al minuto. El fallo se loguea UNA vez por racha para no
+        // llenar el anillo de mantenimiento con un "meta fail" por minuto.
+        if (++baseMetaFallos === 1) baseLog({ fase: "meta", ok: false, ms: Date.now() - t0, err: "sin metadatos tras renovar el enlace" });
+        return;
+      }
+      baseMetaFallos = 0;
       baseLog({ fase: "meta", ok: true, ms: Date.now() - t0, mtime: m.mtime });
-      if (m.mtime && m.mtime === state.pymMTime) return; // sin cambios: sigue la copia
+      if (m.mtime && m.mtime === state.pymMTime) {
+        GM_setValue(PILOTO_CHK, v.sello);                // sin cambios: desenlace terminal
+        return;
+      }
       const ok = await loadPymBaseDescarga(true, m, true);
-      if (ok) notify("AZUL", "📋 Base de prevención actualizada", (m.name || "Base") + "\nSe descargó la versión nueva del libro de la sede.", false, "baseupd|" + hoy); // [COPY-UX]
+      if (ok) {
+        baseDescargaFallos = 0;
+        GM_setValue(PILOTO_CHK, v.sello);                // descarga buena: desenlace terminal
+        notify("AZUL", "📋 Base de prevención actualizada", (m.name || "Base") + "\nSe descargó la versión nueva del libro de la sede.", false, "baseupd|" + v.sello); // [COPY-UX]
+      } else if (++baseDescargaFallos >= BASE_DESCARGA_REINTENTOS) {
+        GM_setValue(PILOTO_CHK, v.sello);                // agotados: sellar y avisar UNA vez
+        baseLog({ fase: "ventana", ok: false, err: "descarga reintentada " + baseDescargaFallos + " veces sin éxito; ventana sellada con la copia vigente" });
+        if (state.leader) notify("AMBAR", "📋 La base nueva no llegó", "El libro de la sede cambió, pero llevo " + baseDescargaFallos + " intentos sin poder descargarlo. Sigo con la última copia buena — volveré a intentarlo en la siguiente ventana (06:00 / 12:00).", false, "baserefreshfail|" + v.sello);
+        baseDescargaFallos = 0;
+      }
+      // sin sello en los demás casos → el minutero reintenta (recuperación automática)
     } catch (e) {} finally { pilotoChkEnCurso = false; }
+  }
+  // v18.6.0 — SINCRONÍA ENTRE PESTAÑAS (revisión adversarial): el sello de ventana y la
+  // caché en disco son compartidos, pero el índice APLICADO vive en la memoria de cada
+  // pestaña — la que descargó quedó nueva y las demás con la copia del arranque, para
+  // siempre. En cada tick del minutero, cada pestaña mira la cola del paquete en disco
+  // (unos bytes, sin desempaquetar) y si su mtime no es el que tiene aplicado —y aquí
+  // no hay carga manual que respetar— desempaqueta y aplica la del disco. Sin red y sin
+  // bajar 22 MB dos veces.
+  async function baseSincronizarEntrePestanas() {
+    try {
+      if (!S.baseAuto || typeof GM_getValue === "undefined") return;
+      if (!state.pymFile || state.pymOrigen !== "base") return;
+      const raw = GM_getValue(PILOTO_KEY, "");
+      if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return;
+      const cola = /"mtime":"([^"]{10,40})"/.exec(raw.slice(-800));
+      if (!cola || cola[1] === state.pymMTime) return;
+      const u = await unpackPym(raw, makeYielder(15));
+      if (!u || (u.meta.id || "") !== pilotoId()) return;
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set();
+      state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
+      afterPymLoaded(u.meta.name || "Base de prevención");
+      baseLog({ fase: "sincronia", ok: true, pacientes: u.map.size, mtime: state.pymMTime });
+    } catch (e) {}
   }
   async function loadPymBase(silent) {
     if (!S.baseAuto) return false;
-    const fb = CONFIG.SP.respaldo;
+    const fb = CONFIG.SP.base;
     if (!fb || !fb.id || typeof GM_xmlhttpRequest === "undefined") return false;
     if (state.pymFile) return true;                    // ya hay algo cargado (caché o manual)
-    // v7.8.1: PRIMERO la copia guardada (cero red, instantánea). La frescura se
-    // revisa aparte, 1-2 veces al día, sin bloquear el arranque.
+    // v7.8.1: PRIMERO la copia guardada (cero red, instantánea). La frescura se revisa
+    // aparte — a partir de las 06:00 Bogotá, una vez al día — sin bloquear el arranque.
     if (await pilotoDesdeCache()) { pilotoFreshCheck(); return true; }
     return loadPymBaseDescarga(silent, await pilotoMeta());
   }
-  async function loadPymBaseDescarga(silent, meta) {
-    const fb = CONFIG.SP.respaldo;
+  // v18.6.0 — viaRefresh=true cuando la llama el refresco de las 06:00/12:00 (sirve para
+  // no duplicar el aviso: el refresco tiene el suyo propio).
+  // Guarda de en-vuelo (revisión adversarial): arrancue y refresco podían disparar DOS
+  // descargas de ~22 MB a la vez en la misma pestaña; ahora la segunda entra y sale.
+  let baseDescargaEnCurso = false;
+  async function loadPymBaseDescarga(silent, meta, viaRefresh) {
+    if (baseDescargaEnCurso) return false;
+    baseDescargaEnCurso = true;
+    try { return await _loadPymBaseDescargaNucleo(silent, meta, viaRefresh); }
+    finally { baseDescargaEnCurso = false; }
+  }
+  async function _loadPymBaseDescargaNucleo(silent, meta, viaRefresh) {
+    const fb = CONFIG.SP.base;
     if (!fb || !fb.id || typeof GM_xmlhttpRequest === "undefined") return false;
-    progreso("Bajando la base PyM de la sede… (pesa ~14 MB, puede tardar medio minuto)");
-    // Las dos rutas del mismo archivo se prueban UNA TRAS OTRA, no a la vez: en
-    // paralelo serían dos descargas de ~14 MB el mismo día. Medido en la red de la
-    // sede: 13.6 MB en 15-19 s por ruta; el margen de 120 s sobra.
+    progreso("Bajando la base de prevención de la sede… (pesa ~22 MB, puede tardar un minuto)");
+    // Autosuficiencia de conexión: antes de tocar SharePoint se renueva la cookie de
+    // acceso por el enlace compartido de la carpeta (primeShareAccess ya se autolimita
+    // a una vez cada ~25 min); ante 401/403 se fuerza UNA renovación extra y se repite.
     const errores = [];
     let buf = null;
-    for (const url of spFallbackUrls(fb.id)) {
-      try {
-        const dl = await gmGet(url, "arraybuffer", "", T_DESCARGA);
-        if (!esLibroValido(dl.response, fb.name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña" : "no es un Excel");
-        buf = dl.response; break;
-      } catch (e) { errores.push((e && e.message) || "error"); }
+    const t0 = Date.now();
+    for (let pasada = 0; pasada < 2 && !buf; pasada++) {
+      if (pasada > 0) await primeShareAccess(true);
+      else await primeShareAccess();
+      // Las dos rutas del mismo archivo se prueban UNA TRAS OTRA, no a la vez: en
+      // paralelo serían dos descargas de ~22 MB el mismo día.
+      for (const url of spFallbackUrls(fb.id)) {
+        try {
+          const dl = await gmGet(url, "arraybuffer", "", T_DESCARGA);
+          if (!esLibroValido(dl.response, fb.name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña" : "no es un Excel");
+          buf = dl.response; break;
+        } catch (e) { errores.push((e && e.message) || "error"); }
+      }
     }
     if (!buf) {
+      baseLog({ fase: "descarga", ok: false, ms: Date.now() - t0, err: (errores[0] || "sin respuesta").slice(0, 120) });
       // Diagnóstico CLARO (antes fallaba en silencio y nadie sabía por qué):
-      // v7.8: el caso /red|permiso/ casi siempre era la SESIÓN de SharePoint vencida:
-      // la petición redirige a login.microsoftonline.com y Tampermonkey la cortaba ahí
-      // (esos dominios ya están en @connect, pero sin sesión igual no hay archivo).
-      // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
-      // sesión, es que hay que quitarle la protección antes de subirlo.
+      // el caso /red|permiso/ casi siempre era la SESIÓN de SharePoint vencida; el
+      // archivo CON CONTRASEÑA se distingue del resto — no es un problema de sesión,
+      // es que hay que quitarle la protección antes de subirlo.
       const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo de la lista de prevención está protegido con contraseña — pida que lo guarden sin protección (en Excel: Archivo → Información → Proteger libro → Quitar contraseña)" // [COPY-UX]
         : errores.find((x) => /red|permiso/i.test(x)) ? "no se pudo conectar con la carpeta compartida de la sede" // [COPY-UX]
         : errores.find((x) => /401|403/.test(x)) ? "la carpeta compartida de la sede rechazó el acceso" // [COPY-UX]
         : errores.find((x) => /no es un Excel/i.test(x)) ? "la carpeta compartida de la sede pidió iniciar sesión en vez de entregar el archivo" // [COPY-UX]
         : (errores[0] || "sin respuesta");
-      if (!silent) setSummary("No se pudo descargar la lista de prevención — " + razon + ". Puede cargar el archivo del día con «Abrir PyM», o avisar al administrador del asistente.", "warn");
-      console.warn("[Vigilante] base PyM:", errores.join(" · "));
+      _pymAnotarFallo(razon);
+      if (!silent) setSummary("No se pudo descargar la base de prevención — " + razon + ". Puede cargar el libro a mano con «Abrir PyM», o avisar al administrador del asistente.", "warn");
+      console.warn("[Vigilante] base de prevención:", errores.join(" · "));
       return false;
     }
-    // En la revisión de frescura, state.pymFile YA está puesto (es la copia vieja de la
-    // piloto): solo se aborta si lo cargado NO es la piloto (PyM real o carga manual).
-    if (state.pymFile && !state.pymFallback) return true;
+    const mb = (buf.byteLength / 1048576).toFixed(1);
+    const msDesc = Date.now() - t0;
+    baseLog({ fase: "descarga", ok: true, ms: msDesc, mb: Number(mb), mtime: (meta && meta.mtime) || "" });
     progreso("Leyendo la base…");
-    const idx = await readPym(fb.name, buf);
-    if (state.pymFile && !state.pymFallback) return true;
-    // La copia persistente se guarda ANTES de aplicar (orden determinista) y con los
-    // metadatos reales del archivo, para que la próxima revisión de frescura compare bien.
-    await pilotoGuardar(idx, { name: (meta && meta.name) || fb.name, mtime: (meta && meta.mtime) || "", fp: pymFP(fb.name, (meta && meta.mtime) || "") });
-    // v18.0.58 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta, reproducido con
-    // el arnés: LA TERCERA GUARDA, QUE FALTABA. Esta misma comprobación está DOS veces más
-    // arriba —antes y justo después de `readPym`— precisamente para no pisar un PyM real que
-    // haya llegado mientras tanto. Pero `pilotoGuardar` empaqueta el índice con `packPym`,
-    // que cede el hilo varias veces, y después de ESE await ya no se volvía a mirar.
-    //
-    // Si en esa ventana `loadPymDiario` (que corre cada 10 min en la misma pestaña) termina
-    // de cargar el archivo real de hoy, las líneas de abajo lo reemplazan por la base piloto
-    // vieja. Y el daño no acaba ahí: `applyPymIdx` se llama SIN el 5.º parámetro, así que
-    // `state.pymDia` se vacía y `debeBuscarPymDiario()` vuelve a creer que la lista de hoy no
-    // se ha cargado. Encima el médico ve el cartel ámbar «Usando la base piloto (mientras
-    // llega la de hoy)» — una afirmación FALSA, porque la de hoy ya había llegado — y puede
-    // consultar actividades de referencia desactualizadas sobre pacientes reales.
-    //
-    // Reproducido: `state.pym.size` pasaba de 1 (el paciente real) a 0 (la piloto vacía).
-    // La copia en disco YA se guardó arriba, y eso está bien: sirve para mañana. Lo que no
-    // puede pasar es APLICARLA encima de la lista buena.
-    if (state.pymFile && !state.pymFallback) return true;
-    // v7.7: esta es la base PILOTO (respaldo) — antes esta línea decía "false" por error
-    // y el panel nunca alcanzaba a avisar "⚠ RESPALDO". Ahora sí marca correctamente que
-    // NO es el PyM real del día, para que loadPymDiario() sepa que puede reemplazarla.
-    state.pymFallback = true;
-    uxTrack("pym.fallback.red");
-    applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (base piloto — aún no llega la de hoy)", (meta && meta.mtime) || "", fb.name);
-    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca la lista real de hoy en la carpeta compartida de la sede.", false); // [COPY-UX]
+    let idx;
+    try {
+      idx = await readPym(fb.name, buf, baseSheetOpts());
+    } catch (e) {
+      // Integridad/estructura: hoja fijada ausente, índice vacío, ZIP corrupto… El
+      // índice NUEVO no se aplica ni se guarda: la caché anterior (la última versión
+      // VALIDADA) sigue mandando — ese es el rollback automático. Se reintenta en la
+      // siguiente vuelta del intervalo mientras no haya nada cargado.
+      const motivo = String((e && e.message) || e);
+      baseLog({ fase: "indice", ok: false, ms: Date.now() - t0, err: motivo.slice(0, 160) });
+      _pymAnotarFallo("el libro nuevo no se pudo leer (" + motivo + ")");
+      if (state.leader) notify("AMBAR", "📋 La base nueva no se pudo leer", (meta && meta.name ? meta.name : "el libro de la sede") + "\n" + motivo + ".\nSigo con la última copia buena y reintento solo.", true, "basebad|" + todayStamp());
+      return false;
+    }
+    const nombreReal = (meta && meta.name) || fb.name;
+    // «Abrir PyM» manual manda SIEMPRE (regla del proyecto): si el médico cargó un
+    // libro mientras bajaba este, no se pisa su pantalla — pero la copia persistente SÍ
+    // se renueva, para que el próximo arranque arranque con la versión nueva. Con la
+    // MISMA guarda de siempre (revisión adversarial): un libro que el mtr rechace no se
+    // cachea ni aquí — el invariante "solo se guarda lo que pasó las guardas" es total.
+    if (state.pymFile && state.pymOrigen === "manual") {
+      if (!mtrLibroNoParecePym(idx)) {
+        await pilotoGuardar(idx, { name: nombreReal, mtime: (meta && meta.mtime) || "", fp: pymFP(nombreReal, (meta && meta.mtime) || "") });
+        baseLog({ fase: "indice", ok: true, ms: Date.now() - t0 - msDesc, pacientes: idx.map.size, aplicado: false, mtime: (meta && meta.mtime) || "" });
+      } else {
+        baseLog({ fase: "indice", ok: false, ms: Date.now() - t0, err: "manual activo y libro rechazado: no se guardó" });
+      }
+      return true;
+    }
+    // v18.6.0 — PRIMERO se aplica y SOLO DESPUÉS se guarda la copia persistente: un
+    // índice que no pase las guardas de applyPymIdx no debe quedar cacheado (la v18.0.58
+    // ponía el orden inverso para una carrera con el PyM diario que ya no existe).
+    // El origen se fija SOLO tras la aceptación (revisión adversarial): un rechazo no
+    // deja un origen mentiroso encima del índice anterior.
+    const aplicado = applyPymIdx(idx, nombreReal, (meta && meta.mtime) || "", nombreReal);
+    if (!aplicado) { baseLog({ fase: "indice", ok: false, ms: Date.now() - t0, err: "applyPymIdx rechazó el índice" }); return false; }
+    state.pymOrigen = "base";
+    await pilotoGuardar(idx, { name: nombreReal, mtime: (meta && meta.mtime) || "", fp: pymFP(nombreReal, (meta && meta.mtime) || "") });
+    // Métricas de rendimiento (canal ux del tablero — las alertas de flota las vigilan):
+    // cajón de duración de la descarga y tamaño del índice aplicado.
+    const msIndice = Date.now() - t0 - msDesc;
+    uxTrack("base.descarga.ok");
+    uxTrack("base.descarga.ms." + (msDesc < 30000 ? "30s" : msDesc < 60000 ? "60s" : msDesc < 120000 ? "120s" : "lenta"));
+    uxTrack("base.indice.pacientes." + (state.pym.size < 100 ? "x100" : state.pym.size < 1000 ? "x1k" : "x10k"));
+    baseLog({ fase: "indice", ok: true, ms: msIndice, pacientes: idx.map.size, todos: idx.todos.size, mtime: (meta && meta.mtime) || "" });
+    if (!viaRefresh) {
+      notify("AZUL", "📋 Base de prevención cargada", nombreReal + "\n" + state.pym.size + " paciente(s) con actividades. Fuente única: el libro de la sede — se refresca a las 06:00 y a las 12:00.", false, "basecarga|" + todayStamp()); // [COPY-UX]
+    }
     return true;
   }
-  // v7.7: PyM DEL DÍA — primera opción. Busca en la carpeta de SharePoint (confirmada
-  // por captura real) el archivo cuyo nombre trae la fecha de hoy y lo descarga directo,
-  // sin que el médico entre a SharePoint. Si ya está cargado y no cambió, no hace nada
-  // (compara la huella nombre+fecha de modificación — no vuelve a descargar los mismos
-  // ~5-15 MB cada vez). Se llama periódicamente: la primera vez que lo encuentra
-  // REEMPLAZA lo que hubiera (incluida la base piloto, vía el mismo applyPymIdx() que ya
-  // sustituye todo el mapa de PyM, no lo mezcla).
-  let diarioEnCurso = false;
-  // v7.8.1: contador de chequeos SEGUIDOS en los que ni siquiera se pudo LISTAR la
-  // carpeta (la sesión de SharePoint murió a media jornada — el caso más peligroso,
-  // porque antes fallaba en silencio total y el médico seguía con la piloto sin
-  // enterarse de que el PyM real podía llevar horas subido). A los 30 min (3
-  // chequeos de 10 min) se avisa UNA sola vez al día.
-  let diarioFallosSesion = 0;
-  async function fetchSpFilesMultiFolder() {
-    const flds = CONFIG.SP.folders || [CONFIG.SP.folder];
-    let allRows = [];
-    let lastError = null;
-    for (const fld of flds) {
-      try {
-        const d = await gmJson(spListUrl(fld));
-        const r = spRows(d);
-        if (r && r.length) {
-          allRows.push(...r);
-          if (pickTodaysFile(r)) return allRows;
-        }
-      } catch (e) {
-        lastError = e;
-      }
-    }
-    if (allRows.length === 0 && lastError) throw lastError;
-    return allRows;
-  }
+  // v18.6.0 — EL FLUJO DEL ARCHIVO DIARIO («Agenda_Dia_CMB») FUE RETIRADO COMPLETO
+  // (mandato del médico, 07-sep): la base única de SEPTIEMBRE1 lo reemplaza al 100 %.
+  // Aquí vivían fetchSpFilesMultiFolder/loadPymDiario/pymDiarioMensajeFallo y los
+  // contadores de sesión del diario. La renovación de cookie (primeShareAccess) y la
+  // escalera de reintentos (schedulePymBase) SIGEN vivas para la base única.
 
   // v16.7.0 — AUDITORÍA #11. El mensaje vive en su propia función a propósito: la
   // diferencia entre «no pude mirar la carpeta» y «miré y el archivo de hoy no está»
@@ -14401,169 +14097,11 @@
   function _pymAnotarFallo(motivo) {
     try { state.pymUltimoFallo = motivo ? (motivo + " · " + new Date().toLocaleTimeString()) : ""; } catch (e) {}
   }
-  function pymDiarioMensajeFallo(noSePudoListar, hayPymCargado) {
-    if (noSePudoListar) {
-      return "No pude revisar la carpeta de la lista de prevención: no se pudo conectar con la carpeta compartida de la sede. NO sé si la lista de hoy ya está subida. "
-        + (hayPymCargado ? "Sigo con lo que hay cargado, que puede no ser lo último." : "Puede cargarla a mano con el botón 📂 «Abrir PyM».");
-    }
-    return "Aún no aparece la lista de prevención de hoy. "
-      + (hayPymCargado ? "Sigo con lo que hay cargado." : "Buscando también la base piloto mientras tanto.");
-  }
-
-  async function loadPymDiario(silent) {
-    if (diarioEnCurso || typeof GM_xmlhttpRequest === "undefined") return false;
-    diarioEnCurso = true;
-    try {
-      let filas;
-      let noSePudoListar = false;
-      try {
-        // v7.8.3: renueva el acceso por el enlace compartido ANTES de listar — así la
-        // gran mayoría de los equipos nunca ven un 401/403 en primer lugar.
-        // v16.7.0 — AUDITORÍA #11: esta llamada estaba FUERA del try, y es justo la que
-        // falla cuando la sesión de SharePoint muere a media jornada. Su excepción se iba
-        // al catch general de la función, así que diarioFallosSesion no llegaba nunca a 3
-        // y el aviso «llevo media hora sin poder revisar la carpeta» —el único que le
-        // dice al médico que su lista de prevención puede estar desactualizada— no salía
-        // jamás. El contador se reiniciaba de hecho en cada vuelta de 10 minutos. Ahora
-        // renovar el acceso cuenta como parte del listado, que es lo que es.
-        await primeShareAccess();
-        filas = await fetchSpFilesMultiFolder();
-        diarioFallosSesion = 0;                          // listó bien: la sesión está viva
-      } catch (eList) {
-        // Un solo reintento: fuerza refrescar el enlace compartido (por si la cookie
-        // ya había expirado) y vuelve a listar antes de darse por vencido.
-        try { await primeShareAccess(true); filas = await fetchSpFilesMultiFolder(); diarioFallosSesion = 0; }
-        catch (eList2) {
-          diarioFallosSesion++;
-          filas = [];
-          noSePudoListar = true;
-          if (diarioFallosSesion === 3 && state.leader) {
-            notify("AMBAR", "🔒 La lista de prevención no se está actualizando", "Llevo media hora sin poder revisar la carpeta de la lista de prevención — si el archivo de hoy ya está subido, no lo estoy viendo.\nPuede cargarlo con el botón 📂 «Abrir PyM» del panel mientras el administrador del asistente renueva el acceso.", false, "sesionvencida|" + todayStamp());
-          }
-        }
-      }
-      // v16.7.0 — AUDITORÍA #11: con la carpeta ilegible, `filas` quedaba en [] y el
-      // flujo seguía como si SharePoint hubiera contestado «hoy no hay archivo». De ahí
-      // salía «Aún no aparece la lista de prevención de hoy», que es un HECHO que nadie
-      // comprobó: puede llevar horas subida. No poder mirar y haber mirado son cosas
-      // distintas, y solo una de las dos justifica seguir con la base piloto tranquilo.
-      if (noSePudoListar) {
-        _pymAnotarFallo("no se pudo conectar con la carpeta compartida de la sede");
-        if (!silent) setSummary(pymDiarioMensajeFallo(true, !!state.pymFile), "warn"); // [COPY-UX]
-        return false;
-      }
-      const sel = pickTodaysFile(filas);
-      if (!sel) {
-        // ¿Subieron el de hoy pero en .xls antiguo? Avisar claro en vez de quedarse mudo.
-        const viejo = xlsViejoDeHoy(filas);
-        if (viejo && state.leader) notify("AMBAR", "📋 El PyM de hoy está en formato .xls antiguo", viejo.Name + "\nEse formato no se puede leer desde el navegador. Pide que lo guarden como .xlsx (Excel: Guardar como → Libro de Excel) y se cargará solo en el siguiente chequeo.", false, "xlsviejo|" + todayStamp());
-        _pymAnotarFallo("aún no aparece la lista de hoy en la carpeta");
-        if (!silent) setSummary(pymDiarioMensajeFallo(false, !!state.pymFile), "warn"); // [COPY-UX]
-        return false;
-      }
-      // Ya es exactamente este archivo (mismo nombre + misma fecha de modificación):
-      // nada que hacer, ahorra la descarga.
-      if (state.pymFP === pymFP(sel.Name, sel.TimeLastModified)) return true;
-      progreso("Descargando el PyM de hoy (" + sel.Name + ")…");
-      const dl = await gmGet(spDownloadUrl(sel.ServerRelativeUrl), "arraybuffer", "", T_DESCARGA);
-      if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
-      const idx = await readPym(sel.Name, dl.response);
-      // v18.0.7 — ver mtrLibroNoParecePym: no se acepta como lista de prevención un libro
-      // con cientos de documentos y CERO actividades pendientes. Se dice y se sigue con lo
-      // que hubiera antes, en vez de dejar al médico creyendo que nadie tiene nada.
-      if (mtrLibroNoParecePym(idx)) {
-        const huella = pymFP(sel.Name, sel.TimeLastModified);
-        if (!_pymRechazados.has(huella)) {
-          _pymRechazados.add(huella);
-          if (state.leader) notify("AMBAR", "📋 Ese archivo no parece la lista de prevención",
-            sel.Name + "\nSe leyó completo (" + idx.todos.size + " documentos) pero NO trae ni una actividad pendiente, así que no es el PyM del día y no se cargó.\nSuba el archivo de prevención de hoy a la carpeta, o cárguelo a mano con 📂 «Abrir PyM».",
-            true, "pymraro|" + todayStamp() + "|" + huella);
-        }
-        _pymAnotarFallo("«" + sel.Name + "» no trae actividades de PyM");
-        if (!silent) setSummary("«" + sel.Name + "» no trae actividades de PyM: no se cargó como lista del día.", "warn");
-        return false;
-      }
-      const eraRespaldo = state.pymFallback;
-      // v12.0.0 (del otro linaje) — El aviso de Windows solo sale cuando APORTA algo: la
-      // primera carga del día, la llegada del PyM real tras la base piloto, o una búsqueda
-      // pedida a mano. El script revisa la carpeta cada 10 minutos y vuelve a descargar en
-      // cuanto alguien guarda el Excel, así que sin esta condición el médico recibía el
-      // mismo cartel "PyM del día cargado" una y otra vez durante la consulta.
-      const teniaPymPreviamente = !!state.pymMTime;
-      state.pymFallback = false;
-      applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name, true);
-      if (!silent || eraRespaldo || !teniaPymPreviamente) {
-        // [NT-118/M19] — uid explícito por día y tipo: antes dependía del hash del texto
-        // (contador de pacientes cambiante = aviso "nuevo" en cada re-subida, sin tope).
-        notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
-          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false,
-          "pymupd|" + todayStamp() + (eraRespaldo ? "|respaldo" : teniaPymPreviamente ? "|actualizado" : "|primera"));
-      }
-      return true;
-    } catch (e) {
-      _pymAnotarFallo("no se pudo leer el archivo (" + ((e && e.message) || e) + ")");
-      if (!silent) setSummary("No pude leer el PyM del día (" + ((e && e.message) || e) + "). " + (state.pymFile ? "Sigo con lo que hay cargado." : "Probando la base piloto."), "warn");
-      return false;
-    } finally { diarioEnCurso = false; }
-  }
-  // CAPTADOR LIGERO en la pestaña de SharePoint (v7.3.2). Si la descarga desde
-  // Everest falla (permiso de Tampermonkey, sesión, 403…), este es el plan seguro:
-  // cuando usted abre SharePoint, la base se baja AQUÍ MISMO con fetch de la propia
-  // pestaña (misma sesión, mismos permisos con los que ya está viendo el archivo) y
-  // se comparte con Everest por el almacén de Tampermonkey. Solo actúa si falta la
-  // base de hoy; no monta panel, no observa nada, no repite rondas.
-  async function bootSharepointLite() {
-    try {
-      if (typeof GM_setValue === "undefined" || typeof GM_getValue === "undefined") return;
-      if (!S.baseAuto) return;
-      // "Ya está" SOLO si es de hoy, el paquete existe de verdad, Y no es la base
-      // piloto (si es piloto, seguimos intentando conseguir el PyM real de hoy).
-      const yaListo = GM_getValue("vgl_pym_dia", "") === todayStamp() && !GM_getValue("vgl_pym_esfallback", "1") && String(GM_getValue("vgl_pym", "") || "").length > 100;
-      if (yaListo) return;
-      spToast("Buscando el PyM de hoy…");
-      // v7.7: PRIMERA opción — el PyM real de hoy, listando la carpeta (misma sesión,
-      // sin permisos extra). Solo si no aparece se usa la base piloto de respaldo.
-      let nombre = "", buf = null, esFallback = true, mtime = "";
-      try {
-        const rl = await _fetchConTope(fetch, spListUrl(), { credentials: "include", headers: { Accept: "application/json;odata=nometadata" } });   // v18.0.104 (fila 6)
-        if (rl.ok) {
-          const sel = pickTodaysFile(spRows(await rl.json()));
-          if (sel) {
-            const rd = await _fetchConTope(fetch, spDownloadUrl(sel.ServerRelativeUrl), { credentials: "include" }, 60000);
-            if (rd.ok) { const b = await rd.arrayBuffer(); if (esLibroValido(b, sel.Name)) { buf = b; nombre = sel.Name; mtime = sel.TimeLastModified || ""; esFallback = false; } }
-          }
-        }
-      } catch (e) {}
-      if (!buf) {
-        let fb = CONFIG.SP.respaldo;
-        if (S.respaldoId && /\S/.test(S.respaldoId)) { const g = parseSpDocId(S.respaldoId); if (g) fb = { id: g, name: "Base PyM (enlace personalizado)" }; }
-        if (!fb || !fb.id) return;
-        let err = "";
-        for (const url of spFallbackUrls(fb.id)) {
-          try {
-            const r = await _fetchConTope(fetch, url, { credentials: "include" }, 60000);   // v18.0.104 (fila 6)
-            if (!r.ok) throw new Error("HTTP " + r.status);
-            const b = await r.arrayBuffer();
-            if (!esLibroValido(b, fb.name)) throw new Error("no es un Excel");
-            buf = b; nombre = fb.name; break;
-          } catch (e) { err = (e && e.message) || "error"; }
-        }
-        if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábralo una vez con su usuario y recargue esta página."); return; }
-      }
-      const idx = await readPym(nombre, buf);
-      // v18.0.7 — misma guarda que en el camino automático: un libro con cientos de
-      // documentos y cero actividades no es el PyM. Aquí importa AÚN MÁS no guardarlo,
-      // porque esta rama escribe la caché (`vgl_pym`) que leen TODAS las pestañas y que
-      // sobrevive a las recargas: un libro equivocado cacheado apaga el aviso el día entero.
-      if (mtrLibroNoParecePym(idx)) {
-        spToast("⚠ «" + nombre + "» se leyó completo (" + idx.todos.size + " documentos) pero no trae ni una actividad pendiente: no es la lista de prevención y NO se guardó.");
-        return;
-      }
-      const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (base piloto — aún no llega la de hoy)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
-      if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", esFallback ? "1" : ""); }
-      spToast((esFallback ? "⚠ Sin PyM de hoy — se usará la base piloto (referencia): " : "✓ PyM de hoy capturado: ") + nombre + " — " + idx.map.size + " paciente(s). Ya está disponible en Everest.");
-    } catch (e) { try { spToast("No pude capturar el PyM: " + ((e && e.message) || e)); } catch (x) {} }
-  }
+  // v18.6.0 — el CAPTADOR de la pestaña de SharePoint (bootSharepointLite, v7.3.2) fue
+  // RETIRADO junto con el archivo diario: su razón de ser era cazar el «PyM de hoy»
+  // desde la pestaña de SharePoint cuando la descarga desde Everest fallaba. Con la
+  // base única por GUID, la descarga desde Everest es la única vía (más el «Abrir PyM»
+  // manual); spToast sigue vivo porque lo usa el HUD de laboratorios.
 
   // Hasta 3 intentos espaciados por si la sesión de SharePoint aún no está lista al
   // arrancar el turno. Solo descarga la pestaña líder; las demás esperan la caché.
@@ -14572,9 +14110,9 @@
     const espera = baseIntentos === 0 ? 2000 : baseIntentos === 1 ? 45000 : 180000;
     baseIntentos++;
     setTimeout(async () => {
-      if (state.pymFile || await loadPymFromCache()) return;
+      if (state.pymFile) return;
       if (!heartbeat()) { schedulePymBase(); return; }
-      console.log("[Vigilante] base PyM: intento " + baseIntentos + " de 3");
+      console.log("[Vigilante] base de prevención: intento " + baseIntentos + " de 3");
       // El ÚLTIMO intento habla: si falla, el motivo queda a la vista en el panel
       // (antes los tres intentos eran mudos y el "PyM sin cargar" no se explicaba).
       const ok = await loadPymBase(baseIntentos < 3).catch(() => false);
@@ -14655,13 +14193,13 @@
   function loadPymFile(file) {
     const name = file.name.toLowerCase(); const reader = new FileReader();
     reader.onerror = () => { try { _saludMarca("pym", false); } catch (e) {} setSummary("No se pudo leer el archivo PyM.", "error"); };
-    // v12.4.1 — Un archivo elegido a mano solo cuenta como "el diario real de HOY" (y por
-    // tanto detiene la re-búsqueda automática) si su NOMBRE trae la fecha de hoy. Un
-    // Excel de ayer cargado a mano ya no apaga la búsqueda: el real de hoy lo reemplaza
-    // en cuanto aparece en SharePoint (hallazgo ALTO de la revisión adversarial).
-    const esDeHoy = esNombreDeHoy(file.name);
-    if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); state.pymFallback = false; applyPymIdx(idx, file.name, "", file.name, esDeHoy); } catch (err) { setSummary("No se pudo leer el archivo (.csv): " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
-    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; use .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : ""), "", file.name, esDeHoy); } catch (err) { setSummary("No se pudo leer el archivo (.xlsx) (" + err.message + "). Pruebe .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
+    // v18.6.0 — la carga manual («Abrir PyM») ya no compite con ningún archivo diario:
+    // lo que el médico elige SE APLICA y queda marcado como origen "manual" para que
+    // la base automática no lo pise en un refresco de las 06:00/12:00. La selección de
+    // hoja sigue siendo automática (scoreSheet) porque un libro puntual puede tener
+    // cualquier forma.
+    if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); const previa = state.pymOrigen; state.pymOrigen = "manual"; if (!applyPymIdx(idx, file.name, "", file.name)) state.pymOrigen = previa; } catch (err) { setSummary("No se pudo leer el archivo (.csv): " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
+    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; use .csv."); const r = await readPymWorkbookStream(e.target.result); const previa = state.pymOrigen; state.pymOrigen = "manual"; state.pymHoja = r.sheetName || ""; if (!applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : ""), "", file.name)) state.pymOrigen = previa; } catch (err) { setSummary("No se pudo leer el archivo (.xlsx) (" + err.message + "). Pruebe .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
   }
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
@@ -15262,12 +14800,11 @@
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
     setSummary("Nuevo día: se reinició el seguimiento.");
-    // v7.8.1: si la pestaña quedó abierta toda la noche (turno que cruza medianoche), el
-    // PyM que tiene cargado es el de AYER. Antes se seguía mostrando "al día"/"sin
-    // pendiente" cruzado contra la base vieja hasta el siguiente tick del intervalo de
-    // 10 min — una ventana en la que el cruce PyM podía leerse como de hoy sin serlo.
-    // Ahora se dispara YA la búsqueda del PyM real de hoy (la líder; el resto espera).
-    if (heartbeat() && typeof GM_xmlhttpRequest !== "undefined") loadPymDiario(true).catch(() => {});
+    // v7.8.1 → v18.6.0: si la pestaña quedó abierta toda la noche (turno que cruza
+    // medianoche), la copia que tiene cargada es de AYER. Se dispara YA la revisión de
+    // frescura de la base única (la pestaña líder; el resto espera la caché) — a partir
+    // de las 06:00 Bogotá descargará la versión nueva si el libro cambió.
+    if (heartbeat() && typeof GM_xmlhttpRequest !== "undefined") { state.pymDeAyer = true; pilotoFreshCheck(); }
   }
   // v18.0.12 — la hora de reloj para la fila del hueco de lectura, que se escribe ANTES de
   // que colorAndAlert calcule su `stamp` habitual. Misma forma, una sola fuente.
@@ -19892,20 +19429,10 @@
       }
       #vgl-root:not(.light) .vgl-chip.vgl-chip-mas{color:var(--c-morado) !important}
       #vgl-root:not(.light) .vgl-chip.vgl-chip-ocultas{color:var(--c-morado) !important}
-      /* v18.0.43 — chip de un pendiente que NO viene de la lista oficial de hoy sino del
-         respaldo (base piloto). Ámbar y con borde punteado a propósito: tiene que leerse
-         distinto de un chip normal de un vistazo, porque su antigüedad es distinta. El
-         color lleva su marca de prioridad, como todo color de este proyecto — escrita en la
-         declaración de abajo y NO en este comentario, porque el censo de la suite 25 cuenta
-         texto crudo y una mención aquí le sumaría una regla que no existe. */
-      .vgl-chip.vgl-chip-resp{
-        color:var(--c-ambar) !important;
-        border:1px dashed rgba(var(--rgb-ambar),.45);
-        background:rgba(var(--rgb-ambar),.08);
-      }
-      #vgl-root:not(.light) .vgl-chip.vgl-chip-resp{color:var(--c-ambar) !important}
-      .vgl-none.resp{color:var(--c-ambar) !important;font-style:normal;font-weight:700}
-      #vgl-root:not(.light) .vgl-none.resp{color:var(--c-ambar) !important}
+      /* v18.6.0 — las CUATRO reglas del chip del respaldo (v18.0.43: .vgl-chip-resp y
+         .vgl-none.resp con sus gemelas oscuras) fueron retiradas: sus únicos emisores
+         (los chips "Del respaldo" de la tarjeta) murieron con la consulta al respaldo
+         del extinto archivo diario. Residuo puro, censado en la suite 25. */
       .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2) !important;font-style:italic} /* Mínimo 12px */
       .vgl-none.falta{color:var(--fg3) !important;font-style:normal;font-weight:700}
 
@@ -22640,6 +22167,14 @@
     [/ObtenerListadoDiagnostico/, "listadoDiagnostico"],
     [/GuardarOrdenamiento/, "guardarOrdenamiento"],
     [/FinalizarTicket/, "finalizarTicket"],
+    // v18.4.6 (cierre 07-sep, segunda tanda): los CINCO endpoints reales que la
+    // auditoría del export contó dentro de api.otro (2.489 llamadas sin atribución).
+    // Literales del call site real — ver docs/AUDITORIA_TELEMETRIA_EXPORT_20260907.md §3.
+    [/ObtenerOrdenamientoPorPacienteIdVigente/, "ordenVigente"],
+    [/GetValidacionExamenCronicos/, "validacionExamenes"],
+    [/ObtenerHistoricoSignosVitales/, "historicoSignos"],
+    [/HistoricoMedicamentoHCM/, "historicoMedicamentos"],
+    [/CargarMedicamentosPaciente/, "medicamentosPaciente"],
   ];
   function _rumEndpointLabel(url) {
     const u = String(url || "");
@@ -31944,22 +31479,16 @@
     // catálogo institucional real (Ordenamientos de Everest) si de verdad corresponde algo.
     let hayCoincidencia = matchedPackages && matchedPackages.length > 0;
     let pkgsToRender = hayCoincidencia ? matchedPackages : [];
-    // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. Los tres motivos ya se podían
-    // distinguir con lo que el estado guarda; hasta hoy los tres salían con la misma frase,
-    // que además afirmaba algo sobre el paciente en los dos casos en que no se sabe nada
-    // de él. `pymTodos` es null mientras no se haya indexado ninguna base: entonces no se
-    // puede afirmar que el paciente no esté en la lista, y el primer motivo ya manda.
+    // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. `pymTodos` es null mientras
+    // no se haya indexado ninguna base: entonces no se puede afirmar que el paciente no
+    // esté en el libro, y el primer motivo ya manda. v18.6.0 — con la base única ya no
+    // hay "respaldo" que consultar: los motivos son sin_base / no_esta_en_base /
+    // sin_pendientes.
     const _pymSinActOpts = {
       listaCargada: !!state.pymFile,
-      esBasePiloto: state.pymFallback === true,
-      diaDistinto: !!state.pymFile && state.pymDia !== todayStamp(),
       pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
         ? state.pymTodos.has(normalizeKey(apt.doc_id))
         : null,
-      // v18.0.43 — lo que diga el respaldo de este paciente, si es que aplica consultarlo
-      // (ver respaldoDiceDe: null en cuanto el paciente sí está en la oficial, no hay
-      // respaldo cargado, o el respaldo YA es la lista activa).
-      respaldo: (apt && apt.doc_id) ? respaldoDiceDe(apt.doc_id) : null,
     };
     let _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades(_pymSinActOpts);
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
@@ -32156,7 +31685,7 @@
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" || _pymSinAct.motivo === "piloto_esta_sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista de prevención")}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `Generar ${pkgsToRender.length} ${pkgsToRender.length === 1 ? "orden" : "órdenes"}` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : _pymSinAct.motivo === "no_esta_en_base" ? "Paciente fuera de la base" : "No hay base de prevención")}</button>
         </div>
       </div>
     `;
@@ -35090,7 +34619,7 @@
         <div class="vgl-fld"><label>Actividades PyM a ocultar<span class="vgl-hint">Separadas por coma. Las actividades de VIH permanecen visibles por seguridad clínica.</span></label><input type="text" id="c-exc" value="${escapeHtml(S.excluir)}"></div>
         <div class="vgl-fld"><label>Recordatorio de carga PyM<span class="vgl-hint">Hora programada para verificar disponibilidad de la lista de prevención.</span></label><input type="time" id="c-rec" value="${escapeHtml(S.recordatorio)}"></div>
         <div class="vgl-fld"><label>Probar aviso del paciente<span class="vgl-hint">Muestra una vista previa del aviso único (prevención + abandono RCV + laboratorios vencidos) con datos de ejemplo.</span></label><button class="vgl-btn" id="c-avisotest">Probar</button></div>
-        <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
+        <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Descarga el libro de la base de la sede (por identificador único) y lo refresca a las 06:00 y a las 12:00.</span></label>${sw("c-base", S.baseAuto)}</div>
 <!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
              arriba, a la sección siempre visible: son operativos, no técnicos. -->
         <!-- v17.58.2 — mismo tratamiento que "Ayudar a mejorar": obligatoria, sin interruptor. -->
@@ -35854,10 +35383,11 @@
   function render(list, source, at) {
     if (source) state.ultimaLectura = Date.now();
     const sinCruce = state.pymFile && state.pym.size > 0 && list.length > 0 && list.every((a) => !a.pym || !a.pym.length);
-    // v7.8.3: texto más claro cuando se está usando la base PILOTO (no la de hoy) — antes
-    // decía solo "⚠ RESPALDO", una palabra que no explica QUÉ significa ni QUÉ hacer.
+    // v18.6.0 — la línea de estado habla de la BASE ÚNICA: ya no hay "de hoy" vs
+    // "piloto". El aviso de cruce de medianoche se conserva (una pestaña abierta toda
+    // la noche puede quedar mostrando la copia descargada el día anterior).
     const pymTxt = state.pymFile
-      ? (`PyM: ${state.pym.size}` + (state.pymDeAyer ? " · ⚠ base de AYER (cargue el Excel de hoy)" : "") + (state.pymFallback ? " · ⚠ base piloto (aún no llega la de hoy)" : "") + (sinCruce ? " ⚠ SIN CRUCE (Ajustes→Diag)" : ""))
+      ? (`PyM: ${state.pym.size}` + (state.pymDeAyer ? " · ⚠ copia de AYER (cruza la medianoche: refresca o recarga)" : "") + (sinCruce ? " ⚠ SIN CRUCE (Ajustes→Diag)" : ""))
       // v18.0.11 — sin lista, se dice POR QUÉ. Antes ponía «PyM sin cargar» a secas y el
       // médico no tenía forma de saber si era la sesión de SharePoint, un archivo que aún
       // no han subido, o un libro equivocado. Reporte suyo: «no sé por qué».
@@ -35986,24 +35516,11 @@
       // Tres lecturas distintas y honestas cuando no hay chips que mostrar: tiene
       // pendientes sin registrar / está al día / no cruza con la base (paciente nuevo o
       // cédula que no coincide, hay que revisarlo). Nunca se dice "al día" sin haber
-      // podido comprobarlo (Regla D).
+      // podido comprobarlo (Regla D). v18.6.0 — la consulta al respaldo fue retirada
+      // con el archivo diario: con la base única, quien no está en el libro sale
+      // directamente como "sin registro en PyM".
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
-      // v18.0.43 — pedido del médico (1-sep): al que la lista OFICIAL de hoy no conoce, se
-      // le pregunta al respaldo. Solo a ese; y lo que conteste sale marcado como del
-      // respaldo, nunca confundido con un pendiente de hoy. respaldoDiceDe() devuelve null
-      // en cuanto algo no aplica (paciente en la oficial, sin respaldo cargado, o el
-      // respaldo YA es la lista activa), y entonces esta tarjeta se pinta igual que antes.
-      const resp = enBase ? null : respaldoDiceDe(a.doc_id);
-      const respTitulo = resp ? escapeHtml("Del respaldo: " + resp.fuente + (resp.fecha ? " · " + String(resp.fecha).slice(0, 10) : "") + ". No es la lista de hoy.") : "";
-      const faltaHtml = (resp && resp.estado === "con_pendientes")
-        ? `<div class="vgl-none resp" title="${respTitulo}">Sin registro en el PyM de hoy · según el respaldo:</div>`
-          + `<div class="vgl-pyms">${panelActivities(resp.lista).slice(0, 3).map((p) => `<span class="vgl-chip vgl-chip-resp" title="${respTitulo}">${escapeHtml(p)}</span>`).join("")}`
-          + `${panelActivities(resp.lista).length > 3 ? `<span class="vgl-chip vgl-chip-resp" title="${escapeHtml(panelActivities(resp.lista).slice(3).join(", "))}">+${panelActivities(resp.lista).length - 3} más</span>` : ""}</div>`
-        : (resp && resp.estado === "sin_pendientes")
-          // Regla D al revés: NO se dice "al día". Que en una base de referencia no hubiera
-          // nada anotado no prueba que hoy no le falte nada — solo que ahí no había nada.
-          ? `<div class="vgl-none falta" title="${respTitulo}">Sin registro en el PyM de hoy · en el respaldo tampoco hay nada anotado</div>`
-          : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`;
+      const faltaHtml = `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`;
       const pyms = pymsVisibles.length
         ? `<div class="vgl-pyms">${pymsVisibles.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipDeMas}${chipOcultas}</div>`
         : ((a.pym || []).length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
@@ -36810,7 +36327,7 @@
       "\n--- PyM ---", "Archivo: " + (state.pymFile || "sin cargar"), "Pacientes con pendientes: " + state.pym.size,
       "Documentos totales en la hoja: " + (state.pymTodos ? state.pymTodos.size : "n/a"),
       "Último fallo al buscar la lista: " + (state.pymUltimoFallo || "(ninguno)"),
-      "Base automática activa: " + (S.baseAuto ? "sí" : "no") + " · id: " + ((CONFIG.SP.respaldo && CONFIG.SP.respaldo.id) || "n/a"),
+      "Base automática activa: " + (S.baseAuto ? "sí" : "no") + " · id: " + ((CONFIG.SP.base && CONFIG.SP.base.id) || "n/a") + " · hojas: " + ((CONFIG.SP.base && CONFIG.SP.base.sheet) || "auto") + "+" + ((CONFIG.SP.base && CONFIG.SP.base.sheetExtra) || "—") + " · refresco: " + ((CONFIG.SP.base && CONFIG.SP.base.horasRefresco || []).join("/") + " Bogotá") + " · ventana revisada: " + (typeof GM_getValue !== "undefined" ? (GM_getValue(PILOTO_CHK, "") || "(ninguna)") : "?"),
       "\n--- CRUCE PyM ↔ AGENDA (v7.3.3) ---", (function () {
         try {
           const mask = (s) => { s = String(s == null ? "" : s); return s ? s.slice(0, 3) + "…(" + s.length + " díg.)" : "(vacío)"; };
@@ -36878,7 +36395,8 @@
       }
   }
 
-  // Recordatorio: si a la hora configurada todavía no hay PyM cargado, avisa (una vez al día).
+  // Recordatorio: si a la hora configurada todavía no hay base cargada, avisa (1×/día).
+  // v18.6.0 — reescrito para la base única (antes «Falta el PyM de hoy»).
   function pymReminderCheck() {
     try {
       if (!state.leader || !S.recordatorio || state.pymFile) return;
@@ -36888,7 +36406,7 @@
       if (now.getHours() * 60 + now.getMinutes() < h * 60 + (isFinite(m) ? m : 0)) return;
       if (localStorage.getItem("vgl_rem") === todayStamp()) return;
       localStorage.setItem("vgl_rem", todayStamp());
-      notify("AMBAR", "📋 Falta el PyM de hoy", "Todavía no se ha cargado la lista de prevención de hoy.\nPulse el botón 📂 «Abrir PyM» (arriba en el panel del asistente) y elija el archivo del día.", false, "rem|" + todayStamp());
+      notify("AMBAR", "📋 Falta la base de prevención", "Todavía no se ha podido cargar el libro de la base de prevención.\nEl reintento es automático; si sigue sin salir, pulse 📂 «Abrir PyM» (arriba en el panel) y elija el libro, o revise la conexión a la carpeta de la sede.", false, "rem|" + todayStamp());
     } catch (e) {}
   }
 
@@ -37510,7 +37028,12 @@
                 aplicarBloqueoVersionObsoleta(minVer);
                 return;
               }
-              try { localStorage.removeItem("vgl_pym_dia"); } catch (e) {}
+              // v18.6.0 — se retiró el ritual removeItem("vgl_pym_dia") (clave del
+              // extinto diario, ya nadie la escribe). El reemplazo con sentido: al
+              // recargar con versión nueva se ABRE la ventana de refresco de la base
+              // (sello vgl_piloto_chk), para que la versión recién instalada revise
+              // frescura de una vez y no herede el "ya revisé" de la versión vieja.
+              try { if (typeof GM_setValue !== "undefined") GM_setValue(PILOTO_CHK, ""); } catch (e) {}
               setSummary(`🔄 Vigilante se actualiza a v${minVer}...`, "info");
               setTimeout(() => location.reload(), 2000);
             }
@@ -38029,66 +37552,36 @@
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue
     // revisando el diario cada 10 min — así en cuanto lo suban, reemplaza SOLO lo que
     // hubiera cargado (incluida la base piloto). «Abrir PyM» siempre puede reemplazar.
-    // v7.8: DIFERIDO a un momento libre del navegador (requestIdleCallback) — la página
-    // de Everest termina de cargar primero; el PyM se materializa por tandas después.
+    // v7.8 → v18.6.0: arranque de la BASE ÚNICA, diferido a un momento libre del
+    // navegador (la página de Everest termina de cargar primero). Primero la copia
+    // local (instantánea), y solo si no existe, la escalera de descarga con reintentos.
+    // Además se purgan UNA vez las claves del extinto archivo diario (hasta 12 MB).
     idleRun(async () => {
-      if (await loadPymFromCache()) return;
-      if (heartbeat()) { const ok = await loadPymDiario(true).catch(() => false); if (!ok) schedulePymBase(); }
+      _vglPurgarCacheDiariaLegacy();
+      if (await pilotoDesdeCache()) { pilotoFreshCheck(); return; }
+      if (heartbeat()) { const ok = await loadPymBase(true).catch(() => false); if (!ok) schedulePymBase(); }
       else schedulePymBase();
     }, 4000);
-    // v12.4.0 — BÚSQUEDA ACTIVA DEL DIARIO, CON PARADA. Cada 10 minutos, durante toda la
-    // jornada, se busca el Agenda_Dia_CMB de HOY en SharePoint — pero SOLO mientras no
-    // esté cargado (sin nada, con la base piloto de respaldo, o con el PyM de otro día).
-    // El archivo lo suben en el transcurso de la mañana: mientras tanto manda la piloto,
-    // y en cuanto el real aparece, loadPymDiario reemplaza TODO (applyPymIdx → panel
-    // repintado con los datos nuevos) y esta re-búsqueda se detiene sola — pedido
-    // explícito del consultorio (2026-08-11). Nota: la revisión "¿subieron una
-    // corrección a mediodía?" de v7.8.1 se sacrifica a propósito con esta parada; si un
-    // archivo cargado resulta equivocado, «Abrir PyM» manual sigue mandando siempre.
-    const tPymDiario = setInterval(() => {
+    // v18.6.0 — DOS intervalos de la base única (reemplazan al buscador del diario y al
+    // captador de la pestaña SharePoint):
+    //   · tBaseMinuto (60 s): solo vigila la compuerta de refresco — la ventana de la
+    //     mañana abre a las 06:00 Bogotá y la de la tarde a las 12:00; cada una se sella
+    //     al contestar los metadatos (1 KB). Un minuto de granularidad basta: el sello
+    //     corta en seco cualquier repetición, y una falla de red a las 06:05 reintenta
+    //     al minuto siguiente en vez de dejar la copia vieja hasta el mediodía.
+    //   · tBaseFalta (10 min): reintento de la carga si tras la escalera de arranque
+    //     sigue sin haber NADA (p. ej. red caída a las 6 a.m.). Con la base cargada no
+    //     cuesta nada (sale de una).
+    const tBaseMinuto = setInterval(() => { pilotoFreshCheck(); baseSincronizarEntrePestanas(); }, 60000);
+    const tBaseFalta = setInterval(() => {
       if (!heartbeat()) return;
-      if (debeBuscarPymDiario()) loadPymDiario(true);
-      // v7.8.1: si después de todo esto sigue sin haber NADA cargado (ni PyM de hoy ni
-      // piloto — p. ej. los 3 intentos del arranque se agotaron por una falla pasajera de
-      // red a las 6 a.m.), se reintenta la piloto aquí. Sin esto, la promesa de "si no
-      // está el de hoy, usa la piloto mientras tanto" solo regía los primeros ~4 minutos
-      // de vida de la pestaña (hallazgo de la auditoría adversarial).
       if (!state.pymFile) loadPymBase(true);
-      // Revisión de frescura de la PILOTO (máx. 1 vez por franja mañana/tarde; se
-      // autolimita adentro, así que colgarla de este mismo intervalo no cuesta nada).
-      pilotoFreshCheck();
     }, 10 * 60 * 1000);
-    // Enganche del captador: si la base se capturó en la pestaña de SharePoint DESPUÉS
-    // de arrancar Everest, se toma sola. Solo mira mientras no haya nada cargado; en
-    // cuanto hay PyM, esta revisión no cuesta nada (sale de una).
-    // v7.8: además, si aquí quedó la base PILOTO pero el captador ya consiguió el PyM
-    // REAL de hoy, se adopta el real desde la caché compartida — sin depender de que la
-    // descarga directa desde Everest (que pudo ser justo la que falló) lo reintente.
-    const tPymCaptador = setInterval(() => {
-      try {
-        if (!state.pymFile) { loadPymFromCache(); return; }
-        if (state.pymFallback && typeof GM_getValue !== "undefined" &&
-            GM_getValue("vgl_pym_dia", "") === todayStamp() && GM_getValue("vgl_pym_esfallback", "1") === "") {
-          const raw = GM_getValue("vgl_pym", "");
-          if (raw && raw.lastIndexOf('{"v":3', 0) === 0) {
-            unpackPym(raw, makeYielder(15)).then((u) => {
-              if (u && u.meta.date === todayStamp() && !u.meta.fb && state.pymFallback) {
-                state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = false;
-                afterPymLoaded((u.meta.name || "PyM") + " (auto)", true);
-                notify("AZUL", "📋 Ya llegó el PyM real de hoy", (u.meta.name || "PyM") + "\n" + state.pym.size + " paciente(s). Se reemplazó la base piloto.", false, "pymreal|" + todayStamp());
-              }
-            }).catch(() => {});
-          }
-        }
-      } catch (e) {}
-    }, 60000);
-    // v15.x — Estos dos intervalos vivian sin referencia: emergencyTeardown() solo cancela
-    // lo que este en state.timers, asi que el kill-switch remoto NO los detenia. La pestaña
-    // seguia consultando SharePoint (loadPymDiario/loadPymBase/pilotoFreshCheck) y
-    // desempacando el libro de PyM (unpackPym, ~13,6 MB) cada 10 min, con la interfaz ya
-    // retirada y el cartel de "Pausa de seguridad remota activa" en pantalla.
-    if (Array.isArray(state.timers)) state.timers.push(tPymDiario, tPymCaptador);
-    console.log("[Vigilante] userscript v" + VERSION + " activo (MODO LIGERO: lectura de la página + PyM manual).");
+    // v15.x — estos intervalos viven referenciados para que emergencyTeardown() (kill-switch
+    // remoto) los cancele: la pestaña no debe seguir consultando SharePoint con la
+    // interfaz retirada y el cartel de "Pausa de seguridad remota activa" en pantalla.
+    if (Array.isArray(state.timers)) state.timers.push(tBaseMinuto, tBaseFalta);
+    console.log("[Vigilante] userscript v" + VERSION + " activo (base única de prevención: refresco 06:00/12:00 Bogotá).");
     } catch (eBoot) {
       console.error("[Vigilante] boot() abortó por una excepción sin capturar — el asistente puede quedar INACTIVO en esta pestaña hasta recargar:", eBoot);
       try { reportarError("boot", String((eBoot && eBoot.message) || eBoot), "boot"); } catch (e2) {}
@@ -38812,8 +38305,11 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   // antes corría la entrada del script, sin perder la corrección v16.2.4.
   function mtrArrancarTodo() {
     if (/sharepoint\.com$/i.test(location.hostname)) {
-      // En SharePoint SOLO corre el captador ligero de la base (y solo si falta la de hoy).
-      bootSharepointLite();
+      // v18.6.0 — el captador ligero (bootSharepointLite) fue retirado con el archivo
+      // diario: la base única se descarga desde la propia pestaña de Everest. Aquí no
+      // se monta nada (la @match de SharePoint se conserva para no romper instalaciones
+      // vigentes, pero el arranque en SharePoint es un no-op silencioso).
+      console.log("[Vigilante] pestaña de SharePoint: aquí ya no corre nada (base única gestionada desde Everest).");
       return;
     }
     apiObservar(window); // aprende la llamada de la agenda en cuanto Everest la haga
