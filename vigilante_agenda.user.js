@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.1.0
+// @version      18.4.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.1.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1164,18 +1164,12 @@
 
   // Observador de Navegación y Secciones Everest
   let lastObservedUrl = "";
-  const _navLogTimer = setInterval(() => {
-    if (location.href !== lastObservedUrl) {
-      const oldUrl = lastObservedUrl;
-      lastObservedUrl = location.href;
-      vglLog("NAV", "UrlChanged", { from: oldUrl, to: lastObservedUrl, section: seccionActiva() });
-    }
-  // v15.5.0 (auditoría de rendimiento): 1 s → 5 s. El registro de navegación no necesita
-  // granularidad de segundo; a 1 s eran 3.600 despertares/hora del hilo principal solo
-  // para comparar una cadena. Con 5 s el dato es el mismo y sobran 2.880 despertares.
-  // v18.0.134 (auditoría 2026-09-03, B13) — el identificador queda guardado: el apagado
-  // de emergencia lo detiene y el script muerto no vuelve a despertar cada 5 segundos.
-  }, 5000);
+  // v18.2 (P11) — el registro ya NO se instala al evaluar el script: antes de aceptar los
+  // términos no puede despertar nada cada 5 segundos. Vive en _instalarLatidosBase(), que
+  // boot() llama tras el consentimiento. El identificador sigue aquí, a propósito, porque
+  // emergencyTeardown lo detiene (v18.0.134, B13). v15.5.0: 5 s bastan para el registro
+  // (a 1 s eran 3.600 despertares/hora del hilo para comparar una cadena).
+  let _navLogTimer = null;
  // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
@@ -1869,10 +1863,7 @@
   // cuando NINGÚN radio del par está seleccionado todavía.
   function _marcarUroanalisisSi() {
       try {
-          // v18.1 (M2M f36) — ancla por SUFIJO del name: el prefijo "resultadoPrograma."
-          // es estructura interna del FormControl de Angular (refactorable); lo
-          // identitario del control es su nombre final, "swUroanalisis".
-          const radios = document.querySelectorAll('input[name$="swUroanalisis"]');
+          const radios = document.querySelectorAll('input[name="resultadoPrograma.swUroanalisis"]');
           let yaElegido = false, radioSi = null;
           for (const el of radios) {
               if (el.checked) yaElegido = true;
@@ -2599,7 +2590,6 @@
       }
     } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
   }
-  function _atheneaSesionVivaParaTest() { return atheneaSesionViva; }
 
   async function getAtheneaSolicitudesAuto(docId) {
     const doc = String(docId || "").replace(/\D/g, "");
@@ -2639,7 +2629,7 @@
       const r2 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/BuscarPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp1.boundary}` }, data: mp1.body });
       diag("2/3 POST BuscarPaciente", "status=" + r2.status + " len=" + (r2.responseText || "").length);
       if (r2.status !== 200) { console.warn("[Vigilante Athenea] paso 2 falló: HTTP " + r2.status); return null; }
-      if (_atheneaPareceLogin(r2.responseText)) { atheneaSesionViva = false; console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
+      if (_atheneaPareceLogin(r2.responseText)) { console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
 
       // Sin IdPaciente no se avanza: puede ser que Athenea no tenga a este
       // paciente, o que la búsqueda haya devuelto una LISTA de coincidencias
@@ -2974,30 +2964,11 @@
   }
 
   // Primer elemento del DOM que exista entre el id principal y sus alternativas.
-  // v18.1.1 (FIX 9 M2M) — Everest ya demostró renderar el MISMO id/name en varios
-  // <input> a la vez (HbA1c vs Hemoglobina, v12.3.26). getElementById/querySelector
-  // devuelven SIEMPRE el primero del documento; si ese primero vive en una copia
-  // OCULTA (pestaña de fondo, acordeón plegado, plantilla residual de Angular),
-  // escribíamos en una casilla que el médico no ve. Ahora se recolectan TODOS los
-  // candidatos por id y por name; si hay varios, gana el primero VISIBLE y habilitado;
-  // si ninguno lo es, se devuelve el primero (comportamiento de siempre, sin regresión).
   function _findLabField(primaryId, altIds) {
       for (const id of [primaryId].concat(altIds || [])) {
           if (!id) continue;
-          const cands = [];
-          const push = (el) => { if (el && cands.indexOf(el) === -1) cands.push(el); };
-          push(document.getElementById(id));
-          let esc = null;
-          try { esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id.replace(/[^a-zA-Z0-9_-]/g, "\\$&"); } catch (e) { esc = id; }
-          try { push(document.querySelector(`[name="${id}"]`)); } catch (e) {}
-          try { Array.prototype.forEach.call(document.querySelectorAll("#" + esc), push); } catch (e) {}
-          try { Array.prototype.forEach.call(document.querySelectorAll('[name="' + esc + '"]'), push); } catch (e) {}
-          if (!cands.length) continue;
-          if (cands.length === 1) return cands[0];
-          for (const el of cands) {
-              if (!el.disabled && _vglVisibleDeVerdad(el)) return el;
-          }
-          return cands[0];
+          const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+          if (el) return el;
       }
       return null;
   }
@@ -5055,6 +5026,9 @@
       // paciente" (el piso de 30 s de arriba queda como respaldo para los casos de error).
       if (docId === _labsPrefetch.docId && _labsPrefetch.labs && (ahora - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) return;
       vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
+      // v18.3 (P13·1.2) — DENOMINADOR: cada paciente abierto en Historia Clínica
+      // cuenta UNA consulta (id hasheado: la cédula no sale del equipo).
+      try { obsConsultaAbrir(docId); } catch (e) {}
 
       try { _preconHidratar(docId); } catch (e) {}   // v16.6.0 — si la pre-consulta ya lo trajo, la ficha abre al instante
       lastAutoFetchedAt = ahora;
@@ -5206,6 +5180,13 @@
   let _vglDomSucio = true;          // nace sucia: la primera cosecha de la sesión siempre corre
   let _vglDomObsActivo = false;     // latch: el observador ya reportó su primera mutación real
   let _vglDomObsInstalado = false;
+  // v18.3.4 (higiene T4) — referencias a nivel de módulo para que emergencyTeardown pueda
+  // desconectar el observer y retirar los listeners de captura: antes vivían en variables
+  // LOCALES de _vglInstalarVigilanciaDom y el kill no tenía vía de recogerlas (patrón de
+  // vglMinInstalar._obs, B13). Solo cambia la vida de las referencias: la semántica de la
+  // compuerta (_vglDomEstaSucia) y sus repintados queda intacta.
+  let _vglDomObs = null;
+  let _vglDomAlTocar = null;
   let _vglDomUltimaCosechaMs = 0;
 
   function _vglNodoEsDelVigilante(n) {
@@ -5227,7 +5208,9 @@
     if (typeof document === "undefined" || !document.body) return;
     if (typeof MutationObserver !== "function" || typeof document.addEventListener !== "function") return;
     try {
-      const obs = new MutationObserver((muts) => {
+      // v18.3.4 (T4) — se asignan a las variables de módulo (antes `const obs`/`const alTocar`
+      // locales) para que el kill-switch pueda recogerlas después. Mismo comportamiento.
+      _vglDomObs = new MutationObserver((muts) => {
         for (const m of muts || []) {
           if (m.type === "characterData") {
             if (!_vglNodoEsDelVigilante(m.target)) { _vglDomMarcarSucio(); return; }
@@ -5238,13 +5221,13 @@
           }
         }
       });
-      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
-      const alTocar = (ev) => {
+      _vglDomObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      _vglDomAlTocar = (ev) => {
         try { if (!ev || !ev.target || !_vglNodoEsDelVigilante(ev.target)) _vglDomMarcarSucio(); } catch (e) {}
       };
-      document.addEventListener("input", alTocar, true);
-      document.addEventListener("change", alTocar, true);
-      document.addEventListener("click", alTocar, true);
+      document.addEventListener("input", _vglDomAlTocar, true);
+      document.addEventListener("change", _vglDomAlTocar, true);
+      document.addEventListener("click", _vglDomAlTocar, true);
       _vglDomObsInstalado = true;
     } catch (e) { _vglDomObsInstalado = false; }
   }
@@ -5381,28 +5364,11 @@
       // desde v17.53.0 para su propio almacén: si el paciente ya tiene una entrada bajo
       // cualquier forma de su cédula, se escribe ENCIMA de esa; solo si no existe ninguna se
       // crea con la forma canónica de hoy.
-      let id = _vglClaveDeDoc(previoTodo, idCrudo) || idCrudo;
-      let previo = previoTodo[id] || {};
-      let fusion = Object.assign({}, previo, datos, { ts: Date.now() });
-      let todo = Object.assign({}, previoTodo);
+      const id = _vglClaveDeDoc(previoTodo, idCrudo) || idCrudo;
+      const previo = previoTodo[id] || {};
+      const fusion = Object.assign({}, previo, datos, { ts: Date.now() });
+      const todo = Object.assign({}, previoTodo);
       todo[id] = fusion;
-      // v18.1.x — FIX 15 M2M: MERGE MULTI-PESTAÑA. Dos pestañas del mismo Everest corren
-      // en procesos distintos: ambas leen el almacén, ambas fusionan su paciente y la que
-      // escribe última PISA la memoria que la otra acabó de guardar (lost update clásico
-      // de read-modify-write sin protección — la v18.0.4 redujo la frecuencia, no cerró
-      // la ventana). Cierre práctico: re-leer el disco y rebasar — los pacientes de la
-      // otra pestaña se conservan tal cual, y para ESTE paciente la fusión se rehace
-      // encima de lo que haya en disco (la pantalla gana, como siempre).
-      try {
-        const fresco = _vglCosechaTodo();
-        if (fresco !== previoTodo) {
-          id = _vglClaveDeDoc(fresco, idCrudo) || idCrudo;
-          previo = fresco[id] || {};
-          fusion = Object.assign({}, previo, datos, { ts: Date.now() });
-          todo = Object.assign({}, fresco);
-          todo[id] = fusion;
-        }
-      } catch (e1) {}
       // Poda: por edad y por cantidad, sacrificando siempre lo más viejo.
       // v18.0.134 — `podaCambio` avisa si esta pasada BORRÓ algo: en ese caso hay que
       // persistir sí o sí (la firma por registro solo mira al paciente recién cosechado
@@ -6687,18 +6653,6 @@
     impresion: { textos: ["impresion diagnostica", "impresión diagnóstica"], ids: ["impDiagnostica"] },
   };
 
-  // v18.1 (M2M f34) — los cuatro ids de "_vglBarraPestanasPrincipal" son frágiles:
-  // "ngb-tab-8" lo autogenera Angular POR POSICIÓN (se renumera si Everest añade o
-  // reordena pestañas) y pes/anamesis/impDiagnostica son ids internos que un rediseño
-  // puede borrar. La identidad estable de la barra es su COPY — el mismo principio con
-  // el que VGL_PESTANAS identifica cada pestaña. Índice de textos titulares de la barra
-  // (SIN "conducta": ese ancla vive en la zona de órdenes y puede no pertenecer a la
-  // barra) para el respaldo por texto de esa función.
-  const VGL_BARRA_TEXTOS = [].concat(
-    VGL_PESTANAS.examen.textos, VGL_PESTANAS.cronicos.textos, VGL_PESTANAS.antecedentes.textos,
-    VGL_PESTANAS.habitos.textos, VGL_PESTANAS.anamnesis.textos, VGL_PESTANAS.impresion.textos
-  );
-
   // v17.1.1 (reporte en vivo del 21-ago: los botones de una pestaña salían en OTRA —
   // «Enfermedad actual» y «Auto-Labs» en Revisión por sistema, «Normalidad fija» en Ruta
   // Crónicos) — buscar 'a.nav-link.active[role="tab"]' SIN ACOTAR devuelve el primer
@@ -6723,25 +6677,6 @@
         if (cont) return cont;
       } catch (e) {}
     }
-    // v18.1 (M2M f34) — respaldo por TEXTO cuando ningún id ancla: el copy de la barra es
-    // lo estable, los ids no. Se barre 'a[role="tab"]' y se sube al tablist del primero
-    // cuyo texto contenga un titular de VGL_BARRA_TEXTOS. El tabset suelto de los
-    // programas (v17.1.1/#151: Síndrome Metabólico / Hipertensión / Diabetes / ERC) no
-    // contiene NINGUNO de esos textos, así que este camino no puede anclar al decoy.
-    // Defensivo con querySelectorAll: arneses y mocks de prueba pueden no traerlo.
-    try {
-      if (typeof d.querySelectorAll === "function") {
-        const tabs = d.querySelectorAll('a[role="tab"]');
-        for (const tab of tabs) {
-          if (!tab) continue;
-          const tx = stripAccents(String(tab.textContent || "")).toLowerCase();
-          if (VGL_BARRA_TEXTOS.some((x) => tx.indexOf(stripAccents(String(x)).toLowerCase()) >= 0)) {
-            const cont = (typeof tab.closest === "function" && tab.closest('[role="tablist"]')) || tab.parentElement;
-            if (cont) return cont;
-          }
-        }
-      }
-    } catch (e) {}
     return null;
   }
 
@@ -8904,9 +8839,9 @@
   }
   function _vglFeedbackBoton(btn, texto, tono, rotuloOriginal) {
     try {
-      btn.innerHTML = texto;
+      btn.textContent = texto;   // v18.3.6 (aud. 2026-09-06): texto plano — cierra el sumidero HTML (los llamadores nunca pasan marcado)
       btn.style.boxShadow = "inset 0 0 0 2px " + (tono === "verde" ? "var(--c-verde,#4ff0b8)" : "var(--c-ambar,#ffcf5c)");
-      setTimeout(() => { try { btn.innerHTML = rotuloOriginal; btn.style.boxShadow = ""; } catch (e) {} }, 8000);
+      setTimeout(() => { try { btn.innerHTML = escapeHtml(rotuloOriginal); btn.style.boxShadow = ""; } catch (e) {} }, 8000);
     } catch (e) {}
   }
 
@@ -9166,13 +9101,7 @@
   const _SCRUB_RX_TEL = /(?<!\d)(?:\+?0?57\s*)?(?:\(?[368]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|[368]\d{9})(?!\d)/g;
   const _SCRUB_RX_FECHA_NUM = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/g;
   const _SCRUB_RX_FECHA_TXT = /\b\d{1,2}\s+(?:de\s+)?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\s+(?:del?\s+)?\d{2,4})?\b/gi;
-  // fix 14 M2M (auditoría 2026-09-05) — dos huecos del hallazgo 14: (a) la coma no estaba
-  // en la clase de separadores y una cédula «1,023,456,789» (formato que devuelve Everest
-  // en algunos campos) viajaba entera — DOC_PLANO tampoco la caza porque cada trozo queda
-  // por debajo de 6 dígitos; (b) el dígito verificador tras guion quedaba expuesto: la
-  // cédula «1.023.456.789-0» salía «[CENSURADO]-0». El DV colombiano (cédula y NIT) es un
-  // solo dígito. La clase sigue siendo UN carácter: «, » con espacio no casa (aceptable).
-  const _SCRUB_RX_GRUPO_NUM = /\b\d{1,3}(?:[\s.,-]\d{3}){1,3}(?:\s*-\s*\d)?\b/g;
+  const _SCRUB_RX_GRUPO_NUM = /\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g;
   const _SCRUB_RX_DOC_PREFIJO = /(?<=\b(?:CC|TI|CE|PPT|Doc|Documento|Cédula|Cedula|Identificación|Identificacion)\s+)\d{5,11}\b/gi;
   const _SCRUB_RX_DOC_PLANO = /(?<=\b|_)\d{6,11}(?=\b|_)/g;
   function scrubPII(input, opciones) {
@@ -10001,15 +9930,10 @@
       // fallar así, pedir el vínculo actual de la carpeta y actualizar SOLO este token.
       shareLink: "https://viva1aips-my.sharepoint.com/:f:/g/personal/director_bello_viva1a_com_co/IgCsGP_chaHvTKYH9v-QZ2Q1AQuJo3umR5gDLjKlkUqgPS4?e=Xael2W",
     },
-    // fix 17 M2M: hora/estado/documento/modalidad/fecha pasan a LISTAS de respaldo.
-    // Hoy cada lista trae el único selector verificado contra Everest (no se inventan
-    // clases nuevas): si Everest renombra una clase Bootstrap basta añadir el string
-    // adicional aquí — qAll()/firstMatch() ya recorren la lista, el código de lectura
-    // no se toca y la agenda no se apaga en silencio por un renombre de clase.
     SEL: {
-      hora: [".labelHora"], estado: [".status-label"], contenedor: [".card-body", ".card"],
-      documento: [".text-muted"], nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
-      modalidad: [".fw-bold.mb-0"], fecha: [".fecha"],
+      hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
+      documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
+      modalidad: ".fw-bold.mb-0", fecha: ".fecha",
     },
   };
   // [UI-CSS] Paleta clínica suavizada (WCAG compliant, tono no estresante)
@@ -10272,7 +10196,8 @@
       }
     });
   } catch (e) {}
-  try { setInterval(_relojVigilarWorker, 30000); } catch (e) {}
+  // v18.2 (P11) — la vigilía del reloj ya no se registra al evaluar el script: nada debe
+  // despertar cada 30 s antes del consentimiento. Vive en _instalarLatidosBase().
   // Si el worker muere, cada canal sigue con el setInterval de la página (misma cadencia).
   function _relojDegradar() {
     try { if (_reloj.worker) _reloj.worker.terminate(); } catch (e) {}
@@ -11799,19 +11724,19 @@
   // lo único que faltaba era no tirarlos.
   //
   // Función PURA para poder probarla: recibe el estado, devuelve el motivo y el texto.
-  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes",
-    // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
-    // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
-    // situaciones distintas y el médico hace cosas distintas con cada una.
-    "no_esta_en_lista_pero_en_respaldo", "no_esta_en_lista_respaldo_vacio",
-    // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
-    // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
-    // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
-    // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
-    // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
-    // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
-    // llena con ella) separa ahora los dos casos que antes compartían esa frase.
-    "piloto_esta_sin_pendientes", "piloto_no_esta"];
+  // v18.0.43 — los dos motivos que aparecen cuando el paciente no está en la oficial y el
+  // respaldo SÍ lo conoce. Se separan del "no_esta_en_lista" genérico a propósito: son
+  // situaciones distintas y el médico hace cosas distintas con cada una.
+  // v18.0.139 — y los dos de cuando el RESPALDO es la base activa. Pedido del médico
+  // (4-sep): "se supone que con la base de respaldo deberían aparecerme qué actividades
+  // tiene pendiente también, se negó a mostrarme". No hubo negativa: con pymFallback,
+  // getActivities() consulta JUSTO esa base piloto, y lo que pasó es que ese paciente
+  // no arrojó actividades en ella. Decir "NO he podido mirar" cuando sí se miró es lo
+  // que se leyó como rechazo; la pertenencia (pymTodos, que con la piloto activa se
+  // llena con ella) separa ahora los dos casos que antes compartían esa frase.
+  // v18.3 (P12 saneamiento) — PYM_SIN_ACT_MOTIVOS, el array que duplicaba estos
+  // literales sin ningún lector (grep de uso: solo su definición), se retiró. Los
+  // motivos vivos son exactamente los que esta función devuelve en línea.
   function pymMotivoSinActividades(est) {
     const e = est || {};
     // v18.0.139 — RESPALDO ACTIVO: primero lo que sí se sabe de esa base. Si el paciente
@@ -12282,6 +12207,12 @@
     return false;
   }
   let repQ = null, repFlushing = false;
+  // v18.4.0 — sello del último envío inmediato disparado por el carril prioritario
+  // (ver reportar): si ese intento FALLÓ, el carril se calla un minuto — una ráfaga
+  // de evidencia contra un panel caído no puede reintroducir la tormenta de red que
+  // el backoff de v17.6.14 cerró. Contra un panel sano no hay throttle: es el
+  // comportamiento de siempre (cada fila sale al encolarse) y ningún contrato cambia.
+  let _repCritTs = 0, _repCritUltimoFallo = false;
   // v12.5.1 — repQLoad ya NO cachea: siempre relee el almacén compartido. La caché en
   // memoria hacía que una pestaña con cola vieja pisara filas recién encoladas por otra
   // (revisión adversarial); releer 30 filas cuesta microsegundos. Queda una ventana de
@@ -12340,9 +12271,17 @@
     try {
       let g = 0;
       while (repQ.length && g++ < 10) {
-        const fila = repQ[0];
+        // v18.4.0 — CARRIL PRIORITARIO: dentro del ciclo sale primero la EVIDENCIA
+        // («error»/«fraude») que haya en la cola, aunque no sea la fila más vieja. Un
+        // fallo en plena consulta no espera detrás de 79 filas de uso: en el incidente
+        // del 27-ago la demora del tablero era el ciclo completo del temporizador
+        // (10 min) por cada fila que fuese de evidencia.
+        let idx = repQ.findIndex((r) => r && (r.evento === "error" || r.evento === "fraude"));
+        if (idx < 0) idx = 0;
+        const fila = repQ[idx];
         if (await repPost(fila)) {
-          repQ.shift(); repQSave();
+          enviadas++;
+          repQ.splice(idx, 1); repQSave();
           // v18.0.66 — BLINDAJE 3: QUE EL SILENCIO SE VEA. Lo que dejó este canal muerto
           // medio año no fue el campo de más: fue que nadie podía notarlo. `error.js`
           // cuenta los detectados y viaja por la telemetría de uso, que SÍ funciona; con
@@ -12351,9 +12290,16 @@
           if (fila && fila.evento === "error") { try { uxTrack("error.entregado"); } catch (e) {} }
           continue;
         }
+        fallo = true;
         fila._intentos = (fila._intentos || 0) + 1;
         if (fila._intentos >= 3) {
-          repQ.shift(); repQSave();
+          repQ.splice(idx, 1); repQSave();
+          // v18.4.0 — ÚLTIMO RECURSO: la fila ya sale de la cola, así que la objeción
+          // de la v17.49.0 (D4: beacon sin acuse + reintento posterior = fila doble)
+          // ya no aplica — no habrá reintento. Una entrega ciega única es estrictamente
+          // mejor que ninguna; si ni así llega, el conteo sigue vivo por uxTrack y la
+          // alerta «canal mudo» del tablero (TABLERO/Codigo.gs, revisarAlertas) lo delata.
+          try { if (repBeacon(fila)) uxTrack("rep.descarte.beacon"); } catch (e2) {}
           try { uxTrack("rep.fila.descartada." + String((fila && fila.evento) || "otro")); } catch (e) {}
           console.warn("[Vigilante] el panel rechazó una fila de tipo «" + ((fila && fila.evento) || "?") + "» tres veces; se descarta para no atascar el resto de la cola.");
           continue;
@@ -12380,16 +12326,12 @@
   // poniéndole nombre al equipo en Ajustes.
   const EQUIPO_ID_KEY = "vgl_equipo_id";
   function _equipoId() {
-    try {
-      const manual = String(S.equipo || "").trim();
-      if (manual) return manual.slice(0, 40);
-      let id = localStorage.getItem(EQUIPO_ID_KEY);
-      if (!id) {
-        id = "eq-" + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
-        localStorage.setItem(EQUIPO_ID_KEY, id);
-      }
-      return String(id).slice(0, 40);
-    } catch (e) { return ""; }
+    // v18.3 (P13·1.1) — delega en el módulo obs: misma prioridad que siempre
+    // (ajuste manual → id persistente → id nuevo), pero el id ahora vive en GM
+    // (sobrevive la limpieza de datos del sitio), migra el legado de
+    // localStorage y avisa cuando nace uno nuevo. Función declarada (hoisted):
+    // el módulo obs vive al final del archivo.
+    try { return obsIdentidadEquipo(); } catch (e) { return ""; }
   }
 
   // v12.6.9 — `lote`: identificador único por fila encolada. En la Hoja aparecieron filas
@@ -12409,8 +12351,16 @@
     // porque con la cuota llena la cola no sobrevive en localStorage y el día quedaba
     // marcado «reportado» sin haber salido jamás: la fila resumen silenciosa del tablero.
     if (!repOn()) return false;
+    // v18.3 (P13·R1) — BLINDAJE DE REENTRANCIA. La fila se construye en una constante
+    // ANTES de recargar repQ: construir el literal puede re-entrar en reportar() —el
+    // nacimiento del id de equipo emite «obs.equipo.nuevo» vía _equipoId(), y cada
+    // reportar() reasigna repQ dentro de repQLoad(). Si el push se resolvía dentro del
+    // mismo enunciado que evaluaba el literal, el receiver quedaba atado al array VIEJO
+    // y la fila externa se perdía en silencio (cinco casos de la suite 83 caían por
+    // exactamente esto). Evaluar fila → recargar → push cierra la ventana.
+    const fila = Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {});
     repQLoad();
-    repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
+    repQ.push(fila);
     repQSave();
     // v17.6.14 — H5: BACKOFF de facto. Sin esto, cada evento reintentaba contra un panel
     // caído: cada repPost espera hasta 20 s en fallar, y hasta 40 errores + 20 fraudes
@@ -12419,6 +12369,20 @@
     // repFlush (10 min) que ya existía — mismo reintento, sin la ráfaga.
     let errTs = 0;
     try { const e = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e && e.ts) errTs = new Date(e.ts).getTime(); } catch (e2) {}
+    // v18.4.0 — CARRIL PRIORITARIO: la evidencia («error», «fraude») NO espera al
+    // backoff de 3 min ni al temporizador de 10 min — es monitoreo crítico en vivo y
+    // su volumen ya está acotado de nacimiento (40 huellas + 20 fraudes/día), que es
+    // justo la tormenta que el backoff existía para frenar. El carril solo se calla
+    // un minuto cuando su ÚLTIMO intento falló (panel caído): así los 3 intentos
+    // antes de descartar siguen espaciados como se diseñó en v18.0.66, sin frenar
+    // el envío inmediato contra un panel sano, que es el comportamiento de siempre.
+    if (evento === "error" || evento === "fraude") {
+      if (!_repCritUltimoFallo || Date.now() - _repCritTs >= 60 * 1000) {
+        _repCritTs = Date.now(); _repCritUltimoFallo = false;
+        Promise.resolve(repFlush()).then((r) => { _repCritUltimoFallo = !!(r && r.fallo); }).catch(() => { _repCritUltimoFallo = true; });
+      }
+      return true;
+    }
     if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return true;
     repFlush();
     return true;
@@ -12444,7 +12408,8 @@
       reportar("entorno", {
         nav, so, zona,
         pantalla: (screen && screen.width ? screen.width + "x" + screen.height : ""),
-        gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : ""
+        gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : "",
+        obs_perdidos: obsPerdidosLeer().n || 0   // v18.3 (P13·1.7): sanity check de la lista blanca
       });
     } catch (e) {}
   }
@@ -12466,10 +12431,25 @@
       const k = "vgl_rep_acceso";
       if (localStorage.getItem(k) === todayStamp()) return;
       localStorage.setItem(k, todayStamp());
+      const perfil = accesoPerfil();
+      // v18.3.4 — SEGUNDA PUERTA CIEGA de la clase «no sale nada»: el médico
+      // aceptó los Términos sin identidad («sin-identidad-aceptado»), boot()
+      // arrancó y ya resolvió quién es, pero el padrón no lo trae (o la lista
+      // quedó corrupta): el núcleo corre recortado a PÚBLICO sin dejar rastro
+      // — a esta altura la compuerta ya decidió y no vuelve a opinar. Este
+      // reporte es el único punto 1/día que YA consulta el perfil, así que
+      // aquí (y nunca en cada tick de accesoPerfil) se deja el MISMO
+      // diagnóstico de GM de la compuerta: motivo fijo «publico-con-sesion».
+      // Se pasa SIN `arrancar`, que así pasa el guard de rutas de incidencia
+      // de mtrCompuertaDiagnostico sin tocarlo. Sin PHI: motivo + login
+      // sí/no + versión + ts.
+      if (perfil === "PUBLICO" && mtrLoginDeSesion()) {
+        try { mtrCompuertaDiagnostico({ motivo: "publico-con-sesion" }); } catch (e) {}
+      }
       reportar("acceso", {
         uid,
         nombre: String((state && state.activeDoctor && state.activeDoctor.name) || "").slice(0, 100),
-        perfil: accesoPerfil()
+        perfil
       });
     } catch (e) {}
   }
@@ -13296,10 +13276,25 @@
       // a medias o descartaría): si no cabe, se omiten claves y se anota cuántas.
       const limpio = {};
       let total = 0, omitidas = 0, tam = 2;
-      for (const k of Object.keys(w.acciones)) {
+      // v18.4.0 — MUESTREO POR PRIORIDAD al desbordar el presupuesto (3.800 caracteres).
+      // Antes se empaquetaba en orden de INSERCIÓN y lo que no cabía se omitía sin
+      // criterio: un día patológico de API (18.414 llamadas el 27-ago) desplazaba del
+      // envío justo lo único que no se reconstruye — los conteos de fallo (error.*,
+      // rep.*). Ahora el sacrificio es por CLASE, de mayor volumen y menor unicidad a
+      // menor: primero rum.*/api.* (diagnóstico agregable), después el resto del uso,
+      // y la evidencia de fallo solo si no queda otra. Empaquetar en orden estable
+      // P0→P2 garantiza que lo omitido sea siempre de la clase más cara, no la que
+      // llegó última.
+      const _prioMuestreo = (kk) => (kk.indexOf("rum.") === 0 || kk.indexOf("api.") === 0) ? 2
+        : (kk.indexOf("error.") === 0 || kk.indexOf("rep.") === 0) ? 0 : 1;
+      const _claves = Object.keys(w.acciones).map((k) => {
         const kk = uxClaveLimpia(k);
+        return { k, kk, p: _prioMuestreo(kk) };
+      }).filter((x) => !!x.kk).sort((a, b) => a.p - b.p);
+      for (const x of _claves) {
+        const k = x.k, kk = x.kk;
         const v = Number(w.acciones[k]);
-        if (!kk || !isFinite(v) || v <= 0) continue;
+        if (!isFinite(v) || v <= 0) continue;
         const peso = kk.length + String(Math.round(v)).length + 4; // "clave":valor,
         if (tam + peso > 3800) { omitidas++; continue; }
         tam += peso;
@@ -14128,49 +14123,25 @@
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
   function firstMatch(root, selList) { const arr = Array.isArray(selList) ? selList : [selList]; for (const s of arr) { const el = root.querySelector(s); if (el) return el; } return null; }
-  // fix 17 M2M: querySelectorAll sobre una LISTA de selectores (unión, en el orden del
-  // mapa). Es el papel de firstMatch pero devolviendo todos los nodos: la agenda y la
-  // cédula dejan de depender de un selector suelto que un renombre de Everest silencia.
-  function qAll(root, selList) { const arr = Array.isArray(selList) ? selList : [selList]; let out = []; for (const s of arr) { const els = root.querySelectorAll(s); if (els && els.length) out = out.concat(Array.from(els)); } return out; }
-  // fix 22 M2M: ¿este ancestro abriga otra hora de cita además de la propia? Si sí,
-  // envuelve VARIAS citas y leer ahí estado/nombre/cédula mezcla pacientes distintos.
-  function _abrigaOtraHora(n, elHora) { return qAll(n, CONFIG.SEL.hora).some((el) => el !== elHora); }
   function containerOf(elHora) {
     for (const s of CONFIG.SEL.contenedor) { const c = elHora.closest(s); if (c) return c; }
     const body = elHora.ownerDocument.body; let n = elHora.parentElement, saltos = 0;
-    while (n && n !== body && saltos < 8) {
-      // fix 22 M2M: contenedor válido = tiene chip de estado Y no abriga otra cita.
-      // Antes devolvía el primer ancestro con CUALQUIER .status-label aunque fuera el
-      // wrapper de toda la agenda, y la cita leía la cédula del paciente de al lado.
-      if (!_abrigaOtraHora(n, elHora) && firstMatch(n, CONFIG.SEL.estado)) return n;
-      n = n.parentElement; saltos++;
-    }
+    while (n && n !== body && saltos < 8) { if (n.querySelector(CONFIG.SEL.estado)) return n; n = n.parentElement; saltos++; }
     return null;
-  }
-  // fix 18 M2M: mismo patrón que extractPacienteAbierto — quedarse con el primer
-  // .text-muted que PARSEE como cédula. Leer el primero a ciegas hacía que un
-  // epígrafe/correo/cualquier texto muted dejara la cita con doc_id "" en silencio
-  // (y el emparejamiento PyM moría para ese paciente).
-  function _cedulaDelContenedor(cont) {
-    for (const el of qAll(cont, CONFIG.SEL.documento)) {
-      const doc = _vglDocCanon(limpio(el.textContent));
-      if (doc) return doc;
-    }
-    return "";
   }
   function extractAgenda(doc) {
     doc = doc || document;
-    const horas = qAll(doc, CONFIG.SEL.hora);                        // fix 17 M2M: lista con respaldo
+    const horas = Array.from(doc.querySelectorAll(CONFIG.SEL.hora));
     if (horas.length === 0) return { visible: false, citas: [] };
     const citas = horas.map((h, i) => {
       const cont = containerOf(h); let estado = "", documento = "", nombre = "", modalidad = "";
       if (cont) {
-        estado = limpio((firstMatch(cont, CONFIG.SEL.estado) || {}).textContent);       // fix 17 M2M
-        documento = _cedulaDelContenedor(cont);                                        // fix 18 M2M
+        estado = limpio((cont.querySelector(CONFIG.SEL.estado) || {}).textContent);
+        documento = limpio((firstMatch(cont, CONFIG.SEL.documento) || {}).textContent);
         nombre = limpio((firstMatch(cont, CONFIG.SEL.nombre) || {}).textContent);
-        modalidad = limpio((firstMatch(cont, CONFIG.SEL.modalidad) || {}).textContent); // fix 17 M2M
+        modalidad = limpio((cont.querySelector(CONFIG.SEL.modalidad) || {}).textContent);
       }
-      return { hora_texto: limpio(h.textContent), doc_id: documento, nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
+      return { hora_texto: limpio(h.textContent), doc_id: _vglDocCanon(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
     });
     return { visible: true, citas };
   }
@@ -14241,7 +14212,7 @@
       // "En Sala"/"Sin presentarse"/"Atendido", que una pantalla de RESERVA de turnos no
       // tendría — ahí no hay estados de asistencia, solo horarios disponibles) es mucho
       // más específico de la vista real que vigila el script.
-      if (firstMatch(document, CONFIG.SEL.hora) && firstMatch(document, CONFIG.SEL.estado)) return "agenda"; // fix 17 M2M: listas de respaldo
+      if (document.querySelector(CONFIG.SEL.hora) && document.querySelector(CONFIG.SEL.estado)) return "agenda";
       return "otra";
     } catch (e) { return "otra"; }              // ante la duda, apagar la vigilancia para no causar errores en DOM
   }
@@ -14272,58 +14243,6 @@
       return "";
     } catch (e) { return ""; }
   }
-
-  // =====================================================================
-  //  v18.0.146 — APAGADO SILENCIOSO: ¿SIGUE VIVA LA VIGILANCIA? (auditoría M2M, fix 4)
-  //  Un cambio de DOM en Everest puede romper los selectores sin lanzar error
-  //  visible: el tick sigue corriendo, la sección se lee "otra" y el panel se
-  //  autodockea sin avisar. Este detector NO depende de selectores nuevos:
-  //  cuenta ticks SEGUIDOS de sospecha y avisa UNA sola vez por carga. Cero PHI.
-  //    A) "otra" durante muchos ticks SEGUIDOS con un paciente visible en pantalla
-  //    B) "historia" durante muchos ticks SEGUIDOS SIN cédula legible
-  // =====================================================================
-  const VGL_SEL_ROTO_UMBRAL_TICKS = 24;   // ticks de 5 s => 2 min seguidos de sospecha
-
-  function _contadorSospechaSelector(sospechoso, ticksPrevios, yaAviso) {
-    const t = sospechoso ? (ticksPrevios || 0) + 1 : 0;
-    return { ticks: t, avisa: !yaAviso && t >= VGL_SEL_ROTO_UMBRAL_TICKS };
-  }
-
-  function _hayCedulaVisibleEnPantalla() {
-    try {
-      const contenedor = document.querySelector("app-index") || document;
-      for (const el of contenedor.querySelectorAll(".text-muted")) {
-        if (el.closest && el.closest("#vgl-root")) continue;   // nunca leer el propio panel
-        if (_vglDocCanon(limpio(el.textContent))) return true;
-      }
-    } catch (e) {}
-    return false;
-  }
-
-  function _vigilarSilencioVigilancia(secc) {
-    try {
-      const hayAppIndex = !!document.querySelector("app-index");
-      const hayCedula = _hayCedulaVisibleEnPantalla();
-      // A) apagado total con paciente en pantalla
-      const rA = _contadorSospechaSelector(secc === "otra" && _enModuloHCHealth() && hayAppIndex && hayCedula, state._selRotoOtraTicks, state._selRotoAviso);
-      state._selRotoOtraTicks = rA.ticks;
-      if (rA.avisa) {
-        state._selRotoAviso = true;
-        try { spToast("No encuentro la agenda ni la historia clínica en esta pantalla. Si está viendo una de las dos, Everest cambió su forma y quedé ciego: repórtelo.", 15000); } catch (e2) {}
-        try { vglLog("NAV", "SelectorRotoOtra", { umbral: VGL_SEL_ROTO_UMBRAL_TICKS }); } catch (e2) {}
-      }
-      // B) historia abierta sin cédula legible: guard anti-cruce ciego
-      const rB = _contadorSospechaSelector(secc === "historia" && !hayCedula, state._selCiegoHistoriaTicks, state._selCiegoAviso);
-      state._selCiegoHistoriaTicks = rB.ticks;
-      if (rB.avisa) {
-        state._selCiegoAviso = true;
-        try { spToast("La historia clínica está abierta pero no logro leer de quién es: la protección anti-cruce quedó ciega. Repórtelo.", 15000); } catch (e2) {}
-        try { vglLog("NAV", "SelectorRotoHistoria", { umbral: VGL_SEL_ROTO_UMBRAL_TICKS }); } catch (e2) {}
-      }
-      return { otraTicks: rA.ticks, avisoOtra: rA.avisa, historiaTicks: rB.ticks, avisoHistoria: rB.avisa };
-    } catch (e) { return { otraTicks: 0, avisoOtra: false, historiaTicks: 0, avisoHistoria: false }; }
-  }
-
   // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiraron
   // `otroAvisoDePacienteAbierto` y `checkRecordatorioPym`: el guard contra
   // modales superpuestos que describían (PyM/PES/labs vencidos en pantalla a
@@ -15482,6 +15401,10 @@
       // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
       const prioridadRcv = !!datos.prioridadRcv;
       if (!abandono && !pym.length && !labs.length && !adelantar.length) return; // nada que mostrar
+      // v18.3 (P13·4.4) — PRESUPUESTO de interrupciones por equipo y día: medido
+      // ≈4.020 en 14 días (≈72/equipo/día, prompt 07). `esPrueba` queda exento y un
+      // fallo de almacenaje NO tapa el aviso (fall-open en obsPresupuestoConsumir).
+      if (!esPrueba && !obsPresupuestoConsumir()) return;
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
@@ -15559,7 +15482,10 @@
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
       if (nEl) nEl.textContent = nombre || "Paciente";
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
-      const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
+      // v18.3 (P13·1.4) — desenlace del aviso: "accion" = el médico lo cerró
+      // conscientemente. El id es LOCAL: solo une mostrado↔desenlace, no sale.
+      const avisoObsId = (!esPrueba) ? obsAvisoMostrar({ ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 }) : "";
+      const closeMod = () => { if (!esPrueba) { uxTrack("aviso.universal.entendido"); try { obsAvisoDesenlace(avisoObsId, "accion"); } catch (e) {} } ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       _vglCerrarConClicFuera(ov, closeMod);   // v18.0.110 (C21): cuadro de consulta
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 });
@@ -17206,19 +17132,8 @@
   // v14.2.12 — Este bucle de 5 s (latido de liderazgo + ventana crítica) corre sobre el
   // reloj de segundo plano (_relojCada), no sobre setInterval: con la pestaña oculta el
   // latido y la lectura de la ventana crítica seguían el mismo estrangulamiento que tick().
-  _relojCada("latido", 5000, () => {
-    try {
-      // v12.3.36 — El latido de liderazgo se renueva AQUÍ, cada 5 s, pase lo que pase
-      // con el "Refresco" de Ajustes (que gobierna tick() y puede llegar a 120 s):
-      // sin esta renovación frecuente, el latido del propio líder vencería entre
-      // ticks y las pestañas se relevarían en falso unas a otras.
-      if (!heartbeat()) return;
-      const crit = hayVentanaCritica();
-      if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
-      if (crit) tickApi();
-      _criticoPrev = crit;
-    } catch (e) {}
-  });
+  // v18.2 (P11) — el registro se movió a _instalarLatidosBase(): el latido de liderazgo
+  // no puede latir antes del consentimiento.
 
 
   // ---- Overlay ----
@@ -20949,8 +20864,6 @@
       #vgl-root #vgl-sheet .vgl-cap-morado{--cap-rgb:var(--rgb-morado)}
       /* [v12.3.13] Mismo caso que arriba: la variante de .vgl-fld de Ajustes solo aplica cuando la hoja montada es Ajustes */
       #vgl-root #vgl-sheet:has(.vgl-set-cap) .vgl-fld{margin:0 -8px;padding:12px 8px;gap:14px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
-      #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
-      #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
       #vgl-root #vgl-sheet .vgl-sw{width:54px;height:32px}
       #vgl-root #vgl-sheet .vgl-sw i:after{width:26px;height:26px;top:3px;left:3px}
       #vgl-root #vgl-sheet .vgl-sw input:checked + i:after{transform:translateX(22px)}
@@ -20959,7 +20872,6 @@
       #vgl-root #vgl-sheet .vgl-grp-tec{background:linear-gradient(170deg,rgba(var(--rgb-morado),.07),rgba(var(--rgb-morado),0) 55%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--rgb-morado),.16),var(--shadow-card)}
       #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde) !important;font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
       #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
-      @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
 
       /* ==== [v12.3.15] BLINDAJE TIPOGRÁFICO contra los estilos globales de Everest ==== */
       /* Descubierto con un pantallazo real del consultorio: los textos que confiaban en
@@ -21281,13 +21193,16 @@
   // fresca — la garantía de v12.3.2 queda intacta.
   const MTR_IDENTIDAD_MEDICO_KEY = "vgl_identidad_medico_cache";
   const MTR_IDENTIDAD_MEDICO_TTL_MS = 12 * 60 * 60 * 1000;   // 12 h: cubre un turno largo, vence entre días
-  function _identidadMedicoCacheLeer(login) {
+  // v18.2 (P11) — `incluirVencidos` lo usa SOLO la compuerta de consentimiento: antes de
+  // aceptar no puede haber red (GetUsuarioPerfil), así que la identidad se toma de la caché
+  // aunque haya cumplido las 12 h. El resto de llamadores sigue exigiendo caché fresca.
+  function _identidadMedicoCacheLeer(login, incluirVencidos) {
     try {
       if (typeof GM_getValue === "undefined" || !login) return null;
       const mapa = GM_getValue(MTR_IDENTIDAD_MEDICO_KEY, null);
       const entry = mapa && typeof mapa === "object" ? mapa[String(login).toLowerCase()] : null;
       if (!entry || !(entry.id > 0) || !entry.name) return null;
-      if (Date.now() - (entry.ts || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) return null;
+      if (!incluirVencidos && Date.now() - (entry.ts || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) return null;
       return { id: entry.id, name: entry.name };
     } catch (e) { return null; }
   }
@@ -21369,27 +21284,21 @@
   function identidadDesdeCliente() {
     if (state.activeDoctor.id) return;
     try {
-      let login = "";
-      let u = null;
-      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
-      let jwtSub = "";
-      try {
-        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
-        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
-      } catch (e) {}
-      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
-        login = String(u.username).trim();
-      }
-      if (!login) {
-        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
-        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
-      }
+      // v18.3.5 (higiene N3, T6/N1-#3) — el parseo del login (localStorage
+      // user/jwt coherentes + cookie UsuarioMedico) ya existe como
+      // mtrLoginDeSesion: se delega ahí (function declaration del mismo IIFE,
+      // el hoisting resuelve la llamada aunque viva más abajo en el archivo)
+      // para que quede UNA sola copia. Lo exclusivo de esta función se
+      // conserva intacto: registrar loginVisto y disparar la validación de
+      // Everest (resolverMedicoPorPerfil).
+      const login = mtrLoginDeSesion();
       if (login) { loginVisto = login; resolverMedicoPorPerfil(login); }
     } catch (e) {}
   }
-  // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
-  // sesión ya existe a document-start; el timeout evita depender del orden de las const).
-  try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
+  // v18.2 (P11) — este arranque temprano de la identidad se MOVIÓ dentro de boot(): corría a
+  // document-start, ANTES de cualquier consentimiento, y era la única llamada de red que la
+  // compuerta no cubría. La identidad SIN red (login de sesión + caché GM) la resuelve la
+  // compuerta con mtrLoginDeSesion(); la validación contra Everest vuelve a pasar en boot().
   const FESTIVOS = new Set([
     // 2024
     "2024-01-01", "2024-01-08", "2024-03-25", "2024-03-28", "2024-03-29",
@@ -21565,16 +21474,6 @@
         return resp;
       }, (e) => { soltar(); throw e; });
   }
-  // fix 16 M2M (auditoría 2026-09-05) — Everest a veces contesta HTTP 200 con un sobre de
-  // error {"Error": "texto"} en lugar de un código de estado. El núcleo lo devolvía como
-  // dato legítimo y p. ej. el modal de cupos anunciaba «no hay cupos» con el servidor en el
-  // suelo, además de pintar de verde el panel de salud. Predicado estricto: objeto no
-  // array con `Error` STRING no vacío. La bandera BOOLEANA `Error:true/false` que usa la
-  // anulación de citas sigue siendo una respuesta legítima y NO entra aquí.
-  function _esSobreError200(data) {
-    return !!data && typeof data === "object" && !Array.isArray(data) &&
-      typeof data.Error === "string" && data.Error.trim() !== "";
-  }
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
@@ -21629,22 +21528,8 @@
           // aquí, al llegar las cabeceras, y `resp.json()` podía esperar para siempre.
           if (resp && resp.ok) {
             let data = null;
-            try { data = await resp.json(); } catch (eJson) {
-              // v18.0.104 (fila 6) preservado: si el TOPE abortó la lectura del cuerpo,
-              // eso SÍ es una caída de red — se re-lanza y sigue el manejo de siempre.
-              // Solo el rechazo de PARSEO entra en el fix 25 (el servidor contestó).
-              if (eJson && eJson.name === "AbortError") throw eJson;
-              return null; // fix 25 M2M: 200 con cuerpo ilegible → sin respuesta, sin reintento, sin fallo
-            } finally { if (_corta) clearTimeout(_corta); }
-            // fix 16 M2M (auditoría 2026-09-05) — el sobre de error {"Error":"…"} se rebaja
-            // a null (el contrato de «sin respuesta» que los llamadores ya entienden vía
-            // {__sinRespuesta}) SIN marcar ni éxito ni fallo: el API sí contestó.
-            if (_esSobreError200(data)) return null;
+            try { data = await resp.json(); } finally { if (_corta) clearTimeout(_corta); }
             if (data) { _apiMarcarResultado(true); return data; }
-            // fix 25 M2M — un 200 con cuerpo falsy (vacío): el servidor respondió; no hay
-            // nada que reintentar y NO es un fallo del API. Antes caía fuera del if/else,
-            // consumía los 4 intentos con backoff + GM y terminaba abriendo el cortacircuitos.
-            return null;
           } else if (resp && resp.status >= 500) {
             isError = true;
           } else if (resp && (resp.status === 401 || resp.status === 403)) {
@@ -21691,7 +21576,6 @@
                 ontimeout: () => reject(new Error("Timeout")),
               }, options || {}));
             });
-            if (_esSobreError200(result)) return null; // fix 16 M2M: el sobre-error tampoco se cuela por la vía GM
             if (result) { _apiMarcarResultado(true); return result; }
           } catch (e) {
             // [BLINDADO v8.2.0 NET-01] Silent Failure eliminado: registrar para diagnóstico técnico (sin datos de pacientes)
@@ -22575,36 +22459,6 @@
       console.warn("[Vigilante] apiHcObtenerOrdenamientosVigentes falló:", e);
       return null;
     }
-  }
-
-  // v18.1.1 (FIX 8 M2M) — ¿Llegó al servidor una orden cuyo POST se PERDIÓ? Un Guardar
-  // de ordenamiento es una ESCRITURA: _pageFetchJsonCore NO lo reintenta por la segunda
-  // vía (duplicaría la orden) y devuelve null. Ese null no distingue "no llegó" de
-  // "llegó pero la respuesta se perdió" (timeout tras aceptar el POST). ANTES de dejar
-  // que el médico reintente (y duplique), se consulta la fuente de verdad: las órdenes
-  // VIGENTES del paciente. Solo cuenta como creada si TODOS los CUPS enviados figuran
-  // con fechaCreacion de HOY — una orden vigente de ayer no dice nada de este POST y no
-  // puede silenciar un reintento legítimo. La caché se invalida primero porque pudo
-  // llenarse ANTES del POST perdido. Un fallo de esta consulta devuelve false (no
-  // bloquea el reintento: "casilla vacía antes que dato inventado").
-  async function _ordenYaFiguraEnEverestHoy(pid, cupsEnviados) {
-    if (!pid) return false;
-    const cups = (Array.isArray(cupsEnviados) ? cupsEnviados : [])
-      .map((c) => String(c == null ? "" : c).trim()).filter(Boolean);
-    if (!cups.length) return false;
-    try { _ordenesVigentesInvalidar(); } catch (e) {}
-    let ordenes = null;
-    try { ordenes = await apiHcObtenerOrdenamientosVigentes(pid); } catch (e) { ordenes = null; }
-    if (!Array.isArray(ordenes) || !ordenes.length) return false;
-    const hoy = todayStamp();
-    const hallados = new Set();
-    for (const o of ordenes) {
-      if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
-      const fc = _parseFechaHoraLike(o.fechaCreacion);
-      if (!fc || fc.iso !== hoy) continue;   // solo HOY habla de este POST perdido
-      hallados.add(String(o.cup.codigo));
-    }
-    return cups.every((c) => hallados.has(c));
   }
 
   // v14.1.0 (R1b) — SIGNOS VITALES: la única pieza que le faltaba al motor renal.
@@ -24975,7 +24829,7 @@
           <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
             ${MTR_ICONO_PORTAL} Abrir el portal oficial del laboratorio
           </a>
-          <button class="vgl-agm-btn pri" id="vgl-labs-close" onclick="this.closest('#vgl-labs-modal').remove()">Cerrar</button>
+          <button class="vgl-agm-btn pri" id="vgl-labs-close">Cerrar</button>
         </div>
       </div>
     `;
@@ -25366,6 +25220,11 @@
     const o = opciones || {};
     const todosLabs = [];
     let _labsAtheneaParaMarca = null;   // A4 (S+, 02-sep): crudos de Athenea para la marca de incompleto del consolidado
+    // v18.3.0 (Incidencia 4, causa raíz) — se declara a nivel de función: antes vivía DENTRO
+    // del try de Athenea de abajo, y su lectura en el guardado de caché (fuera de ese bloque)
+    // lanzaba ReferenceError en cualquier llamada que llegara al final con el motor sano —
+    // un throw que ningún try de esta función atrapaba y escalaba justo como la Incidencia 4.
+    let atheneaPrincipalFallo = false;
     try {
       // v17.6.2 — DESENGANCHE Panel ↔ pre-consulta. Síntoma real en consulta (22-ago): el
       // Panel abría «sin laboratorios» aunque el robot ya los había precargado — la
@@ -25384,7 +25243,6 @@
       // perdía: un `null` se trataba igual que un `[]` y el resumen vacío resultante se
       // guardaba en la caché compartida con sello de tiempo fresco, como si fuera una lectura
       // real. `atheneaPrincipalFallo` conserva la distinción hasta el guardado, más abajo.
-      let atheneaPrincipalFallo = false;
       if (!o.fresco && _labsPrefetchCoincide(apt.doc_id) && Array.isArray(_labsPrefetch.labs) &&
           (Date.now() - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) {
         labsArr = _labsPrefetch.labs;
@@ -25430,19 +25288,37 @@
     if (!sigueVivo()) return null;
     try { if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") await mtrRefrescarMedicamentos(pacienteIdLabs); } catch (e) {}
     if (!sigueVivo()) return null;
-    const resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
+    // v18.3.0 (Incidencia 4, paridad con el hotfix v18.1.4 del gist) — un throw del
+    // motor de resumen ya no escala hasta openPanelPacienteModal: sin esta guarda, el
+    // Panel pintaba «No se pudo leer al paciente ahora (los laboratorios no
+    // respondieron)» en TODOS los pacientes aunque el fallo fuera interno. Ahora se
+    // degrada con honestidad («sin dato») y se marca _resumenDegradado.
+    let resumen = null;
+    let _resumenDegradado = false;
+    try {
+      resumen = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
+    } catch (e) {
+      console.warn("[Vigilante Riesgo] Error construyendo el resumen clínico (se degrada a «sin dato»):", e);
+      _resumenDegradado = true;
+      try { resumen = mtrResumenClinico({ hoyIso: todayStamp(), factores: {}, ultimos: {} }); }
+      catch (e2) { resumen = null; }
+      if (resumen) resumen._resumenDegradado = true;
+    }
     // v18.0.143 (reporte del 04-sep) — si el portal principal no respondió (fresco o no),
     // NO se guarda: la caché compartida (que alimenta Agendar, Ordenar, Conducta y el
     // Redactor IA) conserva la última lectura BUENA con su antigüedad real, en vez de un
     // resumen vacío sellado como «recién leído» — que es exactamente lo que pintaba
     // «nunca se le ha tomado» en pacientes con exámenes hechos (v18.0.131 solo cubría
     // o.fresco; ahora cualquier lectura fallida). La marca baja al plan para que los
-    // pintores lo digan con honestidad.
-    if (atheneaPrincipalFallo) {
-      resumen._lecturaAtheneaFallo = true;
-      if (resumen && resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
-    } else {
-      try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+    // pintores lo digan con honestidad. v18.3.0: el resumen degradado tampoco se
+    // guarda — un «sin dato» por error interno no debe pisar la última lectura buena.
+    if (resumen && !_resumenDegradado) {
+      if (atheneaPrincipalFallo) {
+        resumen._lecturaAtheneaFallo = true;
+        if (resumen.plan) resumen.plan._lecturaAtheneaFallo = true;
+      } else {
+        try { mtrCacheResumenGuardar(apt.doc_id, resumen); } catch (e) {}
+      }
     }
     return resumen;
   }
@@ -25620,6 +25496,11 @@
     if (!resumen) {
       showToast("AZUL", "Redactar con IA", "Leyendo los datos del paciente (laboratorios, medicamentos, historia)… el panel se abre en unos segundos.", false);
       try { resumen = await mtrCalcularResumenClinico(apt, () => true); } catch (e) { resumen = null; }
+      // v18.3.0 (Incidencia 4, paridad con el hotfix v18.1.5 del gist) — GUARDA DE
+      // GROUNDING: si el motor devolvió un resumen DEGRADADO (error interno atrapado),
+      // el redactor IA no lo usa: una hoja de hechos vacía le daría a la IA libertad
+      // de inventar. Sin datos reales, mejor el aviso honesto de «sin datos».
+      if (resumen && resumen._resumenDegradado) resumen = null;
       // v16.2.9 — GUARDA DE PACIENTE AL VOLVER DE LA ESPERA. Decisión del médico (20-ago):
       // "descartar y avisar si cambió de paciente".
       // Esta espera dura 3-6 segundos (Athenea + Annar/Citi + medicamentos + función
@@ -29054,20 +28935,15 @@
           if (!vivo() || miTok !== _pcToken) return;
           if (!pacienteIdAcceso) { pcNota("No se encontró el paciente en el sistema de agenda — no se puede buscar el cupo."); return; }
           const dias = mtrListaDiasBusquedaCupo(todayStamp(), 30);
-          let diasSinRespuesta = 0;   // fix 7 M2M — un día sin RESPUESTA no es un día sin cupo
           for (const iso of dias) {
             if (!vivo() || miTok !== _pcToken) return;
             pcNota("🔎 Buscando el primer cupo… revisando el " + mtrFechaLegible(iso));
             let agendasDelDia = [];
             try {
               const res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, iso, selectedEspId, true);
-              // Con propagarError=true la marca no llega hoy, pero si alguien cambia la
-              // firma del llamador, «no se pudo preguntar» no puede volver a leerse como
-              // «ese día no tiene cupos» (misma clase de bug que v16.7.0, auditoría #11).
-              if (res && res.__sinRespuesta) { diasSinRespuesta++; continue; }
               const fmt = mtrIsoAFechaAgenda(iso);
               agendasDelDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === fmt);
-            } catch (e) { diasSinRespuesta++; continue; }
+            } catch (e) { continue; }
             if (!vivo() || miTok !== _pcToken) return;
             if (selectedEspId === 12) agendasDelDia = _agendasPropias(agendasDelDia, doctorName);
             if (!agendasDelDia.length) continue;
@@ -29099,15 +28975,7 @@
             }
           }
           if (!vivo() || miTok !== _pcToken) return;
-          // fix 7 M2M — el mensaje de cierre ya no afirma «sin cupos» cuando los días
-          // fallaron por red: sin respuesta real no se sabe si hay cupos o no.
-          if (diasSinRespuesta >= dias.length) {
-            pcNota("⚠ No se pudo consultar la disponibilidad: el servidor no respondió en ninguno de los " + dias.length + " días probados. No es que no haya cupos — reintente o revise la agenda oficial de Everest.");
-          } else if (diasSinRespuesta > 0) {
-            pcNota("Sin cupos libres en los " + (dias.length - diasSinRespuesta) + " de " + dias.length + " días consultados (" + diasSinRespuesta + " no respondieron). Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
-          } else {
-            pcNota("Sin cupos libres en los próximos 30 días hábiles" + (selectedEspId === 12 ? " en su agenda" : "") + ". Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
-          }
+          pcNota("Sin cupos libres en los próximos 30 días hábiles" + (selectedEspId === 12 ? " en su agenda" : "") + ". Puede elegir una fecha en el calendario o revisar la agenda oficial de Everest.");
         } finally {
           if (miTok === _pcToken && pcBtn) pcBtn.disabled = false;
         }
@@ -29981,49 +29849,6 @@
 
         setTimeout(() => closeMod(), 2600);
       } else {
-        // v18.1.1 (FIX 21 M2M) — POST SIN VEREDICTO (res == null): las escrituras no se
-        // reintentan en _pageFetchJsonCore, así que este null no dice si la cita llegó a
-        // crearse (timeout tras aceptar el POST). ANTES de ofrecer «Reintentar Crear Cita»
-        // — que crearía la DUPLICADA si la primera llegó — se re-verifica el cupo con el
-        // MISMO matcher de la guarda de arriba: si ya NO está libre, lo más probable es
-        // que NUESTRO turno sí quedó asignado. No se marca como creada (el cupo pudo
-        // tomarlo otro usuario): se bloquea el reintento a ciegas y se manda a verificar
-        // a AppCita. Si el cupo sigue libre o la verificación falla, el fallo es fallo y
-        // el reintento legítimo sigue igual (no se bloquea por una duda).
-        if (res == null && ctxElegido && ctxElegido.agendaId) {
-          let _cupoOcupadoSR = null;
-          try {
-            const frescoSR = await apiAccesoObtenerTurnos(ctxElegido.agendaId, ctxElegido.fecha, pacienteIdAcceso);
-            if (!vivo()) return;
-            const listaSR = extractAgendasList(frescoSR);
-            if (Array.isArray(listaSR) && listaSR.length) {
-              const sigueLibreSR = listaSR.some((t) => {
-                const idT = t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno;
-                const eSR = String((t && t.estado) || "ACT").toUpperCase().trim();
-                return String(idT) === String(turnoId) && (eSR === "" || eSR === "ACT");
-              });
-              _cupoOcupadoSR = !sigueLibreSR;
-            }
-          } catch (e) { _cupoOcupadoSR = null; }
-          if (_cupoOcupadoSR === true) {
-            vglLog("APPCITA", "CitaSinRespuestaCupoOcupado", { turnoId });
-            try { uxTrack("cita.sin_respuesta_cupo_ocupado"); } catch (e) {}
-            try {
-              showToast("AMBAR", "Cita sin confirmación — verifíquela en AppCita",
-                "El envío quedó sin respuesta y el cupo " + (horaTxt || "elegido") + " ya no aparece libre: lo más probable es que la cita SÍ quedó creada. NO la reitere aquí: ábrala en AppCita/Everest, confirme el radicado y solo entonces decida si hace falta otra.",
-                true, "citasinres|" + apt.doc_id);
-            } catch (e) {}
-            if (vivo()) {
-              confirmBtn.disabled = true;
-              confirmBtn.textContent = "⚠ Cupo tomado sin confirmación — verifique en AppCita";
-              const wSR = document.createElement("div");
-              wSR.className = "vgl-agm-err";
-              wSR.textContent = "⚠ El cupo dejó de estar libre sin que llegara respuesta del servidor: la cita pudo quedar creada. Verifíquela en AppCita antes de reintentar — no la duplique.";
-              try { if (typeof slotsEl.prepend === "function") slotsEl.prepend(wSR); else slotsEl.appendChild(wSR); } catch (e) {}
-            }
-            return;
-          }
-        }
         if (vivo()) {
           confirmBtn.disabled = false;
           confirmBtn.textContent = "✓ Reintentar Crear Cita";
@@ -30643,11 +30468,7 @@
     try {
       const res = await pageFetchJson(path);
       if (res) {
-        // v18.1 (M2M f26): extractor blindado — la ficha puede llegar anidada en
-        // `data` (o `data.data[0]`) y la cadena naive devolvía null y hundía la
-        // orden de PyM entera por un contenedor distinto. Ante la duda devuelve
-        // null: "no se pudo" es reversible, un id equivocado no.
-        return extractPatientId(res);
+        return res.id || res.Id || (res.data && (res.data.id || res.data.Id)) || null;
       }
     } catch (e) {}
     return null;
@@ -31357,7 +31178,6 @@
       let creadasCount = 0;
       let agrupadores = [];
       let fallidasCount = 0;
-      let recuperadasCount = 0;              // v18.1.1 (FIX 8 M2M) — POST sin respuesta que SÍ llegó al servidor
       let omitidasCount = 0;                 // v18.0.63 — no se pidieron porque ya se pidieron hoy
       const omitidasTitulos = [];
       const cie10Creados = [];               // v18.0.63 — QUÉ paquetes quedaron creados
@@ -31429,37 +31249,6 @@
             c.disabled = true;
             const lbl = c.closest("label"); if(lbl && lbl.classList) lbl.classList.add("vgl-op-half", "vgl-line-through");
           }
-        } else if (resOrd == null) {
-          // v18.1.1 (FIX 8 M2M) — POST SIN VEREDICTO: la escritura no se reintenta y
-          // pageFetchJson devolvió null. Ese null no dice si la orden se creó (timeout
-          // tras aceptar el POST). ANTES de contarla como fallida (y dejar el botón de
-          // "Reintentar" crear el duplicado), se consulta la fuente de verdad: si TODOS
-          // los CUPS de este paquete ya figuran como vigentes con fecha de HOY, la orden
-          // LLEGÓ — se marca como creada y la casilla se tacha, igual que una creada con
-          // respuesta. Sin agrupador no hay impresión desde aquí: el resumen remite al
-          // módulo de Ordenamientos. Si la consulta falla o no figura, cae a fallida
-          // (reintento legítimo: no se bloquea por una duda).
-          let _pidOrd = pid;
-          if (!_pidOrd) { try { _pidOrd = await apiAccesoBuscarPaciente(apt.doc_id); } catch (e) { _pidOrd = null; } }
-          const _cupsEnviados = cupsObjs.map((co) => co && (co.codigo || co.Codigo));
-          let _recuperada = false;
-          try { _recuperada = await _ordenYaFiguraEnEverestHoy(_pidOrd, _cupsEnviados); } catch (e) { _recuperada = false; }
-          if (_recuperada) {
-            recuperadasCount++;
-            cie10Creados.push(String(pkg.cie10));
-            actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
-            try { markOrdenesCreadasHoy(apt.doc_id, [], (pymPorPaquete.get(pkg) || []), [pkg.cie10]); } catch (e) {}
-            vglLog("ORDEN", "GuardarOrdenRecuperadaSinRespuesta", { cie10: String(pkg.cie10) });
-            try { uxTrack("ordenes.post_perdido.recuperada", { cie10: String(pkg.cie10) }); } catch (e) {}
-            if (vivo()) {
-              c.checked = false;
-              c.disabled = true;
-              const lblR = c.closest("label"); if (lblR && lblR.classList) lblR.classList.add("vgl-op-half", "vgl-line-through");
-            }
-          } else {
-            fallidasCount++;
-            if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); }
-          }
         } else {
           fallidasCount++;
           if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); }
@@ -31493,12 +31282,7 @@
       // se dice con números qué faltó, dejando el reintento SOLO para lo que falló (las
       // casillas creadas ya quedaron tachadas y deshabilitadas por el bucle de arriba).
       const parcial = creadasCount > 0 && fallidasCount > 0;
-      // v18.1.1 (FIX 8 M2M) — corrida cuyo POST se perdió pero la orden SÍ llegó al
-      // servidor (confirmada contra ObtenerOrdenamientoPorPacienteIdVigente). No hay
-      // agrupadores para imprimir ni Radicado que mostrar: no puede pintarse como éxito
-      // pleno, pero TAMPOCO como fallo — el reintento duplicaría la orden.
-      const soloRecuperadas = creadasCount === 0 && recuperadasCount > 0 && fallidasCount === 0;
-      if (creadasCount > 0 || recuperadasCount > 0) {
+      if (creadasCount > 0) {
         // v17.6.8 — AUDITORÍA 5 MÓDULOS (P1 PyM): la llamada de 2 argumentos dejaba
         // `det.actividades` SIN escribir; mientras el campo faltaba, pymPendientesRestantes
         // caía al fallback de "marca vieja" y el aviso silenciaba VIH, cérvix, mama, colon,
@@ -31506,25 +31290,18 @@
         markOrdenesCreadasHoy(apt.doc_id, [...new Set(agrupadores)], [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
         const agrupadoresUnicos = [...new Set(agrupadores)];
         if (vivo()) {
-          if (!parcial && !soloRecuperadas) confirmBtn.classList.add("vgl-bg-success");
+          if (!parcial) confirmBtn.classList.add("vgl-bg-success");
           confirmBtn.textContent = parcial
             ? `Reintentar las ${fallidasCount} que faltaron`
-            : soloRecuperadas
-              ? (recuperadasCount === 1 ? "1 orden creada sin confirmación" : `${recuperadasCount} órdenes creadas sin confirmación`)
-              : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
+            : `${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} generada${creadasCount === 1 ? "" : "s"}`;
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
           // v17.11.0 — hallazgo #44: el parcial usaba .vgl-ord-vigwarn, que en este modal es
           // VERDE («ya está cubierto»). Una corrida a medias no puede parecerse a una que
           // salió bien: clase propia en ámbar.
-          successMsg.className = (parcial || soloRecuperadas) ? "vgl-ord-parcial" : "vgl-msg-success";
-          successMsg.innerHTML = soloRecuperadas
-            ? `
-            <div style="font-size:14px;font-weight:600;margin-bottom:4px">La conexión se cortó, pero ${recuperadasCount === 1 ? "la orden ya quedó creada" : `las ${recuperadasCount} órdenes ya quedaron creadas`} en Everest</div>
-            <div style="font-size:12px;opacity:0.9">El servidor no devolvió la confirmación y se verificó contra las órdenes vigentes: ${recuperadasCount === 1 ? "figura creada hoy" : "figuran creadas hoy"}. <b>No ${recuperadasCount === 1 ? "la vuelva a generar" : "las vuelva a generar"}</b> — el botón de reintento crearía ${recuperadasCount === 1 ? "un duplicado" : "duplicados"}. Verifíquela e imprímala desde el módulo de Ordenamientos de Everest.</div>
-          `
-            : parcial
+          successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
+          successMsg.innerHTML = parcial
             ? `
             <div style="font-size:14px;font-weight:600;margin-bottom:4px">Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
             <div style="font-size:12px;opacity:0.9">Las ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} creadas quedaron listas para imprimir y quedan registradas como generadas: <b>no las vuelva a generar</b>. ${fallidasCount === 1 ? "La que falta está marcada en rojo; el botón de arriba reintenta solo esa." : `Las ${fallidasCount} que faltan están marcadas en rojo; el botón de arriba reintenta solo esas.`}</div>
@@ -31538,10 +31315,7 @@
           // v15.7.0 — AUTO-IMPRESIÓN: la primera orden se abre sola (como Everest). Si hay
           // más de un agrupador, los demás quedan con su botón (el navegador solo permite
           // una pestaña por gesto del usuario).
-          // v18.1.1 (FIX 8 M2M) — el guard de agrupadoresUnicos.length: en una corrida
-          // soloRecuperadas el POST se perdió y no hay agrupador; sin el guard se llamaba
-          // GenerarLinks con undefined.
-          if (pestanaImpresion && agrupadoresUnicos.length) {
+          if (pestanaImpresion) {
             try {
               uxTrack("ordenes.imprimir.auto");
               let urlServidorAuto = null;
@@ -31556,9 +31330,6 @@
           // v12.5.13 — Imprimir directamente la(s) orden(es) recién creada(s). Contrato real,
           // ver imprimirOrdenPyM. Un botón por agrupador ÚNICO de ESTA corrida — nunca una
           // orden vieja de otra sesión ni de otro paciente.
-          // v18.1.1 (FIX 8 M2M) — sin agrupadores (soloRecuperadas) no hay botones: la
-          // verificación e impresión van por el módulo de Ordenamientos, como dice el aviso.
-          if (agrupadoresUnicos.length) {
           const printBox = document.createElement("div");
           printBox.className = "vgl-ord-printbox";
           printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">Imprimir las órdenes generadas</label>`;
@@ -31638,14 +31409,13 @@
               ? `Órdenes enviadas al correo del paciente.`
               : (okCount > 0 ? `Se enviaron ${okCount} de ${agrupadoresUnicos.length} órdenes. Verifique en la plataforma de Everest.` : "No fue posible enviar las órdenes por correo. Verifique el correo o inténtelo desde la plataforma de Everest.");
           });
-          }   // v18.1.1 (FIX 8 M2M) — fin del guard de agrupadores (printBox + mailBox)
         }
 
         // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
         // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
         // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
         markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)], [...new Set(cie10Creados)]);
-        uxTrack("ordenes.creadas", { n: creadasCount, fallidas: fallidasCount, recuperadas: recuperadasCount });
+        uxTrack("ordenes.creadas", { n: creadasCount, fallidas: fallidasCount });
         _fnCompletado = true;
         try { uxTrack("fn.ordenar.complete"); } catch (e) {}
         // v16.7.0 — AUDITORÍA #10: el aviso también decía VERDE «Generadas» en las
@@ -31653,10 +31423,6 @@
         // único que el médico puede usar para decidir si le falta algo por ordenar.
         if (parcial) {
           notify("AMBAR", "Órdenes incompletas", `${patientName} · ${creadasCount} de ${creadasCount + fallidasCount} órdenes quedaron creadas. ${fallidasCount === 1 ? "Falta 1: reintente solo esa" : `Faltan ${fallidasCount}: reintente solo esas`} en el módulo.`, true); // [COPY-UX]
-        } else if (soloRecuperadas) {
-          // v18.1.1 (FIX 8 M2M) — caída de conexión con la orden YA creada en el servidor:
-          // ni verde (no hay confirmación formal) ni reintento (duplicaría).
-          notify("AMBAR", "Órdenes sin confirmación de Everest", `${patientName} · ${recuperadasCount === 1 ? "la orden quedó creada pese a" : `${recuperadasCount} órdenes quedaron creadas pese a`} la caída de conexión. No ${recuperadasCount === 1 ? "la vuelva a generar" : "las vuelva a generar"}: verifíquelas en el módulo de Ordenamientos.`, true); // [COPY-UX]
         } else {
           // v18.0.109 (C18) — el bloque verde del modal ya lo dice; el aviso solo si la pestaña no se mira.
           if (_pestanaSinAtencion()) notify("VERDE", "Órdenes generadas", `${patientName} · ${creadasCount} ${creadasCount === 1 ? "orden" : "órdenes"} quedaron registradas en el sistema.`, true); // [COPY-UX]
@@ -31962,17 +31728,13 @@
       if (!sigueElMismo()) return false;
       const items = Array.from(d.querySelectorAll("li"));
       let li = null;
-      // v18.1.1 (FIX 10 M2M) — mismo filtro de visibilidad que _conductaClicPaqueteHTA
-      // (probado 2 veces en producción en esta misma pantalla): Angular deja residuos de
-      // listas ocultas en el DOM y sin este filtro podíamos clickear el <li> de una copia
-      // que el médico no ve.
-      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo && _vglVisibleDeVerdad(el)) { li = el; break; } }
+      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; } }
       if (!li) return false;
       li.click();
       await _conductaEsperar(700);   // cadencia real observada: ~700-1500ms entre <li> y "Agregar"
       if (!sigueElMismo()) return false;               // ← el hueco grande: 700 ms
       const botones = Array.from(d.querySelectorAll("button"));
-      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled && _vglVisibleDeVerdad(b));
+      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled);
       if (!btnAgregar) return false;
       btnAgregar.click();
       // Cuadro opcional (visto en la captura real para algunos analitos, no todos): se
@@ -31980,16 +31742,16 @@
       await _conductaEsperar(400);
       if (!sigueElMismo()) return false;
       const botones2 = Array.from(d.querySelectorAll("button"));
-      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO" && _vglVisibleDeVerdad(b));
+      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO");
       if (btnRepetir) {
         btnRepetir.click();
         await _conductaEsperar(300);
         if (!sigueElMismo()) return false;
         const botones3 = Array.from(d.querySelectorAll("button"));
-        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR" && _vglVisibleDeVerdad(b));
+        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR");
         if (btnConfirmar) btnConfirmar.click();
       } else {
-        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO" && _vglVisibleDeVerdad(b));
+        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO");
         if (btnEntendido) btnEntendido.click();
       }
       return true;
@@ -34184,6 +33946,9 @@
              script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
              y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
         <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activa en este equipo</span></div>
+        <!-- v18.2 (P11) — versión vigente de los términos siempre visible en Ajustes
+             (requisito de la PARTE 2 §7 del propio documento). Solo lectura. -->
+        <div class="vgl-fld"><label>Términos de uso y privacidad<span class="vgl-hint">Versión del aviso que usted aceptó para usar el asistente, con su fecha. Si el texto cambia, se le pedirá autorización de nuevo antes de continuar.</span></label><b id="c-terminos" style="font-size:var(--t-micro)">${escapeHtml(_terminosAjustesTexto())}</b></div>
       </div>
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
@@ -35389,9 +35154,63 @@
       _relojCada("tick", deseado, tick);
     } catch (e) {}
   }
+  // v18.3.4 (hallazgo N8-B1) — RETIRO DEL MONITOR POR PERFIL. Mismo aseo que
+  // emergencyTeardown (reloj, observador de minimizado, registro de navegación,
+  // temporizadores, nodos vgl-* y —desde v18.3.5, T1— vigilancia de DOM) PERO
+  // sin escribir banderas de kill ni mostrar
+  // el aviso rojo: esto no es una emergencia remota, es la compuerta de acceso
+  // cumpliendo «PÚBLICO no construye UI» cuando la identidad llegó tarde.
+  function _vglRetirarMonitorPorPerfil() {
+    try { _relojDetenerTodo(); } catch (e) {}
+    try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
+    try { clearInterval(_navLogTimer); } catch (e) {}
+    // v18.3.5 (higiene N3, T1) — la vigilancia de DOM (observer de body+subtree y 3
+    // listeners de captura input/change/click) también se suelta, mismo bloque que
+    // emergencyTeardown (T4): un monitor retirado por perfil no debe seguir
+    // observando el DOM ni despertando el hilo. El latch _vglDomObsInstalado se
+    // deja en true a propósito: una llamada tardía a _vglDomEstaSucia no debe
+    // reinstalar el observador de un monitor ya retirado.
+    try {
+      if (_vglDomObs && typeof _vglDomObs.disconnect === "function") _vglDomObs.disconnect();
+      _vglDomObs = null;
+      if (typeof _vglDomAlTocar === "function" && typeof document.removeEventListener === "function") {
+        document.removeEventListener("input", _vglDomAlTocar, true);
+        document.removeEventListener("change", _vglDomAlTocar, true);
+        document.removeEventListener("click", _vglDomAlTocar, true);
+      }
+      _vglDomAlTocar = null;
+    } catch (e) {}
+    if (Array.isArray(state.timers)) {
+      state.timers.forEach((t) => {
+        try { clearTimeout(t); } catch (e) {}
+        try { clearInterval(t); } catch (e) {}
+      });
+      state.timers.length = 0;
+    }
+    try {
+      if (document.querySelectorAll) {
+        document.querySelectorAll("[id^='vgl-']").forEach((el) => { try { el.remove(); } catch (e) {} });
+      }
+    } catch (e) {}
+    console.warn("[Vigilante] Monitor retirado: la identidad resuelta no tiene la capacidad «centinela» (PÚBLICO no construye UI).");
+  }
+
   function tick() {
     try {
       if (state.killed) return;
+      // v18.3.4 (hallazgo N8-B1) — RE-VISA DEL MONITOR: la ruta sin-identidad de
+      // v18.3.2 monta #vgl-root antes de saber quién consulta (el montaje se
+      // difiere en boot()). En cuanto la identidad ES conocida y el perfil
+      // resuelto no tiene la capacidad «centinela» (PÚBLICO/BLOQUEADO — la
+      // misma matriz de suites 78/80), el monitor se retira: PÚBLICO no
+      // construye UI. Sin identidad conocida no se toca nada.
+      try {
+        if ((state.activeDoctor.id || state.activeDoctor.name) &&
+            document.getElementById("vgl-root") && !accesoCap("centinela")) {
+          _vglRetirarMonitorPorPerfil();
+          return;
+        }
+      } catch (e) {}
       // v16.2.4 — DUPLICADOS AL VOLVER (reportado por el médico, 20-ago-2026: "las
       // notificaciones de llegada no se deben repetir... cuando me voy a Ordenamiento
       // o Acceso vuelve y me salen todas"). `eraLider` se captura ANTES de heartbeat():
@@ -35490,11 +35309,6 @@
         state.autoDocked = false; setWinState(state.userWinState, true);
       }
       state.lastSeccion = secc;
-
-      // v18.0.146 (fix 4 M2M) — detector de apagado silencioso: si "otra" se vuelve
-      // crónico con un paciente visible en pantalla (o la historia abierta dejó de
-      // mostrar cédula), el Vigilante avisó UNA vez y dejó rastro en telemetría.
-      try { _vigilarSilencioVigilancia(secc); } catch (e) {}
 
       // v12.3.14 — Disparo del Robot Athenea SIN MutationObserver global: la pregunta
       // que el observador erradicado respondía quemando CPU en cada mutación de la SPA
@@ -36074,16 +35888,47 @@
   // =====================================================================
   //  RED DE SEGURIDAD REMOTA, KILL-SWITCH Y CANARIO (R5.1, R5.3)
   // =====================================================================
-  function emergencyTeardown(reason) {
+  function emergencyTeardown(reason, opts) {
     state.killed = true;
     state.killReason = reason || "Apagado remoto de emergencia";
     try { _relojDetenerTodo(); } catch (e) {}   // v14.2.12 — el reloj de segundo plano también se apaga
+    // v18.3.4 (higiene T4) — el tono insistente del ROJO y el parpadeo de pestaña viven en
+    // intervalos propios (nagTimer/flashTimer, fuera de state.timers): si el kill caía
+    // durante un aviso activo, el sonido seguía hasta ~6 min con la UI ya borrada y sin
+    // modal que permitiera reconocerlo (acknowledge() es inalcanzable tras retirar el DOM).
+    // Se apagan aquí; el edge-trigger (alertedFraud) NO se toca — esto solo apaga al matar.
+    try { stopNag(); } catch (e) {}
+    try { stopFlash(); } catch (e) {}
     // v18.0.134 (auditoría 2026-09-03, B10+B13) — el apagado de emergencia también suelta el
     // observador de ventanas minimizadas y detiene el registro de navegación: el script
     // "muerto" no debe seguir despertando el hilo ni observando el DOM.
     try { if (vglMinInstalar._obs && typeof vglMinInstalar._obs.disconnect === "function") vglMinInstalar._obs.disconnect(); } catch (e) {}
     try { clearInterval(_navLogTimer); } catch (e) {}
-    if (typeof GM_setValue !== "undefined") {
+    // v18.3.4 (higiene T4) — la vigilancia de DOM (observer de body+subtree y 3 listeners de
+    // captura input/change/click) también se suelta: sus referencias ahora viven a nivel de
+    // módulo (_vglDomObs/_vglDomAlTocar). El latch _vglDomObsInstalado se deja en true a
+    // propósito: una llamada tardía a _vglDomEstaSucia no debe reinstalar el observador de
+    // un script ya muerto. Mismo contrato que B13: «el script muerto no debe seguir
+    // despertando el hilo ni observando el DOM».
+    try {
+      if (_vglDomObs && typeof _vglDomObs.disconnect === "function") _vglDomObs.disconnect();
+      _vglDomObs = null;
+      if (typeof _vglDomAlTocar === "function" && typeof document.removeEventListener === "function") {
+        document.removeEventListener("input", _vglDomAlTocar, true);
+        document.removeEventListener("change", _vglDomAlTocar, true);
+        document.removeEventListener("click", _vglDomAlTocar, true);
+      }
+      _vglDomAlTocar = null;
+    } catch (e) {}
+    // v18.4.1 — el bloqueo por versión obsoleta usa su PROPIO candado (vgl_version_lock)
+    // y NO vgl_kill_active: ese, al arrancar, muestra el aviso genérico de pausa remota
+    // sin opción de actualizar, y dejaría al equipo en un limbo tras instalar la versión
+    // nueva. Este candado se limpia solo cuando la versión instalada alcanza la exigida.
+    if (opts && opts.candadoVersion) {
+      if (typeof GM_setValue !== "undefined") {
+        GM_setValue(VGL_VERSION_LOCK_GM, String(opts.candadoVersion));
+      }
+    } else if (typeof GM_setValue !== "undefined") {
       GM_setValue("vgl_kill_active", true);
       GM_setValue("vgl_kill_reason", state.killReason);
     }
@@ -36108,7 +35953,10 @@
         injected.forEach((el) => { try { el.remove(); } catch (e) {} });
       }
     } catch (e) {}
-    _mostrarAvisoPausaClinica(state.killReason);
+    // v18.4.1 — con candado de versión, la pantalla final es el modal exclusivo de
+    // actualización (no el rótulo de esquina de la pausa remota): es la única acción.
+    if (opts && opts.candadoVersion) _mostrarAvisoBloqueoVersion(String(opts.candadoVersion));
+    else _mostrarAvisoPausaClinica(state.killReason);
   }
 
   function _mostrarAvisoPausaClinica(motivo) {
@@ -36133,6 +35981,102 @@
       aviso.appendChild(span);
       document.body.appendChild(aviso);
     } catch (e) {}
+  }
+
+  // =====================================================================
+  //  v18.4.1 — BLOQUEO IRREVERSIBLE POR VERSIÓN OBSOLETA (regla suprema
+  //  de actualización obligatoria). Decidido con el dueño del repo:
+  //   · Señal de activación: MIN_VERSION del TABLERO (VersionCheck.gs) — el
+  //     operador la sube recién cuando todas las tareas paralelas terminaron;
+  //     subir MIN_VERSION es, entonces, el interruptor de la regla.
+  //   · Momento del bloqueo: SOLO cuando no queda operación en curso. El guard
+  //     v7.8.1 de historia clínica abierta sigue devolviendo antes; el bloqueo
+  //     cae en la rama post-recarga de checkVersionMinimum (la recarga ya se
+  //     intentó y el equipo sigue viejo: Tampermonkey aún no tiene la versión).
+  //   · Fail-open: si el TABLERO no contesta o la respuesta no se puede leer,
+  //     no se bloquea NADA (un equipo con red caída no es un equipo viejo).
+  //   · Sin acceso alternativo: el modal no tiene botón de cierre ni «más
+  //     tarde»; la única salida es instalar la versión exigida, y el candado
+  //     (GM) sobrevive a F5 y recargas — se limpia SOLO cuando la versión
+  //     instalada ya alcanza la exigida.
+  //   · El bloqueo desactiva al VIGILANTE, no a Everest: el EHR del hospital
+  //     sigue plenamente usable (el contenedor del aviso deja pasar clics).
+  // =====================================================================
+  const VGL_VERSION_LOCK_GM = "vgl_version_lock";
+
+  function _mostrarAvisoBloqueoVersion(minVer) {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      try { document.body.classList.remove("vgl-modo-oculto"); } catch (e) {}
+      let aviso = document.getElementById("vgl-bloqueo-version");
+      if (aviso) aviso.remove();
+      aviso = document.createElement("div");
+      aviso.id = "vgl-bloqueo-version";
+      aviso.setAttribute("role", "alert");
+      // pointer-events:none en el contenedor y auto SOLO en la tarjeta: el aviso es
+      // imposible de cerrar para el VIGILANTE, pero no secuestra los clics de Everest.
+      // Colores con fallback + !important: cuelga directo de body (regla del proyecto).
+      aviso.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;pointer-events:none;background:transparent;";
+      const card = document.createElement("div");
+      card.style.cssText = "pointer-events:auto;background:var(--c-rojo,#991b1b);color:var(--fg,#ffffff) !important;border:2px solid var(--fg,#ffffff);border-radius:var(--r-card,12px);padding:22px 26px;max-width:560px;font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);line-height:1.55;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));text-align:left;";
+      const titulo = document.createElement("div");
+      titulo.style.cssText = "color:var(--fg,#ffffff) !important;font-weight:700;font-size:16px;margin-bottom:10px;";
+      titulo.textContent = "🔒 Actualización obligatoria del Vigilante";
+      const cuerpo = document.createElement("div");
+      cuerpo.style.cssText = "color:var(--fg,#ffffff) !important;margin-bottom:12px;white-space:pre-line;";
+      cuerpo.textContent = "Este equipo quedó en la versión v" + VERSION + " y la mínima exigida es la v" + minVer + ".\nPor regla del proyecto, la versión anterior queda deshabilitada: actualice para volver a usar el asistente.";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Actualizar ahora";
+      btn.style.cssText = "pointer-events:auto;background:var(--fg,#ffffff);color:var(--c-rojo,#991b1b) !important;font-weight:700;border:none;border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer;margin-bottom:12px;";
+      btn.addEventListener("click", () => {
+        try { window.open(VGL_UPDATE_GIST_URL, "_blank"); } catch (e2) {}
+      });
+      const pasos = document.createElement("div");
+      pasos.style.cssText = "color:var(--fg,#ffffff) !important;white-space:pre-line;opacity:0.95;";
+      pasos.textContent = "1. Pulse «Actualizar ahora» y confirme la instalación en Tampermonkey (o: icono de Tampermonkey → Utilidades → «Buscar actualizaciones de userscripts»).\n2. Recargue Everest (F5): el asistente vuelve solo, ya sin bloqueo.\nEverest sigue funcionando con normalidad; lo deshabilitado es el asistente.";
+      card.appendChild(titulo);
+      card.appendChild(cuerpo);
+      card.appendChild(btn);
+      card.appendChild(pasos);
+      aviso.appendChild(card);
+      document.body.appendChild(aviso);
+    } catch (e) {}
+  }
+
+  function aplicarBloqueoVersionObsoleta(minVer) {
+    const exigida = String(minVer || "").trim();
+    // Registro del caso (bitácora local + telemetría al TABLERO): una vez por sesión y
+    // por versión exigida — el chequeo corre cada 5 min y no debe llenar la cola.
+    try { vglLog("VER", "BloqueoVersionObsoleta", { local: VERSION, exigida }); } catch (e) {}
+    try {
+      const sello = "vgl_verlock_rep|" + exigida;
+      if (sessionStorage.getItem(sello) !== "1") {
+        sessionStorage.setItem(sello, "1");
+        try { reportar("verlock", { exigida }); } catch (e2) {}
+      }
+    } catch (e) {}
+    emergencyTeardown("Versión v" + VERSION + " obsoleta (se exige v" + exigida + "): asistente bloqueado hasta actualizar.", { candadoVersion: exigida });
+  }
+
+  // Chequeo de arranque: devuelve true cuando el boot debe abortarse porque el candado
+  // persistente sigue vigente para ESTA versión. Se llama antes de montar nada; con la
+  // versión ya instalada, limpia el candado y devuelve false (arranque normal).
+  function _vglCandadoVersionArranque() {
+    try {
+      const lockVer = (typeof GM_getValue !== "undefined" && GM_getValue(VGL_VERSION_LOCK_GM, "")) || "";
+      if (!lockVer) return false;
+      if (mtrVersionEsMasNueva(lockVer, VERSION)) {
+        state.killed = true;
+        state.killReason = "Versión v" + VERSION + " obsoleta: se exige la v" + lockVer + " o superior. Actualice desde Tampermonkey para volver a usar el asistente.";
+        _mostrarAvisoBloqueoVersion(lockVer);
+        console.warn("[Vigilante] Inicio cancelado: candado de versión (se exige v" + lockVer + ").");
+        return true;
+      }
+      // Ya actualizado: el candado se cumple solo y se limpia — la versión nueva arranca normal.
+      if (typeof GM_deleteValue !== "undefined") GM_deleteValue(VGL_VERSION_LOCK_GM);
+    } catch (e) {}
+    return false;
   }
 
   // --- Detección de Instancia Duplicada de Tampermonkey (R5.8) ---
@@ -36392,13 +36336,22 @@
                 return;
               }
               const marca = "vgl_upd|" + minVer;
+              let yaRecargo = false;
               try {
-                if (sessionStorage.getItem(marca)) {
-                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualícela desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».`, "warn");
-                  return;
-                }
-                sessionStorage.setItem(marca, "1");
+                if (sessionStorage.getItem(marca)) yaRecargo = true;
+                else sessionStorage.setItem(marca, "1");
               } catch (e) {}
+              if (yaRecargo) {
+                // v18.4.1 — REGLA DE ACTUALIZACIÓN OBLIGATORIA: la recarga ya se intentó
+                // en esta sesión y el equipo SIGUE en la versión vieja (Tampermonkey aún
+                // no tiene la nueva instalada). Antes aquí solo quedaba un aviso pasivo y
+                // la versión obsoleta seguía usándose indefinidamente; ahora el asistente
+                // se bloquea de forma irreversible hasta instalar la exigida. El guard de
+                // historia clínica de arriba ya devolvió: aquí no queda operación en curso
+                // que proteger. El caso queda registrado (bitácora + telemetría).
+                aplicarBloqueoVersionObsoleta(minVer);
+                return;
+              }
               try { localStorage.removeItem("vgl_pym_dia"); } catch (e) {}
               setSummary(`🔄 Vigilante se actualiza a v${minVer}...`, "info");
               setTimeout(() => location.reload(), 2000);
@@ -36727,6 +36680,12 @@
         _vglRevisarClavesDuplicadas();
       }
     } catch (e) {}
+    // v18.4.1 — CANDADO DE VERSIÓN PERSISTENTE: si una sesión anterior bloqueó este
+    // equipo por versión obsoleta, ni F5 ni recargas lo levantan — el arranque aborta
+    // aquí, antes de montar nada, y queda el modal con la única opción de actualizar.
+    // Corre ANTES del chequeo del kill remoto para que el aviso mostrado sea el de
+    // actualización (no la pausa genérica). Con la versión ya instalada, se limpia solo.
+    try { if (_vglCandadoVersionArranque()) return; } catch (e) {}
     try {
       const killActivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_active", false)) === true;
       const bypass = (typeof localStorage !== "undefined" && localStorage.getItem("vgl_override_kill") === "1") ||
@@ -36741,6 +36700,10 @@
       }
     } catch (e) {}
 
+    // v18.2 (P11) — los latidos de nivel superior se instalan AQUÍ: después del
+    // kill-switch y solo tras el consentimiento (ver _instalarLatidosBase).
+    try { _instalarLatidosBase(); } catch (e) {}
+
     // v14.2.0 (auditoría pre-producción) — de aquí en adelante boot() no tenía try/catch
     // propio: una sola excepción en buildOverlay()/applySettings()/etc. abortaba el arranque
     // completo en silencio (tick() nunca llegaba a programarse) y el médico se quedaba sin
@@ -36748,8 +36711,41 @@
     // captura y se deja constancia (consola + reportarError) sin cambiar ningún otro
     // comportamiento cuando todo sale bien.
     try {
+    // v18.2 (P11) — la resolución de identidad por red (GetUsuarioPerfil) vive AHORA aquí:
+    // solo corre cuando la compuerta ya confirmó padrón + consentimiento. Es un setTimeout(0)
+    // para no bloquear el primer render del panel, como siempre.
+    try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
     if (_detectarInstanciaDuplicada()) return;
     if (document.getElementById("vgl-root")) return;
+    // v18.3.4 (hallazgo N8-B1) — CAPA a del monitor núcleo: la capacidad
+    // «centinela» (ACCESO_CAPS_LABORATORIOS) estaba declarada y probada por la
+    // matriz (suites 78/80) pero NUNCA consultada: boot() montaba #vgl-root sin
+    // compuerta de perfil y el monitor corría para PÚBLICO en la ruta
+    // sin-identidad-aceptado. Ahora se exige ANTES de montar, con UNA excepción
+    // documentada: si la identidad del médico aún no se conoce (ruta
+    // sin-identidad de v18.3.2, caso Dra. Gloria), aquí no se bloquea — sin
+    // identidad no hay perfil que exigir y hacerlo reviviría el «no aparece
+    // nada» de la v18.3.2; la re-visa de tick() retira el monitor si al
+    // resolverse la identidad el perfil no tiene la capacidad.
+    // La identidad SIN red se fija primero (login de sesión + caché GM, la
+    // misma fuente que la compuerta) porque en este punto del arranque
+    // state.activeDoctor aún está vacío: sin esto, un médico del padrón con la
+    // gracia de 12 h vencida (primer arranque de la mañana) resolvía PÚBLICO
+    // y perdía el monitor.
+    try {
+      if (!state.activeDoctor.id) {
+        const _lgN8 = mtrLoginDeSesion();
+        const _cacheN8 = _lgN8 ? _identidadMedicoCacheLeer(_lgN8, true) : null;
+        if (_cacheN8 && Number(_cacheN8.id) > 0) {
+          state.activeDoctor.id = Number(_cacheN8.id);
+          state.activeDoctor.name = _cacheN8.name;
+        }
+      }
+    } catch (e) {}
+    if ((state.activeDoctor.id || state.activeDoctor.name) && !accesoCap("centinela")) {
+      console.warn("[Vigilante] Monitor no montado: el perfil de acceso no tiene la capacidad «centinela» (PÚBLICO no construye UI).");
+      return;
+    }
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
     buildOverlay();
     // v18.0.80 — AUDITORÍA (hallazgo de enjambre #32): antes esta llamada vivía ANTES del
@@ -36937,27 +36933,786 @@
     }
   }
 
+  // =====================================================================
+  //  P11 — COMPUERTA DE CONSENTIMIENTO (v18.2)
+  //  ------------------------------------------------------------------
+  //  La compuerta corre ANTES que todo lo demás y decide en tres pasos:
+  //    1. ¿Está el médico en el padrón de autorizados? → si no, el script
+  //       no monta NADA (en silencio, sin pantalla).
+  //    2. ¿Aceptó la versión VIGENTE de los términos? → si no, se muestra
+  //       la pantalla de términos. Rechazó hace <12 h → tampoco se pregunta:
+  //       apagado completo y en silencio.
+  //    3. Solo con las dos en verde arranca boot() (o el captador ligero
+  //       de SharePoint).
+  //  Antes del paso 3 no puede ocurrir NADA: ni dock, ni panel, ni widgets,
+  //  ni observadores del DOM, ni temporizadores, ni una sola llamada de red
+  //  — ni un evento de telemetría. Por eso la identidad por red
+  //  (GetUsuarioPerfil) se movió DENTRO de boot() y el observador de
+  //  rendimiento ya no se instala en la entrada del script.
+  //
+  //  ACEPTA guarda en GM_setValue SOLO {versión, fecha-hora, identificador}.
+  //  RECHAZA deja una marca local con hora (12 h), cero envíos y ni un
+  //  evento de rechazo. Escape y cerrar NO son responder: la pantalla no
+  //  tiene botón ✕ y Escape no hace nada.
+  //
+  //  DESVIACIONES documentadas (docs/CAMBIOS_claude-compuerta-consentimiento.md):
+  //   · RECHAZA no llama emergencyTeardown(): nada está montado aún (la
+  //     compuerta corrió antes que boot) y esa vía escribe vgl_kill_active
+  //     PERMANENTE, que contradice la re-pregunta a las 12 h y rompería un
+  //     arranque posterior tras aceptar. El kill-switch remoto queda intacto.
+  //   · En SharePoint no hay localStorage de Everest: el padrón no es
+  //     evaluable allí, así que la compuerta decide SOLO consentimiento.
+  // =====================================================================
+  const TERMINOS_VERSION = "1.2";
+  const TERMINOS_GM_ACEPTA = "vgl_terminos_acepta";
+  const TERMINOS_GM_RECHAZO = "vgl_terminos_rechazo";
+  const TERMINOS_RECHAZO_MS = 12 * 60 * 60 * 1000;   // re-pregunta a las 12 h (2 h no, 13 h sí)
+  // Lo que muestra la pantalla de primer uso (PARTE 1 del documento, en limpio).
+  const TERMINOS_RESUMEN = [
+    "Centinela es una herramienta de apoyo hecha por un colega médico y compartida entre profesionales. No es un programa oficial de la IPS ni de Everest/Athenea, y no reemplaza su criterio: usted sigue siendo responsable de todo lo que firme en la historia clínica.",
+    "Para poder mejorarla, el programa registra cómo se usa: qué funciones abre, si terminaron bien o mal, cuánto tardan y qué errores técnicos ocurren. Nunca registra datos de sus pacientes — ni nombres, ni documentos, ni diagnósticos, ni el texto de la historia.",
+    "Ese registro es condición para usar la herramienta: no se puede desactivar. Si no está de acuerdo, no pasa nada — el programa simplemente no se abrirá."
+  ].join("\n\n");
+  // El documento ENTERO, carácter por carácter (docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md).
+  // La suite 82 lo compara en estricto contra el archivo: cualquier edición del doc
+  // obliga a repasar esta constante Y a subir TERMINOS_VERSION (re-pregunta al médico).
+  // La vinculación versión↔texto la garantiza esa prueba, no la memoria de nadie.
+  const TERMINOS_TEXTO = `# Términos de uso y aviso de privacidad — Asistente Centinela
+**Versión 1.2 · 6 de septiembre de 2026**
+
+> **Nota de estado.** Este es un borrador de trabajo redactado para decir la verdad sobre lo que el
+> programa hace. No es asesoría jurídica y no sustituye la revisión de un abogado colegiado. Los
+> puntos que exigen una decisión del propietario o del abogado están marcados con la palabra
+> **pendiente** o **requiere abogado**, y ningún punto marcado así debe publicarse sin resolverse.
+
+---
+
+## Cómo leer este documento · T-37
+
+Al inicio hay un **resumen en lenguaje llano** de diez líneas. Ese resumen informa, orienta y no
+sustituye: **en caso de cualquier diferencia, manda el texto completo de estos términos**, no el
+resumen. Cada cláusula tiene un identificador estable (T-07, T-21…) para poder citarla.
+
+### Resumen en diez líneas
+
+1. Centinela es una ayuda de uso clínico hecha por un colega; no es un producto de la IPS, de
+   Everest ni de Athenea.
+2. Sugiere, ordena y escribe solo cuando usted lo pide; todo se puede deshacer y su firma sigue
+   siendo la única que cuenta.
+3. Para mejorarla, registra cómo se usa (funciones, resultados, errores, tiempos). Ese registro es
+   obligatorio: sin él la herramienta no funciona.
+4. Nunca envía datos de sus pacientes por internet: hay una barrera técnica y una prueba automática
+   que la vigila.
+5. Los datos clínicos se procesan solo en su equipo; lo que sale a la red es lo descrito en T-21.
+6. El registro de uso se guarda en una hoja de cálculo en la nube y se borra a los doce meses.
+7. Usted puede conocer, rectificar y pedir la supresión de sus datos en cualquier momento por el
+   canal de contacto de T-20.
+8. La función de redacción con inteligencia artificial es opcional, se usa sin identificar al
+   paciente y usted decide qué insertar.
+9. Si estos términos cambian de fondo, se le pedirá autorización de nuevo antes de continuar.
+10. Ante cualquier duda entre lo que dice Centinela y lo que dice Everest o Athenea, manda Everest.
+
+### Índice
+
+- PARTE 1 · La pantalla de primer uso (T-01 a T-06)
+- PARTE 2 · Términos de uso (T-07 a T-19, T-38, T-39)
+- PARTE 3 · Aviso de privacidad y autorización (T-20 a T-35, T-40 a T-44)
+- Cierre: promesas verificables (T-45), glosario (T-46) y estado antes de publicar (T-36)
+
+---
+
+## PARTE 1 · La pantalla de primer uso
+
+Este es el texto que ve el médico la primera vez, y cada vez que cambie la versión de los
+términos. Dos botones: **Acepto y continúo** · **No acepto**.
+
+> ### Antes de empezar
+>
+> **Centinela** es una herramienta de apoyo hecha por un colega médico y compartida entre
+> profesionales. **No es un programa oficial de la IPS ni de Everest/Athenea**, y no reemplaza su
+> criterio: usted sigue siendo responsable de todo lo que firme en la historia clínica.
+>
+> Para poder mejorarla, el programa **registra cómo se usa**: qué funciones abre, si terminaron
+> bien o mal, cuánto tardaron y qué errores técnicos ocurren. **Nunca registra datos de sus
+> pacientes** — ni nombres, ni documentos, ni diagnósticos, ni el texto de la historia.
+>
+> Ese registro es **condición para usar la herramienta**: no se puede desactivar. Si no está de
+> acuerdo, no pasa nada — el programa simplemente no se abrirá.
+>
+> [Ver los términos completos y el aviso de privacidad]
+>
+> **[ Acepto y continúo ]   [ No acepto ]**
+
+Y si pulsa **No acepto**:
+
+> Sin esa autorización el asistente no puede funcionar. No se le registrará nada.
+> Si cambia de opinión, vuelva a abrir Everest más tarde y se le preguntará de nuevo.
+>
+> **[ Entendido ]**
+
+Antes de aceptar, los términos completos ya están en la pantalla (plegados bajo el enlace
+«Ver los términos completos y el aviso de privacidad»): no hace falta aceptar para poder leerlos.
+
+---
+
+## PARTE 2 · Términos de uso
+
+### T-07 · Qué es esto y quién responde por ello
+Centinela es una herramienta personal, hecha y mantenida por un médico colega —en adelante **el
+Desarrollador**— por su cuenta y a su costo. **No es un producto de la IPS donde usted trabaja, ni
+de Everest, ni de Athenea, ni cuenta con su respaldo o certificación.** Se comparte entre colegas
+como una ayuda, sin costo. El Desarrollador responde por este documento y por el programa en los
+términos de T-38; la atención de sus pacientes sigue siendo enteramente suya.
+
+### T-08 · Qué hace y qué no hace
+Centinela vigila la agenda del día, agrupa información que ya está en Everest y Athenea, y
+prepara borradores y sugerencias para ahorrarle pasos.
+
+Lo que **no** hace, y conviene que quede escrito:
+- **T-09. No decide por usted.** Todo lo que propone es una sugerencia que usted revisa.
+- **T-10. No escribe solo en la historia clínica.** Solo llena casillas cuando usted lo pide y
+  siempre deja cómo deshacerlo; una casilla que usted ya escribió no se pisa nunca.
+- **T-11. No reemplaza la verificación en Everest.** Ninguna cita, orden o cancelación se da por
+  hecha hasta que Everest la confirme.
+- **T-12. No es un dispositivo médico ni una guía clínica.** Las sugerencias clínicas son ayudas
+  de memoria, no indicaciones. La responsabilidad profesional sigue siendo enteramente suya.
+
+### T-13 · Quién puede usarlo y retiro del acceso
+Solo los profesionales autorizados expresamente por el Desarrollador. El acceso es personal e
+intransferible: no comparta el archivo, no lo instale en equipos de terceros y no lo modifique.
+El Desarrollador puede suspender o retirar el acceso cuando exista una razón legítima —seguridad
+de los pacientes, protección de datos, obligación legal o mantenimiento— y se lo comunicará por
+el canal de T-20 cuando sea posible. [REQUIERE ABOGADO: alcance exacto del retiro]
+
+### T-14 · Cómo se entrega
+Se entrega **tal como está**, sin garantía de que funcione siempre ni de que esté libre de
+errores. Everest y Athenea son sistemas ajenos que pueden cambiar sin aviso y dejar partes de la
+herramienta sin funcionar. Si algo falla, repórtelo por el canal de T-20: ese aviso es lo que la
+mejora.
+
+**T-15. En caso de duda entre lo que dice Centinela y lo que dice Everest o Athenea, siempre
+manda Everest o Athenea.**
+
+### T-38 · Responsabilidad [NUEVA · REQUIERE ABOGADO]
+En la máxima medida que la ley colombiana permita, la responsabilidad total del Desarrollador
+frente a usted por cualquier daño relacionado con la herramienta se limita, en conjunto, a la
+reparación del defecto o, si eso no fuera posible, a la terminación de estos términos. Nada en
+este documento excluye ni limita responsabilidades que la ley declare irrenunciables o que no
+puedan ser objeto de renuncia — en particular las derivadas del dolo o la culpa grave, y las
+obligaciones que a usted le impone su profesión médica. Esta cláusula no limita su
+responsabilidad profesional frente a sus pacientes ni frente a la ley.
+
+### T-16 · Inteligencia artificial con supervisión humana
+Cuando usted usa la función de redacción asistida, el programa **nunca envía el texto completo**:
+reconstruye un borrador a partir de una lista cerrada de campos y lo envía —sin nombre, documento
+ni dato que identifique al paciente— a un servicio de inteligencia artificial: Z.ai (GLM) o
+Google Gemini, según cuál esté configurado en el panel. Su clave de ese servicio se guarda
+únicamente en su navegador y nunca se envía a ningún otro destino. Lo que vuelve es un borrador
+que usted lee, corrige y decide si inserta: nada se inserta en la historia clínica sin su acción
+expresa. Si prefiere no usar esa función, no la use: el resto de la herramienta funciona igual.
+
+### T-17 · Sus obligaciones
+- No pegar datos de pacientes en canales que no sean la historia clínica.
+- No usar la herramienta para nada distinto de su trabajo asistencial.
+- Reportar los fallos que encuentre, sobre todo los que afecten a un paciente.
+
+### T-39 · Cambios y versionado [NUEVA]
+Estos términos pueden cambiar. La versión vigente aparece siempre en el panel de ajustes con la
+fecha en que usted la aceptó, y el historial de versiones está al final de este documento. Si el
+cambio es de fondo —nuevos datos, nuevas finalidades, cambios en plazos o en esta cláusula de
+cambios— se le volverá a pedir su autorización **antes** de seguir usando la herramienta: el
+programa le mostrará la nueva versión y no seguirá hasta que responda. Los cambios de fondo
+nunca se aplican hacia atrás a datos ya recogidos bajo una versión anterior.
+
+### T-19 · Ley aplicable y resolución de conflictos
+Estos términos se rigen por la ley colombiana. Cualquier controversia se resolverá primero por
+acuerdo directo a través del canal de T-20 y, si no fuere posible, ante las autoridades
+colombianas competentes. [REQUIERE ABOGADO: foro y método definitivos]
+
+---
+
+## PARTE 3 · Aviso de privacidad y autorización para el tratamiento de datos
+
+### T-20 · Responsable del tratamiento
+El Responsable del Tratamiento de los datos descritos en esta Parte 3 es **el Desarrollador de la
+herramienta** (T-07), actuando como persona natural. Canal para consultas, derechos y reportes:
+**[PENDIENTE: canal de contacto por definir por el propietario antes de publicar]**. La
+identificación completa del Responsable se pone a disposición del titular por ese mismo canal al
+solicitarla, conforme al artículo 12 de la Ley 1581 de 2012. [Conflicto declarado: el encargo de
+este documento exige no revelar la identidad del Desarrollador en el texto; su identificación se
+canaliza por el medio de contacto. REQUIERE ABOGADO.]
+
+### T-40 · Base del tratamiento y principios [NUEVA]
+La base del tratamiento es su **autorización previa, expresa e informada**, otorgada al pulsar
+«Acepto y continúo» (artículos 9 y 12 de la Ley 1581 de 2012). El tratamiento se limita a la
+finalidad declarada en T-28 (principio de finalidad), los datos son los mínimos necesarios y se
+tratan con las medidas de seguridad de T-42 (principios de seguridad y confidencialidad, artículo
+4 de la misma ley).
+
+### T-21 · Qué datos se recogen (y solo esos)
+- **T-21.1. Identificadores:** un identificador de usuario tomado de su sesión de Everest y un
+  identificador del equipo, usados para saber qué perfil de acceso aplicar y distinguir un
+  computador de otro. El «equipo» es una etiqueta del puesto (p. ej. «Consultorio 3»), no un dato
+  personal.
+- **T-21.2. Uso:** qué módulo abrió, si la acción terminó bien, mal o se canceló, el motivo del
+  fallo cuando lo hay, y cuánto tardó.
+- **T-21.3. Errores técnicos:** el mensaje de error, dónde ocurrió y la secuencia de acciones
+  previa.
+- **T-21.4. Datos del equipo:** navegador, sistema operativo, tamaño de pantalla, versión
+  instalada.
+- **T-21.5. Contadores de la agenda:** cuántas citas llegaron a tiempo, cuántas no se presentaron
+  y cuántas se marcaron como atendidas sin haber llegado — como números, sin identificar a
+  ningún paciente.
+
+### T-26 · Lo que nunca se recoge ni se envía
+**Ningún dato de pacientes.** Ni nombres, ni números de documento, ni diagnósticos, ni resultados
+de laboratorio, ni el texto de la historia clínica.
+
+Esto no es una promesa suelta: el programa **solo puede enviar campos de una lista aprobada de
+antemano**, y existe una prueba automática del proyecto que introduce a propósito un nombre, una
+cédula y una nota clínica en cada punto de envío y **falla si alguno logra salir**.
+
+### T-43 · Lo que se procesa solo en su equipo [NUEVA]
+Los datos clínicos de sus pacientes **se procesan en su navegador y no salen de su equipo**:
+Centinela lee la pantalla de Everest, calcula y muestra. Como parte de ese trabajo local, y solo
+en su computador, la herramienta guarda: una carpeta propia **cifrada (AES-GCM 256)** con archivos
+por paciente que contienen datos derivados de las consultas (un caché para no recalcular; no es
+la historia clínica y puede purgarse desde el panel), y un registro local del día con documento y
+hora de los pacientes nuevos. Ninguno de esos datos sale por la red: lo único que se envía a
+internet es lo descrito en T-21.
+
+### T-28 · Para qué se usan
+Únicamente para **corregir fallos y mejorar la herramienta**: saber qué se usa y qué no, qué se
+rompe, qué va lento y qué confunde.
+
+Dicho con todas las letras: el Responsable **sí puede ver qué funciones usa cada usuario** — es
+justamente lo que permite descubrir qué módulo falla, cuál nadie entiende y cuál sobra. Ese
+detalle se usa **solo para mejorar la herramienta**: **no se comparte con la IPS de forma
+individualizada** y **no se usa para evaluar su desempeño laboral**. Si alguna vez esto fuera a
+cambiar, se le pedirá autorización de nuevo **antes**, conforme a T-39.
+
+### T-30 · Dónde se guardan; transferencia internacional
+El registro de uso se guarda en una hoja de cálculo en la nube del Responsable (Google Drive), a
+la que solo él tiene acceso. **Google actúa como encargado del almacenamiento**, lo que implica
+una transferencia de los datos fuera de Colombia, bajo los términos de servicio de Google.
+[PENDIENTE DE FUENTE: ancla exacta del régimen de transferencia internacional, artículo 26 de la
+Ley 1581 y reglamento, y compromiso del encargado. REQUIERE ABOGADO.] Todo lo demás (T-43) vive
+cifrado o local en su equipo.
+
+### T-42 · Medidas de seguridad [NUEVA]
+Las medidas declaradas son las reales y están verificadas por el banco de pruebas del proyecto:
+lista blanca estructural que impide que cualquier texto libre (nombres, cédulas, notas) salga por
+telemetría (T-26); envío al tablero únicamente con un token propio; carpeta local cifrada con
+AES-GCM 256 y purga desde el panel; y la compuerta de consentimiento de PARTE 1: mientras usted
+no responde, el programa no ejecuta nada — ni red, ni temporizadores, ni un solo evento.
+
+### T-32 · Por cuánto tiempo
+**Doce meses** contados desde el día en que cada registro se recibe. Cumplido ese plazo, el
+registro se borra mediante una tarea programada que corre sola sobre la hoja y elimina lo que ya
+cumplió el año. **Mientras esa tarea no esté instalada y corriendo, esta promesa no se está
+cumpliendo** — el estado real consta en T-36 antes de publicar. Si al cabo del año la herramienta
+sigue en uso, el plazo se revisa y, si cambia, se le avisará **antes**, conforme a T-39.
+
+### T-33 · Es obligatorio para usar la herramienta
+El registro de uso **no tiene interruptor**: es la condición para usar un programa que se entrega
+sin costo, y es lo único que permite corregirlo. Si usted no lo autoriza, la herramienta no se
+abrirá, y no se le registrará absolutamente nada — ni siquiera el rechazo sale de su equipo.
+
+### T-34 · Sus derechos y cómo ejercerlos [MODIFICADA]
+Conforme al artículo 8 de la Ley 1581 de 2012, usted tiene derecho a: conocer, actualizar y
+rectificar sus datos; solicitar prueba de la autorización otorgada (la constancia de T-35);
+ser informado, previa solicitud, del uso que se ha dado a sus datos; presentar queja ante la
+Superintendencia de Industria y Comercio; revocar la autorización o solicitar la supresión del
+dato en los casos previstos por la ley; y acceder en forma gratuita a sus datos.
+
+Para ejercerlos escriba al canal de T-20 identificándose con su usuario de Everest. El
+Responsable atenderá la solicitud en el menor tiempo posible y dentro de los plazos legales
+aplicables [PENDIENTE DE FUENTE: plazos exactos de consulta y reclamo del Decreto 1377 de 2013].
+Además del procedimiento legal, y como compromiso propio más ágil: **si usted pide que se borren
+sus registros, se borran los asociados a su identificador**, sin esperar trámite ante autoridad.
+Revocar la autorización implica dejar de usar la herramienta, porque sin ese registro no puede
+funcionar (T-33).
+
+### T-44 · Niños, niñas y adolescentes [NUEVA]
+Esta es una herramienta de uso profesional dirigida exclusivamente a médicos. No se dirige a
+menores de edad y no se recogen datos de menores como usuarios de la herramienta. [Ancla:
+artículo 7 de la Ley 1581 de 2012.]
+
+### T-35 · Su autorización y la constancia
+Al pulsar **Acepto y continúo** usted declara que leyó este aviso y autoriza el tratamiento de
+sus datos en los términos descritos. Se guardará la constancia: la versión del texto, la fecha y
+la hora, y su identificador. Nada más.
+
+---
+
+## T-45 · Promesas verificables [NUEVA]
+Cada afirmación de este documento que dice que el programa «no puede» hacer algo está respaldada
+por una prueba automática del proyecto que se rompe si el comportamiento cambia. En particular:
+1. Sin aceptar los términos no corre nada del programa (ni red, ni temporizadores, ni eventos).
+2. Rechazar no envía ni un dato.
+3. Ningún nombre, documento o nota clínica puede salir por telemetría.
+4. La constancia de aceptación contiene solo versión, fecha-hora e identificador.
+5. Actualizar el programa sin cambiar el texto no vuelve a pedir autorización; cambiarlo, sí.
+
+---
+
+## T-46 · Glosario [NUEVA]
+- **Centinela / la herramienta:** el programa descrito en T-08.
+- **El Desarrollador:** el médico colega que la creó y la mantiene; Responsable del Tratamiento
+  en la Parte 3.
+- **Usted / el médico usuario / el Titular:** el profesional que usa la herramienta y titular de
+  los datos de la Parte 3.
+- **Everest / Athenea:** la plataforma de la IPS sobre la que trabaja la herramienta; sistemas de
+  terceros ajenos al Desarrollador.
+- **Registro de uso:** los datos de T-21, los únicos que salen de su equipo.
+- **Historia clínica (HC):** el documento clínico oficial en Everest; la herramienta nunca
+  escribe en ella sin su acción.
+- **Compuerta de consentimiento:** la pantalla de PARTE 1; mientras no responde, nada corre.
+
+---
+
+## T-36 · Estado de este documento antes de publicar
+
+1. **PENDIENTE — Canal de contacto (T-20):** definir el canal impersonal antes de publicar; sin
+   él, los derechos de T-34 no son ejercibles.
+2. **PENDIENTE — Purga a 12 meses (T-32):** instalar la tarea programada de borrado en el
+   tablero y verificar su primera corrida; mientras no esté, la frase de T-32 no puede publicarse
+   como promesa cumplida.
+3. **PENDIENTE — Lectura de abogado:** todo lo marcado [REQUIERE ABOGADO] (T-13, T-38, T-19,
+   T-20, T-30) y las anclas «pendiente de fuente» (T-30, T-34).
+4. **Pendiente de fuente:** régimen de transferencia internacional (T-30) y plazos de
+   consulta/reclamo (T-34).
+5. **Hecho — Versionado:** historial abajo; la versión vigente se muestra en el panel de ajustes.
+
+### Historial de versiones
+- **1.2 · 6 de septiembre de 2026** — anonimización del texto (el documento ya no identifica al
+  Desarrollador); cláusulas nuevas de responsabilidad (T-38), versionado (T-39), base del
+  tratamiento (T-40), transferencia internacional (T-30), seguridad (T-42), procesamiento local
+  (T-43), menores (T-44), promesas verificables (T-45) y glosario (T-46); derechos alineados con
+  el texto del artículo 8 de la Ley 1581 (T-34); reestructuración con índice e identificadores
+  estables.
+- **1.1 · 5 de septiembre de 2026** — primera versión, junto con la compuerta de consentimiento
+  del programa.
+`;
+
+  // Login de la sesión SIN red: localStorage user/jwt coherentes (el jwt es el token
+  // vivo de ESTA sesión; user.username solo vale si su userIdIdentity coincide con
+  // el sub del jwt) y, como respaldo, la cookie UsuarioMedico. Misma regla de
+  // v12.3.2. Desde v18.3.5 (higiene N3, T6/N1-#3) es la ÚNICA copia del parseo:
+  // identidadDesdeCliente delega aquí para obtener el login y conserva solo lo
+  // suyo (loginVisto + resolverMedicoPorPerfil).
+  function mtrLoginDeSesion() {
+    try {
+      let login = "";
+      let u = null;
+      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
+      let jwtSub = "";
+      try {
+        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
+        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
+      } catch (e) {}
+      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
+        login = String(u.username).trim();
+      }
+      if (!login) {
+        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
+        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
+      }
+      return login || "";
+    } catch (e) { return ""; }
+  }
+
+  // Perfil de acceso evaluado ANTES de boot(): sin red (nada puede salir antes del
+  // consentimiento) y sin state.activeDoctor (boot aún no corrió). La identidad
+  // sale del login de sesión + la caché GM de la última validación que Everest SÍ
+  // hizo para ese login — se acepta vencida: la red está vetada hasta aceptar y
+  // boot() revalida en cuanto corre. Sin identidad, la gracia de 12 h del núcleo
+  // ACCESO respalda al médico confirmado antes en este equipo (misma regla D2).
+  // Fall-closed: cualquier duda termina en PÚBLICO y PÚBLICO no monta NADA.
+  function mtrCompuertaPerfil() {
+    try {
+      // SharePoint: no hay localStorage de Everest en ese origen, el padrón no es
+      // evaluable. Allí solo corre el captador ligero; la compuerta decide solo
+      // consentimiento. (Desviación documentada en docs/CAMBIOS_.)
+      if (/sharepoint\.com$/i.test(location.hostname)) return "COMPLETO";
+      const lista = accesoLeerLista();
+      const cache = _identidadMedicoCacheLeer(mtrLoginDeSesion(), true);
+      const uid = cache ? Number(cache.id) || 0 : 0;
+      const nombre = cache ? mtrNormalizarNombre(cache.name) : "";
+      if (lista) {
+        const porUid = (e) => Number(e.uid) === uid;
+        const porNombre = (e) => mtrNormalizarNombre(e.nombre) === nombre;
+        if ((uid && lista.blocklist.some(porUid)) || (nombre && lista.blocklist.some(porNombre))) return "BLOQUEADO";
+        if ((uid && lista.perfiles.COMPLETO.some(porUid)) || (nombre && lista.perfiles.COMPLETO.some(porNombre))) return "COMPLETO";
+        if ((uid && lista.perfiles.LABORATORIOS.some(porUid)) || (nombre && lista.perfiles.LABORATORIOS.some(porNombre))) return "LABORATORIOS";
+      }
+      if (!uid && !nombre) {
+        const g = _accesoGracia();
+        if (g) return g;
+      }
+      return "PUBLICO";
+    } catch (e) { return "PUBLICO"; }
+  }
+
+  // Constancia de aceptación. SOLO sirve si es de la versión VIGENTE: subir
+  // TERMINOS_VERSION (el texto cambió) vuelve a preguntar; actualizar el script
+  // sin tocar el texto, no. Forma guardada: {version, ts, id} y nada más.
+  function mtrConsentimientoConstancia() {
+    try {
+      const c = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_ACEPTA, null) : null;
+      if (!c || typeof c !== "object" || c.version !== TERMINOS_VERSION) return null;
+      if (typeof c.ts !== "number" || !c.ts) return null;
+      return c;
+    } catch (e) { return null; }
+  }
+  function mtrConsentimientoAceptado() { return !!mtrConsentimientoConstancia(); }
+
+  // ¿El rechazo de esta máquina sigue fresco (< 12 h)? Fresco = NO re-preguntar.
+  function mtrTerminosRechazoFresco() {
+    try {
+      const r = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_RECHAZO, null) : null;
+      return !!(r && typeof r === "object" && typeof r.ts === "number" && r.ts > 0 && Date.now() - r.ts < TERMINOS_RECHAZO_MS);
+    } catch (e) { return false; }
+  }
+
+  // v18.3.2 — ¿Esta máquina no tiene NI rastro de identidad del médico en
+  // sesión? (login presente pero sin caché GM de la última validación que
+  // Everest hizo de ese login.) Es el estado de TODA primera instalación, y es
+  // un deadlock sin esta vía: el único escritor de esa caché vive DENTRO de
+  // boot() (resolverMedicoPorPerfil → GetUsuarioPerfil) y boot() solo corre si
+  // la compuerta lo deja — la puerta que esa misma identidad mantiene cerrada.
+  // Incidencia real (Dra. Gloria, 05-09-2026): médica recién autorizada en el
+  // padrón, máquina nueva, "no aparece nada" para siempre aunque el tablero
+  // SÍ la sirva; borrar cookies no ayuda (la identidad no vive ahí).
+  function mtrCompuertaSinIdentidad() {
+    // v18.3.4 — el catch también es fail-closed: una excepción NO es «hay
+    // identidad» (esa lectura errónea callaba en fuera-del-padron), es «no se
+    // pudo saber» → true abre la pantalla de Términos y boot()/accesoCap()
+    // deciden después (la pantalla no toca red; PÚBLICO no monta nada).
+    try { return !_identidadMedicoCacheLeer(mtrLoginDeSesion(), true); }
+    catch (e) { return true; }
+  }
+
+  // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
+  // las pruebas. arrancar=true solo con padrón Y consentimiento vigentes.
+  function mtrCompuertaDecision() {
+    const perfil = mtrCompuertaPerfil();
+    if (perfil === "BLOQUEADO") return { arrancar: false, pantalla: null, motivo: "bloqueado" };
+    if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") {
+      // v18.3.2 — MÉDICO NUEVO EN MÁQUINA NUEVA: sin identidad la compuerta no
+      // puede NI validar ni refutar (el refresco del padrón de v18.3.1 arregla
+      // la LISTA, no la identidad). En vez del silencio, se muestran los
+      // términos y la capa ACCESO del núcleo decide DESPUÉS, con la identidad
+      // ya resuelta dentro de boot(): sin red ni nodo antes del "sí" (la
+      // pantalla no toca red), y si quien acepta no está en el padrón,
+      // accesoCap() no monta NADA (PÚBLICO no construye UI). Requiere login de
+      // sesión: sin sesión no se le pregunta a nadie.
+      if (mtrCompuertaSinIdentidad() && mtrLoginDeSesion()) {
+        if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "sin-identidad-aceptado" };
+        if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
+        return { arrancar: false, pantalla: "terminos", motivo: "sin-identidad" };
+      }
+      return { arrancar: false, pantalla: null, motivo: "fuera-del-padron" };
+    }
+    if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "aceptado" };
+    if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
+    return { arrancar: false, pantalla: "terminos", motivo: "preguntar" };
+  }
+
+  // El "identificador" de la constancia: uid validado por Everest si la caché lo
+  // tiene; si no, el login de sesión; si no, vacío (versión y fecha-hora quedan).
+  function mtrIdentificadorParaConstancia() {
+    try {
+      const login = mtrLoginDeSesion();
+      const cache = login ? _identidadMedicoCacheLeer(login, true) : null;
+      if (cache && cache.id > 0) return "uid:" + cache.id;
+      if (login) return "login:" + login.toLowerCase();
+    } catch (e) {}
+    return "";
+  }
+
+  // ---------- pantallas (modal propio, cuelgan directo de document.body) ----------
+  // Regla del repo para CSS fuera de #vgl-root: cssText inline con `!important` en
+  // los colores y SIEMPRE con fallback en cada var(--x,...) — el CSS de Everest es
+  // una caja negra que puede ganarle a una regla sin !important (patrón tomado de
+  // _mostrarAvisoPausaClinica). Los dos botones comparten EXACTAMENTE el mismo
+  // estilo: mismo peso, ninguno destacado sobre el otro.
+  function _terminosBtnCss() {
+    return "flex:1 1 200px;min-height:44px;border-radius:10px;border:1px solid #3b4767;background:#1a2438;color:#e8edf5 !important;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;padding:10px 18px;";
+  }
+  function _terminosCerrarPantalla() {
+    try { const v = document.getElementById("vgl-terminos-velo"); if (v) v.remove(); } catch (e) {}
+  }
+
+  function mtrTerminosPantalla() {
+    try { if (typeof document === "undefined" || !document.body) return; } catch (e) { return; }
+    try { const previa = document.getElementById("vgl-terminos-velo"); if (previa) previa.remove(); } catch (e) {}
+    const velo = document.createElement("div");
+    velo.id = "vgl-terminos-velo";
+    velo.setAttribute("role", "dialog");
+    velo.setAttribute("aria-modal", "true");
+    velo.setAttribute("aria-label", "Términos de uso y aviso de privacidad");
+    velo.setAttribute("tabindex", "-1");
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    const tarjeta = document.createElement("div");
+    tarjeta.id = "vgl-terminos-tarjeta";
+    tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(720px,92vw);max-height:86vh;overflow:auto;border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:26px 30px;";
+    const titulo = document.createElement("h2");
+    titulo.textContent = "Antes de empezar";
+    titulo.style.cssText = "margin:0 0 6px 0;font-size:19px;font-weight:700;color:#e8edf5 !important;";
+    tarjeta.appendChild(titulo);
+    const parrafos = String(TERMINOS_RESUMEN).split("\n\n");
+    for (const p of parrafos) {
+      const el = document.createElement("p");
+      el.textContent = p;
+      el.style.cssText = "margin:10px 0 0 0;font-size:14.5px;line-height:1.55;color:#cdd6e4 !important;";
+      tarjeta.appendChild(el);
+    }
+    // Los términos completos existen ANTES de aceptar: un clic los despliega aquí
+    // mismo (texto íntegro, carácter por carácter el del documento versionado).
+    const completo = document.createElement("div");
+    completo.id = "vgl-terminos-texto";
+    completo.style.cssText = "display:none;margin-top:14px;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid #2b3653;border-radius:10px;white-space:pre-wrap;color:#cdd6e4 !important;font-size:13px;line-height:1.5;max-height:40vh;overflow:auto;";
+    completo.textContent = TERMINOS_TEXTO;
+    const ver = document.createElement("button");
+    ver.id = "vgl-terminos-toggle";
+    ver.type = "button";
+    ver.textContent = "Ver los términos completos y el aviso de privacidad";
+    ver.style.cssText = "display:block;margin:16px 0 0 0;background:none;border:none;padding:0;color:#60a5fa !important;text-decoration:underline;cursor:pointer;font-size:14px;text-align:left;";
+    ver.addEventListener("click", () => {
+      const abierto = completo.style.display !== "none";
+      completo.style.display = abierto ? "none" : "block";
+      ver.textContent = abierto ? "Ver los términos completos y el aviso de privacidad" : "Ocultar los términos completos";
+    });
+    tarjeta.appendChild(ver);
+    tarjeta.appendChild(completo);
+    const fila = document.createElement("div");
+    fila.style.cssText = "display:flex;gap:12px;margin-top:22px;flex-wrap:wrap;";
+    const btnAceptar = document.createElement("button");
+    btnAceptar.id = "vgl-terminos-aceptar";
+    btnAceptar.type = "button";
+    btnAceptar.textContent = "Acepto y continúo";
+    btnAceptar.style.cssText = _terminosBtnCss();
+    const btnRechazar = document.createElement("button");
+    btnRechazar.id = "vgl-terminos-rechazar";
+    btnRechazar.type = "button";
+    btnRechazar.textContent = "No acepto";
+    btnRechazar.style.cssText = _terminosBtnCss();
+    btnAceptar.addEventListener("click", _terminosAlAceptar);
+    btnRechazar.addEventListener("click", _terminosAlRechazar);
+    fila.appendChild(btnAceptar);
+    fila.appendChild(btnRechazar);
+    tarjeta.appendChild(fila);
+    // Foco atrapado dentro de la tarjeta: Tab/Shift+Tab rotan entre los tres
+    // controles y no salen del diálogo. Escape NO cierra ni responde nada (cerrar
+    // sin responder no es responder) y la pantalla NO tiene botón ✕: las únicas
+    // salidas son los dos botones.
+    const focos = [ver, btnAceptar, btnRechazar];
+    velo.addEventListener("keydown", (ev) => {
+      try {
+        if (!ev) return;
+        if (ev.key === "Escape") { if (ev.preventDefault) ev.preventDefault(); return; }
+        if (ev.key !== "Tab") return;
+        if (ev.preventDefault) ev.preventDefault();
+        let i = focos.indexOf(document.activeElement);
+        i = ev.shiftKey ? (i <= 0 ? focos.length - 1 : i - 1) : (i < 0 ? 0 : (i + 1) % focos.length);
+        try { focos[i].focus(); } catch (e) {}
+      } catch (e) {}
+    });
+    velo.appendChild(tarjeta);
+    document.body.appendChild(velo);
+    try { ver.focus(); } catch (e) {}
+  }
+
+  // Pantalla tras «No acepto»: informa y se cierra sola con «Entendido». No envía
+  // nada — ni siquiera el rechazo (P11: cero eventos de rechazo).
+  function mtrTerminosPantallaRechazo() {
+    try { if (typeof document === "undefined" || !document.body) return; } catch (e) { return; }
+    const velo = document.createElement("div");
+    velo.id = "vgl-terminos-rechazo-velo";
+    velo.setAttribute("role", "dialog");
+    velo.setAttribute("aria-modal", "true");
+    velo.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483646;background:rgba(10,14,22,0.78);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    const tarjeta = document.createElement("div");
+    tarjeta.style.cssText = "background:#111827;color:#e8edf5 !important;width:min(520px,92vw);border-radius:14px;border:1px solid #2b3653;box-shadow:0 24px 60px rgba(0,0,0,0.55);padding:24px 28px;";
+    const p1 = document.createElement("p");
+    p1.textContent = "Sin esa autorización el asistente no puede funcionar. No se le registrará nada.";
+    p1.style.cssText = "margin:0;font-size:15px;line-height:1.55;color:#cdd6e4 !important;";
+    const p2 = document.createElement("p");
+    p2.textContent = "Si cambia de opinión, vuelva a abrir Everest más tarde y se le preguntará de nuevo.";
+    p2.style.cssText = "margin:10px 0 0 0;font-size:14px;line-height:1.55;color:#cdd6e4 !important;";
+    const ok = document.createElement("button");
+    ok.id = "vgl-terminos-rechazo-ok";
+    ok.type = "button";
+    ok.textContent = "Entendido";
+    ok.style.cssText = "display:block;margin:20px 0 0 0;min-height:40px;border-radius:10px;border:1px solid #3b4767;background:#1a2438;color:#e8edf5 !important;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;padding:8px 20px;";
+    ok.addEventListener("click", () => { try { velo.remove(); } catch (e) {} });
+    tarjeta.appendChild(p1);
+    tarjeta.appendChild(p2);
+    tarjeta.appendChild(ok);
+    velo.appendChild(tarjeta);
+    document.body.appendChild(velo);
+    try { ok.focus(); } catch (e) {}
+  }
+
+  function _terminosAlAceptar() {
+    // SOLO la constancia {versión, fecha-hora, identificador} — nada más (prueba 4).
+    try {
+      GM_setValue(TERMINOS_GM_ACEPTA, { version: TERMINOS_VERSION, ts: Date.now(), id: mtrIdentificadorParaConstancia() });
+      // La marca de rechazo se retira SOLO si existía: un aceptar limpio no escribe
+      // ninguna otra clave, y uno tras un rechazo no puede dejar fresca una marca
+      // que ya no aplica.
+      try { if (GM_getValue(TERMINOS_GM_RECHAZO, null)) GM_deleteValue(TERMINOS_GM_RECHAZO); } catch (e) {}
+    } catch (e) {}
+    _terminosCerrarPantalla();
+    mtrArrancarTodo();
+  }
+
+  function _terminosAlRechazar() {
+    // Marca local con hora y NADA MÁS: apagado completo, cero envíos, ni un
+    // evento de rechazo. No se toca emergencyTeardown (ver nota del banner P11).
+    try { GM_setValue(TERMINOS_GM_RECHAZO, { ts: Date.now() }); } catch (e) {}
+    _terminosCerrarPantalla();
+    try { mtrTerminosPantallaRechazo(); } catch (e) {}
+  }
+
+  // v18.2 (P11) — Latidos que antes se registraban al mero evaluar el script (registro de
+  // navegación, vigilía del reloj de segundo plano y latido de liderazgo): despertaban el
+  // hilo cada 5–30 s aunque el médico nunca aceptara los términos. Ahora boot() los instala
+  // en cadena — consentimiento en verde y DESPUÉS del kill-switch: un script apagado en
+  // remoto tampoco late. emergencyTeardown los sigue deteniendo como siempre (B13).
+  let _latidosBaseInstalados = false;
+  function _instalarLatidosBase() {
+    if (_latidosBaseInstalados) return;
+    _latidosBaseInstalados = true;
+    // v18.2 (P11, R5.1-bis) — todo setInterval nacido de este instalador (que boot()
+    // llama) queda registrado en state.timers: son el registro de navegación y el
+    // perro guardián del reloj, y un apagado remoto de emergencia debe poder
+    // detenerlos igual que a cualquier otro temporizador de boot().
+    try {
+      const navLog = setInterval(() => {
+        if (location.href !== lastObservedUrl) {
+          const oldUrl = lastObservedUrl;
+          lastObservedUrl = location.href;
+          vglLog("NAV", "UrlChanged", { from: oldUrl, to: lastObservedUrl, section: seccionActiva() });
+        }
+      }, 5000);
+      _navLogTimer = navLog;            // emergencyTeardown también lo suelta directo (B13)
+      state.timers.push(navLog);
+    } catch (e) {}
+    try {
+      const vigiaReloj = setInterval(_relojVigilarWorker, 30000);
+      state.timers.push(vigiaReloj);
+    } catch (e) {}
+    try {
+      _relojCada("latido", 5000, () => {
+        try {
+          // v12.3.36 — El latido de liderazgo se renueva AQUÍ, cada 5 s, pase lo que pase
+          // con el "Refresco" de Ajustes (que gobierna tick() y puede llegar a 120 s):
+          // sin esta renovación frecuente, el latido del propio líder vencería entre
+          // ticks y las pestañas se relevarían en falso unas a otras.
+          if (!heartbeat()) return;
+          const crit = hayVentanaCritica();
+          if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
+          if (crit) tickApi();
+          _criticoPrev = crit;
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  // Arranque real, ya con padrón + consentimiento en verde. Es exactamente lo que
+  // antes corría la entrada del script, sin perder la corrección v16.2.4.
+  function mtrArrancarTodo() {
+    if (/sharepoint\.com$/i.test(location.hostname)) {
+      // En SharePoint SOLO corre el captador ligero de la base (y solo si falta la de hoy).
+      bootSharepointLite();
+      return;
+    }
+    apiObservar(window); // aprende la llamada de la agenda en cuanto Everest la haga
+    boot();
+  }
+
+  // Punto de entrada único del script (v18.2, P11). Fail-closed: ante cualquier
+  // excepción en la decisión, no se monta nada.
+  // v18.3.1 — ARREGLO DEL DEADLOCK DE ARRANQUE (incidencia real): el refresco del
+  // padrón solo corría DENTRO de boot(), pero boot() solo corre si el padrón en
+  // CACHÉ ya autoriza → una máquina sin caché válida (primera instalación de una
+  // médica nueva) o con caché envenenada jamás se auto-reparaba: "no sale nada"
+  // sin remedio local, porque el único escritor de la caché vive tras la puerta
+  // que esa misma caché mantiene cerrada. Ahora, ANTES de resignarse al silencio
+  // del veredicto «fuera-del-padron», la compuerta intenta UN refresco del padrón
+  // SIN forzar (respeta el sello de 4 h: una máquina fuera del padrón no martilla
+  // el tablero en cada carga; un sello de fallo no bloquea el reintento) y
+  // re-decide una sola vez con lo que haya quedado en caché. BLOQUEADO, rechazo
+  // fresco y excepción NO se refrescan: su silencio es intencional. La función es
+  // async SOLO por este camino; con caché sana todo corre igual que siempre
+  // (síncrono hasta pintar la pantalla o arrancar).
+  // v18.3.3 — DIAGNÓSTICO DE COMPUERTA: incidencia real (Dra. Gloria,
+  // 05-09-2026): ya con el fix de sin-identidad despliegado, seguía "no
+  // aparece nada" y NO había forma de saber desde afuera qué rama estaba
+  // callando (fuera-del-padron con login no detectado, rechazo fresco,
+  // aceptado-perfuera-del-padron…). Ahora la compuerta deja escrito su
+  // veredicto en el almacenamiento GM (legible en Panel de TM → este script
+  // → pestaña Almacenamiento, clave vgl_compuerta_diagnostico) y una línea
+  // en consola. Sin PHI: motivo + sí/no hay login + versión + fecha.
+  function mtrCompuertaDiagnostico(decision) {
+    // Solo en las rutas de INCIDENCIA (fuera-del-padron, sin-identidad,
+    // rechazo-fresco, bloqueado, excepción): la pantalla de términos rutinaria
+    // del médico del padrón («preguntar») y el arranque normal no dejan rastro
+    // — P11·4 exige que el camino aceptar→arrancar no escriba ninguna clave
+    // aparte de la constancia, y P11·19 exige rastro en las rutas mudas.
+    if (decision && (decision.arrancar || decision.motivo === "preguntar")) return;
+    try {
+      const login = mtrLoginDeSesion();
+      const d = { version: (typeof VERSION !== "undefined") ? VERSION : "", motivo: decision && decision.motivo ? decision.motivo : "?", login: login ? "si" : "no", ts: Date.now() };
+      if (typeof GM_setValue !== "undefined") GM_setValue("vgl_compuerta_diagnostico", d);
+      try { console.info("[Vigilante] compuerta:", d.motivo, "· login:", d.login); } catch (e2) {}
+    } catch (e) {}
+  }
+
+  async function mtrCompuertaArranque() {
+    let decision;
+    try { decision = mtrCompuertaDecision(); }
+    catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
+    if (!decision.arrancar && decision.motivo === "fuera-del-padron") {
+      try { await accesoRefrescarLista(); } catch (e) {}
+      try { decision = mtrCompuertaDecision(); }
+      catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
+    }
+    mtrCompuertaDiagnostico(decision);
+    if (decision.arrancar) {
+      try { mtrArrancarTodo(); } catch (e) { console.error("[Vigilante] arranque post-consentimiento falló:", e); }
+      return;
+    }
+    if (decision.pantalla === "terminos") {
+      try { mtrTerminosPantalla(); } catch (e) { console.error("[Vigilante] no se pudo mostrar la pantalla de términos:", e); }
+      return;
+    }
+    // Fuera del padrón, bloqueado, rechazo fresco o fallo: silencio total. Ni
+    // pantalla, ni nodo, ni evento — el script no existe para esta pestaña.
+  }
+
+  // Fila de Ajustes: la versión vigente de los términos siempre visible (§7 de la
+  // PARTE 2 del propio documento) con la fecha de la constancia.
+  function _terminosAjustesTexto() {
+    const c = mtrConsentimientoConstancia();
+    if (!c) return "aún no aceptado en este equipo";
+    const f = new Date(c.ts);
+    const dos = (n) => String(n).padStart(2, "0");
+    return "versión " + c.version + " · aceptado el " + dos(f.getDate()) + "/" + dos(f.getMonth() + 1) + "/" + f.getFullYear() + " " + dos(f.getHours()) + ":" + dos(f.getMinutes());
+  }
+
   // v7.3 MODO LIGERO: sin ganchos de red (no se envuelve fetch/XHR ni se clona
   // ninguna respuesta) y sin cosechador de SharePoint. Para la vía directa del API
   // solo se usa el OBSERVADOR DE RENDIMIENTO del propio navegador: una lista de URLs
   // que el navegador ya lleva de todos modos; costo prácticamente cero.
-  if (/sharepoint\.com$/i.test(location.hostname)) {
-    // En SharePoint SOLO corre el captador ligero de la base (y solo si falta la de hoy).
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => { bootSharepointLite(); });
-    else bootSharepointLite();
-    return;
-  }
-  apiObservar(window); // document-start: aprende la llamada de la agenda en cuanto Everest la haga
-  // v16.2.4 — El `else boot()` corría boot() A MITAD de la evaluación del script:
-  // todo lo declarado con const/let MÁS ABAJO (MTR_CSS y compañía, ~línea 25000)
-  // seguía en zona muerta, y el primer acceso lanzaba y tumbaba el arranque
-  // entero. Con setTimeout(...,0) el script termina de evaluarse primero y boot()
-  // encuentra el módulo completo. Es la causa raíz del "se desactiva solo, toca
-  // F5" que se reportaba desde hacía semanas y que no se había podido reproducir:
-  // solo pasa cuando el documento YA cargó al inyectarse (navegación interna de
-  // Everest o inyección tardía de Tampermonkey).
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else setTimeout(boot, 0);
+  // v18.2 (P11) — TODO eso corre ahora tras la compuerta: antes de confirmar padrón
+  // + consentimiento no se registra NINGÚN arranque. El setTimeout(...,0) conserva
+  // la corrección de v16.2.4 (el script termina de evaluarse antes de que arranque
+  // nada: sin zona muerta de const/let declarados más abajo).
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mtrCompuertaArranque);
+  else setTimeout(mtrCompuertaArranque, 0);
 
 
   // =====================================================================
@@ -38661,7 +39416,7 @@
   function mtrReglaBetabloqueadorHidrofilico(med, egfr, potasio) {
     if (egfr < 15) {
       return mtrAlerta("betabloqueador_hidrofilico", med, "CAP_DOSIS",
-        "Atenolol/Nadolol: máximo 50 mg cada 48 horas con eGFR < 15 mL/min/1.73m2 (ficha FDA de Tenormin).",
+        "Atenolol/Nadolol: máximo 25 mg/día o 50 mg interdiarios con eGFR < 15 mL/min/1.73m2.",
         MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
     }
     if (egfr < 35) {
@@ -38815,12 +39570,9 @@
     const esCana = norm.indexOf("canagliflozina") >= 0;
 
     if (egfr < 20) {
-      return mtrAlerta("sglt2", med, "EVITAR",
-        "iSGLT2 con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2: NO iniciar. Si ya lo toma y " +
-        "lo tolera, CONTINUAR por renoproteccion/cardioproteccion (KDIGO 2024). " +
-        "Vigilar cetoacidosis euglicemica; suspender ante enfermedad " +
-        "intercurrente grave o inicio de dialisis.",
-        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+      return mtrAlerta("sglt2", med, "SUSPENDER",
+        "iSGLT2: suspender con eGFR < 20 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
     }
     if (egfr < 45) {
       if (egfr >= 20 && egfr < 30 && hba1c !== null && hba1c !== undefined && hba1c > 8.0) {
@@ -38938,27 +39690,7 @@
       if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
         "Apixabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
       if (cg < 30) return mtrAlerta("doac", med, "CAP_DOSIS",
-        "Apixabán con CrCl " + mtrFmt0(cg) + " mL/min: la reducción a 2.5 mg c/12h NO se decide " +
-        "por el CrCl solo.  Verificar los criterios de la ficha técnica (sección 4.2) y reducir " +
-        "solo si cumple 2 de 3: edad >= 80 años, peso <= 60 kg o creatinina sérica >= 1.5 mg/dL.",
-        MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
-    }
-    if (norm.indexOf("edoxaban") >= 0) {
-      // fix 13 M2M — la ficha técnica (Savaysa/Lixiana, sección 4.2) da al
-      // edoxabán un ajuste propio que ningún fallback reproducía: con CrCl > 95
-      // la exposición cae y está contraindicado INICIARLO en FAnV no valvular
-      // (caía en el silencio del `return null`); con CrCl 15-50 la dosis es
-      // 30 mg/día, no el mensaje genérico de "revisar ficha".
-      if (cg > 95) return mtrAlerta("doac", med, "EVITAR",
-        "Edoxabán: NO usar con CrCl > 95 mL/min (exposición reducida; eficacia no " +
-        "demostrada en FAnV no valvular, sección 4.2 de la ficha técnica). Rotar a " +
-        "otro anticoagulante directo.",
-        MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
-      if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
-        "Edoxabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
-      if (cg < 50) return mtrAlerta("doac", med, "CAP_DOSIS",
-        "Edoxabán: reducir a 30 mg/día con CrCl 15-50 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
-      return null;
+        "Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
     }
     if (cg < 15) {
       return mtrAlerta("doac", med, "CONTRAINDICADA",
@@ -38986,7 +39718,7 @@
     if (dosisMg !== null && dosisMg !== undefined && dosisMg > 40) {
       return mtrAlerta("furosemida", med, "CAP_DOSIS",
         "Furosemida: dosis " + mtrFmt0(dosisMg) + " mg/dia con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2 " +
-        "(G4-G5).  Ambulatorio, CAPAR DOSIS a 40 mg/dia maximo.  Si requiere " +
+        "(G3b-G5).  Ambulatorio, CAPAR DOSIS a 40 mg/dia maximo.  Si requiere " +
         "mayor efecto diuretico, rotar a Torasemida o usar combinacion con " +
         "tiazida (secuencia nefrotica) bajo control estrecho.",
         MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
@@ -39117,7 +39849,7 @@
         "agudo, hiperkalemia y sangrado GI. Rotar a Paracetamol " +
         "1 g c/8h.  Si dolor inflamatorio: COX-2 selectivo solo " +
         "con IECA/ARA-II activo y monitoria estrecha.",
-        MTR_FORMULA_CKDEPI, tfgCkdepi, tieneRaas ? MTR_SEV_CRITICAL : MTR_SEV_HIGH));
+        MTR_FORMULA_CKDEPI, tfgCkdepi, tieneRaas ? MTR_SEV_HIGH : MTR_SEV_CRITICAL));
     }
     return alertas;
   }
@@ -41060,10 +41792,6 @@
   //  sobrescribe una categoría que el médico ya haya puesto. Solo propone.
   // =====================================================================
 
-  // Orden de severidad. Se usa para el trinquete: subir el riesgo es seguro,
-  // bajarlo automáticamente no lo es.
-  const MTR_SEVERIDAD_RIESGO = { "bajo": 0, "moderado": 1, "alto": 2, "muy alto": 3 };
-
   // Rango etario en el que las Pooled Cohort Equations están validadas
   // (Goff et al. 2013, ACC/AHA). Fuera de él el número se sigue calculando
   // —no se cambia ninguna conducta sin decisión clínica— pero deja de viajar
@@ -41396,6 +42124,10 @@
   // que ya rige todo el bloque mtr*: una excepción a mitad de consulta es peor
   // que un recuadro que dice qué falta. La conducta clínica es idéntica —sin
   // TFG no hay categoría— pero aquí el médico ve POR QUÉ.
+  // Orden de severidad: muy alto > alto > moderado > bajo, y la clasificación
+  // desciende por pasos sin bajar sola. Es el trinquete: subir el riesgo es
+  // seguro, bajarlo automáticamente no lo es. (v18.3/P12: MTR_SEVERIDAD_RIESGO,
+  // el mapa {bajo:0…muy alto:3} que duplicaba este orden sin ningún lector, se retiró.)
   function mtrClasificarRiesgoCv(f) {
     const x = f || {};
     const egfr = mtrFloat(x.egfrCkdepi);
@@ -41941,6 +42673,7 @@
   // (ver el comentario junto a _vglIrAPestanaYEsperar), así que este clic
   // nunca arriesga borrar nada de lo que esté a medio escribir.
   function mtrIrAPestanaPorNombre(pestania, doc) {
+    uxTrack("zombi.mtrIrAPestanaPorNombre"); // P12 cuarentena: sin llamador en vivo — si esto dispara, docs/SANEAMIENTO.md
     try {
       const tab = _vglClicablePestana(pestania, doc || document);
       if (!tab) return false;
@@ -45426,6 +46159,82 @@
   };
   function mtrProveedorIA(id) { return MTR_PROVEEDORES_IA[id] || null; }
 
+  // v18.2.1 (P10) — BARRERA CERO-IDENTIFICABLES. Cambio de enfoque: los saneadores
+  // (scrubPII / mtrSanearTextoLibreAI) CENSURAN por forma; esto es la revisión FINAL
+  // que DECIDE si el prompt puede salir. Se ejecuta sobre el mensaje ENSAMBLADO
+  // (system+user), después de todos los saneadores y justo antes del único
+  // GM_xmlhttpRequest de IA — cubre también el canal que ningún saneador ve (el JSON
+  // v68 viaja crudo). Detector puro: sin red, sin UI, sin telemetría (eso lo hace el
+  // llamador, y solo con conteos). Si dispara, NADA se envía.
+  // Lo que NO detecta, dicho sin adornos: un nombre propio desconocido en MAYÚSCULAS
+  // SOSTENIDAS sin honorífico delante — para una regex «MARIA» e «HIPERTENSO» son la
+  // misma forma (v18.0.25 lo demostró con la censura de más). Límite aceptado y es
+  // la razón de que D5 use el nombre real del paciente, no adivinación de formas.
+  function mtrBarreraIdentificables(system, user, nombrePaciente) {
+    const hallazgos = [];
+    const canal = (donde, texto) => {
+      const t = String(texto == null ? "" : texto);
+      const add = (tipo, muestra) => { if (hallazgos.length < 6) hallazgos.push({ tipo: tipo, muestra: String(muestra).slice(0, 24), donde: donde }); };
+      // D1 — carrera de 6+ dígitos: cédula, historia, teléfono pegado. Las cifras
+      // clínicas son de 1-3 dígitos y las fechas ISO de 4; 6 seguidos solo puede ser
+      // un identificador que ningún saneador alcanzó.
+      let m = t.match(/\d{6,}/);
+      if (m) add("numero_largo", m[0]);
+      // D2 — teléfono móvil colombiano CON separadores («313 456 7890»): cada grupo
+      // es corto y D1 no lo ve; pegado son 10 dígitos y D1 sí lo caza.
+      m = t.match(/(?:\+?57[\s.\-]\s*)?3\d{2}[\s.\-]\d{3}[\s.\-]\d{4}\b/);
+      if (m) add("telefono", m[0]);
+      // D3 — correo electrónico.
+      m = t.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/);
+      if (m) add("correo", m[0]);
+      // D4 — dirección con nomenclatura colombiana («Cra 45 #12-34»).
+      m = t.match(/\b(?:calle|carrera|cra|kr|avenida|av|diagonal|diag|dg|transversal|trans|tv|cl)\.?\s*\d+\s*#\s*\d{1,3}\s*-\s*\d{1,4}\b/i);
+      if (m) add("direccion", m[0]);
+      // D5 — el nombre del propio paciente, por tokens (con/sin tildes, cualquier
+      // caja): la MISMA política de mtrSanearTextoLibreAI. Si el saneador no lo tachó
+      // (canal crudo, o nombre ausente en ese canal), aquí salta.
+      if (nombrePaciente) {
+        try {
+          const tokens = String(nombrePaciente).trim().split(/\s+/).filter(_mtrTokenDeNombreTachable);
+          if (tokens.length) {
+            const alt = tokens.map(_mtrPatronConTildes).join("|");
+            const reTok = new RegExp("(?<![" + MTR_LETRA_ES + "])(?:" + alt + ")(?![" + MTR_LETRA_ES + "])", "i");
+            const mm = t.match(reTok);
+            if (mm) add("nombre_paciente", mm[0]);
+          }
+        } catch (e) {}
+      }
+      // D6 — honorífico + nombre capitalizado («Paciente María», «Acompañante: Jose»,
+      // «Sr. Pérez», «DR. Gómez»). DOS ramas, porque un punto tras el honorífico significa
+      // cosas opuestas según la palabra: en «Sr. Pérez» el punto ES la abreviatura; en
+      // «…del paciente. Prohibido…» es fin de oración y lo que sigue es una frase con
+      // mayúscula inicial — permitir el punto ahí hacía saltar la barrera con los prompts
+      // REALES (hallado por la suite 81: el system de analisis_plan contiene
+      // «paciente. Prohibido»). Regla final: honoríficos COMPLETOS solo con espacio,
+      // «:» o «,» antes del nombre; ABREVIATURAS (sr, sra, dr, dra) SOLO con punto.
+      try {
+        const variantes = (lista) => lista.map((w) => { const pr = w[0]; return "[" + pr.toUpperCase() + pr + "]" + w.slice(1) + "|" + w.toUpperCase(); }).join("|");
+        const honCompletos = MTR_HONORIFICOS_IA.filter((w) => w.length > 3).concat(["don", "doctor", "doctora"]);
+        const honAbrev = MTR_HONORIFICOS_IA.filter((w) => w.length <= 3 && w !== "don").concat(["dr", "dra"]);
+        const reHon = new RegExp(
+          "(?:^|[^" + MTR_LETRA_ES + "])(?:(?:" + variantes(honCompletos) + ")\\s*[:,]?\\s*|(?:" + variantes(honAbrev) + ")\\.\\s*)([A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+)",
+          "");
+        const mh = reHon.exec(t);
+        // La palabra capitalizada debe ser un nombre de verdad, no una palabra de
+        // función del español («paciente: Sé preciso»): mismo filtro de tokens que
+        // el saneador. Sin esto, cualquier instrucción con «paciente: Sé/Has/Va…»
+        // saltaría la barrera.
+        if (mh && _mtrTokenDeNombreTachable(mh[1])) add("nombre_con_honorifico", String(mh[0] || "").trim());
+      } catch (e) {}
+    };
+    canal("system", system);
+    canal("user", user);
+    const ok = hallazgos.length === 0;
+    const resumen = hallazgos.map((h) => h.donde + ": " + h.tipo).join("; ");
+    const motivo = ok ? "" : "posible identificador (" + resumen + ") en el prompt — no se envió nada a la IA. Revise Indicaciones y contexto (¿nombre, cédula, teléfono, dirección, correo?) y vuelva a generar.";
+    return { ok: ok, hallazgos: hallazgos, motivo: motivo };
+  }
+
   // v18.0.112 (S+ flujo, C7) — cuántas generaciones hay en vuelo (el dock pinta ⏳).
   let _iaGenerandoN = 0;
   function mtrIaGenerando() { return _iaGenerandoN > 0; }
@@ -45457,6 +46266,19 @@
         const _t0 = Date.now();
         const _tel = (a) => { try { uxTrack(a); } catch (e) {} };
         const _telBucket = () => { const s = (Date.now() - _t0) / 1000; return s < 2 ? "lt2" : s < 5 ? "2a5" : s < 10 ? "5a10" : "gt10"; };
+        // v18.2.1 (P10) — LA GUARDA DEL PUNTO ÚNICO DE SALIDA: la barrera decide sobre el
+        // mensaje YA ensamblado (system+user de TODOS los canales, incluido el JSON v68
+        // crudo), ANTES de cualquier disparo de red y antes de contar ia.gen — lo
+        // bloqueado no se generó. Si dispara: nada sale, el motivo le dice al médico
+        // qué se detectó y en qué mitad del prompt, y la telemetría queda en conteos.
+        const _bar = mtrBarreraIdentificables(p.system, p.user, _mtrNombreEfectivo(o.nombrePaciente, o.docId));
+        if (!_bar.ok) {
+          _tel("ia.barrera.bloqueo");
+          _bar.hallazgos.forEach((h) => { _tel("ia.barrera.tipo." + h.tipo); });
+          try { vglLog("IA", "BarreraIdentificablesBloqueo", { donde: _bar.hallazgos.map((h) => h.donde + ":" + h.tipo).join(","), systemChars: (p.system || "").length, userChars: (p.user || "").length }); } catch (e) {}
+          resolve({ ok: false, texto: "", motivo: _bar.motivo });
+          return;
+        }
         _tel("ia.gen." + (modo || "?"));
         let intentos = 0;
         // v18.2.0 (P9) — con clave z.ai: 1 intento z.ai + 1 de respaldo Gemini. Sin
@@ -46733,6 +47555,7 @@
   }
 
   function mtrIaClickDelegado(e) {
+    uxTrack("zombi.mtrIaClickDelegado"); // P12 cuarentena: listener sin registro desde v18.0.x — ver docs/SANEAMIENTO.md
     try {
       const t = e && e.target;
       if (!t || typeof t.closest !== "function") return;
@@ -47677,6 +48500,7 @@
   const MTR_CAMPOS_TA_SIS_ACOSTADO = ["taSistolicaAcostado", "presionSistolicaAcostado"];
   const MTR_CAMPOS_TA_DIA_ACOSTADO = ["taDiastolicaAcostado", "presionDiastolicaAcostado"];
   function _mtrPrimerCampoNumerico(nombres, doc) {
+    uxTrack("zombi._mtrPrimerCampoNumerico"); // P12 cuarentena: sin llamador en vivo — ver docs/SANEAMIENTO.md
     for (const n of nombres) {
       const v = mtrLeerCampoNumerico(n, doc);
       if (v !== null) return v;
@@ -50439,6 +51263,336 @@
       if (dif < mejorDif) { mejorDif = dif; mejor = it; }
     }
     return mejor;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // v18.3.0 — P13 · FASE 1: OBSERVABILIDAD DE ADOPCIÓN (módulo obs*).
+  // Diseño y "qué pregunta de negocio responde cada evento": docs/INSTRUMENTACION.md.
+  // Problema de raíz medido (prompt 07, hoja uso_detalle, 22-ago→4-sep-2026):
+  // el tablero cuenta EVENTOS pero no tiene DENOMINADOR (¿cuántas consultas
+  // hubo?) ni IDENTIDAD de médico (48 ids de equipo en 14 días, 32 vistos un
+  // solo día) — ninguna adherencia es calculable. Este módulo añade, sin
+  // tocar reglas clínicas y con cero PHI:
+  //   1.1 identidad estable de equipo (GM, migra el legado de localStorage)
+  //       e identidad de médico hasheada ("m-" + FNV-1a del uid/login validado)
+  //   1.2 denominador: consulta.abierta / cerrada / elegible.<modulo>
+  //   1.3 evento genérico con desenlace {fase, resultado, codigo, ms, n, ctx}
+  //   1.4 desenlace de avisos: accion|cerrado|ignorado|expirado|silenciado|
+  //       posterior ("posterior" = el médico hizo después por su cuenta —
+  //       la métrica de oro)
+  //   1.5 obsCatch: contador de código FIJO para los catch hoy mudos
+  //   1.6 serialización con LISTA BLANCA: fuera de números/booleanos/enums
+  //       solo pasan cadenas cortas SIN ESPACIOS y sin ser "solo números"
+  //       largos — la prosa y la cédula no caben; el canario es estructural
+  //   1.7 contador de perdidos (eventos rechazados por el saneamiento)
+  //   4.4 presupuesto de interrupciones por equipo y día (aviso universal)
+  // Todo sale por la cola existente (reportar → vgl_repq → TABLERO) con el
+  // prefijo "obs." en el evento, sin mezclarse con la telemetría v15.
+  // Las funciones viven al final del IIFE pero se declaran con `function`
+  // (hoisting): _equipoId(), mucho más arriba, puede delegar en ellas.
+  // ══════════════════════════════════════════════════════════════════════
+  const OBS_EQUIPO_GM = "vgl_obs_equipo";        // id persistente (GM)
+  const OBS_EQUIPO_LS = "vgl_equipo_id";         // legado v12.6.9: se migra, no se borra
+  const OBS_EQUIPO_FP = "vgl_obs_equipo_fp";     // {huella: id} — respaldo si el id se pierde
+  const OBS_PERDIDOS_GM = "vgl_obs_perdidos";
+  const OBS_PRESUPUESTO_GM = "vgl_obs_presupuesto";
+  const OBS_FASES = Object.freeze({ INICIO: "inicio", FIN: "fin" });
+  const OBS_RESULTADOS = Object.freeze({ OK: "ok", FALLO: "fallo", CANCELADO: "cancelado", VACIO: "vacio", TIMEOUT: "timeout" });
+  const OBS_DESENLACES = Object.freeze({ ACCION: "accion", CERRADO: "cerrado", IGNORADO: "ignorado", EXPIRADO: "expirado", SILENCIADO: "silenciado", POSTERIOR: "posterior" });
+  const OBS_ACCION_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/;
+  const OBS_CTX_VALOR_RE = /^[A-Za-z0-9._:-]{0,24}$/;   // sin espacios: la prosa no cabe
+  const OBS_CONSULTA_VENTANA_MS = 5 * 60 * 1000;        // misma clave dentro de 5 min = misma consulta
+
+  // Almacenaje: GM cuando existe (sobrevive la limpieza de datos del sitio),
+  // localStorage como respaldo. El par leer/guardar es simétrico: lo que una
+  // rama escribe, la misma rama lo lee — las claves son nuevas, nadie más las toca.
+  function obsGmLeer(key, def) {
+    try {
+      if (typeof GM_getValue !== "undefined") {
+        const v = GM_getValue(key, null);
+        return (v === null || v === undefined) ? def : v;
+      }
+    } catch (e) {}
+    try {
+      const v = localStorage.getItem(key);
+      return (v === null) ? def : JSON.parse(v);
+    } catch (e2) { return def; }
+  }
+  function obsGmGuardar(key, val) {
+    try { if (typeof GM_setValue !== "undefined") { GM_setValue(key, val); return; } } catch (e) {}
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e2) {}
+  }
+
+  // Hash FNV-1a de 32 bits, determinista y sin dependencias: convierte
+  // identificadores (cédula, uid, login) en huellas cortas no reversibles
+  // que SIRVEN para unir filas pero no identifican a nadie por sí solas.
+  function obsFnv1a(s) {
+    let h = 0x811c9dc5;
+    s = String(s == null ? "" : s);
+    for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, "0");
+  }
+
+  // Huella de respaldo del equipo: atributos técnicos estables. No identifica
+  // a una persona (mismo consultorio = misma resolución/zona casi siempre).
+  function obsHuellaEquipo() {
+    try {
+      const scr = (typeof screen !== "undefined" && screen && screen.width) ? (screen.width + "x" + screen.height) : "";
+      const lng = String((typeof navigator !== "undefined" && navigator && navigator.language) || "");
+      const hc = String((typeof navigator !== "undefined" && navigator && navigator.hardwareConcurrency) || "");
+      let tz = ""; try { tz = String(Intl.DateTimeFormat().resolvedOptions().timeZone || ""); } catch (e) {}
+      return obsFnv1a(scr + "|" + lng + "|" + hc + "|" + tz);
+    } catch (e) { return ""; }
+  }
+
+  let _obsEquipoCache = "", _obsEquipoNuevo = false;
+  // 1.1 — IDENTIDAD DE EQUIPO. Prioridad invariable: ajuste manual → id
+  // persistente en GM → migración del legado localStorage → recuperación por
+  // huella → id nuevo (y avisar que nació: es el dato que explica los "48 ids
+  // en 14 días" — sin ese aviso no se distingue un equipo nuevo de un bug).
+  function obsIdentidadEquipo() {
+    try {
+      const manual = String(S.equipo || "").trim();
+      if (manual) return manual.slice(0, 40);
+      if (_obsEquipoCache) return _obsEquipoCache;
+      let id = String(obsGmLeer(OBS_EQUIPO_GM, "") || "").slice(0, 40);
+      if (!id) {
+        try { id = String(localStorage.getItem(OBS_EQUIPO_LS) || "").slice(0, 40); } catch (e) {}
+      }
+      const fp = obsHuellaEquipo();
+      if (!id && fp) {
+        const mapa = obsGmLeer(OBS_EQUIPO_FP, null);
+        if (mapa && typeof mapa === "object" && mapa[fp]) id = String(mapa[fp]).slice(0, 40);
+      }
+      if (!id) {
+        id = "eq-" + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+        _obsEquipoNuevo = true;
+      }
+      obsGmGuardar(OBS_EQUIPO_GM, id);
+      if (fp) { const m = obsGmLeer(OBS_EQUIPO_FP, null); const mapa = (m && typeof m === "object") ? m : {}; mapa[fp] = id; obsGmGuardar(OBS_EQUIPO_FP, mapa); }
+      _obsEquipoCache = id;   // antes del aviso: reportar() re-entra por _equipoId()
+      if (_obsEquipoNuevo) {
+        _obsEquipoNuevo = false;
+        // v18.3 (P13·R1) — el aviso se DIFIERE un tick. Emitirlo aquí en sincronía
+        // re-entra en reportar() mientras ESTA llamada nace de la evaluación del
+        // literal de otra fila (equipo: _equipoId()): el evento que provocó el
+        // nacimiento llegaba segundo al tablero y el orden de la cola cambiaba según
+        // quién despertara al id. Diferido, el nacimiento queda registrado sin pisar
+        // al evento que lo provocó — y sin reentrar en la cola. No se usa uxTrack():
+        // contaminaría la ventana UX de la media hora en que nazca (y el evento ya
+        // viaja entero por el reportar diferido).
+        try { setTimeout(() => { try { if (repOn()) reportar("obs.equipo.nuevo", {}); } catch (e3) {} }, 0); } catch (e2) {}
+      }
+      return id;
+    } catch (e) { return ""; }
+  }
+
+  // 1.1 — IDENTIDAD DE MÉDICO, hasheada. Reusa la identidad que la compuerta
+  // P11 ya valida (uid de Everest o login de sesión); viaja SOLO como
+  // "m-<hash>". Sin identidad validada no se inventa nada (casilla vacía).
+  let _obsMedicoCache = "";
+  function obsIdentidadMedico() {
+    try {
+      if (_obsMedicoCache) return _obsMedicoCache;
+      let base = "";
+      try { base = (typeof mtrIdentificadorParaConstancia === "function") ? String(mtrIdentificadorParaConstancia() || "") : ""; } catch (e) {}
+      if (!base) return "";
+      _obsMedicoCache = "m-" + obsFnv1a(base);
+      return _obsMedicoCache;
+    } catch (e) { return ""; }
+  }
+
+  // 1.2 — DENOMINADOR: la "consulta" es un paciente abierto en Historia
+  // Clínica. El id que viaja es el HASH de la clave del paciente (nunca la
+  // cédula). Ventana de 5 min: re-lecturas del DOM de Angular (mismo paciente)
+  // no crean consultas nuevas; un paciente distinto cierra la anterior.
+  const obsConsulta = { id: "", ts: 0, elegibles: {} };
+  function obsConsultaAbrir(clave) {
+    try {
+      if (!String(clave == null ? "" : clave)) return obsConsulta.id;
+      const id = obsFnv1a(clave);
+      const ahora = Date.now();
+      if (obsConsulta.id === id && (ahora - obsConsulta.ts) < OBS_CONSULTA_VENTANA_MS) return id;
+      if (obsConsulta.id) obsConsultaCerrar("reemplazada");
+      obsConsulta.id = id; obsConsulta.ts = ahora; obsConsulta.elegibles = {};
+      obsEvento("consulta.abierta", {});
+      return id;
+    } catch (e) { obsCatch("consulta.abrir", e); return ""; }
+  }
+  function obsConsultaCerrar(motivo) {
+    try {
+      if (!obsConsulta.id) return false;
+      const ms = Math.max(0, Date.now() - obsConsulta.ts);
+      obsEvento("consulta.cerrada", { ms, ctx: { motivo: motivo || "desconocido" } });
+      obsConsulta.id = ""; obsConsulta.ts = 0; obsConsulta.elegibles = {};
+      return true;
+    } catch (e) { obsCatch("consulta.cerrar", e); return false; }
+  }
+  function obsConsultaActiva() { return obsConsulta.id; }
+  function obsConsultaElegible(modulo) {
+    // "Este paciente SÍ necesitaba el módulo X": el denominador por módulo.
+    try {
+      if (!obsConsulta.id) return false;
+      const m = obsModuloLimpio(modulo);
+      if (!m || obsConsulta.elegibles[m]) return false;
+      obsConsulta.elegibles[m] = 1;
+      return obsEvento("consulta.elegible." + m, {});
+    } catch (e) { obsCatch("consulta.elegible", e); return false; }
+  }
+  function obsConsultaMarcarModulo(modulo, resultado, extra) {
+    // Numerador: el módulo se usó (fase fin) y cómo terminó.
+    try {
+      const m = obsModuloLimpio(modulo);
+      if (!m) return false;
+      const e2 = Object.assign({}, (extra && typeof extra === "object") ? extra : {}, { fase: "fin", resultado: resultado });
+      return obsEvento("modulo." + m, e2);
+    } catch (e) { obsCatch("consulta.marcar", e); return false; }
+  }
+  function obsModuloLimpio(m) {
+    return String(m == null ? "" : m).toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 16);
+  }
+
+  // 1.4 — DESENLACE DE AVISOS. El id es LOCAL (nunca sale del equipo): solo
+  // une el "mostrado" con su desenlace y permite medir cuánto tardó el médico.
+  const obsAvisos = new Map();
+  let _obsAvisoSeq = 0;
+  function obsAvisoMostrar(extra) {
+    try {
+      const id = "a" + (++_obsAvisoSeq);
+      obsAvisos.set(id, Date.now());
+      if (obsAvisos.size > 40) obsAvisos.delete(obsAvisos.keys().next().value);
+      obsEvento("aviso.mostrado", { fase: "inicio", ctx: (extra && typeof extra === "object" && !Array.isArray(extra)) ? extra : {} });
+      return id;
+    } catch (e) { obsCatch("aviso.mostrar", e); return ""; }
+  }
+  function obsAvisoDesenlace(id, desenlace) {
+    try {
+      const d = OBS_DESENLACES[String(desenlace || "").toUpperCase()] || "";
+      if (!d) return false;
+      const ts0 = obsAvisos.get(id) || 0;
+      obsAvisos.delete(id);
+      const ms = ts0 ? Math.max(0, Date.now() - ts0) : 0;
+      return obsEvento("aviso.desenlace", { ms, ctx: { d } });
+    } catch (e) { obsCatch("aviso.desenlace", e); return false; }
+  }
+  function obsAvisoCumplido(id) {
+    // MÉTRICA DE ORO: el aviso se cerró sin acción y el médico hizo DESPUÉS,
+    // por su cuenta, lo que sugería. Solo mide; no juzga ni toca nada.
+    return obsAvisoDesenlace(id, "posterior");
+  }
+
+  // 1.6 — SERIALIZACIÓN CON LISTA BLANCA. Lo que no está aquí no existe para
+  // la red. El sobre (token/equipo/ver/evento/ts/dia/lote) lo pone reportar():
+  // esta fila JAMÁS repite esas claves (Object.assign las pisaría). ctx viaja
+  // como cadena compacta "k1:v1,k2:v2" (máx 64 chars): la hoja recibe plano.
+  // Cadena admitida: charset cerrado SIN ESPACIOS (la prosa no cabe) y, si no
+  // trae letras, de 4 chars o menos — una cédula o un celular son "solo
+  // números": quedan fuera aunque no tengan espacios.
+  function obsSerializar(extra) {
+    const fila = { medico: "", consulta: "", fase: "", resultado: "", codigo: "", ms: 0, n: 0, ctx: "" };
+    try {
+      extra = (extra && typeof extra === "object" && !Array.isArray(extra)) ? extra : {};
+      fila.medico = /^m-[0-9a-f]{8}$/.test(obsIdentidadMedico()) ? obsIdentidadMedico() : "";
+      fila.consulta = /^[0-9a-f]{8}$/.test(obsConsulta.id) ? obsConsulta.id : "";
+      const fase = OBS_FASES[String(extra.fase || "").toUpperCase()] || "";
+      if (fase) fila.fase = fase;
+      const res = OBS_RESULTADOS[String(extra.resultado || "").toUpperCase()] || "";
+      if (res) fila.resultado = res;
+      const cod = String(extra.codigo || "");
+      if (cod && OBS_ACCION_RE.test(cod)) fila.codigo = cod.slice(0, 32);
+      if (typeof extra.ms === "number" && isFinite(extra.ms) && extra.ms >= 0) fila.ms = Math.min(Math.round(extra.ms), 24 * 3600 * 1000);
+      if (typeof extra.n === "number" && isFinite(extra.n) && extra.n >= 0) fila.n = Math.min(Math.round(extra.n), 1000000);
+      if (extra.ctx && typeof extra.ctx === "object" && !Array.isArray(extra.ctx)) {
+        const pares = [];
+        for (const k of Object.keys(extra.ctx)) {
+          if (pares.length >= 6) break;
+          const ck = String(k).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16);
+          if (!ck) continue;
+          const v = extra.ctx[k];
+          let cv = null;
+          if (typeof v === "number" && isFinite(v) && Math.abs(v) <= 100000) cv = v;
+          else if (typeof v === "boolean") cv = v ? 1 : 0;
+          else if (typeof v === "string" && OBS_CTX_VALOR_RE.test(v) && (v.length <= 4 || /[A-Za-z]/.test(v))) cv = v;
+          if (cv === null) { obsPerdidosSumar("ctx_rechazado"); continue; }
+          pares.push(ck + ":" + cv);
+        }
+        fila.ctx = pares.join(",").slice(0, 64);
+      }
+      return fila;
+    } catch (e) { obsCatch("serializar", e); return fila; }
+  }
+
+  // 1.3 — EVENTO GENÉRICO. Devuelve false si el evento no salió (acción
+  // inválida, reporte apagado): quien lo llama decide si le importa.
+  function obsEvento(accion, extra) {
+    try {
+      const a = String(accion || "");
+      if (!OBS_ACCION_RE.test(a)) { obsPerdidosSumar("accion_invalida"); return false; }
+      return reportar("obs." + a, obsSerializar(extra));
+    } catch (e) { obsCatch("evento", e); return false; }
+  }
+
+  // 1.5 — CATCH CONTADO. Los ~891 catch mudos del script no dejan rastro. Este
+  // contador es el primer peldaño: código FIJO, nada del error viaja (el
+  // mensaje con PHI no puede colarse). La migración de los catch existentes es
+  // incremental; los de este módulo ya lo usan.
+  function obsCatch(codigo, e) {
+    try {
+      const c = String(codigo || "desconocido").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 32) || "desconocido";
+      uxTrack("obs.catch." + c);
+      return true;
+    } catch (e2) { return false; }
+  }
+
+  // 1.7 — PERDIDOS: eventos que el saneamiento rechazó. Si el contador sube,
+  // algo del código está mandando algo que la lista blanca no admite — mejor
+  // saberlo que perderlo en silencio. Viaja en la fila de entorno diaria.
+  function obsPerdidosEstado() {
+    const hoy = todayStamp();
+    const crudo = obsGmLeer(OBS_PERDIDOS_GM, null);
+    return (crudo && typeof crudo === "object" && crudo.dia === hoy && typeof crudo.n === "number")
+      ? crudo : { dia: hoy, n: 0, motivos: {} };
+  }
+  function obsPerdidosSumar(motivo) {
+    try {
+      const st = obsPerdidosEstado();
+      st.n++;
+      const m = String(motivo || "desconocido").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 24) || "desconocido";
+      st.motivos[m] = (st.motivos[m] || 0) + 1;
+      obsGmGuardar(OBS_PERDIDOS_GM, st);
+    } catch (e) {}
+  }
+  function obsPerdidosLeer() {
+    const st = obsPerdidosEstado();
+    return { dia: st.dia, n: st.n || 0, motivos: st.motivos || {} };
+  }
+
+  // 4.4 — PRESUPUESTO DE INTERRUPCIONES, en el código. Medido: ≈4.020
+  // interrupciones en 14 días (≈72 por equipo/día) — el aviso universal pasa
+  // de útil a ruido. Tope por equipo y día; `esPrueba` lo exime (el banco
+  // pinta el modal decenas de veces). Ajustable: S.obsPresupuestoAvisos
+  // (número ≥ 0; 0 = sin tope). No toca colores, tonos ni reglas clínicas:
+  // solo decide cuántas veces al día este aviso puede interrumpir.
+  function obsPresupuestoLimite() {
+    try {
+      const v = S && S.obsPresupuestoAvisos;
+      return (typeof v === "number" && isFinite(v) && v >= 0) ? Math.floor(v) : 6;
+    } catch (e) { return 6; }
+  }
+  function obsPresupuestoEstado() {
+    const hoy = todayStamp();
+    let st = obsGmLeer(OBS_PRESUPUESTO_GM, null);
+    if (!(st && typeof st === "object" && st.dia === hoy && typeof st.usados === "number")) st = { dia: hoy, usados: 0 };
+    const limite = obsPresupuestoLimite();
+    return { dia: hoy, usados: st.usados, limite, permite: limite === 0 || st.usados < limite };
+  }
+  function obsPresupuestoConsumir() {
+    try {
+      const st = obsPresupuestoEstado();
+      if (!st.permite) { uxTrack("aviso.presupuesto.agotado"); return false; }
+      if (st.limite > 0) obsGmGuardar(OBS_PRESUPUESTO_GM, { dia: st.dia, usados: st.usados + 1 });
+      return true;
+    } catch (e) { return true; }   // fall-open: el presupuesto no puede tapar el aviso por un fallo de almacenaje
   }
 
 })();
