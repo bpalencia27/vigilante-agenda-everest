@@ -13057,8 +13057,12 @@ mismo que producía el formato viejo.
 | 542 | la migración cifra y escribe pero NO borra el original con la cédula en el nombre | *suite_69: caso 5 — «el archivo con la cédula en el nombre DESAPARECE»* | Sí |
 | 543 | la poda conserva `edad`, un campo del esquema viejo sin consumidor en el caché | *suite_69: caso 5 — «podado al esquema mínimo: esperaba "fecha,…,v" y obtuvo "edad,fecha,…,v"»* | Sí |
 | 544 | `_mtrInstantaneaAlMenosTanRica` siempre `true`: una lectura pobre pisa la instantánea buena del mismo día | *suite_68: «REGRESIÓN — una instantánea degradada NO pisa la buena del mismo día» y «_mtrInstantaneaAlMenosTanRica: qué cuenta como no perder nada»* | Sí |
+| 545 | la escalera vuelve a leer TODA respuesta con ojos de Gemini (`prov.parsear` → `mtrRespuestaGemini`): una respuesta OpenAI de z.ai ya no se entiende | *suite_70: P9·5b, P9·7b y P9·11 — «choices[0].message.content debe leerse como éxito»* | Sí |
+| 546 | la banda de edicion_fuerte se come el borde inferior (sim >= 0,8): el pin «0,80 exacto sigue leve» se rompe | *suite_70: P9·9 — «16 de 20 → sim 0,80 EXACTO → sigue leve»* | Sí |
+| 547 | el código 1211 de z.ai sale del clasificador de modelo-no-disponible: rotaría sin razón | *suite_70: P9·4 — «z.ai 1211 = modelo que no existe → rotar, no fallar en seco»* | Sí |
+| 548 | se borra `// @connect api.z.ai` del encabezado: Tampermonkey bloquearía la petición del proveedor primario | *suite_70: P9·extra — «sin @connect, Tampermonkey bloquearía la petición»* | Sí |
 
-Banco completo: **3.326 comprobaciones pasan, 0 fallan.**
+Banco completo: **3.344 comprobaciones pasan, 0 fallan.**
 
 ## v18.0.145 — auditoría M2M, parte 1: tres críticos que fallaban en silencio
 
@@ -13089,230 +13093,374 @@ viejos de suite_15 se reescribieron contra el DOM real (37 `alert_message` + 1
 | 545 | HBA1C deja de enrutarse por atributo en `_casillasObligatoriasVacias`: con el choque real de ids (HbA1c comparte `resultadoHemoglobina` con la Hemoglobina del hemograma y `resultadoHBA1C` no existe), una HbA1c obligatoria y vacía vuelve a no reportarse | *suite_30: «_casillasObligatoriasVacias: HBA1C obligatoria y vacía SÍ se reporta pese a compartir id con Hemoglobina (v18.0.145)» — mutante 43 pasan / 1 falla; restaurado 44/0* | Sí |
 | 546 | `extractPatientId` vuelve a la recursión libre con deny-list: una rama hermana con id genérico se devuelve como PacienteID | *suite_05: «extractPatientId: rama hermana nueva con id genérico JAMÁS se devuelve como PacienteID (v18.0.145)» — mutante 34 pasan / 1 falla; restaurado 35/0* | Sí |
 | 547 | se desactiva el ancla estructural de `_emparejarNormalidadFija` (`if (false && (sgIdx…))`): el pegado por posición vuelve a escribir aunque «Síntomas generales» esté ausente, duplicada o desplazada | *suite_15: «casilla NUEVA antes de Síntomas generales (conteo de franja intacto) => rehúso total», «sintomasGenerales AUSENTE (Everest cambió el id) => rehúso, nunca escritura desplazada» y «sintomasGenerales DUPLICADA => rehúso» — mutante 266 pasan / 3 fallan; restaurado 269/0* | Sí |
-| 548 | se elimina el hook `_vigilarSilencioVigilancia(secc)` de `tick()` y se devuelve `false` fijo en `_contadorSospechaSelector`: 24 ticks seguidos de sección «otra» con paciente visible (o historia abierta sin cédula legible) vuelven a transcurrir en silencio absoluto, sin toast ni telemetría | *suite_14: «_contadorSospechaSelector: cuenta, avisa una sola vez y se reinicia», «"otra" crónica en HCHealth con paciente visible => aviso único», «"otra" legítima (fuera de HCHealth o sin paciente) no acumula» y «historia abierta sin cédula legible => guard anti-cruce ciego, aviso único» (v18.0.146) — mutante 32 pasan / 3 fallan; restaurado 35/0* | Sí |
 
 Banco completo: **3.351 comprobaciones pasan, 0 fallan.**
 
-## v18.1.0 — auditoría M2M, parte 2: fixes 4 a 7
+## v18.2.1 (P10) — barrera cero-identificables antes de la red
 
-Segunda tanda de la auditoría adversarial M2M. **Fix 4 (CRÍTICO)** — el detector de
-apagado silencioso: si Everest cambiaba el DOM y el Vigilante dejaba de encontrar la
-sección que esperaba, 24 ticks seguidos transcurrían sin que nada lo dijera — el script
-podía llevar horas ciego sin síntoma visible. Ahora `_vigilarSilencioVigilancia` avisa
-UNA sola vez (toast + telemetría de conteos, sin PHI) y se reinicia por sección; el
-caso «historia abierta sin cédula legible» avisa con el matiz de guard anti-cruce.
-**Fix 5 (ALTO)** — dos textos del motor renal portado: (a) el apixabán con CrCl 15-29
-ordenaba «reducir dosis a 2.5 mg cada 12 horas» por el CrCl solo, cuando la ficha técnica
-de Eliquis (sección 4.2) manda reducir solo si el paciente cumple 2 de 3: edad >= 80 años,
-peso <= 60 kg o creatinina sérica >= 1.5 mg/dL; como el orquestador portado no recibe
-edad/peso/creatinina, el mensaje ahora pide verificar los tres criterios en lugar de
-sugerir la reducción (la conducta CAP_DOSIS/HIGH no cambia), y los 35 vectores afectados
-quedan declarados divergentes en suite_43 porque el Copiloto Python conserva el mensaje
-viejo; (b) el tope de furosemida decía «(G3b-G5)» cuando el gate `egfr >= 30 return null`
-solo deja llegar a esa rama a G4-G5. **Fix 6 (ALTO)** — reintento de timeout y guarda RAC:
-cerrado SIN cambio de código; la verificación en fuente mostró ambos caminos ya blindados
-por entregas anteriores. **Fix 7 (MEDIO)** — el botón «primer cupo»: cada día que fallaba
-por red era un `catch { continue }` en silencio, y tras 30 fallos seguidos el cuadro
-anunciaba «Sin cupos libres en los próximos 30 días hábiles» — un hecho que nadie comprobó,
-la misma clase de bug de la auditoría #11 de v16.7.0 («no hay cupos» vs «no se pudo
-preguntar»). Ahora se cuentan los días sin respuesta (`diasSinRespuesta`) y el mensaje
-final distingue «No se pudo consultar la disponibilidad» del conteo honesto de días
-consultados.
+Revisión FINAL del prompt ensamblado (system+user de todos los canales, incluido el
+JSON v68 crudo) justo antes del único disparo de red de IA: si detecta un posible
+identificador, no se envía nada. La nueva `suite_81_barrera_ia` fija los seis
+detectores, el daño cero contra los prompts reales de los cinco modos, el tablero
+canarios × canales y la cadena estructural prompt → barrera → red. Todas las
+mutaciones se aplicaron una a una sobre `mtrBarreraIdentificables`/`mtrGeminiRedactar`
+y se restauraron verificando `git diff` vacío tras cada una.
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
 |---|---|---|---|
-| 549 | se revierte el mensaje del apixabán (CrCl 15-29) al texto viejo «Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.», que ordena la reducción por el CrCl solo | *suite_39: «fix 5 M2M — apixabán CrCl 15-29: pedir verificación 2-de-3, no reducir por CrCl solo» — mutante 49 pasan / 1 falla; y suite_43: «_regla_doac -> mtrReglaDoac: 560 vectores contra motor_deterministic.py» y «no sobra ninguna divergencia declarada» — las 35 divergencias declaradas dejan de divergir y quedan huérfanas, mutante 38 pasan / 2 fallan; restaurado 50/0 y 40/0* | Sí |
-| 550 | el tope de furosemida vuelve a decir «(G3b-G5)», estadio que el gate `egfr >= 30 return null` excluye antes de llegar a la rama | *suite_39: «fix 5 M2M — el tope de furosemida dice G4-G5, lo único que el gate deja pasar» — mutante 49 pasan / 1 falla; restaurado 50/0* | Sí |
-| 551 | se elimina `diasSinRespuesta++` del `catch` del bucle de 30 días del botón «primer cupo»: 30 fallos de red seguidos vuelven a anunciarse como «Sin cupos libres en los próximos 30 días hábiles» | *suite_15: «fix 7 M2M — 30 días sin respuesta del servidor no se anuncian como "Sin cupos libres"» — mutante 268 pasan / 2 fallan (la segunda caída es la pre-existente de renderDayChips, presente también en HEAD); restaurado 269/1, solo la pre-existente* | Sí |
-| 552 | se anula la rama de recuperación del POST sin veredicto en el lote de órdenes (`if (_recuperada)` → `if (false && _recuperada)`): la orden que SÍ llegó al servidor con respuesta perdida vuelve a contarse como fallida y el botón «Reintentar» queda ofreciendo crear el duplicado | *suite_15: «v18.1.1: POST perdido pero la orden SÍ llegó → se recupera contra vigentes y NO se re-POSTea» — mutante 270 pasan / 1 falla; restaurado 271/0* | Sí |
-| 553 | se anula el bloqueo del reintento tras un POST de cita sin veredicto (`if (_cupoOcupadoSR === true)` → `if (false && _cupoOcupadoSR === true)`): con el cupo ya tomado y respuesta perdida, el modal vuelve a ofrecer el reintento a ciegas que crea la cita duplicada | *suite_15: «v18.1.1 (FIX 21 M2M): POST sin respuesta y el cupo ya NO está libre → NO se ofrece reintento a ciegas (no se duplica la cita)» — mutante 272 pasan / 1 falla; restaurado 273/0* | Sí |
-| 554 | se anula la preferencia por copia visible en `_findLabField` (`if (!el.disabled && _vglVisibleDeVerdad(el)) return el;` → `if (!el.disabled && true) return cands[0];`): con un id duplicado en el DOM vuelve a devolver la primera copia aunque viva en una sección OCULTA y el Auto-Labs escribe en una casilla que el médico no ve | *suite_08: «_findLabField (FIX 9 M2M): id duplicado — gana la copia VISIBLE, no la primera del DOM» — mutante 149 pasan / 1 falla; restaurado 150/0* | Sí |
-| 555 | se retiran los 5 filtros de visibilidad de `_conductaBuscarYAgregarExamen` (loop del `<li>` y `find` de AGREGAR/REPETIRLO/CONFIRMAR/ENTENDIDO): el robot de Conducta vuelve a poder clickear `<li>`/botones de copias OCULTAS residuales de Angular | *suite_71: los 5 casos «_conductaBuscarYAgregarExamen (FIX 10 M2M): …» — mutante 85 pasan / 5 fallan; restaurado 90/0* | Sí |
+| 549 | D1 sube el umbral del número largo a 12 dígitos (`/\d{6,}/` → `/\d{12,}/`): la cédula de 10 escapa | *suite_81: P10·1, P10·4 y P10·5 — «dispara ante numero_largo», «clasifica el número que viajaba crudo» y «CERO disparos de red» — mutante 3 pasan / 3 fallan; restaurado 6/0* | Sí |
+| 550 | D6 pierde las abreviaturas dr/dra (`honAbrev` sin `.concat(["dr","dra"])`): «DR. Pérez» viaja al proveedor | *suite_81: P10·1 y P10·3 — «DR. + nombre capitalizado dispara aunque el saneador no lo conozca» y «al menos el canario DR. es detenido por la barrera» — mutante 4 pasan / 2 fallan; restaurado 6/0* | Sí |
+| 551 | D5 se apaga (`if (nombrePaciente)` → `if (false && nombrePaciente)`): el nombre del propio paciente ya no se barre en ningún canal | *suite_81: P10·1 y P10·4 — «dispara ante nombre_paciente» y «clasifica el nombre del paciente» — mutante 4 pasan / 2 fallan; restaurado 6/0* | Sí |
+| 552 | la guarda del punto único de salida se neutraliza (`if (!_bar.ok)` → `if (false && !_bar.ok)`): la barrera detecta pero la petición SALE igual | *suite_81: P10·5 — «CERO disparos de red: ni z.ai ni gemini recibieron nada» — mutante 5 pasan / 1 falla; restaurado 6/0* | Sí |
 
-Banco completo: **3.355 comprobaciones pasan, 3 fallan**. Las 3 caídas —
-«v18.0.131 (hallazgo 11): renderDayChips» en suite_15 y las dos de cascada CSS
-(v18.0.124 alto contraste, v18.0.127 densidad 1366x768) — se reproducen idénticas en
-HEAD 76128d1 SIN estos cambios, verificado extrayendo el HEAD limpio con `git archive`
-a un directorio aparte y corriendo suite_15 y suite_25 sobre él (268/1 y 30/2). Son
-hallazgos NO tocados por esta entrega, reportados aparte.
+Banco completo: **3.357 comprobaciones pasan, 0 fallan.**
 
-**Entrega FIX 8 M2M (2026-09-05).** Causa raíz de las 3 caídas «pre-existentes»
-identificada y reparada: el archivo en disco había quedado con finales de línea CRLF
-(git de Windows lo reescribió en un checkout/stash), y las pruebas de fuente que
-buscan `"\n    });\n"` literal recibían `cierre = -1`, quedando su ventana de
-respaldo de 900 caracteres sin alcanzar las llamadas reales. Normalizados
-`vigilante_agenda.user.js` y `tests/suite_15_interfaz_avanzada.js` a LF (UTF-8 sin
-BOM, diff de git nulo porque los blobs ya eran LF): suite_15 pasó de 269/1 a
-**271/0** y suite_25 de 30/2 a **32/0**. Las 3 caídas ya no existen.
+## v18.2.2 (P11) — compuerta de consentimiento antes de todo (+ purga de 12 meses del tablero)
 
-**Entrega FIX 11-13+23 M2M (2026-09-05) — clúster de reglas clínicas `mtrRegla*`.**
-Cuatro correcciones del motor de dosis renal (fix 11: AINE+RAAS en G3a/A2 es la
-combinación crítica; fix 12: atenolol/nadolol eGFR<15 a 50 mg cada 48 horas según la
-ficha FDA de Tenormin; fix 13: rama propia de edoxabán — CrCl>95 EVITAR, 15-50 a
-30 mg/día, <15 contraindicado, ficha Savaysa/Lixiana §4.2; fix 23: iSGLT2 con eGFR<20
-pasa de SUSPENDER/CRITICAL a EVITAR/HIGH «NO iniciar pero CONTINUAR si lo tolera»,
-KDIGO 2024). suite_39 pasó de 50 a **53** casos; suite_43 (conformidad cruzada contra
-los dorados del Copiloto Python) extendida con 247 divergencias declaradas (63 de
-betabloqueador, 180 de sglt2 y 4 del orquestador) — el generador de dorados llama cada
-regla con todos los fármacos SIN clasificar por grupo, así que los «controles
-negativos» (CARVEDILOL, metformina) SÍ activan las ramas de umbral bajo y también
-divergen. El test del orquestador se equipó con el mismo mecanismo DIVERGENCIAS/usadas
-del resto de la suite (antes comparaba a ciegas con `t.igual`).
+Nada —ni nodo, ni temporizador, ni petición de red, ni evento de telemetría— corre
+antes de que el médico acepte la versión vigente de los Términos (v1.1, z.ai+Gemini).
+La nueva `suite_82_consentimiento` fija la decisión pura, el fail-closed, la constancia
+exacta `{version, ts, id}`, el TTL del rechazo, el foco atrapado y la cadena estructural
+(solo `boot();` vive dentro de `mtrArrancarTodo`). Los tres latidos base se movieron a
+`_instalarLatidosBase()` (tras el kill-switch, dentro de boot): R5.1-bis exige que sus
+dos `setInterval` literales queden en `state.timers`, y el contador de suite_17 subió de
+17 a 19. La purga de 12 meses es entregable Apps Script aparte
+(`docs/tablero_purga_12m.gs`, instalación manual del dueño) y no toca el userscript.
+Todas las mutaciones se aplicaron UNA A LA VEZ sobre el archivo de producción y se
+restauraron verificando el retorno exacto de cada línea tras cada corrida.
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
 |---|---|---|---|
-| 556 | se invierte el ternario del AINE en G3a/A2 (`tieneRaas ? MTR_SEV_CRITICAL : MTR_SEV_HIGH` → `tieneRaas ? MTR_SEV_HIGH : MTR_SEV_CRITICAL`): la doble whammy AINE+IECA/ARA-II vuelve a ser solo HIGH y el AINE solo baja a CRITICAL | *suite_39: «fix 11 M2M — en G3a/A2 el AINE con IECA/ARA-II activo es CRITICAL (doble whammy)» — mutante 52 pasan / 1 falla; restaurado 53/0* | Sí |
-| 557 | el mensaje del atenolol con eGFR<15 se revierte primero a «máximo 25 mg/día…» y después a la réplica EXACTA del dorado Python («máximo 25 mg/día o 50 mg interdiarios con eGFR < 15 mL/min/1.73m2.») | *suite_39: «fix 12 M2M — atenolol con eGFR < 15: tope 50 mg cada 48 horas (ficha FDA Tenormin)» — mutante 52/1 con ambas variantes; y suite_43 con la réplica literal: «_regla_betabloqueador_hidrofilico» + orquestador + «no sobra ninguna divergencia declarada» — mutante 37/3; restaurado 53/0 y 40/0. La variante de texto libre NO la caza suite_43 (sigue difiriendo del dorado literal): la vigilancia semántica del contenido la hace suite_39* | Sí |
-| 558 | se elimina la rama completa de edoxabán de `mtrReglaDoac`: CrCl>95 vuelve al silencio del `return null` y 15-50 al mensaje genérico de «revisar ficha» | *suite_39: «fix 13 M2M — edoxabán: CrCl > 95 EVITAR, 15-50 a 30 mg/día, < 15 contraindicado» — mutante 52 pasan / 1 falla; restaurado 53/0. Sin divergencias en suite_43: el dorado `_regla_doac.json` (560 vectores) no contiene edoxabán* | Sí |
-| 559 | la rama iSGLT2 eGFR<20 se revierte a SUSPENDER/CRITICAL, primero con texto propio y después con la réplica EXACTA del dorado («iSGLT2: suspender con eGFR < 20 mL/min/1.73m2.») | *suite_39: «fix 23 M2M — iSGLT2 con eGFR < 20: EVITAR/HIGH, no iniciar pero continuar si lo tolera» — mutante 52/1 con ambas variantes; y suite_43 con la réplica literal: «_regla_sglt2» + orquestador + «no sobra ninguna divergencia» — mutante 37/3 (el corte fail-fast del caso deja huérfanas el resto de claves); restaurado 53/0 y 40/0* | Sí |
+| 553 | la compuerta se abre en fail-open (`mtrCompuertaDecision` devuelve `arrancar:true` en el caso «preguntar»): sin constancia el script arranca igual | *suite_82: P11·0 y P11·1 — «sin constancia previa, la decisión es preguntar los términos» y «lo único que aparece es la pantalla de términos» (más 6 casos que dependen del velo) — mutante 3 pasan / 8 fallan; restaurado 11/0* | Sí |
+| 554 | `mtrConsentimientoConstancia` deja de comparar la versión (`c.version !== TERMINOS_VERSION` → `false`): una constancia de la 1.0 autoriza la 1.1 sin re-preguntar | *suite_82: P11·6 — «una constancia de la 1.0 NO sirve para la 1.1: se re-pregunta» — mutante 10 pasan / 1 falla; restaurado 11/0* | Sí |
+| 555 | `_instalarLatidosBase` no registra el intervalo NAV en `state.timers` (`state.timers.push(navLog)` comentado): el kill-switch deja latiendo el registro de navegación tras el apagado | *suite_17: «boot registra los 19 timers que crea (… + los 2 latidos base v18.2: navLog, vigiaReloj)» — esperaba 19 y obtuvo 18 — mutante 51 pasan / 1 falla; restaurado 52/0* | Sí |
+| 556 | `_terminosAlRechazar` no deja la marca local (`GM_setValue(TERMINOS_GM_RECHAZO,…)` comentado): el rechazo no se recuerda y el TTL queda huérfano | *suite_82: P11·0 y P11·2 — «_terminosAlRechazar solo deja la marca con hora» y «queda marca local de rechazo con hora» — mutante 9 pasan / 2 fallan; restaurado 11/0* | Sí |
+| 557 | `_terminosAlAceptar` guarda la constancia sin el identificador (`id: mtrIdentificadorParaConstancia()` comentado): la constancia pierde al firmante | *suite_82: P11·0 y P11·4 — «con el identificador del padrón sembrado» y «constancia con el identificador validado por Everest (uid:101)» — mutante 9 pasan / 2 fallan; restaurado 11/0* | Sí |
 
-Las cuatro mutaciones se aplicaron UNA A LA VEZ (restaurando cada una antes de la
-siguiente). Al cierre del clúster: suite_39 **53/0** y suite_43 **40/0**.
+Banco completo: **3.368 comprobaciones pasan, 0 fallan.**
 
-**Entrega FIX 14 M2M (2026-09-05) — `scrubPII`: cédulas con comas y dígito verificador.**
-Dos huecos del saneador de PII (mismo pipeline de `mtrHcTachar`/`mtrHcValorLimpio`
-→ `scrubPII`, que sale del equipo en bitácora, prompts de IA y exportaciones):
-(a) la coma no estaba en la clase de separadores de `_SCRUB_RX_GRUPO_NUM`, así que
-«1,023,456,789» (formato que Everest devuelve en algunos campos) viajaba ENTERA —
-`_SCRUB_RX_DOC_PLANO` tampoco la caza porque cada trozo queda por debajo de 6 dígitos;
-(b) el dígito verificador colombiano quedaba expuesto: «1.023.456.789-0» salía
-«[CENSURADO]-0». La regex pasa de `[\s.-]` a `[\s.,-]` y gana el sufijo opcional
-`(?:\s*-\s*\d)?` (DV de cédula/NIT = un dígito). suite_31 pasó de 52 a **53** casos.
+## v18.3 (P13) — observabilidad de adopción sin identificadores
 
-| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
-|---|---|---|---|
-| 560 | se revierte `_SCRUB_RX_GRUPO_NUM` a la forma vieja sin coma ni DV (`/\b\d{1,3}(?:[\s.-]\d{3}){1,3}\b/g`): la cédula «1,023,456,789» vuelve a viajar entera y el «-0» del DV vuelve a quedar expuesto | *suite_31: «fix 14 M2M: censura cédulas con comas y dígito verificador tras guion» — mutante 52 pasan / 1 falla («esperaba "Paciente [CENSURADO] en sala" y obtuvo "Paciente 1,023,456,789 en sala»); restaurado 53/0* | Sí |
-
-**Entrega FIX 16+25 M2M (2026-09-05) — `_pageFetchJsonCore`: el sobre-error del 200 y el
-cuerpo ilegible.** Dos caras del mismo contrato: cuando Everest contesta HTTP **200** con
-algo que no es un dato útil, el núcleo del API debe devolver `null` (el «sin respuesta» que
-los llamadores ya entienden vía `{__sinRespuesta}`) — **sin** reintentar y **sin** contar
-ni éxito ni fallo. (a) FIX 16: un 200 con sobre `{"Error":"texto"}` se devolvía como dato
-legítimo — el modal de cupos anunciaba «no hay cupos» con el servidor en el suelo y
-`_apiMarcarResultado(true)` pintaba de verde el panel de salud. Predicado estricto
-`_esSobreError200`: objeto no-array con `Error` STRING no vacío — la bandera BOOLEANA
-`Error:true/false` de la anulación de citas sigue siendo respuesta legítima y NO entra.
-(b) FIX 25: un 200 con cuerpo falsy o con `json()` que revienta al parsear caía fuera del
-if/else — consumía los 4 intentos con backoff, se reenviaba por GM y terminaba en
-`_apiMarcarResultado(false)`: cortacircuitos abierto y panel rojo por una respuesta que sí
-llegó. El `AbortError` del tope (v18.0.104, fila 6) se re-lanza ANTES del `return null`
-del catch y sigue siendo caída de red. suite_05 pasó de 35 a **37** casos.
+Módulo `obs*` del userscript: identidad de equipo (manual → GM → LS legado → huella →
+nuevo con aviso diferido un tick), sesión de consulta con ventana de 5 min y dedup por
+módulo, serialización por lista blanca con contexto acotado a `[A-Za-z0-9._:-]{0,24}`
+(solo-números de máx. 4 dígitos), presupuesto de interrupciones (tope 6/día, fall-open)
+y contador diario de eventos perdidos. La nueva `suite_83_observabilidad` fija el hash
+de las claves, la fuga imposible de la cédula, el dedup del denominador, el tope diario
+y la persistencia. Las suites 11/17/75/78/80 se ajustaron para convivir con el nuevo
+módulo (conteo neto cero). Todas las mutaciones se aplicaron UNA A LA VEZ sobre el
+archivo de producción y se restauraron verificando el retorno exacto de cada línea tras
+cada corrida.
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
 |---|---|---|---|
-| 561 | se anula el chequeo del sobre-error en la vía fetch (`if (_esSobreError200(data)) return null;` → `if (false && _esSobreError200(data)) return null;`): un 200 con `{"Error":"..."}` vuelve a devolverse como dato legítimo — el modal de cupos anuncia «no hay cupos» con el servidor caído y el panel de salud queda en verde | *suite_05: «_pageFetchJsonCore: un 200 con sobre-error {"Error"} es "sin respuesta", no dato (fix 16 M2M)» — mutante 36 pasan / 1 falla («un 200 con sobre-error devuelve null, no el sobre como dato: esperaba null y obtuvo {"Error":"Error interno procesando la solicitud"}»); restaurado 37/0* | Sí |
-| 562 | se retira el `return null;` final del cuerpo falsy del 200 (el `if (data) {...}` queda sin su salida corta): un 200 con cuerpo vacío vuelve a caer fuera del if/else, consume los 4 intentos con backoff, se reenvía por GM en cada uno y termina en `_apiMarcarResultado(false)` — cortacircuitos abierto y panel de salud rojo por una respuesta que sí llegó | *suite_05: «_pageFetchJsonCore: un 200 con cuerpo vacío/ilegible no reintenta ni cuenta como fallo (fix 25 M2M)» — mutante 36 pasan / 1 falla («el servidor respondió: NO es un fallo del API: esperaba 0 y obtuvo 1»); restaurado 37/0* | Sí |
+| 558 | `obsConsultaAbrir` deja de hashear la clave del paciente (`obsFnv1a(clave)` → `String(clave)`): la cédula saldría entera en la fila | *suite_83: P13·3 — «el id de consulta es el HASH de la clave (la cédula no sale)» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 559 | `obsSerializar` admite cadenas ctx «solo números» largas (se quita `&& (v.length <= 4 \|\| /[A-Za-z]/.test(v))`): la cédula con o sin puntos cabría en el contexto | *suite_83: P13·6 — «la cédula (con o sin puntos) NO cabe: solo-números largos fuera» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 560 | `obsConsultaElegible` pierde el dedup por módulo (`if (!m \|\| obsConsulta.elegibles[m])` → `if (!m)`): marcar dos veces el mismo módulo infla el denominador | *suite_83: P13·3 — «marcarlo dos veces no duplica el denominador» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 561 | `obsPresupuestoEstado` siempre permite (`permite: limite === 0 \|\| st.usados < limite` → `permite: true`): el tope diario de interrupciones ya no corta | *suite_83: P13·4.4 — «el séptimo del día ya no interrumpe» — mutante 11 pasan / 1 falla; restaurado 12/0* | Sí |
+| 562 | `reportar` vuelve a construir el literal dentro del `repQ.push` (blindaje de reentrancia revertido) | **Sobrevivió** — mutante 12 pasan / 0 fallan: con el aviso «obs.equipo.nuevo» diferido un tick (P13·R1), el nacimiento del id ya no re-entra en sincronía durante la construcción del literal, así que ninguna prueba puede alcanzar la ventana original en producción; el blindaje queda como defensa en profundidad y fue restaurado igualmente | Sí |
 
-Las dos mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la siguiente).
-No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
-suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
+Banco completo: **3.380 comprobaciones pasan, 0 fallan.**
 
-## f17 — FIX 17+18+22 (M2M): selectores Bootstrap con respaldo/salud (agenda, guarda de cédula, containerOf)
+## v18.3 (P12) — saneamiento: constantes muertas fuera, cuarentena zombi
 
-`CONFIG.SEL` pasa a LISTAS de selectores (`hora`, `estado`, `contenedor`, `documento`,
-`nombre`, `modalidad`, `fecha`) recorridas por `firstMatch()`/`qAll()` (nuevo, unión de
-querySelectorAll en orden del mapa): si Everest renombra una clase Bootstrap basta añadir
-el string adicional al mapa y la agenda no se apaga en silencio. Hoy cada lista trae solo
-el selector verificado contra Everest (no se inventan clases). (b) FIX 18:
-`_cedulaDelContenedor()` itera los `.text-muted` del contenedor y se queda con el primero
-que PARSEE como cédula (mismo patrón que `extractPacienteAbierto`) — antes leía el primero
-a ciegas y un epígrafe/correo dejaba la cita con `doc_id ""` en silencio, matando el
-emparejamiento PyM de ese paciente. (c) FIX 22: el fallback ascendente de `containerOf()`
-exige además `_abrigaOtraHora()` (que el ancestro NO abrigue otra hora de cita): antes
-devolvía cualquier ancestro con `.status-label` aunque fuera el wrapper de TODA la agenda
-y la cita leía estado/cédula/nombre del paciente de al lado. La cita huérfana cae en
-valores por defecto (Pendiente/Paciente Everest/doc_id "") — casilla vacía antes que
-mezclar PHI. suite_14 pasó de 35 a **39** casos; suite_04 mantiene 106.
-
-| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
-|---|---|---|---|
-| 563 | en `qAll` la unión se reemplaza por el último selector con vida (`out = out.concat(Array.from(els))` → `out = Array.from(els)`): un respaldo futuro dejaría de verse y la lectura de agenda/cédula volvería a depender de un único selector | *suite_14: «qAll: une los querySelectorAll de la lista de selectores, en orden (fix 17 M2M)» — mutante 38 pasan / 1 falla («debe concatenar TODOS los selectores de la lista (obtuvo false)»); restaurado 39/0* | Sí |
-| 564 | en `_cedulaDelContenedor` el `if (doc) return doc;` pierde la guarda (→ `return doc;` incondicional): vuelve a entregarse el primer `.text-muted` a ciegas y un correo/epígrafe deja la cita con `doc_id ""` en silencio | *suite_14: «extractAgenda: la cédula es el primer .text-muted que PARSEA, no el primero a ciegas (fix 18 M2M)» — mutante 38 pasan / 1 falla («debía saltar el .text-muted que no parsea y quedarse con la cédula: esperaba "1023456789" y obtuvo ""»); restaurado 39/0* | Sí |
-| 565 | en `containerOf` se retira el guard del ancestro multi-cita (`!_abrigaOtraHora(n, elHora) && ` eliminado): el fallback vuelve a aceptar el primer ancestro con `.status-label` aunque abrigue varias citas y la cita lee la cédula del vecino | *suite_14: «containerOf: ancestro con estado que abriga OTRA cita no sirve (fix 22 M2M)» y «extractAgenda: si el único ancestro con estado abriga varias citas, la cita queda huérfana (fix 22 M2M)» — mutante 37 pasan / 2 fallan («un ancestro que abarca varias citas no puede ser el contenedor: mezclaría pacientes: esperaba null» / «huérfana: el estado del vecino no se lee: esperaba "Pendiente" y obtuvo "En Sala"»); restaurado 39/0* | Sí |
-
-Las tres mutaciones se aplicaron UNA A LA VEZ (restaurada cada una antes de la siguiente).
-No-regresión verificada tras el cambio en las suites que ejercitan el núcleo del API:
-suite_13 (64/0), suite_19 (29/0), suite_23 (109/0), suite_33 (23/0), suite_70 (26/0).
-
-## f15 — FIX 15 (M2M): cosecha merge multi-pestaña (rebase-on-write en `_vglCosechaGuardar`)
-
-`_vglCosechaGuardar` hacía read-modify-write del almacén COMPLETO (`vgl_cosecha`, hasta 80
-pacientes) sin protección. Dos pestañas del mismo Everest corren en procesos distintos:
-ambas leen S0, ambas fusionan su paciente y la que escribe última PISA la memoria clínica
-que la otra pestaña acabó de guardar (lost update clásico — la guarda v18.0.4 redujo la
-frecuencia, no cerró la ventana; el comentario del propio código lo admitía). Cierre: tras
-armar la fusión inicial se RE-LEE el disco vía `_vglCosechaTodo()`; si la memo quedó inválida
-por contenido (la otra pestaña escribió), se re-resuelve la clave con `_vglClaveDeDoc`,
-la fusión se rehace sobre lo fresco (la pantalla gana, como siempre) y `todo` se arma desde
-lo fresco — los pacientes de la otra pestaña sobreviven. La poda y la guarda de escritura
-existentes corren DESPUÉS y cubren la mezcla rebasada sin duplicar código. La prueba simula
-la carrera real: el `getItem` falso devuelve S0 en la primera lectura y S1 en las siguientes
-(la otra pestaña escribió mientras tanto); las aserciones leen el mapa crudo del almacén.
-suite_64 pasó de 39 a **40** casos.
+Se retiraron las dos únicas constantes sin lector (`PYM_SIN_ACT_MOTIVOS`,
+`MTR_SEVERIDAD_RIESGO`) re-hospedando el 100 % de sus comentarios históricos junto a
+las funciones vivas que documentan (`pymMotivoSinActividades`, `mtrClasificarRiesgoCv`);
+tres funciones sin llamador entraron en cuarentena con `uxTrack("zombi.<nombre>")`
+como primera línea (`mtrIaClickDelegado`, `mtrIrAPestanaPorNombre`,
+`_mtrPrimerCampoNumerico`). La nueva `suite_84_saneamiento` (estructural, sobre la
+fuente de producción) fija: constantes fuera, memoria re-hospedada, exactamente tres
+marcadores zombi, y que ninguna pieza protegida por tests (F1) pueda desaparecer en
+silencio. Los defectos encontrados (botón `#vgl-ia-redactar` pintado sin listener,
+`CANCEL_PLANTILLA_KEY` que nunca se limpia, `_deshacerOrdenesPyM` sin camino de UI)
+se reportan en `docs/SANEAMIENTO.md` sin arreglos: arreglarlos cambia comportamiento
+visible y P12 no lo toca. Cada mutación se aplicó UNA A LA VEZ y se restauró
+verificando el retorno exacto tras cada corrida.
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
 |---|---|---|---|
-| 566 | se anula el rebase multi-pestaña (`if (fresco !== previoTodo) {` → `if (false && fresco !== previoTodo) {`): la escritura vuelve a armarse toda sobre la foto vieja S0 y PISA al paciente "222222" que la otra pestaña guardó mientras tanto (y pierde su "hta" para este paciente) | *suite_64: «FIX 15 M2M — la escritura no pisa la memoria que otra pestaña guardó mientras tanto» — mutante 39 pasan / 1 falla («la memoria del paciente de la OTRA pestaña sobrevive (obtuvo false)»); restaurado 40/0* | Sí |
+| 563 | Se restaura la constante muerta `MTR_SEVERIDAD_RIESGO` en la fuente (resurrección del array sin lector) | *suite_84: P12·1 — «MTR_SEVERIDAD_RIESGO ya no se declara» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+| 564 | Se quita el marcador `uxTrack("zombi.mtrIrAPestanaPorNombre")` de la función en cuarentena (la telemetría dejaría de delatarla) | *suite_84: P12·3 — «mtrIrAPestanaPorNombre arranca con uxTrack(…)» y «exactamente tres marcadores» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+| 565 | Se renombra `const MTR_CORRECCIONES_NORMA` → `const MTR_CORRECCIONES_NORMA_MUTANTE` (borrar de facto una pieza protegida por F1) | **Sobrevivió la primera corrida** — mutante 5 pasan / 0 fallan: la aserción de presencia casaba por substring y `…_NORMA_MUTANTE` contiene `…_NORMA`. Aserción faltante: límite de palabra. Se reforzó `declara()` (regex escapada + `(?![A-Za-z0-9_])`) y el MISMO mutante cayó: 4 pasan / 1 falla; restaurado 5/0 | Sí |
+| 566 | Se borra el comentario re-hospedado del trinquete de severidad (memoria del proyecto: «subir el riesgo es seguro, bajarlo no») | *suite_84: P12·2 — «el comentario del trinquete queda re-hospedado sobre mtrClasificarRiesgoCv» — mutante 4 pasan / 1 falla; restaurado 5/0* | Sí |
+| 567 | Incidencia 4: se desenvuelve la llamada al motor (`resumen = mtrResumenDesdeModalLabs(...)` sin try/catch) — el throw volvería a escalar hasta el Panel | *suite_67: «v18.3.0 (Incidencia 4): un throw del motor degrada a…» — mutante 45 pasan / 1 falla (rechaza con `boom-incidencia-4`); restaurado 46/0* | Sí |
+| 568 | Incidencia 4: guard de caché `if (resumen && !_resumenDegradado)` → `if (resumen)` (el «sin dato» envenenaría la última lectura buena) | **Cayó dos veces, la primera por la razón equivocada**: la primera corrida falló con `atheneaPrincipalFallo is not defined` — un ReferenceError por scope latente (la variable vivía dentro del `try`) que resultó ser la CAUSA RAÍZ de la Incidencia 4. Corregido el scope, el MISMO mutante cayó por la aserción correcta: «el guardado de caché exige resumen no degradado» (45 pasan / 1 falla); restaurado 46/0 | Sí |
+| 569 | Incidencia 4: se neutraliza la guarda de grounding del redactor IA con `false &&` delante (`if (false && resumen && resumen._resumenDegradado)`) | **Sobrevivió la primera corrida** — mutante 46 pasan / 0 fallan: la aserción buscaba el fragmento corto `resumen._resumenDegradado) resumen = null;`, que la mutación conserva. Aserción faltante: sentencia completa. Se reforzó a `indexOf("if (resumen && resumen._resumenDegradado) resumen = null;")` y el MISMO mutante cayó: 45 pasan / 1 falla; restaurado 47/0 | Sí |
+| 570 | Incidencia 4 (causa raíz): se reintroduce el bug de scope declarando `let atheneaPrincipalFallo` solo dentro del `try` de Athenea | **Sobrevivió la primera corrida** con solo re-añadir la `let` interna (46/0): sombreaba, no rompía — el bug original exige que NO exista la declaración a nivel de función. Quitada también esa, el mutante cayó: *suite_67: «v18.3.0 (Incidencia 4, causa raíz): sin fallo interno el resumen llega al guardado…»* — 46 pasan / 1 falla (rechaza con ReferenceError); restaurado 47/0 | Sí |
+| 571 | Autorización Dra. Gloria Jaramillo: se quita su fila de la semilla del padrón en `TABLERO/Codigo.gs` (la hoja `acceso` nacería sin ella) | *TABLERO/simulacion_local.js: «perfiles: COMPLETO=4 (deben ser 5 y 3)», «nueva autorizada: NO ESTÁ» y TypeError en `todos[7]` (exit 1) — el simulador evalúa el `Codigo.gs` real; restaurado «B2/B6 servidor: TODO OK» (exit 0, COMPLETO=5, 13 filas)* | Sí |
+| 572 | v18.3.1 (deadlock de arranque): se desactiva el rescate pre-compuerta con `false &&` delante (`if (false && !decision.arrancar && decision.motivo === "fuera-del-padron")`) — la máquina sin caché volvería al silencio eterno de «no sale nada» | *suite_82: P11·11 — «la compuerta fue a buscar el padrón exactamente una vez por GM_xmlhttpRequest (usos 0, fetch 0)» y P11·13 — «intentó el rescate exactamente una vez» — mutante 13 ok / 2 FALLAN; restaurado 15 ok | Sí |
+| 573 | v18.3.1 (cuarentena): el rescate no forzado pasa a forzado (`accesoRefrescarLista()` → `accesoRefrescarLista(true)`) — una máquina fuera del padrón martillaría el tablero en cada carga aunque el sello de 4 h estuviera fresco | *suite_82: P11·12 — «con el sello fresco el rescate respeta la cuarentena de 4 h: cero peticiones (usos 1)» — mutante 14 ok / 1 FALLAN; restaurado 15 ok | Sí |
 
-La mutación se aplicó y restauró (una sola). No-regresión: suite_32 (45/0), suite_75 (50/0).
-suite_76_disco_hostil CUELGA en este entorno de forma PREEXISTENTE (verificado con el código
-commiteado vía stash: imprime la cabecera y no llega al resumen) — no la ejercita este cambio.
+Banco completo: **3.387 comprobaciones pasan, 0 fallan.**
 
-## FIX 19-20+30-33 (auditoría M2M) — fronteras exactas que nadie probaba
+Banco completo al cerrar la v18.3.1: **3.386 pasan / 5 fallan** en la corrida con el diff aplicado; 2 de los fallos eran la cuádruple sincronización de versión de este mismo cambio (package.json y el pin de la «versión viva» de suite_75) y quedaron verdes por suite tras el ajuste (suite_30: 44/0, suite_75: 50/0, suite_82: 15/15). Los 3 fallos restantes son **preexistentes en la punta `009b8da` sin mis cambios** — corrida baseline en HEAD (stash `verif-baseline`): suite_15 «renderDayChips» (268 ok / 1 fallan) y suite_25 «cascada CSS» (30 ok / 2 fallan) reproducen exactamente los mismos fallos. Total proyectado con el diff final: 3.388 pasan / 3 fallan preexistentes.
 
-Los tests existentes de `colorAndAlert`, de las guardas renales y del candado «ya
-agendado/ordenado hoy» usaban valores cómodos (10 min, 5,5 min, peso 0/140, día
-"2020-01-01"): nunca el valor EXACTO del umbral. La producción resultó CORRECTA en
-todas las fronteras (`>=` bien usado; el día se compara por igualdad `!==`), así que
-el fix es solo la adición de 8 pruebas SIBLING con el minuto justo, la actividad
-justa y el valor justo: suite_04 pasó de 106 a **111**, suite_09 de 36 a **37** y
-suite_27 de 12 a **14**. Cada frontera se mutó a propósito (degradar `>=` a `>`,
-igualdad a orden) y cada mutante cayó con la prueba nueva antes de restaurarse.
+## v18.3.3 — diagnóstico de compuerta: rastro del «no sale nada»
 
-| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
-|---|---|---|---|
-| 567 | en `colorAndAlert`, la frontera de inasistencia se degrada (`if (elapsed >= grace)` → `if (elapsed > grace)` en L14761): «Sin presentarse» a los 6 minutos JUSTOS vuelve a pintarse MORADO de pre-alerta en vez de ÁMBAR, sin marca de fraude | *suite_04: «FIX 19 M2M — frontera exacta: Sin presentarse a los 6 minutos JUSTOS es AMBAR (>=, no >)» — mutante 110 pasan / 1 falla; restaurado 111/0* | Sí |
-| 568 | la frontera de pre-alerta se degrada (`} else if (elapsed >= prealert)` → `} else if (elapsed > prealert)` en L14810): a los 5 minutos JUSTOS el MORADO de tiempo desaparece y la celda cae a AZUL | *suite_04: «FIX 19 M2M — frontera exacta: Sin presentarse a los 5 minutos JUSTOS es MORADO de pre-alerta» — mutante 110 pasan / 1 falla («esperaba "MORADO" y obtuvo "AZUL"»); restaurado 111/0* | Sí |
-| 569 | el corte de PyM se degrada (`pym.length >= 3` → `pym.length > 3` en L14812): TRES actividades justas ya no pintan MORADO «pym» y la celda cae a AZUL | *suite_04: «FIX 19 M2M — frontera exacta: TRES actividades de PyM en estado neutro pintan MORADO «pym»» — mutante 110 pasan / 1 falla («esperaba "MORADO" y obtuvo "AZUL"»); restaurado 111/0* | Sí |
-| 570 | el piso de peso de la guarda renal se degrada (`peso >= 20` → `peso > 20` en L4511): un adulto de exactamente 20 kg vuelve a ser rechazado como implausible y se queda sin CrCl | *suite_27: «FIX 32/33 M2M — frontera exacta de peso: 20 y 300 kg calculan, 19,9 y 300,1 son centinela 0» — mutante 13 pasan / 1 falla («peso 20 JUSTO… obtuvo false»); restaurado 14/0* | Sí |
-| 571 | el piso de creatinina se degrada (`creat >= 0.1` → `creat > 0.1` en L4511): la creatinina de exactamente 0,1 (borde inferior del rango oficial de Everest) vuelve a ser centinela 0 | *suite_27: «FIX 32/33 M2M — frontera exacta de creatinina: 0,1 y 20 mg/dL calculan, 0,09 y 20,1 son centinela 0» — mutante 13 pasan / 1 falla («creatinina 0,1 JUSTA… obtuvo false»); restaurado 14/0* | Sí |
-| 572 | el candado del antiduplicados se degrada de igualdad a orden (`data.dia !== today` → `data.dia < today` en L9593): un registro sellado con el día SIGUIENTE (corrupto) ya no se resetea y secuestra el «ya ordenado hoy» de un día que aún no llega | *suite_09: «FIX 20 M2M — un registro sellado con el día de MAÑANA se resetea: el candado es igualdad, no orden» — mutante 36 pasan / 1 falla («esperaba "2026-09-05" y obtuvo "2026-09-06"»); restaurado 37/0* | Sí |
-| 573 | el extractor blindado de `apiOrdenamientoBuscarPaciente` vuelve a la cadena naive (`extractPatientId(res)` → `res.data && res.data.idPaciente ? res.data.idPaciente : null` en L30611): una ficha anidada en `data` vuelve a devolver null y hundir la orden de PyM entera | *suite_05: «v18.1 (M2M f26): apiOrdenamientoBuscarPaciente extrae el id aunque la ficha venga anidada (extractPatientId)» — mutante 37 pasan / 1 falla («la ficha en data.idPaciente se resuelve…»); restaurado 38/0* | Sí |
-| 574 | la baja de bandera del paso 2 desaparece (L2638 quita `atheneaSesionViva = false`): una sesión que caduca a mitad de búsqueda deja la bandera en su valor previo y el keep-alive sigue en cadencia de sesión viva | *suite_18: «v18.1 (M2M f29): sesión caída A MITAD baja la bandera atheneaSesionViva — el paso 2 con login no la deja en true» — mutante 93 pasan / 1 falla («el paso 2 devolvió login: la bandera queda en false…»); restaurado 94/0* | Sí |
-| 575 | la ventana de frescura de la precarga de labs se ensancha de 2 a 10 min (`LABS_PRECARGA_FRESCA_MS = 2 * 60000` → `10 * 60000` en L5015): a los 5 min se vuelve a servir la caché fría sin consultar el portal | *suite_15: «v18.1 (M2M f28): frontera exacta de los 2 min de precarga — 119,5 s se sirve, 120,5 s ya consulta en vivo» — mutante 272 pasan / 2 fallan (la nueva y la frontera C11 ya existente); restaurado 274/0* | Sí |
-| 576 | la vigencia de confirmaciones degrada la frontera de igualdad (`<= dias` → `< dias` en L6103): a los 30 días EXACTOS la confirmación vence un día antes y el médico vuelve a ver la pregunta que ya respondió | *suite_48: «v18.1 (M2M f27): _vglConfirmacionVigente — frontera exacta del día 30 y el sello vacío» — mutante 56 pasan / 1 falla («a los 30 días EXACTOS sigue vigente…»); restaurado 57/0* | Sí |
-| 577 | el regex de cancelación pierde la grafía `AnularCita` (`/\/CancelarCita|\/AnularCita|\/CancelarTurno/i` → sin `|\/AnularCita` en L10823): una anulación vía AnularCita deja de catalogarse como escritura y pasa la compuerta de perfiles restringidos | *suite_78: «v18.1 (M2M f24): accesoEscribirUrl directo — las variantes de cancelación cierran y las URLs de impresión/impresión-orden no se catalogan como escritura» — mutante 34 pasan / 1 falla («AnularCita es agendar_control: cerrada para LABORATORIOS»); restaurado 35/0* | Sí |
-| 578 | el respaldo por TEXTO de la barra de pestañas se desactiva (`if (typeof d.querySelectorAll === "function")` → `if (false && …)` en L6733): sin ningún id ancla, `_vglBarraPestanasPrincipal` devuelve null y la pestaña activa se lee del tabset decoy de los programas (o de nada) | *suite_64: «M2M f34: sin NINGÚN id ancla, la barra principal se localiza por el TEXTO de sus pestañas» — mutante 41 pasan / 1 falla; restaurado 42/0* | Sí |
-| 579 | la normalización de espacios del copy de la pestaña activa se elimina (`String(a.textContent \|\| "").replace(/\s+/g, " ").trim()` → sin el replace en L6766): un «RUTA  CRÓNICOS» con doble espacio interno deja de matchear y Auto-Labs no abre en Ruta Crónicos | *suite_64: «M2M f35: fronteras del copy — espacios dobles, MAYÚSCULAS totales, tildes y el negativo que solo comparte palabras» — mutante 41 pasan / 1 falla («MAYÚSCULAS totales con doble espacio interno: el copy matchea igual»); restaurado 42/0* | Sí |
-| 580 | el selector del interruptor de uroanálisis vuelve al name completo refactorable (`input[name$="swUroanalisis"]` → `input[name="resultadoPrograma.swUroanalisis"]` en L1875): un name reestructurado por Angular (prefijo distinto) deja de encontrar los radios y el SI no se marca | *suite_08: «_marcarUroanalisisSi (M2M f36): un name reestructurado por Angular sigue encontrando los radios (ancla por sufijo)» — mutante 150 pasan / 1 falla; restaurado 151/0* | Sí |
-
-Las seis mutaciones se aplicaron y restauraron UNA POR UNA (grep-verificada cada
-restauración antes de la siguiente). No-regresión: suite_10 (30/0, toca
-`colorAndAlert`) y suite_32 (45/0, frontera de edad 18/120 ya cubierta por R2.3 —
-por eso no se duplica aquí). La celda de «4,9 min sigue AZUL» y la de «DOS
-actividades no pintan» son el contraste de la frontera hacia abajo: sin ellas, un
-umbral que cediera hacia abajo (pintar MORADO demasiado pronto) tampoco se notaría.
-
-## Cierre del banco M2M — dos suites que rompieron los COMMITS de la propia campaña
-
-El banco completo (una suite por proceso, con reintentos) destapó que dos commits de
-esta campaña habían roto pruebas ajenas a su fix sin que nadie lo viera, porque las
-suites de verificación de cada PR solo corrían las que tocaba el cambio. dd59ac6 (f8)
-ensanchó el ternario de la clase del aviso y el lint literal de suite_72 dejó de casar;
-9ebd4c4 (f17+18+22) hizo que `_cedulaDelContenedor` recorriera el contenedor con
-`querySelectorAll` y los mocks de suite_17, que solo sabían `querySelector`, lanzaban
-TypeError dentro de `extractAgenda`. En ambos casos la PRODUCCIÓN estaba bien: lo que
-se reparó fue la prueba. Dos mutaciones muertas fijan cada reparación:
+Incidencia real (Dra. Gloria, 05-09-2026): con el fix de sin-identidad ya
+desplegado seguía «no aparece nada» sin forma de saber desde afuera qué rama
+callaba. La compuerta deja ahora su veredicto en GM (`vgl_compuerta_diagnostico`:
+motivo + sí/no login + versión + ts — sin PHI) y una línea de consola, SOLO en las
+rutas de incidencia (fuera-del-padron, sin-identidad, rechazo-fresco, bloqueado,
+excepción). La pantalla de términos rutinaria del médico del padrón («preguntar»)
+y el arranque normal NO dejan rastro: P11·4 exige que el camino aceptar→arrancar
+no escriba ninguna clave aparte de la constancia — un guard que solo respete
+`arrancar` cae exactamente ahí, y excluir por pantalla («terminos») tampoco sirve
+porque «sin-identidad» también abre pantalla y P11·19 exige rastro en esa ruta.
+La exclusión correcta es por MOTIVO. Caso nuevo P11·19 en suite_82 (hermano del
+anterior, con await). Versiones en paso (18.3.3 en `@version` L4, `VERSION`
+L1038, package.json y pin de suite_75 L900). Banco completo con el diff final:
+solo los 3 fallos preexistentes de la punta base (suite_15 renderDayChips
+268/1, suite_25 cascada CSS 30/2), idénticos a la baseline documentada arriba.
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
 |---|---|---|---|
-| 581 | la clase del aviso de órdenes parciales/recuperadas vuelve al verde por la puerta de atrás (`? "vgl-ord-parcial" :` → `? "vgl-ord-vigwarn" :` en L31521): las órdenes que se RECUPERAN contra vigentes tras un POST sin respuesta vuelven a pintarse como «ya cubierto» | *suite_72: «v17.11.0 — una corrida de órdenes a medias no puede parecerse a una que salió bien» — mutante 24 pasan / 1 falla («y no puede volver a la clase verde por la puerta de atrás»); restaurado 25/0* | Sí |
-| 582 | `_cedulaDelContenedor` se vuelve ciego a la cédula parseada (`if (doc) return doc;` → `if (doc) return "";` en L14157): el contenedor de la agenda ya no identifica al paciente, el tick aborta la siembra y la instantánea se guarda sin claves | *suite_17: «tick: con la agenda visible SIEMBRA sin notificar (no-inferencia) y guarda la instantánea» — mutante 51 pasan / 1 falla («sembrada con su clave y color reales: esperaba "VERDE" y obtuvo undefined»); restaurado 52/0* | Sí |
+| 574 | El diagnóstico se escribe en TODA decisión (guard de rutas eliminado): la clave `vgl_compuerta_diagnostico` aparece en el camino aceptar→arrancar | *suite_82: P11·4 — «aceptar no escribe ninguna OTRA clave GM (…después: vgl_compuerta_diagnostico,…)» — mutante 19 pasan / 1 fallan; restaurado con guard 20/0* | Sí |
+| 575 | El guard excluye por pantalla (`decision.pantalla === "terminos"`) en vez de por motivo: la ruta sin-identidad (que también abre la pantalla de términos) dejaba de dejar rastro | *suite_82: P11·19 — «con sesión registra sin-identidad + login si («undefined»/undefined)» — mutante 19 pasan / 1 fallan; restaurado (exclusión por motivo «preguntar») 20/0* | Sí |
+| 576 | La escritura se neutraliza (`if (typeof GM_setValue !== "undefined")` → `if (false)`): la compuerta decide pero no deja rastro en GM | *suite_82: P11·19 — «la clave vgl_compuerta_diagnostico quedó escrita (obtuvo false)» — mutante 19 pasan / 1 fallan; restaurado 20/0* | Sí |
 
-Las dos mutaciones se aplicaron y restauraron UNA POR UNA (grep-verificada cada
-restauración). No-regresión: suite_14 (39/0, los otros mocks del extractor que f17 ya
-había enseñado) y suite_04 (111/0). El banco completo sobre las suites del repo termina
-en verde; `tests/suite_82_consentimiento.js` es un archivo VACÍO no commiteado (borrador
-ajeno a esta campaña) sobre el que el runner tropieza — no se cuenta.
+## v18.3.4 — barrera (T1+T5): la segunda puerta ciega y la excepción mal clasificada
 
+Dos cierres de la clase «no sale nada» (frente COMPUERTA del enjambre):
+
+**T1 — «sin-identidad-aceptado → PÚBLICO» arrancaba sin rastro.** El médico
+aceptó los Términos sin identidad, boot() corrió y resolvió quién es, pero el
+padrón no lo trae (o la lista quedó corrupta): el núcleo corría recortado a
+PÚBLICO sin que la compuerta —que ya había decidido «arrancar»— volviera a
+opinar. El diagnóstico de GM se escribe ahora en el punto donde el perfil
+PÚBLICO con sesión SE DESCUBRE: `repAccesoDiario` (L12382), el único punto
+1/día que ya consultaba `accesoPerfil()` — el candado diario existente evita
+el martilleo, nunca se escribe por tick de accesoPerfil. Se le pasa
+`{motivo:"publico-con-sesion"}` SIN `arrancar` a mtrCompuertaDiagnostico:
+`decision.arrancar` queda undefined (falso) y pasa el guard de rutas de
+incidencia sin tocarlo (misma clave GM, sin PHI). Caso nuevo **P11·20**
+(hermano, con await): escritura con motivo/login/estructura exacta, candado
+consumido no re-escribe, COMPLETO con sesión no deja rastro y PÚBLICO sin
+sesión tampoco.
+
+**T5 — la excepción de mtrCompuertaSinIdentidad se leía como «hay
+identidad».** El catch devolvía `false` ⇒ mtrCompuertaDecision caía en
+fuera-del-padron (silencio) en vez de sin-identidad (pantalla de Términos).
+Ahora el catch devuelve `true` («no se pudo saber» → pantalla de Términos;
+la salida la deciden boot()/accesoCap() después — sigue fail-closed: la
+pantalla no toca red y PÚBLICO no monta nada). **Limitación documentada**:
+`_identidadMedicoCacheLeer` y `mtrLoginDeSesion` tragan sus propias
+excepciones (`return null` / `return ""`), así que el catch NO es simulable
+en vivo desde el arnés sin mutar el archivo — la prueba **P11·21** lo fija
+como regresión de código fuente (mismo patrón estructural de P11·10: probar
+el cable cuando la pieza no se puede desconectar por fuera).
+
+Suite_82: 20 → 22 casos. `node -c` limpio en ambos archivos.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 577 | Se neutraliza la condición del diagnóstico de T1 (`if (perfil === "PUBLICO" && mtrLoginDeSesion())` → `if (false && …)`): el perfil PÚBLICO con sesión ya no deja rastro en GM | *suite_82: P11·20 — «PÚBLICO con sesión: el reporte diario deja diagnóstico «publico-con-sesion» («undefined») (obtuvo false)» — mutante 21 pasan / 1 fallan; restaurado 22/0* | Sí |
+| 578 | Se revierte el catch de mtrCompuertaSinIdentidad a `return false` (**el defecto original de T5**): la excepción vuelve a clasificarse como «hay identidad» | *suite_82: P11·21 — «el catch devuelve true: fail-closed hacia la pantalla de Términos (obtuvo false)» — mutante 21 pasan / 1 fallan; restaurado 22/0* | Sí |
+
+Tras restaurar cada mutación: suite_82 **22 pasan / 0 fallan**, suite_78
+**34 pasan / 0 fallan** (los 3 fallos preexistentes de la punta base en
+suite_15/suite_25 no se tocaron).
+
+## v18.3.4 — barrera (T2)
+
+Hallazgo N8-B1: la capacidad `centinela` (declarada en `ACCESO_CAPS_LABORATORIOS`
+y fijada por la matriz de suites 78/80: LABORATORIOS la tiene, PÚBLICO no) era
+consultada por CERO consumidores — `boot()` montaba `#vgl-root` sin compuerta de
+perfil y el monitor núcleo corría para PÚBLICO en la ruta
+sin-identidad-aceptado. Se cablea en DOS barreras: (a) compuerta en `boot()`
+antes de `buildOverlay()` — con identidad fijada SIN red primero (login de
+sesión + caché GM, la misma fuente que la compuerta de consentimiento) porque
+`state.activeDoctor` aún está vacío en ese punto y con la gracia de 12 h vencida
+un médico del padrón resolvía PÚBLICO; (b) re-visa en `tick()` que retira el
+monitor (`_vglRetirarMonitorPorPerfil`, el aseo de `emergencyTeardown` sin
+banderas de kill ni aviso rojo) cuando la identidad llegó tarde — la ruta
+sin-identidad de v18.3.2 NO se bloquea en el montaje (bloquearla reviviría el
+«no aparece nada» de la Dra. Gloria), la re-visa decide al resolverse la
+identidad. NOTA de la mutación 579: la primera tentativa de mutar SOLO la
+compuerta de `boot()` sobrevivió, porque la re-visa de `tick()` (que
+`applySettings` dispara dentro del propio arranque) retiraba el monitor igual —
+defensa en profundidad funcionando; la prueba aísla cada barrera blindando
+`tick()` con `state.killed` en el caso (a).
+
+Suite_78: 34 → 35 casos. `node -c` limpio en `vigilante_agenda.user.js` y
+`tests/suite_78_acceso.js`. Suite_15 de este worktree no completa ni SIN estos
+cambios (verificado A/B revirtiendo ambos hunks: exit 1 sin resumen) — cuelgue
+preexistente del entorno, no tocado.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 579 | Se neutraliza la compuerta de capa a del monitor (`if ((state.activeDoctor.id \|\| state.activeDoctor.name) && !accesoCap("centinela"))` → `if (false && …)` en boot): PÚBLICO con identidad conocida vuelve a montar #vgl-root | *suite_78: N8-B1 — «boot() NO monta #vgl-root para PÚBLICO con identidad conocida (obtuvo true)» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+| 580 | Se neutraliza la re-visa de tick() (`if (false && (state.activeDoctor.id \|\| …) && !accesoCap("centinela"))`): el monitor montado por la ruta sin-identidad ya nunca se retira aunque la identidad resuelva PÚBLICO | *suite_78: N8-B1 — «tick() retira el monitor cuando la identidad resuelta no tiene «centinela» (obtuvo true)» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+
+Tras restaurar cada mutación: suite_78 **35 pasan / 0 fallan**, suite_80
+**9 pasan / 0 fallan**, suite_82 **22 pasan / 0 fallan**, suite_17 **52 pasan /
+0 fallan** (boot/tick intactos), suite_25 **30 pasan / 2 fallan** (los mismos
+2 fallos preexistentes de CSS en cascada, sin relación con la compuerta).
+
+## v18.3.4 — higiene (T4)
+
+Hallazgos N7-#2 y #3 (kill-switch incompleto, mantenimiento puro): (a) el tono
+insistente del ROJO y el parpadeo de pestaña viven en intervalos propios
+(`nagTimer`/`flashTimer`, fuera de `state.timers`) — un kill durante un aviso
+activo dejaba el sonido sonando hasta ~6 min con la UI ya borrada y sin modal
+que permitiera reconocerlo; `emergencyTeardown` ahora llama `stopNag()`/
+`stopFlash()` (el edge-trigger de `alertedFraud` NO se toca: solo se apaga al
+matar). (b) `_vglInstalarVigilanciaDom` dejaba su MutationObserver y sus 3
+listeners de captura en variables LOCALES — el kill no podía recogerlos y el
+script «muerto» seguía observando el DOM; las referencias ahora viven a nivel
+de módulo (`_vglDomObs`/`_vglDomAlTocar`, L5188-5189) y el teardown las
+desconecta y retira (patrón B13 de `vglMinInstalar._obs`). El latch
+`_vglDomObsInstalado` se deja en true a propósito: una llamada tardía a la
+compuerta no debe reinstalar el observador de un script muerto. LIMITACIÓN del
+arnés: `MutationObserver.disconnect` y `document.removeEventListener` son
+no-ops ahí, así que la prueba observa el ciclo de vida de las referencias
+(accessor `__vglDomVigilanciaParaTest` añadido a `tests/harness.js`) y de los
+intervalos (`env.intervalos`). NO se tocó `_vglRetirarMonitorPorPerfil` (N8-B1,
+subagente B), que tiene el mismo hueco del observador de DOM: fuera de alcance
+de T4.
+
+Suite_30: 11 → 12 casos. `node -c` limpio en `vigilante_agenda.user.js`,
+`tests/harness.js` y `tests/suite_30_killswitch_canario.js`.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 581 | Se neutralizan los apagados de aviso en emergencyTeardown (`try { stopNag(); } catch`/`try { stopFlash(); } catch`, L35843-35844 → cuerpos vacíos): el kill vuelve a dejar vivos los intervalos de nag/flash | *suite_30: v18.3.4 — «tras el kill no queda vivo ningún intervalo de nag/flash: el aviso murió con el script» — esperaba [] y obtuvo [1,2]; mutante 11 pasan / 1 fallan* | Sí — suite_30 12/0, suite_17 52/0 |
+| 582 | Se neutraliza la suelta de la vigilancia de DOM en emergencyTeardown (disconnect y las dos asignaciones a null, L35857-35865, quedan muertas): el observer queda conectado y referenciado tras el kill | *suite_30: v18.3.4 — «tras el kill el observer de DOM quedó desconectado y sin referencia» — esperaba null y obtuvo {}; mutante 11 pasan / 1 fallan* | Sí — suite_30 12/0, suite_17 52/0 |
+
+## v18.3.4 — bump de versión (integrador)
+
+Cuádruple sincronizada a 18.3.4 por el orquestador al cerrar los frentes T1+T5/T2/T4:
+`@version` L4, `VERSION` L1038, `package.json` y pin de suite_75 L900. Sin mutación
+propia: el alineo lo fijan las pruebas ya existentes (suite_75 «versión viva» 50/0,
+suite_30 canario 45/0, y el comparador `@version`↔`VERSION` de suite_82 22/0 — la
+misma red que cazó el desalineo de v18.3.2). Banco completo con el diff final: solo
+los 3 fallos preexistentes de la baseline (suite_15 renderDayChips 268/1, suite_25
+cascada CSS 30/2). NOTA de entorno: suite_15 presenta además un cuelgue intermitente
+PREEXISTENTE (reproducido en HEAD limpio, caso «v18.0.105 ANTIDUP — dos pestañas»;
+en el banco completo de esta corrida pasó 268/1) — diagnóstico pendiente, no tocado.
+
+## v18.3.5 — higiene pendiente (N3)
+
+Cuatro arreglos de higiene del enjambre (mantenimiento, sin cambio clínico):
+
+**T1 — el retiro del monitor también suelta la vigilancia de DOM.**
+`_vglRetirarMonitorPorPerfil` (v18.3.4, N8-B1) hacía el aseo de `emergencyTeardown`
+pero dejaba vivos el MutationObserver de body+subtree y los 3 listeners de captura
+— el mismo hueco que T4 arregló para el kill (nota explícita de la sección
+v18.3.4 T4: «fuera de alcance de T4»). Se replica ahí el bloque de T4 (disconnect
+de `_vglDomObs`, removeEventListener de `_vglDomAlTocar` ×3, refs a null), sin
+banderas de kill ni aviso (no es emergencia). El latch `_vglDomObsInstalado` se
+deja en true a propósito, mismo contrato: una llamada tardía a `_vglDomEstaSucia`
+no debe reinstalar el observador de un monitor retirado. La prueba N8-B1 de
+suite_78 se EXTENDIÓ (mismo caso, hermano de nada: 35/0 se conserva) para montar
+la vigilancia antes del retiro (`_vglDomEstaSucia`) y comprobar tras `tick()` que
+las refs quedan sueltas vía `__vglDomVigilanciaParaTest` (misma LIMITACIÓN de
+arnés que suite_30: disconnect/removeEventListener son no-ops, se observa el
+ciclo de vida de las referencias).
+
+**T2 — login duplicado (hallazgo T6/N1-#3).** `identidadDesdeCliente` (L21237)
+copiaba el parseo de `mtrLoginDeSesion` (L36991): localStorage user/jwt coherentes
++ cookie UsuarioMedico, y el comentario de la segunda decía «esa función ahora
+delega aquí» sin que delegara. Ahora `identidadDesdeCliente` llama a
+`mtrLoginDeSesion()` (function declarations del mismo IIFE: el hoisting resuelve
+la llamada aunque viva ~15k líneas más abajo — verificado con `node -c` y
+suite_19 29/0) y conserva SOLO su semántica propia: el guard
+`state.activeDoctor.id`, `loginVisto` y `resolverMedicoPorPerfil`. El comentario
+se corrigió para decir la verdad. Sin divergencia de comportamiento: la copia
+era carácter a carácter el mismo parseo (incluidos los try/catch internos).
+
+**T3 — padrón GS (hallazgo B4/N8).** `TABLERO/Codigo.gs`
+(`_listaAccesoRespuesta`): el perfil se normaliza con `trim().toUpperCase()`
+(«completo»/«Laboratorios» clasificaban EN SILENCIO como desconocidos) y el
+estado «inactivo» revoca igual que «bloqueado» (antes un médico «inactivo»
+quedaba ACTIVO en el padrón). Actualizado también el comentario de cabecera y la
+fila de ayuda de la siembra. `TABLERO/simulacion_local.js` (que evalúa el .gs
+real) gana 2 casos con nombres SYN-* (cero PHI): perfil en minúscula y estado
+inactivo. Verificado antes y después: exit 0 con «TODO OK».
+
+**T4 — sellado de `docs/MAPA_v14.md`.** Aviso en negrita al principio: documento
+histórico congelado a la v14 (fecha de corte declarada por su propio contenido,
+2026-08-20), líneas ~×2 tras v14, cifras NO regeneradas (casilla vacía antes que
+dato inventado), navegación actual por grep + este informe. Contenido existente
+conservado íntegro.
+
+`node -c` limpio en `vigilante_agenda.user.js`, `tests/suite_78_acceso.js` y
+`TABLERO/simulacion_local.js`. Sin tocar suite_15 ni el banco completo (3 fallos
+preexistentes de la baseline intactos).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 583 | Se neutraliza la suelta de la vigilancia de DOM en `_vglRetirarMonitorPorPerfil` (disconnect + asignaciones a null, L35126-35135 → cuerpo vacío): el monitor retirado por perfil vuelve a dejar el observer conectado y referenciado | *suite_78: N8-B1 — «tras el retiro el observer de DOM quedó desconectado y sin referencia: esperaba null y obtuvo {}» — mutante 34 pasan / 1 fallan; restaurado 35/0* | Sí |
+| 584 | Se neutraliza `mtrLoginDeSesion` (`return login \|\| ""` → `return ""`): si la delegación de T2 fuera cable muerto, identidadDesdeCliente seguiría resolviendo por su cuenta | *suite_19: 3 casos — «'user' con username + userIdIdentity == sub del jwt -> resuelve por GetUsuarioPerfil», «sin jwt en absoluto, se acepta 'user'.username directamente» y «sin 'user' pero con cookie UsuarioMedico, usa el login de la cookie» — mutante 26 pasan / 3 fallan; restaurado 29/0. La delegación es viva y las pruebas existentes la cubren: no hubo aserción faltante que añadir* | Sí |
+| 585 | Se quita `.toUpperCase()` de la lectura de perfil en `_listaAccesoRespuesta` (Codigo.gs L426): «completo» vuelve a clasificarse en silencio como perfil desconocido | *simulador TABLERO/simulacion_local.js (evalúa el .gs real): exit 1, «FALLA B2/B6 servidor: perfil en minúscula ignorado»; restaurado exit 0 «TODO OK»* | Sí |
+| 586 | Se quita `\|\| estado === "inactivo"` (Codigo.gs L437): un médico marcado «inactivo» vuelve a quedar ACTIVO en el padrón | *simulador TABLERO/simulacion_local.js: exit 1, «FALLA B2/B6 servidor: estado inactivo no revoca \| estado inactivo quedó ACTIVO en el perfil»; restaurado exit 0 «TODO OK»* | Sí |
+
+## v18.3.5 — bump de versión (integrador) y Playwright E2E
+
+Cuádruple sincronizada a 18.3.5: `@version` L4, `VERSION` L1038, `package.json`
+y pin de suite_75 L900 (red de pruebas existente: suite_75 «versión viva» 50/0,
+canario suite_30 45/0, comparador de suite_82 22/0). Banco completo con el diff
+final, corrido con salida directa a archivo (Start-Process -Redirect, protocolo
+post-N6): **3.397 pasan / 3 fallan** — exactamente los 3 preexistentes de la
+baseline (suite_15 renderDayChips 268/1, suite_25 cascada CSS 30/2). Diagnóstico
+N6 del cuelgue intermitente (causa raíz: bloqueo de escritura stderr por tubería
+de PowerShell 5.1 bajo carga, NO un bug del producto) documentado arriba por el
+propio N6. Además: `playwright` añadido como devDependency (solo herramientas de
+prueba — el userscript sigue sin dependencias de runtime) para E2E/simulación de
+uso real con el chromium ya presente en caché (`ms-playwright/chromium-1234`,
+executablePath directo; el CDN de playwright.dev no responde desde esta red).
+Smoke test verificado: lanzar navegador + getComputedStyle real OK.
+
+## SF-01 (encargo SUPERPROMPT_SIMULACION_FLUJOS) — el enriquecedor DOM de suite_73 pasa al arnés
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| suite_73_recorridos.js ~L149 (montar) | Sustituida `instalarDomEnriquecido(c.env.doc)` por la mera referencia `instalarDomEnriquecido;` (la suite abre el modal SIN el enriquecedor compartido: nodos planos, sin parser ni selectores) | NO | Ninguna: las 9 comprobaciones de *Suite 73 · Recorridos del modal Agendar* cayeron a rojo de inmediato (0 ok / 9 FALLAN, exit 1). Restaurada al instante; suite_73 volvió a 9/9 (exit 0). |
+
+Cambio de INFRAESTRUCTURA de pruebas, no de producto: el enriquecedor DOM (parser
+HTML, motor de selectores, dataset, classList con semántica real) que vivía dentro
+de suite_73 se extrajo TAL CUAL a `tests/harness.js` (exporta `enriquecerDom`,
+`instalarDomEnriquecido` y `disparar`) y suite_73 ahora lo consume con
+`require("./harness.js")`. Verificación de inocencia con colisión de sesiones en el
+mismo árbol: otra sesión reescribió `vigilante_agenda.user.js` EN PLENA corrida
+(sha256 0DEFA0F1→6072D32D) y el banco intermedio dio 3377/23; suite_02 aislada con
+mi harness sobre el userscript ya estable dio 33/33. Banco final con userscript
+estable: **3.397 pasan / 3 fallan** = flake ANTIDUP de suite_15 (precedente AE-011;
+aislada pasa 269/269) + 2 de suite_82 (TERMINOS_TEXTO vs docs desincronizados por
+la sesión paralela, territorio ajeno a SF-01). Cronología completa en
+`AUDITORIA/REGISTRO_SIMULACIONES.md` (SF-01).
+
+## SF-02 (encargo SUPERPROMPT_SIMULACION_FLUJOS) — suite_85 nace con R0 y su mutación
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| suite_85_simulacion_m1.js ~L87 (router AsignarTurno) | Mock de confirmación invertido: `{error:true, data:{motivo:"Fallo simulado"}}` en vez de `{error:false, radicado>0}` — el servidor NUNCA confirma la cita | NO | Ninguna: *R0.8: la marca antiduplicado se escribió SOLO tras la confirmación real (radicado > 0)* (suite_85) cayó a rojo con exit 1. Restaurado el mock; suite_85 volvió a 1/1 (exit 0). |
+
+Suite nueva de simulación (infra del encargo SF): escenario R0 del médico (§6) —
+control+labs → 1 mes → retroceder → solo control → 3 meses → fecha concreta → aceptar →
+reabrir. Corre contra el enriquecedor DOM compartido del arnés (SF-01) con turnos
+ESTABLES por fecha (mismos turnoId en el sondeo inicial y en la verificación fresca
+pre-confirmación; si rotaran, el modal declararía «cupo perdido» y jamás crearía la
+cita). La mutación demuestra que la aserción F5 (marca antiduplicado solo con
+confirmación real) muerde. Hallazgo S-0002 (DESV): el eje labs se oculta
+(`display:none`) pero no se desmonta — ver `AUDITORIA/REGISTRO_SIMULACIONES.md` §2.
+
+## TC (encargo SUPERPROMPT_TERMINOS_BLINDAJE) — Términos v1.2: anonimización + blindaje, doc y template sincronizados
+
+`docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md` pasa de v1.1 a v1.2 (anonimización del
+creador, cláusulas de blindaje T-38/T-39/T-40/T-42/T-43/T-44/T-45, índice y IDs
+estables T-##). El documento vive embebido carácter a carácter en `TERMINOS_TEXTO`
+(user.js ~L36811) y su versión en `TERMINOS_VERSION` (L36797): subir el texto a
+1.2 exige tocar las tres piezas a la vez — es exactamente lo que vigila P11·9.
+`TERMINOS_RESUMEN` (L36802, PARTE 1 en limpio) se desidentiza en el mismo paso.
+Suite_82: 6 aserciones de versión 1.1→1.2 (L159, L206-210, L221, L253-254, L378,
+L387). `node --check` limpio en `tests/suite_82_consentimiento.js`. Tras el diff:
+suite_82 **22 pasan / 0 fallan**. Cronología y expedientes en
+`AUDITORIA/REGISTRO_TERMINOS.md` e `AUDITORIA/INFORME_AUDITORIA_TERMINOS.md`.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| user.js ~L37040 (TERMINOS_TEXTO, cláusula T-32) | «**Doce meses**» → «**Doce mesee**» dentro del template embebido (el archivo docs/ queda intacto) | NO | Ninguna: *suite_82: P11·9 — «TERMINOS_TEXTO === docs/… — primera diferencia en el carácter 13605»* — mutante 21 pasan / 1 falla; restaurado 22/0 |
+| user.js L36797 (TERMINOS_VERSION) | `"1.2"` → `"9.9"` sin tocar documento ni template (constancia y vigencia firman una versión que ningún texto respalda) | NO | Ninguna: *suite_82: 5 casos en rojo* — P11·4 «constancia con versión y fecha-hora», P11·7 «constancia vigente aunque antigua: NO se re-pregunta», P11·9 «la versión vigente de la constante: esperaba “1.2” y obtuvo “9.9”», P11·15 «la constancia firma con el login de sesión…» y P11·16 «constancia vigente + sin identidad = arranque directo» — mutante 17 pasan / 5 fallan; restaurado 22/0 |
 
