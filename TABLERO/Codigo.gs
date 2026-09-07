@@ -1,6 +1,28 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.11.0 — 07-09-2026: SINCRONIZACIÓN AUTOMÁTICA DE UIDS (acceso_uid → acceso).
+ * Incidencia real (Eliseth Estrada): su fila de "acceso" tiene uid VACÍO, así que el
+ * matching del cliente va por NOMBRE EXACTO y basta con que Everest reporte su nombre
+ * con una grafía distinta para que resuelva PÚBLICO y el centinela no se monte
+ * («monitor retirado»), aunque el padrón la traiga COMPLETO. Hasta ahora el flujo era
+ * manual: el dueño lee "acceso_uid" y copia uid↔nombre a "acceso" A MANO. Ahora:
+ *   - `_sincronizarAccesoUid(ss)` corre SOLO en cada `?accion=listaAcceso` y también
+ *     desde el menú («Sincronizar uids…») o el editor (`SincronizarAccesoUid()`).
+ *   - Para cada fila de "acceso" con uid VACÍO busca el ÚLTIMO reporte de
+ *     "acceso_uid" cuyo nombre normalizado sea EXACTO; si no hay exacto, acepta un
+ *     candidato ÚNICO que comparta primer y último token (≥2 tokens) y entonces
+ *     corrige TAMBIÉN el nombre de la fila al EXACTO que reportó Everest.
+ *   - REGLA D1 + BLINDAJE: el uid MANDA sobre el nombre, y una celda uid ya llena
+ *     JAMÁS se modifica (ni para corregirla): la sincronización solo ESCRIBE en
+ *     celdas uid VACÍAS. Un uid ya asignado a otra fila se reporta como conflicto
+ *     y no se escribe (un uid regalado a otro médico es el peor error posible aquí).
+ *   - Ambiguo o sin reporte: no se toca nada, queda en el reporte (`sinDato` /
+ *     `ambiguos`) — casilla vacía antes que dato inventado.
+ *   - PROPAGACIÓN: la flota lee la lista cada 4 h y al guardar Ajustes (refresco
+ *     forzado, ya existente en el userscript): el cambio queda visible ≤4 h después
+ *     de detectada la discrepancia, o inmediato tras guardar Ajustes.
+ *
  * v12.10.14 — 05-09-2026: AUTORIZACIÓN de la Dra. Gloria Alejandra Jaramillo
  * Montoya (perfil COMPLETO). Solo cambia la SEMILLA de la hoja "acceso": +1 fila
  * en el padrón (8 nombres). OJO: la siembra SOLO ocurre si la hoja "acceso" NO
@@ -335,6 +357,7 @@ function onOpen() {
       .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
       .addItem("Reparar encabezados de telemetría", "repararEncabezadosTelemetria")
       .addItem("Ver lista de acceso (JSON)", "verListaAcceso")
+      .addItem("Sincronizar uids (acceso_uid → acceso)", "sincronizarUidsMenu")   // v12.11.0
       .addSeparator()
       .addItem("Revisar alertas ahora", "revisarAlertas")                       // v18.4.0
       .addItem("Instalar revisión diaria de alertas (23:30)", "instalarAlertasDiarias")
@@ -359,6 +382,12 @@ function doGet(e) {
     var q = (e && e.parameter) || {};
     if (String(q.token || "") !== TOKEN) return _txt("no");
     if (String(q.accion || "") !== "listaAcceso") return _txt("no");
+    // v12.11.0 — SINCRONIZACIÓN AUTOMÁTICA antes de responder: cada lectura de la
+    // flota reconcilia "acceso" con lo que "acceso_uid" reportó (llena uids VACÍOS,
+    // corrige nombres con discrepancia única, jamás toca un uid ya fijado). Si algo
+    // falla aquí, la respuesta se sirve igual con la hoja como esté: la
+    // sincronización NUNCA puede tumbar la lista.
+    try { _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet()); } catch (eSync) {}
     return _txt(JSON.stringify(_listaAccesoRespuesta(SpreadsheetApp.getActiveSpreadsheet())));
   } catch (err) {
     return _txt("err");
@@ -455,6 +484,163 @@ function _listaAccesoRespuesta(ss) {
 function _accesoUidSintetico(nombre) {
   return 900000000 + (_djb2(String(nombre == null ? "" : nombre)) % 99999999);
 }
+
+// =====================================================================
+//  v12.11.0 — SINCRONIZACIÓN AUTOMÁTICA acceso_uid → acceso
+//  ------------------------------------------------------------------
+//  La hoja "acceso" nace con uids VACÍOS (nunca se inventan) y hasta hoy el
+//  dueño copiaba uid↔nombre A MANO leyendo "acceso_uid". Mientras el uid está
+//  vacío, el matching del cliente va por NOMBRE EXACTO normalizado: cualquier
+//  grafía distinta en Everest (apellido adicional, tilde, orden) resuelve
+//  PÚBLICO y el centinela no se monta — la incidencia real de Eliseth.
+//  Esta pieza cierra el ciclo AUTOMÁTICAMENTE en cada listaAcceso:
+//   · uid VACÍO + nombre EXACTO (normalizado) en "acceso_uid" → se copia el uid.
+//   · uid VACÍO + discrepancia con candidato ÚNICO (mismo primer y último
+//     token, ≥2 tokens en la fila) → se copia el uid Y se corrige el nombre
+//     al EXACTO que reportó Everest.
+//   · REGLA D1 + BLINDAJE: una celda uid ya llena JAMÁS se toca — el uid
+//     manda sobre el nombre y queda fijo para siempre. Un uid que ya pertenece
+//     a otra fila se reporta como conflicto y NO se escribe: regalarle el
+//     perfil de otro médico es el peor fallo posible de este roster.
+//   · Ambiguo (varios candidatos) o sin reporte: no se escribe nada; queda
+//     en el reporte. Casilla vacía antes que dato inventado.
+//  ES5 puro y defensivo como el resto: nunca lanza, nunca rompe listaAcceso.
+// =====================================================================
+
+// Normalización de nombres para comparar: MAYÚSCULAS, sin tildes, espacios
+// colapsados — la MISMA semántica que mtrNormalizarNombre del userscript
+// (stripAccents + toUpperCase + collapse), para que hoja y reporte comparen
+// igual aquí que en el cliente.
+function _normNombreAcceso(s) {
+  var r = String(s == null ? "" : s).toUpperCase()
+    .replace(/[ÁÀÄÂÃÅ]/g, "A").replace(/[ÉÈËÊ]/g, "E").replace(/[ÍÌÏÎ]/g, "I")
+    .replace(/[ÓÒÖÔÕ]/g, "O").replace(/[ÚÙÜÛ]/g, "U").replace(/Ñ/g, "N").replace(/Ç/g, "C")
+    .replace(/\s+/g, " ").trim();
+  return r;
+}
+
+// El sincronizador. Devuelve un reporte legible (nunca lanza):
+//   { llenados:[...], corregidos:[...], sinDato:[...], ambiguos:[...],
+//     conflictoUid:[...], escrituras:n }
+function _sincronizarAccesoUid(ss) {
+  var rep = { llenados: [], corregidos: [], sinDato: [], ambiguos: [], conflictoUid: [], escrituras: 0 };
+  try {
+    // Última identidad reportada por Everest para cada nombre normalizado.
+    // Columnas de "acceso_uid": 0 recibido | 6 uid | 7 nombre | 8 perfil.
+    var hUid = ss.getSheetByName("acceso_uid");
+    if (!hUid || hUid.getLastRow() < 2) {
+      rep.sinDato.push("(la hoja acceso_uid aún no tiene reportes)");
+      return rep;
+    }
+    var filasUid = hUid.getDataRange().getValues();
+    var porNombre = {};
+    for (var i = 1; i < filasUid.length; i++) {
+      var f = filasUid[i] || [];
+      var uid = toNumero(f[6]);
+      var nombre = _celda(f[7], 100).trim();
+      if (!(uid > 0) || !nombre) continue;
+      var k = _normNombreAcceso(nombre);
+      if (!k) continue;
+      var t = (f[0] && typeof f[0].getTime === "function") ? f[0].getTime() : 0;
+      var prev = porNombre[k];
+      if (!prev || t >= prev.t) porNombre[k] = { uid: uid, nombre: nombre, t: t }; // el más reciente manda
+    }
+
+    var hAcc = _hojaAcceso(ss);
+    var datos = hAcc.getDataRange().getValues();
+    var uidsFijados = {};   // uid → nombre de la fila de "acceso" que YA lo tiene
+    var parches = [];       // { filaHoja, uid, nombreNuevo|null, rotulo, reportado, corregido }
+    for (var j = 1; j < datos.length; j++) {
+      var filaA = datos[j] || [];
+      var perfil = String(filaA[0] == null ? "" : filaA[0]).trim().toUpperCase();
+      if (!perfil || perfil.charAt(0) === "#" || (perfil !== "COMPLETO" && perfil !== "LABORATORIOS")) continue;
+      var nombreAcc = _celda(filaA[2], 100).trim();
+      if (!nombreAcc) continue;                       // fila a medias: no se toca
+      var uidAcc = toNumero(filaA[1]);
+      if (uidAcc > 0) { uidsFijados[uidAcc] = nombreAcc; continue; }   // BLINDAJE D1: uid ya fijado, JAMÁS se modifica
+      var kAcc = _normNombreAcceso(nombreAcc);
+      var hit = porNombre[kAcc] || null;
+      var corregirNombre = false;
+      if (!hit) {
+        // Discrepancia de nombre: candidato único que comparta PRIMER y ÚLTIMO
+        // token de la fila (con ≥2 tokens). "ELISETH ESTRADA" casa con un
+        // reporte "ELISETH ESTRADA PEÑA", pero un apellido distinto NO casa.
+        var toks = kAcc.split(" ");
+        if (toks.length >= 2) {
+          var cands = [];
+          for (var k2 in porNombre) {
+            var t2 = k2.split(" ");
+            var tiene = {};
+            for (var x = 0; x < t2.length; x++) tiene[t2[x]] = 1;
+            if (tiene[toks[0]] && tiene[toks[toks.length - 1]]) cands.push(k2);
+          }
+          if (cands.length === 1) { hit = porNombre[cands[0]]; corregirNombre = true; }
+          else if (cands.length > 1) { rep.ambiguos.push(nombreAcc + " → " + cands.length + " candidatos en acceso_uid"); continue; }
+        }
+        if (!hit) { rep.sinDato.push(nombreAcc + " (sin reporte en acceso_uid)"); continue; }
+      }
+      if (uidsFijados[hit.uid]) {
+        rep.conflictoUid.push(nombreAcc + " ↔ uid " + hit.uid + " ya fijado a «" + uidsFijados[hit.uid] + "»: no se escribe");
+        continue;
+      }
+      uidsFijados[hit.uid] = nombreAcc;
+      parches.push({
+        filaHoja: j + 1, uid: hit.uid,
+        nombreNuevo: (corregirNombre && hit.nombre !== nombreAcc) ? hit.nombre : null,
+        rotulo: nombreAcc, reportado: hit.nombre, corregido: corregirNombre
+      });
+    }
+    for (var p = 0; p < parches.length; p++) {
+      try {
+        hAcc.getRange(parches[p].filaHoja, 2).setValue(parches[p].uid);
+        if (parches[p].nombreNuevo) hAcc.getRange(parches[p].filaHoja, 3).setValue(parches[p].nombreNuevo);
+        rep.escrituras++;
+        var linea = parches[p].rotulo + " → uid " + parches[p].uid +
+          (parches[p].corregido && parches[p].nombreNuevo ? " (nombre corregido a «" + parches[p].reportado + "»)" : "");
+        (parches[p].corregido ? rep.corregidos : rep.llenados).push(linea);
+      } catch (eW) {}
+    }
+  } catch (e) {}
+  return rep;
+}
+
+// Manual, desde el EDITOR de Apps Script: ejecutar y leer el reporte en el log.
+// Devuelve el mismo objeto que el menú — sirve también de verificación tras
+// desplegar (ver TEST_sincronizacion para la verificación completa).
+function SincronizarAccesoUid() {
+  var rep = _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet());
+  try { Logger.log(JSON.stringify(rep)); } catch (eL) {}
+  return rep;
+}
+
+// Menú del dueño: sincroniza y muestra el reporte sin salir de la Hoja.
+function sincronizarUidsMenu() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var rep = _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet());
+    ui.alert("Sincronización acceso_uid → acceso (v12.11.0)", JSON.stringify(rep, null, 2), ui.ButtonSet.OK);
+  } catch (e) {}
+}
+
+// Verificación post-despliegue: corre la sincronización y devuelve el estado
+// de la lista para Eliseth + el reporte completo. Ejecutar UNA vez en el editor
+// tras implementar y leer el log (mismo patrón que TEST_caps).
+function TEST_sincronizacion() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var rep = _sincronizarAccesoUid(ss);
+  var lista = _listaAccesoRespuesta(ss);
+  var eliseth = [];
+  for (var perfil in lista.perfiles) {
+    for (var i = 0; i < lista.perfiles[perfil].length; i++) {
+      var e = lista.perfiles[perfil][i];
+      if (_normNombreAcceso(e.nombre).indexOf("ELISETH") >= 0) eliseth.push({ perfil: perfil, uid: e.uid, nombre: e.nombre });
+    }
+  }
+  var salida = { reporte: rep, eliseth: eliseth, version: lista.version };
+  Logger.log(JSON.stringify(salida, null, 2));
+  return salida;
+}
+
 
 // djb2 (variante clásica con init 5381) con máscara de 31 bits en cada paso:
 // en Apps Script V8 y en Node da el MISMO resultado (el & normaliza el
@@ -597,6 +783,12 @@ function armarResumen() {
   var flota = {};
   var versionMasAlta = "0";
   var totalReportes = 0;
+  // v18.4.6 — DEDUP POR LOTE EN "uso". El export real del 07-sep (docs/
+  // AUDITORIA_TELEMETRIA_EXPORT_20260907.md §1) demostró 10.042 filas de reenvío
+  // (54 % de la hoja): el CacheService es best-effort y evicta, así que la hoja
+  // NO puede asumirse sin repeticiones. Sin esto, «Reportes» y «Acciones de uso
+  // (ux, acum.)» salían inflados ~2,2×. Se conserva la PRIMERA copia de cada lote.
+  var usoLotesVistos = {};
 
   fuentes.forEach(function (fte) {
     var sh = ss.getSheetByName(fte.nombre);
@@ -605,9 +797,16 @@ function armarResumen() {
     var hd = vals.shift() || [];
     var c = function (name) { return hd.indexOf(name); };
     var ci = { eq: c("equipo"), ver: c("ver"), rec: c("recibido"), fraude: c("fraude"), inasist: c("inasistencia"),
-               atiempo: c("atiempo"), ultima: c("ultima"), n: c("n"), nav: c("nav"), so: c("so") };
+               atiempo: c("atiempo"), ultima: c("ultima"), n: c("n"), nav: c("nav"), so: c("so"), lote: c("lote") };
     if (ci.eq < 0) return;
     vals.forEach(function (r) {
+      // v18.4.6 — ver §1 de la auditoría: solo la PRIMERA copia de cada lote de
+      // "uso" cuenta (nReportes, primero/ultimo/ver y uxAcum). Filas sin lote
+      // (anteriores a v12.6.9) se cuentan como siempre.
+      if (fte.nombre === "uso" && ci.lote >= 0) {
+        var ltUso = String(r[ci.lote] || "").trim();
+        if (ltUso) { if (usoLotesVistos[ltUso]) return; usoLotesVistos[ltUso] = 1; }
+      }
       // v12.6.9 — Las filas anteriores a esta versión llegaron SIN equipo (dependía de
       // un ajuste manual). Se conservan, pero agrupadas aparte y rotuladas, para que no
       // se confundan con un consultorio real que hoy sí se identifica solo.
