@@ -4,7 +4,58 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
-## [Versión 18.4.5] — 2026-09-07 (Interpretación general del uroanálisis, con recomendación del motor)
+## [Versión 18.5.2] — 2026-09-07 (Lanzador asistido de Historia Clínica + prefetch de órdenes)
+
+### 🩺 VGL-HC: el botón «Historias Clínicas» ahora deja contexto seguro
+El botón nativo `btn btn-primary-medic` del MFE HCHealth (verificado contra el bundle
+público real, espejo del 07-sep) es el único momento en que se sabe QUÉ paciente se
+abre: Everest resuelve la pareja cita↔paciente por red y no en la URL. Al capturar ese
+clic, el asistente anota la cédula de la fila (hint con TTL de 15 s, nunca fabrica
+pacientes) y pinta un **chip accesible** (`role=status`, dentro del panel, cédula
+ENMASCARADA `···1234`) que dice si el paciente tiene alerta de inasistencia
+reincidente. Con lector de pantalla, el aviso se anuncia UNA vez por paciente y
+**sin decir la cédula en voz alta**. El botón hermano «Consentimientos» (misma clase)
+queda excluido por guardia de texto. Pruebas y mutaciones en `tests/suite_91_hc_launch.js`.
+
+### ⚡ Prefetch especulativo de órdenes vigentes al abrir la HC (v18.5.2-hc2)
+Confirmado con traza de red real (HAR del consultorio, ~95 llamadas y ~7 s por
+apertura): en el hueco del clic se precalienta la MISMA cadena que ya usan el banner
+antiduplicado y el modal de órdenes (cédula → id interno → órdenes vigentes). Es
+puramente especulativo — 1 intento, sin reintentos, sin ruido, bajo el cortacircuitos
+de 3 fallos/5 min, con dedup en vuelo — y si falla, el chip y el hint siguen íntegros
+(fallar cerrado). La cédula JAMÁS viaja como id de paciente. Sin escrituras nuevas.
+
+### 📚 Evidencia y documentación
+Análisis integral del flujo con dos capturas HAR reales del dominio (con cuerpos de
+respuesta): estructura JSON de la historia, cadena completa del clic, flujo de punta
+a punta del modal de ordenamiento (documentado; el guardado sigue siendo solo del
+médico), errores del servidor y brechas de captura restantes. Informes:
+`docs/INFORME_MEJORA_INTEGRAL_HC.md` y `docs/INFORME_EVIDENCIA_HAR.md`.
+
+---
+
+## [Versión 18.5.0] — 2026-09-07 (Pacientes nuevos por turno: fuera el botón «NUEVOS», toast FUCSIA)
+
+### 🐞 La causa del «todos son nuevos» de la mañana
+El botón «👤 Nuevos (N)» y su modal decidían «nuevo» contra una **memoria de 90 días por médico**
+(`vgl_aviso_hist_<uid>`), no contra la lista de citas del día. Esa memoria caduca (purga de 90 días,
+vacaciones, navegador limpio): bastaba una cédula vieja sobreviviente para desactivar el arranque
+silencioso, y la primera lectura de la mañana clasificaba «nuevo» a TODA la agenda. El botón, el
+modal, el contador del dock y la memoria de 90 días fueron **retirados por completo**.
+
+### 🟣 Toast FUCSIA con línea base por turno (AM y PM)
+El reemplazo no memoriza médicos: fotografía la **lista inicial de cédulas** de la agenda al
+arrancar cada turno (AM: 00–11 h · PM: 12–23 h) y, con cada lectura del API de agenda (cero red
+extra), dispara de inmediato un toast **FUCSIA (#e879f9 — color exclusivo, ningún otro aviso ni
+elemento de la interfaz lo usa)** por cada paciente que entra después y no estaba en esa foto.
+Misma estructura, animación y comportamiento de los toasts de cambio de leyenda (mismo canal,
+autocierre, cierre por clic/teclado, no crítico). Guardias: gracia de 120 s tras la foto para
+absorber lecturas incompletas del arranque; dedup por cita (cédula@hora) y entre pestañas; sin
+nombres en disco (solo cédula y hora, barridas al cambiar de turno o día); la capa de acceso
+`aviso_paciente_nuevo` sigue mandando. Términos de privacidad actualizados a v1.4 (T-47 n.º 4).
+Pruebas y mutaciones en `tests/suite_79_aviso_paciente.js`.
+
+---
 
 ### 🧪 El menú de interpretación del uroanálisis tras «Exámenes»
 Athenea llena las casillas de los COMPONENTES del parcial (nitritos, leucocitos…), pero la

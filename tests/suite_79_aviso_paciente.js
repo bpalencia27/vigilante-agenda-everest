@@ -1,22 +1,34 @@
 // =====================================================================
-//  SUITE 79 — AVISO DE PACIENTE NUEVO (Misión B, arreglo B5)
+//  SUITE 79 — AVISO DE PACIENTE NUEVO EN EL TURNO (v18.5.0)
 //
 //  LO QUE ESTA SUITE PROTEGE, en una frase: que «paciente nuevo» salga de
-//  la MEMORIA PROPIA del médico (histórico por uid en el propio equipo),
-//  con bootstrap silencioso el primer día, máx. 3 toasts por hora corrida,
-//  dedup por cita (cédula@hora) y entre pestañas (vgl_vistos), contador
-//  SOLO numérico para el dock y CERO PHI persistida más allá de cédula y
-//  hora — jamás nombres en disco.
+//  la FOTO DE LA LISTA INICIAL de cada turno (AM: 00–11 h, PM: 12–23 h),
+//  nunca de una memoria de médico — la memoria de 90 días de v18.1.0/B5
+//  clasificó «nuevo» a toda la agenda la mañana del 07-sep-2026 y fue
+//  retirada junto con su botón/modal «NUEVOS».
 //
-//  La capacidad `aviso_paciente_nuevo` ya estaba registrada desde B1 como
-//  propia del perfil LABORATORIOS (y por tanto de COMPLETO); esta suite
-//  fija que la CAPA a la respeta: PÚBLICO y BLOQUEADO no evalúan NADA ni
-//  aprenden NADA.
+//  Invariantes fijados aquí:
+//   · FOTO DE ARRANQUE SILENCIOSA: la primera lectura del turno ES la
+//     lista inicial — nadie es «nuevo» por estar en ella (el defecto
+//     reportado queda imposible por diseño).
+//   · GRACIA de 120 s tras la foto: absorbe lecturas incompletas.
+//   · Toast FUCSIA (#E879F9) INMEDIATO por cada ingreso posterior, con
+//     la MISMA estructura del canal showToast (mismo canal que los
+//     toasts de cambio de leyenda); color exclusivo, no crítico, y sin
+//     rebajar la gravedad al agruparse (mtrColorMasGrave).
+//   · DEDUP por cita (cédula@hora) y entre pestañas (vgl_vistos).
+//   · CERO PHI INNECESARIA EN DISCO: cédula y hora, jamás nombres; la
+//     foto se barre al cambiar de turno o de día.
+//   · La capacidad `aviso_paciente_nuevo` (capa a) sigue mandando:
+//     PÚBLICO y BLOQUEADO no evalúan NADA ni aprenden NADA.
+//   · El botón «👤 Nuevos», su modal y su contador ya NO EXISTEN.
 // =====================================================================
 
 "use strict";
 
-const HORA_MS = 60 * 60 * 1000;
+const fs = require("fs");
+const path = require("path");
+const FUENTE = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
 const LISTA_OK = {
   version: "2026-09-04.1",
@@ -43,6 +55,10 @@ function cita(doc, nombre, hora) {
   return { doc_id: doc, nombre: nombre, hora_texto: hora, estado: "Pendiente" };
 }
 
+// Relojes deterministas: hoy a una hora fija del turno que la prueba necesita
+// (el turno se deriva de `ahora`, no del reloj de pared del banco).
+function hoyA(h) { const d = new Date(); d.setHours(h, 0, 0, 0); return d.getTime(); }
+
 function grabadora() {
   const llamadas = [];
   return {
@@ -58,243 +74,252 @@ function leer(almacen, k) {
   return v === undefined ? null : JSON.parse(v);
 }
 
-function sembrarDia(almacen, api, extraReg) {
-  const hoy = api.todayStamp();
-  const reg = { dia: hoy, avisados: {}, toasts: [], nuevos: [] };
-  if (extraReg) extraReg(reg);
-  almacen["vgl_aviso_pacientes_" + hoy] = JSON.stringify(reg);
-  return reg;
-}
-
 module.exports = {
-  nombre: "Aviso de paciente nuevo (B5): memoria por médico, bootstrap silencioso, 3 toasts/h, dedup doble, capa a",
+  nombre: "Aviso de paciente nuevo por turno (v18.5.0): foto inicial AM/PM, toast FUCSIA exclusivo, dedup doble, capa a, botón NUEVOS retirado",
 
-  cubre: ["avisoPacEval", "avisoPacCitaId", "avisoPacToastsRecientes",
-    "avisoPacHistKey", "avisoPacDiaKey", "avisoPacHistPodar", "_avisoPacLimpiarDiasViejos"],
+  cubre: ["shiftNewPatientEval", "shiftOf", "shiftBaselineKey", "shiftCitaId", "shiftSweepOldBaselines"],
 
   async pruebas(t, api, env, cargar) {
-    const AHORA = Date.now();
+    const AM8 = hoyA(8), AM8_05 = AM8 + 5 * 60000, AM8_10 = AM8 + 10 * 60000;
 
-    t.caso("B5: el módulo existe y sus helpers puros hacen lo que dice la caja", () => {
-      for (const f of ["avisoPacEval", "avisoPacCitaId", "avisoPacToastsRecientes",
-        "avisoPacHistKey", "avisoPacDiaKey", "avisoPacHistPodar", "_avisoPacLimpiarDiasViejos"]) {
+    t.caso("v18.5.0: los helpers existen y el turno AM/PM se decide por hora local", () => {
+      for (const f of ["shiftNewPatientEval", "shiftOf", "shiftBaselineKey", "shiftCitaId", "shiftSweepOldBaselines"]) {
         t.cierto(typeof api[f] === "function", "falta " + f);
       }
-      t.igual(api.avisoPacCitaId("12345", "8:00"), "12345@8:00", "citaId = cédula@hora");
-      t.igual(api.avisoPacHistKey(201), "vgl_aviso_hist_201", "histórico por uid");
-      t.igual(api.avisoPacHistKey(undefined), "vgl_aviso_hist_0", "sin uid cae al balde 0");
-      t.igual(api.avisoPacDiaKey(api.todayStamp()), "vgl_aviso_pacientes_" + api.todayStamp(), "clave datada del día");
-      // Solo los toasts de la ÚLTIMA HORA consumen presupuesto.
-      const ts = [AHORA - 10 * 60000, AHORA - 2 * HORA_MS, AHORA - 30 * 60000];
-      t.igual(api.avisoPacToastsRecientes(ts, AHORA).length, 2, "de 3 toasts, 2 son de la última hora");
-      t.igual(api.avisoPacToastsRecientes([], AHORA).length, 0, "sin toasts, presupuesto lleno");
-      // La poda solo actúa sobre el máximo y conserva los más recientes.
-      // [M21] los ts del fixture son RECIENTES (relativos a ahora): la purga temporal
-      // de 90 días no debe interferir con lo que este caso mide, que es la poda por CONTEO.
-      const muchos = {};
-      const _base = Date.now();
-      for (let i = 0; i < 2001; i++) muchos["d" + i] = _base + i * 1000;   // d2000 = el más reciente
-      const podado = api.avisoPacHistPodar(muchos);
-      t.cierto(!!podado, "con 2001 conocidos debe podar");
-      t.igual(Object.keys(podado).length, 1500, "la poda deja 1500");
-      t.cierto(podado["d2000"] !== undefined, "conserva los más recientes");
-      t.falso(podado["d0"] !== undefined, "suelta los más viejos");
-      t.igual(api.avisoPacHistPodar({ a: Date.now() }), null, "por debajo del máximo (y reciente) no toca nada");
-      // [M21/NT-123] la purga TEMPORAL sí actúa aunque el conteo no llegue al tope.
-      const _podaTemp = api.avisoPacHistPodar({ a: Date.now() - 91 * 24 * 3600 * 1000, b: Date.now() });
-      t.cierto(!!_podaTemp && !("a" in _podaTemp) && "b" in _podaTemp, "un registro de hace 91 días sale aunque el histórico no esté lleno");
+      t.igual(api.shiftOf(new Date("2026-09-07T00:30:00")), "AM", "00:30 es AM");
+      t.igual(api.shiftOf(new Date("2026-09-07T11:59:00")), "AM", "11:59 sigue siendo AM");
+      t.igual(api.shiftOf(new Date("2026-09-07T12:00:00")), "PM", "12:00 ya es PM");
+      t.igual(api.shiftOf(new Date("2026-09-07T23:30:00")), "PM", "23:30 es PM");
+      t.igual(api.shiftCitaId("12345", "8:00"), "12345@8:00", "citaId = cédula@hora");
+      t.igual(api.shiftBaselineKey(201, "2026-09-07", "AM"), "vgl_shift_base_201_2026-09-07_AM", "la foto es por médico + día + turno");
+      t.igual(api.shiftBaselineKey(undefined, "2026-09-07", "AM"), "vgl_shift_base_0_2026-09-07_AM", "sin uid cae al balde 0");
     });
 
-    t.caso("B5 capa a: PÚBLICO (sin padrón) no evalúa NI APRENDE nada", () => {
+    t.caso("v18.5.0 capa a: PÚBLICO (sin padrón) no evalúa NI APRENDE nada", () => {
       const almacen = {};   // sin vgl_acceso_lista → identidad fuera del padrón → PÚBLICO
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 707, "Alguien Sin Padrón");
       const g = grabadora();
-      const r = c.api.avisoPacEval([cita("111", "Paciente Uno", "8:00")], { ahora: AHORA, toast: g.toast });
+      const r = c.api.shiftNewPatientEval([cita("111", "Paciente Uno", "8:00")], { ahora: AM8, toast: g.toast });
       t.igual(r, null, "PÚBLICO no evalúa el aviso");
       t.igual(g.llamadas.length, 0, "PÚBLICO no dispara toasts");
       for (const k of Object.keys(almacen)) {
-        t.falso(k.indexOf("vgl_aviso_") === 0, "PÚBLICO no debe escribir " + k + " (el histórico solo crece para quien puede usarlo)");
+        t.falso(k.indexOf("vgl_shift_base_") === 0, "PÚBLICO no debe escribir " + k + " (la foto solo crece para quien puede usarla)");
       }
     });
 
-    t.caso("B5 capa a: BLOQUEADO tampoco evalúa, ni siquiera con capacidad registrada", () => {
+    t.caso("v18.5.0 capa a: BLOQUEADO tampoco evalúa, ni siquiera con capacidad registrada", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 999, "Prueba Bloqueada");
       const g = grabadora();
-      t.igual(c.api.avisoPacEval([cita("111", "Paciente Uno", "8:00")], { ahora: AHORA, toast: g.toast }), null, "BLOQUEADO no evalúa");
+      t.igual(c.api.shiftNewPatientEval([cita("111", "Paciente Uno", "8:00")], { ahora: AM8, toast: g.toast }), null, "BLOQUEADO no evalúa");
       t.igual(g.llamadas.length, 0, "BLOQUEADO no dispara toasts");
-      t.falso(("vgl_aviso_hist_999" in almacen), "BLOQUEADO no aprende");
+      t.falso(("vgl_shift_base_999_" + c.api.todayStamp() + "_AM" in almacen), "BLOQUEADO no aprende");
     });
 
-    t.caso("B5 bootstrap silencioso: histórico vacío SOLO aprende, jamás avisa", () => {
+    t.caso("v18.5.0 foto de arranque silenciosa (turno AM): NADIE es nuevo al iniciar la sesión", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");   // LABORATORIOS: tiene aviso_paciente_nuevo
       const g = grabadora();
-      const r = c.api.avisoPacEval(
-        [cita("111", "Ana Vieja", "8:00"), cita("222", "Beto Viejo", "8:30"), cita("333", "Carla Vieja", "9:00")],
-        { ahora: AHORA, toast: g.toast });
+      // EL DEFECTO RETIRADO: memoria vacía/caduca + bootstrap falso ⇒ todos nuevos.
+      // Aquí la MISMA agenda completa entra de una vez a las 8:00 y nadie dispara.
+      const r = c.api.shiftNewPatientEval(
+        [cita("111", "Ana De Hoy", "8:00"), cita("222", "Beto De Hoy", "8:30"), cita("333", "Carla De Hoy", "9:00")],
+        { ahora: AM8, toast: g.toast });
       t.cierto(!!r, "con capacidad SÍ evalúa");
-      t.cierto(r.bootstrap, "histórico vacío → bootstrap");
-      t.igual(r.nuevos, 0, "el primer día NADIE es nuevo");
-      t.igual(r.toasts, 0, "el primer día no hay toasts");
-      t.igual(g.llamadas.length, 0, "bootstrap silencioso: cero avisos");
-      const hist = leer(almacen, "vgl_aviso_hist_201");
-      t.igual(Object.keys(hist.docs).length, 3, "pero la memoria quedó aprendida");
-      t.igual(c.api.__state.avisoPacNuevos, 0, "el contador del dock arranca en 0");
+      t.cierto(r.seed, "primera lectura del turno ⇒ foto");
+      t.igual(r.turno, "AM", "a las 8:00 el turno es AM");
+      t.igual(r.nuevos, 0, "la lista inicial no genera nuevos");
+      t.igual(r.toasts, 0, "y no hay toasts");
+      t.igual(g.llamadas.length, 0, "foto silenciosa: cero avisos");
+      const reg = leer(almacen, "vgl_shift_base_201_" + c.api.todayStamp() + "_AM");
+      t.cierto(!!reg && Object.keys(reg.docs).length === 3, "la foto quedó aprendida");
+      t.igual(c.api.__state.avisoPacNuevos, undefined, "ya NO existe contador del dock retirado");
     });
 
-    t.caso("B5 detección: el paciente nuevo recibe toast; el conocido no; el disco no guarda nombres", () => {
+    t.caso("v18.5.0 detección AM: el que entra DESPUÉS recibe toast FUCSIA inmediato; los iniciales jamás", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
       const g = grabadora();
-      c.api.avisoPacEval([cita("111", "Ana Vieja", "8:00")], { ahora: AHORA, toast: g.toast });   // bootstrap
-      const r2 = c.api.avisoPacEval(
-        [cita("111", "Ana Vieja", "8:00"), cita("444", "María Nueva", "10:00"), cita("555", "Pedro Nuevo", "10:30")],
-        { ahora: AHORA + 1000, toast: g.toast });
-      t.falso(r2.bootstrap, "segunda pasada con memoria: ya no es bootstrap");
-      t.igual(r2.nuevos, 2, "detecta los 2 nuevos (y no a la conocida)");
-      t.igual(r2.toasts, 2, "un toast por cada nuevo");
+      c.api.shiftNewPatientEval([cita("111", "Ana Inicial", "8:00"), cita("222", "Beto Inicial", "8:30")], { ahora: AM8, toast: g.toast });   // foto
+      const r2 = c.api.shiftNewPatientEval(
+        [cita("111", "Ana Inicial", "8:00"), cita("222", "Beto Inicial", "8:30"), cita("444", "María Nueva", "10:00"), cita("555", "Pedro Nuevo", "10:30")],
+        { ahora: AM8_05, toast: g.toast });
+      t.falso(r2.seed, "segunda pasada: ya no es foto");
+      t.igual(r2.nuevos, 2, "detecta los 2 ingresos (y a ninguno de los iniciales)");
+      t.igual(r2.toasts, 2, "un toast inmediato por cada nuevo, sin tope por hora");
       t.igual(g.llamadas.length, 2, "exactamente 2 avisos");
+      t.igual(g.llamadas[0].color, "FUCSIA", "color exclusivo del aviso de paciente nuevo");
       t.cierto(g.llamadas[0].cuerpo.indexOf("María Nueva") >= 0, "el toast dice QUIÉN");
       t.cierto(g.llamadas[0].cuerpo.indexOf("10:00") >= 0, "el toast dice a qué hora");
-      t.igual(g.llamadas[0].color, "VERDE", "informativo, no alarma");
-      // PHI mínima: el registro del día lleva cédula y hora, NUNCA el nombre.
-      const regBruto = almacen["vgl_aviso_pacientes_" + c.api.todayStamp()];
+      t.cierto(g.llamadas[0].cuerpo.indexOf("al iniciar este turno") >= 0, "el cuerpo explica la regla del turno");
+      // PHI mínima: la foto guarda cédula y hora, NUNCA el nombre.
+      const regBruto = almacen["vgl_shift_base_201_" + c.api.todayStamp() + "_AM"];
       t.cierto(regBruto.indexOf("María Nueva") < 0, "el nombre NO vive en disco");
-      t.cierto(regBruto.indexOf("444") >= 0, "la cédula sí (es la memoria)");
-      t.igual(c.api.__state.avisoPacNuevos, 2, "el contador del dock queda en 2");
-    });
-
-    t.caso("B5 dedup por cita: re-evaluar la misma agenda no repite NI cuenta", () => {
-      const almacen = almPadron();
-      const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 201, "Maryuris Terán");
-      const g = grabadora();
-      const citas = [cita("111", "Ana Vieja", "8:00")];
-      c.api.avisoPacEval(citas, { ahora: AHORA, toast: g.toast });                       // bootstrap
-      c.api.avisoPacEval(citas.concat([cita("666", "Nueva Dos Veces", "11:00")]), { ahora: AHORA + 2000, toast: g.toast });
+      t.cierto(regBruto.indexOf("444") >= 0, "la cédula sí (es la foto)");
+      // Re-leer la misma agenda no repite NI vuelve a contar.
       const g2 = grabadora();
-      const r3 = c.api.avisoPacEval(citas.concat([cita("666", "Nueva Dos Veces", "11:00")]), { ahora: AHORA + 3000, toast: g2.toast });
-      t.igual(r3.nuevos, 1, "el contador no crece al re-leer la misma agenda");
+      const r3 = c.api.shiftNewPatientEval(
+        [cita("111", "Ana Inicial", "8:00"), cita("222", "Beto Inicial", "8:30"), cita("444", "María Nueva", "10:00"), cita("555", "Pedro Nuevo", "10:30")],
+        { ahora: AM8_10, toast: g2.toast });
+      t.igual(r3.nuevos, 2, "el conteo no crece al re-leer la misma agenda");
       t.igual(r3.toasts, 0, "y no vuelve a avisar");
       t.igual(g2.llamadas.length, 0, "cero toasts en la re-evaluación");
     });
 
-    t.caso("B5 presupuesto: máximo 3 toasts por hora corrida; los demás quedan contados", () => {
+    t.caso("v18.5.0 gracia de 120 s: lo que llega pegado a la foto se absorbe en silencio (lectura a medias no siembra falsos)", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
-      // Memoria ya caliente (sin bootstrap) y 2 toasts dados hace poco: presupuesto 1.
-      almacen["vgl_aviso_hist_201"] = JSON.stringify({ docs: { "900": 1 } });
-      sembrarDia(almacen, c.api, function (reg) { reg.toasts = [AHORA - 10 * 60000, AHORA - 20 * 60000]; });
       const g = grabadora();
-      const r = c.api.avisoPacEval(
-        [cita("801", "Llega Uno", "13:00"), cita("802", "Llega Dos", "13:05"), cita("803", "Llega Tres", "13:10")],
-        { ahora: AHORA, toast: g.toast });
-      t.igual(r.nuevos, 3, "los 3 quedan registrados");
-      t.igual(r.toasts, 1, "pero solo 1 toast (presupuesto 1 de 3)");
-      t.igual(g.llamadas.length, 1, "exactamente 1 aviso");
-      const reg = leer(almacen, "vgl_aviso_pacientes_" + c.api.todayStamp());
-      t.igual(reg.toasts.length, 3, "el toast dado consume presupuesto en disco");
-      // Una hora después el presupuesto vuelve — pero estos ya no son nuevos.
+      c.api.shiftNewPatientEval([cita("111", "Ana Foto", "8:00")], { ahora: AM8, toast: g.toast });          // foto
+      const rG = c.api.shiftNewPatientEval([cita("111", "Ana Foto", "8:00"), cita("777", "Catch Up", "8:20")], { ahora: AM8 + 90000, toast: g.toast });
+      t.igual(rG.toasts, 0, "a los 90 s de la foto, en gracia: sin toast");
+      t.igual(g.llamadas.length, 0, "cero avisos en la ventana de gracia");
       const g2 = grabadora();
-      const r2 = c.api.avisoPacEval(
-        [cita("801", "Llega Uno", "13:00"), cita("802", "Llega Dos", "13:05"), cita("803", "Llega Tres", "13:10")],
-        { ahora: AHORA + 2 * HORA_MS, toast: g2.toast });
-      t.igual(r2.toasts, 0, "aprendidos: no se re-avisa aunque haya presupuesto");
-      t.igual(r2.nuevos, 3, "el contador del día sigue siendo el de la mañana");
+      const rD = c.api.shiftNewPatientEval([cita("111", "Ana Foto", "8:00"), cita("777", "Catch Up", "8:20"), cita("888", "Ya Fuera", "8:40")], { ahora: AM8 + 180000, toast: g2.toast });
+      t.igual(rD.toasts, 1, "a los 3 min la gracia acabó: solo el nuevo de verdad dispara");
+      t.cierto(g2.llamadas.length === 1 && g2.llamadas[0].cuerpo.indexOf("Ya Fuera") >= 0, "y es «Ya Fuera», no el absorbido");
     });
 
-    t.caso("B5 presupuesto: los toasts de hace MÁS de una hora ya no cuentan", () => {
+    t.caso("v18.5.0 turno PM: mediodía re-fotografía en silencio; la agenda del mediodía NO dispara; la foto AM se barre", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
-      almacen["vgl_aviso_hist_201"] = JSON.stringify({ docs: { "900": 1 } });
-      sembrarDia(almacen, c.api, function (reg) { reg.toasts = [AHORA - 2 * HORA_MS]; });
       const g = grabadora();
-      const r = c.api.avisoPacEval([cita("810", "Presupuesto Lleno", "14:00")], { ahora: AHORA, toast: g.toast });
-      t.igual(r.toasts, 1, "el toast de hace 2 h no consume presupuesto");
+      c.api.shiftNewPatientEval([cita("111", "Ana Mañana", "8:00")], { ahora: hoyA(8), toast: g.toast });     // foto AM
+      // 12:30: el turno PM trae SU lista (con pacientes que no estaban a las 8:00):
+      // es la LISTA INICIAL del PM, no una avalancha de nuevos.
+      const rPM = c.api.shiftNewPatientEval(
+        [cita("111", "Ana Mañana", "8:00"), cita("901", "Tarde Uno", "14:00"), cita("902", "Tarde Dos", "14:30")],
+        { ahora: hoyA(12) + 30000, toast: g.toast });
+      t.cierto(rPM.seed, "mediodía = turno nuevo ⇒ nueva foto");
+      t.igual(rPM.turno, "PM", "a las 12:30 el turno es PM");
+      t.igual(rPM.toasts, 0, "la lista inicial del PM no dispara nada");
+      t.igual(g.llamadas.length, 0, "cero avisos en el cambio de turno");
+      const g2 = grabadora();
+      const rPM2 = c.api.shiftNewPatientEval(
+        [cita("111", "Ana Mañana", "8:00"), cita("901", "Tarde Uno", "14:00"), cita("902", "Tarde Dos", "14:30"), cita("903", "Tarde Nueva", "15:00")],
+        { ahora: hoyA(12) + 600000, toast: g2.toast });
+      t.igual(rPM2.toasts, 1, "el ingreso posterior del PM sí dispara");
+      t.cierto(g2.llamadas.length === 1 && g2.llamadas[0].cuerpo.indexOf("Tarde Nueva") >= 0, "y es la de las 15:00");
+      // La foto AM (turno agotado) se barrió al sembrar la PM.
+      const hoy = c.api.todayStamp();
+      for (const k of Object.keys(almacen)) {
+        if (k.indexOf("vgl_shift_base_") === 0) {
+          t.cierto(k.endsWith("_" + hoy + "_PM"), "tras el cambio de turno solo vive la foto vigente: " + k);
+        }
+      }
     });
 
-    t.caso("B5 dedup entre pestañas: lo ya anunciado por el navegador no se repite", () => {
+    t.caso("v18.5.0 recarga a mitad del turno: la foto persistida evita falsos positivos sin perder detecciones", () => {
+      const almacen = almPadron();
+      const hoy = null;   // todayStamp() del api, calculado abajo
+      const c1 = cargar({ silencioso: true, almacen: almacen });
+      conDoctor(c1.api, 201, "Maryuris Terán");
+      c1.api.shiftNewPatientEval([cita("111", "Ana Inicial", "8:00"), cita("222", "Beto Inicial", "8:30")], { ahora: AM8, toast: grabadora().toast });
+      // La página se recarga (nuevo contexto, MISMO localStorage): la foto sigue ahí.
+      const c2 = cargar({ silencioso: true, almacen: almacen });
+      conDoctor(c2.api, 201, "Maryuris Terán");
+      const g = grabadora();
+      const r = c2.api.shiftNewPatientEval(
+        [cita("111", "Ana Inicial", "8:00"), cita("222", "Beto Inicial", "8:30"), cita("666", "Nueva Tras Recarga", "11:00")],
+        { ahora: AM8_10, toast: g.toast });
+      t.falso(r.seed, "la recarga NO re-fotografía: la foto del turno persiste");
+      t.igual(r.toasts, 1, "solo dispara al que entró de verdad");
+      t.cierto(g.llamadas.length === 1 && g.llamadas[0].cuerpo.indexOf("Nueva Tras Recarga") >= 0, "y es la nueva, no los iniciales");
+      t.cierto(hoy === null, "guarda anti-sombra (hoy no se usa en este caso)");
+    });
+
+    t.caso("v18.5.0 dedup entre pestañas: lo ya anunciado por el navegador no se repite", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
       const hoy = c.api.todayStamp();
+      const c2 = cargar({ silencioso: true, almacen: almacen });   // foto ya hecha por la otra pestaña
       // Otra pestaña acaba de tostar esta cita (registro vgl_vistos del día).
-      almacen["vgl_vistos"] = JSON.stringify({ _dia: hoy, "avisoPac|820@15:00": AHORA - 5000 });
-      almacen["vgl_aviso_hist_201"] = JSON.stringify({ docs: { "900": 1 } });
+      almacen["vgl_vistos"] = JSON.stringify({ _dia: hoy, "pacNuevoTurno|820@15:00": Date.now() - 5000 });
       const g = grabadora();
-      const r = c.api.avisoPacEval([cita("820", "Ya Anunciado", "15:00")], { ahora: AHORA, toast: g.toast });
-      t.igual(r.nuevos, 1, "queda contado");
-      t.igual(r.toasts, 0, "pero el toast no se repite en esta pestaña");
+      const r = c2.api.shiftNewPatientEval([cita("820", "Ya Anunciado", "15:00")], { ahora: hoyA(12) + 600000, toast: g.toast });
+      t.igual(r.toasts, 0, "el toast no se repite en esta pestaña");
       t.igual(g.llamadas.length, 0, "cero avisos duplicados");
     });
 
-    t.caso("B5 memoria por médico: lo que vio Maryuris no lo vuelve nuevo para Brandon", () => {
-      const almacen = almPadron();
-      const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 201, "Maryuris Terán");
-      c.api.avisoPacEval([cita("111", "Ana Compartida", "8:00")], { ahora: AHORA, toast: grabadora().toast });
-      // MISMO navegador, OTRO médico: su histórico está vacío → bootstrap.
-      conDoctor(c.api, 101, "Brandon Jesús Palencia Martínez");
-      const g2 = grabadora();
-      const r2 = c.api.avisoPacEval([cita("111", "Ana Compartida", "8:00")], { ahora: AHORA + 1000, toast: g2.toast });
-      t.cierto(r2.bootstrap, "el histórico de Brandon arranca vacío");
-      t.igual(r2.toasts, 0, "y su primer día también es silencioso");
-      t.cierto(!!almacen["vgl_aviso_hist_201"] && !!almacen["vgl_aviso_hist_101"], "dos memorias separadas");
-    });
-
-    t.caso("B5 filas sin cédula: no se aprenden ni se avisan", () => {
+    t.caso("v18.5.0 por PACIENTE: la segunda cita del mismo turno no lo vuelve «nuevo»", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
       const g = grabadora();
-      const r = c.api.avisoPacEval([cita("", "Sin Documento", "8:00"), cita("   ", "Solo Espacios", "8:30")],
-        { ahora: AHORA, toast: g.toast });
-      t.cierto(r.bootstrap, "nada se aprendió de filas sin cédula");
-      t.igual(r.nuevos, 0, "sin cédula no hay memoria posible");
-      const hist = leer(almacen, "vgl_aviso_hist_201");
-      t.igual(hist, null, "ni siquiera escribió el histórico");
+      c.api.shiftNewPatientEval([cita("111", "Ana Dos Citas", "8:00")], { ahora: AM8, toast: g.toast });   // foto
+      const r = c.api.shiftNewPatientEval(
+        [cita("111", "Ana Dos Citas", "8:00"), cita("111", "Ana Dos Citas", "10:30")], { ahora: AM8_10, toast: g.toast });
+      t.igual(r.toasts, 0, "el paciente ya estaba en la lista inicial del turno");
+      t.igual(r.nuevos, 0, "y no cuenta como nuevo");
+      t.igual(g.llamadas.length, 0, "cero avisos");
     });
 
-    t.caso("B5 poda: sobre 2000 conocidos, el histórico se queda en los 1500 más recientes", () => {
+    t.caso("v18.5.0 filas sin cédula: no se aprenden ni se avisan", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
-      const docs = {};
-      const _base2 = Date.now();
-      for (let i = 0; i < 2005; i++) docs["viejo" + i] = _base2 + i * 1000;   // ordenados del más viejo al más nuevo, todos recientes ([M21] sin purga temporal)
-      almacen["vgl_aviso_hist_201"] = JSON.stringify({ docs: docs });
-      const r = c.api.avisoPacEval([cita("950", "La Que Poda", "16:00")], { ahora: AHORA, toast: grabadora().toast });
-      t.igual(r.nuevos, 1, "la nueva cuenta");
-      const hist = leer(almacen, "vgl_aviso_hist_201");
-      t.cierto(Object.keys(hist.docs).length <= 1500, "el histórico se podó");
-      t.cierto(hist.docs["viejo2004"] !== undefined, "conserva lo más reciente");
-      t.falso(hist.docs["viejo0"] !== undefined, "suelta lo más viejo");
+      const g = grabadora();
+      const r = c.api.shiftNewPatientEval([cita("", "Sin Documento", "8:00"), cita("   ", "Solo Espacios", "8:30")],
+        { ahora: AM8, toast: g.toast });
+      t.cierto(r.seed, "nada se aprendió de filas sin cédula");
+      t.igual(r.nuevos, 0, "sin cédula no hay foto posible");
+      t.igual(Object.keys(almacen).filter((k) => k.indexOf("vgl_shift_base_") === 0).length, 0, "ni siquiera escribió la foto");
     });
 
-    t.caso("B5 limpieza: las claves datadas de días pasados se barren al empezar el día", () => {
-      const almacen = almPadron({ "vgl_aviso_pacientes_2000-01-01": JSON.stringify({ dia: "2000-01-01", avisados: {}, toasts: [], nuevos: [] }) });
-      const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 201, "Maryuris Terán");
-      c.api.avisoPacEval([cita("960", "Dia Nuevo", "7:00")], { ahora: AHORA, toast: grabadora().toast });
-      t.falso(("vgl_aviso_pacientes_2000-01-01" in almacen), "la clave del día viejo se fue");
-      t.cierto(("vgl_aviso_pacientes_" + c.api.todayStamp()) in almacen, "la del día de hoy quedó");
-    });
-
-    t.caso("B5 rodamiento del tick: evaluar tras una lectura vacía o sin capacidad no rompe", () => {
+    t.caso("v18.5.0 barredura: fotos de otros días/turnos se van; la del turno vigente de OTRO médico sobrevive", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
       conDoctor(c.api, 201, "Maryuris Terán");
-      t.igual(c.api.avisoPacEval([], { ahora: AHORA, toast: grabadora().toast }), null, "agenda vacía: nada que hacer");
-      t.igual(c.api.avisoPacEval(null, { ahora: AHORA, toast: grabadora().toast }), null, "lectura fallida (null): nada que hacer");
+      const hoy = c.api.todayStamp();
+      almacen["vgl_shift_base_201_2000-01-01_AM"] = JSON.stringify({ dia: "2000-01-01", turno: "AM", ts: 1, docs: {}, avisados: {} });
+      almacen["vgl_shift_base_202_" + hoy + "_AM"] = JSON.stringify({ dia: hoy, turno: "AM", ts: 1, docs: {}, avisados: {} });
+      almacen["vgl_shift_base_101_" + hoy + "_PM"] = JSON.stringify({ dia: hoy, turno: "PM", ts: 1, docs: { x: true }, avisados: {} });
+      c.api.shiftNewPatientEval([cita("960", "Dia Nuevo", "14:00")], { ahora: hoyA(14), toast: grabadora().toast });
+      t.falso(("vgl_shift_base_201_2000-01-01_AM" in almacen), "la foto del día viejo se fue");
+      t.falso(("vgl_shift_base_202_" + hoy + "_AM" in almacen), "la foto del turno AGOTADO de hoy (AM) también");
+      t.cierto(("vgl_shift_base_101_" + hoy + "_PM" in almacen), "la foto del turno VIGENTE de otro médico sobrevive");
+      t.cierto(("vgl_shift_base_201_" + hoy + "_PM" in almacen), "y la propia quedó");
+    });
+
+    t.caso("v18.5.0 color exclusivo: FUCSIA no se confunde con ningún otro color ni rebaja la gravedad", () => {
+      const hex = api.__COLORS && api.__COLORS.FUCSIA;
+      t.igual(hex, "#E879F9", "FUCSIA existe en COLORS con su hex exclusivo");
+      for (const [k, v] of Object.entries(api.__COLORS || {})) {
+        if (k !== "FUCSIA") t.falso(v === "#E879F9", "ningún otro color usa el hex de FUCSIA (" + k + ")");
+      }
+      t.igual(api.mtrColorMasGrave(["FUCSIA"]), "FUCSIA", "solo en un grupo no es tratado como «color nadie declaró» (= ROJO)");
+      t.igual(api.mtrColorMasGrave(["FUCSIA", "AZUL"]), "FUCSIA", "gana a AZUL (más informativo)");
+      t.igual(api.mtrColorMasGrave(["FUCSIA", "ROJO"]), "ROJO", "y jamás rebaja a un ROJO agrupado");
+    });
+
+    t.caso("v18.5.0 retiro: el botón/modal «NUEVOS» y su memoria de 90 días ya no existen en el código", () => {
+      t.falso(FUENTE.includes("pacientes-nuevos"), "sin data-accion=pacientes-nuevos (la pastilla del dock)");
+      t.falso(FUENTE.includes("avisoPacEval"), "sin el eval de la memoria de 90 días");
+      t.falso(FUENTE.includes('"vgl_aviso_hist_"'), "sin el histórico de 90 días en localStorage (la clave como LITERAL de código)");
+      t.falso(FUENTE.includes("vgl_aviso_pacientes_"), "sin el registro diario del sistema retirado");
+      t.falso(FUENTE.includes('"PACN"'), "sin el contador en la firma del dock");
+      const almacen = almPadron();
+      const c = cargar({ silencioso: true, almacen: almacen });
+      conDoctor(c.api, 201, "Maryuris Terán");
+      c.api.shiftNewPatientEval([cita("111", "Ana", "8:00")], { ahora: AM8, toast: grabadora().toast });
+      t.igual(c.api.__state.avisoPacNuevos, undefined, "el estado del contador retirado no se escribe");
+    });
+
+    t.caso("v18.5.0 rodamiento del tick: evaluar tras una lectura vacía o fallida no rompe; el camino real responde", () => {
+      const almacen = almPadron();
+      const c = cargar({ silencioso: true, almacen: almacen });
+      conDoctor(c.api, 201, "Maryuris Terán");
+      t.igual(c.api.shiftNewPatientEval([], { ahora: AM8, toast: grabadora().toast }), null, "agenda vacía: nada que hacer");
+      t.igual(c.api.shiftNewPatientEval(null, { ahora: AM8, toast: grabadora().toast }), null, "lectura fallida (null): nada que hacer");
       // Sin opts (camino real de tickApi): no debe lanzar aunque el toast sea el de verdad.
-      const r = c.api.avisoPacEval([cita("970", "Camino Real", "17:00")]);
+      const r = c.api.shiftNewPatientEval([cita("970", "Camino Real", "17:00")]);
       t.cierto(r && typeof r.nuevos === "number", "el camino sin opts responde");
     });
   },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.4.5
+// @version      18.5.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.5.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8474,10 +8474,6 @@
       // el conteo del primer tick y se queda ahí toda la consulta, aunque el médico ordene los
       // exámenes o Athenea termine de responder.
       "PN" + _nPendientesDock,
-      // v18.1.0 — B5: el contador de pacientes nuevos también entra en la firma:
-      // sin esto, la pastilla «👤 Nuevos» no aparecería hasta que OTRO factor
-      // moviera la firma y el médico se perdería el aviso de la mañana.
-      "PACN" + ((state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0),
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
@@ -8716,31 +8712,10 @@
       btns.appendChild(bPend);
     }
 
-    // v18.1.0 — B5: pastilla «👤 Nuevos (N)». SOLO un número, sin PHI: cuántos
-    // pacientes de la agenda de hoy no constaban en la memoria de este médico.
-    // Los toasts ya los anunciaron al aparecer (máx. 3/hora, ver avisoPacEval);
-    // este conteo es la memoria del día entero, incluidos los que no alcanzaron
-    // toast. El clic solo recuerda A QUÉ HORAS llegaron, jamás nombres ni cédulas.
-    const _nPacNuevosDock = (state.avisoPacNuevos && Number(state.avisoPacNuevos)) || 0;
-    if (_nPacNuevosDock > 0) {
-      const bPn = document.createElement("button");
-      bPn.className = "vgl-dock-btn";
-      bPn.setAttribute("data-accion", "pacientes-nuevos");
-      bPn.setAttribute("aria-label", _nPacNuevosDock + " pacientes nuevos en la agenda de hoy");
-      bPn.title = "\uD83D\uDC64 Pacientes de hoy que no constaban en la memoria de este médico. Clic para recordar a qué horas llegaron.";
-      _vglDockRotulo(bPn, "\uD83D\uDC64", "Nuevos (" + _nPacNuevosDock + ")");
-      bPn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        try {
-          const _r = readJSON(avisoPacDiaKey(todayStamp()), null);
-          const _horas = (_r && Array.isArray(_r.nuevos) ? _r.nuevos : []).map((x) => x && x.hora).filter(Boolean);
-          showToast("VERDE", "Pacientes nuevos de hoy",
-            _nPacNuevosDock + " paciente(s) que no constaban en la memoria de este médico" +
-            (_horas.length ? ": " + _horas.join(", ") + "." : "."), false, "avisoPacDock|" + todayStamp());
-        } catch (e2) {}
-      });
-      btns.appendChild(bPn);
-    }
+    // v18.5.0 — RETIRADA la pastilla «👤 Nuevos (N)» (v18.1.0, B5): la pastilla y su
+    // toast-resumen recordaban la MEMORIA de 90 días del médico, que es justo lo que
+    // clasificó «nuevo» a toda la agenda la mañana del 07-sep-2026. El reemplazo es el
+    // toast FUCSIA de shiftNewPatientEval: sin botón, sin modal, sin contador.
 
     // v14.2.11 — Cuarto botón: riesgo cardiovascular en su propio modal.
     // v16.8.0 — RETIRADO DEL DOCK. Su contenido (clasificación con su porqué, función
@@ -10271,33 +10246,37 @@
     // VIH SIEMPRE se conserva. Edita esta lista si cambian las metas.
     // (hvc/vhc/hbv/vhb = como aparece la hepatitis en la base piloto)
     EXCLUDE_PYM: ["vdrl", "sifilis", "hepatitis", "hepb", "hepc", "hvc", "vhc", "hbv", "vhb"],
-    // SharePoint: SOLO la base de la sede, bajada por identificador único (sourcedoc).
+    // v18.6.0 — BASE ÚNICA (mandato del médico, 07-sep): TODO el sistema (panel y script)
+    // se alimenta EXCLUSIVAMENTE de «BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx».
+    // El flujo del archivo diario «Agenda_Dia_CMB» fue retirado por completo. La base se
+    // baja por GUID (sourcedoc del enlace), se refresca UNA vez al día a las 06:00
+    // (UTC-5 Bogotá) comparando TimeLastModified, y su hoja fuente está FIJADA por nombre
+    // — la selección por puntaje elegía mal en este libro de 12 hojas (auditoría
+    // INFORME_BASE_PILOTO_SEP_20260907.md, hallazgo H1: elegía «CITASDIA AGOSTO» y
+    // quedaba en 0 pacientes).
     SP: {
       host: "viva1aips-my.sharepoint.com",
       web: "/personal/director_bello_viva1a_com_co",
-      // v7.7: carpeta donde aparece el PyM del día real (confirmada por captura real:
-      // INTRANET > ACTIVIDADES DE PYM, archivo suelto en la raíz, tipo
-      // "Agenda_Dia_CMB_20260806.xlsx"). Es la PRIMERA opción; la base piloto de abajo
-      // queda como respaldo mientras no aparezca la de hoy.
-      folder: "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM",
-      folders: [
-        "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM",
-        "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM/CITAS DIA EBS",
-        "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM/ESTRATEGIAS POR SEDE 2026/SEDE BELLO"
-      ],
-      // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
-      // sesión, es que hay que quitarle la protección antes de subirlo.
-      respaldo: {
-        id: "809a098b-69d1-44fe-9e51-b01f07290807",
-        name: "BASE PILOTO DE CONSULTA  BELLO MAYO.xlsx",
-        // v18.0.5 — INCIDENTE 31-ago (parte 2): el respaldo tampoco cargaba, y con el
-        // vínculo de la carpeta regenerado tampoco servía la URL de descarga por ID si
-        // el archivo cambió de ubicación/permisos. El médico pasó el vínculo NUEVO del
-        // archivo de respaldo (backup de base piloto): se usa su GUID directo como
-        // tercera vía de descarga cuando las dos por ID fallen. El GUID salió del
-        // redirect del vínculo (doc2.aspx?sourcedoc=...). Si el archivo se reemplaza,
-        // pedir el vínculo actual y actualizar SOLO este id.
-        shareId: "2bd8f42a-f8f5-46e0-b2e1-b1d2e5fa5d4f",
+      base: {
+        id: "6594b356-f608-4c56-bb6f-6a90f2125a3f",
+        // Solo informativo (para mensajes): el nombre REAL siempre se toma del servidor
+        // vía pilotoMeta(), porque trae doble espacio antes de BELLO y es fácil errarle
+        // a mano (hallazgo H9 de la auditoría).
+        name: "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx",
+        // Hoja fuente principal (citas operativas: Identificacion + Susceptible +
+        // Abandonados_PES). Coincidencia sin mayúsculas/acentos; si no existe, se cae a
+        // la selección por puntaje de siempre y el guardián de índice vacío decide.
+        sheet: "citas dia regional",
+        // Hoja secundaria (tamizaciones): CERVIX/MAMA/PSA/SOMF con vocabulario
+        // «Aplica Cobertura/Fenix …» = pendiente (opción B confirmada por el médico).
+        sheetExtra: "PROCEXDT",
+        // v18.0.5 legado: la tercera vía por shareId se RETIRA — el shareId viejo apuntaba
+        // a la base de MAYO y bajaría datos de un mes pasado si las dos vías por GUID
+        // fallaran. Para el archivo nuevo las dos vías por id bastan; si algún día se
+        // reemplaza el archivo con otro GUID, pedir el vínculo nuevo y actualizar id.
+        shareId: "",
+        // Hora local Bogotá (UTC-5 fijo, sin DST) del refresco diario único.
+        horaRefresco: 6,
       },
       // v7.8.3: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
       // → "Cualquier persona con el vínculo" / "Personas de la organización"). Visitarlo
@@ -10317,14 +10296,20 @@
       hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
       documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
       modalidad: ".fw-bold.mb-0", fecha: ".fecha",
+      // v18.5.1-hc — clase REAL del botón "Historias Clínicas" de Citas del día,
+      // verificada contra el bundle público de Everest (HCHealth main, "btn
+      // btn-primary-medic" ×11; extracción 07-sep-2026). El botón hermano
+      // "Consentimientos" COMPARE esa clase: por eso _vglEsBotonHC exige además
+      // el texto del rótulo y rechaza "consentimientos".
+      btnHC: ".btn-primary-medic",
     },
   };
   // [UI-CSS] Paleta clínica suavizada (WCAG compliant, tono no estresante)
   // v18.0.0 — rebrand "Centinela": el acento primario pasa de azul a VIOLETA (marca) y
   // la pre-alerta pasa de morado a CIAN para no chocar con la marca. VERDE/ÁMBAR/ROJO
   // conservan su semántica clínica intacta.
-  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#7C3AED", MORADO: "#0891B2" };
-  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(124,58,237,.16)", MORADO: "rgba(8,145,178,.16)" };
+  const COLORS = { VERDE: "#10B981", AMBAR: "#D97706", ROJO: "#E54D42", AZUL: "#7C3AED", MORADO: "#0891B2", FUCSIA: "#E879F9" };
+  const TINT = { VERDE: "rgba(16,185,129,.16)", AMBAR: "rgba(217,119,6,.16)", ROJO: "rgba(229,77,66,.16)", AZUL: "rgba(124,58,237,.16)", MORADO: "rgba(8,145,178,.16)", FUCSIA: "rgba(232,121,249,.16)" };
   // v7.8.1: etiquetas ACCIONABLES, confirmadas por el médico del programa (no adivinadas):
   //  - Tamización CMB = riesgo cardiometabólico según Resolución 3280/2018 (el nombre del
   //    archivo "Agenda_Dia_CMB" es la sede/contrato, NO la prueba — se aclaró a propósito).
@@ -10369,7 +10354,11 @@
     if (s.includes("ccu") || s.includes("citolog")) return "citología cervicouterina";
     return String(valorCrudo || "").trim();               // valor tal cual si no se reconoce
   }
-  const DOC_EXACT = ["IDENTIFICACION", "DOCUMENTO", "CEDULA", "NUMERO_DOCUMENTO", "NRO_DOCUMENTO", "NUMERO_IDENTIFICACION"];
+  // v18.6.0 — auditoría base SEPTIEMBRE1 (H3): «NRO IDENTIFICACION» (con espacio, como
+  // viene en la hoja PROCEX) no estaba, y el fallback blando se quedaba con la PRIMERA
+  // columna que contuviera "DOCUMENTO" — en «CITASDIA AGOSTO» eso es TIPO_DOCUMENTO (el
+  // TIPO: "CC", "TI"…), no el número. Se agregan las variantes con NRO/NUMERO.
+  const DOC_EXACT = ["IDENTIFICACION", "DOCUMENTO", "CEDULA", "NUMERO_DOCUMENTO", "NRO_DOCUMENTO", "NUMERO_IDENTIFICACION", "NRO_IDENTIFICACION", "IDENTIFICACION_PACIENTE", "DOCUMENTO_PACIENTE"];
 
   // v17.6.61 — auditoría 25-ago (sección 6, código muerto confirmado): listeners/subscribe/
   // notify formaban un pub-sub que nadie suscribía en todo el archivo (GHOST.subscribe: 0
@@ -11213,89 +11202,80 @@
   }
 
   // =====================================================================
-  //  v18.1.0 — B5: AVISO DE PACIENTE NUEVO (capacidad `aviso_paciente_nuevo`)
+  //  v18.5.0 — AVISO DE PACIENTE NUEVO EN EL TURNO (capacidad
+  //  `aviso_paciente_nuevo`). Reemplaza y RETIRA el botón/modal «NUEVOS»
+  //  (v18.1.0, B5) y su memoria de 90 días.
   //  ------------------------------------------------------------------
-  //  Everest NO marca «nuevo» en ninguna fila de la agenda, así que «nuevo»
-  //  se define por MEMORIA PROPIA: una cédula que no consta en el histórico
-  //  de ESTE médico (clave por uid: la memoria no se comparte entre médicos
-  //  que usan el mismo navegador). Se evalúa al llegar cada lectura del API
-  //  de agenda (tickApi), sin red adicional y sin capa c: esto no escribe
-  //  nada en Everest, solo observa.
+  //  RAÍZ DEL DEFECTO QUE RETIRÓ EL SISTEMA ANTERIOR (madrugada del
+  //  07-sep-2026): B5 decidía «nuevo» contra el HISTÓRICO de cédulas de
+  //  90 días por médico (vgl_aviso_hist_<uid>), no contra la lista de
+  //  citas del día. Ese histórico caduca (purga de 90 días [NT-123/M21],
+  //  médico que vuelve de vacaciones, navegador limpio): bastaba UNA
+  //  cédula vieja sobreviviente para que `bootstrap` fuera falso, y la
+  //  primera lectura de la mañana clasificaba «nuevo» a TODA la agenda.
+  //
+  //  El reemplazo NO memoriza médicos: fotografía la LISTA INICIAL de
+  //  cédulas de la agenda al arrancar cada turno (AM: 00–11 h, PM: 12–23 h)
+  //  y solo avisa lo que entra DESPUÉS y no estaba en esa foto. Se evalúa
+  //  al llegar cada lectura del API de agenda (tickApi), sin red adicional
+  //  y sin capa c: esto no escribe nada en Everest, solo observa.
   //
   //  LAS REGLAS QUE HACEN QUE ESTO NO MOLESTE:
   //   · CAPA a: sin accesoCap("aviso_paciente_nuevo") no se evalúa NADA ni
-  //     se aprende NADA — el histórico solo crece para quien puede usarlo.
-  //   · BOOTSTRAP SILENCIOSO: con el histórico vacío (médico nuevo, o primer
-  //     día del feature) solo APRENDE y no avisa — el primer día no puede
-  //     mentir diciendo que todos los pacientes de años son nuevos.
-  //   · MÁX 3 TOASTS POR HORA CORRIDA: una agenda que se llene de golpe no
-  //     ametralla al médico; los que no alcanzaron toast quedan contados.
-  //   · DEDUP doble: por cita (cédula@hora) dentro del día, y entre
+  //     se aprende NADA — la foto solo crece para quien puede usarla.
+  //   · FOTO DE ARRANQUE SILENCIOSA: la primera lectura del turno ES la
+  //     lista inicial; nadie es «nuevo» por estar en ella. El defecto del
+  //     histórico (todos nuevos al abrir sesión) queda imposible por
+  //     diseño: la comparación es contra HOY, no contra 90 días.
+  //   · GRACIA DE 120 s tras la foto: absorbe las lecturas incompletas del
+  //     arranque (una lectura a medias no puede sembrar falsos nuevos en
+  //     la lectura siguiente).
+  //   · DEDUP doble: por cita (cédula@hora) dentro del turno, y entre
   //     pestañas por el registro vgl_vistos (_avisoUnaVezPorNavegador).
-  //   · CERO PHI INNECESARIA EN DISCO: el registro del día guarda cédula y
-  //     hora (lo mínimo para la memoria), NUNCA nombres; el nombre solo
-  //     vive en el toast, que se borra solo. Cero red, cero telemetría.
-  //   · El contador del dock («👤 Nuevos (N)») es SOLO un número.
+  //   · TOAST FUCSIA INMEDIATO (#e879f9, color EXCLUSIVO que ningún otro
+  //     aviso ni elemento de la interfaz usa), con la MISMA estructura,
+  //     animación y comportamiento de los toasts de cambio de leyenda
+  //     (mismo showToast/_renderToast, mismo autocierre, mismo cierre por
+  //     clic/teclado): no crítico, no persistente.
+  //   · CERO PHI INNECESARIA EN DISCO: la foto del turno guarda cédula y
+  //     hora (lo mínimo), NUNCA nombres; el nombre solo vive en el toast,
+  //     que se borra solo. Al cambiar de turno o de día la foto se barre
+  //     entera (minimización, Ley 1581/2012 art. 4). Cero red, cero
+  //     telemetría, sin botón, sin modal, sin contador.
   // =====================================================================
-  const AVISO_PAC_HIST_MAX = 2000;    // sobre esto, se poda
-  const AVISO_PAC_HIST_KEEP = 1500;   // a esto se reduce al podar
-  const AVISO_PAC_TOASTS_HORA = 3;    // presupuesto de toasts por hora corrida
-  // [NT-123/M21] — purga TEMPORAL del histórico: además del tope por conteo, ninguna
-  // cédula del histórico de pacientes nuevos vive más de 90 días en localStorage
-  // (minimización y conservación proporcionales a la finalidad — el aviso solo importa
-  // para la jornada y su memoria inmediata). Ley 1581/2012 art. 4.
-  const AVISO_PAC_HIST_DIAS = 90;
-  const AVISO_PAC_HIST_MS = AVISO_PAC_HIST_DIAS * 24 * 60 * 60 * 1000;
+  const SHIFT_BASE_PREFIX = "vgl_shift_base_";
+  const SHIFT_BASE_GRACE_MS = 120000;   // ventana de gracia tras la foto de arranque
 
-  function avisoPacHistKey(uid) { return "vgl_aviso_hist_" + (Number(uid) || 0); }
-  function avisoPacDiaKey(dia) { return "vgl_aviso_pacientes_" + (dia || todayStamp()); }
-  function avisoPacCitaId(doc, hora) { return String(doc || "") + "@" + String(hora || ""); }
-
-  // Puro: de una lista de ts de toasts, los que caen en la última hora corrida.
-  function avisoPacToastsRecientes(ts, ahora) {
-    const corte = (ahora || Date.now()) - 60 * 60 * 1000;
-    return (Array.isArray(ts) ? ts : []).filter(function (x) { return Number(x) > corte; });
+  // Puro: turno vigente a partir de una fecha (AM = 00–11 h, PM = 12–23 h).
+  function shiftOf(fecha) {
+    return ((fecha || new Date()).getHours() < 12) ? "AM" : "PM";
   }
-
-  // Puro: sobre el máximo de conocidos, conserva los más recientes. Devuelve
-  // null si no había nada que podar (el llamador no toca el disco entonces).
-  function avisoPacHistPodar(docs) {
-    const d = docs || {};
-    // [NT-123/M21] — primero la purga TEMPORAL (los ts de hace más de 90 días salen
-    // siempre, aunque el conteo no haya llegado al tope); después, si el resto sigue
-    // sobre el máximo, la poda por conteo de toda la vida.
-    const corte = Date.now() - AVISO_PAC_HIST_MS;
-    const vivos = {};
-    let huboviejos = false;
-    Object.keys(d).forEach(function (k) { if (Number(d[k]) >= corte) vivos[k] = d[k]; else huboviejos = true; });
-    const llaves = Object.keys(vivos);
-    if (!huboviejos && llaves.length <= AVISO_PAC_HIST_MAX) return null;
-    if (llaves.length <= AVISO_PAC_HIST_KEEP) return vivos;
-    llaves.sort(function (a, b) { return (vivos[b] || 0) - (vivos[a] || 0); });
-    const out = {};
-    for (let i = 0; i < AVISO_PAC_HIST_KEEP; i++) out[llaves[i]] = vivos[llaves[i]];
-    return out;
+  // La foto es por médico (uid) + día + turno: cambiar de médico o de turno
+  // re-fotografía; recargar la página a mitad del turno NO (la foto persiste
+  // y no hay falsos positivos ni se pierden detecciones).
+  function shiftBaselineKey(uid, dia, turno) {
+    return SHIFT_BASE_PREFIX + (Number(uid) || 0) + "_" + (dia || todayStamp()) + "_" + (turno || shiftOf());
   }
+  function shiftCitaId(doc, hora) { return String(doc || "") + "@" + String(hora || ""); }
 
-  // Limpieza de claves datadas de días pasados: corre UNA vez al día (cuando
-  // el registro del día cambia), no en cada tick. Mismo patrón que la poda
-  // B8 de las marcas vgl_n_*: quien solo lee, también barre lo viejo.
-  function _avisoPacLimpiarDiasViejos(dia) {
+  // Al sembrar un turno nuevo se barren las fotos de otros días/turnos (de
+  // cualquier médico del navegador): nadie arrastra cédulas viejas en
+  // localStorage. Mismo patrón que la limpieza B8 de las marcas vgl_n_*.
+  function shiftSweepOldBaselines(dia, turno) {
     try {
-      const hoy = dia || todayStamp();
-      const PREF = "vgl_aviso_pacientes_";
+      const sufijo = "_" + (dia || todayStamp()) + "_" + (turno || shiftOf());
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i);
-        if (k && k.indexOf(PREF) === 0 && k.slice(PREF.length) !== hoy) localStorage.removeItem(k);
+        if (k && k.indexOf(SHIFT_BASE_PREFIX) === 0 && !k.endsWith(sufijo)) localStorage.removeItem(k);
       }
     } catch (e) {}
   }
 
-  // Núcleo B5. Recibe las filas ya parseadas de state.apiCitas ({doc_id,
-  // nombre, hora_texto}) y devuelve {nuevos, toasts, bootstrap} — o null si
-  // la capa a cortó o no había nada que evaluar. `opts` es del banco:
+  // Núcleo. Recibe las filas ya parseadas de state.apiCitas ({doc_id,
+  // nombre, hora_texto}) y devuelve {nuevos, toasts, seed, turno} — o null
+  // si la capa a cortó o no había nada que evaluar. `opts` es del banco:
   // {ahora, toast} fijan el reloj y graban los avisos sin depender del DOM.
-  function avisoPacEval(citas, opts) {
+  function shiftNewPatientEval(citas, opts) {
     try {
       if (!accesoCap("aviso_paciente_nuevo")) return null;          // capa a
       if (!Array.isArray(citas) || !citas.length) return null;
@@ -11303,57 +11283,47 @@
       const ahora = o.ahora || Date.now();
       const toast = o.toast || showToast;
       const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
-      // Memoria a largo plazo del médico (por uid, no compartida).
-      let hist = readJSON(avisoPacHistKey(uid), null);
-      const bootstrap = !hist || !hist.docs || typeof hist.docs !== "object" || !Object.keys(hist.docs).length;
-      if (bootstrap) hist = { docs: {} };
-      // Registro del día: dedup por cita, presupuesto de toasts y contador.
       const dia = todayStamp();
-      let reg = readJSON(avisoPacDiaKey(dia), null);
-      if (!reg || reg.dia !== dia) {
-        reg = { dia: dia, avisados: {}, toasts: [], nuevos: [] };
-        _avisoPacLimpiarDiasViejos(dia);
+      const turno = shiftOf(new Date(ahora));
+      const key = shiftBaselineKey(uid, dia, turno);
+      let reg = readJSON(key, null);
+      let seed = false;
+      if (!reg || reg.dia !== dia || reg.turno !== turno) {
+        reg = { dia: dia, turno: turno, ts: ahora, docs: {}, avisados: {} };
+        shiftSweepOldBaselines(dia, turno);
+        seed = true;   // foto de arranque: la agenda actual ES la lista inicial
       }
-      let presupuesto = Math.max(0, AVISO_PAC_TOASTS_HORA - avisoPacToastsRecientes(reg.toasts, ahora).length);
+      const enGracia = ahora - Number(reg.ts || 0) < SHIFT_BASE_GRACE_MS;
       const llegaron = [];   // los nuevos de ESTA pasada, para sus toasts
       let cambio = false;
       for (let i = 0; i < citas.length; i++) {
         const a = citas[i] || {};
         const doc = String(a.doc_id || "").trim();
-        if (!doc) continue;                    // sin cédula no hay memoria posible
+        if (!doc || reg.docs[doc]) continue;   // sin cédula, o ya visto en el turno
+        reg.docs[doc] = true;                  // aprende SIEMPRE (la foto crece)
+        cambio = true;
+        if (seed || enGracia) continue;        // lista inicial (o catch-up): silencio
         const hora = String(a.hora_texto || "");
-        const esNuevo = !hist.docs[doc];
-        hist.docs[doc] = ahora;                // aprende SIEMPRE (la memoria no olvida)
-        if (esNuevo) {
-          cambio = true;
-          const cid = avisoPacCitaId(doc, hora);
-          if (!bootstrap && !reg.avisados[cid]) {
-            reg.avisados[cid] = ahora;
-            reg.nuevos.push({ doc: doc, hora: hora, ts: ahora });   // sin nombre: PHI mínima
-            llegaron.push({ nombre: String(a.nombre || ""), hora: hora, cid: cid });
-          }
+        const cid = shiftCitaId(doc, hora);
+        if (!reg.avisados[cid]) {
+          reg.avisados[cid] = ahora;           // cédula y hora: PHI mínima, jamás nombres
+          llegaron.push({ nombre: String(a.nombre || ""), hora: hora, cid: cid });
         }
       }
-      // Toasts: mejor esfuerzo dentro del presupuesto; dedup entre pestañas.
+      // Toast FUCSIA inmediato, uno por llegada; dedup entre pestañas.
       let dados = 0;
-      for (let j = 0; j < llegaron.length && presupuesto > 0; j++) {
+      for (let j = 0; j < llegaron.length; j++) {
         const p = llegaron[j];
-        if (!_avisoUnaVezPorNavegador("avisoPac|" + p.cid)) continue;
+        if (!_avisoUnaVezPorNavegador("pacNuevoTurno|" + p.cid)) continue;
         try {
-          toast("VERDE", "Paciente nuevo en la agenda",
+          toast("FUCSIA", "🆕 Paciente nuevo en el turno",
             (p.nombre || "Sin nombre") + (p.hora ? " — " + p.hora : "") +
-            ". No constaba en la memoria de este médico.", false, p.cid);
+            ". No figuraba en la lista de citas al iniciar este turno.", false, "pacNuevoTurno|" + p.cid);
         } catch (eT) {}
-        reg.toasts.push(ahora); dados++; presupuesto--; cambio = true;
+        dados++;
       }
-      if (cambio) {
-        const poda = avisoPacHistPodar(hist.docs);
-        if (poda) hist.docs = poda;
-        writeJSON(avisoPacHistKey(uid), hist);
-        writeJSON(avisoPacDiaKey(dia), reg);
-      }
-      try { state.avisoPacNuevos = reg.nuevos.length; } catch (eS) {}
-      return { nuevos: reg.nuevos.length, toasts: dados, bootstrap: bootstrap };
+      if (cambio) writeJSON(key, reg);
+      return { nuevos: Object.keys(reg.avisados).length, toasts: dados, seed: seed, turno: turno };
     } catch (e) { return null; }
   }
 
@@ -11902,16 +11872,72 @@
   // solo el de arriba habría dejado el del worker —el camino normal de un .xlsx— roto.
   // `stripAccents` ya se serializa al worker antes que esta función, así que se puede usar.
   function findDocIdx(headers) {
-    const h = (headers || []).map((x) => stripAccents(String(x == null ? "" : x)).toUpperCase());
+    // v18.6.0 (H3): los espacios se normalizan a "_" antes de comparar, así «NRO
+    // IDENTIFICACION» calza con NRO_IDENTIFICACION venga como venga escrito el encabezado.
+    const h = (headers || []).map((x) => stripAccents(String(x == null ? "" : x)).toUpperCase().replace(/\s+/g, "_"));
     for (const cand of DOC_EXACT) { const k = h.indexOf(cand); if (k >= 0) return k; }
-    return h.findIndex((x) => x.includes("IDENT") || x.includes("CEDULA") || x.includes("DOCUMENTO"));
+    // Fallback blando, con la lección de la base de septiembre: una columna cuyo nombre
+    // EMPIEZA por TIPO_ es el TIPO de documento ("CC"/"TI"), jamás el número — aunque
+    // contenga la palabra DOCUMENTO y aparezca antes en la hoja.
+    return h.findIndex((x) => !x.startsWith("TIPO_") && (x.includes("IDENT") || x.includes("CEDULA") || x.includes("DOCUMENTO")));
+  }
+  // v18.6.0 — HOJA DE TAMIZACIONES (opción B confirmada por el médico): la hoja PROCEX
+  // trae CERVIX / MAMA / PSA / SOMF con vocabulario «Aplica Cobertura/Fenix …» —
+  // «Aplica …» = el paciente REQUIERE la tamización — frente a «Con Tamizacion vigente»
+  // o «No Aplica» (nada que hacer). Es el equivalente del «Susceptible» del extinto
+  // archivo diario, en otro idioma: se traduce aquí y las etiquetas son las del
+  // diccionario FRIENDLY de siempre. CERVIX refina el tipo de prueba (VPH vs CCU)
+  // reutilizando detalleTipoCervix, igual que la fusión de PRUEBA_CERVIX.
+  function esAplicaPendiente(val) {
+    if (val === null || val === undefined || val === "") return false;
+    const t = stripAccents(String(val)).trim().toLowerCase();
+    return t.length <= 40 && t.indexOf("aplica ") === 0;
+  }
+  function makeProcexIndexer(headersRaw) {
+    const crudos = headersRaw || [];
+    const headers = Array.from({ length: crudos.length }, (_, i) => (crudos[i] == null || crudos[i] === "" ? `COL_${i}` : String(crudos[i]).trim().toUpperCase()));
+    const docIdx = findDocIdx(headers);
+    if (docIdx < 0) throw new Error("No se encontró la columna con la identificación del paciente. Verifique el formato de la lista cargada.");
+    const map = new Map();
+    const todos = new Set();
+    const colLabels = [];
+    headers.forEach((h, i) => {
+      if (i === docIdx) return;
+      const n = stripAccents(String(h)).toUpperCase().replace(/\s+/g, "_");
+      if (n === "CERVIX" || n === "TAMIZACION_CERVIX") colLabels[i] = "CERVIX";
+      else if (n === "MAMA" || n === "TAMIZACION_MAMA") colLabels[i] = "MAMA";
+      else if (n === "PSA" || n === "TAMIZACION_PROSTATA") colLabels[i] = "PSA";
+      else if (n === "SOMF" || n === "TAMIZACION_COLON" || n === "SANGRE_OCULTA") colLabels[i] = "SOMF";
+    });
+    return {
+      map, todos,
+      push(row) {
+        const docKey = normalizeKey(row[docIdx]); if (!docKey) return;
+        todos.add(docKey);
+        const bucket = map.get(docKey) || [];
+        colLabels.forEach((tipo, i) => {
+          const val = row[i];
+          if (!esAplicaPendiente(val)) return;
+          let label;
+          if (tipo === "CERVIX") label = "Cáncer de cuello uterino — " + detalleTipoCervix(val);
+          else if (tipo === "MAMA") label = FRIENDLY.TAMIZACION_MAMA;
+          else if (tipo === "PSA") label = FRIENDLY.TAMIZACION_PROSTATA;
+          else label = FRIENDLY.TAMIZACION_COLON;
+          if (label && !bucket.includes(label)) bucket.push(label);
+        });
+        if (bucket.length) map.set(docKey, bucket);
+      },
+    };
   }
   // Lee el libro en STREAMING y devuelve el ÍNDICE ya construido (v7.8):
   // { headers, map, todos, sheetName, rowCount, sheets }. La elección de hoja sigue
   // siendo por muestra barata; la lectura completa va fila a fila: parsear -> indexar
   // -> descartar, cediendo el hilo por presupuesto de tiempo. Nunca se materializa
   // ni el XML completo de la hoja ni la tabla de filas.
-  async function _readPymWorkbookStreamCore(arrayBuffer) {
+  // v18.6.0 — opts = { main, extra }: hojas FIJADAS por configuración (base única de
+  // SEPTIEMBRE). Con opts.main la fuente es ESA hoja (la del día ya no existe como
+  // concepto); opts.extra indexa además la hoja de tamizaciones y FUSIONA su índice.
+  async function _readPymWorkbookStreamCore(arrayBuffer, opts) {
     const maybeYield = makeYielder(15);
     const zip = zipIndex(arrayBuffer);
     const shared = await parseSharedStringsStream(zip, maybeYield);
@@ -11921,53 +11947,103 @@
 
     // 1) Espiar solo el principio de cada hoja para elegir la buena (barato).
     const cand = [];
+    const scPorHoja = new Map();
     for (const h of hojas) {
       const info = zip.files[h.path]; if (!info) continue;
       try {
         const muestra = await zipRead(zip, h.path, XLSX_LIMITS.scanBytes);
         const filas = scanSheetRows(muestra || "", shared, 400);
         const sc = scoreSheet(filas);
+        scPorHoja.set(h.name, sc);
         if (sc.score > 0) cand.push({ h, sc, size: info.uncSize || 0 });
       } catch (e) { /* hoja ilegible: se ignora */ }
       await maybeYield();
     }
-    cand.sort((a, b) => b.sc.score - a.sc.score);
-    const elegida = cand[0] || { h: hojas[0], sc: { headerRow: 0 } };
+    // v18.6.0 — hoja(s) FIJADA(S): la configuración manda sobre el puntaje. En el libro
+    // de 12 hojas de septiembre el puntaje elegía «CITASDIA AGOSTO» (histórico, 400
+    // puntos) y moría en 0 pacientes (auditoría H1): fijar la fuente es la corrección.
+    const _normHoja = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
+    let elegida = null, extraHoja = null;
+    if (opts && opts.main) {
+      const patron = _normHoja(opts.main);
+      const hit = hojas.find((h) => _normHoja(h.name) === patron) || hojas.find((h) => _normHoja(h.name).indexOf(patron) >= 0);
+      if (!hit) throw new Error("no encontré la hoja «" + opts.main + "» en el libro — ¿cambiaron de nombre las hojas?");
+      const sc = scPorHoja.get(hit.name);
+      if (!sc || sc.headerRow < 0) throw new Error("la hoja «" + hit.name + "» no tiene encabezados con la columna de identificación");
+      elegida = { h: hit, sc };
+      if (opts.extra) {
+        const pe = _normHoja(opts.extra);
+        extraHoja = hojas.find((h) => h !== hit && _normHoja(h.name).indexOf(pe) >= 0) || null;
+      }
+    } else {
+      cand.sort((a, b) => b.sc.score - a.sc.score);
+      elegida = cand[0] || { h: hojas[0], sc: { headerRow: 0 } };
+    }
     const headerRow = Math.max(0, elegida.sc.headerRow || 0);
 
-    // 2) Streaming de la hoja elegida: cada fila completa se parsea, se indexa y se tira.
-    progreso("Leyendo «" + elegida.h.name + "»…");
+    // 2) Streaming de las hojas: cada fila completa se parsea, se indexa y se tira.
     const td = new TextDecoder("utf-8");
-    const rowRe = /<row\b([^>]*)(?:\s*\/>|>([\s\S]*?)<\/row>)/g;
-    let buf = "", nRow = 0, headers = null, indexer = null;
-    for await (const chunk of zipEntryChunks(zip, elegida.h.path)) {
-      buf += td.decode(chunk, { stream: true });
-      rowRe.lastIndex = 0;
-      let m, consumed = 0;
-      while ((m = rowRe.exec(buf)) !== null) {
-        const fila = parseRowBody(m[2], shared);
-        if (nRow === headerRow) { headers = fila; indexer = makeIndexer(headers); }
-        else if (nRow > headerRow && indexer) indexer.push(fila);
-        nRow++;
-        consumed = rowRe.lastIndex;
-        if (nRow >= XLSX_LIMITS.maxRows) break;
-        if (await maybeYield()) {
-          if ((nRow & 8191) === 0) progreso("Leyendo el archivo… " + nRow.toLocaleString("es") + " filas");
+    async function streamSheet(path, hr, indexerFactory) {
+      const rowRe = /<row\b([^>]*)(?:\s*\/>|>([\s\S]*?)<\/row>)/g;
+      let buf = "", nRow = 0, headers = null, indexer = null;
+      for await (const chunk of zipEntryChunks(zip, path)) {
+        buf += td.decode(chunk, { stream: true });
+        rowRe.lastIndex = 0;
+        let m, consumed = 0;
+        while ((m = rowRe.exec(buf)) !== null) {
+          const fila = parseRowBody(m[2], shared);
+          if (nRow === hr) { headers = fila; indexer = indexerFactory(headers); }
+          else if (nRow > hr && indexer) indexer.push(fila);
+          nRow++;
+          consumed = rowRe.lastIndex;
+          if (nRow >= XLSX_LIMITS.maxRows) break;
+          if (await maybeYield()) {
+            if ((nRow & 8191) === 0) progreso("Leyendo el archivo… " + nRow.toLocaleString("es") + " filas");
+          }
         }
+        if (consumed) buf = buf.slice(consumed);
+        if (nRow >= XLSX_LIMITS.maxRows) break;
+        // Una "fila" que no cierra en 8 MB no es una fila: archivo corrupto o no tabular.
+        if (buf.length > XLSX_LIMITS.maxBufChars) throw new Error("la hoja «" + path + "» no se puede leer por filas");
       }
-      if (consumed) buf = buf.slice(consumed);
-      if (nRow >= XLSX_LIMITS.maxRows) break;
-      // Una "fila" que no cierra en 8 MB no es una fila: archivo corrupto o no tabular.
-      if (buf.length > XLSX_LIMITS.maxBufChars) throw new Error("la hoja «" + elegida.h.name + "» no se puede leer por filas");
+      if (!indexer) throw new Error("no encontré la fila de encabezados en «" + path + "»");
+      return { headers, indexer, nRow };
     }
-    if (!indexer) throw new Error("no encontré la fila de encabezados en «" + elegida.h.name + "»");
-    return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, sheetName: elegida.h.name, rowCount: nRow, sheets: hojas.map((x) => x.name) };
+    progreso("Leyendo «" + elegida.h.name + "»…");
+    const principal = await streamSheet(elegida.h.path, headerRow, makeIndexer);
+    const headers = principal.headers, indexer = principal.indexer;
+    let extraDocs = 0;
+    if (extraHoja) {
+      const scE = scPorHoja.get(extraHoja.name);
+      const hrE = scE && scE.headerRow >= 0 ? scE.headerRow : 0;
+      progreso("Leyendo «" + extraHoja.name + "» (tamizaciones)…");
+      try {
+        const extra = await streamSheet(extraHoja.path, hrE, makeProcexIndexer);
+        extraDocs = extra.indexer.todos.size;
+        // Fusión por unión con dedup de etiquetas: un paciente puede tener actividades
+        // en la hoja de citas Y tamizaciones en la PROCEX.
+        extra.indexer.todos.forEach((d) => indexer.todos.add(d));
+        extra.indexer.map.forEach((bucket, d) => {
+          const dest = indexer.map.get(d) || [];
+          bucket.forEach((l) => { if (!dest.includes(l)) dest.push(l); });
+          indexer.map.set(d, dest);
+        });
+      } catch (e) { /* la hoja extra es un REGALO: si no se puede leer, la principal manda */ }
+    }
+    // Guardián de índice vacío (auditoría H8): con hoja fijada, un libro que no produce
+    // NI UN paciente no se instala — antes eso se cacheaba en silencio y el panel quedaba
+    // todo el día en «sin registro en PyM» sin error visible.
+    if (opts && opts.main && !indexer.todos.size) {
+      throw new Error("el libro no produjo ningún paciente (hoja «" + elegida.h.name + "» vacía o sin identificaciones legibles)");
+    }
+    return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, sheetName: elegida.h.name, sheetExtra: extraHoja ? extraHoja.name : "", extraDocs, rowCount: principal.nRow, sheets: hojas.map((x) => x.name) };
   }
 
-  // Wrapper Web Worker para Excel Parsing (CYPHER) con fallback en hilo principal
-  async function readPymWorkbookStream(arrayBuffer) {
+  // Wrapper Web Worker para Excel Parsing (CYPHER) con fallback en hilo principal.
+  // v18.6.0 — opts ({main, extra}) viaja con el buffer: hojas fijadas de la base única.
+  async function readPymWorkbookStream(arrayBuffer, opts) {
     if (typeof Worker === "undefined") {
-      return _readPymWorkbookStreamCore(arrayBuffer);
+      return _readPymWorkbookStreamCore(arrayBuffer, opts || null);
     }
     return new Promise((resolve, reject) => {
       let worker;
@@ -12001,6 +12077,8 @@
           ${detalleTipoCervix.toString()}
           ${findDocIdx.toString()}
           ${makeIndexer.toString()}
+          ${esAplicaPendiente.toString()}
+          ${makeProcexIndexer.toString()}
 
           ${inflateRaw.toString()}
           ${colToIdx.toString()}
@@ -12018,7 +12096,8 @@
 
           self.onmessage = async (e) => {
             try {
-              const result = await _readPymWorkbookStreamCore(e.data);
+              const d = e.data || {};
+              const result = await _readPymWorkbookStreamCore(d.buf, d.opts || null);
               self.postMessage({ type: 'done', result });
             } catch(err) {
               self.postMessage({ type: 'error', error: err.message, stack: err.stack });
@@ -12075,7 +12154,7 @@
       }, 90000); // 90s — un archivo de 14MB no debería tardar más de 30s en hardware mínimo
 
       try {
-        worker.postMessage(arrayBuffer, [arrayBuffer]);
+        worker.postMessage({ buf: arrayBuffer, opts: opts || null }, [arrayBuffer]);
       } catch (err) {
         clearTimeout(watchdog);
         URL.revokeObjectURL(workerUrl);
@@ -13999,27 +14078,24 @@
   // Dos formas de bajar un archivo por identificador (si una falla se prueba la otra).
   function spFallbackUrls(id) {
     const g = String(id || "").replace(/[{}]/g, "").toLowerCase();
-    // v18.0.5 — INCIDENTE 31-ago: las dos rutas por ID (GetFileById + download.aspx)
-    // seguían fallando con el vínculo de la carpeta regenerado. Se añade una TERCERA
-    // vía por el GUID del vínculo de compartir del archivo (shareId), que es el
-    // identificador que SharePoint usa aunque el archivo se haya movido o recompuesto.
-    // Si shareId no está configurado, la lista queda igual que antes.
-    const r = [
+    // v18.6.0 — la tercera vía por shareId se RETIRÓ: el shareId configurado apuntaba a
+    // la base de MAYO y, con la base única de septiembre, una tercera vía viva habría
+    // podido entregar el libro de un mes pasado cuando las dos por GUID fallaran. Si
+    // algún día reemplazan el archivo con otro GUID, se actualiza CONFIG.SP.base.id.
+    return [
       spBase() + "/_api/web/GetFileById('" + g + "')/$value",
       spBase() + "/_layouts/15/download.aspx?UniqueId=" + g,
     ];
-    const sid = CONFIG.SP.respaldo && CONFIG.SP.respaldo.shareId
-      ? String(CONFIG.SP.respaldo.shareId).replace(/[{}]/g, "").toLowerCase() : "";
-    if (sid && sid !== g) r.push(spBase() + "/_api/web/GetFileById('" + sid + "')/$value");
-    return r;
   }
   // v7.8: devuelve directamente el ÍNDICE ({map, todos}); nunca la tabla de filas.
-  async function readPym(name, buffer) {
+  // v18.6.0 — opts ({main, extra}) fija las hojas de la base única; la carga manual de
+  // archivos del médico («Abrir PyM») sigue sin opts (selección automática de siempre).
+  async function readPym(name, buffer, opts) {
     if (/\.csv$/i.test(name)) {
       const all = parseCSV(new TextDecoder().decode(new Uint8Array(buffer)));
       return indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15));
     }
-    const r = await readPymWorkbookStream(buffer);
+    const r = await readPymWorkbookStream(buffer, opts || null);
     state.pymHoja = r.sheetName || "";
     return { map: r.map, todos: r.todos, abandono: r.abandono };
   }
@@ -14034,7 +14110,9 @@
         onerror: () => reject(new Error("error de red/permiso")), ontimeout: () => reject(new Error("se agotó el tiempo")) });
     });
   }
-  const T_DESCARGA = 120000; // margen para la descarga: la base pesa ~14 MB
+  // v18.6.0 — la base SEPTIEMBRE1 pesa 22,5 MB (60 % más que la de mayo): el margen de
+  // 120 s pensado para ~14 MB se quedaba justo en un mal día de red de la sede.
+  const T_DESCARGA = 180000; // margen para la descarga: la base pesa ~22,5 MB
   // v7.8: ASÍNCRONA y por tandas. Antes cada pestaña interpretaba hasta 12 MB de JSON
   // de un solo golpe EN PLENA CARGA de la página (340 ms medidos en CPU rápida; segundos
   // en los equipos del consultorio, multiplicado por pestaña). Ahora: comprobación de
@@ -14090,55 +14168,86 @@
   // Avisos de progreso: que nunca parezca colgado mientras trabaja.
   function progreso(txt) { try { if (!state.pymFile) setSummary("⏳ " + txt); } catch (e) {} }
 
-  // ---- BASE PILOTO PERSISTENTE (v7.8.1, pedido explícito del programa) ----
-  // La copia INDEXADA de la piloto queda GUARDADA entre días en el almacén de
-  // Tampermonkey. Al necesitarla se muestra AL INSTANTE (sin red, sin releer 14 MB) y
-  // solo se comprueba 1-2 VECES AL DÍA (mañana/tarde, una consulta de metadatos de
-  // ~1 KB) si cambió en SharePoint. Sin red, o sin cambios: se usa SIEMPRE la última
-  // copia guardada — nunca se vuelve a pagar la descarga completa solo por rutina.
-  // El PyM del DÍA conserva su ciclo propio (cada 10 min); «Abrir PyM» manda siempre.
+  // ---- BASE ÚNICA PERSISTENTE (v18.6.0; antes "base piloto", v7.8.1) ----
+  // La copia INDEXADA de la base queda GUARDADA entre días en el almacén de
+  // Tampermonkey. Al arrancar se aplica AL INSTANTE (sin red, sin releer 22,5 MB) y se
+  // comprueba UNA vez al día — a partir de las 06:00 de Bogotá, con una consulta de
+  // metadatos de ~1 KB — si cambió en SharePoint. Sin red, o sin cambios: se usa
+  // SIEMPRE la última copia guardada. «Abrir PyM» manual sigue mandando siempre.
   let baseIntentos = 0;
   const PILOTO_KEY = "vgl_piloto", PILOTO_CHK = "vgl_piloto_chk";
-  function pilotoId() { const fb = CONFIG.SP.respaldo; return (fb && fb.id ? String(fb.id) : "").replace(/[{}]/g, "").toLowerCase(); }
+  const BASE_LOG_KEY = "vgl_base_log", BASE_LOG_MAX = 60;
+  function pilotoId() { const fb = CONFIG.SP.base; return (fb && fb.id ? String(fb.id) : "").replace(/[{}]/g, "").toLowerCase(); }
+  // Hojas fijadas de la base única: {main, extra} o null si no hay configuradas.
+  function baseSheetOpts() {
+    const b = CONFIG.SP.base || {};
+    return b.sheet ? { main: b.sheet, extra: b.sheetExtra || "" } : null;
+  }
+  // v18.6.0 — LOG DE ACTUALIZACIONES (requisito de mantenimiento del médico): cada
+  // intento deja UNA fila con fase, duración, tamaño, mtime y resultado. SIN PHI: solo
+  // métricas y motivos de fallo. Anillo de BASE_LOG_MAX filas, FIFO: se recorta en
+  // cada escritura, no satura el almacén jamás. Se lee con GM_getValue('vgl_base_log').
+  function baseLog(e) {
+    try {
+      if (typeof GM_setValue === "undefined") return;
+      const fila = Object.assign({ t: new Date().toISOString() }, e || {});
+      let arr = [];
+      try { arr = JSON.parse(GM_getValue(BASE_LOG_KEY, "[]")) || []; } catch (x) { arr = []; }
+      if (!Array.isArray(arr)) arr = [];
+      arr.push(fila);
+      if (arr.length > BASE_LOG_MAX) arr = arr.slice(arr.length - BASE_LOG_MAX);
+      GM_setValue(BASE_LOG_KEY, JSON.stringify(arr));
+    } catch (x) {}
+  }
+  // Bogotá es UTC-5 FIJO (Colombia no tiene horario de verano): el reloj de la compuerta
+  // se calcula desde UTC y NO depende del huso del equipo — un portátil en otra zona no
+  // puede adelantar ni saltarse el refresco de las 06:00.
+  function bogotaAhora() {
+    const d = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    const p = (n) => String(n).padStart(2, "0");
+    return { dia: d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()), hora: d.getUTCHours() + d.getUTCMinutes() / 60 };
+  }
+  // ¿Ya pasó la hora del refresco de hoy (06:00 Bogotá por defecto)?
+  function basePasoHoraRefresco() {
+    const hora = (CONFIG.SP.base && CONFIG.SP.base.horaRefresco) || 6;
+    return bogotaAhora().hora >= hora;
+  }
   async function pilotoDesdeCache() {
     try {
       if (typeof GM_getValue === "undefined") return false;
-      // v18.0.134 — PURGA DE LA BASE PILOTO (hallazgo A2 de la auditoría 2026-09-03):
-      // este caché (hasta 12 MB) se conservaba para siempre — solo se descartaba en
-      // silencio al fallar el desempaquetado o cambiar el id, y el paquete viejo seguía
-      // ocupando el almacén de Tampermonkey indefinidamente. Ahora se BORRA cuando: no
-      // es un paquete v3, la fecha de la cola es de hace más de 30 días, el
-      // desempaquetado falla, o el id ya no es el configurado en Ajustes. NO se purga
-      // cada día a propósito: la piloto es el respaldo para cuando la base del día aún
-      // no llega, así que vive en el almacén varias jornadas (ventana de 30 días, el
-      // mismo espíritu de la memoria clínica de vgl_cosecha con sus 120).
+      // v18.0.134 — PURGA (hallazgo A2 de la auditoría 2026-09-03): este caché (hasta
+      // 12 MB) se BORRA cuando: no es un paquete v3, la fecha de la cola es de hace más
+      // de 30 días, el desempaquetado falla, o el id ya no es el configurado (así la
+      // migración MAYO→SEPTIEMBRE purga sola la copia vieja al cambiar el GUID).
       const purgar = () => { try { GM_setValue(PILOTO_KEY, ""); } catch (e2) {} };
       const raw = GM_getValue(PILOTO_KEY, "");
       if (!raw) return false;
       if (raw.lastIndexOf('{"v":3', 0) !== 0) { purgar(); return false; }
-      // La fecha viaja al FINAL del paquete (mismo truco que loadPymFromCache): mirar la
-      // cola evita desempaquetar varios MB solo para descubrir que es de hace un mes.
+      // La fecha viaja al FINAL del paquete: mirar la cola evita desempaquetar varios
+      // MB solo para descubrir que es de hace un mes.
       const rapida = /"date":"(\d{4}-\d{2}-\d{2})"/.exec(raw.slice(-800));
       if (rapida && rapida[1] < _vglFechaHace(30)) { purgar(); return false; }
       const u = await unpackPym(raw, makeYielder(15));
       if (!u) { purgar(); return false; }               // paquete roto: nada que conservar
-      if ((u.meta.id || "") !== pilotoId()) { purgar(); return false; }   // cambió el enlace configurado en Ajustes
+      if ((u.meta.id || "") !== pilotoId()) { purgar(); return false; }   // cambió el GUID configurado
+      if (mtrLibroNoParecePym(u)) { purgar(); return false; }            // índice inválido guardado: fuera
       if (state.pymFile) return true;
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
-      state.pymFallback = true;
-      uxTrack("pym.fallback.cache");
-      afterPymLoaded((u.meta.name || "Base piloto") + " (base piloto — aún no llega la de hoy)");
+      state.pymOrigen = "base";
+      uxTrack("base.cache.ok");
+      afterPymLoaded(u.meta.name || "Base de prevención");
+      baseLog({ fase: "cache", ok: true, pacientes: u.map.size, mtime: u.meta.mtime || "" });
       return true;
     } catch (e) { return false; }
   }
   async function pilotoGuardar(idx, meta) {
     try {
       if (typeof GM_setValue === "undefined") return;
-      const txt = await packPym(idx.map, idx.todos, idx.abandono, Object.assign({ date: todayStamp(), fb: true, id: pilotoId() }, meta || {}), makeYielder(15));
+      const txt = await packPym(idx.map, idx.todos, idx.abandono, Object.assign({ date: todayStamp(), id: pilotoId() }, meta || {}), makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) GM_setValue(PILOTO_KEY, txt);
     } catch (e) {}
   }
-  // Metadatos del archivo piloto (unos bytes): saber si cambió SIN bajarlo entero.
+  // Metadatos de la base (unos bytes): saber si cambió SIN bajarla entera.
   async function pilotoMeta() {
     try {
       const j = await gmJson(spBase() + "/_api/web/GetFileById('" + pilotoId() + "')?$select=Name,TimeLastModified");
@@ -14146,21 +14255,28 @@
       return (o && o.TimeLastModified) ? { name: o.Name || "", mtime: o.TimeLastModified } : null;
     } catch (e) { return null; }
   }
-  // Revisión de frescura: como máximo UNA vez por franja (mañana / tarde) por día, y
-  // solo mientras se esté usando la piloto (si ya llegó el PyM real, no aplica).
+  // v18.6.0 — REFRESCO DIARIO ÚNICO (mandato del médico): a partir de las 06:00 de
+  // Bogotá (UTC-5 fijo) y UNA sola vez por día, se pregunta a SharePoint por el
+  // TimeLastModified del GUID (1 KB); solo si cambió se bajan los ~22,5 MB. El sello
+  // del día se pone SOLO si los metadatos respondieron: una falla de red a las 06:05
+  // reintenta en la vuelta siguiente del intervalo, no deja la copia vieja clavada.
   let pilotoChkEnCurso = false;
   async function pilotoFreshCheck() {
     try {
-      if (pilotoChkEnCurso || !S.baseAuto || !state.pymFallback || typeof GM_getValue === "undefined") return;
+      if (pilotoChkEnCurso || !S.baseAuto || typeof GM_getValue === "undefined") return;
       if (!heartbeat()) return;
-      const franja = todayStamp() + "|" + (new Date().getHours() < 12 ? "am" : "pm");
-      if (GM_getValue(PILOTO_CHK, "") === franja) return;
+      const hoy = bogotaAhora().dia;
+      if (GM_getValue(PILOTO_CHK, "") === hoy) return;   // ya se revisó hoy
+      if (!basePasoHoraRefresco()) return;               // antes de las 06:00 Bogotá: no toca
       pilotoChkEnCurso = true;
-      GM_setValue(PILOTO_CHK, franja);
+      const t0 = Date.now();
       const m = await pilotoMeta();
-      if (!m || (m.mtime && m.mtime === state.pymMTime)) return;  // sin metadatos o sin cambios: sigue la copia
-      const ok = await loadPymBaseDescarga(true, m);
-      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe descargó la lista de prevención actualizada.", false, "pilotoupd|" + franja); // [COPY-UX]
+      if (!m) { baseLog({ fase: "meta", ok: false, ms: Date.now() - t0, err: "sin metadatos" }); return; }
+      GM_setValue(PILOTO_CHK, hoy);                      // respondió: hoy queda revisado
+      baseLog({ fase: "meta", ok: true, ms: Date.now() - t0, mtime: m.mtime });
+      if (m.mtime && m.mtime === state.pymMTime) return; // sin cambios: sigue la copia
+      const ok = await loadPymBaseDescarga(true, m, true);
+      if (ok) notify("AZUL", "📋 Base de prevención actualizada", (m.name || "Base") + "\nSe descargó la versión nueva del libro de la sede.", false, "baseupd|" + hoy); // [COPY-UX]
     } catch (e) {} finally { pilotoChkEnCurso = false; }
   }
   async function loadPymBase(silent) {
@@ -14670,12 +14786,213 @@
       return "";
     } catch (e) { return ""; }
   }
+
   // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiraron
   // `otroAvisoDePacienteAbierto` y `checkRecordatorioPym`: el guard contra
   // modales superpuestos que describían (PyM/PES/labs vencidos en pantalla a
   // la vez) dejó de aplicar cuando esos tres avisos se unificaron en
   // `avisoUniversal`/`checkAvisoUniversal`, más abajo — el tick ya no llama a
   // ninguno de los dos. Ver CHANGELOG.
+
+  // =====================================================================
+  //  VGL-HC · LANZADOR ASISTIDO DE HISTORIA CLÍNICA (v18.5.1-hc + prefetch v18.5.2-hc2)
+  //  Anclas verificadas contra el bundle público real de Everest (espejo
+  //  07-sep-2026): el botón "Historias Clínicas" de Citas del día vive en
+  //  el MFE HCHealth con clase `btn btn-primary-medic` (×11 en el bundle)
+  //  y rótulo " Historias Clínicas " (×3, con espacios — icono + texto).
+  //  NO usa routerLink: navega por código (abrirHistoria) con token= e
+  //  idPaciente=, así que el único momento en que se sabe QUÉ paciente se
+  //  abre es el CLIC en la fila de la agenda.
+  //
+  //  Este módulo: (1) captura ese clic en fase de captura y anota la
+  //  cédula de la fila (hint); (2) expone hcPacienteContexto() donde el
+  //  DOM SIEMPRE manda (extractPacienteAbierto sigue siendo la verdad;
+  //  el hint solo llena el hueco de los segundos en que la historia
+  //  carga, y caduca solo); (3) pinta un chip de contexto accesible
+  //  dentro de #vgl-root con la cédula ENMASCARADA y el estado de
+  //  inasistencia reincidente (fraudWatch); (4) anuncia por aria-live
+  //  —sin decir la cédula en voz alta— cuando la historia abierta es
+  //  de un paciente con alerta de fraude; (5) v18.5.2-hc2: al capturar
+  //  el clic, hcPrefetch() precalienta en ESPECULATIVO la misma cadena
+  //  de órdenes vigentes que ya usan T6/T7 y PyM (1 intento, sin
+  //  reintentos, bajo el cortacircuitos) — el chip y el hint siguen
+  //  funcionando aunque esa red falle. El script sugiere, el médico
+  //  decide.
+  // =====================================================================
+  const VGL_HC_BTN_CLASE = "btn-primary-medic";   // bundle HCHealth main, ×11
+  const VGL_HC_BTN_TEXTO = "historias clinicas";  // ×3 en el bundle (comparado sin tildes)
+  const VGL_HC_GUARDIA_TEXTO = "consentimientos"; // botón hermano con la MISMA clase (×2): jamás confundir
+  const VGL_HC_HINT_TTL_MS = 15000;               // la historia carga en mucho menos de 15 s; luego el hint caduca
+  let _vglHcHint = null;        // { docId, ts } — última fila desde la que se lanzó la HC
+  let _vglHcListenerOk = false;
+  let _vglHcLiveUltimo = "";    // dedupe del anuncio aria-live (mensaje)
+  let _vglHcLiveDoc = "";       // dedupe del anuncio aria-live (paciente)
+
+  function _vglHcSinTildes(s) {
+    return String(s == null ? "" : s)
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  // ¿Es el botón "Historias Clínicas" de Everest? Clase del bundle real Y
+  // rótulo, o rótulo exacto como respaldo si un día retocan la clase.
+  // "Consentimientos" comparte la clase y NUNCA debe colarse.
+  function _vglEsBotonHC(b) {
+    try {
+      // tagName (y no nodeType) porque los nodos sintéticos del arnés de pruebas
+      // no definen nodeType; en el navegador closest("button") ya garantiza elemento.
+      if (!b || !b.tagName || String(b.tagName).toUpperCase() !== "BUTTON") return false;
+      const t = _vglHcSinTildes(b.textContent);
+      if (t.indexOf(VGL_HC_GUARDIA_TEXTO) !== -1) return false;
+      const porClase = !!(b.classList && b.classList.contains(VGL_HC_BTN_CLASE)) && t.indexOf(VGL_HC_BTN_TEXTO) !== -1;
+      const porTexto = t === VGL_HC_BTN_TEXTO;
+      return porClase || porTexto;
+    } catch (e) { return false; }
+  }
+  // Captura de contexto en el clic (listener en captura; barato y a prueba de todo).
+  function _vglHcCapturarClick(ev) {
+    try {
+      if (!ev || !ev.target) return;
+      const b = ev.target.closest ? ev.target.closest("button") : null;
+      if (!b || !_vglEsBotonHC(b)) return;
+      const card = b.closest ? (b.closest(".card-body") || b.closest(".card")) : null;
+      const docEl = card && card.querySelector ? card.querySelector(CONFIG.SEL.documento) : null;
+      const docId = docEl ? _vglDocCanon(docEl.textContent) : "";
+      // Sin cédula legible NO se toca el hint: nunca sobrescribir un contexto
+      // bueno con uno vacío (fallar cerrado).
+      if (docId) {
+        _vglHcHint = { docId: String(docId), ts: Date.now() };
+        hcPrefetch(docId);   // v18.5.2-hc2 — calienta la cadena mientras Everest abre la HC
+      }
+    } catch (e) {}
+  }
+  // v18.5.2-hc2 — PREFETCH AL CLIC. La cadena quedó confirmada en vivo por
+  // evidencia.har (07-sep-2026): clic → ~7 s de cascada de Everest. En ese
+  // hueco se precalienta EXACTAMENTE la misma cadena que ya usan el banner
+  // T6/T7 y el modal de órdenes PyM (apiAccesoBuscarPaciente → ordenes
+  // vigentes), así el cruce antiduplicado sale de caché cuando la HC pinte.
+  // Seguridad (todo heredado, nada inventado):
+  //   · `especulativo`: 1 intento, sin reintentos ni ruido, sujeto al
+  //     cortacircuitos de 3 fallos/5 min de pageFetchJson.
+  //   · Dedup en vuelo por GHOST.promises (misma mecánica del preparador por
+  //     hover): la misma cédula nunca genera dos prefetch simultáneos.
+  //   · Nunca se consulta órdenes con la CÉDULA: si BuscarPaciente no devuelve
+  //     el id interno, la cadena se corta (una cédula puede coincidir con el
+  //     id interno de OTRA persona — bug ya documentado en las rutas retiradas).
+  //   · Fallo total = silencio: hint y chip NO dependen de este prefetch.
+  function hcPrefetch(docId) {
+    try {
+      if (!docId) return false;
+      const doc = String(docId);
+      if (typeof apiAccesoBuscarPaciente !== "function" ||
+          typeof apiHcObtenerOrdenamientosVigentes !== "function") return false;
+      const promKey = "hcprefetch_" + doc;
+      if (GHOST.promises.has(promKey)) return false;   // ya en vuelo
+      const p = (async () => {
+        try {
+          const pid = await apiAccesoBuscarPaciente(doc, { especulativo: true });
+          if (!pid) return false;
+          await apiHcObtenerOrdenamientosVigentes(pid);  // queda en _ordenesVigentesCache (TTL 10 min)
+          return true;
+        } catch (e) { return false; }
+      })();
+      GHOST.promises.set(promKey, p);
+      setTimeout(() => { if (GHOST.promises.get(promKey) === p) GHOST.promises.delete(promKey); }, 300000);
+      return true;
+    } catch (e) { return false; }
+  }
+  // Paciente de contexto: el DOM manda; el hint es solo un puente fresco.
+  // Nunca fabrica pacientes: si no hay nada, devuelve null.
+  function hcPacienteContexto() {
+    try {
+      if (typeof seccionActiva === "function" && seccionActiva() === "historia") {
+        const dom = extractPacienteAbierto();
+        if (dom) return { docId: String(dom), origen: "dom" };
+      }
+      if (_vglHcHint && Date.now() - _vglHcHint.ts <= VGL_HC_HINT_TTL_MS) {
+        return { docId: String(_vglHcHint.docId), origen: "hint" };
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+  // ¿Este paciente tiene ALGUNA cita en fraudWatch? (claves "doc@hora")
+  function _vglHcFraude(docId) {
+    try {
+      if (!docId || !state || !state.fraudWatch) return false;
+      for (const k of state.fraudWatch) {
+        if (String(k).split("@")[0] === String(docId)) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+  // Cédula enmascarada en pantalla: ··· + últimos 4. Nunca la cédula completa
+  // en el chip (misma política que _diagValorAtributoSeguro).
+  function _vglHcMascara(docId) {
+    const s = String(docId || "");
+    return s.length <= 4 ? "···" : "···" + s.slice(-4);
+  }
+  // Chip de contexto + región aria-live, DENTRO de #vgl-root (hereda los tokens
+  // del panel; los colores van inline, literales, para no depender de var()
+  // que el CSS de Everest pueda pisar). La zona y la región viva se crean UNA
+  // vez; el chip se repinta por tick. Idempotente, cero listeners propios.
+  function hcRenderChip() {
+    try {
+      if (!_vglHcListenerOk && typeof document !== "undefined" && typeof document.addEventListener === "function") {
+        document.addEventListener("click", _vglHcCapturarClick, true);
+        _vglHcListenerOk = true;
+      }
+      const root = document.getElementById("vgl-root");
+      if (!root) return false;
+      let zona = document.getElementById("vgl-hc-zone");
+      if (!zona) {
+        zona = document.createElement("div");
+        zona.id = "vgl-hc-zone";
+        root.appendChild(zona);
+        zona.innerHTML =
+          '<div id="vgl-hc-chip" class="vgl-hc-chip" role="status" style="display:inline-flex;gap:8px;align-items:center;margin:6px 0;padding:4px 10px;border-radius:999px;background:rgba(15,23,42,.06);color:#334155 !important;font-size:12px;line-height:1.2;"></div>' +
+          '<div id="vgl-hc-live" class="vgl-hc-live" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);"></div>';
+      }
+      const chip = document.getElementById("vgl-hc-chip");
+      if (!chip) return false;
+      const ctx = hcPacienteContexto();
+      if (!ctx) { chip.innerHTML = ""; return false; }
+      const fraude = _vglHcFraude(ctx.docId);
+      const origen = ctx.origen === "dom"
+        ? '<span class="vgl-hc-chip-origen">en pantalla</span>'
+        : '<span class="vgl-hc-chip-origen">clic en agenda</span>';
+      chip.innerHTML =
+        '<span class="vgl-hc-chip-doc">HC ' + _vglHcMascara(ctx.docId) + "</span>" + origen +
+        (fraude
+          ? '<span class="vgl-hc-chip-fraude" style="color:#B91C1C !important;font-weight:600;">&#9888; inasistencia reincidente</span>'
+          : "");
+      return true;
+    } catch (e) { return false; }
+  }
+  // Anuncio accesible (una sola vez por paciente) cuando la historia abierta
+  // pertenece a un paciente con alerta de inasistencia reincidente. Sin
+  // identificadores en voz alta: la sala de espera también escucha los
+  // lectores de pantalla.
+  function hcTickVigia(docIdDock) {
+    try {
+      const live = document.getElementById("vgl-hc-live");
+      if (!live) return false;
+      const ctx = hcPacienteContexto();
+      if (!ctx || ctx.origen !== "dom") return false;
+      const docId = String(docIdDock || ctx.docId);
+      if (!_vglHcFraude(docId)) return false;
+      const msg = "Historia clínica abierta: paciente con alerta de inasistencia reincidente.";
+      if (_vglHcLiveDoc === docId && _vglHcLiveUltimo === msg) return false;
+      _vglHcLiveDoc = docId;
+      _vglHcLiveUltimo = msg;
+      live.textContent = msg;
+      return true;
+    } catch (e) { return false; }
+  }
+  // Sembrado/limpieza del hint para el banco de pruebas (fuera de producción).
+  function _vglHcSetHintParaTest(docId, haceMs) {
+    _vglHcHint = docId ? { docId: String(docId), ts: Date.now() - (haceMs || 0) } : null;
+    _vglHcLiveUltimo = "";
+    _vglHcLiveDoc = "";
+  }
 
   // ---- Color / alerta ----
   // Interpreta la hora venga como venga. La pantalla de Everest la escribe
@@ -16339,8 +16656,9 @@
     AMBAR: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
     VERDE: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>',
     AZUL: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    FUCSIA: '<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>',
   };
-  const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" };
+  const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️", FUCSIA: "🆕" };
 
   // [NT/M18] — ¿está el médico ESCRIBIENDO en la historia? (textarea/input de texto o
   // contentEditable con foco). Solo para telemetría anónima de interrupciones: nunca
@@ -16435,7 +16753,10 @@
   //  Es el orden que el resto del archivo ya usa para ordenar y para no autodescartar
   //  (ver el comentario de _renderToast: «ROJO/MORADO/ÁMBAR van al FRENTE»).
   // =====================================================================
-  const MTR_ORDEN_GRAVEDAD_COLOR = ["ROJO", "MORADO", "AMBAR", "VERDE", "AZUL"];
+  // v18.5.0 — FUCSIA entra como informativo (nivel VERDE): un toast de paciente nuevo
+  // jamás puede rebajar a ROJO/MORADO/ÁMBAR al agruparse, ni ser tratado como "color
+  // que nadie declaró" (= ROJO, lo más grave) si viaja solo en un grupo.
+  const MTR_ORDEN_GRAVEDAD_COLOR = ["ROJO", "MORADO", "AMBAR", "VERDE", "FUCSIA", "AZUL"];
   function mtrColorMasGrave(colores) {
     const lista = (Array.isArray(colores) ? colores : []).filter(Boolean);
     for (const c of MTR_ORDEN_GRAVEDAD_COLOR) {
@@ -17733,12 +18054,12 @@
     API.ultimo = Date.now();
     const currentEpoch = state.sessionEpoch;
     apiLeerAgenda().then((citas) => {
-      if (state.killed) return;   // [NT-119/M7] teardown hecho: ni avisos ni toasts póstumos (avisoPacEval consume presupuesto/marcas)
+      if (state.killed) return;   // [NT-119/M7] teardown hecho: ni avisos ni toasts póstumos (shiftNewPatientEval aprende/marca)
       if (currentEpoch !== state.sessionEpoch) return; // KR-02: Descartes de datos de ayer
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
-      // v18.1.0 — B5: el aviso de paciente nuevo se evalúa con la MISMA lectura
-      // que ya llegó (cero red extra). Fallo del eval jamás rompe el tick.
-      if (citas) { try { avisoPacEval(citas); } catch (eA) {} }
+      // v18.5.0 — el aviso de paciente nuevo EN EL TURNO se evalúa con la MISMA
+      // lectura que ya llegó (cero red extra). Fallo del eval jamás rompe el tick.
+      if (citas) { try { shiftNewPatientEval(citas); } catch (eA) {} }
     });
   }
   // v12.3.8 — BOMBA DE VENTANA CRÍTICA. Dos huecos que ningún umbral de apiCadencia()
@@ -18117,6 +18438,10 @@
         --c-labs:#818cf8;
         --c-paquete:#38bdf8;
         --c-pes:#ff9ec4;
+        /* v18.5.0 — FUCSIA, color EXCLUSIVO del aviso de «paciente nuevo en el turno»:
+           ningún otro aviso, estado ni elemento de la interfaz lo usa (verificado por
+           grep: ni #e879f9 ni 232,121,249 existen en ningún otro punto de la hoja). */
+        --c-fucsia:#e879f9;
         /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
            eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
            diferencia era la atenuación de la tarjeta completa (fácil de pasar por alto
@@ -18135,6 +18460,7 @@
         --rgb-labs:129,140,248;
         --rgb-paquete:56,189,248;
         --rgb-pes:255,158,196;
+        --rgb-fucsia:232,121,249;
         --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
         --r-chip:14px;--r-card:18px;--r-surface:22px;--r-field:14px;--r-pill:999px;
@@ -18210,6 +18536,9 @@
         --c-labs:#3730a3;
         --c-paquete:#0369a1;
         --c-pes:#9d174d;--c-atendido:#475569;
+        /* v18.5.0 — FUCSIA claro (fuchsia-800, AAA sobre cerámica) para el toast de
+           paciente nuevo: exclusivo, igual que su gemelo oscuro. */
+        --c-fucsia:#86198f;
         /* v18.0.123 (UI#5) — los canales van con sus hexadecimales: un --rgb-* que no case con
            su --c-* pinta el tinte de un color y el texto de otro. */
         --rgb-rojo:153,27,27;--rgb-morado:21,94,117;--rgb-ambar:146,64,14;
@@ -18218,6 +18547,7 @@
         --rgb-labs:55,48,163;
         --rgb-paquete:3,105,161;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
+        --rgb-fucsia:134,25,143;
         /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
            médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
            4.5). La auditoría dejó anotado que arreglarlo SOLO en .vgl-dock-toggle crearía
@@ -36147,6 +36477,9 @@
           // es el primer sospechoso del tirón periódico (barre el DOM entero y reserializa
           // el almacén de hasta 80 pacientes, cada vuelta).
           try { _rumTramo("tick.cosecha", function () { return _vglCosecharDePantalla(docId); }); } catch (e2) {}
+          // v18.5.1-hc — anuncio accesible (aria-live) del lanzador de historia
+          // clínica: una sola vez por paciente con alerta de inasistencia.
+          try { hcTickVigia(docId); } catch (e2) {}
           try { _vglVigilarTextoLibre(docId); } catch (e2) {}       // v16.3.2 — y se vigila lo que el médico escribe
           _acompTick(docId ? { doc_id: docId } : null);
         } catch (e) {}
@@ -36173,6 +36506,10 @@
       // pestaña concreta. La función es idempotente y se autolimpia sola si el médico sale
       // del módulo o cierra al paciente — igual de barata que createLabInjectorUI().
       createAccionesDockUI();
+      // v18.5.1-hc — chip de contexto del lanzador de historia clínica:
+      // idempotente, cero red, solo dentro de #vgl-root. Se llama en CADA tick
+      // porque además instala su listener de captura la primera vez.
+      try { hcRenderChip(); } catch (e) {}
 
       // v16.1.0 — REPORTE DE CAMPO: «Auto-Labs» aparecía hasta en Citas del día. Causa:
       // los botones inyectados se crean dentro de la historia y, como Everest no recarga
@@ -37788,7 +38125,7 @@
   //   · En SharePoint no hay localStorage de Everest: el padrón no es
   //     evaluable allí, así que la compuerta decide SOLO consentimiento.
   // =====================================================================
-  const TERMINOS_VERSION = "1.3";
+  const TERMINOS_VERSION = "1.4";
   const TERMINOS_GM_ACEPTA = "vgl_terminos_acepta";
   const TERMINOS_GM_RECHAZO = "vgl_terminos_rechazo";
   const TERMINOS_RECHAZO_MS = 12 * 60 * 60 * 1000;   // re-pregunta a las 12 h (2 h no, 13 h sí)
@@ -37803,7 +38140,7 @@
   // obliga a repasar esta constante Y a subir TERMINOS_VERSION (re-pregunta al médico).
   // La vinculación versión↔texto la garantiza esa prueba, no la memoria de nadie.
   const TERMINOS_TEXTO = `# Términos de uso y aviso de privacidad — Asistente Centinela
-**Versión 1.3 · 7 de septiembre de 2026**
+**Versión 1.4 · 7 de septiembre de 2026**
 
 > **Nota de estado.** Este es un borrador de trabajo redactado para decir la verdad sobre lo que el
 > programa hace. No es asesoría jurídica y no sustituye la revisión de un abogado colegiado. Los
@@ -38079,8 +38416,9 @@ la hora, y su identificador. Nada más.
    identifica solo por su hora (Ley 1581 de 2012, artículos 3 y 4).
 3. La cola temporal de avisos pendientes del navegador se guarda en su equipo SIN nombre
    ni documento del paciente, y se purga sola por tiempo.
-4. El histórico local del aviso «paciente nuevo» guarda solo documento y hora, sin
-   nombres, con purga automática a los 90 días.
+4. La lista inicial de citas de cada turno, usada solo para avisar de pacientes que
+   entran después, se guarda en su equipo con documento y hora, sin nombres, y se
+   borra sola al cambiar de turno o de día.
 5. La bitácora local de la jornada sí contiene nombres de pacientes: vive SOLO en su
    equipo, sale únicamente cuando usted exporta la bitácora, y jamás por telemetría.
 
@@ -38127,6 +38465,9 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 5. **Hecho — Versionado:** historial abajo; la versión vigente se muestra en el panel de ajustes.
 
 ### Historial de versiones
+- **1.4 · 7 de septiembre de 2026** — T-47 n.º 4: el aviso de pacientes nuevos pasa de un
+  histórico local de 90 días (retirado) a la lista inicial de cada turno; se guarda menos
+  tiempo y se borra al cambiar de turno o de día.
 - **1.3 · 7 de septiembre de 2026** — cláusula nueva de avisos y notificaciones (T-47):
   qué se muestra dentro de la página, qué no sale al sistema operativo, la cola local sin
   identificación, la purga a 90 días del histórico de pacientes nuevos y el alcance de la

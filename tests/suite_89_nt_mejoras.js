@@ -18,7 +18,7 @@ module.exports = {
   cubre: [
     "avisoUniversal", "obsPresupuestoReembolsar", "avisoOlvidar", "osNotify",
     "_notificarSistema", "_encolarAvisoPendiente", "_dispararAvisoAudible",
-    "_vglTopeHora", "maybeNotify", "avisoPacHistPodar", "muted", "_renderToast",
+    "_vglTopeHora", "maybeNotify", "shiftSweepOldBaselines", "muted", "_renderToast",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -208,14 +208,22 @@ module.exports = {
       t.cierto(wrap.children[1] && wrap.children[1].getAttribute("role") === "status", "lo rutinario sigue siendo status (polite)");
     });
 
-    // ── M21 (NT-123): purga temporal del histórico ─────────────────────
-    t.caso("M21/NT-123: el histórico de pacientes nuevos purga los ts de hace más de 90 días, aunque no esté lleno", () => {
-      const c = cargar({ silencioso: true });
-      const hoy = Date.now();
-      const docs = { viejo: hoy - 91 * 24 * 3600 * 1000, fresco1: hoy - 3600000, fresco2: hoy - 7200000 };
-      const out = c.api.avisoPacHistPodar(docs);
-      t.cierto(!!out && !("viejo" in out), "el registro de hace 91 días salió (antes vivía para siempre si el conteo no llegaba a 2000)");
-      t.cierto("fresco1" in out && "fresco2" in out, "los recientes se conservan");
+    // ── M21 (NT-123), reencaminado en v18.5.0 ──────────────────────────
+    // La purga de 90 días del histórico (v18.1.0) se retiró junto con el botón
+    // «NUEVOS»: la minimización ahora la cumple la FOTO del turno (cédula y
+    // hora, sin nombres), que se barre AL CAMBIAR DE TURNO O DE DÍA — nadie
+    // arrastra cédulas viejas en localStorage.
+    t.caso("M21/NT-123 (v18.5.0): la foto de pacientes nuevos se barre al cambiar de turno o de día", () => {
+      const almacen = {};
+      const c = cargar({ silencioso: true, almacen: almacen });
+      const hoy = c.api.todayStamp();
+      almacen["vgl_shift_base_201_2000-01-01_AM"] = JSON.stringify({ dia: "2000-01-01", turno: "AM", ts: 1, docs: { viejo: true }, avisados: {} });
+      almacen["vgl_shift_base_201_" + hoy + "_AM"] = JSON.stringify({ dia: hoy, turno: "AM", ts: Date.now(), docs: { agotado: true }, avisados: {} });
+      almacen["vgl_shift_base_201_" + hoy + "_PM"] = JSON.stringify({ dia: hoy, turno: "PM", ts: Date.now(), docs: { vivo: true }, avisados: {} });
+      c.api.shiftSweepOldBaselines(hoy, "PM");
+      t.falso(("vgl_shift_base_201_2000-01-01_AM" in almacen), "la foto de otro día salió (antes la cédula vivía hasta 90 días)");
+      t.falso(("vgl_shift_base_201_" + hoy + "_AM" in almacen), "la del turno agotado de hoy también");
+      t.cierto(("vgl_shift_base_201_" + hoy + "_PM" in almacen), "la del turno vigente se conserva");
     });
 
     // ── M16 (NT-110): contraste AAA del aviso del kill-switch ──────────
@@ -275,12 +283,14 @@ module.exports = {
     });
 
     // ── M22 (NT-124): los términos declaran el pipeline de avisos ─────
-    t.caso("M22/NT-124: TERMINOS v1.3 declara los avisos/notificaciones (T-47)", () => {
+    t.caso("M22/NT-124: TERMINOS v1.4 declara los avisos/notificaciones (T-47)", () => {
       const i = FUENTE.indexOf("### T-47");
       t.cierto(i > 0, "existe la cláusula T-47 · Avisos y notificaciones");
       const bloque = FUENTE.slice(i, i + 1200);
       t.cierto(/NO llevan nombre ni documento/.test(bloque), "declara que el SO no lleva identificación del paciente");
-      t.cierto(/90 días/.test(bloque), "declara la purga temporal del histórico local");
+      // v18.5.0 — la purga de 90 días del histórico retirado se volvió el borrado de la
+      // lista inicial de cada turno al cambiar de turno o de día (T-47 n.º 4, términos 1.4).
+      t.cierto(/al cambiar de turno o de día/.test(bloque), "declara el borrado de la lista de turno al terminar el turno o el día");
       t.cierto(/vgl_avisos_pendientes|cola temporal/.test(bloque), "declara la cola pendiente sin PHI");
       t.cierto(/bitácora local/.test(bloque), "y declara el alcance de la bitácora local");
     });

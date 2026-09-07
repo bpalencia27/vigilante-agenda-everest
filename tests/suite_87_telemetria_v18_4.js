@@ -154,5 +154,28 @@ module.exports = {
       t.igual(w.acciones["rep.fila.descartada.error"], 1, "el descarte queda contado");
       t.igual(w.acciones["rep.descarte.beacon"], 1, "y el beacon de último recurso también se ve");
     });
+
+    // =====================================================================
+    // 6. v18.4.6 — ETIQUETADO DE api.otro. La auditoría del export del 07-sep
+    // (docs/AUDITORIA_TELEMETRIA_EXPORT_20260907.md §3) contó 2.489 llamadas
+    // sin atribución: cinco endpoints que ESTE script llama de verdad y la
+    // lista no reconocía. Cada patrón es el literal del call site real.
+    // =====================================================================
+    t.caso("v18.4.6: los cinco endpoints reales que caían en api.otro llevan etiqueta propia", () => {
+      const c = cargar({ silencioso: true });
+      const L = c.api._rumEndpointLabel;
+      t.igual(L("/apiviva/APIHCHealth/api/Historicos/ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=X"), "ordenVigente");
+      t.igual(L("/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=Y"), "validacionExamenes");
+      t.igual(L("/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=Z"), "historicoSignos");
+      t.igual(L("/apiviva/APIHCHealth/api/Historicos/HistoricoMedicamentoHCM?PacienteId=N"), "historicoMedicamentos");
+      t.igual(L("/apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente"), "medicamentosPaciente");
+    });
+
+    t.caso("v18.4.6: una URL desconocida sigue siendo api.otro — la lista blanca no se relaja", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIAcceso/api/Paciente/ValidarPresupuestosPaciente"), "otro",
+        "un endpoint que solo usa la UI nativa de Everest no entra: _rumTrack solo ve nuestras llamadas");
+      t.igual(c.api._rumEndpointLabel(""), "otro");
+    });
   }
 };

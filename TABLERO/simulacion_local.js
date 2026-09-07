@@ -244,3 +244,34 @@ const get=q=>doGet({parameter:q}).t;
   if(fallos.length){console.error("FALLA alertas:",fallos.join(" | "));process.exitCode=1;}
   else console.log("alertas v18.4: TODO OK");
 })();
+
+// =====================================================================
+// v18.4.6 — DEDUP POR LOTE en armarResumen. El export real del 07-sep trajo
+// 10.042 filas de reenvío en "uso" (54 %): sin dedup, «Reportes» y «Acciones
+// de uso (ux, acum.)» del tablero de flota salían inflados ~2,2×. Aquí se
+// siembra un equipo con un lote repetido y uno único, y se comprueba la fila
+// del resumen de flota contra el .gs REAL.
+// =====================================================================
+(function pruebaResumenDedup(){
+  const fallos=[];
+  const hdUso2=hojas["uso"].d[0];
+  const filaUso2=(vals)=>{const r=[];for(let i=0;i<hdUso2.length;i++)r.push(vals[hdUso2[i]]!==undefined?vals[hdUso2[i]]:"");hojas["uso"].appendRow(r);};
+  const ventana2=(lote,n)=>filaUso2({equipo:"eq-dedup",ver:"18.4.6",lote:lote,deDia:"2026-09-07",n:n,acciones:"{}"});
+  ventana2("DX1",100);
+  ventana2("DX1",100);   // reenvío del MISMO lote (lo que el export real mostró)
+  ventana2("DX2",7);
+
+  armarResumen();
+  const rf=hojas["resumen_flota"].d;
+  const hd=rf[1];
+  const filaEq=rf.find(r=>r[0]==="eq-dedup");
+  const col=(n)=>hd.indexOf(n);
+  const acum=Number(filaEq[col("Acciones de uso (ux, acum.)")]);
+  const reportes=Number(filaEq[col("Reportes")]);
+  console.log("\n-- dedup armarResumen: acum="+acum+" (debe ser 107) · reportes="+reportes+" (debe ser 2)");
+  if(acum!==107)fallos.push("ux acum con dup: obtuvo "+acum+" (107 esperados: el reenvío del lote DX1 no debe contar)");
+  if(reportes!==2)fallos.push("reportes con dup: obtuvo "+reportes+" (2 esperados)");
+
+  if(fallos.length){console.error("FALLA dedup resumen:",fallos.join(" | "));process.exitCode=1;}
+  else console.log("dedup armarResumen v18.4.6: TODO OK");
+})();

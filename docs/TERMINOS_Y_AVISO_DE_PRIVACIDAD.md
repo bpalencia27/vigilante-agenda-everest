@@ -275,8 +275,9 @@ la hora, y su identificador. Nada más.
    identifica solo por su hora (Ley 1581 de 2012, artículos 3 y 4).
 3. La cola temporal de avisos pendientes del navegador se guarda en su equipo SIN nombre
    ni documento del paciente, y se purga sola por tiempo.
-4. El histórico local del aviso «paciente nuevo» guarda solo documento y hora, sin
-   nombres, con purga automática a los 90 días.
+4. La lista inicial de citas de cada turno, usada solo para avisar de pacientes que
+   entran después, se guarda en su equipo con documento y hora, sin nombres, y se
+   borra sola al cambiar de turno o de día.
 5. La bitácora local de la jornada sí contiene nombres de pacientes: vive SOLO en su
    equipo, sale únicamente cuando usted exporta la bitácora, y jamás por telemetría.
 
@@ -323,6 +324,9 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 5. **Hecho — Versionado:** historial abajo; la versión vigente se muestra en el panel de ajustes.
 
 ### Historial de versiones
+- **1.4 · 7 de septiembre de 2026** — T-47 n.º 4: el aviso de pacientes nuevos pasa de un
+  histórico local de 90 días (retirado) a la lista inicial de cada turno; se guarda menos
+  tiempo y se borra al cambiar de turno o de día.
 - **1.3 · 7 de septiembre de 2026** — cláusula nueva de avisos y notificaciones (T-47):
   qué se muestra dentro de la página, qué no sale al sistema operativo, la cola local sin
   identificación, la purga a 90 días del histórico de pacientes nuevos y el alcance de la
