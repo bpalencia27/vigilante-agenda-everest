@@ -481,6 +481,41 @@ module.exports = {
     });
 
     // =====================================================================
+    //  v18.4.4 — CAPACIDADES EXTRA POR MÉDICO (requerimiento del 07-sep): la
+    //  6ª columna del padrón ("caps", sembrada por el TABLERO v12.10.15)
+    //  concede permisos individuales. Hoy: `pym_opcional` = el modal Agendar
+    //  no exige programa especial/PyM (Medicina General u otra especialidad
+    //  sin RCV). Los NOMBRES de estos fixtures son SIMULADOS (cero PHI).
+    // =====================================================================
+    t.caso("v18.4.4: accesoCapExtra lee la cap individual del padrón (uid manda, nombre respalda)", () => {
+      const lista = JSON.parse(JSON.stringify(LISTA_OK));
+      lista.version = "2026-09-07.1";
+      lista.perfiles.COMPLETO.push({ uid: 105, nombre: "Medicina General Simulada", caps: ["pym_opcional"] });
+      const almacen = { vgl_acceso_lista: JSON.stringify(lista) };
+      const c = cargarCon(cargar, almacen);
+      conDoctor(c.api, 105, "Medicina General Simulada");
+      t.cierto(c.api.accesoCapExtra("pym_opcional") === true, "su entrada del padrón trae la cap");
+      t.cierto(c.api.accesoCapExtra("otra_cap") === false, "una cap que su entrada no trae es false");
+      const c2 = cargarCon(cargar, almacen);
+      conDoctor(c2.api, 0, "Eliseth Estrada");   // por NOMBRE: entrada sin caps
+      t.cierto(c2.api.accesoCapExtra("pym_opcional") === false, "una entrada sin caps no hereda nada (la exención es fila por fila)");
+      const c3 = cargarCon(cargar, listaEnStorage());
+      conDoctor(c3.api, 101, "Brandon Jesús Palencia Martínez");
+      t.cierto(c3.api.accesoCapExtra("pym_opcional") === false, "un padrón SIN la columna deja la obligatoriedad intacta: nadie más se exime");
+    });
+
+    t.caso("v18.4.4: blocklist gana SIEMPRE sobre las caps extra", () => {
+      const lista = JSON.parse(JSON.stringify(LISTA_OK));
+      lista.version = "2026-09-07.2";
+      lista.perfiles.COMPLETO.push({ uid: 106, nombre: "Revocada Simulada", caps: ["pym_opcional"] });
+      lista.blocklist.push({ uid: 106, nombre: "Revocada Simulada", motivo: "prueba" });
+      const c = cargarCon(cargar, { vgl_acceso_lista: JSON.stringify(lista) });
+      conDoctor(c.api, 106, "Revocada Simulada");
+      t.igual(c.api.accesoPerfil(), "BLOQUEADO", "precondición");
+      t.cierto(c.api.accesoCapExtra("pym_opcional") === false, "bloqueada no conserva la cap");
+    });
+
+    // =====================================================================
     //  v18.1.0 — B4: CAPA c (compuerta de escritura). La capa b decide qué
     //  se PUEDE ABRIR; esta decide qué se PUEDE ENVIAR. Los cuatro embudos
     //  de red del script (pageFetchJson, _fetchConTope, gmPostJsonEx y

@@ -304,5 +304,16 @@ module.exports = {
       const i = FUENTE.indexOf('"pymupd|" + todayStamp()');
       t.cierto(i > 0, "el uid ya no depende del hash del texto (contador cambiante = aviso nuevo sin tope)");
     });
+
+    // ── v18.4.4: permiso pym_opcional cableado en la guarda del modal ──
+    t.caso("v18.4.4: la guarda del programa en _confirmarCita consulta la exención del padrón (pym_opcional)", () => {
+      const i = FUENTE.indexOf('Elija el programa al que se carga la cita');
+      t.cierto(i > 0, "existe la guarda del programa del modal Agendar");
+      const bloque = FUENTE.slice(i - 1400, i + 200);
+      t.cierto(/_selProg\.value && !accesoCapExtra\("pym_opcional"\)/.test(bloque),
+        "la obligatoriedad solo se salta si el PADRÓN del servidor trae pym_opcional para ese médico");
+      t.cierto(/accesoCapExtra\("pym_opcional"\)/.test(FUENTE.slice(FUENTE.indexOf("const _varios = progs.length > 1;"), FUENTE.indexOf("const _varios = progs.length > 1;") + 700)),
+        "y el selector lo anuncia en pantalla (placeholder 'opcional para su perfil')");
+    });
   },
 };

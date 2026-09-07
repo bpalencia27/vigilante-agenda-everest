@@ -1,0 +1,2 @@
+[Vigilante] hora no interpretable: invalido
+[Vigilante] La tabla de festivos caducó, hay que actualizarla.

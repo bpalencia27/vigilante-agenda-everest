@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.4.3
+// @version      18.4.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1035,7 +1035,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.4.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10999,6 +10999,31 @@
     if (perfil === "COMPLETO") return true;
     if (perfil === "LABORATORIOS") return ACCESO_CAPS_LABORATORIOS.includes(cap);
     return false;
+  }
+  // v18.4.4 — CAPACIDADES EXTRA POR MÉDICO (requerimiento del 07-sep): la hoja
+  // "acceso" del tablero trae una 6ª columna con capacidades individuales
+  // (separadas por coma), y hoy existe una sola: `pym_opcional` — exime de la
+  // selección obligatoria de programa especial/PyM en el modal de Agendar a los
+  // médicos cuya especialidad NO es Riesgo Cardiovascular (p. ej. Medicina
+  // General). El flag vive SOLO en el padrón del servidor (la caché local es un
+  // espejo que el refresco de 4 h corrige): no es un toggle de consola. Mismo
+  // orden de resolución que accesoPerfil (blocklist gana SIEMPRE; uid manda
+  // sobre nombre). Sin lista o sin entrada del médico → false: quien no está
+  // en el padrón con la cap conserva la obligatoriedad.
+  function accesoCapExtra(cap) {
+    try {
+      const lista = accesoLeerLista();
+      if (!lista) return false;
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      const nombre = mtrNormalizarNombre((state && state.activeDoctor && state.activeDoctor.name) || "");
+      const porUid = (e) => Number(e.uid) === uid;
+      const porNombre = (e) => mtrNormalizarNombre(e.nombre) === nombre;
+      if ((uid && lista.blocklist.some(porUid)) || (nombre && lista.blocklist.some(porNombre))) return false;
+      const entradas = [].concat(lista.perfiles.COMPLETO || [], lista.perfiles.LABORATORIOS || []);
+      const e = (uid && entradas.find(porUid)) || (nombre && entradas.find(porNombre)) || null;
+      if (!e || !Array.isArray(e.caps)) return false;
+      return e.caps.some((c) => String(c || "").trim().toLowerCase() === String(cap || "").trim().toLowerCase());
+    } catch (eX) { return false; }
   }
   // v18.1.0 — B4 CAPA c: re-comprobación JUSTO antes de escribir. La capa
   // b decide qué se puede ABRIR; esta decide qué puede SALIR a la red. El
@@ -28801,8 +28826,13 @@
             // se cargaba a un programa que él nunca eligió y que decide de qué contrato sale.
             // Con uno solo no hay nada que preguntar y se deja como estaba.
             const _varios = progs.length > 1;
-            sel.innerHTML = (_varios ? '<option value="" selected>— elija el programa —</option>' : "")
+            // v18.4.4 — con la exención `pym_opcional` (caps extra del padrón), el
+            // placeholder y el tooltip dicen la verdad: para ese perfil el programa
+            // es opcional y la guarda de _confirmarCita no bloqueará el guardado.
+            const _progOpcional = accesoCapExtra("pym_opcional");
+            sel.innerHTML = (_varios ? `<option value="" selected>${_progOpcional ? "— programa (opcional para su perfil) —" : "— elija el programa —"}</option>` : "")
               + progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${(!_varios && i === 0) ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
+            if (_progOpcional) { try { box.title = "Para su perfil el programa es opcional (Medicina General u otra especialidad sin RCV)."; } catch (eT) {} }
             box.style.display = "block";
           }
 
@@ -30256,11 +30286,16 @@
       // no eligió, no se asigna nada. Everest exige el programa para dar el turno, y mandar uno
       // supuesto es exactamente lo que la regla del dato inventado prohíbe. Mismo patrón que la
       // guarda de la toma sin hora (v18.0.117): se enfoca, se pide, y no se inventa.
+      // v18.4.4 (requerimiento 07-sep) — EXENCIÓN POR MÉDICO: `pym_opcional` en las caps
+      // extra del padrón (hoja "acceso", 6ª columna) levanta la obligatoriedad para médicos
+      // cuya especialidad no es RCV (p. ej. Medicina General). Para todos los demás la guarda
+      // sigue intacta. El flag se re-resuelve aquí, en la capa c (justo antes de escribir):
+      // aunque alguien force el DOM, la exención solo existe si el PADRÓN del servidor la trae.
       {
         const _boxProg = modal.querySelector("#vgl-agm-prog-box");
         const _selProg = modal.querySelector("#vgl-agm-prog-sel");
         const _visible = _boxProg && (_boxProg.style ? _boxProg.style.display === "block" : false);
-        if (_visible && _selProg && !_selProg.value) {
+        if (_visible && _selProg && !_selProg.value && !accesoCapExtra("pym_opcional")) {
           try { _selProg.focus(); } catch (e) {}
           confirmBtn.textContent = "Elija el programa al que se carga la cita";
           try { uxTrack("cita.programa.sin_elegir"); } catch (e) {}

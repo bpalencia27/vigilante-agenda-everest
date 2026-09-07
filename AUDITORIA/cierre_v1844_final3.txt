@@ -1,0 +1,9 @@
+
+[36m════════════════════════════════════════════════════════════════[0m
+[36m  PRUEBAS DEL VIGILANTE DE AGENDA[0m
+[36m════════════════════════════════════════════════════════════════[0m
+  funciones alcanzables: 1282 de 1407
+
+[32m✓[0m Texto y datos del paciente                [90m54 ok[0m
+[32m✓[0m Tiempo y fechas                           [90m33 ok[0m
+[32m✓[0m Excel, caché y SharePoint                 [90m33 ok[0m

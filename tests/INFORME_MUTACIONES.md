@@ -13535,3 +13535,5 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 | user.js avisoPacHistPodar corte (M21/NT-123) | `const corte = 0` (la purga temporal de 90 d�as desaparece: c�dulas para siempre en localStorage) | NO | Ninguna: *suite_89: �M21/NT-123: el hist�rico� purga los ts de hace m�s de 90 d�as�* en rojo � mutante 19/1; restaurado 20/0 |
 | user.js muteFor sello (M4/NT-109a) | no escribir `vgl_mute_hasta` en localStorage (el silencio vuelve a ser privado de cada pesta�a) | NO | Ninguna: *suite_89: �M4/NT-109a: el silencio de una pesta�a lo ve la otra�* en rojo � mutante 19/1; restaurado 20/0 |
 | user.js _vglTopeHora (M5/NT-108) | `if (false && arr.length >= tope)` (el tope 3/hora del aviso �3+ PyM� queda anulado) | NO | Ninguna: *suite_89: �M5/NT-108: 3+ PyM avisa UNA vez por cita (silencioso), con tope 3/hora�* en rojo � mutante 19/1; restaurado 20/0 |
+| ~11004 | accesoCapExtra: return false inmediato (la cap nunca se concede) | NO | - |
+| ~30296 | guarda de _confirmarCita: quitar accesoCapExtra(pym_opcional) de la condición (!false) | NO | - |

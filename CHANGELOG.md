@@ -4,6 +4,20 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.4.4] — 2026-09-07 (Permiso individual: programa PyM opcional para Medicina General)
+
+### 🎫 `pym_opcional`: agendar sin programa especial cuando su especialidad no es RCV
+La hoja "acceso" del tablero gana una columna de capacidades individuales. Hoy existe
+una: `pym_opcional`, sembrada exclusivamente para la Dra. Gloria Alejandra Jaramillo
+Montoya (Medicina General) — su modal de **Agendar** ya no exige elegir programa
+especial/PyM (HTA, HTA+DM, Nefroprotección…) para confirmar la cita, y el selector
+lo anuncia («— programa (opcional para su perfil) —»). Para todos los demás médicos
+la obligatoriedad queda exactamente como estaba: el permiso vive solo en el padrón
+del servidor (blocklist gana siempre; reverting = borrar la celda). Pruebas de
+regresión y mutaciones en suite_78/89; detalle en `docs/CAMBIOS_permiso_pym_opcional.md`.
+
+---
+
 ## [Versión 18.3.0] — 2026-09-05 (La IA con red de seguridad, y el consentimiento antes de nada)
 
 ### 🪜 La escalera de IA (m2m)

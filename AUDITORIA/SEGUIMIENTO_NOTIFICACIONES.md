@@ -83,3 +83,5 @@ según AE-014 se mantienen en REGISTRO_ELITE.md.
 | 2026-09-07 | IMP-6 | Banco #2: 3460 ok / 5 fallan — 4 de ellos por ediciones PISADAS por el enjambre SF-## (write-back stale); re-aplicadas con verificación de 8 anclas antes/después de cada corrida |
 | 2026-09-07 | IMP-6 | Banco #4: 3463 ok / 1 falla (Regla J: `#vgl-tip-pop` migrado a var(--z-modal) rompía el conteo exacto=2; corregido a `calc(var(--z-alerta) - 1)`) |
 | 2026-09-07 | IMP-6 | **Banco FINAL (cierre_impl_nt_final.txt): 3464 pasan / 0 fallan — VERDE.** Anclas re-verificadas tras la corrida (8/8). Temporales de trabajo borrados |
+| 2026-09-07 | DEPLOY | Commit 393faaa (93 archivos) pusheado a origin/claude/sf-simulacion-flujos; gist de distribución actualizado a v18.4.4 |
+| 2026-09-07 | A24 | Requerimiento de permiso `pym_opcional` (Dra. Gloria, Medicina General): v18.4.4 + TABLERO v12.10.15 implementados; 2 mutaciones; banco v18.4.4 en corrida final |

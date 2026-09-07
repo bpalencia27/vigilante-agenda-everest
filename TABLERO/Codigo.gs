@@ -387,20 +387,21 @@ function _hojaAcceso(ss) {
     h = _hoja(ss, "acceso", hd);
     try {
       var filas = [
-        ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", ""],
-        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", ""],
-        ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", ""],
-        ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", ""],
-        ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", ""],
-        ["COMPLETO", "", "Eliseth Estrada", "activo", ""],
-        ["COMPLETO", "", "María Edineth Pino", "activo", ""],
-        ["COMPLETO", "", "Sinaí Mijares", "activo", ""],
-        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", ""],
-        ["LABORATORIOS", "", "Maryuris Terán", "activo", ""],
-        ["LABORATORIOS", "", "Daniela Zuluaga", "activo", ""],
-        ["LABORATORIOS", "", "Moisés Carpio", "activo", ""]
+        ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", "", ""],
+        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", "", ""],
+        ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", "", ""],
+        ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", "", ""],
+        ["# caps extra (v12.10.15, col 6): capacidades individuales separadas por coma. Hoy: pym_opcional = el modal Agendar NO exige programa especial/PyM (Medicina General u otra especialidad sin RCV)", "", "", "", "", ""],
+        ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", "", ""],
+        ["COMPLETO", "", "Eliseth Estrada", "activo", "", ""],
+        ["COMPLETO", "", "María Edineth Pino", "activo", "", ""],
+        ["COMPLETO", "", "Sinaí Mijares", "activo", "", ""],
+        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", "", "pym_opcional"],
+        ["LABORATORIOS", "", "Maryuris Terán", "activo", "", ""],
+        ["LABORATORIOS", "", "Daniela Zuluaga", "activo", "", ""],
+        ["LABORATORIOS", "", "Moisés Carpio", "activo", "", ""]
       ];
-      h.getRange(h.getLastRow() + 1, 1, filas.length, 5).setValues(filas);
+      h.getRange(h.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);
     } catch (e) {}
   }
   return h;
