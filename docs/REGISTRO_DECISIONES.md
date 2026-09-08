@@ -14,8 +14,14 @@ una corrección es una fila nueva.
 | 2026-09-07 | Entrega | ¿Commitear/publicar gist? | **NO commitear aún** — el médico no lo ha ordenado; el árbol queda listo | No commitear | — |
 | 2026-09-07 | Alcance | ¿Las 3 fallas preexistentes (suites 79/82/87)? | **No tocarlas**: probadas preexistentes con `git stash` (trabajo v18.5.2 en curso de la otra sesión); se documentan, no se corrigen aquí | No tocar | — |
 | 2026-09-07 | Entrega | ¿Commitear/publicar v18.6.0? | **SÍ, ordenado y ejecutado**: commit `309f984` en `claude/sf-simulacion-flujos` (+push) y Gist `d231aab6f54de51a5c472b392aac1b91` (gistfile1.txt) verificado **byte a byte** — SHA-256 `b8cf6406acef5d63a51a27aaabbf72e39d580a30604b64e919b9640269203dfa` local ≡ remoto, `@version 18.6.0`. Banco 3542/3542 (97 suites). Corrige la fila anterior «no commitear». NOTA posterior: las 3 fallas heredadas SÍ se cerraron antes de commitear (orden del médico de publicar en verde): etiquetas suite 87, portada Términos 1.4 suite 82, doctor en 2ª pestaña suite 79 | — | `309f984` |
+| 2026-09-07 | F1/Anexo 5 | ¿Qué columnas alimenta el indexador y con qué forma? | 26 columnas de las 38 (las que el aviso consume: programa, control, 9 metas con su fecha de toma por emparejamiento de nombre tolerante a typos, TFG, estadio, EKG, 4 remisiones, 6 valores de contexto); salida compacta `{prog,ctrl,suma,tfg,est,ekg,rem,m[9][pts,fecha],v[6]}` en mapa APARTE (`state.pymAnexo5`, NO fusionado en `todos`) | — | pendiente (v18.6.1 sin commitear) |
 
 ## Supuestos activos (pendientes de confirmación del propietario)
+
+- **F2/regla (b)**: «estudios pendientes» aplicará SOLO a metas con columna de fecha de
+  toma en el libro (glicemia, LDL, HDL, triglicéridos, microalbuminuria, HbA1c) + EKG;
+  TA/IMC/circunferencia se miden en consulta y NO se marcan como estudio pendiente
+  (sus puntos viajan al contexto). Es interpretación del mandato §O2.2(b) — confirmar.
 
 - **Ninguno bloqueante** en v18.6.0: las tres preguntas de diseño fueron respondidas en vivo.
 - Menor, documentado en la auditoría (H6): el riesgo de chip obsoleto por filas multi-día
