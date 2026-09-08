@@ -293,7 +293,7 @@ module.exports = {
 
     // ---------- baseSheetOpts: las hojas fijadas ----------
     t.caso("baseSheetOpts: de fábrica fija la hoja de citas y la de tamizaciones (PROCEXDT)", () => {
-      t.igual(api.baseSheetOpts(), { main: "citas dia regional", extra: "PROCEXDT" });
+      t.igual(api.baseSheetOpts(), { main: "citas dia regional", extra: "PROCEXDT", anexo5: "ANEXO" });
     });
 
     t.caso("baseSheetOpts: sin hoja configurada devuelve null (selección automática); sin extra queda vacío, no undefined", () => {
@@ -301,7 +301,7 @@ module.exports = {
       c.api.__CONFIG.SP.base = { id: GUID };               // sin .sheet
       t.igual(c.api.baseSheetOpts(), null);
       c.api.__CONFIG.SP.base = { id: GUID, sheet: "OTRA HOJA" };
-      t.igual(c.api.baseSheetOpts(), { main: "OTRA HOJA", extra: "" });
+      t.igual(c.api.baseSheetOpts(), { main: "OTRA HOJA", extra: "", anexo5: "" });
     });
 
     // ---------- parseSpDocId (se conserva del flujo viejo: sigue sirviendo ----------
@@ -383,13 +383,14 @@ module.exports = {
     });
 
     // ---------- pilotoGuardar: empaqueta y persiste en el almacén GM ----------
-    await t.casoAsync("pilotoGuardar: guarda el paquete v3 con id y fecha del día y sobrevive el viaje de ida y vuelta", async () => {
+    await t.casoAsync("pilotoGuardar: guarda el paquete v4 (Anexo 5) con id y fecha del día y sobrevive el viaje de ida y vuelta", async () => {
       const c = cargar({ silencioso: true });
       const mapa = new Map([["111", ["Tamización de VIH"]], ["222", ["Valoración integral de salud", "Tamización de VIH"]]]);
       await c.api.pilotoGuardar({ map: mapa, todos: new Set(["111", "222"]), abandono: new Set(["222"]) }, { name: "N.xlsx", mtime: "M1" });
       const crudo = c.env.gm["vgl_piloto"];
-      t.cierto(typeof crudo === "string" && crudo.lastIndexOf('{"v":3', 0) === 0, "el paquete debe empezar por el prefijo v3");
+      t.cierto(typeof crudo === "string" && crudo.lastIndexOf('{"v":4', 0) === 0, "v18.6.1: el paquete debe empezar por el prefijo v4 (con campo a5 del Anexo 5)");
       const o = JSON.parse(crudo);
+      t.igual(o.a5, "", "sin índice Anexo 5 el campo viaja vacío, no ausente");
       t.igual(o.id, GUID, "lleva el id de la base para invalidar la copia si cambia el GUID configurado");
       t.igual(o.date, c.api.todayStamp());
       t.igual(o.name, "N.xlsx");

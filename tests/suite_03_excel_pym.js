@@ -450,8 +450,8 @@ module.exports = {
       t.falso(api.esXlsxCifrado(new Uint8Array([0xD0, 0xCF]).buffer), "menos de 8 bytes no alcanzan ni para la firma");
     });
 
-    // ---------- packPym / unpackPym: el formato v3 del caché (sobrevivió) ----------
-    await t.casoAsync("packPym comprime y unpackPym expande los mapas de PyM (ida y vuelta v3)", async () => {
+    // ---------- packPym / unpackPym: el formato del caché (v4 desde 18.6.1; v3 se acepta) ----------
+    await t.casoAsync("packPym comprime y unpackPym expande los mapas de PyM (ida y vuelta v4 con Anexo 5)", async () => {
       const map = new Map();
       map.set("5150076", ["Mamografía", "PSA (antígeno de próstata)"]);
       map.set("99887766", ["Mamografía"]);
@@ -461,7 +461,8 @@ module.exports = {
 
       const packed = await api.packPym(map, todos, abandono, meta);
       t.cierto(typeof packed === "string");
-      t.cierto(packed.lastIndexOf('{"v":3', 0) === 0, "el paquete v3 empieza por su prefijo: lo primero que mira pilotoDesdeCache");
+      t.cierto(packed.lastIndexOf('{"v":4', 0) === 0, "v18.6.1: el paquete v4 empieza por su prefijo: lo primero que mira pilotoDesdeCache");
+      t.cierto(JSON.parse(packed).a5 === "", "sin Anexo 5 el campo viaja vacío, no ausente");
 
       const u = await api.unpackPym(packed);
       t.cierto(u !== null);

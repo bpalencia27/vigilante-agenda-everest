@@ -29,6 +29,7 @@ module.exports = {
   cubre: [
     "_vglEsBotonHC", "_vglHcCapturarClick", "hcPacienteContexto", "_vglHcFraude",
     "hcRenderChip", "hcTickVigia", "_vglHcSetHintParaTest", "hcPrefetch",
+    "vglSerialAFecha", "vglSerialHoy", "a5AlertasDe", "hcAnexo5Render",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -270,6 +271,104 @@ module.exports = {
       await new Promise((r) => setTimeout(r, 30)); // margen para que un hipotético 2do eslabón se delate
       t.cierto(urls.length >= 1, "la búsqueda sí se hizo (se leyó el dato)");
       t.cierto(urls.every((u) => u.indexOf("ObtenerOrdenamientoPorPacienteIdVigente") === -1), "sin id interno NO se piden órdenes: la cadena se corta");
+    });
+
+    // =====================================================================
+    //  v18.6.1 (F2, delegación v2 §O2.3) — AVISO DEL ANEXO 5 AL ABRIR LA HC
+    //  4 alertas + contexto, cédula enmascarada, una vez por paciente,
+    //  aria-live sin cédula, cierre manual que respeta el turno.
+    // =====================================================================
+    const HOY_S = 46270;   // serial Excel de referencia (46269 = 04-sep-2026)
+    const REC_A5 = {
+      prog: "HTA+DM", ctrl: HOY_S - 200, suma: 58, tfg: 42.5, est: 3, ekg: 0,
+      rem: ["Nutrición", "Odontología"],
+      m: [[0, 0], [10, HOY_S - 30], [10, HOY_S - 30], [10, HOY_S - 30], [0, HOY_S - 10], [0, 0], [10, 0], [10, 0], [10, 0]],
+      v: [138, 84, 102, 7.2, 112, 98],
+    };
+    const EST_A5 = (rec, conPES) => ({
+      pymAnexo5: new Map([["1018888777", rec || REC_A5]]),
+      pymAbandono: new Set(conPES ? ["1018888777"] : []),
+    });
+
+    t.caso("F2/vglSerialAFecha: serial Excel → dd/mm/aaaa (base 1899-12-30, verificada)", () => {
+      t.igual(api.vglSerialAFecha(46269), "04/09/2026", "el serial de referencia del libro real");
+      t.igual(api.vglSerialAFecha(1), "31/12/1899");
+      t.igual(api.vglSerialAFecha(0), "", "0 = sin fecha: casilla vacía antes que 30/12/1899 inventado");
+      t.igual(api.vglSerialAFecha(""), "");
+      t.cierto(api.vglSerialHoy() > 46000, "el serial de hoy es del rango 2026");
+    });
+
+    t.caso("F2/a5AlertasDe: las CUATRO alertas con el reloj inyectado", () => {
+      const r = api.a5AlertasDe("1.018.888.777", EST_A5(), HOY_S);
+      t.cierto(!!r, "el paciente está en el Anexo 5");
+      t.cierto(!!r.abandono && r.abandono.sinControl && !r.abandono.pes, "abandono por regla del libro: >183 días sin control");
+      t.igual(r.pendientes, ["EKG (sin realizar)", "Glicemia en ayunas", "Hemoglobina glucosilada (HbA1c)"],
+        "EKG sin fecha + metas 0 puntos SIN fecha (la de 0 con fecha NO cuenta)");
+      t.igual(r.remitir, ["Nutrición", "Odontología"]);
+      t.igual(r.suma, 58);
+      t.falso(r.cumpleSuma, "58 < 75");
+      t.igual(r.contexto.ta, "138/84", "contexto: TA sistólica/diastólica");
+      t.igual(r.contexto.rac, 0, "RAC sin puntos (pendiente) con fecha aparte");
+      // Abandono por PES aunque el control sea reciente.
+      const recAlDia = Object.assign({}, REC_A5, { ctrl: HOY_S - 10 });
+      const r2 = api.a5AlertasDe("1018888777", EST_A5(recAlDia, true), HOY_S);
+      t.cierto(!!r2.abandono && r2.abandono.pes && !r2.abandono.sinControl, "abandono por Abandonados_PES de la hoja regional");
+      // Cumple metas.
+      const recCumple = Object.assign({}, REC_A5, { ctrl: HOY_S - 10, suma: 80 });
+      const r3 = api.a5AlertasDe("1018888777", EST_A5(recCumple), HOY_S);
+      t.falso(!!r3.abandono, "control reciente y sin PES: sin alerta de abandono");
+      t.cierto(r3.cumpleSuma, "80 ≥ 75");
+      // Paciente fuera del Anexo 5 → null (sin dato, sin mentira).
+      t.igual(api.a5AlertasDe("999", EST_A5(), HOY_S), null);
+    });
+
+    t.caso("F2/hcAnexo5Render: panel DENTRO de #vgl-root con las 4 alertas, cédula enmascarada y cierre que respeta el turno", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
+      c.api.__state.pymAbandono = EST_A5().pymAbandono;
+      t.cierto(c.api.hcAnexo5Render() === true, "con la HC abierta por DOM y dato del Anexo 5, el panel se pinta");
+      const panel = c.env.doc.getElementById("vgl-a5-panel");
+      t.cierto(!!panel && panel._parent && panel._parent.id === "vgl-root", "vive dentro de #vgl-root");
+      t.cierto(panel.innerHTML.indexOf("Anexo 5 · HTA+DM") >= 0, "título con el programa");
+      t.cierto(panel.innerHTML.indexOf("···8777") >= 0, "cédula enmascarada ···+4");
+      t.falso(panel.innerHTML.indexOf("1.018.888.777") >= 0 && panel.innerHTML.indexOf("C.C.") < 0, "la cédula completa jamás");
+      t.cierto(panel.innerHTML.indexOf("ABANDONO DEL PROGRAMA") >= 0, "alerta (a)");
+      t.cierto(panel.innerHTML.indexOf("Estudios pendientes de ordenar") >= 0, "alerta (b)");
+      t.cierto(panel.innerHTML.indexOf("Consultas por remitir") >= 0, "alerta (c)");
+      t.cierto(panel.innerHTML.indexOf("Puntaje de metas: 58/75") >= 0, "alerta (d)");
+      t.cierto(panel.innerHTML.indexOf("más de 6 meses sin control (último: " + api.vglSerialAFecha(HOY_S - 200) + ")") >= 0, "la fecha de control en dd/mm/aaaa");
+      const live = c.env.doc.getElementById("vgl-a5-live");
+      t.cierto(!!live && live.getAttribute("aria-live") === "polite", "región aria-live propia");
+      t.cierto(live.textContent.indexOf("Anexo 5 abierto") === 0, "el anuncio nombra las alertas");
+      t.falso(live.textContent.indexOf("8777") >= 0, "y NUNCA la cédula (PHI acústico)");
+      const antes = live.textContent;
+      c.api.hcAnexo5Render();                                   // segunda vuelta del tick
+      t.igual(live.textContent, antes, "una sola vez por paciente: el lector no repite");
+      // Cierre manual: el médico manda.
+      const btn = panel.querySelector("[data-a5-cerrar]");
+      t.cierto(!!btn && btn._listeners && btn._listeners.click && btn._listeners.click.length === 1, "el botón de cierre escucha el clic");
+      btn._listeners.click[0]();
+      t.cierto(!c.env.doc.getElementById("vgl-a5-panel"), "cerrar quita el panel");
+      t.cierto(c.api.hcAnexo5Render() === false, "y no vuelve a aparecer para ese paciente en este turno");
+    });
+
+    t.caso("F2/hcAnexo5Render: sin HC abierta por DOM, o sin dato del Anexo 5, no hay panel", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 98.765.432.109</div></app-index>');
+      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;             // el dato es de OTRO paciente
+      t.cierto(c.api.hcAnexo5Render() === false, "paciente sin registro en el Anexo 5: sin panel, sin mentira");
+      const c2 = montar(AGENDA);                                 // origen hint (clic), HC aún no abierta
+      c2.api._vglHcSetHintParaTest("1018888777");
+      c2.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
+      t.cierto(c2.api.hcAnexo5Render() === false, "el aviso exige la historia ABIERTA (origen dom), no el clic");
+    });
+
+    t.caso("F2: el tick llama al aviso junto al chip (el hook no se pierde por carreras de edición)", () => {
+      const i = FUENTE.indexOf("try { hcRenderChip(); } catch");
+      t.cierto(i > 0, "el hook del chip existe");
+      t.cierto(FUENTE.indexOf("try { hcAnexo5Render(); } catch", i) > 0 && FUENTE.indexOf("try { hcAnexo5Render(); } catch", i) < i + 120,
+        "el aviso del Anexo 5 cuelga del MISMO tick, inmediatamente después del chip");
     });
   },
 };

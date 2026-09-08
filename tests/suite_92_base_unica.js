@@ -279,7 +279,7 @@ module.exports = {
 
     t.caso("pilotoId/baseSheetOpts/spBase: identidad normalizada y hojas fijadas de fábrica", () => {
       t.igual(api.pilotoId(), GUID_BASE);
-      t.igual(api.baseSheetOpts(), { main: "citas dia regional", extra: "PROCEXDT" });
+      t.igual(api.baseSheetOpts(), { main: "citas dia regional", extra: "PROCEXDT", anexo5: "ANEXO" });
       t.igual(api.spBase(), SP_BASE_URL);
       const c = cargar({ silencioso: true });
       c.api.__CONFIG.SP.base = null;
@@ -372,6 +372,125 @@ module.exports = {
       t.igual(ix.map.size, 2);
       t.igual(Array.from(ix.todos).sort(), ["4455667", "5150076"]);
       t.falso("abandono" in ix, "la hoja de tamizaciones no tiene abandono PES: ese concepto vive en la principal");
+    });
+
+    // =====================================================================
+    //  F1 (v18.6.1) — ANEXO 5: indexador de metas RCV con los TYPOS del libro
+    //  real («PISCOLOGIA», «HEMOBLOBINA_GLICOSILADA», «MICROALBU/CREATINURIA1»,
+    //  «FECHA_MICROALBU/CREATINURIA1» sin DE_TOMA, «Fecha Ultimo Control
+    //  (Médico)», «PLANI?»). Columnas en orden REVUELTO para obligar al
+    //  emparejamiento por nombre, no por posición.
+    // =====================================================================
+    const ENC_A5 = [
+      "Numero Documento", "SUMA_METAS", "Fecha Ultimo Control (Médico)", "PISCOLOGIA", "CUMPLE_GLICEMIA",
+      "FECHA_DE_TOMA_GLICEMIA", "HEMOBLOBINA_GLICOSILADA", "FECHA_DE_TOMA_GLICOSILADA", "CUMPLE_MICROALBUMINURIA",
+      "MICROALBU/CREATINURIA1", "FECHA_MICROALBU/CREATINURIA1", "NUTRICION", "PLANI?", "ODONTOLOGIA",
+      "EKG", "TFG_DEL_ULTIMO_CONTROL", "ESTADIO_ACTUAL_DE_NEFROPROTECCION", "Programa Actual",
+      "TENSION_ARTERIAL_SISTOLICA1", "TENSION_ARTERIAL_DIASTOLICA1", "CIRCUNFERENCIA_ABDOMINAL1",
+      "COLESTEROL_LDL1", "GLICEMIA1", "CUMPLE_HEMOGLOBINA_GLICOSILADA", "Estudiado para ERC", "clasificacion",
+    ];
+    function filaA5(vals) {
+      // vals: array alineado con ENC_A5; los strings van inlineStr, los números sin tipo.
+      const celdas = vals.map((v, i) => {
+        const ref = String.fromCharCode(65 + (i % 26)) + ((i >= 26 ? 1 : 0) ? "A" + String.fromCharCode(65 + i - 26) : "1");
+        return null; // placeholder (se construye abajo con refs reales)
+      });
+      let out = "";
+      vals.forEach((v, i) => {
+        const col = i < 26 ? String.fromCharCode(65 + i) : "A" + String.fromCharCode(65 + i - 26);
+        const ref = col + "2";
+        out += (typeof v === "string" && v !== "")
+          ? '<c r="' + ref + '" t="inlineStr"><is><t>' + v + "</t></is></c>"
+          : '<c r="' + ref + '"><v>' + v + "</v></c>";
+      });
+      return "<row r=\"2\">" + out + "</row>";
+    }
+    function hojaAnexo5() {
+      const enc = ENC_A5.map((h, i) => {
+        const col = i < 26 ? String.fromCharCode(65 + i) : "A" + String.fromCharCode(65 + i - 26);
+        return '<c r="' + col + '1" t="inlineStr"><is><t>' + h + "</t></is></c>";
+      }).join("");
+      // 5150076: fila completa (PROGRAMA, control 45900, suma 58, TFG 42.5, estadio 3,
+      // EKG VACÍO (=no realizado), PLANI?+NUTRICION+ODONTOLOGIA en REMITIR (PISCOLOGIA no),
+      // glicemia 10 pts con fecha 46100, HbA1c 0 pts SIN fecha, micro 0 pts con fecha 46090.
+      const r1 = filaA5(["5150076", "58", "45900", "Ya va", "10", "46100", "7.2", "", "0", "25", "46090",
+        "REMITIR", "REMITIR", "REMITIR", "", "42.5", "3", "HTA+DM", "138", "84", "102", "112", "98", "0", "No estudiado", "Cumple Metas"]);
+      // 7000001: paciente que SOLO vive en el Anexo 5 (no está en citas ni PROCEX).
+      const r2 = "<row r=\"3\">" + '<c r="A3"><v>7000001</v></c><c r="B3"><v>90</v></c><c r="R3" t="inlineStr"><is><t>HTA</t></is></c>' + "</row>";
+      return "<worksheet><sheetData><row r=\"1\">" + enc + "</row>" + r1 + r2 + "</sheetData></worksheet>";
+    }
+    function libroConAnexo5() {
+      return crearZipPrueba({
+        "xl/workbook.xml": '<workbook><sheets><sheet name="CITASDIA AGOSTO" sheetId="1" r:id="rId1"/><sheet name="CITAS DIA  REGIONAL" sheetId="2" r:id="rId2"/><sheet name="PROCEXDT" sheetId="3" r:id="rId3"/><sheet name="ANEXO 5 JULIO" sheetId="4" r:id="rId4"/></sheets></workbook>',
+        "xl/_rels/workbook.xml.rels": '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Target="worksheets/sheet4.xml"/></Relationships>',
+        "xl/sharedStrings.xml": XML_SST,
+        "xl/worksheets/sheet1.xml": hojaAgosto(),
+        "xl/worksheets/sheet2.xml": hojaRegional(),
+        "xl/worksheets/sheet3.xml": hojaProcex(),
+        "xl/worksheets/sheet4.xml": hojaAnexo5(),
+      });
+    }
+
+    await t.casoAsync("F1/Anexo 5: el core indexa la TERCERA hoja con los typos del libro real (emparejamiento por nombre, no posición)", async () => {
+      const c = cargar({ silencioso: true });
+      const res = await c.api._readPymWorkbookStreamCore(libroConAnexo5(), { main: "citas dia regional", extra: "PROCEXDT", anexo5: "ANEXO" });
+      t.igual(res.sheetAnexo5, "ANEXO 5 JULIO", "la hoja se encuentra por substring del config");
+      t.igual(res.anexo5Docs, 2, "dos pacientes del programa indexados");
+      const a = res.anexo5.get("5150076");
+      t.cierto(!!a, "el paciente de citas está en el Anexo 5");
+      t.igual(a.prog, "HTA+DM");
+      t.igual(a.ctrl, 45900, "fecha de último control como serial Excel (la conversión a fecha es cosa del aviso)");
+      t.igual(a.suma, 58);
+      t.igual(a.tfg, 42.5);
+      t.igual(a.est, 3);
+      t.igual(a.ekg, 0, "EKG vacío = no realizado (serial 0)");
+      t.igual(a.rem, ["Nutrición", "Planificación familiar", "Odontología"], "REMITIR en orden de columna: NUTRICION, PLANI?, ODONTOLOGIA; PISCOLOGIA («Ya va») no cuenta");
+      t.igual(a.m[0], [10, 46100], "GLICEMIA: 10 puntos con fecha de toma");
+      t.igual(a.m[4], [0, 46090], "MICROALBUMINURIA: 0 puntos, fecha de la columna con typo FECHA_MICROALBU/CREATINURIA1");
+      t.igual(a.m[5], [0, 0], "HBA1C: 0 puntos y SIN fecha (FECHA_DE_TOMA_GLICOSILADA, sin HEMO — el typo del libro)");
+      t.igual(a.v, [138, 84, 102, 7.2, 112, 98], "valores de contexto: TA s/d, circunferencia, HbA1c, LDL, glicemia");
+      t.falso(res.todos.has("7000001"), "el paciente SOLO del Anexo 5 NO entra en todos: la tarjeta no puede decir «al día» por estar en el programa");
+      t.cierto(res.anexo5.has("7000001"), "pero sí está en su propio mapa para el aviso");
+    });
+
+    await t.casoAsync("F1/Anexo 5: el mapa viaja en el paquete v4 y sobrevive descarga→caché→recarga", async () => {
+      const cont = contadorBase();
+      cont.bufFn = libroConAnexo5;
+      const c = cargar({ silencioso: true, gmxhr: gmxhrBase(cont) });
+      t.cierto(await c.api.loadPymBase(true), "descarga e instala la base");
+      t.cierto(c.api.__state.pymAnexo5.size === 2, "state.pymAnexo5 poblado desde el lector");
+      const crudo = String(c.env.gm["vgl_piloto"] || "");
+      t.cierto(crudo.lastIndexOf('{"v":4', 0) === 0, "paquete v4 en el almacén");
+      t.cierto(/"a5":"\{/.test(crudo), "el campo a5 lleva el JSON del Anexo 5");
+      // Recarga en frío (segundo cargar simulando otra pestaña al día siguiente de
+      // caché): el almacén GM del arnés es un closure por cargar, así que se comparte
+      // la clave a mano — exactamente lo que Tampermonkey comparte de verdad.
+      const c2 = cargar({ silencioso: true, gmxhr: gmxhrBase(cont) });
+      c2.env.gm["vgl_piloto"] = crudo;
+      t.cierto(await c2.api.pilotoDesdeCache(), "la caché v4 se acepta");
+      t.igual(c2.api.__state.pymAnexo5.size, 2, "y el Anexo 5 se restaura completo");
+      t.igual(c2.api.__state.pymAnexo5.get("5150076").suma, 58, "campo a campo");
+    });
+
+    await t.casoAsync("F1/Anexo 5: paquete v3 de AYER (sin a5) se acepta con Anexo 5 vacío — el aviso degrada, no rompe", async () => {
+      const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_piloto"] = JSON.stringify({
+        v: 3, labels: ["VIH"], p: "5150076:0", t: "5150076", ab: "",
+        date: ayer, name: "VIEJA.xlsx", mtime: "T0", fp: "VIEJA.xlsx|T0", id: GUID_BASE,
+      });
+      t.cierto(await c.api.pilotoDesdeCache(), "el v3 viejo sigue vivo");
+      t.igual(c.api.__state.pym.size, 1, "el índice PyM sí se aplica");
+      t.igual(c.api.__state.pymAnexo5.size, 0, "el Anexo 5 llega vacío: sin dato, sin mentira");
+    });
+
+    await t.casoAsync("F1/Anexo 5: libro SIN hoja ANEXO → todo sigue igual y el mapa queda vacío", async () => {
+      const c = cargar({ silencioso: true });
+      const res = await c.api._readPymWorkbookStreamCore(libroBase(), c.api.baseSheetOpts());
+      t.igual(res.sheetAnexo5, "", "sin hoja no hay nombre");
+      t.igual(res.anexo5Docs, 0);
+      t.igual(res.anexo5.size, 0);
+      t.cierto(res.todos.size >= 3, "la regional+PROCEX siguen intactas");
     });
 
     t.caso("mtrLibroNoParecePym/esLibroValido/esXlsxCifrado: los guardianes de integridad básicos", () => {
@@ -576,7 +695,7 @@ module.exports = {
 
       // La caché persistente quedó lista para el próximo arranque sin red.
       const crudo = String(c.env.gm["vgl_piloto"] || "");
-      t.cierto(crudo.lastIndexOf('{"v":3', 0) === 0, "paquete v3");
+      t.cierto(crudo.lastIndexOf('{"v":4', 0) === 0, "paquete v4 (v18.6.1)");
       const u = await c.api.unpackPym(crudo, null);
       t.igual(u.meta.mtime, "T1");
       t.igual(u.meta.id, GUID_BASE, "lleva el id: si mañana cambian el GUID, la copia se purga sola");
@@ -674,7 +793,7 @@ module.exports = {
       t.igual(c.api.__state.pymOrigen, "base");
       t.igual(c.api.__state.pymMTime, "T1");
       t.igual(cont.descargasOk, 1, "solo cuenta la exitosa");
-      t.cierto(String(c.env.gm["vgl_piloto"] || "").lastIndexOf('{"v":3', 0) === 0, "y ahora sí quedó copia para mañana");
+      t.cierto(String(c.env.gm["vgl_piloto"] || "").lastIndexOf('{"v":4', 0) === 0, "y ahora sí quedó copia para mañana (v4)");
       t.igual(c.api.__state.pymUltimoFallo, "", "cargó bien: el motivo viejo no se queda colgado");
     });
 

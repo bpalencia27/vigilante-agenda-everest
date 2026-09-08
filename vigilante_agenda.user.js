@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.6.0
+// @version      18.6.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1036,7 +1036,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8465,6 +8465,11 @@
       citaDetalleHoy(docId) ? "REC" : "",   // v17.1.0 (#147) — si aparece el radicado, el dock se repinta
       colapsado ? "c" : "", isLight() ? "L" : "D", S.agendamientoRapido !== false ? "A" : "",
       citaReal ? "R" : "n",
+      // v18.6.1 (F3): el toggle de agendar entra en la firma — sin esto, el
+      // re-pintado en caliente que lanza togSet() lo bloquea la guarda v14.2.0
+      // (misma firma → return) y el botón Agendar no reaparece al encenderlo
+      // hasta que cambie OTRA pieza (docId, cita, resumen…).
+      togActiva("tog_agendar") ? "TA" : "ta",
       // v17.5.0 — la compuerta del Panel del paciente: si el resumen termina de calcularse o
       // el médico documenta el factor que faltaba, esto cambia y el dock debe repintarse
       // para reflejarlo (aparecer el botón). El botón se OCULTA hasta cumplir requisitos,
@@ -8516,7 +8521,8 @@
       // v17.x.x — REFACTOR S+ (30-ago): los no autorizados solo agendan la TOMA DE
       // MUESTRAS (openLabSoloModal); la cita de control general y su recordatorio
       // quedan ocultos para ellos.
-      if (_autorizado || soloFaltaLab) {
+      // v18.6.1 (F3): capa b — el botón ni se crea si el toggle está apagado.
+      if ((_autorizado || soloFaltaLab) && togActiva("tog_agendar")) {
       const bAg = document.createElement("button");
       bAg.className = "vgl-dock-btn" + (soloFaltaLab ? " vgl-dock-btn-ambar" : "");
       bAg.setAttribute("data-accion", "agendar");
@@ -8556,6 +8562,8 @@
           if (citaDetalleHoy(docId)) { uxTrack("widget.recordatorio.abrir"); abrirRecordatorioCita(apt); return; }
           uxTrack("widget.agendar.reabrir"); openAgendamientoModal(apt); return;   // v18.0.114: sin radicado guardado, se vuelve al módulo
         }
+        // v18.6.1 (F3): sub-toggle labs — el dock también lo respeta (doble capa).
+        if (togActiva("tog_agendar_labs")) { uxTrack("widget.agendar.soloLabsToggle"); openLabSoloModal(apt); return; }
         uxTrack(soloFaltaLab ? "widget.agendar.sololab" : "widget.agendar.abrir");
         soloFaltaLab ? openLabSoloModal(apt) : openAgendamientoModal(apt);
       });
@@ -9775,6 +9783,56 @@
   // CHANGELOG.
 
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
+
+  // =====================================================================
+  //  v18.6.1 (F3, delegación v2 §O3) — TOGGLES DE FUNCIONALIDAD
+  //  ------------------------------------------------------------------
+  //  Registro central + API + persistencia POR USUARIO. La clave de ajustes
+  //  (vgl_cfg) es GLOBAL del navegador: los toggles viven en su propia clave
+  //  por uid (vgl_tog_<uid>, mismo mecanismo readJSON/writeJSON) para que dos
+  //  médicos del mismo equipo no se pisen. Sin identidad resuelta → defaults
+  //  (todo activo SALVO los restrictivos con `defecto: false`, que nacen
+  //  apagados: su activación LIMITA el flujo histórico y solo debe ocurrir
+  //  por decisión explícita del médico). Fail-open SOLO para claves
+  //  inexistentes en el registro.
+  //  Jerarquía: un sub-toggle solo está activo si su padre lo está.
+  // =====================================================================
+  const VGL_TOGGLES = [
+    { k: "tog_agendar", label: "Módulo de agendamiento", desc: "Botón 📅 Agendar del dock y su cuadro (cita de control y toma de muestras)." },
+    { k: "tog_agendar_labs", label: "Solo toma de muestras", desc: "Dentro de Agendar: limitar EXCLUSIVAMENTE a la programación de estudios de laboratorio. Criterio derivado del propio flujo: el modal de solo-labs que ya usan los perfiles no autorizados (openLabSoloModal).", sub: "tog_agendar", defecto: false },
+    { k: "tog_pacientes", label: "Panel del paciente", desc: "Ficha clínica, resumen y riesgo cardiovascular del paciente (botón del dock)." },
+    { k: "tog_laboratorios", label: "Laboratorios", desc: "Panel de administración de laboratorios (botón 🧪 del dock)." },
+    { k: "tog_notif", label: "Notificaciones", desc: "Sistema de avisos universales del asistente (prevención, abandono, laboratorios)." },
+    { k: "tog_anexo5", label: "Aviso del Anexo 5", desc: "Panel de estado del programa RCV al abrir la historia clínica.", sub: "tog_notif" },
+    { k: "tog_hc_chip", label: "Chip de contexto de la HC", desc: "Chip con cédula enmascarada y origen del contexto al abrir la historia clínica." },
+  ];
+  function _togUid() {
+    try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
+  }
+  function togActiva(k) {
+    try {
+      const def = VGL_TOGGLES.find((x) => x.k === k);
+      if (!def) return true;                        // clave inexistente: fail-open documentado
+      const uid = _togUid();
+      if (!uid) return def.defecto !== false;       // sin identidad: defaults (todo activo)
+      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      let act = (k in mapa) ? !!mapa[k] : (def.defecto !== false);
+      if (act && def.sub && !togActiva(def.sub)) act = false;   // el padre manda
+      return act;
+    } catch (e) { return true; }
+  }
+  function togSet(k, on) {
+    try {
+      const uid = _togUid();
+      if (!uid) return false;                       // sin identidad no se persiste nada
+      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      mapa[k] = !!on;
+      writeJSON("vgl_tog_" + uid, mapa);
+      uxTrack("tog." + k + "." + (on ? "on" : "off"));
+      try { createAccionesDockUI(); } catch (e2) {}   // re-pintado en caliente del dock
+      return true;
+    } catch (e) { return false; }
+  }
   // v18.0.87 — AUDITORÍA (hallazgo de enjambre #39): si vgl_cfg queda corrupto (JSON
   // parcial — cierre abrupto del navegador, disco lleno), safeReadJSON ya lo pone en
   // cuarentena, pero S vuelve a los valores de FÁBRICA en SILENCIO: sin aviso, y sin
@@ -10271,6 +10329,9 @@
         // Hoja secundaria (tamizaciones): CERVIX/MAMA/PSA/SOMF con vocabulario
         // «Aplica Cobertura/Fenix …» = pendiente (opción B confirmada por el médico).
         sheetExtra: "PROCEXDT",
+        // v18.6.1 (F1) — TERCERA hoja: el Anexo 5 (metas RCV/estadio/remisiones). Se
+        // busca por substring: el libro real la trae como «ANEXO 5 JULIO» (mes corrido).
+        sheetAnexo5: "ANEXO",
         // v18.0.5 legado: la tercera vía por shareId se RETIRA — el shareId viejo apuntaba
         // a la base de MAYO y bajaría datos de un mes pasado si las dos vías por GUID
         // fallaran. Para el archivo nuevo las dos vías por id bastan; si algún día se
@@ -10374,6 +10435,8 @@
 
   const rawState = {
     pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymHoja: "",
+    // v18.6.1 (F1) — Anexo 5: estado del programa RCV por paciente (mapa APARTE de pym).
+    pymAnexo5: new Map(),
     // v18.6.0 — origen de la carga activa: "base" (la base única, por caché o descarga)
     // o "manual" («Abrir PyM»). Reemplaza a pymFallback/pymDia, que existían para el
     // extinto archivo diario.
@@ -11798,6 +11861,99 @@
       },
     };
   }
+  // v18.6.1 (F1, delegación v2 §O2) — INDEXADOR DEL ANEXO 5: metas RCV, estadio renal,
+  // remisiones y último control del programa. La hoja real («ANEXO 5 JULIO», 38 columnas)
+  // respeta los typos del libro: «PISCOLOGIA», «HEMOBLOBINA_GLICOSILADA»,
+  // «MICROALBU/CREATINURIA1», «FECHA_MICROALBU/CREATINURIA1» (sin DE_TOMA),
+  // «Fecha Ultimo Control (Médico)» — todo verificado contra el libro real
+  // (AUDITORIA/INFORME_BASE_PILOTO_SEP_20260907.md §2 + _audit_base_sep_raw.txt).
+  //
+  // POR QUÉ UN MAPA APARTE (y no fusionado en state.pym): el Anexo 5 describe el estado
+  // del PROGRAMA del paciente, no actividades pendientes de hoy. Un paciente que SOLO
+  // está en el Anexo 5 no puede salir como «Al día · sin PyM pendiente» en la tarjeta:
+  // `todos` sigue significando «la base de citas/tamizaciones lo conoce». El aviso del
+  // Anexo 5 (F2) consulta este mapa por separado.
+  //
+  // Salida por documento (compacta para el paquete v4):
+  //   { prog, ctrl:<serial|0>, suma, tfg, est:<1-5|0>, ekg:<serial|0>,
+  //     rem:["Nutrición",…], m:[[pts,fecha]×9 en orden FIJO], v:[sis,dia,ca,a1c,ldl,glu] }
+  // m: orden fijo = GLICEMIA, LDL, HDL, TRIGLICÉRIDOS, MICROALBUMINURIA, HBA1C, TA, IMC,
+  //    CIRCUNFERENCIA — cada una [puntos, fechaToma serial|0]. Las tres últimas no
+  //    tienen columna de fecha en el libro real: fecha siempre 0 (se miden en consulta).
+  // Serial Excel: días desde 1899-12-30 (46269 = 04-sep-2026, verificado).
+  function makeAnexo5Indexer(headersRaw) {
+    const crudos = headersRaw || [];
+    const headers = Array.from({ length: crudos.length }, (_, i) => (crudos[i] == null || crudos[i] === "" ? `COL_${i}` : String(crudos[i]).trim().toUpperCase()));
+    const docIdx = findDocIdx(headers);
+    if (docIdx < 0) throw new Error("No se encontró la columna con la identificación del paciente. Verifique el formato de la lista cargada.");
+    const _n = (h) => stripAccents(String(h)).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const norm = headers.map(_n);
+    const num = (v) => { const s = String(v == null ? "" : v).trim(); if (!s) return 0; const x = Number(s); return isFinite(x) ? x : 0; };
+    // Columnas escalares.
+    const cProg = norm.findIndex((x) => x === "PROGRAMA_ACTUAL");
+    const cCtrl = norm.findIndex((x) => x.indexOf("FECHA_ULTIMO_CONTROL") === 0);
+    const cSuma = norm.findIndex((x) => x === "SUMA_METAS");
+    const cTfg = norm.findIndex((x) => x === "TFG_DEL_ULTIMO_CONTROL");
+    const cEst = norm.findIndex((x) => x === "ESTADIO_ACTUAL_DE_NEFROPROTECCION");
+    const cEkg = norm.findIndex((x) => x === "EKG");
+    // Remisiones: valor «REMITIR» (insensible a mayúsculas/acentos).
+    const REM_LABEL = { PLANI: "Planificación familiar", NUTRICION: "Nutrición", PISCOLOGIA: "Psicología", ODONTOLOGIA: "Odontología" };
+    const colsRem = [];
+    norm.forEach((x, i) => {
+      if (i === docIdx) return;
+      if (x === "PLANI" || x.indexOf("PLANI_") === 0) colsRem.push([i, REM_LABEL.PLANI]);
+      else if (x === "NUTRICION") colsRem.push([i, REM_LABEL.NUTRICION]);
+      else if (x === "PISCOLOGIA" || x === "PSICOLOGIA") colsRem.push([i, REM_LABEL.PISCOLOGIA]);
+      else if (x === "ODONTOLOGIA") colsRem.push([i, REM_LABEL.ODONTOLOGIA]);
+    });
+    // Las 9 metas: columna CUMPLE_<clave> (puntos) + columna de fecha de toma por
+    // substring (el libro varía: FECHA_DE_TOMA_GLICEMIA, FECHA_DE_TOMA_GLICOSILADA —sin
+    // HEMO—, FECHA_MICROALBU_CREATINURIA1 —sin DE_TOMA—). Claves de emparejamiento
+    // elegidas para NO cruzarse entre sí.
+    const METAS = [
+      ["GLICEMIA", "GLICEMIA"], ["COLESTEROL_LDL", "COLESTEROL_LDL"], ["COLESTEROL_HDL", "COLESTEROL_HDL"],
+      ["TRIGLICERIDOS", "TRIGLICERIDOS"], ["MICROALBUMINURIA", "MICROALBU"], ["HEMOGLOBINA_GLICOSILADA", "GLICOSILADA"],
+      ["TENSION_ARTERIAL", "@TA"], ["INDICE_DE_MASA_CORPORAL", "@IMC"], ["CIRCUNFERENCIA_ABDOMINAL", "@CA"],
+    ];
+    const colsMeta = METAS.map(([cumple, fechaClave]) => {
+      let cPts = -1, cFecha = -1;
+      norm.forEach((x, i) => {
+        if (i === docIdx) return;
+        if (x === "CUMPLE_" + cumple) cPts = i;
+        if (fechaClave.charAt(0) !== "@" && x.indexOf("FECHA") === 0 && x.indexOf(fechaClave) >= 0) cFecha = i;
+      });
+      return [cPts, cFecha];
+    });
+    // Últimos valores (contexto del aviso): TA s/d, circunferencia, HbA1c, LDL, glicemia.
+    const cSis = norm.findIndex((x) => x === "TENSION_ARTERIAL_SISTOLICA1");
+    const cDia = norm.findIndex((x) => x === "TENSION_ARTERIAL_DIASTOLICA1");
+    const cCa = norm.findIndex((x) => x === "CIRCUNFERENCIA_ABDOMINAL1");
+    const cA1c = norm.findIndex((x) => x === "HEMOBLOBINA_GLICOSILADA" || x === "HEMOGLOBINA_GLICOSILADA1" || x === "HEMOGLOBINA_GLICOSILADA_1");
+    const cLdl = norm.findIndex((x) => x === "COLESTEROL_LDL1");
+    const cGlu = norm.findIndex((x) => x === "GLICEMIA1");
+    const map = new Map();
+    const todos = new Set();
+    return {
+      map, todos,
+      push(row) {
+        const docKey = normalizeKey(row[docIdx]); if (!docKey) return;
+        todos.add(docKey);
+        const rem = [];
+        colsRem.forEach(([i, label]) => { if (stripAccents(String(row[i] == null ? "" : row[i])).trim().toUpperCase() === "REMITIR" && rem.indexOf(label) < 0) rem.push(label); });
+        const m = colsMeta.map(([cPts, cFecha]) => [cPts >= 0 ? num(row[cPts]) : 0, cFecha >= 0 ? num(row[cFecha]) : 0]);
+        const v = [cSis >= 0 ? num(row[cSis]) : 0, cDia >= 0 ? num(row[cDia]) : 0, cCa >= 0 ? num(row[cCa]) : 0, cA1c >= 0 ? num(row[cA1c]) : 0, cLdl >= 0 ? num(row[cLdl]) : 0, cGlu >= 0 ? num(row[cGlu]) : 0];
+        map.set(docKey, {
+          prog: cProg >= 0 ? String(row[cProg] == null ? "" : row[cProg]).trim().slice(0, 24) : "",
+          ctrl: cCtrl >= 0 ? num(row[cCtrl]) : 0,
+          suma: cSuma >= 0 ? num(row[cSuma]) : 0,
+          tfg: cTfg >= 0 ? num(row[cTfg]) : 0,
+          est: cEst >= 0 ? num(row[cEst]) : 0,
+          ekg: cEkg >= 0 ? num(row[cEkg]) : 0,
+          rem: rem, m: m, v: v,
+        });
+      },
+    };
+  }
   // Lee el libro en STREAMING y devuelve el ÍNDICE ya construido (v7.8):
   // { headers, map, todos, sheetName, rowCount, sheets }. La elección de hoja sigue
   // siendo por muestra barata; la lectura completa va fila a fila: parsear -> indexar
@@ -11832,7 +11988,7 @@
     // de 12 hojas de septiembre el puntaje elegía «CITASDIA AGOSTO» (histórico, 400
     // puntos) y moría en 0 pacientes (auditoría H1): fijar la fuente es la corrección.
     const _normHoja = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
-    let elegida = null, extraHoja = null;
+    let elegida = null, extraHoja = null, anexoHoja = null;
     if (opts && opts.main) {
       const patron = _normHoja(opts.main);
       const hit = hojas.find((h) => _normHoja(h.name) === patron) || hojas.find((h) => _normHoja(h.name).indexOf(patron) >= 0);
@@ -11843,6 +11999,12 @@
       if (opts.extra) {
         const pe = _normHoja(opts.extra);
         extraHoja = hojas.find((h) => h !== hit && _normHoja(h.name).indexOf(pe) >= 0) || null;
+      }
+      // v18.6.1 (F1) — tercera hoja: Anexo 5 (metas del programa). Ausente → sigue sin
+      // ella (regalo: la regional manda; el aviso de F2 simplemente no tendrá datos).
+      if (opts.anexo5) {
+        const pa = _normHoja(opts.anexo5);
+        anexoHoja = hojas.find((h) => h !== hit && (!extraHoja || h !== extraHoja) && _normHoja(h.name).indexOf(pa) >= 0) || null;
       }
     } else {
       cand.sort((a, b) => b.sc.score - a.sc.score);
@@ -11899,13 +12061,27 @@
         });
       } catch (e) { /* la hoja extra es un REGALO: si no se puede leer, la principal manda */ }
     }
+    // v18.6.1 (F1) — Anexo 5: mapa APARTE (ver el comentario de makeAnexo5Indexer: sus
+    // documentos NO se fusionan en `todos` a propósito — no son "al día en PyM" por
+    // estar en el programa). Ausente o ilegible → mapa vacío y sigue.
+    let anexo5 = new Map(), anexo5Docs = 0;
+    if (anexoHoja) {
+      const scA = scPorHoja.get(anexoHoja.name);
+      const hrA = scA && scA.headerRow >= 0 ? scA.headerRow : 0;
+      progreso("Leyendo «" + anexoHoja.name + "» (Anexo 5)…");
+      try {
+        const a5 = await streamSheet(anexoHoja.path, hrA, makeAnexo5Indexer);
+        anexo5 = a5.indexer.map;
+        anexo5Docs = anexo5.size;
+      } catch (e) { /* regalo: sin Anexo 5 el aviso de F2 queda sin datos, lo demás sigue */ }
+    }
     // Guardián de índice vacío (auditoría H8): con hoja fijada, un libro que no produce
     // NI UN paciente no se instala — antes eso se cacheaba en silencio y el panel quedaba
     // todo el día en «sin registro en PyM» sin error visible.
     if (opts && opts.main && !indexer.todos.size) {
       throw new Error("el libro no produjo ningún paciente (hoja «" + elegida.h.name + "» vacía o sin identificaciones legibles)");
     }
-    return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, sheetName: elegida.h.name, sheetExtra: extraHoja ? extraHoja.name : "", extraDocs, rowCount: principal.nRow, sheets: hojas.map((x) => x.name) };
+    return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, anexo5: anexo5, sheetName: elegida.h.name, sheetExtra: extraHoja ? extraHoja.name : "", extraDocs, sheetAnexo5: anexoHoja ? anexoHoja.name : "", anexo5Docs, rowCount: principal.nRow, sheets: hojas.map((x) => x.name) };
   }
 
   // Wrapper Web Worker para Excel Parsing (CYPHER) con fallback en hilo principal.
@@ -11954,6 +12130,7 @@
           ${makeIndexer.toString()}
           ${esAplicaPendiente.toString()}
           ${makeProcexIndexer.toString()}
+          ${makeAnexo5Indexer.toString()}
 
           ${inflateRaw.toString()}
           ${colToIdx.toString()}
@@ -12120,7 +12297,7 @@
   //  (medido con la réplica de la base piloto). Empaquetar y desempaquetar
   //  ceden el hilo por tandas: ninguna pestaña se congela por la caché.
   // =====================================================================
-  async function packPym(map, todos, abandono, meta, maybeYield) {
+  async function packPym(map, todos, abandono, meta, maybeYield, anexo5) {
     const labels = []; const lidx = new Map();
     const parts = new Array(map.size); let n = 0;
     for (const [k, arr] of map) {
@@ -12140,11 +12317,17 @@
     // v7.8.1: cédulas con Abandonados_PES="Si" (riesgo cardiovascular) — clave "ab".
     const ab = Array.from(abandono || []).join(",");
     if (maybeYield) await maybeYield();
-    return JSON.stringify(Object.assign({ v: 3, labels, p, t, ab }, meta || {}));
+    // v18.6.1 (F1) — Anexo 5: mapa aparte doc→{prog,ctrl,suma,…}. JSON directo (los
+    // objetos son diminutos y el dominio de claves son cédulas ya normalizadas).
+    const a5 = (anexo5 && anexo5.size) ? JSON.stringify(Object.fromEntries(anexo5)) : "";
+    if (maybeYield) await maybeYield();
+    return JSON.stringify(Object.assign({ v: 4, labels, p, t, ab, a5: a5 }, meta || {}));
   }
   async function unpackPym(txt, maybeYield) {
     const o = JSON.parse(txt);
-    if (o.v !== 3) return null;                       // formato viejo: se descarta
+    // v18.6.1: v4 trae el Anexo 5 ("a5"); los v3 viejos (sin el campo) se aceptan tal
+    // cual — el mapa sale vacío y el aviso de F2 queda sin datos, no roto.
+    if (o.v !== 4 && o.v !== 3) return null;          // formato más viejo: se descarta
     const labels = o.labels || [];
     const map = new Map();
     const parts = o.p ? o.p.split("|") : [];
@@ -12163,7 +12346,15 @@
     const abandono = new Set();
     const ab = o.ab ? o.ab.split(",") : [];
     for (let i = 0; i < ab.length; i++) { if (ab[i]) abandono.add(ab[i]); if (maybeYield && (i & 8191) === 0) await maybeYield(); }
-    return { map, todos, abandono, meta: o };
+    const anexo5 = new Map();
+    if (o.a5 && typeof o.a5 === "string" && o.a5.length) {
+      try {
+        const obj = JSON.parse(o.a5);
+        for (const k of Object.keys(obj || {})) anexo5.set(k, obj[k]);
+      } catch (e) { /* a5 corrupto: mapa vacío, lo demás del paquete sigue vivo */ }
+      if (maybeYield) await maybeYield();
+    }
+    return { map, todos, abandono, anexo5, meta: o };
   }
 
   // v7.8: se aplica un ÍNDICE ya construido ({map, todos, abandono}) — el lector en
@@ -12182,6 +12373,7 @@
     try { _saludMarca("pym", true); } catch (e) {}   // v15.8.0 (N2) — la lista de prevención cargó bien
     state.pym = idx.map; state.pymTodos = idx.todos;
     state.pymAbandono = idx.abandono || new Set();
+    state.pymAnexo5 = idx.anexo5 || new Map();  // v18.6.1: mapa aparte (carga manual → vacío)
     state.pymMTime = mtime || "";
     // La huella usa el nombre CRUDO del archivo (sin las etiquetas que se le añaden para
     // mostrar), para que coincida con lo que devuelve SharePoint en la siguiente ronda.
@@ -13734,7 +13926,8 @@
     }
     const r = await readPymWorkbookStream(buffer, opts || null);
     state.pymHoja = r.sheetName || "";
-    return { map: r.map, todos: r.todos, abandono: r.abandono };
+    state.pymHojaAnexo5 = r.sheetAnexo5 || "";
+    return { map: r.map, todos: r.todos, abandono: r.abandono, anexo5: r.anexo5 || new Map() };
   }
   // Tiempo de espera POR LLAMADA: los listados deben rendirse rápido (si SharePoint no
   // responde en 12 s, no va a responder) para no dejar al usuario mirando un panel quieto;
@@ -13799,10 +13992,10 @@
   const PILOTO_KEY = "vgl_piloto", PILOTO_CHK = "vgl_piloto_chk";
   const BASE_LOG_KEY = "vgl_base_log", BASE_LOG_MAX = 60;
   function pilotoId() { const fb = CONFIG.SP.base; return (fb && fb.id ? String(fb.id) : "").replace(/[{}]/g, "").toLowerCase(); }
-  // Hojas fijadas de la base única: {main, extra} o null si no hay configuradas.
+  // Hojas fijadas de la base única: {main, extra, anexo5} o null si no hay configuradas.
   function baseSheetOpts() {
     const b = CONFIG.SP.base || {};
-    return b.sheet ? { main: b.sheet, extra: b.sheetExtra || "" } : null;
+    return b.sheet ? { main: b.sheet, extra: b.sheetExtra || "", anexo5: b.sheetAnexo5 || "" } : null;
   }
   // v18.6.0 — LOG DE ACTUALIZACIONES (requisito de mantenimiento del médico): cada
   // intento deja UNA fila con fase, duración, tamaño, mtime y resultado. SIN PHI: solo
@@ -13854,7 +14047,8 @@
       const purgar = () => { try { GM_setValue(PILOTO_KEY, ""); } catch (e2) {} };
       const raw = GM_getValue(PILOTO_KEY, "");
       if (!raw) return false;
-      if (raw.lastIndexOf('{"v":3', 0) !== 0) { purgar(); return false; }
+      // v18.6.1: el prefijo rápido admite v4 (Anexo 5) y v3 (paquetes de ayer, sin a5).
+      if (raw.lastIndexOf('{"v":3', 0) !== 0 && raw.lastIndexOf('{"v":4', 0) !== 0) { purgar(); return false; }
       // La fecha viaja al FINAL del paquete: mirar la cola evita desempaquetar varios
       // MB solo para descubrir que es de hace un mes.
       const rapida = /"date":"(\d{4}-\d{2}-\d{2})"/.exec(raw.slice(-800));
@@ -13864,7 +14058,7 @@
       if ((u.meta.id || "") !== pilotoId()) { purgar(); return false; }   // cambió el GUID configurado
       if (mtrLibroNoParecePym(u)) { purgar(); return false; }            // índice inválido guardado: fuera
       if (state.pymFile) return true;
-      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymAnexo5 = u.anexo5 || new Map(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymOrigen = "base";
       uxTrack("base.cache.ok");
       // v18.6.0 (revisión adversarial): el camino de caché es el PRINCIPAL de cada
@@ -13879,7 +14073,7 @@
   async function pilotoGuardar(idx, meta) {
     try {
       if (typeof GM_setValue === "undefined") return;
-      const txt = await packPym(idx.map, idx.todos, idx.abandono, Object.assign({ date: todayStamp(), id: pilotoId() }, meta || {}), makeYielder(15));
+      const txt = await packPym(idx.map, idx.todos, idx.abandono, Object.assign({ date: todayStamp(), id: pilotoId() }, meta || {}), makeYielder(15), idx.anexo5 || null);
       if (txt.length <= 12 * 1024 * 1024) GM_setValue(PILOTO_KEY, txt);
     } catch (e) {}
   }
@@ -13956,12 +14150,12 @@
       if (!S.baseAuto || typeof GM_getValue === "undefined") return;
       if (!state.pymFile || state.pymOrigen !== "base") return;
       const raw = GM_getValue(PILOTO_KEY, "");
-      if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return;
+      if (!raw || (raw.lastIndexOf('{"v":3', 0) !== 0 && raw.lastIndexOf('{"v":4', 0) !== 0)) return;
       const cola = /"mtime":"([^"]{10,40})"/.exec(raw.slice(-800));
       if (!cola || cola[1] === state.pymMTime) return;
       const u = await unpackPym(raw, makeYielder(15));
       if (!u || (u.meta.id || "") !== pilotoId()) return;
-      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set();
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymAnexo5 = u.anexo5 || new Map();
       state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       afterPymLoaded(u.meta.name || "Base de prevención");
       baseLog({ fase: "sincronia", ok: true, pacientes: u.map.size, mtime: state.pymMTime });
@@ -14075,7 +14269,7 @@
     uxTrack("base.descarga.ok");
     uxTrack("base.descarga.ms." + (msDesc < 30000 ? "30s" : msDesc < 60000 ? "60s" : msDesc < 120000 ? "120s" : "lenta"));
     uxTrack("base.indice.pacientes." + (state.pym.size < 100 ? "x100" : state.pym.size < 1000 ? "x1k" : "x10k"));
-    baseLog({ fase: "indice", ok: true, ms: msIndice, pacientes: idx.map.size, todos: idx.todos.size, mtime: (meta && meta.mtime) || "" });
+    baseLog({ fase: "indice", ok: true, ms: msIndice, pacientes: idx.map.size, todos: idx.todos.size, anexo5: idx.anexo5 ? idx.anexo5.size : 0, mtime: (meta && meta.mtime) || "" });
     if (!viaRefresh) {
       notify("AZUL", "📋 Base de prevención cargada", nombreReal + "\n" + state.pym.size + " paciente(s) con actividades. Fuente única: el libro de la sede — se refresca a las 06:00 y a las 12:00.", false, "basecarga|" + todayStamp()); // [COPY-UX]
     }
@@ -14491,6 +14685,9 @@
       }
       const chip = document.getElementById("vgl-hc-chip");
       if (!chip) return false;
+      // v18.6.1 (F3): toggle del chip. El listener de captura sigue vivo (alimenta el
+      // prefetch, que es independiente); solo se apaga el PINTADO.
+      if (!togActiva("tog_hc_chip")) { chip.innerHTML = ""; return false; }
       const ctx = hcPacienteContexto();
       if (!ctx) { chip.innerHTML = ""; return false; }
       const fraude = _vglHcFraude(ctx.docId);
@@ -14522,6 +14719,153 @@
       _vglHcLiveDoc = docId;
       _vglHcLiveUltimo = msg;
       live.textContent = msg;
+      return true;
+    } catch (e) { return false; }
+  }
+  // =====================================================================
+  //  v18.6.1 (F2, delegación v2 §O2.3) — AVISO DEL ANEXO 5 AL ABRIR LA HC
+  //  ------------------------------------------------------------------
+  //  Con la HC abierta (origen "dom" del contexto, FICHA 5) y el paciente
+  //  presente en state.pymAnexo5, un panel DENTRO de #vgl-root resume el
+  //  estado del programa con las CUATRO alertas exigidas: (a) abandono
+  //  (>183 días sin control —regla del propio libro— MÁS Abandonados_PES de
+  //  la hoja regional), (b) estudios pendientes de ordenar (EKG sin fecha +
+  //  metas de laboratorio con 0 puntos y sin fecha de toma), (c) consultas
+  //  por remitir (PLANI?/NUTRICION/PISCOLOGIA/ODONTOLOGIA = REMITIR) y
+  //  (d) puntaje total de metas contra el mínimo 75 (afirmación del
+  //  propietario; SUPUESTO ACTIVO en docs/REGISTRO_DECISIONES.md por lo de
+  //  TA/IMC/circunferencia). Reglas del proyecto: informativo, cero
+  //  escritura; cédula enmascarada ···+4 en pantalla y AUSENTE del aria-live
+  //  (la sala escucha los lectores); cierre manual que respeta el turno.
+  // =====================================================================
+  function vglSerialAFecha(serial) {
+    const n = Number(serial);
+    if (!isFinite(n) || n <= 0) return "";
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 86400000);
+    const p = (x) => String(x).padStart(2, "0");
+    return p(d.getUTCDate()) + "/" + p(d.getUTCMonth() + 1) + "/" + d.getUTCFullYear();
+  }
+  function vglSerialHoy() { return Math.floor((Date.now() - Date.UTC(1899, 11, 30)) / 86400000); }
+  const A5_MIN_SUMA = 75;            // mínimo del programa (afirmación del propietario)
+  const A5_DIAS_ABANDONO = 183;      // «más de 6 meses sin control» — regla del libro
+  const A5_METAS_LAB = ["Glicemia en ayunas", "Colesterol LDL", "Colesterol HDL", "Triglicéridos", "Microalbuminuria/creatininuria (RAC)", "Hemoglobina glucosilada (HbA1c)"];
+  // PURA (para el banco): recibe el estado (pymAnexo5/pymAbandono) y el reloj como
+  // serial de hoy; devuelve las alertas y el contexto, o null si el paciente no
+  // figura en el Anexo 5.
+  function a5AlertasDe(docId, est, hoySerial) {
+    const e = est || {};
+    const k = normalizeKey(docId);
+    if (!k) return null;
+    const a = (e.pymAnexo5 && e.pymAnexo5.get) ? e.pymAnexo5.get(k) : null;
+    if (!a) return null;
+    const hoy = typeof hoySerial === "number" ? hoySerial : vglSerialHoy();
+    const enPES = !!(e.pymAbandono && e.pymAbandono.has && e.pymAbandono.has(k));
+    const sinControl = a.ctrl > 0 && (hoy - a.ctrl) > A5_DIAS_ABANDONO;
+    const pendientes = [];
+    if (!a.ekg) pendientes.push("EKG (sin realizar)");
+    for (let i = 0; i < A5_METAS_LAB.length && i < (a.m || []).length; i++) {
+      const par = a.m[i] || [0, 0];
+      if (!par[0] && !par[1]) pendientes.push(A5_METAS_LAB[i]);
+    }
+    const m = a.m || [];
+    const v = a.v || [0, 0, 0, 0, 0, 0];
+    return {
+      docKey: k, prog: a.prog || "programa RCV",
+      abandono: (sinControl || enPES) ? { sinControl: sinControl, pes: enPES, ultimo: a.ctrl } : null,
+      pendientes: pendientes, remitir: (a.rem || []).slice(),
+      suma: Number(a.suma) || 0, cumpleSuma: (Number(a.suma) || 0) >= A5_MIN_SUMA,
+      contexto: {
+        fechaControl: a.ctrl || 0, tfg: a.tfg || 0, estadio: a.est || 0,
+        ta: (v[0] && v[1]) ? v[0] + "/" + v[1] : "", circ: v[2] || 0, a1c: v[3] || 0,
+        ldl: v[4] || 0, glu: v[5] || 0, rac: m[4] ? m[4][0] : 0, racFecha: m[4] ? m[4][1] : 0,
+        ekg: a.ekg || 0,
+      },
+    };
+  }
+  let _vglA5Cerrados = new Set();    // docs cuyo panel cerró el médico (respeta el turno)
+  let _vglA5Anunciado = "";          // último doc anunciado por aria-live (1×/paciente)
+  // Render por tick (idempotente, como el chip): solo con HC abierta por DOM y dato del Anexo 5.
+  function hcAnexo5Render() {
+    try {
+      const root = document.getElementById("vgl-root");
+      if (!root) return false;
+      // v18.6.1 (F3): sub-toggle del sistema de notificaciones (el padre manda).
+      if (!togActiva("tog_notif") || !togActiva("tog_anexo5")) { const ap = document.getElementById("vgl-a5-panel"); if (ap) ap.remove(); return false; }
+      const ctx = hcPacienteContexto();
+      if (!ctx || ctx.origen !== "dom") { const viejo = document.getElementById("vgl-a5-panel"); if (viejo) viejo.remove(); return false; }
+      const datos = a5AlertasDe(ctx.docId, state);
+      if (!datos || _vglA5Cerrados.has(datos.docKey)) {
+        const viejo = document.getElementById("vgl-a5-panel");
+        if (viejo) viejo.remove();
+        return false;
+      }
+      let panel = document.getElementById("vgl-a5-panel");
+      if (!panel) {
+        panel = document.createElement("div");
+        panel.id = "vgl-a5-panel";
+        panel.setAttribute("role", "note");
+        root.appendChild(panel);
+      }
+      const c = datos.contexto;
+      const filas = [];
+      if (datos.abandono) {
+        const por = [];
+        if (datos.abandono.sinControl) por.push("más de 6 meses sin control (último: " + (vglSerialAFecha(datos.abandono.ultimo) || "sin fecha") + ")");
+        if (datos.abandono.pes) por.push("marcado como abandonado en la base de citas");
+        filas.push('<div style="margin:4px 0;color:#B91C1C !important;font-weight:600;">&#9888; ABANDONO DEL PROGRAMA — ' + por.join(" · ") + "</div>");
+      }
+      if (datos.pendientes.length) {
+        filas.push('<div style="margin:4px 0;color:#B45309 !important;font-weight:600;">&#128270; Estudios pendientes de ordenar: <span style="font-weight:400;color:#334155 !important;">' + datos.pendientes.join(" · ") + "</span></div>");
+      }
+      if (datos.remitir.length) {
+        filas.push('<div style="margin:4px 0;color:#1D4ED8 !important;font-weight:600;">&#128221; Consultas por remitir: <span style="font-weight:400;color:#334155 !important;">' + datos.remitir.join(" · ") + "</span></div>");
+      }
+      // Regla R: cada color inline lleva su !importante LITERAL en la misma cadena —
+      // la alternative concatenada (color:' + (cond?...) + ' !important) es invisible
+      // para el censo de la suite 25 y además frágil.
+      filas.push(datos.cumpleSuma
+        ? '<div style="margin:4px 0;color:#15803D !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — cumple</div>"
+        : '<div style="margin:4px 0;color:#B45309 !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — por debajo del mínimo</div>");
+      const ctxLinea = [
+        c.fechaControl ? "último control " + vglSerialAFecha(c.fechaControl) : "",
+        c.tfg ? "TFG " + c.tfg : "",
+        c.estadio ? "estadio " + c.estadio : "",
+        c.ta ? "TA " + c.ta : "",
+        c.circ ? "circunf. " + c.circ + " cm" : "",
+        c.a1c ? "HbA1c " + c.a1c + "%" : "",
+        c.ldl ? "LDL " + c.ldl : "",
+        c.glu ? "glicemia " + c.glu : "",
+        c.rac ? "RAC " + c.rac + (c.racFecha ? " (" + vglSerialAFecha(c.racFecha) + ")" : "") : "",
+      ].filter(Boolean).join(" · ");
+      panel.innerHTML =
+        '<div style="margin:8px 0;padding:8px 12px;border:1px solid rgba(15,23,42,.15);border-left:4px solid #B91C1C;border-radius:8px;background:rgba(15,23,42,.03);font-size:12px;line-height:1.45;color:#334155 !important;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+        '<span style="font-weight:700;color:#0F172A !important;">&#129656; Anexo 5 · ' + escapeHtml(datos.prog) + " — paciente " + _vglHcMascara(ctx.docId) + "</span>" +
+        '<span data-a5-cerrar role="button" tabindex="0" title="Cerrar por este turno" style="cursor:pointer;color:#64748B !important;font-weight:700;padding:0 4px;">×</span></div>' +
+        filas.join("") +
+        '<div style="margin-top:4px;color:#64748B !important;">' + escapeHtml(ctxLinea) + "</div>" +
+        "</div>";
+      const btn = panel.querySelector("[data-a5-cerrar]");
+      if (btn) btn.addEventListener("click", () => { _vglA5Cerrados.add(datos.docKey); panel.remove(); });
+      // Aria-live: UNA vez por paciente, SIN cédula (PHI acústico — misma regla del
+      // aviso de fraude de la FICHA 8).
+      let live = document.getElementById("vgl-a5-live");
+      if (!live) {
+        live = document.createElement("div");
+        live.id = "vgl-a5-live";
+        live.setAttribute("aria-live", "polite");
+        live.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);";
+        root.appendChild(live);
+      }
+      const corto = "Anexo 5 abierto: " +
+        (datos.abandono ? "abandono del programa. " : "") +
+        (datos.pendientes.length ? datos.pendientes.length + " estudios pendientes. " : "") +
+        (datos.remitir.length ? "remitir a " + datos.remitir.join(", ") + ". " : "") +
+        "puntaje de metas " + datos.suma + " de " + A5_MIN_SUMA + ".";
+      if (_vglA5Anunciado !== datos.docKey) {
+        _vglA5Anunciado = datos.docKey;
+        live.textContent = corto;
+      }
       return true;
     } catch (e) { return false; }
   }
@@ -15707,6 +16051,7 @@
   }
 
   function avisoUniversal(nombre, datos, esPrueba, uidAviso) {
+    if (!togActiva("tog_notif")) return false;          // v18.6.1 (F3): compuerta de toggle
     let _consumidoPresupuesto = false;   // [NT-102/M2] visible también en el catch, para reembolsar el cupo si no se pintó
     try {
       datos = datos || {};
@@ -15933,6 +16278,7 @@
     } catch (e) { return vacio; }
   }
   function checkAvisoUniversal() {
+    if (!togActiva("tog_notif")) return false;          // v18.6.1 (F3): compuerta de toggle
     try {
       // [NT-103] — modo oculto: el modal es display:none, pero se marcaba visto y
       // consumía presupuesto INVISIBLEMENTE. Se difiere: la condición sigue viva y el
@@ -25299,6 +25645,7 @@
   }
 
   async function openLaboratoriosModal(apt, opts) {
+    if (!togActiva("tog_laboratorios")) return false;   // v18.6.1 (F3): compuerta de toggle
     // v18.1.0 — B3 (capa b): compuerta de acceso. `laboratorios` es capacidad
     // privada; sin ella la apertura corta en seco, antes de leer nada del paciente.
     if (!accesoCap("laboratorios")) return;
@@ -27059,6 +27406,7 @@
   // vigila la historia igual que hacía «Riesgo y exámenes» (cada 20 s) y
   // reclasifica solo si el médico escribió algo nuevo.
   async function openPanelPacienteModal(apt, opts) {
+    if (!togActiva("tog_pacientes")) return false;      // v18.6.1 (F3): compuerta de toggle
     // v18.1.0 — B3 (capa b): `panel_paciente` es de COMPLETO; sin la capacidad
     // la apertura corta en seco, antes de leer nada del paciente.
     if (!accesoCap("panel_paciente")) return;
@@ -27984,6 +28332,11 @@
     } catch (e) { return false; }
   }
   function openAgendamientoModal(apt) {
+    // v18.6.1 (F3) — compuerta de toggle (capa a). Y el sub-toggle labs: el criterio
+    // «solo estudios de laboratorio» es el flujo de toma de muestras que el propio
+    // script ya usa para perfiles no autorizados (openLabSoloModal).
+    if (!togActiva("tog_agendar")) return false;
+    if (togActiva("tog_agendar_labs")) return openLabSoloModal(apt);
     // v18.1.0 — B3 (capa b): `agendar_control` es de COMPLETO. Sin la capacidad
     // la apertura corta en seco (LABORATORIOS agenda la toma por openLabSoloModal).
     if (!accesoCap("agendar_control")) return;
@@ -36027,6 +36380,7 @@
       // idempotente, cero red, solo dentro de #vgl-root. Se llama en CADA tick
       // porque además instala su listener de captura la primera vez.
       try { hcRenderChip(); } catch (e) {}
+      try { hcAnexo5Render(); } catch (e2) {}   // v18.6.1 (F2): aviso del Anexo 5 con la HC abierta
 
       // v16.1.0 — REPORTE DE CAMPO: «Auto-Labs» aparecía hasta en Citas del día. Causa:
       // los botones inyectados se crean dentro de la historia y, como Everest no recarga

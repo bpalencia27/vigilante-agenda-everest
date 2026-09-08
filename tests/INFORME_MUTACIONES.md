@@ -13581,3 +13581,32 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 | user.js `RUM_ENDPOINTS` (5 patrones nuevos de v18.4.6, ~L22174) | patrón `CargarMedicamentosPaciente` comentado: el endpoint vuelve a caer en `api.otro` (2.489 llamadas sin atribución eran el hallazgo original) | NO | *suite_87 «los cinco endpoints reales que caían en api.otro llevan etiqueta propia»*: mutante 1 rojo (7 ok); restaurado 8/0 |
 | docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md L2 (portada) | (sin mutación de código: era un desincronizado doc↔constante) el doc decía «Versión 1.3» con la constante y TERMINOS_VERSION ya en 1.4 | — | *suite_82 «P11·9 — TERMINOS_TEXTO es el documento del repo, idéntico carácter a carácter»* es el guardián de la vinculación versión↔texto: corregido el doc a 1.4 → 22/0 |
 | tests/suite_79 (caso «dedup entre pestañas») | (bug de la prueba, no del código) la 2ª pestaña se creaba SIN médico → `accesoCap("aviso_paciente_nuevo")` falso → `shiftNewPatientEval` devolvía null por diseño de la capa a y el caso leía `r.toasts` | — | el propio caso, ahora con `conDoctor(c2.api, …)`: 15/0. El null por capa a ya lo fija el caso «PÚBLICO no evalúa el aviso» |
+
+## v18.6.1 (F1, delegación v2 §O2) — Indexador del Anexo 5
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` (emparejamiento CUMPLE_*↔FECHA_*, ~L11870) | emparejamiento de fechas por nombre desactivado (`cFecha` jamás se fija): las fechas de toma de las 9 metas llegarían todas en 0 — el aviso diría «pendiente» de todo | NO | *suite_92 «F1/Anexo 5: el core indexa la TERCERA hoja con los typos del libro real»* (m[0]=[10,46100] y m[4]=[0,46090], las dos parejas con typo): mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `packPym` (campo `a5`, ~L12240) | `a5: ""` fijo: el Anexo 5 indexado NO viaja en el paquete — cada arranque lo perdería y el aviso quedaría mudo pese a caché caliente | NO | *suite_92 «F1/Anexo 5: el mapa viaja en el paquete v4 y sobrevive descarga→caché→recarga»* (/"a5":"\{/ + restauración .size===2): mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `_readPymWorkbookStreamCore` (bloque Anexo 5, ~L12005) | documentos del Anexo 5 FUSIONADOS en `todos`: un paciente solo del programa haría que la tarjeta diga «Al día · sin PyM pendiente» | NO | *suite_92 «…el paciente SOLO del Anexo 5 NO entra en todos»*: mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `_readPymWorkbookStreamCore` (resolución `opts.anexo5`, ~L11947) | hoja ignorada (`if (opts.anexo5 && false)`): la tercera hoja jamás se lee | NO | *suite_92* casos «TERCERA hoja…» y «mapa viaja en el paquete v4» (sheetAnexo5 vacío + state.pymAnexo5 0): mutante 2 rojos (37 ok); restaurado 39/0 |
+
+## v18.6.1 (F2, delegación v2 §O2.3) — Aviso del Anexo 5 al abrir la HC
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `A5_DIAS_ABANDONO` (~L14680) | umbral 183 → 99999 días: la regla «más de 6 meses sin control» del libro jamás dispara | NO | *suite_91 «F2/a5AlertasDe: las CUATRO alertas»* (abandono.sinControl) + caso hermano del panel: mutante 2 rojos (24 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (título del panel, ~L14735) | máscara fuera: la cédula COMPLETA del paciente en pantalla | NO | *suite_91 «F2/hcAnexo5Render: panel DENTRO de #vgl-root…»* («···8777» + cédula completa jamás): mutante 1 rojo (25 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (cierre manual, ~L14742) | `_vglA5Cerrados.add(…)` fuera: cerrar el panel no persiste y resucita al siguiente tick, martillando al médico toda la consulta | NO | *suite_91* misma («y no vuelve a aparecer para ese paciente en este turno»): mutante 1 rojo (25 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (guarda origen, ~L14722) | exigencia `origen === "dom"` fuera: el aviso salta con el SOLO clic del botón HC, antes de que la historia exista | NO | *suite_91 «sin HC abierta por DOM… el aviso exige la historia ABIERTA»*: mutante 1 rojo (25 ok); restaurado 26/0 |
+
+## v18.6.1 (F3, mandato «toggles por médico») — Toggles de funcionalidad
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `VGL_TOGGLES` (entrada `tog_agendar_labs`, ~L9797) | `defecto: false` fuera: el restrictivo nace ACTIVO por fail-open y desvía TODA la agenda a solo-labs sin que nadie lo pida (la regresión de 53 rojos) | NO | *suite_93* caso «sin identidad todo nace activo SALVO el restrictivo»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `togActiva` (jerarquía `sub`, ~L9815) | `!togActiva(def.sub)` → `false`: el padre deja de mandar y un hijo persistido revive con su módulo apagado | NO | *suite_93* caso «jerarquía: un sub-toggle solo vive mientras su padre está encendido»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openAgendamientoModal` (compuerta, ~L28333) | `if (!togActiva("tog_agendar")) return false;` fuera: con el módulo apagado el modal se abre igual | NO | *suite_93* caso «con el módulo apagado corta en seco, sin modal»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openAgendamientoModal` (desvío sub-toggle, ~L28334) | `if (togActiva("tog_agendar_labs")) return openLabSoloModal(apt);` fuera: con la limitación encendida se abre el modal COMPLETO, no el ligero de toma de muestras | NO | *suite_93* caso «con el sub-toggle encendido desvía a la toma de muestras»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openPanelPacienteModal` (compuerta, ~L27404) | `if (!togActiva("tog_pacientes")) return false;` fuera: el panel del paciente se abre con su toggle apagado | NO | *suite_93* caso «openLaboratoriosModal y openPanelPacienteModal: compuertas apagadas cortan en seco»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `createAccionesDockUI` (firma `_sigDock`, ~L8470) | `togActiva("tog_agendar") ? "TA" : "ta"` fuera de la firma: la guarda v14.2.0 bloquea el re-pintado en caliente de `togSet()` y el botón Agendar NO reaparece al encender el toggle (bug real cazado por la suite) | NO | *suite_93* caso «capa b del dock: al volver, reaparece»: mutante 1 rojo (9 ok); restaurado 10/0 |
