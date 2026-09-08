@@ -7046,7 +7046,7 @@
       const d = doc || document;
       const el = document.getElementById("vgl-cw-examenes");
       if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
-      const docId = extractPacienteAbierto();
+      const docId = _vglDocDelTick();   // v18.6.2 (F-P2): foto del tick (único llamador de esta función es el tick)
       if (!docId) {
         if (el) el.style.display = "none";
         _cwDocPrevio = null; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false;   // nunca arrastrar el juicio de un paciente a otro
@@ -7270,7 +7270,9 @@
       // Compuerta completa re-visada EN CADA TICK: la identidad puede llegar
       // tarde y el padrón puede retirar el permiso a mitad de jornada.
       const secc = seccionActiva();
-      const docId = extractPacienteAbierto();
+      // v18.6.2 (F-P2): esta primera lectura corre SÍNCRONA dentro del tick y puede usar su
+      // foto (_vglDocDelTick); la re-verificación POST-AWAIT de más abajo sigue fresca.
+      const docId = _vglDocDelTick();
       if (!rcvPendientesDebeVerse({ autorizado: esMedicoRCVActivo(), enHCHealth: _enModuloHCHealth(), seccion: secc, docId: docId })) {
         _rcvpOcultar();
         _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
@@ -14509,8 +14511,13 @@
   // REVIRTIÓ: es la fuente del guard anti-cruce de pacientes (_pacienteSigueAbierto), llamado
   // desde callbacks diferidos (300/900 ms) tras un cambio de paciente; un valor memoizado
   // dejaría "vivo" al paciente anterior hasta 1 s y podría escribir sus labs en la historia
-  // del nuevo. La lectura DEBE ser fresca. La optimización segura (calcularla una vez en tick()
-  // y pasarla a los 4 llamadores SÍNCRONOS, dejando fresca la vía diferida) queda pendiente.
+  // del nuevo. La lectura DEBE ser fresca.
+  // v18.6.2 (F-P2) — la optimización segura queda HECHA: tick() calcula la lectura UNA vez
+  // (state._docTick) y la consumen SOLO los llamadores SÍNCRONOS del propio tick
+  // (mtrWidgetConductaTick, rcvPendientesTick 1ª lectura, hcPacienteContexto ×3,
+  // checkAvisoUniversal) vía _vglDocDelTick(). La vía diferida —el guard anti-cruce, los
+  // callbacks 300/900 ms, las re-verificaciones post-red (p. ej. rcvPendientesTick tras su
+  // await)— sigue leyendo AQUÍ, fresca, sin excepción. Mutación en suite_94 Parte D.
   function extractPacienteAbierto() {
     try {
       if (!document.getElementById("anamesis")) return "";     // no estamos en historia clínica
@@ -14521,6 +14528,18 @@
         if (doc) return doc;
       }
       return "";
+    } catch (e) { return ""; }
+  }
+
+  // v18.6.2 (F-P2) — foto del paciente abierto tomada por el tick de esta vuelta.
+  // SOLO para los llamadores SÍNCRONOS del tick: si no hay foto (pruebas que no corren
+  // tick, o un llamador rezagado), cae a la lectura fresca de siempre. Jamás se usa
+  // desde la vía diferida ni desde _pacienteSigueAbierto.
+  function _vglDocDelTick() {
+    try {
+      return (typeof state === "object" && state && typeof state._docTick === "string")
+        ? state._docTick
+        : extractPacienteAbierto();
     } catch (e) { return ""; }
   }
 
@@ -14642,7 +14661,10 @@
   function hcPacienteContexto() {
     try {
       if (typeof seccionActiva === "function" && seccionActiva() === "historia") {
-        const dom = extractPacienteAbierto();
+        // v18.6.2 (F-P2): los tres llamadores de esta función viven SOLO en el tick
+        // (hcRenderChip, hcTickVigia, hcAnexo5Render), así que consume la foto del tick;
+        // sin foto (pruebas) cae a la lectura fresca.
+        const dom = _vglDocDelTick();
         if (dom) return { docId: String(dom), origen: "dom" };
       }
       if (_vglHcHint && Date.now() - _vglHcHint.ts <= VGL_HC_HINT_TTL_MS) {
@@ -14699,11 +14721,62 @@
       const origen = ctx.origen === "dom"
         ? '<span class="vgl-hc-chip-origen">en pantalla</span>'
         : '<span class="vgl-hc-chip-origen">clic en agenda</span>';
+      // v18.6.2 (F-P2, P1): última HC del paciente en el chip. El dato se pide una sola
+      // vez por paciente (caché 10 min, dedup en vuelo, 1 intento especulativo); si la
+      // red falla o no hay dato, el chip queda con su línea base — el precalentado no
+      // puede romper lo que ya funciona.
+      _vglHcUltimaPrecalentar(ctx.docId);
+      const ult = (_ultimaHcCache.docId === String(ctx.docId) && _ultimaHcCache.data)
+        ? _ultimaHcCache.data : null;
       chip.innerHTML =
         '<span class="vgl-hc-chip-doc">HC ' + _vglHcMascara(ctx.docId) + "</span>" + origen +
         (fraude
           ? '<span class="vgl-hc-chip-fraude" style="color:#B91C1C !important;font-weight:600;">&#9888; inasistencia reincidente</span>'
-          : "");
+          : "") +
+        _vglHcUltimaLinea(ult);
+      return true;
+    } catch (e) { return false; }
+  }
+  // v18.6.2 (F-P2, P1) — línea "última HC" del chip: fecha de cierre + clasificación y/o
+  // riesgo cardiovascular. Solo lo que el contrato real de ObtenerUltimaHCPes trae;
+  // sin dato, cadena vacía (el chip no miente).
+  function _vglHcUltimaLinea(d) {
+    try {
+      if (!d) return "";
+      const partes = [];
+      if (d.fechaCreacion) partes.push(_vglUltimaHcFecha(d.fechaCreacion));
+      if (d.clasificacion) partes.push(d.clasificacion);
+      if (d.riesgoCardiovascular) partes.push(d.riesgoCardiovascular);
+      const txt = partes.filter(Boolean).join(" · ");
+      if (!txt) return "";
+      return '<span class="vgl-hc-chip-ultima">última HC: ' + txt + "</span>";
+    } catch (e) { return ""; }
+  }
+  // v18.6.2 (F-P2, P1) — precalentado especulativo de la última HC para el chip. Misma
+  // mecánica que hcPrefetch (1 intento, sin reintentos, dedup por GHOST.promises, la
+  // cédula JAMÁS viaja al endpoint de HC — primero se resuelve el id interno y si no
+  // hay id la cadena se corta). El dato no es PHI en el transcript: solo claves y
+  // formas; los valores viven en Everest.
+  function _vglHcUltimaPrecalentar(docId) {
+    try {
+      if (!docId) return false;
+      const doc = String(docId);
+      if (typeof apiAccesoBuscarPaciente !== "function" || typeof apiHcObtenerUltimaHc !== "function") return false;
+      if (_ultimaHcCache.docId === doc && _ultimaHcCache.data &&
+          (Date.now() - _ultimaHcCache.ts) < ORDENES_VIGENTES_TTL_MS) return false;   // ya la tiene, fresca
+      const promKey = "ultimahc_" + doc;
+      if (GHOST.promises.has(promKey)) return false;   // ya en vuelo
+      const p = (async () => {
+        try {
+          const pid = await apiAccesoBuscarPaciente(doc, { especulativo: true });
+          if (!pid) return false;
+          const datos = await apiHcObtenerUltimaHc(pid);
+          if (datos) { try { _ultimaHcCache.docId = doc; } catch (e2) {} }
+          return !!datos;
+        } catch (e) { return false; }
+      })();
+      GHOST.promises.set(promKey, p);
+      setTimeout(() => { if (GHOST.promises.get(promKey) === p) GHOST.promises.delete(promKey); }, 300000);
       return true;
     } catch (e) { return false; }
   }
@@ -16289,7 +16362,7 @@
       // consumía presupuesto INVISIBLEMENTE. Se difiere: la condición sigue viva y el
       // aviso saldrá en cuanto el modo oculto se levante.
       if (document.body && document.body.classList && document.body.classList.contains("vgl-modo-oculto")) return;
-      const doc = extractPacienteAbierto(); if (!doc) return;
+      const doc = _vglDocDelTick(); if (!doc) return;   // v18.6.2 (F-P2): foto del tick (único llamador de esta función es el tick)
       const key = normalizeKey(doc); if (!key) return;
       if (document.getElementById("vgl-pym-modal")) return; // ya hay un aviso en pantalla
 
@@ -22663,7 +22736,12 @@
       // funciona (APIAcceso), y como la precarga al pasar el cursor por las tarjetas también
       // las dispara, la agenda entera generaba un goteo constante de 404 contra el servidor.
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
-      `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
+      // v18.6.2 (F-P2) — RETIRADA la ruta de respaldo SIN TipoDocumento: la evidencia HAR
+      // en producción (3/3 en vivo, INFORME_EVIDENCIA_HAR.md §9.4.1) la muestra devolviendo
+      // 400 ProblemDetails para todos los pacientes. Solo la ruta de arriba responde, así
+      // que la cascada gastaba una petición fallida por búsqueda (incluido el prefetch
+      // especulativo de HC). Si un día el HAR muestra un documento sin TipoDocumento=CC
+      // (p. ej. otro tipo de identificación), se reintroduce aquí — con su evidencia.
       // v12.0.0 — RETIRADA la quinta ruta: pasaba la CÉDULA en el parámetro idPaciente,
       // que espera el identificador INTERNO de Everest. Son dos numeraciones distintas, así
       // que una cédula puede coincidir con el id interno de OTRA persona y devolver su
@@ -23345,6 +23423,58 @@
       console.warn("[Vigilante] apiHcObtenerOrdenamientosVigentes falló:", e);
       return null;
     }
+  }
+
+  // v18.6.2 (F-P2, P1) — ÚLTIMA HC DEL PACIENTE para el chip del lanzador. Endpoint
+  // real capturado en producción (INFORME_EVIDENCIA_HAR.md §9.4.2: `ObtenerUltimaHCPes`
+  // con fecha de `fechaCreacion` y motivo vía `clasificacion`/`riesgoCardiovascular`).
+  // Mismo patrón de caché por paciente (TTL 10 min) y misma prudencia de forma: solo se
+  // acepta un OBJETO con alguna de las claves conocidas; cualquier otra forma (null,
+  // arreglo, string) no se cachea y sube null. Cero PHI en código: solo nombres de campo.
+  let _ultimaHcCache = { pacienteId: "", docId: "", data: null, ts: 0 };   // docId: cédula de origen, para buscarla por el chip
+  function apiHcObtenerUltimaHc(pacienteId) {
+    return _vglUltimaHcPedir(pacienteId);
+  }
+  async function _vglUltimaHcPedir(pacienteId) {
+    if (!pacienteId) return null;
+    const key = String(pacienteId);
+    const ahora = Date.now();
+    if (_ultimaHcCache.pacienteId === key && _ultimaHcCache.data &&
+        (ahora - _ultimaHcCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _ultimaHcCache.data;
+    }
+    const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerUltimaHCPes?PacienteId=${encodeURIComponent(key)}`;
+    try {
+      const data = await pageFetchJson(path);
+      const util = _vglUltimaHcUtilizable(data);
+      if (!util) return null;
+      _ultimaHcCache = { pacienteId: key, data: util, ts: Date.now() };
+      return util;
+    } catch (e) { return null; }   // especulativo: el fallo no toca el chip base
+  }
+  // PURA (para el banco): acepta SOLO el objeto con las claves del contrato real
+  // (fechaCreacion, clasificacion, riesgoCardiovascular). Nunca fabrica valores.
+  function _vglUltimaHcUtilizable(d) {
+    try {
+      if (!d || typeof d !== "object" || Array.isArray(d)) return null;
+      const tiene = (k) => typeof d[k] === "string" && d[k];
+      if (!tiene("fechaCreacion") && !tiene("clasificacion") && !tiene("riesgoCardiovascular")) return null;
+      return {
+        fechaCreacion: tiene("fechaCreacion") ? d.fechaCreacion : "",
+        clasificacion: tiene("clasificacion") ? d.clasificacion : "",
+        riesgoCardiovascular: tiene("riesgoCardiovascular") ? d.riesgoCardiovascular : "",
+      };
+    } catch (e) { return null; }
+  }
+  // ISO → dd/mm/aaaa (solo la fecha, sin hora: el chip no necesita más). Vacío si no
+  // se puede interpretar — casilla vacía antes que dato inventado.
+  function _vglUltimaHcFecha(iso) {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      const p = (x) => String(x).padStart(2, "0");
+      return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear();
+    } catch (e) { return ""; }
   }
 
   // v14.1.0 (R1b) — SIGNOS VITALES: la única pieza que le faltaba al motor renal.
@@ -36317,6 +36447,14 @@
       // depende del DOM de cada vista) se queda condicionado a estar en agenda/historia.
       const secc = seccionActiva();
       const enVistaVigilada = secc !== "otra";
+      // v18.6.2 (F-P2) — MEMO POR TICK del paciente abierto: la cédula se lee UNA sola
+      // vez por tick y viaja en state._docTick. Solo la consumen los llamadores SÍNCRONOS
+      // de este mismo tick vía _vglDocDelTick() (widget de conducta, rcvPendientesTick
+      // 1ª lectura, hcPacienteContexto ×3, checkAvisoUniversal); la vía diferida (guards
+      // anti-cruce, callbacks 300/900 ms, re-verificaciones post-red) sigue leyendo
+      // extractPacienteAbierto() fresca — ver la NOTA v14.2.0 en su definición, que
+      // documenta por qué el memo temporal de 1 s se revirtió (cruce de pacientes).
+      state._docTick = (secc === "historia") ? extractPacienteAbierto() : "";
       // v18.0.7 — el botón "Ordenar pendientes" se pinta en document.body con coordenadas de
       // PÁGINA y su propio tick solo corre en la pestaña Conducta: al navegar la SPA a Citas
       // del día nadie lo retiraba y se quedaba flotando sobre la lista de citas (reporte en

@@ -18,6 +18,10 @@
 //  C) RELOJ CONGELADO: el contexto vm tiene su propio Date intrínseco;
 //     congelar c.ctx.Date.now deja los TTL quietos y permite envejecer
 //     cachés sin esperar minutos reales.
+//  D) MEMO POR TICK (v18.6.2): tick() lee la cédula UNA vez (state._docTick)
+//     y los llamadores síncronos del tick la consumen vía _vglDocDelTick();
+//     la vía diferida (guard anti-cruce, callbacks 300/900 ms) sigue fresca.
+//     La aserción D1 ES la mutación de F-P2.
 // =====================================================================
 const vm = require("vm");
 const { instalarDomEnriquecido } = require("./harness");
@@ -37,7 +41,7 @@ module.exports = {
   cubre: [
     "togActiva", "mtrNormalizarNombre", "readJSON", "extractPacienteAbierto",
     "accesoCap", "apiAccesoBuscarPaciente", "hcPrefetch", "hcPacienteContexto",
-    "apiHcObtenerOrdenamientosVigentes",
+    "apiHcObtenerOrdenamientosVigentes", "_vglDocDelTick",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -140,7 +144,7 @@ module.exports = {
     // =====================================================================
     //  PARTE B — CONTEO DE RED POR FLUJO (contratos de cascada)
     // =====================================================================
-    await t.casoAsync("B/cascada: peor caso de apiAccesoBuscarPaciente cuesta HOY 2 peticiones (baseline v0)", async () => {
+    await t.casoAsync("B/cascada: peor caso de apiAccesoBuscarPaciente cuesta HOY 1 petición (v18.6.2, ruta 400 retirada)", async () => {
       const urls = [];
       const c = cargar({
         silencioso: true,
@@ -149,10 +153,12 @@ module.exports = {
       sembrar707(c);
       const pid = await c.api.apiAccesoBuscarPaciente("12345678");
       t.igual(pid, null, "sin paciente en ninguna ruta: null, casilla vacía antes que dato inventado");
-      // BASELINE v0: la cascada de hoy tiene 2 rutas (TipoDocumento=CC y la de respaldo
-      // sin TipoDocumento). F-P2 retira la de respaldo y ESTA aserción se actualiza a 1.
-      t.igual(urls.length, 2, "el peor caso intenta las 2 rutas de la cascada actual");
-      t.cierto(urls[0].indexOf("TipoDocumento=CC") !== -1, "la primera ruta lleva TipoDocumento");
+      // v18.6.2 (F-P2): la ruta de respaldo sin TipoDocumento devolvía 400 en producción
+      // (3/3 en vivo, INFORME_EVIDENCIA_HAR.md §9.4.1) y se retiró — el peor caso es hoy
+      // 1 petición. Esta aserción era 2 en el baseline v0 y es la mutación de F-P2
+      // (INFORME_MUTACIONES.md).
+      t.igual(urls.length, 1, "el peor caso intenta solo la ruta con TipoDocumento=CC (la de respaldo 400 retirada)");
+      t.cierto(urls[0].indexOf("TipoDocumento=CC") !== -1, "la única ruta lleva TipoDocumento");
       t.cierto(urls[0].indexOf("identificacion=12345678") !== -1, "el documento viaja en la URL");
       console.log("[PERF-94] B/cascada peor caso: " + urls.length + " peticiones");
     });
@@ -260,6 +266,96 @@ module.exports = {
       await c.api.apiHcObtenerOrdenamientosVigentes(999);
       t.igual(llamadas, 2, "al vencer los 10 min, se reconsulta");
       console.log("[PERF-94] C/órdenes vigentes: TTL 10 min verificado con reloj congelado");
+    });
+
+    // =====================================================================
+    //  PARTE D — MEMO POR TICK DEL PACIENTE ABIERTO (F-P2, v18.6.2)
+    //  tick() lee la cédula UNA vez (state._docTick) y los llamadores SÍNCRONOS
+    //  del tick la consumen vía _vglDocDelTick(); la vía diferida sigue fresca.
+    //  La aserción "usa la foto del tick SIN barrer el DOM" ES la mutación de
+    //  F-P2: si el helper vuelve a leer fresco, devuelve la cédula del DOM
+    //  (otra) y el contador sube → rojo.
+    // =====================================================================
+    t.caso("D/memo tick: hcPacienteContexto usa la foto del tick sin barrer el DOM", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      // Foto del tick con OTRA cédula: si el consumidor barriera el DOM, leería 1018888777.
+      c.api.__state._docTick = "99999999";
+      let barridos = 0;
+      const appIndex = c.env.doc.querySelector("app-index");
+      if (appIndex && typeof appIndex.querySelectorAll === "function") {
+        const qsa = appIndex.querySelectorAll.bind(appIndex);
+        appIndex.querySelectorAll = (sel) => { if (sel === ".text-muted") barridos++; return qsa(sel); };
+      }
+      const ctx = c.api.hcPacienteContexto();
+      t.cierto(!!ctx && ctx.docId === "99999999" && ctx.origen === "dom",
+        "consume la foto del tick (state._docTick), no el DOM");
+      t.igual(barridos, 0, "cero barridos de .text-muted: la lectura del tick es UNA por vuelta");
+      console.log("[PERF-94] D/memo tick: foto del tick consumida, " + barridos + " barridos del DOM");
+    });
+
+    t.caso("D/memo tick: sin foto del tick (pruebas/vía diferida) la lectura sigue fresca", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      delete c.api.__state._docTick;   // como una prueba que no corre tick()
+      const ctx = c.api.hcPacienteContexto();
+      t.cierto(!!ctx && ctx.docId === "1018888777" && ctx.origen === "dom",
+        "sin foto, cae a extractPacienteAbierto() fresca (el guard anti-cruce depende de esta vía)");
+      console.log("[PERF-94] D/memo tick: vía fresca intacta sin foto del tick");
+    });
+
+    // =====================================================================
+    //  PARTE E — CHIP ÚLTIMA HC (F-P2, P1, v18.6.2)
+    //  El chip del lanzador pinta la última HC del paciente con el contrato
+    //  REAL de ObtenerUltimaHCPes (fechaCreacion, clasificacion,
+    //  riesgoCardiovascular — INFORME_EVIDENCIA_HAR.md §9.4.2). La aserción
+    //  del pintado ES la mutación de P1.
+    // =====================================================================
+    t.caso("E/utilizable: solo el objeto del contrato real pasa (nunca se fabrican valores)", () => {
+      const c = cargar({ silencioso: true });
+      const u = c.api._vglUltimaHcUtilizable;
+      const lleno = u({ fechaCreacion: "2026-06-06T10:19:38-05:00", clasificacion: "A1", riesgoCardiovascular: "ALTO" });
+      t.cierto(lleno && lleno.fechaCreacion === "2026-06-06T10:19:38-05:00" && lleno.clasificacion === "A1" && lleno.riesgoCardiovascular === "ALTO",
+        "objeto del contrato: pasa con sus tres claves");
+      const parcial = u({ clasificacion: "A1" });
+      t.cierto(parcial && parcial.clasificacion === "A1" && parcial.fechaCreacion === "" && parcial.riesgoCardiovascular === "",
+        "parcial: las claves ausentes quedan vacías, jamás inventadas");
+      t.igual(u([]), null, "arreglo: null");
+      t.igual(u(null), null, "null: null");
+      t.igual(u({ foo: "bar" }), null, "objeto ajeno al contrato: null");
+      t.igual(c.api._vglUltimaHcFecha("2026-06-06T10:19:38-05:00"), "06/06/2026", "ISO → dd/mm/aaaa");
+      t.igual(c.api._vglUltimaHcFecha("garbage"), "", "fecha ilegible → vacío");
+      console.log("[PERF-94] E/utilizable: contrato real validado sin fabricar valores");
+    });
+
+    await t.casoAsync("E/chip: pinta fecha + clasificación + riesgo de la última HC con UNA sola consulta", async () => {
+      const DOM_H = '<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>';
+      const urlsE = [];
+      const c = montar(DOM_H, {
+        fetch: async (url) => {
+          urlsE.push(String(url));
+          if (String(url).indexOf("BuscarPaciente") !== -1) return respuesta([{ pacienteId: 999 }]);
+          if (String(url).indexOf("ObtenerUltimaHCPes") !== -1) return respuesta({ fechaCreacion: "2026-06-06T10:19:38-05:00", clasificacion: "A1", riesgoCardiovascular: "ALTO" });
+          return respuesta([]);
+        },
+      });
+      c.api.hcRenderChip();
+      const chip1 = c.env.doc.getElementById("vgl-hc-chip");
+      t.cierto(!!chip1 && chip1.innerHTML.indexOf("HC ···8777") !== -1,
+        "línea base del chip intacta (cédula enmascarada)");
+      t.cierto(chip1.innerHTML.indexOf("última HC") === -1,
+        "sin dato cacheado todavía, NO hay línea de última HC (el chip no miente)");
+      for (let i = 0; i < 100 && urlsE.filter((u) => u.indexOf("ObtenerUltimaHCPes") !== -1).length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+      c.api.hcRenderChip();
+      const chip2 = c.env.doc.getElementById("vgl-hc-chip");
+      t.cierto(chip2.innerHTML.indexOf("última HC: 06/06/2026 · A1 · ALTO") !== -1,
+        "el chip pinta la última HC del contrato real (fecha de cierre + clasificación + riesgo)");
+      t.igual(urlsE.filter((u) => u.indexOf("ObtenerUltimaHCPes") !== -1).length, 1,
+        "una sola consulta de última HC (caché 10 min + dedup en vuelo)");
+      t.cierto(urlsE.filter((u) => u.indexOf("ObtenerUltimaHCPes") !== -1).every((u) => u.indexOf("PacienteId=999") !== -1),
+        "al endpoint viaja el id INTERNO resuelto, jamás la cédula");
+      console.log("[PERF-94] E/chip: última HC pintada con 1 consulta (id interno, no cédula)");
     });
   },
 };

@@ -65,3 +65,16 @@ retire la ruta de respaldo sin `TipoDocumento`, esa misma aserción se pondrá
 ROJA — esa es la mutación verificada del cambio — y se actualizará a **1** con
 su fila en `tests/INFORME_MUTACIONES.md`. Ninguna otra aserción de la suite
 depende del hardware: un banco lento no la pone roja.
+
+---
+
+## F-P2 APLICADO (v18.6.2) — quick wins sobre el baseline
+
+| Pieza | Qué se hizo | Mutación verificada (suite_94) | Estado de M |
+|---|---|---|---|
+| P1 (cascada) | Retirada la ruta de respaldo SIN `TipoDocumento` de `apiAccesoBuscarPaciente`: el HAR de producción la muestra devolviendo 400 3/3 (INFORME_EVIDENCIA_HAR §9.4.1). El peor caso baja de 2 peticiones a 1 — y deja de gastarse una petición FALLIDA por búsqueda (incluido el prefetch de HC) | aserción M3 era 2 → roja al retirar → actualizada a 1 | **M3: 2 → 1** |
+| P2 (memo tick) | La cédula del paciente se lee UNA vez por tick (`state._docTick`) y la consumen SOLO los llamadores síncronos del propio tick (`_vglDocDelTick`: widget de conducta, rcvPendientesTick 1ª lectura, hcPacienteContexto ×3, checkAvisoUniversal). La vía diferida —guard anti-cruce `_pacienteSigueAbierto`, callbacks 300/900 ms, re-verificaciones post-red— sigue leyendo `extractPacienteAbierto()` fresca: es exactamente la optimización segura que la NOTA v14.2.0 dejó pendiente (el memo temporal de 1 s se revirtió por riesgo de cruce de pacientes) | Parte D: foto del tick consumida con 0 barridos; mutante volvió a barrer el DOM → rojo | **M1 (contexto): 4 barridos/tick → 1** |
+| P3 (chip última HC) | El chip del lanzador pinta «última HC: dd/mm/aaaa · clasificación · riesgo cardiovascular» con el contrato REAL de `ObtenerUltimaHCPes` (fechaCreacion, clasificacion, riesgoCardiovascular). 1 consulta por paciente (caché 10 min + dedup en vuelo), la cédula JAMÁS viaja al endpoint (primero se resuelve el id interno), fallo = chip base intacto | Parte E: línea pintada con 1 consulta; mutante (clave ajena al contrato) → 2 rojos | M4/M5: cadena del clic INTACTA (2); la última HC es +1 solo la 1ª vez por paciente, luego de caché |
+| P4 (prefetch) | **YA ALINEADO POR PREEXISTENCIA** (v18.5.2-hc2): el clic ya precalienta la cadena exacta de órdenes vigentes con 1 intento especulativo, dedup en vuelo y cortocircuitos; el baseline B/cadena HC (2 peticiones) lo verifica como contrato vivo. Nada que cambiar — documentado, no tocado | — (preexistente; cubierto por B/cadena HC) | M4: 2 (sin cambios) |
+
+Todas las filas en `tests/INFORME_MUTACIONES.md` (sección v18.6.2).
