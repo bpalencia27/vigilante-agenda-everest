@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.6
+// @version      18.8.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12983,8 +12983,49 @@
       if (!writeJSON(k, hoy.length > 3000 ? hoy.slice(-3000) : hoy)) evBuffer = pend.concat(evBuffer).slice(-200);
     } catch (e) { evBuffer = []; }
   }
+  // v18.8.7 — UNICIDAD DE AUDITORÍA POR EVENTO (orden del médico, 08-sep, con CSV real
+  // adjunto): una sola fila de notificación por (tipo de evento, cita, día) en TODO el
+  // navegador, venga de la pestaña que venga. El CSV traía (a) rachas de
+  // LECTURA_TRAS_RELEVO_SIN_CONFIRMAR para los MISMOS pacientes —hasta SIETE líneas por
+  // un hecho— porque el candado de esa rama vive en la memoria de cada pestaña, y (b)
+  // pares CAMBIO_ESTADO + INGRESO_A_TIEMPO del mismo paciente en el mismo segundo. El
+  // candado vive en un almacén COMPARTIDO del día, como el de fraude/conteos
+  // (vgl_fraude_dia2): eso es lo que exige «en cualquier instancia del sistema» — la
+  // primera instancia que gana la marca escribe su fila, las demás callan. Lo que se
+  // comparte es SOLO el candado, nunca una notificación: cada pestaña emite sus avisos
+  // en su propia ventana o no emite (aislamiento total entre instancias).
+  const AUDIT_UNICO_KEY = "vgl_audit_unico";
+  const TIPOS_AUDIT_UNICO = ["RECTIFICACION_INASISTENCIA", "HUECO_DE_LECTURA",
+    "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", "CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE",
+    "CAMBIO_ESTADO", "INASISTENCIA", "INGRESO_A_TIEMPO", "ULTIMA_LLAMADA", "FRAUDE_EXTEMPORANEO"];
+  // CAMBIO_ESTADO es el único de esos tipos que puede repetirse LEGÍTIMAMENTE para una
+  // misma cita (cada transición real es un hecho distinto): su marca incluye la
+  // transición (previo→estado). Los demás son hechos terminales de la jornada: uno al día.
+  function _auditMarcaUnica(marca) {
+    try {
+      const g = readJSON(AUDIT_UNICO_KEY, null);
+      const mapa = (g && g.dia === todayStamp()) ? (g.mapa || {}) : {};
+      if (mapa[marca]) return false;
+      mapa[marca] = 1;
+      writeJSON(AUDIT_UNICO_KEY, { dia: todayStamp(), mapa });
+      return true;
+    } catch (e) { return true; }   // sin almacén no se bloquea nada: comportamiento previo
+  }
   function logEvent(ev) {
     try {
+      // Unicidad: solo para los tipos de notificación y solo cuando el llamador
+      // identifica la cita (ev.key). Los demás eventos (labs, athenea, bitácora
+      // genérica) pasan exactamente igual que antes.
+      if (ev && ev.key && TIPOS_AUDIT_UNICO.indexOf(ev.ev) >= 0) {
+        const marca = ev.ev + "|" + ev.key + (ev.ev === "CAMBIO_ESTADO" ? "|" + ((ev.previo || "") + "→" + (ev.estado || "")) : "");
+        if (!_auditMarcaUnica(marca)) return;
+      }
+      // v18.8.7 — la desviación horaria nunca se registra NEGATIVA en la bitácora. Los
+      // valores como -35.3/-43.7 del CSV eran pacientes confirmados ANTES de la hora de la
+      // cita (la resta hora_cita − ahora es honesta pero ensucia la trazabilidad de las
+      // asistencias, que se reclaman por llegadas TARDE). Se normaliza a 0: el dato «llegó
+      // temprano» no se pierde para la reclamación, que solo cuenta los retrasos.
+      if (ev && typeof ev.min === "number" && isFinite(ev.min) && ev.min < 0) ev.min = 0;
       const d = todayStamp();
       if (evDia && evDia !== d) evFlush();       // el turno cruzó la medianoche
       evDia = d;
@@ -15949,7 +15990,7 @@
       state.contadas.add("rectificada@" + key);
       if (rectificarStat("inasistencia")) {
         logEvent({ t: new Date().toLocaleTimeString(), ev: "RECTIFICACION_INASISTENCIA", hora: a.hora_texto,
-          doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+          doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre, key });
       }
       _fraudeCompartidoGuardar();
     }
@@ -16032,7 +16073,7 @@
           state.contadas.add(marca);
           _fraudeCompartidoGuardar();       // una sola vez por cita y día, entre pestañas
           logEvent({ t: stampSalto(), ev: "HUECO_DE_LECTURA", hora: a.hora_texto, doc: a.doc_id,
-            estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+            estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre, key });
         }
       }
       else color = "VERDE";
@@ -16072,7 +16113,7 @@
             // `state.bitacoraRelevo`: siete líneas para un solo hecho.
             if (!_apptMarcada(state.bitacoraRelevo, a, key)) {
               _apptMarcar(state.bitacoraRelevo, a, key);
-              logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+              logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre, key });
             }
           } else {
             // v18.0.39 — no se origina una marca contra una fila que no identifica a nadie.
@@ -16083,7 +16124,7 @@
             } else if (!_apptMarcada(state.bitacoraSinId, a, key)) {
               // Mismo candado, mismo motivo: esta rama tampoco marca fraudWatch.
               _apptMarcar(state.bitacoraSinId, a, key);
-              logEvent({ t: new Date().toLocaleTimeString(), ev: "CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+              logEvent({ t: new Date().toLocaleTimeString(), ev: "CONFIRMACION_SIN_PACIENTE_IDENTIFICABLE", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre, key });
             }
           }
         }
@@ -16111,7 +16152,19 @@
     // rompían el cuadre del informe con el que el médico reclama.
     // Ahora la fila se escribe exactamente donde se cuenta y solo si se contó: contar y
     // registrar dejan de poder separarse.
-    else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
+    else if (st !== prev && prev !== "") {
+      // v18.8.7 — LA LLEGADA A SALA SE REGISTRA UNA SOLA VEZ, POR SU EVENTO TIPADO. El par
+      // doble CAMBIO_ESTADO + INGRESO_A_TIEMPO del CSV (mismo paciente, misma hora de cita,
+      // mismo segundo) nacía aquí: esta función escribía la transición y maybeNotify, en el
+      // MISMO tick, escribía el evento con el que se cuenta (INGRESO_A_TIEMPO, o
+      // FRAUDE_EXTEMPORANEO si llegó tarde). Dos filas para un solo hecho. La llegada queda
+      // en su evento tipado, que es el que sustenta el conteo y la reclamación; CAMBIO_ESTADO
+      // sigue cubriendo las transiciones sin evento propio (en sala→atendido, el hueco de
+      // lectura, las oscilaciones de vuelta), cada una con su marca de transición en el
+      // candado de unicidad de logEvent.
+      const _esLlegadaASala = st.includes("en sala") && !prev.includes("en sala");
+      if (!_esLlegadaASala) logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre, key });
+    }
     // v18.0.62 — bajo TODAS las identidades de la cita (ver _apptMapaEscribir), para que el
     // parpadeo del doc_id no parta su memoria en dos ni la haga pasar por «nueva».
     _apptMapaEscribir(state.historical, a, key, stRaw);
@@ -18121,7 +18174,7 @@
     // existe de verdad, en suite_10 («el cuadre del CSV»), y compara la cabecera contra las
     // filas del cuerpo para las tres categorías.
     const _conto = bumpStatCita(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima", a.key);
-    if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
+    if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre, key: a.key });
     // v18.0.13 — y el ROJO, aquí mismo: una sola condición decide el número Y la fila, así
     // que el cuadre del CSV deja de depender de qué función llegó a correr. `a.sound` es la
     // marca de que se observó la transición de verdad (v16.2.8: el rojo heredado por
@@ -18129,7 +18182,7 @@
     // acto (ver logEvent): son pocos al día y es la evidencia que justifica todo esto.
     if (_conto && a.color === "ROJO" && a.sound) {
       logEvent({ t: a.visto || new Date().toLocaleTimeString(), ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto,
-        doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
+        doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre, key: a.key });
       try { reportarFraude(a.hora_texto, a.elapsed); } catch (e) {}
     }
     // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00

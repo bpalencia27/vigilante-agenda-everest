@@ -4,6 +4,53 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.7] — 2026-09-08 (Notificaciones: una sola vez por evento, aislamiento total entre instancias y desviación horaria sin negativos)
+
+Orden del médico con el registro real de auditoría de notificaciones adjunto. Se
+identificaron tres patrones anómalos y se corrigieron los tres, con verificación
+por mutación de cada uno.
+
+### 🔔 Una notificación, una sola fila de auditoría — en cualquier instancia
+El CSV traía rachas de «lectura tras relevo sin confirmar» para los MISMOS
+pacientes (hasta siete líneas por un solo hecho): el candado de esa rama vivía en
+la memoria de cada pestaña, y la gracia del relevo se reabre con cada cambio de
+pestaña. Ahora un candado compartido del día (`vgl_audit_unico`) decide, dentro de
+la bitácora, quién escribe cada fila: la primera instancia que gana la marca
+registra el evento; las demás callan. La unicidad es por (tipo de evento, cita,
+día) para los nueve tipos de notificación; para `CAMBIO_ESTADO` la marca incluye
+además la transición (previo → estado), para no amputar transiciones posteriores
+legítimas de la misma cita.
+
+### 🧱 Aislamiento total entre ventanas y pestañas
+Ninguna notificación se comparte, sincroniza ni propaga entre instancias: cada
+pestaña emite sus avisos en su propia ventana o no emite. Lo ÚNICO que viaja por
+el almacén común es el candado anti-duplicado — sin ningún dato del paciente —,
+que es justamente lo que impide que dos instancias emitan lo mismo (los dos
+requisitos juntos: ni propagación, ni duplicados).
+
+### 🔀 Sin pares dobles CAMBIO_ESTADO + INGRESO_A_TIEMPO
+El CSV mostraba al mismo paciente con ambas filas en el mismo segundo: la
+transición la escribía `colorAndAlert` y, en el MISMO tick, `maybeNotify`
+escribía el evento tipado con el que se cuenta. La llegada a sala queda ahora
+registrada UNA sola vez, por su evento tipado (INGRESO_A_TIEMPO, o
+FRAUDE_EXTEMPORANEO si llegó tarde) — el que sustenta el conteo y la reclamación.
+`CAMBIO_ESTADO` sigue cubriendo las transiciones sin evento propio (en sala →
+atendido, el hueco de lectura, las oscilaciones de vuelta).
+
+### ⏱️ Desviación horaria sin negativos
+Las filas con -35.3 y -43.7 minutos (pacientes confirmados ANTES de la hora de la
+cita) ensuciaban la trazabilidad de las asistencias, que se reclaman por llegadas
+TARDE. La bitácora normaliza ahora cualquier desviación negativa a 0; los
+retrasos positivos se conservan tal cual.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md`
+(candado de unicidad, supresión del par doble y normalización del minuto
+negativo — las tres cayeron rojas en la suite nueva y volvieron a verde).
+Suite nueva `suite_103_unicidad_notificaciones.js` (7/7). Banco completo
+3673/3673, EXIT=0 real.
+
+---
+
 ## [Versión 18.8.6] — 2026-09-08 (Widget RCV: minimizar con pastilla de reapertura + verificación de los modales del dock)
 
 Pedido en vivo del médico: el panel «Próximos exámenes · Riesgo cardiovascular»
