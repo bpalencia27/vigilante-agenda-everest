@@ -4,6 +4,47 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.4] — 2026-09-08 (T1: Anexo 5 con variables de tema + blindaje tipográfico de los 9 modales/avisos pegados a body)
+
+Cierre del encargo T1 de la sesión: auditoría CSS de los modales y avisos que se
+pegan directamente a `document.body` (la lista de CLAUDE.md) y rediseño del panel
+del Anexo 5 de la HC con variables de tema.
+
+### 🎨 El panel del Anexo 5 se pinta con variables de tema, no con colores duros
+El aviso de abandono/pendientes/remitir/metas dentro de la Historia Clínica usaba
+colores duros (azul noche `#0F172A`, rojo `#B91C1C`, ámbar `#B45309`, azul
+`#1D4ED8`, verde `#15803D`, gris pizarra `#334155`/`#64748B`, fondo y borde
+`rgba(15,23,42,…)` y un `font-size:12px` fijo). Ahora usa las variables de tema
+del proyecto (`--fg`, `--fg2`, `--fg3`, `--c-rojo`, `--c-ambar`, `--c-azul`,
+`--c-verde`, `--surface-2`, `--line`, `--t-small`): legible en tema oscuro y en
+tema claro, y coherente con el resto de la UI. Los `!important` de cada estilo
+inline se conservan exactamente donde estaban (Regla R) y el acento semántico del
+borde izquierdo rojo se mantiene. Verificado en Chromium contra el CSS real de la
+hoja con un «Everest» simulado agresivo
+(`div,span,p,b,small,label,button{color:… !important}`): los 12 colores del panel
+sobreviven en ambos temas.
+
+### 🛡️ Blindaje tipográfico agrupado de los 9 modales/avisos pegados a body
+Los 9 contenedores de la lista de CLAUDE.md (`#vgl-pym-modal`, `#vgl-pes-modal`,
+`#vgl-labs-modal`, `#vgl-labsv-modal`, `#vgl-postcita-panel`,
+`#vgl-agendar-modal`, `#vgl-ordenar-modal`, `#vgl-toasts`, `#vgl-pausa-clinica`)
+ya tenían sus reglas de color con `!important` (auditoría: 252 reglas reales,
+0 violaciones), pero el texto suelto SIN clase propia (un `<b>`/`<span>` dentro de
+un párrafo) no estaba protegido contra reglas genéricas de Everest. Nueva regla
+agrupada con el patrón de especificidad CERO
+`#vgl-… :where(:not([class])){color:inherit !important}`: quien lleva color propio
+lleva clase propia (v18.0.16), y el suelto hereda el color del contenedor.
+Verificado en Chromium: el suelto de los 9 contenedores sobrevive a un Everest
+simulado realista y las clases con color propio sobreviven al agresivo.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (blindaje
+sin un selector, color duro reintroducido, `!important` retirado de una regla de
+modal — las tres cayeron rojas y volvieron a verde), banco completo en verde
+(3658 comprobaciones), verificación Chromium con el patrón de
+`docs/herramientas/chromium_102.py`.
+
+---
+
 ## [Versión 18.8.3] — 2026-09-08 (Auditoría integral del widget «Próximos exámenes · Riesgo cardiovascular»)
 
 Auditoría completa del widget pedida por el médico: errores clasificados por

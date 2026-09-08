@@ -353,6 +353,36 @@ module.exports = {
       t.cierto(c.api.hcAnexo5Render() === false, "y no vuelve a aparecer para ese paciente en este turno");
     });
 
+    t.caso("F2/hcAnexo5Render (v18.8.4 T1): el panel se pinta con variables de tema, sin colores duros", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
+      c.api.__state.pymAbandono = EST_A5().pymAbandono;
+      t.cierto(c.api.hcAnexo5Render() === true, "el panel se pinta con las 4 alertas");
+      const html = c.env.doc.getElementById("vgl-a5-panel").innerHTML;
+      // Colores duros de la v18.8.3: en tema oscuro quedaban ilegibles (T1 los migra).
+      const duros = ["#0F172A", "#B45309", "#1D4ED8", "#15803D", "#334155", "#64748B",
+        "rgba(15,23,42,.03)", "rgba(15,23,42,.15)", "font-size:12px"];
+      for (const h of duros) {
+        t.falso(html.indexOf(h) >= 0, "sin el color duro " + h + " en el panel");
+      }
+      const vars = ["var(--c-rojo)", "var(--c-ambar)", "var(--c-azul)",
+        "var(--fg)", "var(--fg2)", "var(--fg3)", "var(--surface-2)", "var(--line)", "var(--t-small)"];
+      for (const v of vars) {
+        t.cierto(html.indexOf(v) >= 0, "el panel consume " + v);
+      }
+      // La rama VERDE solo sale con metas cumplidas (58/75 no cumple): se fuerza con otro
+      // registro del MISMO paciente y se comprueba que también consume su token.
+      const recCumple = Object.assign({}, REC_A5, { ctrl: HOY_S - 10, suma: 80 });
+      c.api.__state.pymAnexo5 = EST_A5(recCumple).pymAnexo5;
+      t.cierto(c.api.hcAnexo5Render() === true, "re-render con metas cumplidas");
+      const html2 = c.env.doc.getElementById("vgl-a5-panel").innerHTML;
+      t.cierto(html2.indexOf("var(--c-verde)") >= 0, "la rama de metas cumplidas consume var(--c-verde)");
+      t.falso(html2.indexOf("#15803D") >= 0, "y ya no pinta el verde duro");
+      // Regla R: los !important literales inline se conservan exactamente (10, contados).
+      t.igual((html.match(/!important/g) || []).length, 10, "los 10 !important inline siguen literales");
+    });
+
     t.caso("F2/hcAnexo5Render: sin HC abierta por DOM, o sin dato del Anexo 5, no hay panel", () => {
       const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
         + '<app-index><div class="text-muted">C.C. 98.765.432.109</div></app-index>');

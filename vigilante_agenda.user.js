@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.3
+// @version      18.8.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15455,20 +15455,23 @@
         const por = [];
         if (datos.abandono.sinControl) por.push("más de 6 meses sin control (último: " + (vglSerialAFecha(datos.abandono.ultimo) || "sin fecha") + ")");
         if (datos.abandono.pes) por.push("marcado como abandonado en la base de citas");
-        filas.push('<div style="margin:4px 0;color:#B91C1C !important;font-weight:600;">&#9888; ABANDONO DEL PROGRAMA — ' + por.join(" · ") + "</div>");
+        filas.push('<div style="margin:4px 0;color:var(--c-rojo) !important;font-weight:600;">&#9888; ABANDONO DEL PROGRAMA — ' + por.join(" · ") + "</div>");
       }
       if (datos.pendientes.length) {
-        filas.push('<div style="margin:4px 0;color:#B45309 !important;font-weight:600;">&#128270; Estudios pendientes de ordenar: <span style="font-weight:400;color:#334155 !important;">' + datos.pendientes.join(" · ") + "</span></div>");
+        filas.push('<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#128270; Estudios pendientes de ordenar: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.pendientes.join(" · ") + "</span></div>");
       }
       if (datos.remitir.length) {
-        filas.push('<div style="margin:4px 0;color:#1D4ED8 !important;font-weight:600;">&#128221; Consultas por remitir: <span style="font-weight:400;color:#334155 !important;">' + datos.remitir.join(" · ") + "</span></div>");
+        filas.push('<div style="margin:4px 0;color:var(--c-azul) !important;font-weight:600;">&#128221; Consultas por remitir: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.remitir.join(" · ") + "</span></div>");
       }
-      // Regla R: cada color inline lleva su !importante LITERAL en la misma cadena —
+      // Regla R: cada color inline lleva su !important LITERAL en la misma cadena —
       // la alternative concatenada (color:' + (cond?...) + ' !important) es invisible
       // para el censo de la suite 25 y además frágil.
+      // v18.8.4 (T1): los colores duros pasan a variables de tema (--fg/--fg2/--fg3,
+      // --c-*/--surface-2/--line/--t-small) para que el panel se lea también en tema
+      // oscuro; los !important literales se conservan exactamente donde estaban.
       filas.push(datos.cumpleSuma
-        ? '<div style="margin:4px 0;color:#15803D !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — cumple</div>"
-        : '<div style="margin:4px 0;color:#B45309 !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — por debajo del mínimo</div>");
+        ? '<div style="margin:4px 0;color:var(--c-verde) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — cumple</div>"
+        : '<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — por debajo del mínimo</div>");
       const ctxLinea = [
         c.fechaControl ? "último control " + vglSerialAFecha(c.fechaControl) : "",
         c.tfg ? "TFG " + c.tfg : "",
@@ -15481,12 +15484,12 @@
         c.rac ? "RAC " + c.rac + (c.racFecha ? " (" + vglSerialAFecha(c.racFecha) + ")" : "") : "",
       ].filter(Boolean).join(" · ");
       panel.innerHTML =
-        '<div style="margin:8px 0;padding:8px 12px;border:1px solid rgba(15,23,42,.15);border-left:4px solid #B91C1C;border-radius:8px;background:rgba(15,23,42,.03);font-size:12px;line-height:1.45;color:#334155 !important;">' +
+        '<div style="margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--c-rojo);border-radius:8px;background:var(--surface-2);font-size:var(--t-small);line-height:1.45;color:var(--fg2) !important;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-        '<span style="font-weight:700;color:#0F172A !important;">&#129656; Anexo 5 · ' + escapeHtml(datos.prog) + " — paciente " + _vglHcMascara(ctx.docId) + "</span>" +
-        '<span data-a5-cerrar role="button" tabindex="0" title="Cerrar por este turno" style="cursor:pointer;color:#64748B !important;font-weight:700;padding:0 4px;">×</span></div>' +
+        '<span style="font-weight:700;color:var(--fg) !important;">&#129656; Anexo 5 · ' + escapeHtml(datos.prog) + " — paciente " + _vglHcMascara(ctx.docId) + "</span>" +
+        '<span data-a5-cerrar role="button" tabindex="0" title="Cerrar por este turno" style="cursor:pointer;color:var(--fg3) !important;font-weight:700;padding:0 4px;">×</span></div>' +
         filas.join("") +
-        '<div style="margin-top:4px;color:#64748B !important;">' + escapeHtml(ctxLinea) + "</div>" +
+        '<div style="margin-top:4px;color:var(--fg3) !important;">' + escapeHtml(ctxLinea) + "</div>" +
         "</div>";
       const btn = panel.querySelector("[data-a5-cerrar]");
       if (btn) btn.addEventListener("click", () => { _vglA5Cerrados.add(datos.docKey); panel.remove(); });
@@ -19802,6 +19805,13 @@
       #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       #vgl-cw-farmaco :where(:not([class])){color:inherit !important}
+      /* v18.8.4 (T1): blindaje tipográfico de los 9 modales/avisos pegados a document.body
+         (lista de CLAUDE.md). El texto suelto SIN clase propia hereda el color del modal y
+         queda inmune a las reglas genéricas de Everest; :where = especificidad CERO, nunca
+         compite con una clase o un inline nuestro (quien lleva color propio lleva clase
+         propia — v18.0.16 — y la Regla R garantiza que todo color inline se declara con
+         prioridad). El panel del Anexo 5 no está: vive DENTRO de #vgl-root. */
+      #vgl-pym-modal :where(:not([class])),#vgl-pes-modal :where(:not([class])),#vgl-labs-modal :where(:not([class])),#vgl-labsv-modal :where(:not([class])),#vgl-postcita-panel :where(:not([class])),#vgl-agendar-modal :where(:not([class])),#vgl-ordenar-modal :where(:not([class])),#vgl-toasts :where(:not([class])),#vgl-pausa-clinica :where(:not([class])){color:inherit !important}
 
       /* =====================================================================
          v18.0.16 — REGRESIÓN DE MI PROPIO BLINDAJE (v18.0.14), medida en Chromium.

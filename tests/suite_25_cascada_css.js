@@ -846,7 +846,7 @@ module.exports = {
       // v18.8.3 — 668 -> 669: la desc técnica .vgl-rcvp-desc (segunda línea de cada fila
       // del widget, bajo el rótulo amable) trae su color con !important — regla de color
       // nueva en un flotante pegado a document.body, la Regla E lo exige sin excepción.
-      t.cierto(importantTotal === 669, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal, los 14 del panel RCV de la v18.4.2, los 3 del cierre/arrastre del widget RCV de la v18.8.2 (2 reglas de color del botón + 1 mención en su comentario) y la 1 de la desc técnica .vgl-rcvp-desc de la v18.8.3 (esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664, más la 1 del acceso directo a HC de la v18.7.0 = 665, más las 3 de la v18.8.2 = 668, más la 1 de la v18.8.3 = 669; salió ${importantTotal})`);
+      t.cierto(importantTotal === 670, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal, los 14 del panel RCV de la v18.4.2, los 3 del cierre/arrastre del widget RCV de la v18.8.2 (2 reglas de color del botón + 1 mención en su comentario), la 1 de la desc técnica .vgl-rcvp-desc de la v18.8.3 y la 1 del blindaje tipográfico agrupado de los 9 modales pegados a body de la v18.8.4 (T1) (esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664, más la 1 del acceso directo a HC de la v18.7.0 = 665, más las 3 de la v18.8.2 = 668, más la 1 de la v18.8.3 = 669, más la 1 de la v18.8.4 = 670; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
@@ -1570,6 +1570,20 @@ module.exports = {
       for (const r of REGLAS) {
         const n = code.split(r).length - 1;
         t.igual(n, 1, "la regla aparece UNA sola vez (hay " + n + "): " + r.slice(0, 64) + "…");
+      }
+    });
+
+    t.caso("v18.8.4 (T1) — blindaje tipográfico de los 9 modales/avisos pegados a body", () => {
+      // CLAUDE.md: el texto suelto sin clase propia de un modal pegado a document.body
+      // hereda el color del modal y queda inmune a las reglas genéricas de Everest.
+      // Una regla agrupada con :where (especificidad CERO) que no compite con ninguna
+      // clase ni inline nuestro — el Anexo 5 no está: vive DENTRO de #vgl-root.
+      const nueve = ["vgl-pym-modal", "vgl-pes-modal", "vgl-labs-modal", "vgl-labsv-modal",
+        "vgl-postcita-panel", "vgl-agendar-modal", "vgl-ordenar-modal", "vgl-toasts", "vgl-pausa-clinica"];
+      const regla = css.split("\n").find(l => l.includes("#vgl-pym-modal :where") && l.includes("color:inherit !important"));
+      t.cierto(!!regla, "existe la regla agrupada del blindaje, con color:inherit !important");
+      for (const id of nueve) {
+        t.cierto(regla.indexOf("#" + id + " :where(:not([class]))") >= 0, "el modal " + id + " tiene su blindaje en la regla");
       }
     });
 
