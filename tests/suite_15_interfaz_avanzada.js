@@ -6550,5 +6550,77 @@ module.exports = {
       t.cierto(/escríbalo a mano en la casilla/.test(src), "y qué puede hacer el médico");
     });
 
+    // =====================================================================
+    // v18.6.2 — UI ADMINISTRATIVA DE LOS TOGGLES F3 (pendiente de la
+    // delegación §A.3): el grupo «Funcionalidades por médico» en Ajustes.
+    // Solo el perfil COMPLETO lo ve (capacidad toggles_funcionalidades, que
+    // ninguna lista concede salvo COMPLETO); cada interruptor aplica en
+    // caliente con togSet (persistencia por médico, vgl_tog_<uid>, sin pasar
+    // por el borrador de vgl_cfg); los sub-toggles se pintan solo con su
+    // padre activo y se ocultan/recuperan en vivo al moverlo. El memo del
+    // harness (mismo selector → mismo nodo) hace observable el efecto en
+    // vivo del listener sobre las filas de los sub-toggles.
+    // =====================================================================
+    t.caso("v18.6.2: el grupo «Funcionalidades por médico» solo se pinta para médicos (capacidad toggles_funcionalidades)", () => {
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      // Se verifica por el id del div, no por el texto: el comentario HTML de la
+      // sección también nombra el grupo y se pinta SIEMPRE, con y sin permiso.
+      t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "el médico (COMPLETO) ve el grupo");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar"'), "con el interruptor del módulo de agendamiento");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-hc_chip"'), "y el del chip de la HC");
+      // Un perfil PÚBLICO (uid desconocido en el padrón) no lo ve: no es
+      // configuración del equipo, es decisión personal del médico.
+      cv.api.__state.activeDoctor = { id: 999, name: "MEDICO NO REGISTRADO" };
+      cv.api.renderSettings();
+      t.falso(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "un perfil PÚBLICO no ve el grupo");
+      t.falso(hoja.innerHTML.includes('id="c-tog-agendar"'), "ni sus interruptores");
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "al volver el médico, el grupo reaparece");
+    });
+
+    t.caso("v18.6.2: el interruptor de un toggle aplica EN CALIENTE con togSet — persistencia por médico y borrador de Ajustes intacto", () => {
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      const chk = hoja.querySelector("#c-tog-agendar");
+      t.cierto(!!chk && !!chk._listeners && !!chk._listeners.change, "el interruptor quedó cableado");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar" checked'), "nace encendido (default fail-open)");
+      chk.checked = false;
+      disparar(chk, "change");
+      const mapa = cv.api.readJSON("vgl_tog_707") || {};
+      t.igual(mapa.tog_agendar, false, "la decisión queda persistida en la clave del médico (vgl_tog_<uid>)");
+      t.igual(cv.api.togActiva("tog_agendar"), false, "y aplica en caliente: la compuerta la respeta");
+      t.falso(cv.api._ajustesSucio(), "NO pasa por el borrador de Ajustes (no pide «Guardar cambios»)");
+      chk.checked = true;
+      disparar(chk, "change");
+      t.igual(cv.api.readJSON("vgl_tog_707").tog_agendar, true, "volver a encenderlo restaura el flujo");
+    });
+
+    t.caso("v18.6.2: los sub-toggles solo se pintan con su padre activo y se ocultan/recuperan en vivo al moverlo", () => {
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.togSet("tog_agendar", false);
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('<div class="vgl-fld vgl-d-none" id="vgl-togsub-tog_agendar_labs">'),
+        "con el padre apagado, el sub-toggle de solo-labs se pinta oculto");
+      t.falso(hoja.innerHTML.includes('id="c-tog-agendar_labs" checked'),
+        "y su interruptor va sin marca (la jerarquía manda en togActiva)");
+      t.cierto(hoja.innerHTML.includes('<div class="vgl-fld" id="vgl-togsub-tog_anexo5">'),
+        "el sub-toggle del Anexo 5 (padre notificaciones activo) se pinta visible");
+      // En vivo: encender al padre recupera la fila; apagarlo la oculta.
+      const chkPadre = hoja.querySelector("#c-tog-agendar");
+      chkPadre.checked = true;
+      disparar(chkPadre, "change");
+      t.falso(hoja.querySelector("#vgl-togsub-tog_agendar_labs").classList.contains("vgl-d-none"),
+        "al encender el padre, la fila del sub-toggle reaparece en el acto");
+      chkPadre.checked = false;
+      disparar(chkPadre, "change");
+      t.cierto(hoja.querySelector("#vgl-togsub-tog_agendar_labs").classList.contains("vgl-d-none"),
+        "y al apagarlo vuelve a ocultarse, sin esperar a otro repintado");
+      chkPadre.checked = true;
+      disparar(chkPadre, "change");
+      t.igual(cv.api.togActiva("tog_agendar"), true, "se deja al padre encendido al terminar");
+    });
+
   },
 };

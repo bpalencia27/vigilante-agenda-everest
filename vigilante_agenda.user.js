@@ -10999,6 +10999,11 @@
   // =====================================================================
   const ACCESO_CAPS_PUBLICAS = ["psic_odonto", "pym"];
   const ACCESO_CAPS_LABORATORIOS = ["centinela", "notificaciones", "agendar_labs", "laboratorios", "widget_examen_normal", "widget_examenes_autolabs", "aviso_paciente_nuevo"];
+  // v18.6.2 — UI administrativa de los toggles F3 en Ajustes: capacidad que NO
+  // aparece en ninguna de las dos listas de arriba, así que accesoCap() solo la
+  // concede al perfil COMPLETO (los médicos). Los perfiles de laboratorio y el
+  // público NO ven el grupo «Funcionalidades por médico»: son decisiones
+  // personales del médico sobre sus propios flujos, no configuración del equipo.
   const ACCESO_GRACIA_MS = 12 * 60 * 60 * 1000;
   function mtrNormalizarNombre(n) {
     return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
@@ -34865,6 +34870,24 @@
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
     // v12.5.2 — Estado de la credencial COMPARTIDA de Athenea en este equipo (sin exponer valores).
     const athEstado = '<span id="c-athestado">' + _ajustesAthEstadoHtml() + "</span>";
+    // v18.6.2 — UI administrativa de los toggles F3 (v18.6.1): SOLO médicos — la
+    // compuerta es accesoCap("toggles_funcionalidades"), capacidad que ninguna
+    // lista concede salvo al perfil COMPLETO (accesoCap: COMPLETO = todo). Cada
+    // interruptor aplica EN CALIENTE con togSet() (persistencia por médico en
+    // vgl_tog_<uid>, sin pasar por el borrador de vgl_cfg): su efecto es visible
+    // de inmediato — el botón del dock aparece o desaparece en el acto (decisión
+    // F3/Dock) — y el propio interruptor se guarda al cambiarlo, como la guía
+    // paso a paso (c-acomp). Los sub-toggles se pintan SOLO con su padre activo
+    // y se ocultan/recuperan en vivo al moverlo.
+    const grpToggles = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-toggles">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Funcionalidades por médico</div>
+        <div class="vgl-fld"><span class="vgl-hint">Interruptores personales suyos: se guardan por médico (no por computador) y aplican de inmediato. Apagar un módulo oculta su botón; encenderlo lo devuelve al instante. Solo usted los ve.</span></div>
+        ${VGL_TOGGLES.map((def) => {
+          const esHijo = !!def.sub;
+          const padreLabel = esHijo ? (VGL_TOGGLES.find((x) => x.k === def.sub) || {}).label : "";
+          return `<div class="vgl-fld${esHijo && !togActiva(def.sub) ? " vgl-d-none" : ""}"${esHijo ? ` id="vgl-togsub-${def.k}"` : ""}><label>${def.label}<span class="vgl-hint">${def.desc}${esHijo ? " Solo se muestra con «" + padreLabel + "» encendido." : ""}</span></label>${sw("c-tog-" + def.k.replace(/^tog_/, ""), togActiva(def.k))}</div>`;
+        }).join("")}
+      </div>`;
     // v15.6.1 — El grupo de Athenea es configuración DE INSTALACIÓN (una vez por equipo,
     // la hace el programador): solo se pinta en modo programador. Reporte del 20-08.
     const grpAthenea = !isDevMode ? "" : `      <div class="vgl-grp">
@@ -34915,6 +34938,9 @@
              (requisito de la PARTE 2 §7 del propio documento). Solo lectura. -->
         <div class="vgl-fld"><label>Términos de uso y privacidad<span class="vgl-hint">Versión del aviso que usted aceptó para usar el asistente, con su fecha. Si el texto cambia, se le pedirá autorización de nuevo antes de continuar.</span></label><b id="c-terminos" style="font-size:var(--t-micro)">${escapeHtml(_terminosAjustesTexto())}</b></div>
       </div>
+      <!-- v18.6.2 — Funcionalidades por médico: solo se pinta para el perfil
+           COMPLETO (compuerta accesoCap("toggles_funcionalidades") en grpToggles). -->
+      ${grpToggles}
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
       ${grpAthenea}
@@ -35048,6 +35074,28 @@
       else { _acompEstadoGuardar({ estado: "off" }); _acompCerrar(false); showToast("AZUL", "Guía paso a paso", "Apagada. Puede volver a encenderla aquí cuando quiera.", false); }
       try { uxTrack(g.checked ? "acomp.ajustes.on" : "acomp.ajustes.off"); } catch (e) {}
     }); }
+    // v18.6.2 — UI de los toggles F3: cambio EN CALIENTE con togSet(), sin pasar
+    // por el borrador de vgl_cfg — la persistencia es por médico (vgl_tog_<uid>)
+    // y el re-pintado del dock lo lanza el propio togSet (firma "TA"/"ta"). Al
+    // mover un PADRE, sus sub-toggles se ocultan o recuperan en vivo; la
+    // jerarquía real la sigue aplicando togActiva() por debajo.
+    VGL_TOGGLES.forEach((def) => {
+      const tg = q("#c-tog-" + def.k.replace(/^tog_/, ""));
+      if (!tg) return;
+      tg.addEventListener("change", () => {
+        const ok = togSet(def.k, tg.checked);
+        if (!def.sub) {
+          VGL_TOGGLES.filter((x) => x.sub === def.k).forEach((h) => {
+            const fila = q("#vgl-togsub-" + h.k);
+            if (fila) fila.classList.toggle("vgl-d-none", !tg.checked);
+          });
+        }
+        try {
+          showToast(ok ? (tg.checked ? "VERDE" : "AZUL") : "ROJO", "Funcionalidad",
+            ok ? (tg.checked ? "Encendida: " : "Apagada: ") + def.label : "No se pudo guardar (no se reconoce al médico en sesión).", false);
+        } catch (e) {}
+      });
+    });
     // v12.5.2 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
     // comportamiento; la credencial compartida se guarda aparte y nunca se registra en
     // consola ni en telemetría.
