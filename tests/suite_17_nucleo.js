@@ -925,6 +925,33 @@ module.exports = {
       t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal");
     });
 
+    // ---------- v18.8.3: mini guía del aviso de actualización obligatoria ----------
+    // Pedido del médico del 08-sep-2026: «Actualizar ahora» abre el archivo raw del
+    // gist en el navegador en lugar de iniciar la actualización desde Tampermonkey.
+    // La mini guía numerada explica qué hacer en ese caso, va ANTES de los pasos
+    // originales (complemento, no reemplazo) y el card pasa al par fijo AAA
+    // #991b1b/#ffffff para ser legible en cualquier tema.
+    t.caso("_mostrarAvisoBloqueoVersion: la mini guía explica el raw del gist y va ANTES de los pasos originales", () => {
+      const c = cargar({ silencioso: true });
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const modal = c.env.doc.getElementById("vgl-bloqueo-version");
+      t.cierto(!!modal, "modal de bloqueo presente");
+      const card = modal.children[0];
+      const hijos = card.children.map((n) => String(n.textContent || ""));
+      const iGuia = hijos.findIndex((txt) => txt.indexOf("texto de programación") >= 0);
+      t.cierto(iGuia >= 0, "existe el bloque de la mini guía");
+      const iBtn = hijos.findIndex((txt) => txt.indexOf("Actualizar ahora") >= 0);
+      const iPasos = hijos.findIndex((txt) => txt.indexOf("Pulse «Actualizar ahora»") >= 0);
+      t.cierto(iBtn >= 0 && iGuia > iBtn && iPasos > iGuia, "orden del card: botón → mini guía → pasos originales (la guía está ANTES de los pasos existentes)");
+      const g = hijos[iGuia];
+      for (const paso of ["1.", "2.", "3.", "4.", "5."]) t.cierto(g.indexOf(paso + " ") >= 0, "la guía numera el paso " + paso.slice(0, 1));
+      t.cierto(g.indexOf("Ctrl+A") >= 0 && g.indexOf("Ctrl+V") >= 0 && g.indexOf("Ctrl+S") >= 0, "los atajos de copiar/pegar/guardar están explicados");
+      t.cierto(g.indexOf("«Panel»") >= 0 && g.indexOf("«Utilidades»") >= 0, "nombra el panel y las utilidades de Tampermonkey");
+      t.cierto(g.indexOf("desaparece solo") >= 0, "explica que el aviso desaparece al instalar la versión exigida");
+      t.cierto(hijos[iPasos].indexOf("Recargue Everest (F5)") >= 0 && hijos[iPasos].indexOf("Everest sigue funcionando") >= 0, "los pasos originales quedaron intactos (complemento, no reemplazo)");
+      t.cierto(card.style.cssText.indexOf("background:#991b1b") >= 0 && card.style.cssText.indexOf("color:#ffffff !important") >= 0, "el card usa el par fijo AAA #991b1b/#ffffff (legible en cualquier tema)");
+    });
+
     // ---------- resolverMedicoPorPerfil ----------
     await t.casoAsync("resolverMedicoPorPerfil: fija el médico activo desde GetUsuarioPerfil y consulta UNA sola vez por login", async () => {
       let respuestaPerfil = { data: { id: "515", nombreCompleto: "PEDRO PEREZ GOMEZ", perfilCodigo: "PROFESIONAL" } };

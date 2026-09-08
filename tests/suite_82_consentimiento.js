@@ -86,12 +86,14 @@ module.exports = {
       // Rechazar directo: marca + aviso, sin red y sin arranque
       c.api._terminosAlRechazar();
       t.cierto(!!c.env.gm["vgl_terminos_rechazo"] && !c.env.doc.getElementById("vgl-root") && red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "_terminosAlRechazar solo deja la marca con hora");
+      t.cierto(!!c.env.almacen["vgl_terminos_rechazo"] && typeof JSON.parse(c.env.almacen["vgl_terminos_rechazo"]).ts === "number", "la marca de rechazo queda también en el localStorage del origen (v18.8.3: respaldo de por vida)");
       t.cierto(!!c.env.doc.getElementById("vgl-terminos-rechazo-velo"), "y muestra el aviso informativo");
       c.env.doc.getElementById("vgl-terminos-rechazo-ok")._listeners.click[0]();
       // Aceptar directo: borra la marca de rechazo y escribe la constancia
       c.api._terminosAlAceptar();
       t.cierto(!c.env.gm["vgl_terminos_rechazo"] && !!c.env.gm["vgl_terminos_acepta"], "_terminosAlAceptar escribe la constancia y retira el rechazo");
       t.cierto(c.env.gm["vgl_terminos_acepta"].id === "uid:101", "con el identificador del padrón sembrado");
+      t.cierto(!c.env.almacen["vgl_terminos_rechazo"] && !!c.env.almacen["vgl_terminos_acepta"] && JSON.parse(c.env.almacen["vgl_terminos_acepta"]).version === "1.4", "el aceptar retira el rechazo TAMBIÉN del localStorage y deja allí la constancia de por vida");
     });
 
     // ── 1 ── sin responder: no corre NADA del script ──────────────────
@@ -124,7 +126,8 @@ module.exports = {
       c.env.doc.getElementById("vgl-terminos-rechazar")._listeners.click[0]();
       const marca = c.env.gm["vgl_terminos_rechazo"];
       t.cierto(!!marca && typeof marca.ts === "number" && Math.abs(Date.now() - marca.ts) < 5000, "queda marca local de rechazo con hora");
-      t.cierto(!("vgl_terminos_acepta" in c.env.gm), "rechazar NO escribe ninguna constancia de aceptación");
+      t.cierto(!!c.env.almacen["vgl_terminos_rechazo"], "y su respaldo de por vida en el localStorage del origen (v18.8.3)");
+      t.cierto(!("vgl_terminos_acepta" in c.env.gm) && !("vgl_terminos_acepta" in c.env.almacen), "rechazar NO escribe ninguna constancia de aceptación (ni en GM ni en el localStorage)");
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "la pantalla de términos se cierra");
       const aviso = c.env.doc.getElementById("vgl-terminos-rechazo-velo");
       t.cierto(!!aviso, "aparece el aviso informativo de rechazo");
@@ -235,6 +238,9 @@ module.exports = {
     });
 
     // ── 8 ── la constancia sobrevive la limpieza del sitio ────────────
+    // v18.8.3 — la constancia vive ahora en GM Y en el localStorage del origen
+    // (respaldo de por vida). Tras «borrar datos del sitio», GM sigue autorizando
+    // y el respaldo del localStorage se autorrepara solo en el arranque.
     await t.casoAsync("P11·8 — la constancia vive fuera del origen: sobrevive «borrar datos del sitio»", async () => {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
@@ -242,6 +248,7 @@ module.exports = {
       c.api.mtrCompuertaArranque();
       c.env.doc.getElementById("vgl-terminos-aceptar")._listeners.click[0]();
       t.cierto(!!c.env.gm["vgl_terminos_acepta"], "constancia escrita al aceptar");
+      t.cierto(!!c.env.almacen["vgl_terminos_acepta"], "y duplicada de por vida en el localStorage del origen (v18.8.3)");
       c.env.storage.clear();                    // el médico borra los datos del SITIO
       t.cierto(!c.env.almacen["vgl_terminos_acepta"] && !c.env.almacen["user"], "el localStorage quedó vacío de verdad");
       t.cierto(!!c.env.gm["vgl_terminos_acepta"], "pero la constancia sigue en el almacen del userscript (GM)");
@@ -249,6 +256,7 @@ module.exports = {
       c.env.gm["vgl_kill_active"] = true;       // marcador de arranque (ver P11·4)
       c.api.mtrCompuertaArranque();
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "tras limpiar el sitio NO vuelve a pedir autorización");
+      t.cierto(!!c.env.almacen["vgl_terminos_acepta"], "y el respaldo de por vida se autorreparó solo en el localStorage");
       t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica"), "y arranca normal (aviso del kill-switch)");
     });
 
@@ -506,6 +514,60 @@ module.exports = {
       c2.api.repAccesoDiario();
       await new Promise((res) => setTimeout(res, 30));
       t.falso(!!c2.env.gm["vgl_compuerta_diagnostico"], "perfil del padrón con sesión: el reporte diario tampoco deja diagnóstico");
+    });
+
+    // ── v18.8.3 ── respaldo DE POR VIDA en el localStorage del origen ─────
+    // Pedido del médico del 08-sep-2026: «el modal de aceptación vuelve a
+    // aparecer cada vez que se actualiza el script». Causa: la constancia vivía
+    // SOLO en GM, y al actualizar recreando el userscript Tampermonkey descarta
+    // el GM del script anterior. El localStorage de Everest sobrevive a esa
+    // operación: la constancia vive ahora en los DOS almacenes, se rescata del
+    // localStorage cuando GM no la trae (re-sembrándolo) y se autorrepara la
+    // copia local cuando GM la trae.
+    await t.casoAsync("P11·22 (v18.8.3) — recrear el script al actualizar (GM perdido) NO vuelve a preguntar: la constancia se rescata del localStorage", async () => {
+      // «Instalación anterior»: aceptar dejó la constancia en GM y en el localStorage.
+      const c1 = await cargar({ silencioso: true, fetch: redContada().fetch, gmxhr: redContada().gmxhr });
+      sembrarMedico(c1.env);
+      c1.api.mtrCompuertaArranque();
+      c1.env.doc.getElementById("vgl-terminos-aceptar")._listeners.click[0]();
+      t.cierto(!!c1.env.gm["vgl_terminos_acepta"] && !!c1.env.almacen["vgl_terminos_acepta"], "aceptar escribe la constancia en GM y en el localStorage del origen");
+      // «Actualización con script nuevo»: GM nace vacío; el localStorage del sitio sigue.
+      const c2 = await cargar({ silencioso: true, fetch: redContada().fetch, gmxhr: redContada().gmxhr });
+      sembrarMedico(c2.env);
+      t.cierto(!("vgl_terminos_acepta" in c2.env.gm), "el GM del script recreado nace sin constancia");
+      c2.env.almacen["vgl_terminos_acepta"] = JSON.stringify({ version: "1.4", ts: Date.now() - 10 * 24 * 3600 * 1000, id: "uid:101" });
+      c2.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
+      const d = c2.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === true && d.motivo === "aceptado", "la copia del localStorage autoriza el arranque directo (motivo «" + d.motivo + "»)");
+      t.cierto(c2.env.gm["vgl_terminos_acepta"] && c2.env.gm["vgl_terminos_acepta"].id === "uid:101", "y la constancia se re-siembra en GM para la próxima");
+      await c2.api.mtrCompuertaArranque();
+      t.cierto(!c2.env.doc.getElementById("vgl-terminos-velo"), "no se muestra la pantalla de términos");
+      t.cierto(!!c2.env.doc.getElementById("vgl-pausa-clinica"), "boot() corrió directo tras la compuerta");
+    });
+
+    await t.casoAsync("P11·23 (v18.8.3) — solo una constancia VIGENTE del localStorage autoriza; GM vigente manda sobre localStorage viejo", async () => {
+      const red = redContada();
+      // (a) versión vieja en el localStorage: se re-pregunta (el texto cambió).
+      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      sembrarMedico(c.env);
+      c.env.almacen["vgl_terminos_acepta"] = JSON.stringify({ version: "1.0", ts: Date.now(), id: "uid:101" });
+      let d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.motivo === "preguntar", "una copia de la 1.0 en localStorage NO autoriza (motivo «" + d.motivo + "»)");
+      // (b) forma rota (ts no numérico): tampoco autoriza.
+      c.env.almacen["vgl_terminos_acepta"] = JSON.stringify({ version: "1.4", ts: "ayer" });
+      d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.motivo === "preguntar", "una copia sin fecha-hora numérica NO autoriza");
+      // (c) GM vigente + localStorage viejo: GM manda y NO se deja pisar por la copia vieja.
+      c.env.gm["vgl_terminos_acepta"] = { version: "1.4", ts: Date.now(), id: "uid:101" };
+      d = c.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === true && d.motivo === "aceptado", "con GM vigente la decisión es aceptado aunque la copia del localStorage esté vieja");
+      // (d) rechazo fresco solo en el localStorage (GM perdido al recrear): la
+      // ventana de cortesía de 12 h se conserva y no se pregunta.
+      const c2 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      sembrarMedico(c2.env);
+      c2.env.almacen["vgl_terminos_rechazo"] = JSON.stringify({ ts: Date.now() - 2 * 3600 * 1000 });
+      d = c2.api.mtrCompuertaDecision();
+      t.cierto(d.arrancar === false && d.motivo === "rechazo-fresco", "la marca de rechazo del localStorage conserva la ventana de cortesía (motivo «" + d.motivo + "»)");
     });
 
     t.caso("P11·21 (v18.8.1) — REGRESIÓN ESTRUCTURAL: mtrCompuertaSinIdentidad ya NO existe; la decisión es solo consentimiento", () => {

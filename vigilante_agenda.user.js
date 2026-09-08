@@ -38162,26 +38162,38 @@
       // Colores con fallback + !important: cuelga directo de body (regla del proyecto).
       aviso.style.cssText = "position:fixed;inset:0;z-index:var(--z-toast,2147483647);display:flex;align-items:center;justify-content:center;pointer-events:none;background:transparent;";
       const card = document.createElement("div");
-      card.style.cssText = "pointer-events:auto;background:var(--c-rojo,#991b1b);color:var(--fg,#ffffff) !important;border:2px solid var(--fg,#ffffff);border-radius:var(--r-card,12px);padding:22px 26px;max-width:560px;font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);line-height:1.55;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));text-align:left;";
+      // v18.8.3 — par FIJO AAA #991b1b/#ffffff (8,31:1, WCAG AAA), igual que el aviso
+      // de pausa remota: los tokens se giran con el tema (--c-rojo es #ff8177 en
+      // oscuro y deja el texto blanco ilegible). Pedido del médico del 08-sep-2026:
+      // los mensajes de notificación deben ser perfectamente legibles.
+      card.style.cssText = "pointer-events:auto;background:#991b1b;color:#ffffff !important;border:2px solid #ffffff;border-radius:var(--r-card,12px);padding:22px 26px;max-width:560px;font-family:var(--font-stack,system-ui,sans-serif);font-size:var(--t-body,14px);line-height:1.55;box-shadow:var(--shadow-float,0 10px 25px rgba(0,0,0,0.5));text-align:left;";
       const titulo = document.createElement("div");
-      titulo.style.cssText = "color:var(--fg,#ffffff) !important;font-weight:700;font-size:16px;margin-bottom:10px;";
+      titulo.style.cssText = "color:#ffffff !important;font-weight:700;font-size:16px;margin-bottom:10px;";
       titulo.textContent = "🔒 Actualización obligatoria del Vigilante";
       const cuerpo = document.createElement("div");
-      cuerpo.style.cssText = "color:var(--fg,#ffffff) !important;margin-bottom:12px;white-space:pre-line;";
+      cuerpo.style.cssText = "color:#ffffff !important;margin-bottom:12px;white-space:pre-line;";
       cuerpo.textContent = "Este equipo quedó en la versión v" + VERSION + " y la mínima exigida es la v" + minVer + ".\nPor regla del proyecto, la versión anterior queda deshabilitada: actualice para volver a usar el asistente.";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "Actualizar ahora";
-      btn.style.cssText = "pointer-events:auto;background:var(--fg,#ffffff);color:var(--c-rojo,#991b1b) !important;font-weight:700;border:none;border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer;margin-bottom:12px;";
+      btn.style.cssText = "pointer-events:auto;background:#ffffff;color:#991b1b !important;font-weight:700;border:none;border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer;margin-bottom:12px;";
       btn.addEventListener("click", () => {
         try { window.open(VGL_UPDATE_GIST_URL, "_blank"); } catch (e2) {}
       });
+      // v18.8.3 — mini guía para el fallo real del botón (pedido del médico del
+      // 08-sep-2026): «Actualizar ahora» abre el archivo raw del gist, no la
+      // actualización de Tampermonkey. La guía explica qué hacer en ese caso,
+      // numerada, ANTES de los pasos originales, y los complementa sin tocarlos.
+      const guia = document.createElement("div");
+      guia.style.cssText = "color:#ffffff !important;white-space:pre-line;margin:0 0 12px 0;padding:10px 14px;border:1px solid rgba(255,255,255,0.6);border-radius:8px;background:rgba(0,0,0,0.18);font-size:var(--t-small,13px);line-height:1.5;";
+      guia.textContent = "¿El botón abrió una página con texto de programación en lugar de instalar la actualización?\nEsa página ES la actualización, lista para copiarse. Siga estos pasos, en orden:\n1. Presione Ctrl+A y Ctrl+C para copiarla entera.\n2. Haga clic en el icono de Tampermonkey (esquina superior derecha del navegador) y elija «Panel».\n3. Pulse «＋» (Crear un script nuevo), borre lo que aparezca y pegue con Ctrl+V.\n4. Pulse Ctrl+S (Guardar), cierre la pestaña del archivo y recargue Everest con F5: el asistente vuelve solo, ya sin bloqueo.\n5. Si prefiere no pegar nada: en el Panel abra «Utilidades» y pulse «Buscar actualizaciones de userscripts»; Tampermonkey instala la versión vigente por su cuenta.\nUna vez instalada la versión exigida, este aviso desaparece solo.";
       const pasos = document.createElement("div");
-      pasos.style.cssText = "color:var(--fg,#ffffff) !important;white-space:pre-line;opacity:0.95;";
+      pasos.style.cssText = "color:#ffffff !important;white-space:pre-line;opacity:0.95;";
       pasos.textContent = "1. Pulse «Actualizar ahora» y confirme la instalación en Tampermonkey. Si lo prefiere a mano: Actualícela desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».\n2. Recargue Everest (F5): el asistente vuelve solo, ya sin bloqueo.\nEverest sigue funcionando con normalidad; lo deshabilitado es el asistente.";
       card.appendChild(titulo);
       card.appendChild(cuerpo);
       card.appendChild(btn);
+      card.appendChild(guia);
       card.appendChild(pasos);
       aviso.appendChild(card);
       document.body.appendChild(aviso);
@@ -39094,6 +39106,35 @@
   const TERMINOS_GM_ACEPTA = "vgl_terminos_acepta";
   const TERMINOS_GM_RECHAZO = "vgl_terminos_rechazo";
   const TERMINOS_RECHAZO_MS = 12 * 60 * 60 * 1000;   // re-pregunta a las 12 h (2 h no, 13 h sí)
+  // v18.8.3 — respaldo DE POR VIDA en el localStorage del origen (mismas claves,
+  // otra residencia). Pedido del médico del 08-sep-2026: «el modal de aceptación
+  // vuelve a aparecer cada vez que se actualiza el script». Causa: la constancia
+  // vivía SOLO en el almacén GM, y al actualizar recreando el userscript
+  // Tampermonkey descarta el GM del script anterior — el localStorage de Everest
+  // sobrevive a esa operación. Forma idéntica a la de GM: {version, ts, id},
+  // nada más (cero PHI: el id es el del MÉDICO, ya consentido en T-21).
+  const TERMINOS_LS_ACEPTA = "vgl_terminos_acepta";
+  const TERMINOS_LS_RECHAZO = "vgl_terminos_rechazo";
+  function mtrTerminosLsLeer(clave) {
+    try {
+      if (typeof localStorage === "undefined") return null;
+      const crudo = localStorage.getItem(clave);
+      if (!crudo) return null;
+      return JSON.parse(crudo);
+    } catch (e) { return null; }
+  }
+  function mtrTerminosLsGuardar(clave, valor) {
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.setItem(clave, JSON.stringify(valor));
+    } catch (e) {}
+  }
+  function mtrTerminosLsBorrar(clave) {
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.removeItem(clave);
+    } catch (e) {}
+  }
   // Lo que muestra la pantalla de primer uso (PARTE 1 del documento, en limpio).
   const TERMINOS_RESUMEN = [
     "Centinela es una herramienta de apoyo hecha por un colega médico y compartida entre profesionales. No es un programa oficial de la IPS ni de Everest/Athenea, y no reemplaza su criterio: usted sigue siendo responsable de todo lo que firme en la historia clínica.",
@@ -39509,22 +39550,39 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   // Constancia de aceptación. SOLO sirve si es de la versión VIGENTE: subir
   // TERMINOS_VERSION (el texto cambió) vuelve a preguntar; actualizar el script
   // sin tocar el texto, no. Forma guardada: {version, ts, id} y nada más.
+  // v18.8.3 — residencia doble (GM + localStorage del origen): si GM no trae
+  // constancia válida (p. ej. el script se recreó al actualizar y Tampermonkey
+  // perdió el GM anterior), se rescata la copia del localStorage y se re-siembra
+  // en GM; si GM la trae, se autorrepara la copia del localStorage si se perdió
+  // (p. ej. «borrar datos del sitio»). Una versión distinta jamás autoriza.
   function mtrConsentimientoConstancia() {
     try {
       const c = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_ACEPTA, null) : null;
-      if (!c || typeof c !== "object" || c.version !== TERMINOS_VERSION) return null;
-      if (typeof c.ts !== "number" || !c.ts) return null;
-      return c;
-    } catch (e) { return null; }
+      if (c && typeof c === "object" && c.version === TERMINOS_VERSION && typeof c.ts === "number" && c.ts) {
+        const l = mtrTerminosLsLeer(TERMINOS_LS_ACEPTA);
+        if (!l || l.version !== c.version || l.ts !== c.ts || l.id !== c.id) mtrTerminosLsGuardar(TERMINOS_LS_ACEPTA, c);
+        return c;
+      }
+    } catch (e) {}
+    const l2 = mtrTerminosLsLeer(TERMINOS_LS_ACEPTA);
+    if (l2 && typeof l2 === "object" && l2.version === TERMINOS_VERSION && typeof l2.ts === "number" && l2.ts) {
+      try { GM_setValue(TERMINOS_GM_ACEPTA, l2); } catch (e) {}
+      return l2;
+    }
+    return null;
   }
   function mtrConsentimientoAceptado() { return !!mtrConsentimientoConstancia(); }
 
   // ¿El rechazo de esta máquina sigue fresco (< 12 h)? Fresco = NO re-preguntar.
+  // v18.8.3 — también con respaldo en el localStorage del origen (misma ventana
+  // de cortesía aunque el script se haya recreado al actualizar).
   function mtrTerminosRechazoFresco() {
     try {
       const r = (typeof GM_getValue !== "undefined") ? GM_getValue(TERMINOS_GM_RECHAZO, null) : null;
-      return !!(r && typeof r === "object" && typeof r.ts === "number" && r.ts > 0 && Date.now() - r.ts < TERMINOS_RECHAZO_MS);
-    } catch (e) { return false; }
+      if (r && typeof r === "object" && typeof r.ts === "number" && r.ts > 0 && Date.now() - r.ts < TERMINOS_RECHAZO_MS) return true;
+    } catch (e) {}
+    const l = mtrTerminosLsLeer(TERMINOS_LS_RECHAZO);
+    return !!(l && typeof l === "object" && typeof l.ts === "number" && l.ts > 0 && Date.now() - l.ts < TERMINOS_RECHAZO_MS);
   }
 
   // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
@@ -39683,12 +39741,18 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 
   function _terminosAlAceptar() {
     // SOLO la constancia {versión, fecha-hora, identificador} — nada más (prueba 4).
+    // v18.8.3 — se guarda en GM y en el localStorage del origen (de por vida: la
+    // aceptación sobrevive a recrear el userscript al actualizar), y la marca de
+    // rechazo se retira de AMBOS si existía.
     try {
-      GM_setValue(TERMINOS_GM_ACEPTA, { version: TERMINOS_VERSION, ts: Date.now(), id: mtrIdentificadorParaConstancia() });
+      const constancia = { version: TERMINOS_VERSION, ts: Date.now(), id: mtrIdentificadorParaConstancia() };
+      GM_setValue(TERMINOS_GM_ACEPTA, constancia);
       // La marca de rechazo se retira SOLO si existía: un aceptar limpio no escribe
       // ninguna otra clave, y uno tras un rechazo no puede dejar fresca una marca
       // que ya no aplica.
       try { if (GM_getValue(TERMINOS_GM_RECHAZO, null)) GM_deleteValue(TERMINOS_GM_RECHAZO); } catch (e) {}
+      mtrTerminosLsGuardar(TERMINOS_LS_ACEPTA, constancia);
+      mtrTerminosLsBorrar(TERMINOS_LS_RECHAZO);
     } catch (e) {}
     _terminosCerrarPantalla();
     mtrArrancarTodo();
@@ -39697,7 +39761,12 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   function _terminosAlRechazar() {
     // Marca local con hora y NADA MÁS: apagado completo, cero envíos, ni un
     // evento de rechazo. No se toca emergencyTeardown (ver nota del banner P11).
-    try { GM_setValue(TERMINOS_GM_RECHAZO, { ts: Date.now() }); } catch (e) {}
+    // v18.8.3 — la marca vive en GM y en el localStorage del origen.
+    try {
+      const marca = { ts: Date.now() };
+      GM_setValue(TERMINOS_GM_RECHAZO, marca);
+      mtrTerminosLsGuardar(TERMINOS_LS_RECHAZO, marca);
+    } catch (e) {}
     _terminosCerrarPantalla();
     try { mtrTerminosPantallaRechazo(); } catch (e) {}
   }
