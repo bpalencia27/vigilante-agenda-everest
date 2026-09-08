@@ -13714,3 +13714,16 @@ Orden del médico con el registro de auditoría adjunto: notificaciones UNA sola
 | user.js `_auditMarcaUnica` (candado compartido de unicidad en `logEvent`) | `if (mapa[marca]) return false;` → `if (false && …)`: la marca del almacén compartido (`vgl_audit_unico`) deja de bloquear — cualquier instancia vuelve a escribir la fila del mismo evento, y regresan las rachas entre pestañas | NO | *suite_103* 4 casos: «una misma notificación se escribe UNA sola vez…», «dos instancias con almacén compartido…», «la constancia de «lectura tras relevo» no se repite entre instancias» y «la misma transición vista por dos instancias…»: mutante 4 rojos; restaurado 7/7 |
 | user.js `colorAndAlert` (supresión del CAMBIO_ESTADO redundante en la llegada a sala) | `const _esLlegadaASala = st.includes("en sala") && !prev.includes("en sala");` → `false && …`: vuelve el par doble CAMBIO_ESTADO + INGRESO_A_TIEMPO del mismo paciente en la misma hora programada | NO | *suite_103* caso «la llegada a sala se registra UNA vez (INGRESO_A_TIEMPO) y no se duplica como CAMBIO_ESTADO»: mutante rojo; restaurado 7/7 |
 | user.js `logEvent` (normalización de la desviación horaria) | `if (ev && typeof ev.min === "number" … ev.min = 0;` → `false && …`: los minutos negativos vuelven a la bitácora (-35.3, -43.7), ensuciando la trazabilidad de las asistencias | NO | *suite_103* caso «la desviación horaria nunca se registra negativa en la auditoría»: mutante rojo («-43.7 se normaliza a 0…»); restaurado 7/7 |
+## v18.8.8 FASE A (Sincronización en tiempo real — orden del 08-sep-2026)
+
+Orden del médico: «actualización inmediata de los datos ingresados por el médico». Hasta
+v18.8.7 el repintado del PANEL DEL PACIENTE esperaba su vigilante de 20 s. FASE A: los
+listeners de captura de la compuerta (input/change/click) distinguen la ESCRITURA real
+(input/change) de la navegación (click) y programan un flush con debounce de 700 ms que
+adelanta el vigilante del panel abierto (slot _vglPanelVigilanteFn, extraído a
+_vigilarPanel). Suite nueva suite_104_sync_escritura.js (5/5).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js _vglDomAlTocar (disparo del flush, zona compuerta DOM) | if (ev.type === "input" || ev.type === "change") _vglEscrituraDetectada(); → if (false && ev.type === "input") …: la escritura del médico vuelve a esperar los 20 s del vigilante — el panel abierto ya no se refleja en <1 s | NO | *suite_104* caso «la escritura del médico (input) adelanta al vigilante en <1 s…»: mutante rojo («esperaba 1 y obtuvo 0»); restaurado 5/5 |
+| user.js closeMod del panel (desregistro del vigilante urgente) | _vglPanelVigilanteRegistrar(null) eliminado del cierre: el slot queda apuntando al panel cerrado — la escritura del médico sigue adelantando un vigilante muerto el resto de la jornada | NO | *suite_104* caso «…al cerrar por la ✕ se libera»: mutante rojo («esperaba null y obtuvo undefined»); restaurado 5/5 + banco completo 3678/3678 EXIT=0 |

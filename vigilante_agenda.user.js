@@ -5330,6 +5330,61 @@
     return false;
   }
   function _vglDomMarcarSucio() { _vglDomObsActivo = true; _vglDomSucio = true; }
+  // =====================================================================
+  //  v18.8.8 — FASE A: FLUSH DE ESCRITURA DEL MÉDICO (sync en tiempo real)
+  //  La compuerta solo MARCA suciedad; la cosecha y el repintado esperaban su
+  //  turno (tick de 5 s; vigilante del panel de 20 s). Desde esta versión, la
+  //  escritura real del médico (input/change en Everest, nodos ajenos al
+  //  Vigilante) programa un flush con debounce: si el PANEL DEL PACIENTE está
+  //  abierto, su vigilante corre en <1 s tras la última tecla, en vez de
+  //  esperar TABLERO_VIGILANCIA_MS.
+  //  Reglas:
+  //   - El click NO adelanta (es navegación, no escritura de datos); los
+  //     radios, casillas, selects y textos emiten input/change al cambiar.
+  //   - Sin panel abierto el slot es null: el flush sale sin programar nada
+  //     (costo cero fuera del panel).
+  //   - El vigilante del panel es idempotente (compara la firma del DOM y si
+  //     nada cambió sale sin repintar) y tiene su guarda de minimizado/cerrado
+  //     (v17.0.2): adelantarlo es seguro por diseño.
+  //   - Techo anti-ráfaga: entre disparos reales pasan al menos
+  //     VGL_FLUSH_ESCRITURA_MIN_MS; mientras el médico teclea sin pausas, el
+  //     vigilante de 20 s del panel sigue cubriendo como siempre.
+  // =====================================================================
+  let _vglPanelVigilanteFn = null;       // vigilante urgente del panel abierto (o null)
+  let _vglFlushEscrituraTimer = null;
+  let _vglFlushEscrituraUltimoMs = 0;
+  const VGL_FLUSH_ESCRITURA_MS = 700;        // debounce trailing: espera a que el médico pare de teclear
+  const VGL_FLUSH_ESCRITURA_MIN_MS = 2500;   // techo entre disparos reales del vigilante
+
+  function _vglPanelVigilanteRegistrar(fn) {
+    _vglPanelVigilanteFn = (typeof fn === "function") ? fn : null;
+  }
+  // Quita el registro SOLO si sigue apuntando a esta función: un panel que
+  // muere solo (reemplazado por otro) no debe desactivar al panel vigente.
+  function _vglPanelVigilanteQuitarSi(fn) {
+    if (_vglPanelVigilanteFn === fn) _vglPanelVigilanteFn = null;
+  }
+  function _vglPanelVigilanteEstado() { return _vglPanelVigilanteFn; }
+  // Cuerpo llamado por los listeners de captura cuando el médico escribe en
+  // Everest (separado de _vglDomAlTocar para poder probarlo sin eventos).
+  function _vglEscrituraDetectada() {
+    try {
+      if (typeof _vglPanelVigilanteFn !== "function") { _vglFlushEscrituraUltimoMs = 0; return; }
+      if (_vglFlushEscrituraTimer) clearTimeout(_vglFlushEscrituraTimer);
+      _vglFlushEscrituraTimer = setTimeout(_vglFlushEscrituraEjecutar, VGL_FLUSH_ESCRITURA_MS);
+    } catch (e) {}
+  }
+  function _vglFlushEscrituraEjecutar() {
+    try {
+      _vglFlushEscrituraTimer = null;
+      const fn = _vglPanelVigilanteFn;
+      if (typeof fn !== "function") return;
+      const ahora = Date.now();
+      if (ahora - _vglFlushEscrituraUltimoMs < VGL_FLUSH_ESCRITURA_MIN_MS) return;   // techo anti-ráfaga
+      _vglFlushEscrituraUltimoMs = ahora;
+      try { fn(); } catch (e) {}
+    } catch (e) {}
+  }
   function _vglInstalarVigilanciaDom() {
     if (_vglDomObsInstalado) return;
     if (typeof document === "undefined" || !document.body) return;
@@ -5350,7 +5405,14 @@
       });
       _vglDomObs.observe(document.body, { childList: true, subtree: true, characterData: true });
       _vglDomAlTocar = (ev) => {
-        try { if (!ev || !ev.target || !_vglNodoEsDelVigilante(ev.target)) _vglDomMarcarSucio(); } catch (e) {}
+        try {
+          if (!ev || !ev.target || _vglNodoEsDelVigilante(ev.target)) return;
+          _vglDomMarcarSucio();
+          // v18.8.8 — FASE A: input/change son escritura real del médico (los
+          // radios, casillas, selects y textos los emiten al cambiar de valor);
+          // el click es navegación y no mueve datos, así que no adelanta nada.
+          if (ev.type === "input" || ev.type === "change") _vglEscrituraDetectada();
+        } catch (e) {}
       };
       document.addEventListener("input", _vglDomAlTocar, true);
       document.addEventListener("change", _vglDomAlTocar, true);
@@ -28701,6 +28763,7 @@
     const closeMod = () => {
       cerrado = true;
       try { if (_timer) clearInterval(_timer); } catch (e) {}
+      try { _vglPanelVigilanteRegistrar(null); } catch (e) {}   // v18.8.8 — FASE A: al cerrar, la escritura del médico ya no debe adelantar nada
       try { if (!_fnCompletado) uxTrack("fn.panel.abandon"); } catch (e) {}
       modal.innerHTML = ""; modal.remove();
     };
@@ -28996,9 +29059,20 @@
     try { uxTrack("fn.panel.complete"); } catch (e) {}
 
     // VIGILANCIA: cada 20 s se compara la pantalla; solo si cambió algo se reclasifica.
-    _timer = setInterval(() => {
+    // v18.8.8 — FASE A: el cuerpo vive en `_vigilarPanel` y se REGISTRA como vigilante
+    // urgente: la escritura del médico en Everest lo adelanta con debounce de <1 s
+    // (_vglEscrituraDetectada → _vglFlushEscrituraEjecutar). Adelantarlo es seguro:
+    // si el DOM no cambió sale sin repintar (firma), y si el panel está minimizado o
+    // cerrado no recalcula nada (guarda de v17.0.2 intacta).
+    const _vigilarPanel = () => {
       try {
-        if (!vivo()) { clearInterval(_timer); return; }
+        if (!vivo()) {
+          try { if (_timer) clearInterval(_timer); } catch (e) {}
+          // FASE A: un panel muerto no debe seguir siendo adelantado por la escritura;
+          // solo se quita si el slot sigue apuntando a ESTE panel (no al que venga).
+          try { _vglPanelVigilanteQuitarSi(_vigilarPanel); } catch (e) {}
+          return;
+        }
         if (minimizado()) return;                 // v17.0.2 — dormido: no se recalcula nada
         // v17.x.x — REFACTOR S+ (sincronización): primero se mira la firma del resumen
         // cacheado. Si otro módulo (Conducta, Ordenar, Agendar) invalidó la caché y
@@ -29041,7 +29115,9 @@
         try { uxTrack("fn.panel.reclasificado"); } catch (e) {}
         pintar("Se actualizó con lo que acaba de escribir en la historia" + (cambios.length ? " (" + cambios.slice(0, 3).join(", ") + ")" : "") + ".");
       } catch (e) {}
-    }, TABLERO_VIGILANCIA_MS);
+    };
+    _timer = setInterval(_vigilarPanel, TABLERO_VIGILANCIA_MS);
+    try { _vglPanelVigilanteRegistrar(_vigilarPanel); } catch (e) {}   // FASE A: la escritura del médico puede adelantar esta vigilancia
   }
 
 
