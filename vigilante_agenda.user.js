@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.9
+// @version      18.8.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13088,6 +13088,21 @@
       // asistencias, que se reclaman por llegadas TARDE). Se normaliza a 0: el dato «llegó
       // temprano» no se pierde para la reclamación, que solo cuenta los retrasos.
       if (ev && typeof ev.min === "number" && isFinite(ev.min) && ev.min < 0) ev.min = 0;
+      // v18.8.10 (ORDEN #10, auditoría de extemporáneas) — cada fila local de la bitácora
+      // lleva la identidad de la sesión (usuario del login de Everest que estaba delante
+      // cuando el Vigilante vio el hecho), para que el CSV de reclamación responda quién
+      // estaba en la sesión. Decisión del médico (02-sep): solo el login de Everest
+      // (GetUsuarioPerfil) identifica a quien firma. Jamás se inventa: si la sesión aún no
+      // se capturó, el campo simplemente no va (casilla vacía). La telemetría del tablero
+      // NO se toca: sigue anónima por diseño; esto es solo la bitácora local.
+      if (ev && ev.usr === undefined) {
+        try {
+          const _ad = state && state.activeDoctor;
+          const _n = (_ad && _ad.name) ? String(_ad.name).trim() : "";
+          const _u = (_ad && _ad.id) ? String(_ad.id) : "";
+          if (_n) ev.usr = _n; else if (_u) ev.usr = _u;
+        } catch (e) {}
+      }
       const d = todayStamp();
       if (evDia && evDia !== d) evFlush();       // el turno cruzó la medianoche
       evDia = d;
@@ -13152,7 +13167,12 @@
   function exportAudit(day) {
     const d = day || todayStamp(), evs = eventsOf(d), st = allStats()[d] || { fraude: 0, inasistencia: 0, atiempo: 0 };
     // [COPY-UX] Reporte de atención clínica
-    const head = ["Hora", "Evento", "Hora cita", "Documento", "Estado", "Estado previo", "Minutos", "Paciente"];
+    // v18.8.10 (ORDEN #10) — columna «Usuario» al final: la sesión del login de
+    // Everest que estaba delante cuando el Vigilante vio el hecho (la adjunta
+    // logEvent). Vacía si la sesión no se había capturado: casilla vacía antes
+    // que dato inventado. Queda al final para no mover las columnas históricas
+    // del CSV con el que el médico ya viene reclamando.
+    const head = ["Hora", "Evento", "Hora cita", "Documento", "Estado", "Estado previo", "Minutos", "Paciente", "Usuario"];
     const lines = [
       "REPORTE CLINICO DE ATENCION - VIGILANTE DE AGENDA v" + VERSION,
       "Fecha;" + d,
@@ -13163,7 +13183,7 @@
       "",
       head.join(";"),
     ];
-    for (const e of evs) lines.push([e.t, e.ev, e.hora, e.doc, e.estado, e.previo || "", e.min === undefined ? "" : e.min, e.nombre || ""].map(csvCell).join(";"));
+    for (const e of evs) lines.push([e.t, e.ev, e.hora, e.doc, e.estado, e.previo || "", e.min === undefined ? "" : e.min, e.nombre || "", e.usr || ""].map(csvCell).join(";"));
     // BOM para que Excel respete las tildes.
     downloadBlob(new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), "auditoria_vigilante_" + d + ".csv");
     setSummary("Reporte del " + d + " descargado (" + evs.length + " evento(s)).");

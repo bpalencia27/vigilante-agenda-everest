@@ -4,6 +4,35 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.10] — 2026-09-08 (Auditoría de confirmaciones extemporáneas: quién estaba en la sesión queda registrado en cada reclamo)
+
+Tras revisar el archivo de auditoría del día 08-sep y la bitácora del Vigilante,
+se cierra la **ORDEN #10** con tres resultados:
+
+### ✅ La ventana de confirmación es estricta: 6 minutos, sin excepciones
+La regla ya era rígida por construcción — la sospecha de confirmación fuera de
+plazo nace solo cuando el Vigilante observa en vivo una cita que sigue **sin
+presentarse** después del minuto 6 y luego aparece **en sala**. Se fijaron los
+dos bordes de la frontera con pruebas exactas (+5,9 min: ingreso a tiempo, sin
+ninguna alerta; +6,0 min exactos: la ventana cerró; +6,1 min: alerta completa).
+Del archivo del día: la única confirmación fuera de plazo del turno (+11,8 min)
+sí apareció marcada como tal, y la llegada de +4,9 min se contó a tiempo —
+**cero confirmaciones válidas fuera de plazo, cero falsas acusaciones**.
+
+### 🖊️ Cada registro de la bitácora ahora dice quién estaba en la sesión
+El archivo de reclamación (`auditoria_vigilante_*.csv`) gana la columna
+**«Usuario»** al final: quién estaba identificado en el sistema cuando el
+Vigilante registró cada hecho. La identidad sale únicamente del usuario en
+sesión (la misma que firma las citas): si el sistema aún no la ha revelado, la
+celda queda **vacía** — el Vigilante nunca inventa un responsable. El aviso
+anónimo en vivo al tablero no cambia: sigue sin nombres, por diseño.
+
+### 🧪 Verificación
+Suite nueva `suite_106_orden10_extemporaneos.js` (5/5), con los bordes exactos
+de la ventana y la columna nueva, verificada por **dos mutaciones** (rojo →
+restaurar → verde). Banco completo **3707/3707, EXIT=0 real**. El informe
+íntegro de la auditoría quedó en `docs/AUDITORIA_ORDEN10.md`.
+
 ## [Versión 18.8.9] — 2026-09-08 (Botón de actualización en el panel: réplica exacta de «Consultar», sin recargar la página)
 
 Pedido del médico (ORDEN #9): un botón en la cabecera del panel que refresque las
@@ -30,9 +59,10 @@ con un clic del médico y nunca pisa lo que el médico haya escrito a mano.
 
 ### 🧪 Verificación
 Suite nueva `suite_105_boton_actualizar.js` (13/13), endurecida además contra dos
-falsos verdes de su propia lectura del DOM pintado (verificados por mutación en
-solitario). Censo de blindaje CSS actualizado (676 → 701) y sincronización de
-versión R5.1 completada. Banco completo **3702/3702, EXIT=0 real**.
+falsos verdes de su propia lectura de lo que el panel muestra en pantalla
+(verificados por mutación en solitario). Censo de blindaje CSS actualizado
+(676 → 701) y sincronización de versión R5.1 completada. Banco completo
+**3702/3702, EXIT=0 real**.
 
 *(Nota: la v18.8.8 del orquestador —FASE A/B/C, refactor en tres bloques— no se
 publicó como versión independiente; sus actas están en

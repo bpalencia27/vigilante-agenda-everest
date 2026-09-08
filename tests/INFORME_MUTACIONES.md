@@ -13798,3 +13798,20 @@ red nueva:
 | Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
 | suite_105 `tarjetasDe` — lectura de la lista pintada | resolver el fragmento (`unica._esFragmento → unica.children`) → devolver `lista.children` a pelo: la lista «tiene» 1 hijo (el fragmento) y nunca las 2 tarjetas | NO | *suite_105* caso C2 «la lista del panel se repintó con las dos citas (tarjetas reales de render)» y D2 «y es una tarjeta real de render…» rojos — ahora EN SOLITARIO, porque los casos esperan de verdad con `t.casoAsync` (11 ok 2 FALLAN); restaurado 13 ok EXIT=0 |
+
+## v18.8.10 (ORDEN #10 — auditoría de confirmaciones extemporáneas)
+
+Dos cambios de comportamiento en producción: logEvent adjunta el usuario de la sesión
+(`state.activeDoctor`, login de Everest — jamás inventado, casilla vacía si la sesión aún
+no se capturó) a cada fila local que no traiga campo propio, y exportAudit gana la
+columna «Usuario» al final de cada fila del CSV (al final para no mover las columnas
+históricas). Suite_106 nueva: 5 casos — bordes exactos de la ventana estricta de 6 min
+(confirmar a +5,9 → VERDE/INGRESO_A_TIEMPO y cero fraude; a +5,99 la sospecha aún no
+nace y a +6,00 exactos la marca nace con `>=`; a +6,1 la cadena completa: ROJO una vez con
+sonido, UNA fila FRAUDE_EXTEMPORANEO y jamás INGRESO_A_TIEMPO, hora original y doc
+conservados) y el usuario en bitácora + CSV (celda vacía sin sesión).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `logEvent` — bloque v18.8.10 que adjunta `usr` de la sesión | `if (ev && ev.usr === undefined)` → `if (false && …)`: el adjunto nunca ocurre y ninguna fila lleva sesión | NO | *suite_106* «la bitácora y el CSV llevan el usuario de la sesión en cada fila» rojo («la fila de la bitácora lleva la sesión que estaba delante: esperaba "MEDICO DE PRUEBA" y obtuvo undefined»); restaurado 5 ok |
+| user.js `exportAudit` — celda final de cada fila | Quitar `e.usr \|\| ""` de la fila (el head conserva «Usuario»): la columna se declara pero las filas no llevan el dato | NO | *suite_106* ambos casos del CSV rojos («la fila del hecho termina con el usuario de la sesión (obtuvo false)» y «la fila termina en el nombre del paciente, con la celda de usuario vacía (obtuvo false)»); restaurado 5 ok |
