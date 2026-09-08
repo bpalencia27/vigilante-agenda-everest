@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.6.2
+// @version      18.7.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1036,7 +1036,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.7.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8459,6 +8459,15 @@
     const _pendDock = (typeof _pendientesUniversales === "function") ? _pendientesUniversales(docId) : null;
     const _nPendientesDock = (_pendDock && _pendDock.n) || 0;
 
+    // v18.7.0 (M2) — «pestañas de impresión diagnóstica y conducta» (pedido del
+    // médico): los dos accesos directos SOLO se ofrecen si la pestaña ya está
+    // montada en el DOM de la historia — el dock nace antes que el editor de la
+    // nota, así que su presencia entra en la firma y el dock se repinta solo
+    // cuando aparecen. Búsqueda acotada y anclada a la barra principal (mismo
+    // coste que el resto de lecturas del tick, suite_94 lo vigila).
+    const _tabImp = _vglClicablePestana("impresion diagnostica");
+    const _tabCond = _vglClicablePestana("conducta");
+
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
     // provocando reflow + GC cada 5 s en la vista de historia. Ahora, si la firma de estado
@@ -8485,7 +8494,10 @@
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
-      _resumenListoParaGate ? "RS" : "rs"].join("|");   // v18.0.112 (C7, C12)
+      _resumenListoParaGate ? "RS" : "rs",
+      // v18.7.0 (M2) — presencia de las dos pestañas de impresión en la firma:
+      // sin esto los botones no aparecerían hasta que otra pieza repintara.
+      _tabImp ? "TI" : "ti", _tabCond ? "TC" : "tc"].join("|");   // v18.0.112 (C7, C12)
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -8721,6 +8733,52 @@
         } catch (e3) {}
       });
       btns.appendChild(bPend);
+    }
+
+    // v18.7.0 (M2) — «pestañas de impresión diagnóstica y conducta» (pedido del
+    // médico): acceso directo a las DOS pestañas que se imprimen al cerrar la
+    // consulta. El gesto es el clic del propio enlace de pestaña de Everest
+    // (anclas reales de VGL_PESTANAS) — ni red ni escritura propias; si la
+    // pestaña ya no está (pantalla distinta), aviso ámbar y nada más.
+    if (_tabImp) {
+      const bImp = document.createElement("button");
+      bImp.className = "vgl-dock-btn";
+      bImp.setAttribute("data-accion", "pestana-impresion");
+      bImp.setAttribute("aria-label", "Ir a la pestaña Impresión Diagnóstica");
+      bImp.title = "🖨 Salta a la pestaña «Impresión Diagnóstica» (la vista de impresión del diagnóstico).";
+      _vglDockRotulo(bImp, "🖨", "Impresión Diagnóstica");
+      bImp.addEventListener("click", (e) => {
+        e.stopPropagation();
+        uxTrack("hc.pestana.impresion.clic");
+        const tab = _vglClicablePestana("impresion diagnostica");
+        if (!tab || typeof tab.click !== "function") {
+          uxTrack("hc.pestana.impresion.sin_pestana");
+          showToast("AMBAR", "🖨 Impresión Diagnóstica", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
+          return;
+        }
+        try { tab.click(); uxTrack("hc.pestana.impresion.ok"); } catch (e2) {}
+      });
+      btns.appendChild(bImp);
+    }
+    if (_tabCond) {
+      const bCond = document.createElement("button");
+      bCond.className = "vgl-dock-btn";
+      bCond.setAttribute("data-accion", "pestana-conducta");
+      bCond.setAttribute("aria-label", "Ir a la pestaña Conducta");
+      bCond.title = "📋 Salta a la pestaña «Conducta» de la historia.";
+      _vglDockRotulo(bCond, "📋", "Conducta");
+      bCond.addEventListener("click", (e) => {
+        e.stopPropagation();
+        uxTrack("hc.pestana.conducta.clic");
+        const tab = _vglClicablePestana("conducta");
+        if (!tab || typeof tab.click !== "function") {
+          uxTrack("hc.pestana.conducta.sin_pestana");
+          showToast("AMBAR", "📋 Conducta", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
+          return;
+        }
+        try { tab.click(); uxTrack("hc.pestana.conducta.ok"); } catch (e2) {}
+      });
+      btns.appendChild(bCond);
     }
 
     // v18.5.0 — RETIRADA la pastilla «👤 Nuevos (N)» (v18.1.0, B5): la pastilla y su
@@ -14704,6 +14762,12 @@
         document.addEventListener("click", _vglHcCapturarClick, true);
         _vglHcListenerOk = true;
       }
+      // v18.7.0 (M1) — mismo patrón de listener único en captura para el botón de
+      // acceso directo a HC de las tarjetas del panel (ver _vglHcDirectoAbrir).
+      if (!_vglHcDirectoListenerOk && typeof document !== "undefined" && typeof document.addEventListener === "function") {
+        document.addEventListener("click", _vglHcDirectoAbrir, true);
+        _vglHcDirectoListenerOk = true;
+      }
       const root = document.getElementById("vgl-root");
       if (!root) return false;
       let zona = document.getElementById("vgl-hc-zone");
@@ -14741,6 +14805,102 @@
         _vglHcUltimaLinea(ult);
       return true;
     } catch (e) { return false; }
+  }
+  // =====================================================================
+  //  v18.7.0 (M1) — ACCESO DIRECTO A HC DESDE LA TARJETA DEL PANEL
+  //  «Acceso directo a historias clínicas en el panel del centinela»
+  //  (pedido del médico). Se respeta la decisión v14.0.2: nada de botón
+  //  "Atender" propio — el gesto REAL sigue siendo el clic del botón
+  //  NATIVO "Historias Clínicas" de la fila en Citas del día; la tarjeta
+  //  solo lo replica de forma localizable. Por eso el emparejamiento es
+  //  FAIL-CLOSED: sin fila inequívoca, sin clic, y un aviso ámbar que
+  //  dice exactamente qué hacer. El clic sintético pasa por el listener
+  //  de captura de este módulo (hint + prefetch), igual que un clic real.
+  // =====================================================================
+  let _vglHcDirectoListenerOk = false;
+
+  function _vglHcDirectoAbrir(ev) {
+    try {
+      const t = ev && ev.target ? ev.target : null;
+      const btn = t && t.closest ? t.closest(".vgl-hc-directo") : null;
+      if (!btn || !btn.getAttribute) return;
+      const doc = btn.getAttribute("data-vgl-doc") || "";
+      const hora = btn.getAttribute("data-vgl-hora") || "";
+      const estado = btn.getAttribute("data-vgl-estado") || "";
+      if (!doc && !hora) return;
+      uxTrack("hc.accesoDirecto.clic");
+      // El botón nativo solo existe en Citas del día: fuera de ahí no hay
+      // qué clicar, y el aviso explica qué hacer en vez de fallar en seco.
+      if (typeof seccionActiva !== "function" || seccionActiva() !== "agenda") {
+        uxTrack("hc.accesoDirecto.fueraAgenda");
+        showToast("AMBAR", "📋 Acceso a historia clínica",
+          "Este atajo replica el clic del botón nativo «Historias Clínicas» de Citas del día: vuelva a esa vista y pulse de nuevo el botón de la tarjeta.");
+        return;
+      }
+      const fila = _vglHcDirectoFila(doc, hora, estado);
+      if (!fila) {
+        uxTrack("hc.accesoDirecto.sinFila");
+        showToast("AMBAR", "📋 Acceso a historia clínica",
+          "No se pudo identificar con certeza la fila de este paciente en Citas del día (la lista puede estar refrescándose o filtrada). Abra la historia con el botón nativo de su fila.");
+        return;
+      }
+      const boton = _vglHcDirectoBoton(fila);
+      if (!boton) {
+        uxTrack("hc.accesoDirecto.sinBoton");
+        showToast("AMBAR", "📋 Acceso a historia clínica",
+          "No se encontró el botón «Historias Clínicas» en la fila de este paciente. Abra la historia con el botón nativo.");
+        return;
+      }
+      uxTrack("hc.accesoDirecto.abierto");
+      if (typeof boton.click === "function") boton.click();
+    } catch (e) {}
+  }
+
+  // Empareja UNA fila de Citas del día con la tarjeta clicada: primero por
+  // cédula canónica (emparejamiento fuerte); sin cédula, por hora exacta +
+  // estado. Cero o varios candidatos → null (fallar cerrado: jamás clicar
+  // la fila equivocada). .card > .card-body capturan la MISMA fila dos
+  // veces: se normaliza a la .card y se deduplica antes de contar.
+  function _vglHcDirectoFila(doc, hora, estado) {
+    try {
+      const sels = Array.isArray(CONFIG.SEL.contenedor) ? CONFIG.SEL.contenedor : [CONFIG.SEL.contenedor];
+      const estadoL = _vglHcSinTildes(estado);
+      const candidatos = [];
+      for (const sel of sels) {
+        const conts = document.querySelectorAll(sel);
+        for (const c of conts) {
+          if (!c) continue;
+          if (c.closest && c.closest("#vgl-root")) continue;   // nunca el panel propio
+          const fila = (c.classList && c.classList.contains("card")) ? c : ((c.closest && c.closest(".card")) || c);
+          if (candidatos.indexOf(fila) !== -1) continue;
+          if (doc) {
+            const dEl = fila.querySelector ? fila.querySelector(CONFIG.SEL.documento) : null;
+            if (dEl && _vglDocCanon(dEl.textContent) === doc) { candidatos.push(fila); }
+          } else if (hora) {
+            const hEl = fila.querySelector ? fila.querySelector(CONFIG.SEL.hora) : null;
+            const eEl = fila.querySelector ? fila.querySelector(CONFIG.SEL.estado) : null;
+            if (!hEl || !eEl) continue;
+            const min = parseHoraMin(hEl.textContent);
+            const horaNativa = (typeof min === "number" && isFinite(min)) ? "m" + min : "";
+            const estadoNativo = _vglHcSinTildes(eEl.textContent);
+            if (horaNativa === hora && (!estadoL || estadoNativo.indexOf(estadoL) !== -1)) { candidatos.push(fila); }
+          }
+        }
+      }
+      return candidatos.length === 1 ? candidatos[0] : null;
+    } catch (e) { return null; }
+  }
+
+  // El botón nativo vive DENTRO de la fila (.card/.card-body, el mismo
+  // supuesto de _vglHcCapturarClick). Solo se busca ahí: subir más arriba
+  // arriesgaría clicar el botón de OTRA fila — fail-closed también aquí.
+  function _vglHcDirectoBoton(fila) {
+    try {
+      if (!fila || !fila.querySelectorAll) return null;
+      const botones = fila.querySelectorAll("button");
+      for (const b of botones) { if (_vglEsBotonHC(b)) return b; }
+      return null;
+    } catch (e) { return null; }
   }
   // v18.6.2 (F-P2, P1) — línea "última HC" del chip: fecha de cierre + clasificación y/o
   // riesgo cardiovascular. Solo lo que el contrato real de ObtenerUltimaHCPes trae;
@@ -19725,6 +19885,21 @@
         line-height:1.3;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
+      /* v18.7.0 (M1) — acceso directo a HC en la tarjeta (solo «En sala»). Punto de
+         color con prioridad máxima (el censo de suite_25 cuenta la mención literal en
+         prosa, así que el token no se escribe aquí); tinte y borde de la marca (violeta),
+         sin estilos inline (el test T1 exige clases, y la cascada de Everest no puede
+         pisar el color). */
+      .vgl-hc-directo{
+        font-size:var(--t-micro);font-weight:800;padding:4px 11px;border-radius:var(--r-pill);
+        white-space:nowrap;letter-spacing:.2px;line-height:1.3;cursor:pointer;flex-shrink:0;
+        border:0;margin:0;font-family:inherit;
+        color:var(--c-azul,#7C3AED) !important;
+        background:rgba(var(--rgb-azul,124,58,237),.14);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul,124,58,237),.30);
+      }
+      .vgl-hc-directo:hover{background:rgba(var(--rgb-azul,124,58,237),.26)}
+      .vgl-hc-directo:focus-visible{outline:2px solid rgba(var(--rgb-azul,124,58,237),.85);outline-offset:1px}
       /* v-S+ (refactor panel, mockup canvas 30-ago): las banderas dejan el relleno SÓLIDO
          (texto oscuro sobre bloque de color + glow) por el estilo "outline" del mockup:
          texto del color de su semáforo sobre fondo tintado al 10% con borde interior al
@@ -36276,6 +36451,9 @@
       const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
       const esPes = tieneAbandonoPES(a);
       const esAtendido = !!(a.estado && a.estado.toLowerCase().includes("atendido"));
+      // v18.7.0 (M1) — solo «En sala» ofrece el acceso directo a HC: es el momento
+      // operativo de atender al paciente (ver botón .vgl-hc-directo, más abajo).
+      const esEnSala = !!(a.estado && a.estado.toLowerCase().includes("sala"));
       card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "") + (esAtendido ? " atendido" : "");
       // v13.0.0 — El badge de estado usaba el mismo verde de puntualidad (--tc) que "En
       // sala": aquí, y SOLO aquí (nunca en --tc/el punto, que sigue siendo el eje de
@@ -36385,6 +36563,21 @@
             ${flag}${pesFlag}${pym3Flag}${agendPend}${adicFlag}
             <!-- v18.0.123 (UI/UX UI#5) — tinte del badge al 10 % en claro (el .16 dejaba «Confirmada» en 3,48:1) -->
             <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(isLight() ? ".10" : ".16")};color:${badgeCol} !important;box-shadow:inset 0 0 0 1px ${badgeRgba(isLight() ? ".26" : ".32")}">${escapeHtml(a.estado)}</span>
+            ${(() => {
+              // v18.7.0 (M1) — ACCESO DIRECTO A HC (pedido del médico: «acceso directo a
+              // historias clínicas en el panel del centinela»). Solo en «En sala» —el
+              // momento operativo de atender— y solo si hay con qué emparejar la fila
+              // nativa (cédula u hora): sin eso el atajo no podría clicar con certeza y
+              // no se ofrece. El gesto real sigue siendo el clic del botón NATIVO
+              // «Historias Clínicas» (decisión v14.0.2): la tarjeta solo lo replica —
+              // ver _vglHcDirectoAbrir.
+              if (!esEnSala) return "";
+              const hcDoc = normalizeKey(a.doc_id || "");
+              const hcMin = parseHoraMin(a.hora_texto);
+              const hcHora = (typeof hcMin === "number" && isFinite(hcMin)) ? "m" + hcMin : "";
+              if (!hcDoc && !hcHora) return "";
+              return "<button class=\"vgl-hc-directo\" data-vgl-doc=\"" + escapeHtml(hcDoc) + "\" data-vgl-hora=\"" + hcHora + "\" data-vgl-estado=\"" + escapeHtml(a.estado || "") + "\" title=\"Abrir la historia clínica de este paciente (replica el clic del botón nativo «Historias Clínicas» de Citas del día)\">📋 Historias Clínicas</button>";
+            })()}
           </div>
         </div>
         <div class="vgl-card-mid vgl-card-mid-t1">

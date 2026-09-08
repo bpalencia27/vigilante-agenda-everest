@@ -1,6 +1,6 @@
 {
   "name": "vigilante-agenda-everest",
-  "version": "18.6.2",
+  "version": "18.7.0",
   "description": "Banco de pruebas del Vigilante",
   "private": true,
   "scripts": {

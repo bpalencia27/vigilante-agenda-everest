@@ -4,6 +4,43 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.7.0] — 2026-09-08 (Acceso directo a Historias Clínicas y pestañas de impresión desde el dock)
+
+### 📋 Un toque y a la historia del paciente en sala
+Las tarjetas del panel «En sala» muestran ahora un botón violeta **«Historias Clínicas»**.
+Un solo clic abre la historia del paciente — el mismo gesto que el botón nativo de
+«Citas del día» (nada de botones «Atender» propios: la decisión v14.0.2 se mantiene).
+
+Pensado para el momento exacto de atender:
+
+- **Solo en «En sala»**: el atajo aparece únicamente cuando el paciente está en sala;
+  los demás estados no lo muestran.
+- **Nunca abre el paciente equivocado**: la tarjeta empareja su fila nativa por cédula
+  exacta (o, si la tarjeta no trae cédula, por hora y estado). Si hay cero filas o más
+  de una candidata —o está fuera de Citas del día—, no clica nada y avisa en ámbar
+  cómo hacerlo a mano.
+- **Cero red propia**: el botón solo replica el clic del botón nativo de Everest; el
+  módulo VGL-HC existente (hint + precarga) sigue haciendo el resto.
+
+Pruebas y mutaciones en `tests/suite_97_hc_directo.js`.
+
+### 🖨 📋 Impresión Diagnóstica y Conducta a un clic desde el dock de la historia
+El dock de la historia clínica ofrece dos accesos directos nuevos —**Impresión
+Diagnóstica** y **Conducta**— que saltan a las pestañas de la nota que se imprimen al
+cerrar la consulta.
+
+- **Solo cuando existen**: los botones nacen únicamente si la pestaña ya está montada
+  en la pantalla (el dock puede aparecer antes que el editor de la nota); al montarse,
+  el dock se repinta solo y el acceso aparece.
+- **El gesto es de Everest**: cada botón clica el enlace real de su pestaña
+  (`a#impDiagnostica` / `a#conducta`), sin red ni escritura propias.
+- **A prueba de pantallas**: si la pestaña ya no está al momento del clic, aviso ámbar
+  y nada más — jamás se inventa una pestaña.
+
+Pruebas y mutaciones en `tests/suite_98_hc_pestanas.js`.
+
+---
+
 ## [Versión 18.6.2] — 2026-09-07 (Toggles en Ajustes y una apertura de Historia Clínica más ligera)
 
 ### ⚙️ Los interruptores de funcionalidad ya se mueven desde Ajustes
