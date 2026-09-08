@@ -4,6 +4,23 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.9.0] — 2026-09-08 (El Vigilante consulta la agenda más seguido en los momentos de calma y ahora mide cuánto tarda en ver un cupo nuevo)
+
+Orden del médico con los datos de los ensayos A/B. Cuatro puntos, los cuatro cumplidos:
+
+### 📋 La regla de los horarios 06:00/12:00 queda aclarada
+Esos horarios de refresco corresponden **exclusivamente a la base piloto** del proyecto (el libro SEPTIEMBRE1) y se eliminó cualquier redacción que los presentara como una restricción general del sistema. Corrección documental: el funcionamiento no cambia.
+
+### ⏱️ Consultas de la agenda más ágiles en los momentos de calma
+Cuando no hay nada urgente, el Vigilante consultaba la agenda cada 30 segundos (y cada 20 en la mayor parte de la jornada). Ahora consulta cada 20 y cada 15 segundos: el tiempo máximo que un cupo nuevo puede esperar a ser visto baja de 30 a 20 segundos, y de 20 a 15 en plena jornada. Las velocidades de las situaciones urgentes (el minuto de gracia, el cruce de los 6 minutos, la franja de ediciones tardías) **no cambian ni un segundo**: allí la vigilancia ya era máxima.
+La carga extra es mínima: la consulta es la misma y liviana que dispara el botón «Consultar» de la vista de citas, y solo ocurre mientras el panel está abierto. El refresco programado de la base (06:00 y 12:00, exclusivo de la base piloto SEPTIEMBRE1) **no se tocó**: es el horario de descarga del libro y es independiente de estas consultas de agenda.
+
+### 📏 Medición nueva: cuánto tarda el Vigilante en detectar un cupo nuevo
+Cada vez que aparece en la agenda una cita que la consulta anterior no tenía, el Vigilante mide el tiempo transcurrido desde esa consulta anterior (el tiempo máximo que el cupo pudo estar esperando a ser visto) y lo registra **de forma anónima** — sin nombres ni datos de pacientes, solo tiempos. Con esta medición se podrá validar, con los datos reales de la jornada, el efecto de las consultas más frecuentes. Si entre una consulta y otra pasó mucho rato (por ejemplo, el Vigilante volvió de un descanso de la pestaña), el hallazgo se anota aparte, **sin** atribuirle un tiempo que la frecuencia de consulta no explica.
+
+### 🧪 Verificación
+Suite nueva de pruebas 107 — latencia de detección de cupos (9/9) — verificada por **dos mutaciones** (rojo → restaurar → verde): una rompe la medición (invertido el límite entre la espera normal y el descanso largo) y la otra restaura las frecuencias viejas. Banco completo **3716/3716, EXIT=0 real**. Los detalles técnicos de la decisión quedaron en el registro de decisiones; el informe de los ensayos A/B ya refleja la corrección del punto 1.
+
 ## [Versión 18.8.10] — 2026-09-08 (Auditoría de confirmaciones extemporáneas: quién estaba en la sesión queda registrado en cada reclamo)
 
 Tras revisar el archivo de auditoría del día 08-sep y la bitácora del Vigilante,

@@ -419,9 +419,9 @@ module.exports = {
       const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
       const st = c.api.__state;
       st.lastSnapshot = null;
-      t.igual(c.api.apiCadencia(), 30000, "sin agenda: reposo de 30 s (v14.2.11)");
+      t.igual(c.api.apiCadencia(), 20000, "sin agenda: reposo de 20 s (v18.9.0 — orden A/B; antes 30 s)");
       st.lastSnapshot = { list: [{ estado: "Atendido", elapsed: 0 }, { estado: "En Sala", elapsed: 99 }] };
-      t.igual(c.api.apiCadencia(), 30000, "todas resueltas: nada que vigilar de cerca");
+      t.igual(c.api.apiCadencia(), 20000, "todas resueltas: nada que vigilar de cerca (reposo de 20 s)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
       t.igual(c.api.apiCadencia(), 5000, "en el cruce exacto (ventana crítica): 5 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 8 }] };
@@ -429,7 +429,7 @@ module.exports = {
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 8 }] };
       t.igual(c.api.apiCadencia(), 8000, "8 min DESPUÉS del cruce: 8 s — MÁS agresivo que antes, por diseño (asimetría v12.3.8)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 30 }] };
-      t.igual(c.api.apiCadencia(), 20000, "lejos de la tolerancia, antes del cruce: 20 s");
+      t.igual(c.api.apiCadencia(), 15000, "lejos de la tolerancia, antes del cruce: 15 s (v18.9.0; antes 20 s)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
       t.igual(c.api.apiCadencia(), 10000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 10 s");
     });
@@ -446,7 +446,7 @@ module.exports = {
 
       c.api.__state.lastSnapshot = null;
       c.api.actualizarRelojCabecera();
-      t.cierto(clock.title.indexOf("cada 30 s") >= 0, "sin nada pendiente: reposo de 30 s, tal como devuelve apiCadencia()");
+      t.cierto(clock.title.indexOf("cada 20 s") >= 0, "sin nada pendiente: reposo de 20 s, tal como devuelve apiCadencia()");
 
       c.api.__state.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
       c.api.actualizarRelojCabecera();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.10
+// @version      18.9.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.9.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18740,8 +18740,8 @@
   // 5 min oculta): eso no lo gobierna el script — con la pestaña visible no aplica.
   function apiCadencia() {
     const TOL = CONFIG.TOLERANCIA_MIN;
-    const SIN_PENDIENTES = 30000; // 30s — ninguna cita "Sin presentarse" vigente (antes 90 s)
-    const LEJANO         = 20000; // 20s — a más de 10 min del cruce; aquí vive casi toda la jornada (antes 45 s)
+    const SIN_PENDIENTES = 20000; // 20s — ninguna cita "Sin presentarse" vigente (v18.9.0: 20 s, orden A/B; antes 30 s)
+    const LEJANO         = 15000; // 15s — a más de 10 min del cruce; aquí vive casi toda la jornada (v18.9.0: 15 s; antes 20 s)
     const APROXIMACION   = 10000; // 10s — bisagra antes del cruce y vigilancia sostenida mucho después (antes 15 s)
     const RECIENTE       = 8000;  // 8s  — 2..15 min DESPUÉS del cruce: la franja de las ediciones tardías
     const CRITICA        = 5000;  // 5s  — minuto 5 de gracia → 2 min tras el cruce (piso real del sistema)
@@ -37891,6 +37891,39 @@
   // usa el botón) pinta aunque la vista no sea vigilada: el médico acaba de
   // pulsar en el panel, está visible sí o sí. Con false, el comportamiento es
   // idéntico al del tick histórico, línea por línea.
+  // [v18.9.0 — orden A/B (punto 4)] MEDICIÓN DE LATENCIA DE DETECCIÓN DE CUPOS NUEVOS.
+  // Requisito técnico previo del experimento de frecuencias del polling (informe A/B,
+  // AB-6): cuánto tarda el sistema en VER que un cupo (cita) nuevo entró en la agenda.
+  // El instante exacto de creación en el servidor no es observable desde el cliente; lo
+  // medible con exactitud es la VENTANA entre la lectura anterior de la agenda (donde el
+  // cupo aún no estaba) y la lectura donde aparece — el techo de la edad del cupo, la
+  // métrica que la frecuencia del polling acota. Una cita nueva aporta
+  // `uxTrack("cupo.nuevo", {n: ventanaMs})`: el conteo de la clave es el número de cupos
+  // y `cupo.nuevo.total` la suma de ventanas (el MISMO convenio del RUM api.*.ok/.err).
+  // No-inferencia v2.5: si la lectura anterior es un recuerdo (hueco > huecoMax, el MISMO
+  // criterio del antirrebote de colorAndAlert), el cupo pudo nacer en cualquier punto del
+  // hueco y esa ventana NO la explica la frecuencia del polling — el evento se cuenta
+  // aparte (`cupo.nuevo.hueco`, sin ventana) en vez de ensuciar la métrica con un dato
+  // que la frecuencia no explica. Cero PHI: solo ms y conteos, jamás identidades. Un
+  // parpadeo de doc_id entre lecturas puede contar un falso «nuevo» con ventana corta: el
+  // sistema lo absorbe con su mapa tolerante, y aquí replicar esa tolerancia duplicaría
+  // el mecanismo para una métrica agregada — el efecto en la distribución es despreciable.
+  function _cupoLatenciaMedir(processed, now) {
+    try {
+      if (S.uxTelemetria === false) return;
+      const ant = state.lastSnapshot;
+      if (!ant || !ant.at || !ant.list || !ant.list.length || !processed || !processed.length) return; // siembra: sin lectura anterior comparable no hay latencia que medir
+      const ventana = now - ant.at;
+      if (!(ventana > 0)) return;
+      const vistos = new Set();
+      for (const p of ant.list) { try { if (p) vistos.add(apptKey(p)); } catch (e2) {} }
+      let nuevos = 0;
+      for (const p of processed) { try { if (p && !vistos.has(apptKey(p))) nuevos++; } catch (e3) {} }
+      if (!nuevos) return;
+      if (ventana > Math.max(30000, 4 * (CONFIG.POLL_MS || 5000))) { for (let i = 0; i < nuevos; i++) uxTrack("cupo.nuevo.hueco", {}); return; }
+      for (let i = 0; i < nuevos; i++) uxTrack("cupo.nuevo", { n: ventana });
+    } catch (e) {}
+  }
   function _procesarFuenteAgenda(data, source, now, forzarPintado) {
     // v18.8.9 (ORDEN #9) — la variable local del tick NO viaja en esta extracción:
     // dentro de tick() `enVistaVigilada` era una const local (seccionActiva() !==
@@ -37944,6 +37977,7 @@
         // pestaña que no es «Citas del día» eso no pasa nunca. Ver la nota completa allá.
         processed.forEach(maybeNotify);
       }
+      try { _cupoLatenciaMedir(processed, now); } catch (eCL) {}
       state.lastSnapshot = { at: now, list: processed, source };
       if (leader) { share(processed); _reprogramarDeadline(processed); _ajustarSondeo(processed); }
       if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
