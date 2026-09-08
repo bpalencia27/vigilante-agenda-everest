@@ -301,10 +301,12 @@ A/B de rendimiento con puntería a la fase exacta.
   intervalo mayor cuando no hay interacción reciente) reduce el 40,5 M de llamadas
   `api.*` de la ventana sin retrasar la detección de un cupo cuando el médico está
   activo en agendar.
-- **CUIDADO — regla del proyecto**: el refresco de agenda es semántica clínica viva
-  (06:00/12:00 Bogotá, decisiones tomadas con el médico). Este experimento **no toca la
-  lógica de refresco programado**; solo el polling de fondo. Requiere medir la latencia
-  de detección de cupos (hoy no medida): requisito técnico previo.
+- **CUIDADO — regla del proyecto**: el refresco programado de la base piloto es semántica
+  clínica viva — sus horarios 06:00/12:00 Bogotá (decisiones tomadas con el médico)
+  son EXCLUSIVOS de SEPTIEMBRE1, no una restricción de aplicación general del
+  refresco. Este experimento **no toca la lógica de refresco programado**; solo el
+  polling de fondo. Requiere medir la latencia de detección de cupos (hoy no
+  medida): requisito técnico previo.
 - **Métricas**: primaria `api.citasdisponibles.ok.total` por equipo-día (conteo);
   secundaria latencia cupo→aviso (nueva). Impacto: alto en carga de red del host
   (Everest agradece); riesgo: medio — requiere cuidado y validación con el médico.
@@ -460,7 +462,7 @@ seguimiento con duración fija de 8 semanas y análisis intermedio a las 4.
 | AB-3 | `ux.rage.host` por equipo-día | acción siguiente al rage (nueva), `ux.rage.otro` | ninguna acción automática | ✓ |
 | AB-4 | `sincasilla`/`casillas.total` | `labs.autollenado.click`, tiempo por fila manual (nueva) | cero autollenado en casilla no vacía (regla) | ✓ |
 | AB-5 | `exclusiontexto`/(aplicada+exclusiones) | `rehusada`, rage en zona de examen físico | **cero falsos normales**: auditoría manual de muestra | ✓ |
-| AB-6 | `api.citasdisponibles.ok.total` por equipo-día | latencia cupo→aviso (nueva), `api.*.err.*` | refrescos programados 06:00/12:00 intactos | ✓ |
+| AB-6 | `api.citasdisponibles.ok.total` por equipo-día | latencia cupo→aviso (nueva), `api.*.err.*` | refrescos programados de la base piloto intactos (06:00/12:00 en SEPTIEMBRE1) | ✓ |
 | AB-7 | aperturas por pestaña/filtro por equipo-día | acciones completadas desde cada superficie | — | ✓ |
 | AB-8 | versión vista por equipo-día (`entorno`) | `aviso.universal.entendido`, clics de actualización (nuevo) | — | parcial ✓ |
 

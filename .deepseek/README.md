@@ -106,8 +106,9 @@ junto al resumen del mismo día y citan sus logs como origen de cada número.
 - **Cron sugerido:** `17 2 * * *` (02:17 UTC = 21:17 de la víspera en Colombia,
   consultorio cerrado). Minuto 17, no redondo, para no colisionar con los crons que
   corren en el minuto 0 de la hora y mantener estables los micro-bench de la suite 94;
-  nunca en horario de consulta ni cerca de los refrescos de agenda (06:00/12:00
-  Bogotá). La línea completa de crontab está en la cabecera de
+  nunca en horario de consulta ni cerca de los refrescos de agenda de la base piloto — 06:00/12:00 Bogotá,
+  exclusivos de SEPTIEMBRE1, no regla general del refresco. La línea
+  completa de crontab está en la cabecera de
   `run-nightly-checks.sh`.
 
 ## 6. Política de medición antes/después
