@@ -98,7 +98,7 @@ manual/arreglar botón, legible, complementar no reemplazar).
   card: botón → guía → pasos).
 - **FALTA**: la fila de esa mutación en `tests/INFORME_MUTACIONES.md` — cierre §5-T2.
 
-### 4.3 PEDIDO 2 — CSS de modales/avisos incl. el aviso del Anexo 5 (EN CURSO — T1)
+### 4.3 PEDIDO 2 — CSS de modales/avisos incl. el aviso del Anexo 5 (HECHO — v18.8.4, commit `07ef120`)
 
 Pedido del médico: «Soluciona la mezcla de estilos CSS de Everest Health que afecta a
 los nuevos modales y avisos, incluyendo el del anexo 5. Asegúrate de que todos estos
@@ -156,10 +156,24 @@ notificaciones sean perfectamente legibles y visibles para el usuario.»
    nuevo y ver la prueba correspondiente roja) + filas en `tests/INFORME_MUTACIONES.md`.
 6. Banco completo EXIT=0 antes del cierre.
 
+**ESTADO FINAL (2026-09-08): T1 ENTREGADO como v18.8.4** — commit `07ef120` en
+`claude/sf-v18.6.1-fix` (+push), gist actualizado y verificado byte a byte
+(SHA-256 `62d0445c…` en ambos scripts, 3.514.033 bytes; descripción `74f55bdf…`;
+PROBAR intacto). Los 6 pasos cumplidos: (1) panel Anexo 5 con variables de tema,
+los `!important` inline conservados (Regla R) y el censo de Regla G actualizado
+669→670; (2) auditoría de los 9 modales: 252 reglas, 0 violaciones de color de
+texto — el hueco era el texto suelto, cubierto con el blindaje agrupado
+`#vgl-… :where(:not([class])){color:inherit !important}`; (3) verificación
+Chromium contra el CSS real: 26/26 panel en ambos temas + 8 clases contra Everest
+agresivo, 9 sueltos blindados contra Everest realista; (4) suite_25 con contrato
+670; (5) 3 mutaciones verificadas con filas en INFORME_MUTACIONES; (6) banco
+3658/3658 EXIT=0 real. Los pedidos 1 y 4 se cerraron como parte de la v18.8.3
+(documentados en el registro). Nada pendiente de este prompt.
+
 ## 5. TAREAS — en orden estricto
 
-- **T1 — Terminar el pedido 2 (§4.3)**, con mutaciones verificadas y filas.
-- **T2 — Cierre v18.8.3** (UNA sola entrega con pedidos 1+2+4):
+- ~~**T1 — Terminar el pedido 2 (§4.3)**, con mutaciones verificadas y filas.~~ **HECHO — v18.8.4** (commit `07ef120`, gist verificado byte a byte).
+- ~~**T2 — Cierre v18.8.3** (UNA sola entrega con pedidos 1+2+4):~~ **HECHO en dos partes**: pedidos 1+4 cerrados en la v18.8.3 (commit `6174ba6`, documentación retroactiva en INFORME_MUTACIONES y registro); pedido 2 cerrado en la v18.8.4 (commit `07ef120`). Detalle del cierre original:
   1. `tests/INFORME_MUTACIONES.md`: filas de M1 (términos-escritura-LS), M2
      (términos-rescate-LS), mutación del orden de la guía (pedido 4), y las del
      pedido 2 (T1). Formato de las filas existentes; si faltara el detalle exacto de
