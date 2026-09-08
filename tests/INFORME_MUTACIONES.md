@@ -13741,3 +13741,18 @@ mientras el modal siga abierto. Suite_67 ampliada de 47 a 51 (4 casos nuevos).
 |---|---|---|---|
 | user.js pintar() del panel (relleno del slot de programa de cabecera, L28931) | `document.getElementById("vgl-panel-prog-slot")` → `…("-NOEXISTE")`: el chip de programa ya no se rellena — la cabecera queda muda y el programa vuelve a vivir solo en Exámenes (la cita sugerida se rellena, el programa no) | NO | *suite_67* caso nuevo «FASE B (B.2+B.4): el panel rellena los chips de cabecera…»: mutante rojo («y el chip de programa quedó relleno en la cabecera — visible también desde Exámenes (obtuvo false)»); restaurado 51 ok EXIT=0 |
 | user.js template del agendador (máscara del documento, L29745) | `${_vglHcMascara(apt.doc_id)}` → `${apt.doc_id}`: el documento viaja pelado en el encabezado del agendador — cualquier persona u ocular sobre la pantalla lo lee sin gesto alguno | NO | *suite_67* caso nuevo «FASE B (S5): el documento viaja mascarado en el agendador…»: mutante rojo («el documento viaja mascarado (··· + últimos 4) en el encabezado (obtuvo false)»); restaurado 51 ok EXIT=0 |
+
+## v18.8.8 FASE C (Motor de IA preferido + gate Gemini — orden del 08-sep-2026, SUPERPROMPT_ORQUESTADOR_REFACTOR_INTEGRAL fases C.1-C.3)
+
+El médico ya no está atado al orden histórico de la escalera: en Ajustes → modo
+programador elige el «Motor de IA preferido» (`vgl_ia_pref`: auto | deepseek | zai |
+gemini). «Automático» (default del sistema) conserva el orden histórico byte a byte:
+DeepSeek V4 Flash si hay su clave y, si no, z.ai; Gemini solo con su propia clave y,
+con Gemini preferido, corre su rotación completa de modelos sin respaldo. Sin la clave
+del preferido, la escalera cae al siguiente disponible (fail-open). Suite_99 ampliada
+de 10 a 17 casos (selector + default + gate Gemini + C.3 no-recalcula el JSON v68).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js mtrGeminiRedactar — rama de preferencia «gemini» sin su clave (fallback del gate) | `(claveGem ? "gemini" : claveDs ? "deepseek" : claveZai ? "zai" : "")` → `(claveGem ? "gemini" : "")`: sin la clave de Gemini la escalera ya no cae al siguiente disponible — con preferencia gemini y solo clave deepseek el redactor muere en «sin_clave» | NO | *suite_99* caso nuevo «FASE C (C.2): gate Gemini — preferencia gemini sin su clave cae al siguiente disponible…»: mutante rojo («responde deepseek (obtuvo false)»); restaurado 17 ok EXIT=0 |
+| user.js mtrIaPreferencia — validación de la preferencia al LEER (selector) | `(v === "deepseek" || v === "zai" || v === "gemini")` → sin `"gemini"`: la preferencia guardada «gemini» deja de reconocerse y cae a «auto» — el médico elige Gemini y el sistema lo ignora (y Gemini deja de ser primario con su clave: entran 2 llamadas, deepseek+gemini) | NO | *suite_99* casos nuevos FASE C (C.1): «la preferencia queda persistida» rojo («esperaba "gemini" y obtuvo "auto"») y «gemini responde a la primera: UNA sola llamada» rojo («esperaba 1 y obtuvo 2»); restaurado 17 ok EXIT=0 |

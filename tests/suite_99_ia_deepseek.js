@@ -17,6 +17,8 @@ const FUENTE = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user
 
 // Respuesta típica de deepseek (forma OpenAI — idéntica a la de z.ai).
 const respDs = (texto, finish) => JSON.stringify({ choices: [{ message: { content: texto }, finish_reason: finish || "stop" }] });
+// Respuesta típica de Gemini (forma nativa: candidates[].content.parts[].text).
+const respGem = (texto) => JSON.stringify({ candidates: [{ content: { parts: [{ text: texto }] }, finishReason: "STOP" }] });
 
 function hojaDemo(api) {
   return api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", diabetes: true, hta: true },
@@ -29,8 +31,8 @@ const accionesUX = (c) => {
 };
 
 module.exports = {
-  nombre: "Suite 99 · v18.8.0: deepseek-v4-flash primario (z.ai alternativo, Gemini respaldo)",
-  cubre: ["mtrProveedorIA", "mtrRespuestaZai", "mtrGeminiRedactar", "mtrGuardarClaveDeepseek", "mtrLeerClaveDeepseek", "mtrHayClaveIA", "mtrEsCuotaAgotada", "mtrEsModeloNoDisponible"],
+  nombre: "Suite 99 · v18.8.0 deepseek primario + v18.8.8 FASE C: motor de IA preferido (default auto)",
+  cubre: ["mtrProveedorIA", "mtrRespuestaZai", "mtrGeminiRedactar", "mtrGuardarClaveDeepseek", "mtrLeerClaveDeepseek", "mtrHayClaveIA", "mtrEsCuotaAgotada", "mtrEsModeloNoDisponible", "mtrIaPreferencia", "mtrGuardarIaPreferencia"],
   async pruebas(t, api, env, cargar) {
 
     t.caso("DS·1 — contrato del proveedor deepseek: URL, headers y cuerpo OpenAI con el system en ROLE propio", () => {
@@ -193,7 +195,7 @@ module.exports = {
       t.cierto(FUENTE.indexOf("deepseek (deepseek-v4-flash)") >= 0 || FUENTE.indexOf("DeepSeek") >= 0, "el consentimiento T-16 menciona a DeepSeek");
       t.cierto(FUENTE.indexOf("DeepSeek, z.ai o Gemini, según la clave configurada") >= 0, "el pie del modal nombra a los tres proveedores");
       t.cierto(FUENTE.indexOf('mtrLeerClaveDeepseek() ? "deepseek-v4-flash"') >= 0, "el modelo inicial del título es deepseek-v4-flash si hay su clave");
-      t.cierto(FUENTE.indexOf("if (claveDs && n === 0)") >= 0, "la escalera da el intento 0 a deepseek cuando hay su clave");
+      t.cierto(FUENTE.indexOf('if (_primario === "deepseek")') >= 0, "la escalera da el intento 0 al primario (deepseek cuando hay su clave)");
       t.cierto(FUENTE.indexOf("prioridad deepseek > z.ai > Gemini") >= 0, "la prioridad queda documentada en el comentario");
     });
 
@@ -204,6 +206,102 @@ module.exports = {
       const gem = api.mtrProveedorIA("gemini");
       t.cierto(!!gem, "gemini sigue presente como respaldo");
       t.cierto(FUENTE.indexOf("const MTR_ZAI_KEY = \"vgl_zai_key\";") >= 0 && FUENTE.indexOf("const MTR_DEEPSEEK_KEY = \"vgl_deepseek_key\";") >= 0, "las llaves de almacenamiento de las claves son distintas");
+    });
+
+    // ═══ v18.8.8 FASE C (C.1/C.2) — MOTOR DE IA PREFERIDO ═══
+    t.caso("FASE C (C.1) — el motor preferido vive en Ajustes y el default del sistema es «auto»", () => {
+      t.cierto(FUENTE.indexOf('id="c-ia-pref"') >= 0, "el select «Motor de IA preferido» está en Ajustes");
+      t.cierto(FUENTE.indexOf('<option value="auto">') >= 0 && FUENTE.indexOf('<option value="deepseek">') >= 0 && FUENTE.indexOf('<option value="zai">') >= 0 && FUENTE.indexOf('<option value="gemini">') >= 0, "las 4 opciones: auto, deepseek, zai y gemini");
+      t.cierto(FUENTE.indexOf("Automático — DeepSeek V4 Flash si hay clave") >= 0, "el rótulo del default explica qué hace «automático»");
+      t.cierto(FUENTE.indexOf("mtrGuardarIaPreferencia(iaPrefEl.value)") >= 0, "el cambio del select persiste la preferencia");
+      t.cierto(FUENTE.indexOf("vgl_ia_pref") >= 0, "la preferencia vive en vgl_ia_pref (sin PHI)");
+      const iK = FUENTE.indexOf('id="c-ia-key"'), iP = FUENTE.indexOf('id="c-ia-pref"');
+      t.cierto(iK >= 0 && iP > iK, "el select va dentro de la sección técnica, junto a las claves (gate de modo programador del grupo)");
+      const c0 = cargar({ silencioso: true, gmxhr: () => {} });
+      t.igual(c0.api.mtrIaPreferencia(), "auto", "sin nada guardado, el default del sistema es «auto»");
+      t.igual(c0.api.mtrGuardarIaPreferencia("gemini"), "gemini", "guardar «gemini» devuelve «gemini»");
+      t.igual(c0.api.mtrIaPreferencia(), "gemini", "la preferencia queda persistida");
+      t.igual(c0.api.mtrGuardarIaPreferencia("basura"), "auto", "un valor inválido cae a «auto» (fail-open)");
+      t.igual(c0.api.mtrIaPreferencia(), "auto", "tras el valor inválido, el sistema queda en «auto»");
+    });
+
+    await t.casoAsync("FASE C (C.1) — preferencia «auto» (default): deepseek primero con su clave; si responde, es la ÚNICA llamada", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => o.onload({ status: 200, responseText: respDs("Borrador DS por default.") }), 0);
+      } });
+      c.api.mtrGuardarClaveDeepseek("D"); c.api.mtrGuardarClaveGemini("G");
+      t.igual(c.api.mtrIaPreferencia(), "auto", "arranca en el default del sistema");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 1, "deepseek responde a la primera: UNA sola llamada (gemini ni se asoma)");
+      t.cierto(urls[0].indexOf("api.deepseek.com") >= 0, "el disparo fue a deepseek");
+      t.cierto(r.ok && r.texto === "Borrador DS por default.", "el borrador llega del primario deepseek");
+      const acc = accionesUX(c);
+      t.igual(acc["ia.prov.deepseek"], 1, "telemetría: queda registrado que respondió deepseek");
+    });
+
+    await t.casoAsync("FASE C (C.1) — preferido «zai»: con clave de deepseek presente, z.ai recibe la llamada única", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => { if (o.url.indexOf("api.z.ai") >= 0) o.onload({ status: 200, responseText: respDs("Borrador GLM preferido.") }); else o.onload({ status: 500, responseText: "{}" }); }, 0);
+      } });
+      c.api.mtrGuardarClaveDeepseek("D"); c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      c.api.mtrGuardarIaPreferencia("zai");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 1, "z.ai responde a la primera: UNA sola llamada");
+      t.cierto(urls[0].indexOf("api.z.ai") >= 0, "la llamada única fue a z.ai (deepseek inactivo con zai preferido)");
+      t.cierto(r.ok && r.texto === "Borrador GLM preferido.", "el borrador llega del preferido z.ai");
+    });
+
+    await t.casoAsync("FASE C (C.2) — gate Gemini: preferencia «gemini» sin su clave cae al siguiente disponible (cero llamadas a Gemini)", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => o.onload({ status: 200, responseText: respDs("Borrador DS sin clave gemini.") }), 0);
+      } });
+      c.api.mtrGuardarClaveDeepseek("D");
+      c.api.mtrGuardarIaPreferencia("gemini");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.cierto(r.ok && r.texto === "Borrador DS sin clave gemini.", "responde deepseek");
+      t.igual(urls.length, 1, "una sola llamada");
+      t.cierto(urls[0].indexOf("generativelanguage") < 0, "Gemini NO recibe ninguna llamada sin su clave");
+      t.cierto(urls[0].indexOf("api.deepseek.com") >= 0, "sin la clave del preferido, la escalera cae al siguiente disponible");
+    });
+
+    await t.casoAsync("FASE C (C.1) — preferido «gemini» con su clave: Gemini es el primario y deepseek no se asoma", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => { if (o.url.indexOf("generativelanguage") >= 0) o.onload({ status: 200, responseText: respGem("Borrador Gemini preferido.") }); else o.onload({ status: 500, responseText: "{}" }); }, 0);
+      } });
+      c.api.mtrGuardarClaveDeepseek("D"); c.api.mtrGuardarClaveGemini("G");
+      c.api.mtrGuardarIaPreferencia("gemini");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 1, "gemini responde a la primera: UNA sola llamada");
+      t.cierto(urls[0].indexOf("generativelanguage.googleapis.com") >= 0, "la llamada única fue a Gemini");
+      t.cierto(r.ok && r.texto === "Borrador Gemini preferido.", "el borrador llega del preferido gemini");
+    });
+
+    await t.casoAsync("FASE C (C.1) — si el preferido falla por cuota, el respaldo Gemini entra UNA vez", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => { if (o.url.indexOf("api.z.ai") >= 0) o.onload({ status: 429, responseText: "{}" }); else o.onload({ status: 200, responseText: respGem("Respaldo Gemini tras cuota.") }); }, 0);
+      } });
+      c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      c.api.mtrGuardarIaPreferencia("zai");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 2, "z.ai agotó cuota y Gemini entró de respaldo");
+      t.cierto(urls[0].indexOf("api.z.ai") >= 0 && urls[1].indexOf("generativelanguage") >= 0, "el orden fue preferido → respaldo");
+      t.cierto(r.ok && r.texto === "Respaldo Gemini tras cuota.", "responde el respaldo Gemini");
+    });
+
+    t.caso("FASE C (C.3) — el JSON v68 llega al prompt como bloque estructurado RECIBIDO, sin recálculo ni guardado", () => {
+      t.cierto(FUENTE.indexOf("JSON DEL MOTOR RCV (v68) — fuente de verdad, no recalcules") >= 0, "el prompt ordena no recalcular: recibe el bloque ya armado");
+      t.cierto(FUENTE.indexOf("if (modo === \"analisis_plan\" && o.jsonV68)") >= 0, "el JSON viaja por o.jsonV68: lo trae el llamador, la función no lo reúne de nuevo");
+      t.cierto(FUENTE.indexOf("o.selloContexto") >= 0, "el sello de contexto viaja por la misma vía (recibido, no recalculado)");
     });
 
   },

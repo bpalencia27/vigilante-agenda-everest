@@ -36365,6 +36365,11 @@
         <div class="vgl-fld"><label>Clave de la IA (DeepSeek — principal)<span class="vgl-hint">Clave de la API de DeepSeek (api.deepseek.com). El redactor usa deepseek-v4-flash con esta clave; si falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-deepseek-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
         <div class="vgl-fld"><label>Clave de la IA (z.ai — alternativo)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). Solo se usa si NO hay clave de DeepSeek; si GLM-5.3 falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
         <div class="vgl-fld"><label>Clave de la IA (Gemini — respaldo)<span class="vgl-hint">Se usa sola si no hay clave de DeepSeek ni de z.ai, o como único reintento cuando el principal falla. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <!-- v18.8.8 FASE C (C.1) — MOTOR DE IA PREFERIDO: cuál proveedor intenta
+             primero el redactor. "auto" = DeepSeek V4 Flash si hay clave (default del
+             sistema), si no z.ai; Gemini entra solo con su clave. Sin la clave del
+             preferido, la escalera cae al orden natural. Se guarda aparte, sin PHI. -->
+        <div class="vgl-fld"><label>Motor de IA preferido<span class="vgl-hint">Cuál proveedor intenta primero el redactor. «Automático» = DeepSeek V4 Flash si hay clave de DeepSeek (default del sistema) y, si no, z.ai; Gemini solo entra con su propia clave. Si el preferido no tiene clave configurada, se usa el siguiente disponible.</span></label><select id="c-ia-pref"><option value="auto">Automático — DeepSeek V4 Flash si hay clave</option><option value="deepseek">DeepSeek V4 Flash</option><option value="zai">z.ai (GLM-5.3)</option><option value="gemini">Google Gemini</option></select></div>
         <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere alguna de las claves de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO; v18.0.144 — ya NO guarda historias clínicas
              identificadas: es un CACHÉ mínimo, cifrado y seudonimizado (sin cédulas dentro
@@ -36636,6 +36641,15 @@
         v = v.replace(/[•]/g, "").trim();
         mtrGuardarClaveZai(v);                           // v vacío la borra
         zaiKey.value = v ? "••••••••" : "";
+      });
+    }
+    // v18.8.8 FASE C (C.1) — motor de IA preferido: el select pinta el valor
+    // guardado y cada cambio persiste vgl_ia_pref al momento (sin borrador).
+    const iaPrefEl = q("#c-ia-pref");
+    if (iaPrefEl) {
+      try { iaPrefEl.value = mtrIaPreferencia(); } catch (e) {}
+      iaPrefEl.addEventListener("change", () => {
+        try { mtrGuardarIaPreferencia(iaPrefEl.value); } catch (e) {}
       });
     }
     // v14.2.0 — El modelo ya no se edita a mano: es automático con rotación por cuota.
@@ -47665,9 +47679,31 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   function mtrLeerClaveDeepseek() {
     try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_DEEPSEEK_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
   }
+  // v18.8.8 FASE C (C.1) — MOTOR DE IA PREFERIDO. El médico elige en Ajustes →
+  // modo programador → «Motor de IA preferido» (vgl_ia_pref: auto | deepseek |
+  // zai | gemini). "auto" es el DEFAULT DEL SISTEMA y significa DeepSeek V4 Flash
+  // si hay clave deepseek y, si no, z.ai: exactamente el orden histórico de la
+  // escalera. Cualquier valor ausente o inválido cae a "auto" (fail-open).
+  const MTR_IA_PREF_KEY = "vgl_ia_pref";
+  function mtrIaPreferencia() {
+    try {
+      if (typeof GM_getValue === "undefined") return "auto";
+      const v = String(GM_getValue(MTR_IA_PREF_KEY, "") || "").toLowerCase().trim();
+      return (v === "deepseek" || v === "zai" || v === "gemini") ? v : "auto";
+    } catch (e) { return "auto"; }
+  }
+  function mtrGuardarIaPreferencia(v) {
+    try {
+      const limpio = String(v == null ? "" : v).toLowerCase().trim();
+      const val = (limpio === "deepseek" || limpio === "zai" || limpio === "gemini") ? limpio : "auto";
+      if (typeof GM_setValue === "undefined") return "auto";
+      GM_setValue(MTR_IA_PREF_KEY, val);
+      return val;
+    } catch (e) { return "auto"; }
+  }
   // ¿Hay ALGUNA clave de IA configurada (deepseek, z.ai o Gemini)? Los gates de
   // entrada al redactor (dock, inyectores, panel, Generar) preguntan esto, no por
-  // un proveedor concreto: el médico no elige proveedor, la escalera sí.
+  // un proveedor concreto; la escalera (y la preferencia C.1) decide por cuál.
   function mtrHayClaveIA() {
     try { return !!(mtrLeerClaveDeepseek() || mtrLeerClaveZai() || mtrLeerClaveGemini()); } catch (e) { return false; }
   }
@@ -49053,17 +49089,29 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       let resuelto = false;
       const resolve = (r) => { if (resuelto) return; resuelto = true; _iaGenerandoN = Math.max(0, _iaGenerandoN - 1); resolveCrudo(r); };
       try {
-        // v18.2.0 (P9) — ESCALERA DE PROVEEDORES: z.ai PRIMARIO (un intento, GLM-5.3)
-        // y Gemini de RESPALDO. El médico no elige proveedor: si el primario no está
-        // configurado, Gemini conserva SU rotación completa de hoy; si lo está y falla
-        // por algo que merezca rotar, Gemini entra UNA vez con el modelo del modo.
+        // v18.2.0 (P9) — ESCALERA DE PROVEEDORES: un PRIMARIO (un intento) y Gemini
+        // de RESPALDO. Sin primario configurado, Gemini conserva SU rotación completa
+        // de hoy; si el primario está y falla por algo que merezca rotar, Gemini entra
+        // UNA vez con el modelo del modo.
         // v18.8.0 — con clave deepseek, el primario pasa a ser deepseek-v4-flash
         // (un intento) y z.ai queda inactivo: prioridad deepseek > z.ai > Gemini.
+        // v18.8.8 FASE C (C.1) — el MOTOR DE IA PREFERIDO (vgl_ia_pref, Ajustes →
+        // modo programador) decide quién es el primario: el proveedor preferido SI
+        // tiene clave; "auto" (default del sistema) = DeepSeek V4 Flash si hay clave
+        // y, si no, z.ai. Sin la clave del preferido, la escalera cae al orden
+        // natural. Con Gemini preferido, Gemini corre su rotación completa de
+        // modelos (la misma de hoy cuando es el único configurado) y no hay respaldo.
         const claveDs = mtrLeerClaveDeepseek();
         const claveZai = mtrLeerClaveZai();
         const claveGem = mtrLeerClaveGemini();
-        const clavePrim = claveDs || claveZai;
-        if (!clavePrim && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
+        const _pref = mtrIaPreferencia();
+        const _primario = (_pref === "gemini")
+          ? (claveGem ? "gemini" : claveDs ? "deepseek" : claveZai ? "zai" : "")
+          : (_pref === "zai")
+            ? (claveZai ? "zai" : claveDs ? "deepseek" : "")
+            : (claveDs ? "deepseek" : claveZai ? "zai" : "");   // "auto" y "deepseek"
+        const _clavePrim = _primario === "gemini" ? claveGem : _primario === "zai" ? claveZai : _primario === "deepseek" ? claveDs : "";
+        if (!_clavePrim && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
         if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, texto: "", motivo: "sin GM_xmlhttpRequest" }); return; }
         const p = mtrRedaccionPrompt(modo, hoja, o);
         // El cuerpo de cada proveedor vive en MTR_PROVEEDORES_IA (gemini.cuerpo es la
@@ -49093,12 +49141,23 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         let intentos = 0;
         // v18.2.0 (P9) — con primario: 1 intento + 1 de respaldo Gemini. Sin
         // primario: la rotación COMPLETA de Gemini de hoy (longitud de su lista).
-        const maxIntentos = (clavePrim ? 1 : 0) + (claveGem ? (clavePrim ? 1 : MTR_GEMINI_MODELOS.length) : 0);
-        // El intento n de la escalera: primero el primario (deepseek o z.ai), luego Gemini.
+        // v18.8.8 FASE C (C.1) — con Gemini preferido (o solo Gemini configurado,
+        // que es el mismo caso de siempre): rotación completa de modelos. Con
+        // primario deepseek/z.ai: 1 intento + 1 de respaldo Gemini.
+        const maxIntentos = (!_clavePrim || _primario === "gemini")
+          ? MTR_GEMINI_MODELOS.length
+          : 1 + (claveGem ? 1 : 0);
+        // El intento n de la escalera: el slot 0 es el primario preferido
+        // (deepseek, z.ai o Gemini con el modelo del modo); los siguientes son
+        // Gemini — en rotación completa cuando el primario es Gemini o no hay
+        // primario, o el respaldo único (modelo del modo) cuando el primario
+        // deepseek/z.ai falló por algo que merece rotar.
         const _slot = (n) => {
-          if (claveDs && n === 0) return { prov: MTR_PROVEEDORES_IA.deepseek, clave: claveDs, modelo: "deepseek-v4-flash" };
-          if (claveZai && n === 0) return { prov: MTR_PROVEEDORES_IA.zai, clave: claveZai, modelo: "glm-5.3" };
-          const nGem = clavePrim ? (n - 1) : n;
+          if (n === 0) {
+            if (_primario === "deepseek") return { prov: MTR_PROVEEDORES_IA.deepseek, clave: claveDs, modelo: "deepseek-v4-flash" };
+            if (_primario === "zai") return { prov: MTR_PROVEEDORES_IA.zai, clave: claveZai, modelo: "glm-5.3" };
+          }
+          const nGem = (_primario === "deepseek" || _primario === "zai") ? (n - 1) : n;
           const modelo = (nGem === 0) ? mtrModeloGemini(modo) : mtrModeloGemini();
           return { prov: MTR_PROVEEDORES_IA.gemini, clave: claveGem, modelo: modelo };
         };
