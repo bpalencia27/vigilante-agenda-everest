@@ -78,3 +78,62 @@ depende del hardware: un banco lento no la pone roja.
 | P4 (prefetch) | **YA ALINEADO POR PREEXISTENCIA** (v18.5.2-hc2): el clic ya precalienta la cadena exacta de órdenes vigentes con 1 intento especulativo, dedup en vuelo y cortocircuitos; el baseline B/cadena HC (2 peticiones) lo verifica como contrato vivo. Nada que cambiar — documentado, no tocado | — (preexistente; cubierto por B/cadena HC) | M4: 2 (sin cambios) |
 
 Todas las filas en `tests/INFORME_MUTACIONES.md` (sección v18.6.2).
+
+---
+
+## F-P3 APLICADO (v18.6.2) — caché de catálogos globales bajo toggle
+
+**Problema medido en el HAR** (§9.4.4): `ParDiagnosticos` (2,6 MB) y `ParCiudades`
+(303 KB) se descargan **en cada apertura de historia clínica** — ~2,9 MB por paciente
+de catálogos de parametrización de la IPS que no cambian durante la jornada.
+
+**Qué se hizo** (suite_95, 6/6; mutaciones M1-M2 verificadas): módulo `mtrPerfCache*`
+con toggle `tog_perf_cache` **APAGADO por defecto** (la red de Everest no se toca
+hasta que el médico lo enciende en Ajustes; apagarlo restaura los fetch/XHR originales
+al instante). Al encenderlo intercepta `fetch` y `XMLHttpRequest` (la vía real del
+HttpClient de Angular) y aplica un **protocolo de doble lectura**:
+
+| Lectura | Qué pasa |
+|---|---|
+| 1.ª | pasa por la red; se observa la huella FNV-1a del cuerpo |
+| 2.ª idéntica | pasa por la red; la igualdad **demuestra la inmutabilidad en vivo** y se guarda en IndexedDB |
+| 3.ª en adelante | se sirve de caché, **cero red** |
+| cuerpos distintos | la fase pendiente se reinicia: **jamás se cachea mientras cambie** |
+
+**Decisiones de seguridad documentadas** (fila en REGISTRO_DECISIONES):
+
+- **Solo los 2 catálogos globales.** `GetParDiagnosticoByCitaId`, `ObtenerListadoCupsByCitaIdComplete`,
+  `ObtenerRetriccionesDiagnostico` y `MedicamentoPorPaciente` quedan FUERA por diseño:
+  son por-cita o por-paciente (clave única por paciente: una caché así no reutiliza y
+  crecería sin fin). La defensa mira la URL completa (la query lleva citaId/pacienteId)
+  y está fijada por mutación M1.
+- **La inmutabilidad no se supone, se demuestra en vivo.** El HAR no incluyó cuerpos de
+  respuesta (solo tamaños — §2 del informe), así que no existe comparación byte a byte
+  fuera del navegador: la doble lectura es la prueba. Está fijada por mutación M2.
+- **TTL de un día local**: lo persistido solo se sirve el mismo día; un catálogo que la
+  IPS cambie de un día a otro jamás se sirve obsoleto.
+- **Fail-open total**: cualquier excepción, forma desconocida, status ≠ 200, content-type
+  no textual (binarios) o `responseType` no textual en XHR → la red original sin tocar.
+- **Cero PHI por construcción**: son catálogos de parametrización de la IPS, sin paciente.
+  Nada sale del equipo: IndexedDB local.
+
+**Telemetría** (`tog_perf_informe`, sub-toggle que revive solo con su padre encendido):
+`mtrPerfCacheEstadisticas()` → `{activo, servidas, bytesAhorrados, confirmaciones,
+observadas}` + eventos `perfcache.servida.fetch/xhr` en la telemetría anónima interna.
+
+## F-P5 — INFORME ANTES/DESPUÉS (baseline v0 → v18.6.2 con F-P2 + F-P3)
+
+| Métrica | Antes (baseline v0) | Después (v18.6.2) | Cambio |
+|---|---|---|---|
+| **M1** p95 `extractPacienteAbierto` (µs) | 18.9 | 18.9 (coste unitario intacto) | **barridos por tick: 4 → 1** (F-P2 memo) |
+| **M2** p95 `togActiva` (µs) | 1.3 | 1.3 | sin cambios |
+| **M3** peor caso cascada `apiAccesoBuscarPaciente` (peticiones) | 2 | **1** | **−1 petición FALLIDA por búsqueda** (F-P2, ruta 400 retirada) |
+| **M4** cadena HC por clic (peticiones) | 2 | 2 | sin cambios (F-P2 P4 ya preexistente) |
+| **M5** acierto + caché, 2 lecturas (peticiones) | 1 | 1 | sin cambios |
+| **M6** TTLs (hint 15 s · cachés 10 min) | verificados | verificados | sin cambios |
+| **M7** catálogos globales por apertura de HC (bytes) | ~2,9 MB SIEMPRE de red | **0 bytes desde la 3.ª apertura** del día (1.ª y 2.ª pasan por red para demostrar inmutabilidad; con persistencia del mismo día, 0 desde la 1.ª) | **~2,9 MB menos por paciente** con `tog_perf_cache` ENCENDIDO; 0 bytes de cambio con el toggle apagado (defecto) |
+
+**Cómo medirlo en vivo**: Ajustes → Funcionalidades por médico → «Caché de catálogos de
+Everest» → encender → abrir 3 historias clínicas distintas → `mtrPerfCacheEstadisticas()`
+en consola: `servidas` crece y `bytesAhorrados` acumula ~2,9 MB por HC abierta. Si algo
+se ve raro, apagar el toggle restaura la red original en el instante.

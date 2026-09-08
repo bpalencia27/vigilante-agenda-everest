@@ -19,6 +19,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 const LISTA_RCV = {
   version: "2026-09-06.1",
@@ -212,6 +213,21 @@ module.exports = {
       c.api.__state.activeDoctor.name = nombre;
       cablearHistoria(c, "5150076", ex.anamesis !== false);
       try { c.api.mtrCacheResumenGuardar("5150076", resumen88(ex.pid === undefined ? 777 : ex.pid)); } catch (e) {}
+      // El tick de PRODUCCIÓN usa el reloj real del sistema (todayStamp() → new Date()),
+      // mientras el fixture HOY de esta suite está congelado en 2026-09-06: al pasar la
+      // medianoche, una orden que en el fixture "vence HOY" se reclasifica VENCIDA sin que
+      // la lógica haya cambiado (roja del 08-sep: «ya no está vencido tras la orden nueva»).
+      // Se congela el reloj DENTRO del vm (patrón suite_94): new Date() sin argumentos y
+      // Date.now() devuelven el instante del fixture; new Date(x) con argumento parsea
+      // normal, así el cálculo de vigencias y fechas no se altera.
+      vm.runInContext(
+        "var __VGL88_DATE_ORIG = Date;" +
+        "Date = class extends __VGL88_DATE_ORIG {" +
+        "  constructor(){ super(...(arguments.length ? arguments : [" + msDe(HOY) + "])); }" +
+        "  static now(){ return " + msDe(HOY) + "; }" +
+        "};",
+        c.ctx
+      );
       return { c: c, red: red };
     };
 

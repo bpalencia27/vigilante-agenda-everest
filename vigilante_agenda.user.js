@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.6.1
+// @version      18.6.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1036,7 +1036,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.6.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9807,6 +9807,8 @@
     { k: "tog_notif", label: "Notificaciones", desc: "Sistema de avisos universales del asistente (prevención, abandono, laboratorios)." },
     { k: "tog_anexo5", label: "Aviso del Anexo 5", desc: "Panel de estado del programa RCV al abrir la historia clínica.", sub: "tog_notif" },
     { k: "tog_hc_chip", label: "Chip de contexto de la HC", desc: "Chip con cédula enmascarada y origen del contexto al abrir la historia clínica." },
+    { k: "tog_perf_cache", label: "Caché de catálogos de Everest", desc: "EXPERIMENTAL: sirve ParDiagnosticos y ParCiudades (≈2,9 MB por apertura de HC) desde caché local tras demostrar dos lecturas idénticas en vivo. Solo catálogos globales de la IPS: jamás toca peticiones por paciente o por cita. Apagarlo restaura la red original al instante.", defecto: false },
+    { k: "tog_perf_informe", label: "Métricas del caché de catálogos", desc: "Conteos anónimos de la caché de catálogos (servidas, bytes ahorrados, confirmaciones) en la telemetría interna. Solo lectura: no altera la red.", sub: "tog_perf_cache" },
   ];
   function _togUid() {
     try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
@@ -9832,6 +9834,9 @@
       writeJSON("vgl_tog_" + uid, mapa);
       uxTrack("tog." + k + "." + (on ? "on" : "off"));
       try { createAccionesDockUI(); } catch (e2) {}   // re-pintado en caliente del dock
+      // v18.6.2 (F-P3) — el interruptor de la caché de catálogos actúa en caliente:
+      // encender instala los interceptores, apagar restaura los originales.
+      if (k === "tog_perf_cache") { try { if (on) { mtrPerfCacheActivar(); } else { mtrPerfCacheDesactivar(); } } catch (e) {} }
       return true;
     } catch (e) { return false; }
   }
@@ -23549,6 +23554,299 @@
       console.warn("[Vigilante] apiHcValidacionExamenCronicos falló:", e);
       return null;
     }
+  }
+
+  // ---------------------------------------------------------------------
+  //  v18.6.2 (F-P3) — CACHÉ DE CATÁLOGOS GLOBALES DE EVEREST (toggle OFF por defecto).
+  //
+  //  El HAR de producción (INFORME_EVIDENCIA_HAR.md §9.4.4) confirma que
+  //  ParDiagnosticos (2,6 MB) y ParCiudades (303 KB) se bajan EN CADA apertura de
+  //  historia clínica: ~2,9 MB de catálogos de parametrización de la IPS que no
+  //  cambian durante la jornada. Los otros cuatro pesados quedan FUERA por diseño:
+  //  GetParDiagnosticoByCitaId, ObtenerListadoCupsByCitaIdComplete,
+  //  ObtenerRetriccionesDiagnostico y MedicamentoPorPaciente son por-cita o
+  //  por-paciente (una caché por clave única nunca reutiliza y crecería sin fin).
+  //
+  //  Por qué nace APAGADO (defecto:false, como tog_agendar_labs): la única forma de
+  //  ahorrar esa red es interceptar fetch/XMLHttpRequest de la SPA ajena — la clase
+  //  de pieza que el médico debe encender a sabiendas. Reglas de seguridad, todas
+  //  fijadas por la suite 95:
+  //    · Solo GET a la URL exacta de los 2 catálogos globales; lo por-cita o
+  //      por-paciente jamás entra (defensa en profundidad, aunque hoy no colisiona).
+  //    · PROTOCOLO DE DOBLE LECTURA: la 1.ª respuesta se observa (huella FNV-1a);
+  //      la 2.ª idéntica CONFIRMA y se guarda en IndexedDB; desde ahí se sirve de
+  //      caché. Si las lecturas difieren, la fase pendiente se reinicia y JAMÁS se
+  //      cachea mientras cambie: la inmutabilidad no se supone, se demuestra en vivo.
+  //      (El HAR no trae cuerpos de respuesta, solo tamaños — §2 del informe — así
+  //      que no hay contra qué comparar byte a byte fuera del navegador.)
+  //    · Lo persistido solo se sirve el MISMO día local: un catálogo que la IPS
+  //      cambie de un día a otro jamás se sirve obsoleto.
+  //    · Fail-open total: cualquier excepción o forma desconocida → la red original
+  //      sin tocar. Solo se sirven cuerpos de texto (Angular lee JSON vía
+  //      responseText); los binarios pasan intactos.
+  //    · Apagar el toggle restaura los fetch/XHR originales tal cual estaban.
+  //  Cero PHI por construcción: catálogos de parametrización de la IPS, sin paciente.
+  const VGL_PERF_CACHE_DB = "vgl_perfcache", VGL_PERF_CACHE_STORE = "respuestas";
+  const VGL_PERF_CACHE_RUTAS = ["ParDiagnosticos", "ParCiudades"];
+  const _perfCacheEst = {
+    activo: false,
+    fetchOrig: null, fetchWrap: null, xhrOpenOrig: null, xhrSendOrig: null,
+    confirmadas: new Map(), pendientes: new Map(),
+    stats: { servidas: 0, bytesAhorrados: 0, confirmaciones: 0, observadas: 0 },
+  };
+
+  // ¿Es un GET a uno de los catálogos globales cacheables? Nombre canónico o null.
+  function mtrPerfCacheClasificar(metodo, url) {
+    try {
+      if (String(metodo || "").toUpperCase() !== "GET") return null;
+      const u = String(url == null ? "" : url).toLowerCase();
+      if (!u) return null;
+      // defensa en profundidad sobre la URL COMPLETA (la query lleva citaId/pacienteId):
+      // lo por-cita o por-paciente jamás entra, aunque mañana Everest mueva estos
+      // catálogos a una ruta que contenga su nombre
+      if (/(citaid|bycita|pacienteid|porpaciente|medicamentopor)/.test(u)) return null;
+      const path = "/" + u.split("?")[0];
+      for (const r of VGL_PERF_CACHE_RUTAS) {
+        if (path.includes("/" + r.toLowerCase())) return r;
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
+  function _perfCacheDb() {
+    return new Promise((resolve) => {
+      try {
+        if (typeof indexedDB === "undefined") { resolve(null); return; }
+        const req = indexedDB.open(VGL_PERF_CACHE_DB, 1);
+        req.onupgradeneeded = () => { try { req.result.createObjectStore(VGL_PERF_CACHE_STORE); } catch (e) {} };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+  }
+  async function _perfCacheGuardar(url, cuerpo, huella) {
+    try {
+      const db = await _perfCacheDb();
+      if (!db) return false;
+      return await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(VGL_PERF_CACHE_STORE, "readwrite");
+          tx.objectStore(VGL_PERF_CACHE_STORE).put({ u: url, c: cuerpo, h: huella, l: String(cuerpo || "").length, ts: Date.now() }, url);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (e) { resolve(false); }
+      });
+    } catch (e) { return false; }
+  }
+  async function _perfCacheLeer(url) {
+    try {
+      const db = await _perfCacheDb();
+      if (!db) return null;
+      return await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(VGL_PERF_CACHE_STORE, "readonly");
+          const rq = tx.objectStore(VGL_PERF_CACHE_STORE).get(url);
+          rq.onsuccess = () => resolve(rq.result || null);
+          rq.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+    } catch (e) { return null; }
+  }
+
+  function _perfCacheMismoDia(ts) {
+    try {
+      const d0 = new Date(ts), d1 = new Date();
+      return d0.getFullYear() === d1.getFullYear() && d0.getMonth() === d1.getMonth() && d0.getDate() === d1.getDate();
+    } catch (e) { return false; }
+  }
+
+  // Protocolo de doble lectura. "confirmada" justo en la 2.ª lectura idéntica; si el
+  // cuerpo cambia, la fase pendiente se reinicia y nunca se cachea mientras cambie.
+  function _perfCacheAnotar(url, cuerpo) {
+    try {
+      if (typeof cuerpo !== "string" || !cuerpo) return "omitida";
+      _perfCacheEst.stats.observadas++;
+      const h = obsFnv1a(cuerpo);
+      const p = _perfCacheEst.pendientes.get(url);
+      if (!p || p.h !== h) {
+        _perfCacheEst.pendientes.set(url, { h: h });
+        return "pendiente";
+      }
+      _perfCacheEst.pendientes.delete(url);
+      _perfCacheEst.confirmadas.set(url, { h: h, cuerpo: cuerpo, l: cuerpo.length, ct: "" });
+      _perfCacheEst.stats.confirmaciones++;
+      _perfCacheGuardar(url, cuerpo, h);   // fuego y olvido: sin DB, la de memoria sigue
+      return "confirmada";
+    } catch (e) { return "omitida"; }
+  }
+
+  // Lo que se puede servir YA: confirmado en memoria, o persistido HOY en IndexedDB.
+  async function _perfCacheServible(url) {
+    try {
+      const mem = _perfCacheEst.confirmadas.get(url);
+      if (mem) return mem;
+      const ent = await _perfCacheLeer(url);
+      if (!ent || typeof ent.c !== "string") return null;
+      if (!_perfCacheMismoDia(ent.ts)) return null;
+      const s = { h: ent.h, cuerpo: ent.c, l: ent.l, ct: "" };
+      _perfCacheEst.confirmadas.set(url, s);
+      return s;
+    } catch (e) { return null; }
+  }
+
+  function _perfCacheRespuesta(txt, ct) {
+    try {
+      const R = (typeof Response !== "undefined") ? Response : (PAGEWIN && PAGEWIN.Response);
+      if (typeof R === "function") return new R(txt, { status: 200, headers: ct ? { "content-type": ct } : {} });
+    } catch (e) {}
+    // arnés sin Response: forma compatible con lo que _pageFetchJsonCore espera
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => (String(k || "").toLowerCase() === "content-type" ? (ct || "") : null) },
+      text: async () => txt, json: async () => JSON.parse(txt), clone() { return this; },
+    };
+  }
+
+  function _perfCacheFetchWrapper(fetchOrig) {
+    return async function (input, init) {
+      try {
+        const url = (typeof input === "string") ? input : (input && input.url) || "";
+        const metodo = (init && init.method) || (input && input.method) || "GET";
+        if (!mtrPerfCacheClasificar(metodo, url)) return fetchOrig.apply(this, arguments);
+        const c = await _perfCacheServible(url);
+        if (c) {
+          _perfCacheEst.stats.servidas++;
+          _perfCacheEst.stats.bytesAhorrados += c.l;
+          try { if (togActiva("tog_perf_informe")) uxTrack("perfcache.servida.fetch"); } catch (e) {}
+          return _perfCacheRespuesta(c.cuerpo, c.ct);
+        }
+        const resp = await fetchOrig.apply(this, arguments);
+        try {
+          if (!resp || resp.status !== 200) return resp;
+          const ct = String((resp.headers && typeof resp.headers.get === "function" && resp.headers.get("content-type")) || "");
+          if (ct && !/json|text|javascript/i.test(ct)) return resp;   // binario: intocable
+          const txt = await resp.text();
+          _perfCacheAnotar(url, txt);
+          return _perfCacheRespuesta(txt, ct);
+        } catch (e) { return resp; }   // fail-open: la respuesta original queda como venía
+      } catch (e) {
+        try { return fetchOrig.apply(this, arguments); } catch (e2) { throw e2; }
+      }
+    };
+  }
+
+  function _perfCacheXhrCapturar(xhr) {
+    try {
+      if (xhr.__vglPerfCapturado) return;
+      xhr.__vglPerfCapturado = true;
+      if (xhr.status !== 200) return;
+      const rt = (typeof xhr.responseType === "string") ? xhr.responseType : "";
+      if (rt !== "" && rt !== "text") return;
+      const txt = (typeof xhr.responseText === "string") ? xhr.responseText : null;
+      if (txt == null) return;
+      _perfCacheAnotar(xhr.__vglPerfUrl || "", txt);
+    } catch (e) {}
+  }
+  function _perfCacheXhrObservar(xhr) {
+    try {
+      if (typeof xhr.addEventListener === "function") {
+        xhr.addEventListener("load", () => { try { _perfCacheXhrCapturar(xhr); } catch (e) {} });
+        xhr.addEventListener("readystatechange", () => { try { if (xhr.readyState === 4) _perfCacheXhrCapturar(xhr); } catch (e) {} });
+      }
+    } catch (e) {}
+  }
+
+  // Instala los interceptores (idempotente). Solo actúa cuando el toggle está
+  // encendido: con el defecto OFF, la red de Everest no se toca NUNCA.
+  function mtrPerfCacheActivar() {
+    try {
+      if (_perfCacheEst.activo) return true;
+      const w = PAGEWIN || (typeof window !== "undefined" ? window : null);
+      if (!w) return false;
+      if (typeof w.fetch === "function" && !_perfCacheEst.fetchOrig) {
+        _perfCacheEst.fetchOrig = w.fetch;
+        const fw = _perfCacheFetchWrapper(w.fetch);
+        _perfCacheEst.fetchWrap = fw;
+        w.fetch = fw;
+      }
+      if (w.XMLHttpRequest && w.XMLHttpRequest.prototype &&
+          typeof w.XMLHttpRequest.prototype.open === "function" &&
+          typeof w.XMLHttpRequest.prototype.send === "function") {
+        const proto = w.XMLHttpRequest.prototype;
+        if (!_perfCacheEst.xhrOpenOrig) {
+          _perfCacheEst.xhrOpenOrig = proto.open;
+          proto.open = function (metodo, url) {
+            try {
+              this.__vglPerfRuta = mtrPerfCacheClasificar(metodo, url) || null;
+              this.__vglPerfUrl = String(url == null ? "" : url);
+            } catch (e) { this.__vglPerfRuta = null; this.__vglPerfUrl = ""; }
+            return _perfCacheEst.xhrOpenOrig.apply(this, arguments);
+          };
+        }
+        if (!_perfCacheEst.xhrSendOrig) {
+          _perfCacheEst.xhrSendOrig = proto.send;
+          proto.send = function (body) {
+            const self = this;
+            const url = self.__vglPerfUrl;
+            if (!self.__vglPerfRuta || !url) return _perfCacheEst.xhrSendOrig.apply(self, arguments);
+            const rt = (typeof self.responseType === "string") ? self.responseType : "";
+            _perfCacheServible(url).then((c) => {
+              try {
+                if (!c || (rt !== "" && rt !== "text")) {
+                  // sin caché o con un responseType que no podemos servir sin romper
+                  // la SPA: red original, y solo observamos para la doble lectura
+                  _perfCacheXhrObservar(self);
+                  return _perfCacheEst.xhrSendOrig.call(self, body);
+                }
+                // servido de caché: sin red, mismos eventos que un load real
+                _perfCacheEst.stats.servidas++;
+                _perfCacheEst.stats.bytesAhorrados += c.l;
+                try { if (togActiva("tog_perf_informe")) uxTrack("perfcache.servida.xhr"); } catch (e) {}
+                setTimeout(() => {
+                  try {
+                    Object.defineProperty(self, "readyState", { value: 4, writable: true, configurable: true });
+                    Object.defineProperty(self, "status", { value: 200, writable: true, configurable: true });
+                    Object.defineProperty(self, "responseText", { value: c.cuerpo, writable: true, configurable: true });
+                    Object.defineProperty(self, "response", { value: c.cuerpo, writable: true, configurable: true });
+                    if (typeof self.onreadystatechange === "function") { try { self.onreadystatechange({ type: "readystatechange", target: self, currentTarget: self }); } catch (e) {} }
+                    if (typeof self.onload === "function") { try { self.onload({ type: "load", target: self, currentTarget: self }); } catch (e) {} }
+                  } catch (e) {}
+                }, 0);
+              } catch (e) {
+                try { _perfCacheEst.xhrSendOrig.call(self, body); } catch (e2) {}
+              }
+            });
+          };
+        }
+      }
+      _perfCacheEst.activo = true;
+      try { uxTrack("perfcache.on"); } catch (e) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function mtrPerfCacheDesactivar() {
+    try {
+      const w = PAGEWIN || (typeof window !== "undefined" ? window : null);
+      if (w) {
+        if (_perfCacheEst.fetchOrig && w.fetch === _perfCacheEst.fetchWrap) w.fetch = _perfCacheEst.fetchOrig;
+        if (w.XMLHttpRequest && w.XMLHttpRequest.prototype) {
+          const proto = w.XMLHttpRequest.prototype;
+          if (_perfCacheEst.xhrOpenOrig && proto.open !== _perfCacheEst.xhrOpenOrig) proto.open = _perfCacheEst.xhrOpenOrig;
+          if (_perfCacheEst.xhrSendOrig && proto.send !== _perfCacheEst.xhrSendOrig) proto.send = _perfCacheEst.xhrSendOrig;
+        }
+      }
+    } catch (e) {}
+    _perfCacheEst.activo = false;
+    _perfCacheEst.fetchOrig = null; _perfCacheEst.fetchWrap = null;
+    _perfCacheEst.xhrOpenOrig = null; _perfCacheEst.xhrSendOrig = null;
+    _perfCacheEst.confirmadas.clear(); _perfCacheEst.pendientes.clear();
+    try { uxTrack("perfcache.off"); } catch (e) {}
+  }
+  function mtrPerfCacheActivo() { return _perfCacheEst.activo; }
+  function mtrPerfCacheEstadisticas() {
+    const s = _perfCacheEst.stats;
+    return { activo: _perfCacheEst.activo, servidas: s.servidas, bytesAhorrados: s.bytesAhorrados, confirmaciones: s.confirmaciones, observadas: s.observadas };
   }
 
   // ---------------------------------------------------------------------
@@ -37892,6 +38190,10 @@
     // try/catch porque NADA de esto puede impedir el arranque, y la propia función no
     // modifica ninguna petición: lee el cuerpo y devuelve el control intacto.
     try { mtrHcEnganchar(); } catch (e) {}
+    // v18.6.2 (F-P3) — si el médico ya encendió la caché de catálogos, los interceptores
+    // se instalan en el arranque. Nace APAGADO por defecto: sin toggle, la red de
+    // Everest no se toca NADA.
+    try { if (togActiva("tog_perf_cache")) mtrPerfCacheActivar(); } catch (e) {}
     try { _cancelEnganchar(); } catch (e) {}   // v18.0.119 — aprender cómo cancela Everest
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
@@ -46982,6 +47284,10 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       indicaciones,
     ].join("\n"));
     if (ejemplos) bloques.push(ejemplos);
+    // v18.6.2 (R-Grounding) — el sello de la foto viaja como bloque propio, después de
+    // todos los datos y antes de la tarea final: solo DECLARA la edad de la lectura y la
+    // hora de la generación, no aporta hechos al modelo.
+    if (o.selloContexto) bloques.push(o.selloContexto);
     bloques.push("Con base únicamente en la información anterior, " + instruccion);
     // v18.2.0 (P9) — autoverificación + línea FUENTES en el system; recordatorio
     // anti-invención/anti-omisión al FINAL del user (lo último que lee el modelo).
@@ -47202,6 +47508,66 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       return !MTR_EA_PREFIJOS_PROHIBIDOS.some((pref) => l.indexOf(pref) === 0);
     });
     return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  // v18.6.2 (R-Grounding, INFORME_AUDITORIA_REDACTOR_IA §4) — SELLO DE TRAZABILIDAD de la
+  // "foto" que viaja a la IA. El clic de Generar ya recalcula la hoja SIEMPRE
+  // (mtrIaResumenVigente); este sello solo DECLARA en el prompt la edad de la lectura y la
+  // hora local de la generación, para que el médico pueda auditar cuán frescos eran los
+  // hechos de un borrador. PURA: no lee DOM ni red; `ahora` inyectable para el banco.
+  function mtrSelloContextoTexto(edadMin, refrescado, ahora) {
+    try {
+      const d = new Date((typeof ahora === "number" && isFinite(ahora)) ? ahora : (typeof Date !== "undefined" ? Date.now() : 0));
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const antiguedad = (edadMin === null || typeof edadMin === "undefined")
+        ? "antigüedad no disponible"
+        : (edadMin < 1 ? "recién leídos" : "leídos de la pantalla hace " + edadMin + " min");
+      return "SELLO DE LA FOTO: hechos " + antiguedad
+        + (refrescado ? " (refrescados al instante de este clic)" : "")
+        + " · generación solicitada a las " + hh + ":" + mm + " (hora local del consultorio).";
+    } catch (e) { return ""; }
+  }
+
+  // v18.6.2 (R-Grounding) — SANEADOR DE PREÁMBULOS para TODOS los modos. El prompt ya
+  // prohíbe saludos y preámbulos; esta es la red de seguridad post-hoc: si el modelo
+  // igual abre con «Claro, aquí tiene…» o «Por supuesto, …», se quita esa línea ANTES de
+  // que el médico la vea. CONSERVADOR a propósito: solo el INICIO del texto, máximo 2
+  // líneas, cada una corta (<100), sin dígitos (una línea con cifras clínicas jamás se
+  // borra) y terminada en puntuación tras el conector. El resto del borrador, intacto.
+  // PURA: texto → texto; un texto sin preámbulo sale idéntico.
+  function mtrQuitarPreambuloIA(texto) {
+    try {
+      const t = String(texto || "");
+      if (!t) return "";
+      // el contenido tras el conector puede traer comas internas («Claro, aquí tiene…»):
+      // se limita por longitud (<100) y por terminar en puntuación; los dígitos los
+      // bloquea la guarda de arriba (una línea con cifras clínicas jamás se borra).
+      // la frontera tras el conector es un lookahead (espacio, coma, dos puntos o fin):
+      // una \b falla con conectores terminados en vocal acentuada («AQUÍ…») sin flag /u.
+      const re = /^\s*(AQUÍ|CLARO|POR SUPUESTO|CON GUSTO|DE ACUERDO|ENTENDIDO|PERFECTO|LISTO|SEGURO|EFECTIVAMENTE|A CONTINUACIÓN|SEGÚN LO SOLICITADO|POR DESCONTADO|ADELANTE CON|HE AQUÍ|AHÍ VA)(?=[\s:,]|$)[^\n]{0,95}[:.!]\s*$/i;
+      const lineas = t.split("\n");
+      let i = 0, quitadas = 0;
+      while (i < lineas.length && quitadas < 2) {
+        const l = lineas[i];
+        if (!l.trim() || l.trim().length >= 100 || /\d/.test(l) || !re.test(l)) break;
+        i++; quitadas++;
+      }
+      return lineas.slice(i).join("\n").replace(/^\s+/, "").replace(/\n{3,}/g, "\n\n").trim();
+    } catch (e) { return String(texto || ""); }
+  }
+
+  // v18.6.2 (R-Grounding) — ETIQUETA ANÓNIMA de la telemetría del verificador de
+  // afirmaciones (mtrVerificarFuentesIA). Devuelve la etiqueta uxTrack o null: el
+  // contador ia.fuentes.flag.N cuando el verificador marcó afirmaciones sin respaldo,
+  // e ia.fuentes.sin_linea cuando el modelo no declaró la línea FUENTES y el verificador
+  // operó sin corpus. JAMÁS texto clínico (política cero-PHI). PURA.
+  function mtrTrackFuentesIA(nFlags, tieneLinea) {
+    try {
+      if (nFlags > 0) return "ia.fuentes.flag." + Math.min(nFlags, 3);
+      if (!tieneLinea) return "ia.fuentes.sin_linea";
+      return null;
+    } catch (e) { return null; }
   }
 
   // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE COHERENCIA DE CIFRAS.
@@ -49323,6 +49689,9 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
           contextoLibre: [libreAhora().combinado, mtrTextoDeOtrasCasillas(modo, document, _res._nombrePaciente)]
             .filter(Boolean).join("\n\n"),
           jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(_res, _hoja) : null,
+          // v18.6.2 (R-Grounding) — sello de trazabilidad de la foto: edad de la lectura
+          // y hora local de la generación, declaradas en el prompt (auditable por el médico).
+          selloContexto: mtrSelloContextoTexto(_vig.edadMin, _vig.refrescado),
         };
         if (!mtrHayClaveIA()) {
           _congelarChips(false);
@@ -49381,7 +49750,11 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
           return;
         }
         if (r.ok) {
-          let textoFinal = r.texto;
+          // v18.6.2 (R-Grounding) — saneador de preámbulos para TODOS los modos: si el
+          // modelo abre con «Claro, aquí tiene…», esa línea se quita antes de que el
+          // médico la vea (mtrQuitarPreambuloIA es conservadora: solo el inicio, corta,
+          // sin dígitos; el resto del borrador sale intacto).
+          let textoFinal = mtrQuitarPreambuloIA(r.texto);
           // v16.5.0 — los marcadores del encabezado se rellenan AQUÍ, en el equipo del
           // médico: el identificador jamás viaja a la IA (decisión de diseño del modal).
           if (modoGen === "analisis_plan") {
@@ -49406,6 +49779,13 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
             _pintarCifras();
             // v18.2 — P9 (B2): cuántos avisos de cifras sin respaldo provocó esta generación (techo en 3+).
             try { uxTrack("ia.cifras." + Math.min(_hallazgosCifras.length, 3)); } catch (e) {}
+            // v18.6.2 (R-Grounding) — telemetría anónima del verificador de afirmaciones:
+            // flag.N cuando marcó afirmaciones sin respaldo, sin_linea cuando el modelo no
+            // declaró FUENTES y el verificador operó sin corpus. Jamás texto clínico.
+            try {
+              const _etq = mtrTrackFuentesIA(_hallazgosFuentes.length, _fuentesIA.length > 0);
+              if (_etq) uxTrack(_etq);
+            } catch (e) {}
             _autosizeSalida();   // v17.6.12
           }
           _pintarMeta();

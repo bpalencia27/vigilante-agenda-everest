@@ -330,3 +330,32 @@ los 404 de módulos (§9.1). Lo que sigue faltando (brechas 2, 4, 6, 8) NO bloqu
 ninguna funcionalidad de lectura de la HC: solo afecta detección de sesión muerta,
 respaldo de red para "Atendido" y compuertas por perfil — todas con receta de captura
 en §8.2 para una tercera ronda.
+
+---
+
+## 10. Matriz de cobertura HAR → código (estado al cierre de v18.6.2)
+
+Cruza cada hallazgo accionable del HAR con su estado REAL en el userscript. Regla del
+proyecto aplicada: «casilla vacía antes que dato inventado» — las filas «NO implementado»
+lo dicen sin adornos, con el porqué.
+
+| # | Hallazgo HAR | Estado en v18.6.2 | Dónde vive / evidencia |
+|---|---|---|---|
+| 1 | Cadena del clic HC + prefetch (§1, §3.1): anclas, clic, `ObtenerOrdenamientoPorPacienteIdVigente` (15,5 KB) | **IMPLEMENTADO** (v18.5.1-hc / v18.5.2-hc2, revalidado por el HAR) | `hcPrefetch` + `apiHcObtenerOrdenamientosVigentes` (caché 10 min, dedup en vuelo, 1 intento, fallo = silencio). Contrato vivo: suite_94 «B/cadena HC» (2 peticiones por clic) |
+| 2 | §9.4.1 — ruta 2 de `BuscarPaciente` devuelve 400 en producción (3/3) | **RETIRADA** (v18.6.2, F-P2 P1) | Cascada de `apiAccesoBuscarPaciente` reducida a la ruta viva (`TipoDocumento=CC&epsId=2`). Peor caso 2→1 petición. suite_94 «B/cascada» + mutación verificada |
+| 3 | §9.4.2 / §3.2 — chip «última HC» con `ObtenerUltimaHCPes` (10,7 KB) | **IMPLEMENTADO** (v18.6.2, F-P2 P3) | `apiHcObtenerUltimaHc` + `_vglUltimaHcUtilizable` (contrato real: fechaCreacion, clasificacion, riesgoCardiovascular) + línea en el chip del lanzador. 1 consulta por paciente (caché 10 min); id interno jamás cédula en la URL. suite_94 «E» + mutación |
+| 4 | §9.4.3 — medicamentos por `HistoricoMedicamentoHCM` (66 items, 26,9 KB), nunca el catálogo de 1,3 MB | **PARCIAL** | El prefetch del script NO descarga medicamentos (solo órdenes vigentes: cero riesgo del catálogo). El endpoint bueno ya está etiquetado en el RUM (`historicoMedicamentos`) y usado por el guion `DIAGNOSTICO_MEDICAMENTOS`. La integración de medicamentos al chip queda candidata a ronda futura |
+| 5 | §9.4.4 — catálogos pesados bajados en CADA apertura (~7,5 MB) | **IMPLEMENTADO PARCIAL** (v18.6.2, F-P3) | Solo los 2 GLOBALES: `ParDiagnosticos` + `ParCiudades` (~2,9 MB) bajo toggle `tog_perf_cache` (APAGADO por defecto), doble lectura idéntica antes de cachear, TTL de un día, fail-open. Los 4 por-cita/por-paciente quedan FUERA por diseño (caché por clave única sin reutilización). suite_95 + mutaciones M1-M2; informe F-P5 en INFORME_RENDIMIENTO_BASELINE_V0 |
+| 6 | §9.4.5 / §5 — errores de Everest (ConfirmarTicket 500×2, Citi 404, EpsConfiguracionIntegraciones 500, actividad educativa 400×2) | **MONITOREADOS** | RUM v12.10.12 (`finalizarTicket`, `resultadosLabCiti`, …): latencia y tasa de éxito por etiqueta FIJA (nunca la URL real), sin reacción automática — observar, no intervenir en la red ajena |
+| 7 | §3.3 — detección de «HC abierta» por red (`guardarHoraApertura` + `CargarAntecedentesByCita`) | **NO implementado** | Sigue el marcador DOM, que funciona. `guardarHoraApertura` ya tiene etiqueta RUM (`horaApertura`) para el día que se quiera; `CargarAntecedentesByCita` no aparece en el script |
+| 8 | §3.4 — identidad del médico sin sniffer (`ObtenerDatosLoginByLogin`) | **NO implementado** (0 usos) | El sniffer de login actual funciona; el endpoint queda documentado como reemplazo si Everest rompe el sniffer |
+| 9 | §3.5 — estado de cita en tiempo real (`ObtenerEstadoCita`) | **MONITOREADO** | Etiqueta RUM (`estadoCita`) sin respaldo activo del fraudWatch (el DOM se mantiene) |
+| 10 | §3.6 — labs por API propia (`ObtenerResultadosLaboratorioAnnar`/`Citi`) | **PARCIAL** | Annar implementado (`apiHcLabsAnnar` con `pacienteId`); Citi 404 en esta IPS (documentado). El puente Athenea sigue como vía principal |
+| 11 | §9.2 — estructura real de la HC (claves de los JSON) | **DOCUMENTADA como referencia** | El script NO lee la HC por API: la casilla es del médico y la escritura está fuera de alcance (§3). Las claves quedan como contrato para diagnósticos futuros |
+| 12 | §9.3 — flujo de ordenamiento punta a punta (contrato `GuardarOrdenamiento`: un dx por orden con `ordenes:[{cup:{Id,…}}]`) | **VERIFICADO contra el módulo existente** | La selección múltiple ya existe en el módulo ordenar; el contrato capturado confirma la forma real. M3 (agrupación por CIE-10 común) queda para la ronda de mejoras, sin inventar nada que el HAR no muestre |
+
+**Lectura de la matriz**: todo hallazgo con «IMPLEMENTADO» tiene prueba de banco viva
+(suite_94/95) y mutación verificada; todo lo demás dice su estado sin prometer más de lo
+que hay. El RUM (v12.10.12, etiquetas fijas) es la base arquitectónica que hizo posible
+el F-P3: ya observaba la red de Everest sin tocarla — el caché de catálogos es la
+primera pieza que, con el toggle del médico, además la alivia.

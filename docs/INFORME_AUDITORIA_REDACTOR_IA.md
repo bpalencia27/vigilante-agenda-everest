@@ -57,6 +57,15 @@ de la pregunta y barrera final de identificables sobre el mensaje ensamblado.
   anónimos `ia.fuentes.flag` y `ia.fuentes.sin_linea` vía uxTrack — jamás
   texto clínico (política cero-PHI intacta).
 
+**Estado (2026-09-07, v18.6.2): IMPLEMENTADO.** Las tres piezas viven en el
+script con prueba de banco (`tests/suite_96_grounding.js`, 4/4) y mutación
+verificada (M3 sello, M4 saneador, M5 telemetría en `tests/INFORME_MUTACIONES.md`):
+`mtrSelloContextoTexto` (edad de la foto + hora local, reloj inyectable) viaja
+como bloque propio del prompt después de los datos y antes de la tarea final;
+`mtrQuitarPreambuloIA` se aplica a la respuesta en todos los modos (conservador:
+máximo 2 líneas cortas sin dígitos al inicio); `mtrTrackFuentesIA` emite
+`ia.fuentes.flag.N` (techo 3+) o `ia.fuentes.sin_linea` por cada generación.
+
 ## 5. Qué NO se implementa (rechazo razonado, con evidencia)
 
 - **Cambiar el proveedor a "deepseek v4 flash 0731"**: ese modelo no existe

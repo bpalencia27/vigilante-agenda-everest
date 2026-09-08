@@ -4,6 +4,67 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.6.2] — 2026-09-07 (Toggles en Ajustes y una apertura de Historia Clínica más ligera)
+
+### ⚙️ Los interruptores de funcionalidad ya se mueven desde Ajustes
+El grupo «Funcionalidades por médico» (solo perfil COMPLETO) pinta cada toggle
+registrado con su mecanismo: encender o apagar aplica **en caliente** (el botón del dock
+aparece o desaparece al instante), se guarda por médico y no pasa por el borrador de
+Ajustes. Los sub-interruptores se muestran solo con su padre activo y se ocultan o
+recuperan en vivo. Pruebas y mutaciones en `tests/suite_15_interfaz_avanzada.js`.
+
+### 🚀 Apertura de HC más ligera (informe antes/después en `docs/INFORME_RENDIMIENTO_BASELINE_V0.md`)
+- **Menos una petición fallida por búsqueda**: retirada la ruta de respaldo que el HAR
+  de producción mostraba devolviendo 400 tres de tres veces. El peor caso de la cascada
+  baja de 2 peticiones a 1.
+- **La cédula se lee una vez por segundo, no cuatro**: el tick del vigilante toma una
+  foto del paciente abierto y la comparten los llamadores síncronos; la vía diferida
+  sigue leyendo fresca (protección anti-cruce intacta).
+- **Chip «última HC» en el lanzador**: fecha de cierre, clasificación y riesgo
+  cardiovascular con el contrato real de Everest, una consulta por paciente (caché de
+  10 minutos), la cédula jamás viaja al servicio.
+- **Caché de catálogos globales bajo interruptor** (APAGADO por defecto): al encenderla,
+  los dos catálogos de parametrización de la IPS (~2,9 MB por apertura de HC) se
+  confirman con doble lectura idéntica y desde la tercera apertura se sirven sin red.
+  TTL de un día, todo fallo devuelve el flujo original intacto, cero datos de paciente.
+
+### 📚 Evidencia cerrada en matriz
+`docs/INFORME_EVIDENCIA_HAR.md` estrena la §10 «Matriz de cobertura HAR → código»: cada
+hallazgo de la captura real cruza con su estado en esta versión — lo implementado tiene
+prueba de banco y mutación verificada; lo no implementado se dice sin adornos y con el
+porqué.
+
+### 🔍 Redactor con IA: trazabilidad de la «foto» y red de seguridad de preámbulos
+El plan de la auditoría del redactor (`docs/INFORME_AUDITORIA_REDACTOR_IA.md`) queda
+aplicado: cada nota lleva un **sello de trazabilidad** —declara en el prompt la edad de
+la lectura de pantalla y la hora local de la generación—, los **preámbulos** del modelo
+(«Claro, aquí tiene…») se quitan antes de que usted los vea, en todos los modos, y el
+verificador de afirmaciones estrena **telemetría anónima** (`ia.fuentes.flag`,
+`ia.fuentes.sin_linea`) sin una sola palabra de texto clínico. El cambio de proveedor y
+la certificación «S+» pedidos siguen rechazados con evidencia (§5 del informe).
+
+---
+
+## [Versión 18.6.1] — 2026-09-07 (Toggles de funcionalidad y el Anexo 5 del programa RCV)
+
+### 📋 El Anexo 5 se indexa desde el libro
+Tercera hoja del libro SEPTIEMBRE1: metas de riesgo cardiovascular (glicemia, LDL,
+HbA1c, microalbuminuria…), estadio renal, EKG y remisiones, con emparejamiento de
+columnas tolerante a errores de escritura del libro y emparejamiento por documento.
+La salida vive en un mapa aparte (no se mezcla con el índice general).
+
+### 🔔 Aviso del Anexo 5 al abrir la HC
+Con la historia abierta, el panel avisa qué metas del programa tiene pendientes el
+paciente y sus fechas de toma — solo lectura, la casilla del médico intacta.
+
+### ⚙️ Toggles de funcionalidad (primera entrega, por consola)
+Registro `VGL_TOGGLES` con persistencia por médico, jerarquía padre-hijo y regla
+asimétrica: lo que solo apaga piezas no esenciales nace encendido; lo que limita el
+flujo (como solo-labs) nace APAGADO y solo se enciende por decisión explícita. La
+interfaz en Ajustes llega en la versión siguiente.
+
+---
+
 ## [Versión 18.5.2] — 2026-09-07 (Lanzador asistido de Historia Clínica + prefetch de órdenes)
 
 ### 🩺 VGL-HC: el botón «Historias Clínicas» ahora deja contexto seguro
