@@ -13656,3 +13656,10 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 | user.js `permisosCapRevocada` (inmunidad de centinela, L11142) | `cap === "centinela"` → `cap === "centinela_mutado"`: una fila local con off:["centinela"] apaga el panel Centinela del médico — la única cap no revocable deja de ser inmune | NO | *suite_101* casos «P101·U6» (centinela inmune en la unidad) y «P101·F1» (ancla literal de fuente): mutante 2 rojos; restaurado 15/15 |
 | user.js listener delegado del menú de permisos (guarda D5, L35989) | `if (esUnoMismo && !cb.checked)` → `if (false && …)`: el médico en sesión puede desmarcarse funciones a sí mismo — la auto-revocación prohibida por D5 vuelve a colarse | NO | *suite_101* caso «P101·I2 (menú Ajustes)»: mutante 1 rojo (el desmarque propio no se deshace en el acto); restaurado 15/15 |
 
+## v18.8.2 (Widget «Próximos exámenes»: cierre accesible + arrastre libre, mandato del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_rcvpArrastrarInicio` (guard del botón de cierre, ~L7309) | `if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) return;` → comentada: un pointerdown sobre el botón ✕ inicia el arrastre — cerrar y mover dejan de ser excluyentes | NO | *suite_102* caso «el botón de cierre jamás inicia el arrastre (y fuera de la barra tampoco)»: mutante 1 rojo («sin agarre desde el botón de cierre (obtuvo true)»); restaurado 7/7 |
+| user.js `rcvPendientesTick` (guard del cierre por paciente, ~L7359) | `docId === _rcvpCerradoDoc` → `docId === _rcvpCerradoDoc + "_x"`: el guard nunca dispara y un tick con contenido nuevo en el MISMO paciente cerrado resucita el panel | NO | *suite_102* caso «cierre: el botón oculta el panel y NO resucita…» paso «mismo paciente con contenido nuevo: el cierre aguanta» (resumen re-sembrado con otro programa para que la firma cambie — el guard corta antes que la firma): mutante 2 rojos (ese paso + ancla F1); restaurado 7/7 |
+

@@ -4,6 +4,45 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.2] — 2026-09-08 (Widget «Próximos exámenes»: ahora se cierra y se mueve)
+
+### ✕ El panel de próximos exámenes por fin se deja cerrar
+El widget «Próximos exámenes · Riesgo cardiovascular / Programa: …» tenía un fallo
+de usabilidad crítico: no podía cerrarse ni moverse, y quedaba clavado en su
+esquina. Ahora:
+- **Botón de cierre visible y accesible** en la esquina superior derecha de la
+  barra del panel: un `<button>` nativo con nombre accesible («Cerrar el panel de
+  próximos exámenes»), operable con clic, Enter o Espacio, y con anillo de foco
+  visible para navegación por teclado.
+- **Cierre por paciente, no para siempre**: al cerrarlo, el panel no resucita
+  mientras el médico siga en ese paciente — ni siquiera si llegan datos nuevos de
+  ese mismo paciente. Al abrir otro paciente, vuelve solo.
+
+### 🖐️ Arrastre libre con la barra superior
+- La **barra superior es la única zona de agarre**: se arrastra desde ahí y el
+  cursor lo anuncia (grab/grabbing). El botón de cierre jamás inicia arrastre.
+- La **posición se preserva en la sesión** (GM `vgl_rcvp_pos`) y se restaura al
+  volver a pintar, clampada a la ventana actual: rotar el monitor o cambiar de
+  resolución nunca deja el panel fuera del alcance (mínimo 96 px visibles).
+- La raíz se anuncia como región («Próximos exámenes») para lectores de pantalla.
+
+### 🛡️ Blindaje verificado contra el CSS de Everest
+Cada color nuevo del botón lleva `!important` (el panel vive pegado a
+`document.body`, fuera de `#vgl-root`) y se verificó en Chromium contra un CSS
+«Everest» simulado agresivo (`div,span,p,b,small,label,button{color:X
+!important}`): los 11 colores del panel, el hover y el anillo de foco sobreviven
+todos. La escala tipográfica queda cableada a `--t-micro` (Regla G de la cascada).
+
+### 🧪 Pruebas
+Suite nueva `suite_102` (7 casos: clampeo por pantallas reales 320×480 a
+1920×1080, accesibilidad del botón, cierre por paciente, arrastre con persistencia,
+restauración clampada, y exclusión del botón como zona de agarre) + regresión
+`suite_88` (20/20) y `suite_25` (33/33, contrato de `!important` actualizado a
+668). Dos mutaciones verificadas (guard del botón y guard del cierre por
+paciente) con sus filas en `tests/INFORME_MUTACIONES.md`.
+
+---
+
 ## [Versión 18.8.1] — 2026-09-08 (Bienvenida a todos los médicos: solo términos y condiciones, y permisos por médico)
 
 ### 🚪 La puerta de entrada ahora es solo su aceptación

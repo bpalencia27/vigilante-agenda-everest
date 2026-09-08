@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.1
+// @version      18.8.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7247,7 +7247,8 @@
       ? '<div class="vgl-rcvp-nota">Sin órdenes vigentes consultables: todo queda como PENDIENTE (ante la duda, se muestra).</div>'
       : "";
     const rotulo = String(programaRotulo || "");
-    return '<div class="vgl-rcvp-head">'
+    return '<div class="vgl-rcvp-head" title="Arrastrar para mover el panel">'
+      + '<button type="button" class="vgl-rcvp-cerrar" aria-label="Cerrar el panel de próximos exámenes">✕</button>'
       + '<div class="vgl-rcvp-tit">Próximos exámenes · Riesgo cardiovascular</div>'
       + (rotulo ? '<div class="vgl-rcvp-prog">Programa: ' + escapeHtml(rotulo) + '</div>' : "")
       + '<div class="vgl-rcvp-cont">' + (d.nPendientes || 0) + ' por asignar</div>'
@@ -7258,9 +7259,83 @@
   }
 
   let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
-  function _rcvpResetParaTest() { _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false; }
+  const RCV_POS_KEY = "vgl_rcvp_pos";   // v18.8.2 — sesión: {x, y} px de left/top tras arrastrar
+  let _rcvpArrastre = null, _rcvpCerradoDoc = "";
+  function _rcvpResetParaTest() {
+    _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false;
+    _rcvpCerradoDoc = ""; _rcvpArrastre = null;   // v18.8.2
+  }
   function _rcvpOcultar() {
     try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
+  }
+
+  // v18.8.2 — PURA: clampa la posición del panel para que nunca quede fuera del
+  // alcance del médico (mínimo 96 px visibles en cada eje, cualquier pantalla).
+  function rcvPendientesClamparPos(x, y, vw, vh, ancho) {
+    const vis = 96;
+    const an = Math.max(ancho || 330, 1);
+    const maxX = Math.max(vw - vis, 8);
+    const maxY = Math.max(vh - 48, 0);
+    return {
+      x: Math.min(Math.max(x, 8 - an + vis), maxX),
+      y: Math.min(Math.max(y, 0), maxY),
+    };
+  }
+  function _rcvpPosGuardar(x, y) {
+    try { if (typeof GM_setValue !== "undefined") GM_setValue(RCV_POS_KEY, { x: Math.round(x), y: Math.round(y) }); } catch (e) {}
+  }
+  function _rcvpPosLeer() {
+    try {
+      const p = (typeof GM_getValue !== "undefined") ? GM_getValue(RCV_POS_KEY, null) : null;
+      if (p && typeof p === "object" && isFinite(p.x) && isFinite(p.y)) return { x: p.x, y: p.y };
+    } catch (e) {}
+    return null;
+  }
+
+  // v18.8.2 — el cierre respeta al médico: oculta el panel para el paciente abierto
+  // y no lo resucita mientras siga en ese paciente; al llegar otro, vuelve solo.
+  function _rcvpCerrar() {
+    _rcvpCerradoDoc = _rcvpDocPrevio || "";
+    _rcvpOcultar();
+  }
+
+  // v18.8.2 — arrastre libre: la zona de agarre es SOLO la barra superior
+  // (.vgl-rcvp-head); el clic del botón de cierre jamás inicia arrastre. Al
+  // primer arrastre el panel pasa de left/bottom a left/top, y la posición
+  // final se guarda en la sesión (GM vgl_rcvp_pos) para restaurarla al volver.
+  function _rcvpArrastrarInicio(e) {
+    const w = document.getElementById("vgl-rcv-pendientes");
+    if (!w || !e || !e.target) return;
+    if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) return;
+    if (!(e.target.closest && e.target.closest(".vgl-rcvp-head"))) return;
+    const r = w.getBoundingClientRect();
+    _rcvpArrastre = { px: e.clientX || 0, py: e.clientY || 0, x: r.left || 0, y: r.top || 0, an: r.width || 330 };
+    w.classList.add("vgl-rcvp-arrastrando");
+    w.style.bottom = "auto";
+    w.style.left = Math.round(_rcvpArrastre.x) + "px";
+    w.style.top = Math.round(_rcvpArrastre.y) + "px";
+    if (typeof w.setPointerCapture === "function" && e.pointerId !== undefined && e.pointerId !== null) {
+      try { w.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  }
+  function _rcvpArrastrarMover(e) {
+    if (!_rcvpArrastre || !e) return;
+    const nx = _rcvpArrastre.x + ((e.clientX || 0) - _rcvpArrastre.px);
+    const ny = _rcvpArrastre.y + ((e.clientY || 0) - _rcvpArrastre.py);
+    const p = rcvPendientesClamparPos(nx, ny, window.innerWidth || 1024, window.innerHeight || 768, _rcvpArrastre.an);
+    const w = document.getElementById("vgl-rcv-pendientes");
+    if (w) { w.style.left = Math.round(p.x) + "px"; w.style.top = Math.round(p.y) + "px"; }
+  }
+  function _rcvpArrastrarFin() {
+    if (!_rcvpArrastre) return;
+    const w = document.getElementById("vgl-rcv-pendientes");
+    if (w) {
+      w.classList.remove("vgl-rcvp-arrastrando");
+      const x = parseInt(w.style.left, 10);
+      const y = parseInt(w.style.top, 10);
+      if (isFinite(x) && isFinite(y)) _rcvpPosGuardar(x, y);
+    }
+    _rcvpArrastre = null;
   }
 
   // El tick del panel. Asíncrono solo por la consulta de órdenes vigentes
@@ -7279,6 +7354,12 @@
         _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
         return;
       }
+      // v18.8.2 — cierre por paciente: si el médico cerró el panel para el paciente
+      // abierto, no se resucita en el mismo paciente; al llegar otro, vuelve solo
+      // (el repintado del tick de ese otro paciente ya lo devuelve a la vista: la
+      // firma cambia con el docId, no hay forma de que el display quede en none).
+      if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }
+      _rcvpCerradoDoc = "";
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
       if (!resumen) { _rcvpOcultar(); return; }   // sin programa identificado no hay a qué alinear el panel
@@ -7308,6 +7389,29 @@
       if (!widget) {
         widget = document.createElement("div");
         widget.id = "vgl-rcv-pendientes";
+        widget.setAttribute("role", "region");
+        widget.setAttribute("aria-label", "Próximos exámenes");
+        // v18.8.2 — posición recordada de la sesión (arrastre previo), clampada a la
+        // ventana actual: rotaciones y monitores distintos no dejan el panel huérfano.
+        const pos = _rcvpPosLeer();
+        if (pos) {
+          const p = rcvPendientesClamparPos(pos.x, pos.y, window.innerWidth || 1024, window.innerHeight || 768, 330);
+          widget.style.left = p.x + "px";
+          widget.style.top = p.y + "px";
+          widget.style.bottom = "auto";
+        }
+        // Escuchas DELEGADAS en la raíz (sobreviven al repintado del innerHTML):
+        // la barra superior arrastra, el botón de cierre cierra, nunca a la vez.
+        widget.addEventListener("pointerdown", _rcvpArrastrarInicio);
+        widget.addEventListener("pointermove", _rcvpArrastrarMover);
+        widget.addEventListener("pointerup", _rcvpArrastrarFin);
+        widget.addEventListener("pointercancel", _rcvpArrastrarFin);
+        widget.addEventListener("click", (e) => {
+          if (e && e.target && e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) {
+            _rcvpCerrar();
+            uxTrack("widget.proximosExamenes.cerrado");
+          }
+        });
         document.body.appendChild(widget);
       }
       widget.className = isLight() ? "light" : "";
@@ -19523,6 +19627,24 @@
       #vgl-rcv-pendientes .vgl-rcvp-nota{margin-top:8px;font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
       #vgl-rcv-pendientes .vgl-rcvp-pie{margin-top:8px;font-size:var(--t-nano);color:var(--fg3) !important}
       #vgl-rcv-pendientes :where(:not([class])){color:inherit !important}
+      /* v18.8.2 — cierre accesible y arrastre libre del panel. El panel vive en
+         document.body, fuera de #vgl-root: cada color de clase lleva !important sin
+         excepción (CLAUDE.md). La barra superior (.vgl-rcvp-head) es la única zona
+         de agarre; el botón de cierre queda fuera del flujo (esquina superior
+         derecha) para que el título nunca se le monte encima. */
+      #vgl-rcv-pendientes .vgl-rcvp-head{position:relative;cursor:grab;padding-right:26px;touch-action:none}
+      #vgl-rcv-pendientes .vgl-rcvp-head.vgl-rcvp-arrastrando{cursor:grabbing}
+      #vgl-rcv-pendientes .vgl-rcvp-cerrar{
+        position:absolute;top:2px;right:2px;width:22px;height:22px;
+        display:flex;align-items:center;justify-content:center;padding:0;
+        border:1px solid transparent;border-radius:var(--r-pill);
+        background:transparent;color:var(--fg2) !important;
+        font-size:var(--t-micro);line-height:1;cursor:pointer
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-cerrar:hover{
+        background:rgba(var(--rgb-rojo),.14);border-color:rgba(var(--rgb-rojo),.38);color:var(--c-rojo) !important
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-cerrar:focus-visible{outline:2px solid var(--c-azul);outline-offset:1px}
       /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
          ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
          Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
