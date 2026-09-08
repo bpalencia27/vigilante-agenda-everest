@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.5
+// @version      18.8.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7308,6 +7308,7 @@
       + " · el médico decide";
     return '<div class="vgl-rcvp-head" title="Arrastrar para mover el panel">'
       + '<button type="button" class="vgl-rcvp-cerrar" aria-label="Cerrar el panel de próximos exámenes">✕</button>'
+      + '<button type="button" class="vgl-rcvp-min" aria-label="Minimizar el panel de próximos exámenes" title="Minimizar: el panel baja a una pastilla y vuelve tal cual al pulsarla">—</button>'
       + '<div class="vgl-rcvp-tit">Próximos exámenes · Riesgo cardiovascular</div>'
       + (rotulo ? '<div class="vgl-rcvp-prog">Programa: ' + escapeHtml(rotulo) + '</div>' : "")
       + '<div class="vgl-rcvp-cont">' + (d.nPendientes || 0) + ' por asignar</div>'
@@ -7320,6 +7321,7 @@
   let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
   const RCV_POS_KEY = "vgl_rcvp_pos";   // v18.8.2 — sesión: {x, y} px de left/top tras arrastrar
   let _rcvpArrastre = null, _rcvpCerradoDoc = "";
+  let _rcvpMinimizado = false;   // v18.8.6 — minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse
   // v18.8.3 — SELLO DIARIO (actualización automática cada 24 h): día calendario del
   // último refresco forzado del caché de órdenes vigentes. El TTL de 10 min ya
   // garantiza frescura mientras el tick vive; este sello cubre el hueco restante
@@ -7331,6 +7333,7 @@
     _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false;
     _rcvpCerradoDoc = ""; _rcvpArrastre = null;   // v18.8.2
     _rcvpDiaUltimoRefresco = "";   // v18.8.3
+    _rcvpMinimizado = false;   // v18.8.6
   }
   function _rcvpOcultar() {
     try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
@@ -7361,9 +7364,48 @@
 
   // v18.8.2 — el cierre respeta al médico: oculta el panel para el paciente abierto
   // y no lo resucita mientras siga en ese paciente; al llegar otro, vuelve solo.
+  // v18.8.6 — cerrar desarma el minimizado: cierre es cierre, sin pastilla de por medio.
   function _rcvpCerrar() {
     _rcvpCerradoDoc = _rcvpDocPrevio || "";
+    _rcvpMinimizado = false;
+    _rcvpPillQuitar();
     _rcvpOcultar();
+  }
+
+  // v18.8.6 — PASTILLA DE REAPERTURA: mientras el panel está minimizado, una
+  // pastilla pequeña ofrece volver a abrirlo. Lleva solo el rótulo del widget —
+  // jamás datos de paciente (nada de PHI de un paciente minimizado en pantalla).
+  // Al pulsarla se desarma el minimizado y se limpia la firma: el próximo tick
+  // repinta con los datos del paciente ABIERTO ahora mismo, nunca con los de un
+  // paciente anterior (el mismo guard anti-cruce del resto del widget).
+  function _rcvpPillQuitar() {
+    try { const p = document.getElementById("vgl-rcv-pendientes-pill"); if (p && p.remove) p.remove(); } catch (e) {}
+  }
+  function _rcvpPillAsegurar() {
+    try {
+      if (document.getElementById("vgl-rcv-pendientes-pill")) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "vgl-rcv-pendientes-pill";
+      if (isLight()) b.className = "light";
+      b.setAttribute("aria-label", "Volver a abrir el panel de próximos exámenes");
+      b.title = "Volver a abrir el panel de próximos exámenes tal como estaba.";
+      b.textContent = "▣ Próximos exámenes";
+      b.addEventListener("click", (e) => {
+        try { e.preventDefault(); e.stopPropagation(); } catch (er) {}
+        _rcvpMinimizado = false;
+        _rcvpFirma = "";   // fuerzas: el siguiente tick repinta con el paciente actual
+        _rcvpPillQuitar();
+        try { uxTrack("widget.proximosExamenes.reabierto"); } catch (er) {}
+      });
+      document.body.appendChild(b);
+    } catch (e) {}
+  }
+  function _rcvpMinimizar() {
+    _rcvpMinimizado = true;
+    _rcvpOcultar();
+    _rcvpPillAsegurar();
+    try { uxTrack("widget.proximosExamenes.minimizado"); } catch (e) {}
   }
 
   // v18.8.2 — arrastre libre: la zona de agarre es SOLO la barra superior
@@ -7373,7 +7415,7 @@
   function _rcvpArrastrarInicio(e) {
     const w = document.getElementById("vgl-rcv-pendientes");
     if (!w || !e || !e.target) return;
-    if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) return;
+    if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar, .vgl-rcvp-min")) return;
     if (!(e.target.closest && e.target.closest(".vgl-rcvp-head"))) return;
     const r = w.getBoundingClientRect();
     _rcvpArrastre = { px: e.clientX || 0, py: e.clientY || 0, x: r.left || 0, y: r.top || 0, an: r.width || 330 };
@@ -7419,6 +7461,10 @@
       if (!rcvPendientesDebeVerse({ autorizado: esMedicoRCVActivo(), enHCHealth: _enModuloHCHealth(), seccion: secc, docId: docId })) {
         _rcvpOcultar();
         _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
+        // v18.8.6 — sin contexto (sin paciente o fuera de la historia) el minimizado
+        // se desarma: no queda pastilla huérfana ni estado colgado.
+        _rcvpMinimizado = false;
+        _rcvpPillQuitar();
         return;
       }
       // v18.8.2 — cierre por paciente: si el médico cerró el panel para el paciente
@@ -7427,6 +7473,11 @@
       // firma cambia con el docId, no hay forma de que el display quede en none).
       if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }
       _rcvpCerradoDoc = "";
+      // v18.8.6 — minimizado: ningún tick resucita el panel (ni con datos nuevos ni
+      // al cambiar de paciente) mientras el médico no pulse la pastilla; solo se
+      // mantiene la pastilla presente. Al reabrir, la firma limpia fuerza el
+      // repintado con el paciente actual.
+      if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
       if (!resumen) { _rcvpOcultar(); return; }   // sin programa identificado no hay a qué alinear el panel
@@ -7479,9 +7530,13 @@
         widget.addEventListener("pointerup", _rcvpArrastrarFin);
         widget.addEventListener("pointercancel", _rcvpArrastrarFin);
         widget.addEventListener("click", (e) => {
-          if (e && e.target && e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) {
-            _rcvpCerrar();
-            uxTrack("widget.proximosExamenes.cerrado");
+          if (e && e.target && e.target.closest) {
+            if (e.target.closest(".vgl-rcvp-min")) {
+              _rcvpMinimizar();   // v18.8.6
+            } else if (e.target.closest(".vgl-rcvp-cerrar")) {
+              _rcvpCerrar();
+              uxTrack("widget.proximosExamenes.cerrado");
+            }
           }
         });
         document.body.appendChild(widget);
@@ -18944,7 +18999,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes,#vgl-rcv-pendientes-pill{
         /* Vidrio frost sobre negro OLED */
         /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
         /* v18.0.123 (UI/UX UI#4) — el vidrio se calibró «sobre OLED» y en la vida real vive
@@ -19051,7 +19106,7 @@
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light,#vgl-rcv-pendientes.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light,#vgl-rcv-pendientes.light,#vgl-rcv-pendientes-pill.light{
         --bg:rgba(249,250,252,.90);
         --bg-sidebar:rgba(243,246,250,.84);
         --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
@@ -19715,7 +19770,7 @@
          excepción (CLAUDE.md). La barra superior (.vgl-rcvp-head) es la única zona
          de agarre; el botón de cierre queda fuera del flujo (esquina superior
          derecha) para que el título nunca se le monte encima. */
-      #vgl-rcv-pendientes .vgl-rcvp-head{position:relative;cursor:grab;padding-right:26px;touch-action:none}
+      #vgl-rcv-pendientes .vgl-rcvp-head{position:relative;cursor:grab;padding-right:60px;touch-action:none}
       #vgl-rcv-pendientes .vgl-rcvp-head.vgl-rcvp-arrastrando{cursor:grabbing}
       /* v18.8.3 — 28×28 px: por encima del mínimo táctil (WCAG 2.5.8: 24 px); el
          22×22 anterior era difícil de tocar en pantalla táctil durante la consulta */
@@ -19730,6 +19785,34 @@
         background:rgba(var(--rgb-rojo),.14);border-color:rgba(var(--rgb-rojo),.38);color:var(--c-rojo) !important
       }
       #vgl-rcv-pendientes .vgl-rcvp-cerrar:focus-visible{outline:2px solid var(--c-azul);outline-offset:1px}
+      /* v18.8.6 — minimizar: botón «—» gemelo del cierre (28×28, WCAG 2.5.8), a su
+         izquierda. Hover AZUL, no rojo: minimizar no destruye. La pastilla de
+         reapertura vive abajo a la izquierda, ENCIMA de la barra de módulos
+         minimizados (que baja a left:14 al ocultar el panel principal). Ambos
+         cuelgan de document.body: Regla E, colores con !important sin excepción. */
+      #vgl-rcv-pendientes .vgl-rcvp-min{
+        position:absolute;top:2px;right:32px;width:28px;height:28px;
+        display:flex;align-items:center;justify-content:center;padding:0;
+        border:1px solid transparent;border-radius:var(--r-pill);
+        background:transparent;color:var(--fg2) !important;
+        font-size:var(--t-small);line-height:1;cursor:pointer
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-min:hover{
+        background:rgba(var(--rgb-azul),.14);border-color:rgba(var(--rgb-azul),.38);color:var(--c-azul) !important
+      }
+      #vgl-rcv-pendientes .vgl-rcvp-min:focus-visible{outline:2px solid var(--c-azul);outline-offset:1px}
+      #vgl-rcv-pendientes-pill{
+        position:fixed;left:14px;bottom:58px;
+        z-index:calc(var(--z-modal) + 1);
+        display:flex;align-items:center;gap:6px;
+        padding:9px 14px;
+        background:var(--bg-solid) !important;border:1px solid var(--edge);
+        border-radius:var(--r-pill);box-shadow:var(--shadow-panel);
+        font-family:var(--font-stack);font-size:var(--t-micro);font-weight:700;
+        color:var(--fg) !important;cursor:pointer
+      }
+      #vgl-rcv-pendientes-pill:hover{color:var(--c-azul) !important;border-color:var(--c-azul)}
+      #vgl-rcv-pendientes-pill:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
       /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
          ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
          Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de

@@ -515,13 +515,13 @@ module.exports = {
       t.cierto(/#vgl-rcv-pendientes\{[^}]*box-sizing:border-box/.test(bloque),
         "la caja del panel usa box-sizing:border-box: el tope de ancho incluye padding y borde (no se corta en pantallas angostas)");
       // (c) registro en las DOS listas de tokens (oscura y clara) — sin la clara, el tema claro hereda Everest
-      t.cierto(/#vgl-chooser-modal,#vgl-rcv-pendientes\{/.test(css), "registrado en la lista de tokens oscura");
-      t.cierto(/#vgl-chooser-modal\.light,#vgl-rcv-pendientes\.light\{/.test(css), "y en la clara");
+      t.cierto(/#vgl-chooser-modal,#vgl-rcv-pendientes,#vgl-rcv-pendientes-pill\{/.test(css), "registrado en la lista de tokens oscura");
+      t.cierto(/#vgl-chooser-modal\.light,#vgl-rcv-pendientes\.light,#vgl-rcv-pendientes-pill\.light\{/.test(css), "y en la clara");
       // (d) modo oculto y zoom de letra también lo cubren
       t.cierto(/body\.vgl-modo-oculto[^{]*#vgl-rcv-pendientes\{display:none !important\}/.test(css), "el modo oculto lo esconde");
       t.cierto(code.indexOf('"#vgl-rcv-pendientes"') > 0, "escala con el tamaño de letra (VGL_FZ_OBJETIVOS)");
       // (e) cada var() que consume el bloque está declarada en la lista de tokens
-      const iDark = css.indexOf("#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes{");
+      const iDark = css.indexOf("#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes,#vgl-rcv-pendientes-pill{");
       const tokensDark = css.slice(iDark, css.indexOf("}", css.indexOf("--font-stack", iDark)));
       const varsUsadas = new Set((bloque.match(/var\(--[\w-]+/g) || []).map((s) => s.slice(4).replace(/,.*/, "")));
       const faltantes = [...varsUsadas].filter((v) => tokensDark.indexOf(v + ":") < 0);

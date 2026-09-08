@@ -258,6 +258,92 @@ module.exports = {
       t.cierto(!!fila, "precondición: hay filas pintadas");
       disparar102(c, w, "pointerdown", { target: fila, clientX: 50, clientY: 50, pointerId: 3 });
       t.falso(w.classList.contains("vgl-rcvp-arrastrando"), "fuera de la barra superior tampoco arrastra");
+      // v18.8.6 — el botón de minimizar tampoco inicia el arrastre (misma guarda
+      // que el cierre: la barra es la ÚNICA zona de agarre).
+      const minBtn = w.querySelector(".vgl-rcvp-min");
+      t.cierto(!!minBtn, "precondición: hay botón de minimizar");
+      disparar102(c, w, "pointerdown", { target: minBtn, clientX: 50, clientY: 50, pointerId: 4 });
+      t.falso(w.classList.contains("vgl-rcvp-arrastrando"), "el botón de minimizar tampoco inicia el arrastre");
+    });
+
+    // ==================== INTEGRACIÓN: MINIMIZAR / REABRIR (v18.8.6) ====================
+    const pill102 = (c) => Array.prototype.find.call(c.env.doc.body.children, (e) => e.id === "vgl-rcv-pendientes-pill") || null;
+
+    await t.casoAsync("minimizar: el botón «—» baja el panel a la pastilla y ningún tick lo resucita (ni con datos nuevos)", async () => {
+      const c = ctx102();
+      await c.api.rcvPendientesTick();
+      const w = widget102(c);
+      t.cierto(!!w, "precondición: panel montado");
+      const min = w.querySelector(".vgl-rcvp-min");
+      t.cierto(!!min, "el botón de minimizar existe");
+      t.igual(min.getAttribute("type"), "button", "botón nativo: Enter y Espacio sin código propio");
+      t.igual(min.getAttribute("aria-label"), "Minimizar el panel de próximos exámenes", "nombre accesible del minimizar");
+      disparar102(c, w, "click", { target: min });
+      t.igual(w.style.display, "none", "el clic minimizó el panel");
+      t.cierto(!!pill102(c), "la pastilla de reapertura apareció");
+      await c.api.rcvPendientesTick();
+      t.igual(w.style.display, "none", "el tick no resucita el panel minimizado");
+      t.cierto(!!pill102(c), "la pastilla sigue (única: asegurar es idempotente)");
+      try { c.api.mtrCacheResumenGuardar("5150076", { ...resumen102(), programa: "DM2" }); } catch (e) {}
+      await c.api.rcvPendientesTick();
+      t.igual(w.style.display, "none", "ni con contenido nuevo resucita mientras esté minimizado");
+      try { c.api.mtrCacheResumenGuardar("5150076", resumen102()); } catch (e) {}
+    });
+
+    await t.casoAsync("reapertura: la pastilla devuelve el panel con los datos del paciente ABIERTO ahora (no del anterior)", async () => {
+      const c = ctx102();
+      await c.api.rcvPendientesTick();
+      const w = widget102(c);
+      disparar102(c, w, "click", { target: w.querySelector(".vgl-rcvp-min") });
+      // Cambia de paciente MIENTRAS el panel está minimizado: al reabrir, nada
+      // del paciente anterior puede salir a pantalla (guard anti-cruce).
+      cablear102(c, "5150077");
+      try { c.api.mtrCacheResumenGuardar("5150077", { ...resumen102(), _docId: "5150077", programa: "DM2" }); } catch (e) {}
+      const pill = pill102(c);
+      t.cierto(!!pill, "precondición: pastilla presente");
+      disparar102(c, pill, "click", { target: pill });
+      t.falso(!!pill102(c), "la pastilla se retira al pulsarla");
+      await c.api.rcvPendientesTick();
+      t.igual(widget102(c).style.display, "", "el panel volvió a la vista");
+      const prog = widget102(c).querySelector(".vgl-rcvp-prog");
+      t.cierto(!!prog && prog.textContent.indexOf("Diabetes tipo 2") >= 0, "repinta con el programa del paciente actual");
+    });
+
+    await t.casoAsync("cierre y minimizado conviven: cerrar desarma el minimizado y su pastilla", async () => {
+      const c = ctx102();
+      await c.api.rcvPendientesTick();
+      const w = widget102(c);
+      disparar102(c, w, "click", { target: w.querySelector(".vgl-rcvp-min") });
+      t.cierto(!!pill102(c), "precondición: minimizado con pastilla");
+      const pill = pill102(c);
+      disparar102(c, pill, "click", { target: pill });
+      await c.api.rcvPendientesTick();
+      t.igual(widget102(c).style.display, "", "reabierto");
+      disparar102(c, widget102(c), "click", { target: widget102(c).querySelector(".vgl-rcvp-cerrar") });
+      t.igual(widget102(c).style.display, "none", "cerrado");
+      t.falso(!!pill102(c), "cerrar no deja pastilla");
+      // El minimizado quedó desarmado por el cierre: al cambiar de paciente el
+      // panel vuelve SOLO (cierre por vista), sin pastilla de por medio.
+      cablear102(c, "5150077");
+      try { c.api.mtrCacheResumenGuardar("5150077", { ...resumen102(), _docId: "5150077" }); } catch (e) {}
+      await c.api.rcvPendientesTick();
+      t.igual(widget102(c).style.display, "", "al cambiar de paciente vuelve solo, sin pastilla");
+    });
+
+    await t.casoAsync("sin contexto el minimizado se desarma: no queda pastilla huérfana", async () => {
+      const c = ctx102();
+      await c.api.rcvPendientesTick();
+      const w = widget102(c);
+      disparar102(c, w, "click", { target: w.querySelector(".vgl-rcvp-min") });
+      t.cierto(!!pill102(c), "precondición: minimizado");
+      cablear102(c, "");   // sin cédula → sin paciente abierto → la compuerta cae
+      await c.api.rcvPendientesTick();
+      t.falso(!!pill102(c), "sin contexto la pastilla se retira");
+      // Vuelve el contexto: el panel reaparece sin necesitar la pastilla (el
+      // minimizado ya estaba desarmado).
+      cablear102(c, "5150076");
+      await c.api.rcvPendientesTick();
+      t.igual(widget102(c).style.display, "", "con contexto de nuevo el panel vuelve directo");
     });
 
     // ==================== REGRESIÓN DE FUENTE (F1) ====================
@@ -269,10 +355,17 @@ module.exports = {
         'widget.setAttribute("role", "region")',
         'widget.setAttribute("aria-label", "Próximos exámenes")',
         'if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }',
-        'if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) return;',
+        'if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar, .vgl-rcvp-min")) return;',
         'uxTrack("widget.proximosExamenes.cerrado")',
         '.vgl-rcvp-cerrar:focus-visible',
         '.vgl-rcvp-head{position:relative;cursor:grab',
+        // v18.8.6 — minimizar y reapertura
+        'aria-label="Minimizar el panel de próximos exámenes"',
+        'if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }',
+        'uxTrack("widget.proximosExamenes.minimizado")',
+        'uxTrack("widget.proximosExamenes.reabierto")',
+        '#vgl-rcv-pendientes .vgl-rcvp-min{',
+        '#vgl-rcv-pendientes-pill{',
       ];
       for (const a of anclas) {
         t.cierto(FUENTE.indexOf(a) >= 0, "ancla: " + a.slice(0, 64));

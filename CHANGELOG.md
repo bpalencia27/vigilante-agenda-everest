@@ -4,6 +4,43 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.6] — 2026-09-08 (Widget RCV: minimizar con pastilla de reapertura + verificación de los modales del dock)
+
+Pedido en vivo del médico: el panel «Próximos exámenes · Riesgo cardiovascular»
+debía poder minimizarse, cerrarse y volver a abrirse con un estado consistente
+durante toda la sesión, y los modales «[IMPRESION DIAGNOSTICA]» y «[CONDUCTA]»
+del dock de la Historia Clínica quedaban bajo verificación integral.
+
+### ➖ Minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse
+El botón «—» (gemelo del cierre, 28×28 px, táctil) oculta el panel y deja una
+pastilla «▣ Próximos exámenes» fija abajo a la izquierda (left:14, bottom:58 —
+encima de la barra de módulos minimizados, que baja a left:14 cuando el panel
+principal se oculta). Mientras esté minimizado, NINGÚN tick lo resucita, ni
+siquiera con contenido nuevo del mismo paciente: el estado de sesión es estable.
+Pulsar la pastilla la retira, limpia la firma de repintado y el siguiente tick
+devuelve el panel con los datos del paciente que esté ABIERTO en ese momento —
+nunca los del paciente anterior (anti-cruce de pacientes). Cerrar con ✕ desarma
+el minimizado y su pastilla, y si el contexto clínico desaparece (sin historia
+abierta), el minimizado se desarma solo: no quedan pastillas huérfanas.
+
+### 🧪 Verificación de los modales del dock (Impresión Diagnóstica / Conducta)
+Auditoría del cableado v18.7.0: los botones nacen solo con su pestaña montada
+(`_tabImp`/`_tabCond` en la firma de repintado), el clic usa `_vglClicablePestana`
+y si la pestaña falta el flujo falla cerrado con aviso ámbar. Suites 97, 98 y 15
+en verde (11 + 6 + 303 comprobaciones): sin pestañas no nacen, al montarse la
+pestaña el botón reaparece solo, y el acceso directo abre la pestaña correcta.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (puerta
+del minimizado en el tick, guard de arrastre del botón «—» y limpieza de firma de
+la pastilla — todas cayeron rojas y volvieron a verde), 4 casos nuevos en
+suite_102 (11/11), censo CSS de suite_25 actualizado (676 `!important`).
+Verificación Chromium (`docs/herramientas/chromium_186.py`) contra un «Everest»
+simulado agresivo: los 21 colores/posiciones verificados sobreviven, incluida la
+pastilla — un `<button>` sin clase cuyo único escudo es su regla por id con
+`!important`.
+
+---
+
 ## [Versión 18.8.5] — 2026-09-08 (Aviso de actualización obligatoria: solo en HCHealth y en UNA sola pestaña)
 
 Pedido en vivo del médico: «LA ACTUALIZACIÓN OBLIGATORIA DEL SCRIPT DEBE SALIR
