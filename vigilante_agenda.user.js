@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.4
+// @version      18.8.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -38256,9 +38256,110 @@
   // =====================================================================
   const VGL_VERSION_LOCK_GM = "vgl_version_lock";
 
+  // v18.8.5 — ARRIENDO ENTRE PESTAÑAS del aviso de actualización obligatoria
+  // (pedido del médico 08-sep-2026: «una sola ventana/pestaña, no se debe repetir
+  // ese aviso en las otras instancias»).
+  //
+  // Cómo funciona: la pestaña que va a mostrar el aviso escribe un arriendo en
+  // localStorage (VGL_AVISO_BLOQUEO_CLAIM, compartido por TODAS las pestañas de
+  // Everest del navegador) y lo renueva cada VGL_AVISO_BLOQUEO_RELOJ_MS. Las
+  // demás ven un arriendo ajeno fresco y se callan. El TTL de 2 min es a propósito
+  // generoso: Chrome estrangula los timers de pestañas ocultas a uno por minuto, y
+  // la dueña debe poder renovar aunque esté tapada por otra ventana. Si la dueña
+  // muere, el arriendo expira y la primera pestaña en notarlo lo reclama: siempre
+  // hay UNA sola mostrándolo.
+  //
+  // El linaje (VGL_AVISO_BLOQUEO_LINAJE) vive en sessionStorage, que sobrevive al
+  // F5 de ESTA pestaña: recargar la dueña no la convierte en «otra instancia» y
+  // recupera su arriendo al instante. El heartbeat() del líder NO sirve aquí: en
+  // estado bloqueado no hay canal "tick" y heartbeat() devolvería falso siempre.
+  //
+  // Fail-open: si el storage no responde, se muestra igual — el bloqueo de versión
+  // es la regla suprema y debe verse por encima de cualquier fallo de coordinación.
+  const VGL_AVISO_BLOQUEO_CLAIM = "vgl_aviso_bloqueo_claim";
+  const VGL_AVISO_BLOQUEO_LINAJE = "vgl_aviso_bloqueo_linaje";
+  const VGL_AVISO_BLOQUEO_TTL_MS = 120000;
+  const VGL_AVISO_BLOQUEO_RELOJ_MS = 10000;
+  let _avisoBloqueoInterval = null;
+  let _avisoBloqueoVer = "";
+  let _avisoBloqueoLinajeCache = null;
+
+  function _avisoBloqueoLinaje() {
+    try {
+      if (_avisoBloqueoLinajeCache) return _avisoBloqueoLinajeCache;
+      if (typeof sessionStorage !== "undefined") {
+        const s = sessionStorage.getItem(VGL_AVISO_BLOQUEO_LINAJE) || "";
+        if (s) { _avisoBloqueoLinajeCache = s; return s; }
+        try { sessionStorage.setItem(VGL_AVISO_BLOQUEO_LINAJE, TABID); } catch (e) {}
+      }
+      _avisoBloqueoLinajeCache = TABID;
+      return TABID;
+    } catch (e) { return TABID; }
+  }
+
+  function _avisoBloqueoReclamar() {
+    try {
+      const lin = _avisoBloqueoLinaje();
+      const ahora = Date.now();
+      let claim = null;
+      try { claim = JSON.parse(localStorage.getItem(VGL_AVISO_BLOQUEO_CLAIM) || "null"); } catch (e) {}
+      if (claim && claim.id && claim.id !== lin && (ahora - claim.t) < VGL_AVISO_BLOQUEO_TTL_MS) return false;
+      try { localStorage.setItem(VGL_AVISO_BLOQUEO_CLAIM, JSON.stringify({ id: lin, t: ahora, v: _avisoBloqueoVer })); } catch (e) {}
+      // guard anti-carrera: dos pestañas que reclaman a la vez — gana la última escritura
+      try { claim = JSON.parse(localStorage.getItem(VGL_AVISO_BLOQUEO_CLAIM) || "null"); } catch (e) {}
+      if (claim && claim.id && claim.id !== lin) return false;
+      return true;
+    } catch (e) { return true; }
+  }
+
+  function _avisoBloqueoArmarReloj() {
+    try {
+      if (_avisoBloqueoInterval !== null) { try { clearInterval(_avisoBloqueoInterval); } catch (e) {} _avisoBloqueoInterval = null; }
+      if (typeof setInterval !== "function") return;
+      // El reloj NO va a state.timers a propósito: emergencyTeardown barre
+      // state.timers ANTES de llamar a este aviso, y el aviso ES la pantalla
+      // posterior al teardown — su reloj debe sobrevivirle (y muere con la página).
+      _avisoBloqueoInterval = setInterval(() => {
+        try {
+          if (!_avisoBloqueoReclamar()) {
+            // otra pestaña es la dueña: esta se calla y retira su modal si lo tenía
+            const aviso = document.getElementById("vgl-bloqueo-version");
+            if (aviso) aviso.remove();
+            return;
+          }
+          // dueños: el arriendo ya quedó renovado arriba; repintar solo si falta el modal
+          if (!document.getElementById("vgl-bloqueo-version")) _avisoBloqueoPintar();
+        } catch (e) {}
+      }, VGL_AVISO_BLOQUEO_RELOJ_MS);
+    } catch (e) {}
+  }
+
   function _mostrarAvisoBloqueoVersion(minVer) {
     try {
       if (typeof document === "undefined" || !document.body) return;
+      _avisoBloqueoVer = String(minVer || "");
+      // v18.8.5 — pedido del médico (08-sep-2026): el aviso de actualización
+      // obligatoria sale SOLO en el módulo clínico HCHealth (/viva/HCHealth/).
+      // Fuera de ahí ni se pinta ni se reclama el arriendo: la dueña debe ser
+      // siempre una pestaña del módulo clínico.
+      if (!_enModuloHCHealth()) return;
+      // v18.8.5 — y en UNA sola pestaña/ventana: la que gana el arriendo. La
+      // perdedora arma igual su reloj (relevo si la dueña muere) pero jamás
+      // pinta su modal mientras exista un arriendo ajeno fresco.
+      if (!_avisoBloqueoReclamar()) {
+        try { const viejo = document.getElementById("vgl-bloqueo-version"); if (viejo) viejo.remove(); } catch (e) {}
+        _avisoBloqueoArmarReloj();
+        return;
+      }
+      _avisoBloqueoPintar();
+      _avisoBloqueoArmarReloj();
+    } catch (e) {}
+  }
+
+  // v18.8.5 — el pintado quedó aparte para que el reloj del arriendo (arriba)
+  // pueda re-pintar el aviso cuando una pestaña toma el relevo tiempo después.
+  function _avisoBloqueoPintar() {
+    try {
       try { document.body.classList.remove("vgl-modo-oculto"); } catch (e) {}
       let aviso = document.getElementById("vgl-bloqueo-version");
       if (aviso) aviso.remove();
@@ -38280,7 +38381,7 @@
       titulo.textContent = "🔒 Actualización obligatoria del Vigilante";
       const cuerpo = document.createElement("div");
       cuerpo.style.cssText = "color:#ffffff !important;margin-bottom:12px;white-space:pre-line;";
-      cuerpo.textContent = "Este equipo quedó en la versión v" + VERSION + " y la mínima exigida es la v" + minVer + ".\nPor regla del proyecto, la versión anterior queda deshabilitada: actualice para volver a usar el asistente.";
+      cuerpo.textContent = "Este equipo quedó en la versión v" + VERSION + " y la mínima exigida es la v" + _avisoBloqueoVer + ".\nPor regla del proyecto, la versión anterior queda deshabilitada: actualice para volver a usar el asistente.";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "Actualizar ahora";

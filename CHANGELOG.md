@@ -4,6 +4,40 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.5] — 2026-09-08 (Aviso de actualización obligatoria: solo en HCHealth y en UNA sola pestaña)
+
+Pedido en vivo del médico: «LA ACTUALIZACIÓN OBLIGATORIA DEL SCRIPT DEBE SALIR
+SOLAMENTE AQUI https://neps.everestintelligent.com/viva/HCHealth/ Y UNA SOLA
+VENTANA/PESTAÑA NO SE DEBE REPETIR ESE AVISO EN LAS OTRAS INSTANCIAS».
+
+### 📍 El aviso solo existe en el módulo clínico HCHealth
+Antes, cada pestaña de Everest con una versión vieja pintaba su propio modal de
+bloqueo, en cualquier pantalla del hospital. Ahora la puerta de URL
+(`_enModuloHCHealth()`, la misma regla del resto de funciones clínicas) corta el
+aviso fuera de `/viva/HCHealth/`: en las demás páginas el asistente sigue
+bloqueado (regla de proyecto) pero sin el cartel, y ninguna pestaña ajena al
+módulo clínico puede quedarse con el turno de mostrarlo.
+
+### 🪟 Una sola pestaña/ventana lo muestra (arriendo entre pestañas)
+La pestaña que gana el arriendo lo escribe en `localStorage`
+(`vgl_aviso_bloqueo_claim`, compartido por todas las pestañas de Everest del
+navegador) y lo renueva cada 10 s; las demás ven un arriendo ajeno fresco y se
+callan, aunque su reloj queda vigilando para tomar el relevo si la dueña muere
+(TTL de 2 min, generoso a propósito: Chrome estrangula los temporizadores de
+pestañas ocultas a uno por minuto y la dueña debe poder renovar). El linaje vive
+en `sessionStorage` (`vgl_aviso_bloqueo_linaje`): recargar la pestaña dueña no la
+convierte en «otra instancia» y recupera su arriendo al instante. Con guard
+anti-carrera (dos pestañas que reclaman a la vez: gana la última escritura) y
+fail-open (si el storage no responde, el bloqueo se muestra igual — es la regla
+suprema).
+
+Trazabilidad: 4 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (puerta
+de URL, cerradura del arriendo en sus dos sentidos y linaje del F5 — todas
+cayeron rojas y volvieron a verde), 4 casos nuevos en suite_17, banco completo
+en verde (3662 comprobaciones).
+
+---
+
 ## [Versión 18.8.4] — 2026-09-08 (T1: Anexo 5 con variables de tema + blindaje tipográfico de los 9 modales/avisos pegados a body)
 
 Cierre del encargo T1 de la sesión: auditoría CSS de los modales y avisos que se

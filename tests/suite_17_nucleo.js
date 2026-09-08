@@ -952,6 +952,74 @@ module.exports = {
       t.cierto(card.style.cssText.indexOf("background:#991b1b") >= 0 && card.style.cssText.indexOf("color:#ffffff !important") >= 0, "el card usa el par fijo AAA #991b1b/#ffffff (legible en cualquier tema)");
     });
 
+    // ---------- v18.8.5: el aviso sale SOLO en HCHealth y en UNA sola pestaña ----------
+    // Pedido del médico del 08-sep-2026: «LA ACTUALIZACIÓN OBLIGATORIA DEL SCRIPT
+    // DEBE SALIR SOLAMENTE AQUI https://neps.everestintelligent.com/viva/HCHealth/
+    // Y UNA SOLA VENTANA/PESTAÑA NO SE DEBE REPETIR ESE AVISO EN LAS OTRAS INSTANCIAS».
+    t.caso("_mostrarAvisoBloqueoVersion: fuera de HCHealth no sale (y no reclama el arriendo)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/EverHealth/Acceso";
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal fuera del módulo clínico");
+      t.cierto(!("vgl_aviso_bloqueo_claim" in c.env.almacen), "y sin reclamar el arriendo: la dueña debe ser una pestaña de HCHealth");
+      // dentro de HCHealth sí sale
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "en HCHealth el aviso sí sale");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: UNA sola pestaña lo muestra — las demás instancias se callan", () => {
+      const c1 = cargar({ silencioso: true });
+      const c2 = cargar({ silencioso: true, almacen: c1.env.almacen });
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c1.env.doc.getElementById("vgl-bloqueo-version"), "la primera pestaña de HCHealth lo muestra");
+      const claim = JSON.parse(c1.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.cierto(!!claim && !!claim.id, "y deja el arriendo escrito con su linaje");
+      c2.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c2.env.doc.getElementById("vgl-bloqueo-version"), "la segunda pestaña NO repite el aviso");
+      t.igual(c2.env.almacen["vgl_aviso_bloqueo_claim"], JSON.stringify(claim), "y no pisa el arriendo de la dueña");
+      // la dueña muere (arriendo vencido) → la segunda toma el relevo, y SOLO ella
+      c2.env.almacen["vgl_aviso_bloqueo_claim"] = JSON.stringify({ id: claim.id, t: Date.now() - 200000, v: "99.0.0" });
+      c2.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c2.env.doc.getElementById("vgl-bloqueo-version"), "vencido el arriendo, OTRA pestaña lo muestra");
+      const claim2 = JSON.parse(c2.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.cierto(claim2.id !== claim.id, "y el nuevo arriendo es de la segunda pestaña");
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c1.env.doc.getElementById("vgl-bloqueo-version"), "la dueña vieja retira su modal cuando otra gana el arriendo");
+      t.cierto(!!c2.env.doc.getElementById("vgl-bloqueo-version"), "y la nueva dueña conserva el suyo");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: el linaje sobrevive al F5 — recargar la dueña no la vuelve «otra instancia»", () => {
+      const c1 = cargar({ silencioso: true });
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const linaje1 = c1.env.win.sessionStorage._d["vgl_aviso_bloqueo_linaje"];
+      t.cierto(!!linaje1, "la pestaña deja su linaje en sessionStorage");
+      // "recarga" de la MISMA pestaña: mismo sessionStorage (sobrevive al F5), nuevo TABID
+      const c1b = cargar({ silencioso: true, almacen: c1.env.almacen });
+      c1b.env.win.sessionStorage._d["vgl_aviso_bloqueo_linaje"] = linaje1;
+      c1b.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c1b.env.doc.getElementById("vgl-bloqueo-version"), "recargada, la MISMA pestaña recupera su arriendo al instante (no espera el TTL)");
+      const claim = JSON.parse(c1b.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.igual(claim.id, linaje1, "y el arriendo sigue a nombre de su linaje");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: el reloj del arriendo se arma UNA vez y renueva el claim en cada vuelta", () => {
+      const c = cargar({ silencioso: true });
+      const vivosBase = new Set([...c.env.intervalos.entries()].filter(([, r]) => r.vivo).map(([id]) => id));
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const nuevos = [...c.env.intervalos.entries()].filter(([id, r]) => r.vivo && !vivosBase.has(id));
+      t.igual(nuevos.length, 1, "un solo reloj del arriendo");
+      t.igual(nuevos[0][1].ms, 10000, "…con periodo corto: renueva antes de que el TTL de 2 min venza");
+      const antes = JSON.parse(c.env.almacen["vgl_aviso_bloqueo_claim"]).t;
+      nuevos[0][1].f();
+      const despues = JSON.parse(c.env.almacen["vgl_aviso_bloqueo_claim"]).t;
+      t.cierto(despues >= antes, "cada vuelta del reloj renueva el arriendo (t fresco)");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "y la dueña conserva su modal");
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const nuevos2 = [...c.env.intervalos.entries()].filter(([id, r]) => r.vivo && !vivosBase.has(id));
+      t.igual(nuevos2.length, 1, "llamar de nuevo no apila relojes (el viejo se apaga y se reemplaza)");
+    });
+
     // ---------- resolverMedicoPorPerfil ----------
     await t.casoAsync("resolverMedicoPorPerfil: fija el médico activo desde GetUsuarioPerfil y consulta UNA sola vez por login", async () => {
       let respuestaPerfil = { data: { id: "515", nombreCompleto: "PEDRO PEREZ GOMEZ", perfilCodigo: "PROFESIONAL" } };
