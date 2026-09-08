@@ -39,6 +39,22 @@ cerrar la consulta.
 
 Pruebas y mutaciones en `tests/suite_98_hc_pestanas.js`.
 
+### 🧪 Script de prueba en la consola (F12): PROBAR_CENTINELA
+Para comprobar el Centinela en vivo se entrega **PROBAR_CENTINELA.js**, un script de
+consola que se pega en F12 y descarga un reporte JSON **redactado** (cero datos de
+paciente: solo rutas, conteos y estados técnicos).
+
+- **Prueba A (solo lectura)**: confirma que el panel y el dock están vivos y cuenta
+  los atajos instalados (Historias Clínicas, Impresión Diagnóstica, Conducta).
+- **Prueba B (con rollback automático)**: simula por un instante las pestañas de la
+  nota y comprueba que los accesos del dock aparecen; después retira todo y deja la
+  pantalla exactamente como estaba — no toca casillas ni datos de ningún paciente.
+- **A prueba de errores**: si las pestañas reales ya están en pantalla o quedó algo de
+  una prueba anterior, la prueba B no corre y lo avisa en el propio reporte.
+
+Uso: F12 → Consola → pegar el script → esperar ~15 s → se descarga
+`probar_centinela_….json` con el resultado.
+
 ---
 
 ## [Versión 18.6.2] — 2026-09-07 (Toggles en Ajustes y una apertura de Historia Clínica más ligera)
