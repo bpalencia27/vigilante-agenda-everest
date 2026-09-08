@@ -1,0 +1,106 @@
+{
+  "ecosistema": "mantenimiento_nocturno_deepseek",
+  "version": "1.0.0",
+  "plataforma": "DeepSeek",
+  "_descripcion": "Mapa dinámico de comandos y agentes del ecosistema nocturno. Sin rutas hardcodeadas a gestores de paquetes ni a instalaciones: {comando} es un nombre de binario en el PATH del entorno y {args} su lista de argumentos; {{RAIZ}} y {{DEEPSEEK}} son placeholders que el ejecutor resuelve (raíz del checkout y directorio .deepseek). El chequeo nocturno completo lo orquesta run-nightly-checks.sh.",
+  "placeholders": {
+    "{{RAIZ}}": "raíz del checkout del repo (donde vive vigilante_agenda.user.js y tests/)",
+    "{{DEEPSEEK}}": "directorio del ecosistema (.deepseek/)"
+  },
+  "verificacion_sintactica": {
+    "un_archivo": { "comando": "node", "args": ["--check", "{{ARCHIVO}}"], "criterio_exito": "código de salida 0; sin salida en stderr" },
+    "userscript": { "comando": "node", "args": ["--check", "{{RAIZ}}/vigilante_agenda.user.js"], "criterio_exito": "código de salida 0" },
+    "suites": { "comando": "bash", "args": ["-c", "for f in \"{{RAIZ}}\"/tests/*.js; do node --check \"$f\" || exit 1; done"], "criterio_exito": "código de salida 0 (todas las suites y harness parsean)" }
+  },
+  "banco_de_pruebas": {
+    "completo": {
+      "comando": "node",
+      "args": ["{{RAIZ}}/tests/runner.js"],
+      "_nota": "El runner fija TZ=America/Bogota por sí mismo. Ejecutar desde {{RAIZ}} o con ruta absoluta.",
+      "criterio_exito": "código de salida 0 con EXIT real verificado (> log 2>&1; echo EXIT=$?); línea 'comprobaciones : N pasan' sin fallos; N no menor que el baseline de la noche",
+      "solo_una_suite": { "comando": "node", "args": ["{{RAIZ}}/tests/runner.js", "{{SUFIJO}}"], "_nota": "El runner acepta un sufijo opcional que filtra archivos suite_* por inclusión (p. ej. 'suite_94')." }
+    }
+  },
+  "chequeo_nocturno_completo": {
+    "comando": "bash",
+    "args": ["{{DEEPSEEK}}/run-nightly-checks.sh"],
+    "criterio_exito": "código de salida 0 SOLO si sintaxis del userscript, sintaxis de todas las suites y banco completo pasaron; logs escritos en {{DEEPSEEK}}/logs/YYYY-MM-DD/ (resumen ejecutivo + salida completa por chequeo)",
+    "cron_sugerida": "17 2 * * *",
+    "_por_que_17": "Minuto no redondo para no colisionar con los crons corporativos que corren en el minuto 0 de la hora; 02:00 UTC = 21:00 hora de Colombia (UTC-05:00), consultorio cerrado y médico sin consulta en vivo."
+  },
+  "agentes_nocturnos": [
+    {
+      "id": "bolt",
+      "nombre": "BOLT · Rendimiento",
+      "prompt": "{{DEEPSEEK}}/prompts/bolt-performance.md",
+      "mision": "Auditoría de rendimiento del userscript sobre el EHR Everest: cascada de red por flujo, coste de barridos por tick, lecturas de almacén, DOM de modales y TTL/cachés internas.",
+      "criterios_de_exito": [
+        "Reducción DEMOSTRADA (baseline y resultado publicados con su origen) en al menos una métrica: peticiones por flujo, lecturas de almacén por tick o reflows al pintar",
+        "node tests/runner.js con EXIT real 0 y cero comprobaciones perdidas",
+        "Cada cambio con mutación verificada (rojo->verde) y fila en tests/INFORME_MUTACIONES.md",
+        "Bump de @version y const VERSION por entrega",
+        "Informe estructurado con baseline, resultado, delta, riesgo y reversión por commit"
+      ],
+      "suites_clave": ["suite_94_rendimiento", "suite_95_perfcache", "suite_33_robustez_concurrencia_red"],
+      "contraindicacion": "No optimizar sin medir antes; no tocar lógica clínica por rendimiento; no debilitar protocolos de seguridad; no subir TTL de datos clínicos"
+    },
+    {
+      "id": "palette",
+      "nombre": "PALETTE · UX y Accesibilidad",
+      "prompt": "{{DEEPSEEK}}/prompts/palette-ux.md",
+      "mision": "Auditoría UX/UI y accesibilidad (WCAG 2.1 AA + meta interna 2.5.8): contraste de temas, objetivos táctiles >= 24 px, foco visible, aria-live, orden de tabulación de modales y nombres accesibles; verificación honesta en motores y resoluciones disponibles.",
+      "criterios_de_exito": [
+        "Checklist WCAG 2.1 AA por componente auditado (Cumple / No cumple / N-A / No verificado + motivo)",
+        "Cero regresiones de color: defensas de CLAUDE.md intactas (!important fuera de #vgl-root, blindaje :where(...:not([class])) y verificación Chromium contra CSS Everest simulado)",
+        "suite_25_cascada_css y banco completo con EXIT real 0; mutación verificada por corrección con fila en tests/INFORME_MUTACIONES.md",
+        "Informe con severidad (Crítica/Alta/Media/Baja/Informativa) y lista honesta de lo no verificado",
+        "Bump de @version y const VERSION si hay corrección entregada"
+      ],
+      "suites_clave": ["suite_25_cascada_css", "suite_35_interfaz_accesibilidad_medica", "suite_59_burbujas_ux", "suite_23_ux_telemetria", "suite_61_v158_ux"],
+      "contraindicacion": "No cambiar semántica clínica de los colores; no rediseñar lo que el médico usa por memoria muscular; no reportar como verificado lo que no se corrió (WebKit en Windows, lectores, resoluciones)"
+    },
+    {
+      "id": "sentinel",
+      "nombre": "SENTINEL · Seguridad",
+      "prompt": "{{DEEPSEEK}}/prompts/sentinel-security.md",
+      "mision": "Auditoría de seguridad del propio script SOLO: sumideros XSS, fugas de PHI a consola/red/almacén, claves de IA, BroadcastChannel, integridad de dependencias (cero dependencias) y barrera cero-identificables del redactor IA.",
+      "criterios_de_exito": [
+        "Informe de hallazgos con severidad CVSS-style (vector, puntuación, explotabilidad, impacto) y CERO PHI en los ejemplos",
+        "Cada corrección con mutación verificada y fila en tests/INFORME_MUTACIONES.md; banco completo EXIT real 0",
+        "Suites de seguridad existentes verdes (suite_31, suite_44, suite_57/58, suite_69, suite_81, suite_96)",
+        "Protocolo de alerta crítica < 15 min operable: PHI en tránsito o XSS ejecutable -> hallazgo CRÍTICO y parada de entrega exigida",
+        "Bump de @version y const VERSION si hay corrección entregada"
+      ],
+      "suites_clave": ["suite_31_seguridad_phi_xss", "suite_44_grounding_sin_phi", "suite_69_v18_carpeta_cifrada", "suite_81_barrera_ia", "suite_96_grounding"],
+      "contraindicacion": "Solo se audita el código propio (nada de ataques a Everest/Athenea fuera del sandbox); cero PHI en todo artefacto; ofuscación no es un control; no tocar el servidor TABLERO/"
+    }
+  ],
+  "agentes_bajo_demanda": [
+    {
+      "id": "ui-auditor-interactivo",
+      "nombre": "Auditor Interactivo de UI (por sección)",
+      "_preexistente": "Creado por el operador el 2026-09-08, antes de formalizar el ecosistema nocturno; se documenta aquí para que el mapa sea único, sin duplicar su alcance.",
+      "prompt": "{{DEEPSEEK}}/prompts/ui-auditor-interactivo.md",
+      "mision": "Auditoría funcional INTERACTIVA de una sección del userscript (una por invocación): mapear y probar botones/flujos, aprobar o rechazar funcionalidades con justificación, proponer mejoras y documentar soluciones; simulación sobre arnés, jamás sobre el EHR real.",
+      "entrada_del_operador": ["SECCIÓN_AUDITAR (obligatoria; el agente no elige sección)", "OBJETIVO", "CONTEXTO_CLÍNICO", "AUTORIZAR_IMPLEMENTACIÓN (no por defecto)", "EVIDENCIA_ANEXA (opcional)", "RESTRICCIONES (opcional)"],
+      "criterios_de_exito": [
+        "Informe estructurado + código de la sección si se autorizó + pruebas con mutación verificada y fila en tests/INFORME_MUTACIONES.md",
+        "node tests/runner.js en verde; cero PHI; cero red real; ámbito estricto (solo la sección)",
+        "Bump de @version y const VERSION si hubo código; reglas de color nuevas verificadas contra CSS Everest simulado",
+        "Todo número de línea citado verificado contra el archivo real (antídoto anti-alucinación)"
+      ],
+      "suites_clave": ["banco completo", "suites de la sección auditada"],
+      "contraindicacion": "Una sección a la vez; jamás simular uso sobre el EHR real del paciente; jamás transcribir PHI; jamás dejar el banco en rojo"
+    }
+  ],
+  "convenciones": {
+    "exit_real": "> log 2>&1; echo EXIT=$? — el código de salida se verifica en la línea siguiente a cada comando, nunca se asume",
+    "rama_por_cambio": "<agente>/<mejora>-<YYYY-MM-DD> (p. ej. bolt/memo-tick-2026-09-08): una rama dedicada por noche, un commit por cambio, revert limpio en 7 días",
+    "medicion_antes_despues": "Toda tarea de rendimiento deja baseline y resultado con su origen (archivo de log, fecha, corrida); un delta sin baseline no se publica",
+    "publicacion": "El agente no toca el checkout principal ni ejecuta git add/commit/push; trabaja en worktree y el orquestador commitea"
+  },
+  "politica_de_reversion": {
+    "plazo_dias": 7,
+    "metodo": "Commit por cambio en rama dedicada; ante regresión atribuible, git revert limpio del commit exacto (nunca parchear encima); conflicto de revert -> documentar y devolver al orquestador"
+  }
+}
