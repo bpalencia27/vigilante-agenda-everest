@@ -17,6 +17,16 @@
 //  10·ESTRUCTURAL: un solo punto de entrada; nada arranca fuera de la
 //     compuerta (la prueba 10 del prompt —mutación verificada con cuatro
 //     salidas— vive en tests/INFORME_MUTACIONES.md, filas de P11)
+//
+// v18.8.1 — RESTRICCIONES DE INICIO RETIRADAS (pedido del médico del 08-sep-2026):
+// la compuerta es SOLO consentimiento. P11·11-21 reescritos al contrato nuevo:
+// la decisión pura tiene cuatro salidas (bloqueado / aceptado / rechazo-fresco /
+// preguntar); «preguntar» es SIEMPRE la salida sin constancia — con o sin sesión,
+// dentro o fuera del padrón, porque el padrón ya no cierra la puerta a nadie y su
+// rescate de v18.3.1 dejó de existir (la decisión no toca la red jamás). El
+// diagnóstico GM solo queda en las rutas mudas (bloqueado / rechazo-fresco /
+// excepción) y el reporte diario de acceso ya no emite «publico-con-sesion»
+// porque el perfil PÚBLICO murió con el fail-open.
 // ══════════════════════════════════════════════════════════════════════
 const fs = require("fs");
 const path = require("path");
@@ -53,7 +63,7 @@ function nodosVgl(env) {
 
 module.exports = {
   nombre: "Suite 82 · v18.2 (P11): compuerta de consentimiento antes de todo",
-  cubre: ["mtrCompuertaArranque", "mtrCompuertaDecision", "mtrTerminosPantalla", "_terminosAlAceptar", "_terminosAlRechazar"],
+  cubre: ["mtrCompuertaArranque", "mtrCompuertaDecision", "mtrCompuertaPerfil", "mtrCompuertaDiagnostico", "mtrTerminosPantalla", "_terminosAlAceptar", "_terminosAlRechazar"],
   async pruebas(t, api, env, cargar) {
     t.cierto(typeof api.mtrCompuertaArranque === "function", "la compuerta debe quedar expuesta al arnés (declaración function de nivel superior)");
     t.cierto(typeof api.__TERMINOS_TEXTO === "string" && api.__TERMINOS_TEXTO.length > 1000, "TERMINOS_TEXTO publicada al arnés y no vacía");
@@ -287,12 +297,15 @@ module.exports = {
       t.cierto(FUENTE.indexOf("${escapeHtml(_terminosAjustesTexto())}") > 0, "la fila pinta el texto de versión/fecha real, no un literal fijo");
     });
 
-    // ── v18.3.1 ── rescate del arranque sin caché (deadlock real) ─────
-    // Incidencia de producción: el único escritor de la caché del padrón vivía
-    // DENTRO de boot(), y boot() solo corre si la caché ya autoriza → una máquina
-    // sin caché válida (primera instalación) o envenenada jamás se auto-reparaba
-    // («no sale nada»). La compuerta ahora refresca el padrón ANTES de resignarse
-    // al silencio del veredicto «fuera-del-padron» y re-decide una sola vez.
+    // ── v18.3.1 → v18.8.1 ── el rescate del padrón dejó de existir ─────
+    // Incidencia de producción de v18.3.1: el único escritor de la caché del
+    // padrón vivía DENTRO de boot(), y boot() solo corría si la caché ya
+    // autorizaba → una máquina sin caché jamás se auto-reparaba («no sale
+    // nada»). v18.8.1 lo resuelve de raíz: el padrón ya no condiciona el
+    // arranque (fail-open), así que no hay nada que rescatar ANTES de
+    // preguntar — el padrón se refresca por su vía normal dentro de boot().
+    // PADRON_REMOTO queda como fixture para asertar que la compuerta NO lo
+    // busca (P11·11/12).
     const PADRON_REMOTO = { ok: true, version: "vTest2", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] };
 
     // Identidad presente (login de sesión + caché GM validada por Everest) PERO
@@ -302,72 +315,76 @@ module.exports = {
       env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 101, name: "Prueba Uno", ts: Date.now() } };
     }
 
-    await t.casoAsync("P11·11 — máquina sin caché: la compuerta refresca el padrón ANTES de resignarse y luego pregunta los términos", async () => {
+    await t.casoAsync("P11·11 (v18.8.1) — máquina sin caché: la compuerta NO toca la red y pregunta los términos igual (el rescate de v18.3.1 dejó de existir)", async () => {
       const red = redContada();
       let usos = 0;
       const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr });
       sembrarIdentidadSinPadron(c.env);
       await c.api.mtrCompuertaArranque();
-      t.cierto(usos === 1 && red.contadores.fetch === 0, "la compuerta fue a buscar el padrón exactamente una vez por GM_xmlhttpRequest (usos " + usos + ", fetch " + red.contadores.fetch + ")");
-      t.cierto(!!c.env.almacen["vgl_acceso_lista"], "el padrón descargado quedó cacheado (versión " + (JSON.parse(c.env.almacen["vgl_acceso_lista"] || "{}").version || "?") + ")");
-      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "y con el padrón en mano la compuerta SÍ pregunta los términos — el script «sale» sin remedio manual");
+      t.cierto(usos === 0 && red.contadores.fetch === 0, "cero red: el padrón ya no condiciona el arranque (usos " + usos + ", fetch " + red.contadores.fetch + ")");
+      t.falso(!!c.env.almacen["vgl_acceso_lista"], "ningún padrón se descargó antes del consentimiento");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "sin padrón en caché la compuerta SÍ pregunta los términos — el script «sale» sin remedio manual");
       t.cierto(!c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "sin panel ni temporizadores mientras no se acepta");
     });
 
-    await t.casoAsync("P11·12 — sello de refresco fresco (<4 h): la compuerta NO vuelve a gastar red aunque siga fuera del padrón", async () => {
+    await t.casoAsync("P11·12 (v18.8.1) — padrón envenenado sin esta médica y sello fresco: sigue preguntando los términos (fuera del padrón ya no es silencio)", async () => {
       let usos = 0;
       const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
       const c = await cargar({ silencioso: true, fetch: async () => { usos += 100; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } }; }, gmxhr });
       // Padrón cacheado VÁLIDO pero sin esta médica (quedó viejo/envenenado) y
-      // sello de refresco fresco: el tablero acaba de ser consultado hace <4 h.
+      // sello de refresco fresco: antes esto era el silencio eterno del rescate.
       c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t0", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [] });
       c.env.almacen["vgl_acceso_fetch"] = JSON.stringify({ ts: Date.now(), ok: true });
       sembrarIdentidadSinPadron(c.env);
       await c.api.mtrCompuertaArranque();
-      t.cierto(usos === 0, "con el sello fresco el rescate respeta la cuarentena de 4 h: cero peticiones (usos " + usos + ")");
-      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "fuera del padrón y sin rescate disponible: silencio total");
+      t.cierto(usos === 0, "cero peticiones: la decisión es pura, no negocia con el tablero (usos " + usos + ")");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "fuera del padrón se pregunta los términos igual — el padrón no cierra la puerta");
     });
 
-    await t.casoAsync("P11·13 — si el rescate falla (red caída), la compuerta termina en silencio sin romperse", async () => {
+    await t.casoAsync("P11·13 (v18.8.1) — sin padrón y con la red vetada la compuerta NI LO INTENTA: pregunta los términos sin gastar un solo envío", async () => {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       sembrarIdentidadSinPadron(c.env);
       await c.api.mtrCompuertaArranque();
-      t.cierto(red.contadores.gmxhr === 1, "intentó el rescate exactamente una vez");
-      const sello = JSON.parse(c.env.almacen["vgl_acceso_fetch"] || "null");
-      t.cierto(!!sello && sello.ok === false, "el sello quedó pesimista (ok:false) — un fallo NO bloquea el reintento de la próxima carga");
-      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "silencio total, cero temporizadores y sin excepción");
+      t.cierto(red.contadores.gmxhr === 0 && red.contadores.fetch === 0, "cero red: no hay rescate que intentar (gmxhr " + red.contadores.gmxhr + ")");
+      t.falso(!!c.env.almacen["vgl_acceso_fetch"], "ni siquiera un sello de refresco: la compuerta ya no lo toca");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "la pantalla de términos se muestra igual con la red caída");
     });
 
-    await t.casoAsync("P11·14 — BLOQUEADO no se refresca: su silencio no negocia con el tablero", async () => {
+    await t.casoAsync("P11·14 (v18.8.1) — BLOQUEADO: silencio total, cero red y diagnóstico escrito (la única decisión que apaga sin preguntar)", async () => {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [{ uid: 101, nombre: "Prueba Uno" }] });
       sembrarIdentidadSinPadron(c.env);
       await c.api.mtrCompuertaArranque();
-      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "bloqueado no dispara NI un intento de rescate");
-      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "silencio total: el bloqueo no se re-evalúa por red");
+      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "bloqueado no dispara NI un intento de red");
+      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "silencio total: ni pantalla ni panel");
+      const d = c.env.gm["vgl_compuerta_diagnostico"];
+      t.cierto(!!d && d.motivo === "bloqueado" && d.login === "si", "la ruta muda deja su diagnóstico («" + (d && d.motivo) + "»/" + (d && d.login) + ")");
     });
 
-    // ── v18.3.2 ── médico nuevo en MÁQUINA NUEVA (incidencia Dra. Gloria) ──
+    // ── v18.3.2 → v18.8.1 ── médico nuevo en MÁQUINA NUEVA (incidencia Dra. Gloria) ──
     // El padrón cacheado la sirve, PERO la máquina no tiene NI rastro de
     // identidad validada: la caché GM solo la escribe resolverMedicoPorPerfil,
     // que vive DENTRO de boot(), y boot() solo corre si la compuerta lo deja.
-    // v18.3.1 arregló la LISTA; esto es el deadlock de IDENTIDAD que quedaba.
+    // v18.3.1 arregló la LISTA; esto era el deadlock de IDENTIDAD que quedaba.
+    // v18.8.1: la vía sin-identidad dejó de ser un camino aparte — sin identidad
+    // se pregunta y se arranca igual que con ella (motivos «preguntar»/«aceptado»),
+    // y la constancia firma con el login de sesión si no hay uid validado.
     function sembrarMaquinaNueva(env) {
       env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
       env.almacen["user"] = JSON.stringify({ username: "bpalencia", userIdentity: "x" });
     }
 
-    await t.casoAsync("P11·15 — máquina nueva sin identidad: la compuerta SÍ pregunta los términos (caso Dra. Gloria)", async () => {
+    await t.casoAsync("P11·15 (v18.8.1) — máquina nueva sin identidad: la compuerta SÍ pregunta los términos (caso Dra. Gloria, ahora la salida única «preguntar»)", async () => {
       const red = redContada();
       let usos = 0;
       const gmxhr = (o) => { usos++; try { o.onload({ status: 200, response: PADRON_REMOTO }); } catch (e) {} };
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr });
       sembrarMaquinaNueva(c.env);
       const d = c.api.mtrCompuertaDecision();
-      t.cierto(d.arrancar === false && d.pantalla === "terminos" && d.motivo === "sin-identidad", "la decisión es preguntar por la vía sin-identidad (motivo «" + d.motivo + "»)");
+      t.cierto(d.arrancar === false && d.pantalla === "terminos" && d.motivo === "preguntar", "la decisión es preguntar (motivo «" + d.motivo + "»): sin identidad ya no es una vía aparte");
       c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
       await c.api.mtrCompuertaArranque();
       t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo"), "a una primera instalación se le muestra la pantalla de términos — ya no silencio eterno");
@@ -387,117 +404,124 @@ module.exports = {
       c.env.gm["vgl_terminos_acepta"] = { version: "1.4", ts: Date.now(), id: "login:bpalencia" };
       c.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
       const d = c.api.mtrCompuertaDecision();
-      t.cierto(d.arrancar === true && d.motivo === "sin-identidad-aceptado" && d.pantalla === null, "constancia vigente + sin identidad = arranque directo (motivo «" + d.motivo + "»)");
+      t.cierto(d.arrancar === true && d.motivo === "aceptado" && d.pantalla === null, "constancia vigente + sin identidad = arranque directo (motivo «" + d.motivo + "»)");
       await c.api.mtrCompuertaArranque();
       t.cierto(!c.env.doc.getElementById("vgl-terminos-velo"), "no vuelve a preguntar lo ya aceptado");
       t.cierto(!!c.env.doc.getElementById("vgl-pausa-clinica") && !c.env.doc.getElementById("vgl-root"), "boot() corrió directo tras la compuerta");
     });
 
-    await t.casoAsync("P11·17 — sin identidad Y sin login de sesión: a nadie se le pregunta nada", async () => {
+    await t.casoAsync("P11·17 (v18.8.1) — sin identidad Y sin login de sesión: se pregunta igual (la compuerta es solo consentimiento)", async () => {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       // Solo el padrón cacheado: ni user de sesión ni identidad ni constancia.
       c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
       const d = c.api.mtrCompuertaDecision();
-      t.cierto(d.arrancar === false && d.pantalla === null && d.motivo === "fuera-del-padron", "sin sesión la vía sin-identidad no aplica (motivo «" + d.motivo + "»)");
+      t.cierto(d.arrancar === false && d.pantalla === "terminos" && d.motivo === "preguntar", "sin sesión la decisión es preguntar (motivo «" + d.motivo + "»): ya nadie se queda en silencio");
       await c.api.mtrCompuertaArranque();
-      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "silencio total: no se pregunta a una máquina sin médico en sesión");
-      t.cierto(red.contadores.gmxhr === 1, "el motivo fuera-del-padron sí intenta su único rescate (gmxhr " + red.contadores.gmxhr + ")");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root") && c.env.intervalos.size === 0, "se pregunta a una máquina sin médico en sesión — el pedido era quitar las restricciones de inicio");
+      t.cierto(red.contadores.gmxhr === 0 && red.contadores.fetch === 0, "cero red: la decisión es pura (gmxhr " + red.contadores.gmxhr + ")");
     });
 
-    await t.casoAsync("P11·18 — REGRESIÓN: con identidad presente, el padrón sigue mandando — fuera es fuera", async () => {
+    await t.casoAsync("P11·18 (v18.8.1) — con identidad presente FUERA del padrón: se pregunta los términos (el padrón ya no recorta a nadie)", async () => {
       const red = redContada();
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
       // Identidad validada (uid 202) que el padrón cacheado NO trae, y sello de
-      // refresco fresco para que el rescate no gaste red y se vea la decisión pura.
+      // refresco fresco: antes esto era el silencio eterno de «fuera-del-padron».
       c.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
       c.env.gm["vgl_identidad_medico_cache"] = { bgloria: { id: 202, name: "Prueba Dos", ts: Date.now() } };
       c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
       c.env.almacen["vgl_acceso_fetch"] = JSON.stringify({ ts: Date.now(), ok: true });
       const d = c.api.mtrCompuertaDecision();
-      t.cierto(d.arrancar === false && d.pantalla === null && d.motivo === "fuera-del-padron", "identidad presente pero fuera del padrón: silencio, no términos (motivo «" + d.motivo + "»)");
+      t.cierto(d.arrancar === false && d.pantalla === "terminos" && d.motivo === "preguntar", "identidad presente pero fuera del padrón: términos, no silencio (motivo «" + d.motivo + "»)");
       await c.api.mtrCompuertaArranque();
-      t.cierto(!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "el arreglo de máquina nueva NO abre la puerta a quien el padrón no trae");
-      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "sello fresco: ni siquiera rescate (fetch " + red.contadores.fetch + ", gmxhr " + red.contadores.gmxhr + ")");
+      t.cierto(!!c.env.doc.getElementById("vgl-terminos-velo") && !c.env.doc.getElementById("vgl-root"), "el fail-open v18.8.1 abre la puerta a quien el padrón no trae — solo pide el consentimiento");
+      t.cierto(red.contadores.fetch === 0 && red.contadores.gmxhr === 0, "cero red: sin rescate ni sello que consultar (fetch " + red.contadores.fetch + ", gmxhr " + red.contadores.gmxhr + ")");
     });
 
-    await t.casoAsync("P11·19 — v18.3.3 diagnóstico: la compuerta deja escrito su veredicto en GM", async () => {
+    await t.casoAsync("P11·19 (v18.8.1) — diagnóstico solo en las rutas mudas: bloqueado y rechazo-fresco escriben; «preguntar» y «aceptado» no", async () => {
       const red = redContada();
+      // (a) BLOQUEADO: ruta muda que SÍ deja veredicto, con login «si».
       const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
-      // Fuera-del-padron SIN login: el caso del silencio eterno — ahora rastreable.
-      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [{ uid: 101, nombre: "Prueba Uno" }] });
+      sembrarIdentidadSinPadron(c.env);
       await c.api.mtrCompuertaArranque();
       const d = c.env.gm["vgl_compuerta_diagnostico"];
-      t.cierto(!!d, "la clave vgl_compuerta_diagnostico quedó escrita");
-      t.cierto(d && d.motivo === "fuera-del-padron", "motivo registrado («" + (d && d.motivo) + "»)");
-      t.cierto(d && d.login === "no", "sin sesión se registra login «no»");
-      // Y con login: el motivo cambia a sin-identidad y login «si».
+      t.cierto(!!d && d.motivo === "bloqueado" && d.login === "si", "bloqueado queda diagnosticado («" + (d && d.motivo) + "»/" + (d && d.login) + ")");
+      t.cierto(d && Object.keys(d).sort().join(",") === "login,motivo,ts,version" && typeof d.ts === "number" && d.ts > 0 && typeof d.version === "string", "sin PHI: SOLO {motivo, login sí/no, versión, ts}");
+      // (b) rechazo-fresco: también es una ruta muda, con login «no».
       const c2 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
-      c2.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
-      c2.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
+      c2.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [], LABORATORIOS: [] }, blocklist: [] });
+      c2.env.gm["vgl_terminos_rechazo"] = { ts: Date.now() - 2 * 3600 * 1000 };
       await c2.api.mtrCompuertaArranque();
       const d2 = c2.env.gm["vgl_compuerta_diagnostico"];
-      t.cierto(d2 && d2.motivo === "sin-identidad" && d2.login === "si", "con sesión registra sin-identidad + login si («" + (d2 && d2.motivo) + "»/" + (d2 && d2.login) + ")");
+      t.cierto(!!d2 && d2.motivo === "rechazo-fresco" && d2.login === "no", "rechazo fresco queda diagnosticado («" + (d2 && d2.motivo) + "»/" + (d2 && d2.login) + ")");
+      // (c) «preguntar» NO escribe diagnóstico: es la pantalla rutinaria.
+      const c3 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c3.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
+      await c3.api.mtrCompuertaArranque();
+      t.cierto(!("vgl_compuerta_diagnostico" in c3.env.gm), "la pantalla de términos rutinaria NO deja rastro (P11·4 exige no escribir nada más)");
+      // (d) «aceptado» tampoco: el arranque normal no es una incidencia.
+      const c4 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      c4.env.gm["vgl_terminos_acepta"] = { version: "1.4", ts: Date.now(), id: "uid:101" };
+      c4.env.gm["vgl_kill_active"] = true; // marcador de arranque (ver P11·4)
+      await c4.api.mtrCompuertaArranque();
+      t.cierto(!("vgl_compuerta_diagnostico" in c4.env.gm), "el arranque normal NO deja rastro de compuerta");
     });
 
-    // ── v18.3.4 ── segunda puerta ciega: «sin-identidad-aceptado → PÚBLICO» ──
+    // ── v18.3.4 → v18.8.1 ── segunda puerta ciega: «sin-identidad-aceptado → PÚBLICO» ──
     // El médico aceptó los Términos sin identidad, boot() arrancó y ya resolvió
-    // quién es, pero el padrón no lo trae (o quedó corrupto): el núcleo corre
-    // recortado a PÚBLICO sin que la compuerta —que ya decidió— deje rastro.
-    // El descubrimiento vive en el reporte diario de acceso (repAccesoDiario),
-    // el único punto 1/día que ya consultaba el perfil.
-    await t.casoAsync("P11·20 — v18.3.4 puerta ciega 2: perfil PÚBLICO con sesión deja diagnóstico «publico-con-sesion» (1/día)", async () => {
-      const red = redContada();
-      const c = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+    // quién es, pero el padrón no lo traía: el núcleo corría recortado a PÚBLICO
+    // sin que la compuerta —que ya decidió— dejara rastro. El reporte diario de
+    // acceso (repAccesoDiario) era el punto que lo descubría con el motivo
+    // «publico-con-sesion». v18.8.1: PÚBLICO murió con el fail-open — fuera del
+    // padrón con sesión resuelve COMPLETO —, así que repAccesoDiario ya solo
+    // informa el perfil efectivo y NO escribe diagnóstico de compuerta alguno.
+    await t.casoAsync("P11·20 (v18.8.1) — el reporte diario de acceso ya NO deja diagnóstico: la puerta ciega «publico-con-sesion» murió con el fail-open", async () => {
+      const posts = [];
+      const gmxhr = (o) => { posts.push(o); try { o.onload({ status: 200, responseText: "ok", finalUrl: "" }); } catch (e) {} };
+      const c = await cargar({ silencioso: true, fetch: redContada().fetch, gmxhr });
       // Padrón que NO trae a la médica (uid 202) + sesión presente + identidad
-      // ya resuelta por boot(): accesoPerfil() resuelve PÚBLICO.
+      // ya resuelta por boot(): accesoPerfil() resuelve COMPLETO (fail-open).
       c.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
       c.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
       c.api.__state.activeDoctor.id = 202;
       c.api.__state.activeDoctor.name = "Prueba Dos";
       c.api.repAccesoDiario();
-      const d = c.env.gm["vgl_compuerta_diagnostico"];
-      t.cierto(!!d && d.motivo === "publico-con-sesion", "PÚBLICO con sesión: el reporte diario deja diagnóstico «publico-con-sesion» («" + (d && d.motivo) + "»)");
-      t.cierto(d && d.login === "si", "registrado con login «si»");
-      t.cierto(d && Object.keys(d).sort().join(",") === "login,motivo,ts,version" && typeof d.ts === "number" && d.ts > 0 && typeof d.version === "string", "sin PHI: SOLO {motivo, login sí/no, versión, ts}");
-      // El candado diario ya se gastó: un segundo paso NO martilla la clave GM.
-      delete c.env.gm["vgl_compuerta_diagnostico"];
+      await new Promise((res) => setTimeout(res, 30));
+      t.falso(!!c.env.gm["vgl_compuerta_diagnostico"], "el reporte diario ya NO deja «publico-con-sesion» ni ningún otro diagnóstico de compuerta");
+      const accesos = posts.filter((p) => { try { return JSON.parse(p.data).evento === "acceso"; } catch (e) { return false; } });
+      t.igual(accesos.length, 1, "un solo POST de acceso");
+      t.igual(accesos[0] && JSON.parse(accesos[0].data).perfil, "COMPLETO", "fuera del padrón con sesión reporta el perfil fail-open COMPLETO");
+      // El candado diario ya se gastó: un segundo paso NO martilla la red.
+      const antes = posts.length;
       c.api.repAccesoDiario();
-      t.cierto(!("vgl_compuerta_diagnostico" in c.env.gm), "con el candado del día consumido no se vuelve a escribir (1/día, no por tick de accesoPerfil)");
+      await new Promise((res) => setTimeout(res, 30));
+      t.igual(posts.length, antes, "con el candado del día consumido no se vuelve a enviar (1/día)");
       // La médica DEL padrón reporta normal: ningún rastro de compuerta.
-      const c2 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
+      const c2 = await cargar({ silencioso: true, fetch: redContada().fetch, gmxhr });
       c2.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 202, nombre: "Prueba Dos" }], LABORATORIOS: [] }, blocklist: [] });
       c2.env.almacen["user"] = JSON.stringify({ username: "bgloria", userIdentity: "x" });
       c2.api.__state.activeDoctor.id = 202;
       c2.api.__state.activeDoctor.name = "Prueba Dos";
       c2.api.repAccesoDiario();
-      t.cierto(!("vgl_compuerta_diagnostico" in c2.env.gm), "perfil COMPLETO con sesión: el reporte diario NO deja diagnóstico (el rastro es solo de incidencia)");
-      // Y PÚBLICO sin sesión tampoco: sin login no hay a quién rastrear.
-      const c3 = await cargar({ silencioso: true, fetch: red.fetch, gmxhr: red.gmxhr });
-      c3.env.almacen["vgl_acceso_lista"] = JSON.stringify({ version: "t1", perfiles: { COMPLETO: [{ uid: 101, nombre: "Prueba Uno" }], LABORATORIOS: [] }, blocklist: [] });
-      c3.api.__state.activeDoctor.id = 202;
-      c3.api.__state.activeDoctor.name = "Prueba Dos";
-      c3.api.repAccesoDiario();
-      t.cierto(!("vgl_compuerta_diagnostico" in c3.env.gm), "PÚBLICO sin sesión: sin login no se deja diagnóstico");
       await new Promise((res) => setTimeout(res, 30));
+      t.falso(!!c2.env.gm["vgl_compuerta_diagnostico"], "perfil del padrón con sesión: el reporte diario tampoco deja diagnóstico");
     });
 
-    t.caso("P11·21 — v18.3.4 REGRESIÓN: la excepción en sin-identidad cuenta como SIN identidad (Términos), nunca como «hay identidad»", () => {
-      // _identidadMedicoCacheLeer y mtrLoginDeSesion tragan sus propias
-      // excepciones (return null / return ""), así que el catch de
-      // mtrCompuertaSinIdentidad no es simulable EN VIVO desde el arnés sin
-      // mutar el archivo: se fija como regresión de código fuente, el mismo
-      // patrón estructural de P11·10 (probar el cable cuando la pieza no se
-      // puede desconectar por fuera). El contrato: catch → true (falta de
-      // identidad sin resolver → pantalla de Términos; boot()/accesoCap()
-      // deciden después), nunca false (excepción leída como «hay identidad»
-      // → fuera-del-padron → silencio eterno).
-      const ini = FUENTE.indexOf("function mtrCompuertaSinIdentidad()");
-      const fin = FUENTE.indexOf("function mtrCompuertaDecision()", ini);
-      t.cierto(ini >= 0 && fin > ini, "mtrCompuertaSinIdentidad existe y precede a la decisión");
+    t.caso("P11·21 (v18.8.1) — REGRESIÓN ESTRUCTURAL: mtrCompuertaSinIdentidad ya NO existe; la decisión es solo consentimiento", () => {
+      // La vía sin-identidad de v18.3.2 (y su catch fail-closed) se retiró entera
+      // con las restricciones de inicio: la decisión pura tiene cuatro salidas y
+      // ninguna mira la identidad ni el padrón. Se fija como regresión de código
+      // fuente, el mismo patrón estructural de P11·10 (probar el cable cuando la
+      // pieza no se puede desconectar por fuera).
+      t.cierto(FUENTE.indexOf("function mtrCompuertaSinIdentidad") === -1, "mtrCompuertaSinIdentidad fue retirada del archivo");
+      const ini = FUENTE.indexOf("function mtrCompuertaDecision()");
+      const fin = FUENTE.indexOf("function mtrIdentificadorParaConstancia()", ini);
+      t.cierto(ini >= 0 && fin > ini, "mtrCompuertaDecision existe y precede al identificador de la constancia");
       const cuerpo = FUENTE.slice(ini, fin);
-      t.cierto(/catch\s*\(e\)\s*\{\s*return true;?\s*\}/.test(cuerpo), "el catch devuelve true: fail-closed hacia la pantalla de Términos");
-      t.cierto(!/return false/.test(cuerpo), "y no queda ningún return false: la excepción ya no puede clasificarse como «hay identidad»");
+      t.cierto(!/fuera-del-padron|sin-identidad/.test(cuerpo), "la decisión ya no conoce los motivos del padrón ni de la identidad");
+      t.cierto(/motivo: "preguntar"/.test(cuerpo), "la salida sin constancia es SIEMPRE «preguntar»");
+      t.cierto(!/accesoRefrescarLista|_accesoGracia/.test(cuerpo), "la decisión no refresca el padrón ni consulta la gracia");
     });
   }
 };

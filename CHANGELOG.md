@@ -4,6 +4,55 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.1] — 2026-09-08 (Bienvenida a todos los médicos: solo términos y condiciones, y permisos por médico)
+
+### 🚪 La puerta de entrada ahora es solo su aceptación
+Se retiran las restricciones de inicio y de uso por padrón: el script ya no le cierra
+el paso a ningún médico de la IPS.
+
+- **Todo médico entra**: esté o no en la lista, la primera pantalla es únicamente la
+  aceptación de términos y condiciones. Al aceptar, el script arranca completo.
+- **La lista dejó de recortar**: quien no aparece en el padrón (o el padrón no está
+  disponible) recibe el perfil COMPLETO — todas las funciones visibles y utilizables.
+  La única medida que apaga a un médico entero sigue siendo la lista de bloqueo,
+  que se mantiene por seguridad.
+- **La decisión es local e inmediata**: la pantalla de términos no espera ninguna
+  consulta a la red; el rechazo se respeta durante 12 horas y el diagnóstico de la
+  compuerta solo se escribe cuando el arranque se silencia (bloqueo o rechazo fresco),
+  nunca cuando simplemente se pregunta o se acepta.
+
+### 🎛️ Permisos por médico × función (administración desde Ajustes)
+Todos los médicos ven todas las funciones del sistema. Para cada médico se puede
+activar o desactivar el **uso** de cada función, desde el nuevo grupo
+**«Permisos por médico»** de Ajustes (visible para el perfil COMPLETO):
+
+- **Por cédula o por nombre completo** se añade al médico a la lista y se desmarca lo
+  que se le quiere desactivar. Por defecto todo nace **encendido (ON)** — para los
+  médicos que ya estaban y para los que vayan llegando.
+- **Se desactiva el uso, no la vista**: el botón sigue a la vista; al intentarlo, avisa
+  que la función está desactivada y no abre ni escribe nada.
+- **La hoja «acceso» del tablero manda en lo remoto**: la columna `off` de la lista
+  remota desactiva funciones (se refresca cada 4 h); los ajustes locales del equipo
+  pueden volver a encenderlas (marcar ON) o desactivarlas adicionalmente, y la fila
+  local se puede quitar con «Quitar» para volver a mandar el padrón.
+- **Usted no puede desactivarse funciones a sí mismo**: la casilla se re-marca sola con
+  el aviso de que sus revocaciones se administran desde el padrón.
+- **Centinela no se puede desactivar** para nadie.
+
+### 🧾 Auditoría de cada cambio de permisos
+Cada activación o desactivación queda anotada en este equipo con **quién** hizo el
+cambio, **cuándo** (fecha y hora), **a qué médico** y **qué función**, con un registro
+que se conserva hasta 200 entradas, y cada cambio viaja además al tablero como evento
+`permiso_cambio`. Las anotaciones del padrón usan el uid o el login del médico en
+sesión; sin identidad, la casilla del autor queda vacía.
+
+Pruebas en `tests/suite_101_permisos.js` (15/15: unidad de revocación, estado efectivo,
+menú con su guarda D5, auditoría local y remota, y corte de ejecución en los seis
+puntos) con las suites 78/80/82 adaptadas al nuevo fail-open; 3 mutaciones verificadas
+(fail-open, inmunidad de centinela y guarda D5) en `tests/INFORME_MUTACIONES.md`.
+
+---
+
 ## [Versión 18.8.0] — 2026-09-08 (DeepSeek como proveedor principal de la redacción con IA)
 
 ### 🤖 Redacción con IA: deepseek-v4-flash como proveedor principal

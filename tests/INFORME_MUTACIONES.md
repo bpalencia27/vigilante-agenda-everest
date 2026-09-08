@@ -13648,3 +13648,11 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 |---|---|---|---|
 | user.js `MTR_PROVEEDORES_IA.deepseek.cuerpo` (~L47960) | `messages.unshift({ role: "system", content: system })` → `role: "assistant"`: el prompt de sistema viaja como turno de asistente — deepseek lo leería como parte del diálogo, no como instrucción, y todo el contrato OpenAI del proveedor queda roto | NO | *suite_99* caso DS·1 «contrato del proveedor deepseek»: mutante 1 rojo (ancla literal byte-exacta con `"role":"system"`); restaurado 10/10 |
 
+## v18.8.1 (Compuerta solo términos + fail-open + permisos por médico × función, mandato del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `accesoPerfil` (fallback fail-open, L11416) | `return "COMPLETO"` → `return "LABORATORIOS"`: el médico fuera del padrón vuelve a quedar recortado — el fail-open muere y el padrón recorta de nuevo a los compañeros nuevos | NO | *suite_80* casos «B6 matriz capa a/b» y «capa c» (el 555 debe resolver COMPLETO con las 13): mutante 3 rojos; restaurado 9/9 |
+| user.js `permisosCapRevocada` (inmunidad de centinela, L11142) | `cap === "centinela"` → `cap === "centinela_mutado"`: una fila local con off:["centinela"] apaga el panel Centinela del médico — la única cap no revocable deja de ser inmune | NO | *suite_101* casos «P101·U6» (centinela inmune en la unidad) y «P101·F1» (ancla literal de fuente): mutante 2 rojos; restaurado 15/15 |
+| user.js listener delegado del menú de permisos (guarda D5, L35989) | `if (esUnoMismo && !cb.checked)` → `if (false && …)`: el médico en sesión puede desmarcarse funciones a sí mismo — la auto-revocación prohibida por D5 vuelve a colarse | NO | *suite_101* caso «P101·I2 (menú Ajustes)»: mutante 1 rojo (el desmarque propio no se deshace en el acto); restaurado 15/15 |
+

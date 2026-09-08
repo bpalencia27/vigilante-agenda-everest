@@ -38,13 +38,18 @@ const CAPS_SOLO_COMPLETO = ["agendar_control", "panel_paciente", "redactor_ia", 
 const LAS_13 = CAPS_PUBLICAS.concat(CAPS_LABS, CAPS_SOLO_COMPLETO);
 
 // uid, nombre y matriz esperada (qué capacidades SÍ tiene cada perfil).
+// v18.8.1 — FAIL-OPEN: el perfil PÚBLICO desaparece; un médico FUERA del
+// padrón (uid 555) resuelve COMPLETO con las 13 capacidades. Solo la
+// blocklist recorta. Las filas de denegación de la telemetría se prueban
+// con LABORATORIOS (201), que SÍ tiene capacidades negadas (las 4
+// solo-COMPLETO) — el hueco que dejó PÚBLICO.
 const PERFILES = [
   { uid: 101, nombre: "Brandon Jesús Palencia Martínez", perfil: "COMPLETO",
     si: LAS_13.slice() },
   { uid: 201, nombre: "Maryuris Terán", perfil: "LABORATORIOS",
     si: CAPS_PUBLICAS.concat(CAPS_LABS) },
-  { uid: 555, nombre: "Fuera Del Padrón", perfil: "PUBLICO",
-    si: CAPS_PUBLICAS.slice() },
+  { uid: 555, nombre: "Fuera Del Padrón", perfil: "COMPLETO",
+    si: LAS_13.slice() },
   { uid: 999, nombre: "Prueba Bloqueada", perfil: "BLOQUEADO",
     si: [] },
 ];
@@ -132,26 +137,26 @@ module.exports = {
     t.caso("B6 telemetría: la denegación de capa c se cuenta en memoria y baja a disco agregada", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 555, "Fuera Del Padrón");   // PÚBLICO
-      c.api.accesoEscribir("laboratorios");        // denegada ×3
-      c.api.accesoEscribir("laboratorios");
-      c.api.accesoEscribir("laboratorios");
+      conDoctor(c.api, 201, "Maryuris Terán");     // LABORATORIOS: rcv es solo-COMPLETO
+      c.api.accesoEscribir("rcv");                 // denegada ×3
+      c.api.accesoEscribir("rcv");
+      c.api.accesoEscribir("rcv");
       const r = c.api._accesoDenegDia();
       t.cierto(!!r, "el volcado devuelve el día");
-      t.igual(r.cuentas.laboratorios, 3, "tres intentos, tres cuentas");
+      t.igual(r.cuentas.rcv, 3, "tres intentos, tres cuentas");
       t.igual(Object.keys(r.cuentas).length, 1, "solo la capacidad denegada, nada más");
       const hoy = c.api.todayStamp();
       t.cierto(("vgl_acceso_deneg_" + hoy) in almacen, "la clave datada quedó en disco");
       // Un segundo volcado sin nuevos intentos conserva el acumulado (memoria ya vacía).
       const r2 = c.api._accesoDenegDia();
-      t.igual(r2.cuentas.laboratorios, 3, "el acumulado del día no se pierde entre barridos");
+      t.igual(r2.cuentas.rcv, 3, "el acumulado del día no se pierde entre barridos");
     });
 
     t.caso("B6 telemetría: la capa a/b NO se cuenta — es el estado normal, no un incidente", () => {
       const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 555, "Fuera Del Padrón");   // PÚBLICO
-      for (let i = 0; i < 5; i++) c.api.accesoCap("laboratorios"); // denegada ×5 en capa a/b
+      conDoctor(c.api, 201, "Maryuris Terán");     // LABORATORIOS: rcv es solo-COMPLETO
+      for (let i = 0; i < 5; i++) c.api.accesoCap("rcv"); // denegada ×5 en capa a/b
       const r = c.api._accesoDenegDia();
       t.igual(Object.keys(r.cuentas).length, 0, "cinco ticks de UI recortada no generan ni una cuenta");
     });
@@ -176,8 +181,8 @@ module.exports = {
       red.gmxhr = (o) => { red.posts.push(o); o.onload({ status: red.status, responseText: red.cuerpo, finalUrl: red.finalUrl }); };
       const almacen = almPadron({ "vgl_acceso_deneg_2000-01-01": JSON.stringify({ pym: 40 }) });
       const c = cargar({ silencioso: true, almacen: almacen, gmxhr: red.gmxhr });
-      conDoctor(c.api, 555, "Fuera Del Padrón");
-      c.api.accesoEscribir("redactor_ia");         // denegada en PÚBLICO
+      conDoctor(c.api, 201, "Maryuris Terán");     // LABORATORIOS: redactor_ia denegado
+      c.api.accesoEscribir("redactor_ia");
       c.api._accesoDenegFlush();
       await new Promise((res) => setTimeout(res, 30));
       t.falso(("vgl_acceso_deneg_2000-01-01" in almacen), "la clave del día viejo se fue");
@@ -189,8 +194,8 @@ module.exports = {
       t.cierto(postsAcceso.length === 1, "un solo POST de acceso_deneg (el aviso obs.equipo.nuevo del primer arranque viaja aparte)");
       const cuerpo = JSON.parse(postsAcceso[0].data);
       t.igual(cuerpo.evento, "acceso_deneg", "evento acceso_deneg");
-      t.igual(cuerpo.uid, 555, "uid del médico (dato de personal)");
-      t.igual(cuerpo.perfil, "PUBLICO", "perfil resuelto");
+      t.igual(cuerpo.uid, 201, "uid del médico (dato de personal)");
+      t.igual(cuerpo.perfil, "LABORATORIOS", "perfil resuelto");
       t.igual(cuerpo.cuentas.redactor_ia, 1, "cuenta agregada por capacidad");
       t.cierto(String(postsAcceso[0].data).indexOf("Fuera") === -1, "sin nombre del médico en el POST");
       t.igual(almacen["vgl_rep_acceso_deneg"], c.api.todayStamp(), "candado diario escrito");

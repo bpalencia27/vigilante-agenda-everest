@@ -19,8 +19,10 @@
 //   · DEDUP por cita (cédula@hora) y entre pestañas (vgl_vistos).
 //   · CERO PHI INNECESARIA EN DISCO: cédula y hora, jamás nombres; la
 //     foto se barre al cambiar de turno o de día.
-//   · La capacidad `aviso_paciente_nuevo` (capa a) sigue mandando:
-//     PÚBLICO y BLOQUEADO no evalúan NADA ni aprenden NADA.
+//   · La capacidad `aviso_paciente_nuevo` (capa a) sigue mandando. Con la
+//     v18.8.1 fail-open el perfil PÚBLICO ya no existe: fuera del padrón se
+//     resuelve COMPLETO y el aviso SÍ evalúa/aprende — solo BLOQUEADO
+//     (blocklist) no evalúa NADA ni aprende NADA.
 //   · El botón «👤 Nuevos», su modal y su contador ya NO EXISTEN.
 // =====================================================================
 
@@ -95,17 +97,51 @@ module.exports = {
       t.igual(api.shiftBaselineKey(undefined, "2026-09-07", "AM"), "vgl_shift_base_0_2026-09-07_AM", "sin uid cae al balde 0");
     });
 
-    t.caso("v18.5.0 capa a: PÚBLICO (sin padrón) no evalúa NI APRENDE nada", () => {
-      const almacen = {};   // sin vgl_acceso_lista → identidad fuera del padrón → PÚBLICO
+    t.caso("v18.8.1 capa a (fail-open): solo BLOQUEADO no evalúa NI APRENDE nada", () => {
+      // v18.8.1 — esta prueba sembraba un PÚBLICO (sin padrón → fuera de la lista) y
+      // esperaba null; con el fail-open, fuera del padrón se resuelve COMPLETO y el
+      // aviso SÍ evalúa. El ÚNICO perfil que no evalúa es BLOQUEADO (blocklist por
+      // uid/nombre exacto), y para que exista hay que sembrar el padrón con su entrada.
+      const almacen = almPadron();
       const c = cargar({ silencioso: true, almacen: almacen });
-      conDoctor(c.api, 707, "Alguien Sin Padrón");
+      conDoctor(c.api, 999, "Prueba Bloqueada");
       const g = grabadora();
       const r = c.api.shiftNewPatientEval([cita("111", "Paciente Uno", "8:00")], { ahora: AM8, toast: g.toast });
-      t.igual(r, null, "PÚBLICO no evalúa el aviso");
-      t.igual(g.llamadas.length, 0, "PÚBLICO no dispara toasts");
+      t.igual(r, null, "BLOQUEADO no evalúa el aviso");
+      t.igual(g.llamadas.length, 0, "BLOQUEADO no dispara toasts");
       for (const k of Object.keys(almacen)) {
-        t.falso(k.indexOf("vgl_shift_base_") === 0, "PÚBLICO no debe escribir " + k + " (la foto solo crece para quien puede usarla)");
+        t.falso(k.indexOf("vgl_shift_base_") === 0, "BLOQUEADO no debe escribir " + k + " (la foto solo crece para quien puede usarla)");
       }
+    });
+
+    t.caso("v18.8.1 capa a (fail-open): fuera del padrón (sin lista) es COMPLETO — SÍ evalúa y aprende", () => {
+      // v18.8.1 — el caso que esta prueba reemplaza esperaba que el médico fuera del
+      // padrón (PÚBLICO, ya inexistente) no evaluara nada. Con el fail-open resuelve
+      // COMPLETO y su turno produce EXACTAMENTE el resultado que asertaba la versión
+      // autorizada (foto de arranque silenciosa + aprendizaje + aviso del ingreso
+      // posterior), sin padrón que recorte.
+      const almacen = {};   // sin vgl_acceso_lista: la lista ausente ya no recorta a nadie
+      const c = cargar({ silencioso: true, almacen: almacen });
+      conDoctor(c.api, 555, "Médico Nuevosur del Hospital");
+      const g = grabadora();
+      const r = c.api.shiftNewPatientEval(
+        [cita("111", "Paciente Uno", "8:00"), cita("222", "Paciente Dos", "8:30"), cita("333", "Paciente Tres", "9:00")],
+        { ahora: AM8, toast: g.toast });
+      t.cierto(!!r, "fuera del padrón SÍ evalúa (fail-open: COMPLETO)");
+      t.cierto(r.seed, "primera lectura del turno ⇒ foto");
+      t.igual(r.turno, "AM", "a las 8:00 el turno es AM");
+      t.igual(r.nuevos, 0, "la lista inicial no genera nuevos");
+      t.igual(r.toasts, 0, "y no hay toasts");
+      t.igual(g.llamadas.length, 0, "foto silenciosa: cero avisos");
+      const reg = leer(almacen, "vgl_shift_base_555_" + c.api.todayStamp() + "_AM");
+      t.cierto(!!reg && Object.keys(reg.docs).length === 3, "la foto quedó aprendida (sin padrón también crece)");
+      // Y un ingreso posterior sí dispara el toast FUCSIA: mismo comportamiento que el autorizado.
+      const g2 = grabadora();
+      const r2 = c.api.shiftNewPatientEval(
+        [cita("111", "Paciente Uno", "8:00"), cita("222", "Paciente Dos", "8:30"), cita("333", "Paciente Tres", "9:00"), cita("444", "Paciente Cuatro", "10:00")],
+        { ahora: AM8_05, toast: g2.toast });
+      t.igual(r2.toasts, 1, "el que entra después recibe su toast");
+      t.cierto(g2.llamadas.length === 1 && g2.llamadas[0].color === "FUCSIA", "color exclusivo, igual que para un médico del padrón");
     });
 
     t.caso("v18.5.0 capa a: BLOQUEADO tampoco evalúa, ni siquiera con capacidad registrada", () => {

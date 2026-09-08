@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.0
+// @version      18.8.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11074,9 +11074,234 @@
   function mtrNormalizarNombre(n) {
     return stripAccents(String(n || "")).toUpperCase().replace(/\s+/g, " ").trim();
   }
+  // ---------------------------------------------------------------------
+  //  v18.8.1 — REVOCACIÓN GRANULAR POR MÉDICO × FUNCIÓN (pedido del médico del
+  //  08-sep-2026): «todos los médicos tendrán acceso visual a todas las
+  //  funciones… se podrá activar o desactivar el acceso funcional a cada una
+  //  de ellas desde el menú de ajustes de configuración de permisos. Por
+  //  defecto, todas las funciones estarán activadas (ON) para todos los
+  //  usuarios médicos… al desactivar una función para un médico específico,
+  //  este no pueda ejecutarla ni acceder a sus recursos, mientras que mantiene
+  //  la capacidad de ver que la función existe en la interfaz».
+  //  DOS fuentes, la misma forma {uid?, nombre?, off:[caps]} — uid manda sobre
+  //  nombre (D1) y ambas se resuelven por identidad EXACTA (nunca sub-cadena):
+  //   (a) la columna `off` de la entrada del padrón (hoja "acceso" del tablero,
+  //       baja con el refresco de 4 h a todos los equipos — fuente de verdad
+  //       remota, igual que la 6ª columna caps de v18.4.4);
+  //   (b) los permisos locales de ESTE equipo (clave GM vgl_permisos_locales,
+  //       editados desde Ajustes → «Permisos por médico»), que aplican de
+  //       inmediato aquí y auditan cada cambio.
+  //  Default ON: sin entrada off, NADA está revocado — médicos existentes y
+  //  nuevos arrancan con todo activado. La revocación corta la EJECUCIÓN y la
+  //  ESCRITURA (capas b y c de accesoCap/accesoEscribir); NO corta la capa a:
+  //  el botón sigue visible (fail-open v18.8.1 + «ver que la función existe»).
+  //  «centinela» NO es revocable: apagar el monitor raíz equivaldría a apagar
+  //  el script entero, y eso es la blocklist, no un permiso por función.
+  // ---------------------------------------------------------------------
+  const PERMISOS_LOCALES_KEY = "vgl_permisos_locales";
+  const PERMISOS_CAPS_REVOCABLES = ["psic_odonto", "pym", "notificaciones", "agendar_labs", "laboratorios", "widget_examen_normal", "widget_examenes_autolabs", "aviso_paciente_nuevo", "agendar_control", "panel_paciente", "redactor_ia", "rcv"];
+  // Rótulos legibles del menú (misma lista, mismo orden). Las caps SIN botón ni
+  // panel propio (p. ej. «notificaciones», «widget_examen_*» históricas) quedan
+  // revocadas en el NÚCLEO (accesoCap/accesoEscribir) — su corte se materializa
+  // donde la función pregunte por la cap, hoy o en el futuro (ver REGISTRO).
+  const PERMISOS_ROTULOS = {
+    psic_odonto: "Salud mental / Odontología (Psic·Odonto)",
+    pym: "Prevención PyM",
+    notificaciones: "Avisos y notificaciones",
+    agendar_labs: "Toma de muestras (laboratorios)",
+    laboratorios: "Laboratorios del paciente",
+    widget_examen_normal: "Widget «Próximos exámenes»",
+    widget_examenes_autolabs: "Widget de exámenes del laboratorio",
+    aviso_paciente_nuevo: "Aviso de paciente nuevo",
+    agendar_control: "Agendamiento de control",
+    panel_paciente: "Panel del paciente",
+    redactor_ia: "Redactor con IA",
+    rcv: "Riesgo cardiovascular"
+  };
+  let _permisosLocales = null;
+  function permisosLocalesLeer() {
+    if (_permisosLocales !== null) return _permisosLocales;
+    try {
+      _permisosLocales = (typeof GM_getValue !== "undefined") ? (GM_getValue(PERMISOS_LOCALES_KEY, null) || null) : null;
+      if (!Array.isArray(_permisosLocales)) _permisosLocales = [];
+    } catch (e) { _permisosLocales = []; }
+    return _permisosLocales;
+  }
+  function permisosLocalesEscribir(arr) {
+    _permisosLocales = arr;
+    try { if (typeof GM_setValue !== "undefined") GM_setValue(PERMISOS_LOCALES_KEY, arr); } catch (e) {}
+  }
+  // ¿La `cap` está revocada para el médico en sesión? Pura (sin red). Tolerante:
+  // un off que no es arreglo o con basura simplemente no revoca nada — una fila
+  // rota del tablero jamás apaga funciones que no se pidió apagar. La entrada
+  // LOCAL gana sobre la remota en AMBAS direcciones (D1): `on` fuerza ACTIVADA
+  // (tapa un off del padrón — el administrador local puede re-encender), `off`
+  // fuerza REVOCADA. Sin entrada local, el padrón remoto decide.
+  function permisosCapRevocada(cap) {
+    try {
+      if (!cap || cap === "centinela") return false;
+      const uid = Number((state && state.activeDoctor && state.activeDoctor.id) || 0) || 0;
+      const nombre = mtrNormalizarNombre((state && state.activeDoctor && state.activeDoctor.name) || "");
+      const tiene = (arr) => Array.isArray(arr) && arr.some((c) => String(c || "").trim() === cap);
+      for (const e of permisosLocalesLeer()) {
+        if (!e || typeof e !== "object") continue;
+        const esLaMisma = (uid && Number(e.uid) === uid) || (nombre && mtrNormalizarNombre(e.nombre) === nombre);
+        if (!esLaMisma) continue;
+        if (tiene(e.on)) return false;
+        if (tiene(e.off)) return true;
+      }
+      const lista = accesoLeerLista();
+      if (lista) {
+        const entradas = [].concat(lista.perfiles.COMPLETO || [], lista.perfiles.LABORATORIOS || []);
+        const e = (uid && entradas.find((x) => Number(x.uid) === uid)) || (nombre && entradas.find((x) => mtrNormalizarNombre(x.nombre) === nombre));
+        if (e && tiene(e.off)) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+  // v18.8.1 — ESCRITURA local (menú Ajustes → «Permisos por médico»). Cada cambio
+  // aplica EN CALIENTE (la caché en memoria se reasigna) y el menú audita aparte.
+  // `mut` = {on?: [caps], off?: [caps]}; omitir un arreglo lo deja como estaba.
+  // «centinela» no llega aquí (no es revocable) — la defensa final es
+  // permisosCapRevocada, que responde false siempre para esa cap.
+  function permisosLocalSet(uid, nombre, mut) {
+    const arr = permisosLocalesLeer().filter((e) => e && typeof e === "object");
+    const esUid = Number(uid) > 0;
+    let e = arr.find((x) => (esUid ? Number(x.uid) === Number(uid) : mtrNormalizarNombre(x.nombre) === mtrNormalizarNombre(nombre)));
+    if (!e) { e = {}; arr.push(e); }
+    if (esUid) { e.uid = Number(uid); delete e.nombre; } else { e.nombre = mtrNormalizarNombre(nombre); delete e.uid; }
+    if (mut && typeof mut === "object") {
+      if (mut.on !== undefined) e.on = Array.isArray(mut.on) ? mut.on.slice() : [];
+      if (mut.off !== undefined) e.off = Array.isArray(mut.off) ? mut.off.slice() : [];
+    }
+    if (!Array.isArray(e.off)) e.off = [];
+    permisosLocalesEscribir(arr);
+    return e;
+  }
+  // Retira la entrada local del médico (vuelve a mandar el padrón). Devuelve la
+  // entrada retirada, o null si no existía.
+  function permisosLocalQuitar(uid, nombre) {
+    const arr = permisosLocalesLeer().filter((e) => e && typeof e === "object");
+    const esUid = Number(uid) > 0;
+    const idx = arr.findIndex((x) => (esUid ? Number(x.uid) === Number(uid) : mtrNormalizarNombre(x.nombre) === mtrNormalizarNombre(nombre)));
+    if (idx < 0) return null;
+    const quitada = arr.splice(idx, 1)[0];
+    permisosLocalesEscribir(arr);
+    return quitada;
+  }
+  // v18.8.1 — AUDITORÍA de permisos (pedido del médico, 08-sep-2026): cada cambio
+  // de estado queda {ts, quien, medico, funcion, estado}. `quien` y `medico` van
+  // como "uid:NN" o "nombre:XXX" (constancia; es personal de la IPS, nunca PHI).
+  // LOCAL: acumulado en GM, podado a los últimos 200. REMOTO: evento
+  // «permiso_cambio» por la cola normal del tablero (con reintentos y backoff).
+  const PERMISOS_AUDIT_KEY = "vgl_permisos_audit";
+  const PERMISOS_AUDIT_MAX = 200;
+  function permisosAuditLeer() {
+    try {
+      const a = (typeof GM_getValue !== "undefined") ? GM_getValue(PERMISOS_AUDIT_KEY, null) : null;
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  function permisosAuditAnotar(cambio) {
+    const fila = {
+      ts: new Date().toISOString(),
+      quien: (typeof mtrIdentificadorParaConstancia === "function") ? mtrIdentificadorParaConstancia() : "",
+      medico: String((cambio && cambio.medico) || ""),
+      funcion: String((cambio && cambio.funcion) || ""),
+      estado: String((cambio && cambio.estado) || "")
+    };
+    try {
+      const a = permisosAuditLeer();
+      a.push(fila);
+      while (a.length > PERMISOS_AUDIT_MAX) a.shift();
+      if (typeof GM_setValue !== "undefined") GM_setValue(PERMISOS_AUDIT_KEY, a);
+    } catch (e) {}
+    try { reportar("permiso_cambio", { quien: fila.quien, medico: fila.medico, funcion: fila.funcion, estado: fila.estado }); } catch (e) {}
+    return fila;
+  }
+  // Aviso visible cuando un botón corta por REVOCACIÓN (el botón sigue a la vista
+  // — «ver que la función existe» — pero no abre). Devuelve el texto del cuerpo
+  // para poder asertarlo sin DOM. BLOQUEADO (blocklist) corta en silencio: no es
+  // un permiso, es un apagado total del que el médico no debe sacar detalle.
+  function permisosAvisoRevocado(cap) {
+    const cuerpo = "Esta función está desactivada para este médico. El administrador del asistente puede reactivarla en Ajustes → Permisos por médico.";
+    try { showToast("AMBAR", "Función desactivada", cuerpo, false); } catch (e) {}
+    try { uxTrack("permiso.revocado", { cap: String(cap || "") }); } catch (e) {}
+    return cuerpo;
+  }
+  // Corte compartido de los botones: BLOQUEADO corta en seco, REVOCADO avisa.
+  function _permisoCorte(cap) { if (permisosCapRevocada(cap)) permisosAvisoRevocado(cap); }
+  // Estado EFECTIVO de un médico para el menú: por cap, marcada si está
+  // ACTIVADA. Orden de decisión: local `on` (fuerza ON) → local `off` (fuerza
+  // OFF) → remoto `off` → ON. Devuelve {capsOn, capsOff, local} (local = hay
+  // entrada local para este médico).
+  function permisosEntradaEfectiva(uid, nombre) {
+    const tiene = (arr, cap) => Array.isArray(arr) && arr.some((c) => String(c || "").trim() === cap);
+    let local = null;
+    for (const e of permisosLocalesLeer()) {
+      if (!e || typeof e !== "object") continue;
+      if ((uid && Number(e.uid) === uid) || (nombre && mtrNormalizarNombre(e.nombre) === mtrNormalizarNombre(nombre))) { local = e; break; }
+    }
+    let remota = null;
+    try {
+      const lista = accesoLeerLista();
+      if (lista) {
+        const entradas = [].concat(lista.perfiles.COMPLETO || [], lista.perfiles.LABORATORIOS || []);
+        remota = (uid && entradas.find((x) => Number(x.uid) === uid)) || (nombre && entradas.find((x) => mtrNormalizarNombre(x.nombre) === mtrNormalizarNombre(nombre))) || null;
+      }
+    } catch (e) {}
+    const capsOn = [], capsOff = [];
+    for (const cap of PERMISOS_CAPS_REVOCABLES) {
+      if (local && tiene(local.on, cap)) capsOn.push(cap);
+      else if (local && tiene(local.off, cap)) capsOff.push(cap);
+      else if (remota && tiene(remota.off, cap)) capsOff.push(cap);
+      else capsOn.push(cap);
+    }
+    return { capsOn, capsOff, local: !!local };
+  }
+  // Médicos VISIBLES del menú: entradas locales + padrón (COMPLETO/LABORATORIOS),
+  // dedup por uid y por nombre normalizado. Devuelve [{uid, nombre, off}] — el
+  // off del padrón informa el estado inicial de las casillas vía
+  // permisosEntradaEfectiva.
+  function permisosEntradasVisibles() {
+    const vistas = [];
+    const empujar = (e) => {
+      if (!e || typeof e !== "object") return;
+      const esUid = Number(e.uid) > 0;
+      const nombre = mtrNormalizarNombre(e.nombre);
+      if (!esUid && !nombre) return;
+      if (esUid ? vistas.some((v) => Number(v.uid) === Number(e.uid)) : vistas.some((v) => mtrNormalizarNombre(v.nombre) === nombre)) return;
+      vistas.push({ uid: esUid ? Number(e.uid) : 0, nombre: esUid ? String(e.nombre || "") : nombre, off: Array.isArray(e.off) ? e.off : [] });
+    };
+    (permisosLocalesLeer() || []).forEach(empujar);
+    try {
+      const lista = accesoLeerLista();
+      if (lista) [].concat(lista.perfiles.COMPLETO || [], lista.perfiles.LABORATORIOS || []).forEach(empujar);
+    } catch (e) {}
+    return vistas;
+  }
+  // HTML de las filas del menú (puro; el binding lo hace el listener delegado
+  // del contenedor #c-perm-lista en renderSettings).
+  function permisosListaHtml() {
+    const entradas = permisosEntradasVisibles();
+    if (!entradas.length) return '<div class="vgl-fld"><span class="vgl-hint">Todavía no hay médicos en la lista. Añada uno arriba o espere el refresco del padrón.</span></div>';
+    return entradas.map((e) => {
+      const rotulo = e.nombre ? (e.uid ? escapeHtml(e.nombre) + " · uid " + e.uid : escapeHtml(e.nombre)) : "uid " + e.uid;
+      const quien = e.uid ? "uid-" + e.uid : "nom-" + encodeURIComponent(e.nombre);
+      const ef = permisosEntradaEfectiva(e.uid || 0, e.nombre || "");
+      const cbs = PERMISOS_CAPS_REVOCABLES.map((cap) => {
+        const on = ef.capsOn.includes(cap);
+        return `<label class="vgl-sw" style="margin-left:6px" title="${escapeHtml(PERMISOS_ROTULOS[cap] || cap)}"><input type="checkbox" data-perm-cap="${cap}" data-perm-quien="${quien}"${on ? " checked" : ""}><i></i></label><span class="vgl-hint" style="margin-left:2px">${escapeHtml(PERMISOS_ROTULOS[cap] || cap)}</span>`;
+      }).join("");
+      const quitar = ef.local ? `<button class="vgl-btn off" data-perm-quitar="${quien}" style="margin-left:8px">Quitar</button>` : "";
+      return `<div class="vgl-fld"><label>${rotulo}<span class="vgl-hint">Marcado = función activada (ON). Desmarcar la desactiva para este médico: el botón queda visible pero avisa y no abre. ${ef.local ? "«Quitar» borra esta fila local y vuelve a mandar el padrón." : "Fila del padrón (hoja «acceso» del tablero): sus cambios quedan anclados aquí como ajuste local de este equipo."}</span></label><div>${cbs}${quitar}</div></div>`;
+    }).join("");
+  }
   // Pura: la lista sirve solo si viene COMPLETA y bien tipada — version no
   // vacía, COMPLETO/LABORATORIOS/blocklist como arreglos de {uid>0, nombre}.
   // Una lista a medias NO se aplica parcialmente: se ignora entera (D3).
+  // La columna `off` de cada entrada es OPCIONAL (v18.8.1): no participa de la
+  // validación — la consume permisosCapRevocada, que ignora formas rotas.
   function accesoListaValida(lista) {
     try {
       if (!lista || typeof lista !== "object") return false;
@@ -11160,11 +11385,16 @@
   //   1. blocklist por uid o por nombre — gana SIEMPRE, en silencio.
   //   2. uid en COMPLETO / LABORATORIOS (el uid MANDA sobre el nombre, D1).
   //   3. nombre normalizado en COMPLETO / LABORATORIOS (respaldo D1).
-  //   4. sin identidad (uid 0 y sin nombre): gracia fresca → último perfil
-  //      confirmado; vencida o sin anoto → PÚBLICO. Con identidad que no
-  //      está en el padrón → PÚBLICO (la gracia NO se hereda, D2).
-  //   Sin lista aplicable (caché ausente o inservible, p.ej. B1 sin B2):
-  //   todos resuelven por la regla 4 — padrón vacío = PÚBLICO.
+  //   4. todo lo demás → COMPLETO.
+  // v18.8.1 — FAIL-OPEN (pedido del médico del 08-sep-2026): el padrón ya no
+  //   recorta a nadie. Quien no está en la lista, la lista ausente/corrupta y
+  //   la identidad sin resolver: COMPLETO, con TODAS las funciones visibles.
+  //   El recorte fino por función vive en la capa de revocación (columna off
+  //   del padrón + permisos locales del equipo) que accesoCap consulta; la
+  //   blocklist sigue siendo la ÚNICA decisión que apaga a un médico entero.
+  //   La gracia de 12 h se conserva por compatibilidad (anoto del perfil
+  //   confirmado con identidad), pero ya no decide nada: su fallback natural
+  //   era PÚBLICO y el fail-open lo reemplaza por COMPLETO.
   function accesoPerfil() {
     try {
       const lista = accesoLeerLista();
@@ -11183,16 +11413,20 @@
         const g = _accesoGracia();
         if (g) return g;
       }
-      return "PUBLICO";
-    } catch (e) { return "PUBLICO"; }
+      return "COMPLETO";
+    } catch (e) { return "COMPLETO"; }
   }
   // Las TRES capas de compuerta usan esto: (a) no construir la UI, (b) no
   // abrir el modal, (c) re-comprobar justo antes de escribir. BLOQUEADO no
   // ve NADA; las públicas valen para todos los no bloqueados; COMPLETO ve
   // todo; LABORATORIOS solo sus siete capacidades.
+  // v18.8.1 — la REVOCACIÓN granular se consulta después de BLOQUEADO y antes
+  // del perfil: una función revocada se cierra aunque el perfil la conceda
+  // (corta la ejecución y la escritura — capas b y c —, NUNCA la visibilidad).
   function accesoCap(cap) {
     const perfil = accesoPerfil();
     if (perfil === "BLOQUEADO") return false;
+    if (permisosCapRevocada(cap)) return false;
     if (ACCESO_CAPS_PUBLICAS.includes(cap)) return true;
     if (perfil === "COMPLETO") return true;
     if (perfil === "LABORATORIOS") return ACCESO_CAPS_LABORATORIOS.includes(cap);
@@ -12984,20 +13218,10 @@
       if (localStorage.getItem(k) === todayStamp()) return;
       localStorage.setItem(k, todayStamp());
       const perfil = accesoPerfil();
-      // v18.3.4 — SEGUNDA PUERTA CIEGA de la clase «no sale nada»: el médico
-      // aceptó los Términos sin identidad («sin-identidad-aceptado»), boot()
-      // arrancó y ya resolvió quién es, pero el padrón no lo trae (o la lista
-      // quedó corrupta): el núcleo corre recortado a PÚBLICO sin dejar rastro
-      // — a esta altura la compuerta ya decidió y no vuelve a opinar. Este
-      // reporte es el único punto 1/día que YA consulta el perfil, así que
-      // aquí (y nunca en cada tick de accesoPerfil) se deja el MISMO
-      // diagnóstico de GM de la compuerta: motivo fijo «publico-con-sesion».
-      // Se pasa SIN `arrancar`, que así pasa el guard de rutas de incidencia
-      // de mtrCompuertaDiagnostico sin tocarlo. Sin PHI: motivo + login
-      // sí/no + versión + ts.
-      if (perfil === "PUBLICO" && mtrLoginDeSesion()) {
-        try { mtrCompuertaDiagnostico({ motivo: "publico-con-sesion" }); } catch (e) {}
-      }
+      // v18.8.1 — con el fail-open el perfil PÚBLICO ya no existe (un médico
+      // con sesión fuera del padrón resuelve COMPLETO), así que la puerta
+      // ciega «publico-con-sesion» de v18.3.4 murió con ella: el reporte
+      // diario solo informa el perfil efectivo, sin diagnóstico de compuerta.
       reportar("acceso", {
         uid,
         nombre: String((state && state.activeDoctor && state.activeDoctor.name) || "").slice(0, 100),
@@ -26257,7 +26481,7 @@
     if (!togActiva("tog_laboratorios")) return false;   // v18.6.1 (F3): compuerta de toggle
     // v18.1.0 — B3 (capa b): compuerta de acceso. `laboratorios` es capacidad
     // privada; sin ella la apertura corta en seco, antes de leer nada del paciente.
-    if (!accesoCap("laboratorios")) return;
+    if (!accesoCap("laboratorios")) { _permisoCorte("laboratorios"); return; }
     const _lo = opts || {};   // v18.0.115 (C11): { nuevos: true } fuerza la consulta en vivo
     let _labsDePrecargaSeg = null;   // segundos de antigüedad si se sirvió la precarga
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -26992,7 +27216,7 @@
     // v18.1.0 — B3 (capa b): `redactor_ia` es de COMPLETO. La puerta del dock
     // corta en seco, antes de leer datos clínicos; mtrAbrirPanelRedaccion
     // re-comprueba al montar (defense-in-depth).
-    if (!accesoCap("redactor_ia")) return;
+    if (!accesoCap("redactor_ia")) { _permisoCorte("redactor_ia"); return; }
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     if (!(typeof S !== "undefined" && S.iaRedaccion === true) || !mtrHayClaveIA()) {
       showToast("AMBAR", "Redactar con IA", "La redacción con IA aún no está activada en este computador. Pida al administrador del asistente activarla — es un paso único por equipo.", false);
@@ -28018,7 +28242,7 @@
     if (!togActiva("tog_pacientes")) return false;      // v18.6.1 (F3): compuerta de toggle
     // v18.1.0 — B3 (capa b): `panel_paciente` es de COMPLETO; sin la capacidad
     // la apertura corta en seco, antes de leer nada del paciente.
-    if (!accesoCap("panel_paciente")) return;
+    if (!accesoCap("panel_paciente")) { _permisoCorte("panel_paciente"); return; }
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     const origen = (opts && opts.origen) || "panel";
     try { uxTrack("fn.panel.open", { origen: origen }); } catch (e) {}
@@ -28948,7 +29172,7 @@
     if (togActiva("tog_agendar_labs")) return openLabSoloModal(apt);
     // v18.1.0 — B3 (capa b): `agendar_control` es de COMPLETO. Sin la capacidad
     // la apertura corta en seco (LABORATORIOS agenda la toma por openLabSoloModal).
-    if (!accesoCap("agendar_control")) return;
+    if (!accesoCap("agendar_control")) { _permisoCorte("agendar_control"); return; }
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
     // v15.2.0 — Embudo del modal: abrir -> elegir horario -> crear cita/abandonar.
     // v15.3.0 — Restituido tras adoptar el rediseño de 3 pasos: la version nueva del modal
@@ -31493,7 +31717,7 @@
   async function openLabSoloModal(apt, opts) {
     // v18.1.0 — B3 (capa b): `agendar_labs` (toma de muestras) es de LABORATORIOS
     // y COMPLETO; PÚBLICO y BLOQUEADO no abren. Corta en seco, antes de leer nada.
-    if (!accesoCap("agendar_labs")) return;
+    if (!accesoCap("agendar_labs")) { _permisoCorte("agendar_labs"); return; }
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
 
     // v14.2.0 — MODO LIBRE (encargo del médico): también se puede agendar SOLO la toma de
@@ -35492,6 +35716,17 @@
           return `<div class="vgl-fld${esHijo && !togActiva(def.sub) ? " vgl-d-none" : ""}"${esHijo ? ` id="vgl-togsub-${def.k}"` : ""}><label>${def.label}<span class="vgl-hint">${def.desc}${esHijo ? " Solo se muestra con «" + padreLabel + "» encendido." : ""}</span></label>${sw("c-tog-" + def.k.replace(/^tog_/, ""), togActiva(def.k))}</div>`;
         }).join("")}
       </div>`;
+    // v18.8.1 — PERMISOS POR MÉDICO (administración). Misma compuerta visual que
+    // los toggles F3 (solo el perfil COMPLETO lo ve). Default ON: cada casilla
+    // nace marcada (= nada revocado) para médicos existentes y nuevos. Cambios
+    // EN CALIENTE (sin borrador de vgl_cfg): la revocación aplica en el acto y
+    // cada cambio se audita (local + evento remoto «permiso_cambio»).
+    const grpPermisos = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
+        <div class="vgl-set-cap vgl-cap-morado"><i></i>Permisos por médico (administración)</div>
+        <div class="vgl-fld"><span class="vgl-hint">Decida qué funciones puede EJECUTAR cada médico de este equipo. Todos siguen VIENDO los botones: al desactivar una función, el botón queda visible pero avisa que está desactivada y no abre. Por defecto todo queda encendido (ON). Escriba la cédula (uid) o el nombre completo del médico, pulse Añadir y desmarque lo que corresponda. Cada cambio queda anotado con quién lo hizo, cuándo, a qué médico y qué función (auditoría). No puede desactivarse funciones a sí mismo.</span></div>
+        <div class="vgl-fld"><label>Médico (cédula o nombre completo)</label><div style="display:flex;gap:8px;align-items:center"><input type="text" id="c-perm-medico" autocomplete="off" spellcheck="false" placeholder="ej. 12345678 o PEPITO PEREZ"><button class="vgl-btn" id="c-perm-add">Añadir</button></div></div>
+        <div id="c-perm-lista">${permisosListaHtml()}</div>
+      </div>`;
     // v15.6.1 — El grupo de Athenea es configuración DE INSTALACIÓN (una vez por equipo,
     // la hace el programador): solo se pinta en modo programador. Reporte del 20-08.
     const grpAthenea = !isDevMode ? "" : `      <div class="vgl-grp">
@@ -35545,6 +35780,9 @@
       <!-- v18.6.2 — Funcionalidades por médico: solo se pinta para el perfil
            COMPLETO (compuerta accesoCap("toggles_funcionalidades") en grpToggles). -->
       ${grpToggles}
+      <!-- v18.8.1 — Permisos por médico (administración): revocación granular
+           con auditoría. Misma compuerta visual que los toggles F3. -->
+      ${grpPermisos}
       <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
            compartida por la sede (confirmado: Athenea no tiene login por médico). -->
       ${grpAthenea}
@@ -35703,6 +35941,65 @@
         } catch (e) {}
       });
     });
+    // v18.8.1 — MENÚ DE PERMISOS POR MÉDICO: cambios EN CALIENTE (permisosLocalSet
+    // reasigna la caché en memoria al instante), auditoría por cambio y D5: el
+    // médico en sesión NO puede desactivarse funciones a sí mismo (no las
+    // necesita apagadas para administrar a otros; sus revocaciones reales se
+    // administran desde el padrón remoto).
+    { const addBtn = q("#c-perm-add");
+      if (addBtn) addBtn.addEventListener("click", () => {
+        const inp = q("#c-perm-medico");
+        const texto = (inp && inp.value || "").trim();
+        if (!texto) { try { showToast("AMBAR", "Permisos", "Escriba la cédula o el nombre completo del médico.", false); } catch (e) {} return; }
+        const esUid = /^\d+$/.test(texto);
+        permisosLocalSet(esUid ? Number(texto) : 0, esUid ? "" : texto);
+        permisosAuditAnotar({ medico: esUid ? "uid:" + Number(texto) : "nombre:" + mtrNormalizarNombre(texto), funcion: "*", estado: "entrada-anadida" });
+        if (inp) inp.value = "";
+        const lista = q("#c-perm-lista");
+        if (lista) lista.innerHTML = permisosListaHtml();
+        try { uxTrack("permisos.menu.anadir", { tipo: esUid ? "uid" : "nombre" }); } catch (e) {}
+        try { showToast("VERDE", "Permisos", "Médico añadido a la lista. Las casillas muestran su estado actual (todo encendido salvo lo que ya tenga revocado en el padrón). Desmarque lo que quiera desactivarle.", false); } catch (e) {}
+      }); }
+    { const lista = q("#c-perm-lista");
+      if (lista) {
+        lista.addEventListener("click", (ev) => {
+          const btn = ev.target;
+          if (!btn || !btn.dataset || !btn.dataset.permQuitar) return;
+          const quien = String(btn.dataset.permQuitar || "");
+          const uid = quien.indexOf("uid-") === 0 ? (Number(quien.slice(4)) || 0) : 0;
+          let nombre = "";
+          if (!uid) { try { nombre = decodeURIComponent(quien.slice(4) || ""); } catch (e) { nombre = quien.slice(4) || ""; } }
+          permisosLocalQuitar(uid, nombre);
+          permisosAuditAnotar({ medico: uid ? "uid:" + uid : "nombre:" + mtrNormalizarNombre(nombre), funcion: "*", estado: "entrada-eliminada" });
+          lista.innerHTML = permisosListaHtml();
+          try { uxTrack("permisos.menu.quitar"); } catch (e) {}
+          try { showToast("AZUL", "Permisos", "Fila local retirada: el médico vuelve al estado del padrón.", false); } catch (e) {}
+        });
+        lista.addEventListener("change", (ev) => {
+          const cb = ev.target;
+          if (!cb || cb.type !== "checkbox" || !cb.dataset || !cb.dataset.permCap) return;
+          const quien = String(cb.dataset.permQuien || "");
+          const cap = String(cb.dataset.permCap || "");
+          const uid = quien.indexOf("uid-") === 0 ? (Number(quien.slice(4)) || 0) : 0;
+          let nombre = "";
+          if (!uid) { try { nombre = decodeURIComponent(quien.slice(4) || ""); } catch (e) { nombre = quien.slice(4) || ""; } }
+          if (!uid && !nombre) return;
+          const activo = (state && state.activeDoctor) || {};
+          const esUnoMismo = (uid && Number(activo.id) === uid) || (nombre && mtrNormalizarNombre(activo.name) === mtrNormalizarNombre(nombre));
+          if (esUnoMismo && !cb.checked) {
+            cb.checked = true;   // D5: deshacer el desmarque en el acto
+            try { showToast("AMBAR", "Permisos", "No puede desactivarse funciones a sí mismo. Sus revocaciones se administran desde el padrón (hoja «acceso» del tablero).", false); } catch (e) {}
+            return;
+          }
+          const marcadas = new Set(Array.from(lista.querySelectorAll('input[type="checkbox"][data-perm-quien="' + quien + '"]:checked')).map((x) => x.dataset.permCap));
+          const on = [], off = [];
+          for (const c of PERMISOS_CAPS_REVOCABLES) { (marcadas.has(c) ? on : off).push(c); }
+          permisosLocalSet(uid, nombre, { on, off });
+          permisosAuditAnotar({ medico: uid ? "uid:" + uid : "nombre:" + mtrNormalizarNombre(nombre), funcion: cap, estado: cb.checked ? "on" : "off" });
+          try { uxTrack("permisos.menu.cambio", { cap: cap, on: cb.checked }); } catch (e) {}
+          try { showToast(cb.checked ? "VERDE" : "AMBAR", "Permisos", (cb.checked ? "Activada: " : "Desactivada: ") + (PERMISOS_ROTULOS[cap] || cap) + (uid ? " (uid " + uid + ")" : "") + ". Aplica de inmediato y queda anotado en la auditoría.", false); } catch (e) {}
+        });
+      } }
     // v12.5.2 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
     // comportamiento; la credencial compartida se guarda aparte y nunca se registra en
     // consola ni en telemetría.
@@ -39059,9 +39356,9 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   // consentimiento) y sin state.activeDoctor (boot aún no corrió). La identidad
   // sale del login de sesión + la caché GM de la última validación que Everest SÍ
   // hizo para ese login — se acepta vencida: la red está vetada hasta aceptar y
-  // boot() revalida en cuanto corre. Sin identidad, la gracia de 12 h del núcleo
-  // ACCESO respalda al médico confirmado antes en este equipo (misma regla D2).
-  // Fall-closed: cualquier duda termina en PÚBLICO y PÚBLICO no monta NADA.
+  // boot() revalida en cuanto corre. v18.8.1 — FAIL-OPEN (pedido del médico del
+  // 08-sep-2026): cualquier duda termina en COMPLETO, no en PÚBLICO. El padrón
+  // solo puede PROMOVER a LABORATORIOS o BLOQUEAR (blocklist); nunca recorta.
   function mtrCompuertaPerfil() {
     try {
       // SharePoint: no hay localStorage de Everest en ese origen, el padrón no es
@@ -39083,8 +39380,8 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         const g = _accesoGracia();
         if (g) return g;
       }
-      return "PUBLICO";
-    } catch (e) { return "PUBLICO"; }
+      return "COMPLETO";
+    } catch (e) { return "COMPLETO"; }
   }
 
   // Constancia de aceptación. SOLO sirve si es de la versión VIGENTE: subir
@@ -39108,45 +39405,19 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     } catch (e) { return false; }
   }
 
-  // v18.3.2 — ¿Esta máquina no tiene NI rastro de identidad del médico en
-  // sesión? (login presente pero sin caché GM de la última validación que
-  // Everest hizo de ese login.) Es el estado de TODA primera instalación, y es
-  // un deadlock sin esta vía: el único escritor de esa caché vive DENTRO de
-  // boot() (resolverMedicoPorPerfil → GetUsuarioPerfil) y boot() solo corre si
-  // la compuerta lo deja — la puerta que esa misma identidad mantiene cerrada.
-  // Incidencia real (Dra. Gloria, 05-09-2026): médica recién autorizada en el
-  // padrón, máquina nueva, "no aparece nada" para siempre aunque el tablero
-  // SÍ la sirva; borrar cookies no ayuda (la identidad no vive ahí).
-  function mtrCompuertaSinIdentidad() {
-    // v18.3.4 — el catch también es fail-closed: una excepción NO es «hay
-    // identidad» (esa lectura errónea callaba en fuera-del-padron), es «no se
-    // pudo saber» → true abre la pantalla de Términos y boot()/accesoCap()
-    // deciden después (la pantalla no toca red; PÚBLICO no monta nada).
-    try { return !_identidadMedicoCacheLeer(mtrLoginDeSesion(), true); }
-    catch (e) { return true; }
-  }
-
   // La decisión de la compuerta, PURA (sin DOM, sin red): la usan el arranque y
-  // las pruebas. arrancar=true solo con padrón Y consentimiento vigentes.
+  // las pruebas.
+  // v18.8.1 — RESTRICCIONES DE INICIO RETIRADAS (pedido del médico del 08-sep-2026:
+  // «retira las restricciones de inicio y uso del script, solamente pon la
+  // aceptación de términos y condiciones y listo»). La decisión es SOLO
+  // consentimiento: aceptado → arranca; rechazo fresco → silencio; sin constancia
+  // → pantalla de términos, se pregunte a quien se pregunte (con o sin sesión, en
+  // el padrón o fuera de él — el padrón ya no cierra la puerta a nadie). La ÚNICA
+  // excepción es la blocklist: BLOQUEADO sigue en silencio total, porque es una
+  // decisión activa del dueño, no una restricción de arranque. El kill-switch
+  // remoto sigue cortando el arranque dentro de boot() como red de emergencia.
   function mtrCompuertaDecision() {
-    const perfil = mtrCompuertaPerfil();
-    if (perfil === "BLOQUEADO") return { arrancar: false, pantalla: null, motivo: "bloqueado" };
-    if (perfil !== "COMPLETO" && perfil !== "LABORATORIOS") {
-      // v18.3.2 — MÉDICO NUEVO EN MÁQUINA NUEVA: sin identidad la compuerta no
-      // puede NI validar ni refutar (el refresco del padrón de v18.3.1 arregla
-      // la LISTA, no la identidad). En vez del silencio, se muestran los
-      // términos y la capa ACCESO del núcleo decide DESPUÉS, con la identidad
-      // ya resuelta dentro de boot(): sin red ni nodo antes del "sí" (la
-      // pantalla no toca red), y si quien acepta no está en el padrón,
-      // accesoCap() no monta NADA (PÚBLICO no construye UI). Requiere login de
-      // sesión: sin sesión no se le pregunta a nadie.
-      if (mtrCompuertaSinIdentidad() && mtrLoginDeSesion()) {
-        if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "sin-identidad-aceptado" };
-        if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
-        return { arrancar: false, pantalla: "terminos", motivo: "sin-identidad" };
-      }
-      return { arrancar: false, pantalla: null, motivo: "fuera-del-padron" };
-    }
+    if (mtrCompuertaPerfil() === "BLOQUEADO") return { arrancar: false, pantalla: null, motivo: "bloqueado" };
     if (mtrConsentimientoAceptado()) return { arrancar: true, pantalla: null, motivo: "aceptado" };
     if (mtrTerminosRechazoFresco()) return { arrancar: false, pantalla: null, motivo: "rechazo-fresco" };
     return { arrancar: false, pantalla: "terminos", motivo: "preguntar" };
@@ -39371,33 +39642,22 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
 
   // Punto de entrada único del script (v18.2, P11). Fail-closed: ante cualquier
   // excepción en la decisión, no se monta nada.
-  // v18.3.1 — ARREGLO DEL DEADLOCK DE ARRANQUE (incidencia real): el refresco del
-  // padrón solo corría DENTRO de boot(), pero boot() solo corre si el padrón en
-  // CACHÉ ya autoriza → una máquina sin caché válida (primera instalación de una
-  // médica nueva) o con caché envenenada jamás se auto-reparaba: "no sale nada"
-  // sin remedio local, porque el único escritor de la caché vive tras la puerta
-  // que esa misma caché mantiene cerrada. Ahora, ANTES de resignarse al silencio
-  // del veredicto «fuera-del-padron», la compuerta intenta UN refresco del padrón
-  // SIN forzar (respeta el sello de 4 h: una máquina fuera del padrón no martilla
-  // el tablero en cada carga; un sello de fallo no bloquea el reintento) y
-  // re-decide una sola vez con lo que haya quedado en caché. BLOQUEADO, rechazo
-  // fresco y excepción NO se refrescan: su silencio es intencional. La función es
-  // async SOLO por este camino; con caché sana todo corre igual que siempre
-  // (síncrono hasta pintar la pantalla o arrancar).
-  // v18.3.3 — DIAGNÓSTICO DE COMPUERTA: incidencia real (Dra. Gloria,
-  // 05-09-2026): ya con el fix de sin-identidad despliegado, seguía "no
-  // aparece nada" y NO había forma de saber desde afuera qué rama estaba
-  // callando (fuera-del-padron con login no detectado, rechazo fresco,
-  // aceptado-perfuera-del-padron…). Ahora la compuerta deja escrito su
-  // veredicto en el almacenamiento GM (legible en Panel de TM → este script
-  // → pestaña Almacenamiento, clave vgl_compuerta_diagnostico) y una línea
-  // en consola. Sin PHI: motivo + sí/no hay login + versión + fecha.
+  // v18.8.1 — RESTRICCIONES DE INICIO RETIRADAS (pedido del médico del 08-sep-2026):
+  // la decisión es SOLO consentimiento, así que el rescate del padrón de v18.3.1
+  // (deadlock de arranque) y la vía sin-identidad de v18.3.2 dejaron de existir:
+  // no hay padrón que rescatar cuando el padrón no cierra la puerta. El padrón se
+  // refresca por su vía normal dentro de boot() (sello de 4 h), sin condicionar
+  // jamás el arranque. La función volvió a ser síncrona.
+  // v18.3.3 — DIAGNÓSTICO DE COMPUERTA: la compuerta deja escrito su veredicto en
+  // el almacenamiento GM (legible en Panel de TM → este script → pestaña
+  // Almacenamiento, clave vgl_compuerta_diagnostico) y una línea en consola.
+  // Sin PHI: motivo + sí/no hay login + versión + fecha.
   function mtrCompuertaDiagnostico(decision) {
-    // Solo en las rutas de INCIDENCIA (fuera-del-padron, sin-identidad,
-    // rechazo-fresco, bloqueado, excepción): la pantalla de términos rutinaria
-    // del médico del padrón («preguntar») y el arranque normal no dejan rastro
-    // — P11·4 exige que el camino aceptar→arrancar no escriba ninguna clave
-    // aparte de la constancia, y P11·19 exige rastro en las rutas mudas.
+    // Solo en las rutas de INCIDENCIA (bloqueado, rechazo-fresco, excepción):
+    // la pantalla de términos rutinaria («preguntar») y el arranque normal no
+    // dejan rastro — P11·4 exige que el camino aceptar→arrancar no escriba
+    // ninguna clave aparte de la constancia, y P11·19 exige rastro en las
+    // rutas mudas.
     if (decision && (decision.arrancar || decision.motivo === "preguntar")) return;
     try {
       const login = mtrLoginDeSesion();
@@ -39407,15 +39667,10 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     } catch (e) {}
   }
 
-  async function mtrCompuertaArranque() {
+  function mtrCompuertaArranque() {
     let decision;
     try { decision = mtrCompuertaDecision(); }
     catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
-    if (!decision.arrancar && decision.motivo === "fuera-del-padron") {
-      try { await accesoRefrescarLista(); } catch (e) {}
-      try { decision = mtrCompuertaDecision(); }
-      catch (e) { decision = { arrancar: false, pantalla: null, motivo: "excepcion:" + String((e && e.message) || e) }; }
-    }
     mtrCompuertaDiagnostico(decision);
     if (decision.arrancar) {
       try { mtrArrancarTodo(); } catch (e) { console.error("[Vigilante] arranque post-consentimiento falló:", e); }
@@ -39425,8 +39680,8 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       try { mtrTerminosPantalla(); } catch (e) { console.error("[Vigilante] no se pudo mostrar la pantalla de términos:", e); }
       return;
     }
-    // Fuera del padrón, bloqueado, rechazo fresco o fallo: silencio total. Ni
-    // pantalla, ni nodo, ni evento — el script no existe para esta pestaña.
+    // Bloqueado, rechazo fresco o fallo: silencio total. Ni pantalla, ni nodo,
+    // ni evento — el script no existe para esta pestaña.
   }
 
   // Fila de Ajustes: la versión vigente de los términos siempre visible (§7 de la
@@ -49487,7 +49742,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     // v18.1.0 — B3 (capa b): segunda puerta de `redactor_ia`. abrirRedactorTextoLibre
     // ya filtra la entrada del dock; este montaje re-comprueba para cualquier otro
     // llamador. Defense-in-depth: sin la capacidad no se monta el panel de IA.
-    if (!accesoCap("redactor_ia")) return;
+    if (!accesoCap("redactor_ia")) { _permisoCorte("redactor_ia"); return; }
     try {
       if (!resumen) { setSummary("No hay resumen clínico para redactar.", "warn"); return; }
       try { uxTrack("fn.ia.open"); } catch (e) {}

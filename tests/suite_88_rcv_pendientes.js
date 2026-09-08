@@ -3,12 +3,14 @@
 //
 //  Encargo del equipo de riesgo cardiovascular (06-sep-2026). Esta suite
 //  protege, en una frase: que el panel SOLO se pinte dentro de la historia
-//  clínica de un paciente abierto y SOLO para el equipo autorizado (la
-//  capacidad «rcv» del padrón de acceso — nadie más), que cada fila muestre
-//  Última→Vence con el estado correcto contra la UNA tabla de vigencias del
-//  paquete I10X (RCV_VIGENCIA_DIAS), que un fallo de red nunca oculte un
-//  pendiente (D4), y que el refresco en vivo refleje una orden nueva sin
-//  recargar la interfaz.
+//  clínica de un paciente abierto y SOLO cuando accesoCap("rcv") lo conceda
+//  (v18.4.2: la capacidad «rcv» del perfil COMPLETO del padrón; v18.8.1
+//  fail-open: todo médico NO bloqueado resuelve COMPLETO, y la cap se recorta
+//  por función desde la columna `off` del padrón o desde los permisos locales
+//  vgl_permisos_locales), que cada fila muestre Última→Vence con el estado
+//  correcto contra la UNA tabla de vigencias del paquete I10X
+//  (RCV_VIGENCIA_DIAS), que un fallo de red nunca oculte un pendiente (D4),
+//  y que el refresco en vivo refleje una orden nueva sin recargar la interfaz.
 //
 //  Los NOMBRES del padrón no viven en el userscript (7A): la suite los
 //  siembra en `vgl_acceso_lista` como lo haría la lista remota (patrón de
@@ -246,13 +248,57 @@ module.exports = {
       t.cierto(!!w && w.style.display === "", "visible");
     });
 
-    await t.casoAsync("permiso: PÚBLICO, LABORATORIOS, BLOQUEADO y sin identidad NO ven el panel", async () => {
-      for (const [uid, nombre] of [[555, "Médico Nuevosur del Hospital"], [201, "Maryuris Terán"], [999, "Prueba Bloqueada Uno"], [0, ""]]) {
+    await t.casoAsync("permiso (v18.8.1 fail-open): LABORATORIOS y BLOQUEADO NO ven el panel; fuera del padrón y sin identidad SÍ lo ven", async () => {
+      // v18.8.1 — el perfil PÚBLICO ya no existe. Esta prueba sembraba fuera del padrón
+      // (555) y sin identidad (0, "") esperando accesoCap("rcv") = false; con el
+      // fail-open accesoPerfil() resuelve COMPLETO para todo médico NO bloqueado y la
+      // cap «rcv» se concede — solo recortan la blocklist (999) y el perfil LABORATORIOS
+      // (201: «rcv» no está en su lista de capacidades). La compuerta real del panel
+      // (rcvPendientesDebeVerse: cap + ruta HCHealth + sección historia + paciente
+      // abierto) NO exige identidad del médico, así que el (0, "") de antes también
+      // monta hoy: se aserta el comportamiento real del guard, no el del contrato viejo.
+      for (const [uid, nombre] of [[201, "Maryuris Terán"], [999, "Prueba Bloqueada Uno"]]) {
         const { c } = ctx88(uid, nombre);
         t.falso(c.api.esMedicoRCVActivo(), "precondición sin rcv: " + nombre);
         await c.api.rcvPendientesTick();
         t.falso(montado88(c), "no se monta para uid " + uid);
       }
+      const fueraPadron = ctx88(555, "Médico Nuevosur del Hospital");
+      t.cierto(fueraPadron.c.api.esMedicoRCVActivo(), "v18.8.1: fuera del padrón resuelve COMPLETO y «rcv» está activa");
+      await fueraPadron.c.api.rcvPendientesTick();
+      t.cierto(montado88(fueraPadron.c), "el panel SÍ se monta para el médico fuera del padrón (fail-open)");
+      const anon = ctx88(0, "");
+      t.cierto(anon.c.api.esMedicoRCVActivo(), "v18.8.1: sin identidad tampoco recorta — accesoPerfil() = COMPLETO");
+      await anon.c.api.rcvPendientesTick();
+      t.cierto(montado88(anon.c), "y el panel se monta (la compuerta real no exige identidad de médico)");
+    });
+
+    await t.casoAsync("v18.8.1 revocación granular: COMPLETO con «rcv» en off (vgl_permisos_locales) no ve el panel; al quitar la entrada vuelve a verlo", async () => {
+      // v18.8.1 — accesoCap("rcv") cruza el perfil con permisosCapRevocada(): la clave
+      // GM vgl_permisos_locales lleva entradas {uid?, nombre?, off:[caps]} del menú
+      // Ajustes → «Permisos por médico». El médico 101 es COMPLETO del padrón (cap
+      // concedida por perfil), pero la entrada local la revoca: ejecución cortada. Sin
+      // entrada local (default ON) o con `on`/`off` cambiados, el padrón vuelve a mandar.
+      const { c } = ctx88(101, "Brandon Jesús Palencia Martínez");
+      // Se siembra ANTES de la primera consulta: la caché del módulo (_permisosLocales)
+      // se congela tras su primer acceso; permisosLocalesEscribir la re-sincroniza igual.
+      const loc = [{ uid: 101, off: ["rcv"] }];
+      c.env.gm["vgl_permisos_locales"] = loc;
+      try { c.api.permisosLocalesEscribir(loc); } catch (e) {}
+      t.cierto(c.api.permisosCapRevocada("rcv"), "precondición: «rcv» está revocada para el uid 101");
+      t.falso(c.api.permisosCapRevocada("centinela"), "«centinela» NO es revocable jamás (apagar el monitor es oficio de la blocklist)");
+      t.falso(c.api.esMedicoRCVActivo(), "precondición: con la cap revocada la compuerta del panel cierra");
+      await c.api.rcvPendientesTick();
+      t.falso(montado88(c), "COMPLETO con «rcv» revocada NO ve el panel");
+      // El administrador quita la entrada local → default ON (vuelve a mandar el padrón).
+      const quitada = c.api.permisosLocalQuitar(101, "Brandon Jesús Palencia Martínez");
+      t.cierto(!!quitada && Array.isArray(quitada.off) && quitada.off.indexOf("rcv") >= 0, "la entrada local se retiró");
+      t.falso(c.api.permisosCapRevocada("rcv"), "sin la entrada local la cap vuelve a estar activa");
+      t.cierto(c.api.esMedicoRCVActivo(), "y la compuerta del panel abre otra vez");
+      await c.api.rcvPendientesTick();
+      t.cierto(montado88(c), "al quitar la revocación el panel vuelve a montarse");
+      const w = widget88(c);
+      t.cierto(!!w && w.innerHTML.indexOf("Programa: Hipertensión arterial") >= 0, "y muestra el contenido real del paciente");
     });
 
     // ==================== INTEGRACIÓN: CONTEXTO/RUTA ====================
