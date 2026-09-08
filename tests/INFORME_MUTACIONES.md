@@ -13641,3 +13641,10 @@ ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre f
 |---|---|---|---|
 | user.js `createAccionesDockUI` (guard de presencia de pestaña, ~L8743) | `if (_tabImp)` → `if (true)`: el botón «Impresión Diagnóstica» nace AUNQUE la pestaña no esté montada (pantalla distinta al editor de la nota) — el dock ofrece un acceso directo muerto que siempre termina en aviso ámbar | NO | *suite_98* casos «sin pestañas montadas… los botones no nacen» y «firma del dock: al MONTARSE la pestaña después…» (primer tramo, que exige ausencia sin pestaña): mutante 2 rojos (4 ok); restaurado 6/0 |
 | user.js `createAccionesDockUI` (firma `_sigDock`, ~L8500) | segmento `_tabImp ? "TI" : "ti"` fuera de la firma: la presencia de la pestaña deja de entrar en el contrato de repintado — si la pestaña se monta después del dock, el botón no reaparece solo | NO | *suite_15* caso «v18.0.118 (UI/UX #5)…» (aserción de firma actualizada para cubrir RS/rs + TI/ti + TC/tc): mutante 1 rojo (273 ok); restaurado 274/0 |
+
+## v18.8.0 (DeepSeek, mandato «edición de los prompts adaptándolos a deepseek v4 flash») — Tercer proveedor de IA como primario
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `MTR_PROVEEDORES_IA.deepseek.cuerpo` (~L47960) | `messages.unshift({ role: "system", content: system })` → `role: "assistant"`: el prompt de sistema viaja como turno de asistente — deepseek lo leería como parte del diálogo, no como instrucción, y todo el contrato OpenAI del proveedor queda roto | NO | *suite_99* caso DS·1 «contrato del proveedor deepseek»: mutante 1 rojo (ancla literal byte-exacta con `"role":"system"`); restaurado 10/10 |
+

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.7.0
+// @version      18.8.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -26,6 +26,7 @@
 // @connect      gist.githubusercontent.com
 // @connect      generativelanguage.googleapis.com
 // @connect      api.z.ai
+// @connect      api.deepseek.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -1036,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.7.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -35574,9 +35575,12 @@
              sección visible: el médico no tiene nada que decidir ahí (reporte del 20-08,
              pantallazo). Se conserva aquí como referencia de comportamiento. -->
         <div class="vgl-fld"><label>Aviso del paciente al abrir la historia<span class="vgl-hint">Referencia: un único aviso por paciente reúne, al abrir su historia, las actividades de prevención (PyM) pendientes, el abandono del Programa de Riesgo Cardiovascular y los laboratorios RCV sin resultado vigente (últimos 180 días). Siempre activo, sin interruptores separados.</span></label><span class="vgl-hint" style="opacity:.85">Siempre activo</span></div>
-        <!-- v18.2 — dos proveedores: z.ai (GLM-5.3) principal y Gemini de respaldo. -->
-        <div class="vgl-fld"><label>Clave de la IA (z.ai — principal)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). El redactor usa GLM-5.3 con esta clave; si falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
-        <div class="vgl-fld"><label>Clave de la IA (Gemini — respaldo)<span class="vgl-hint">Se usa sola si no hay clave de z.ai, o como único reintento cuando GLM-5.3 falla. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <!-- v18.2 — dos proveedores: z.ai (GLM-5.3) principal y Gemini de respaldo.
+             v18.8.0 — tres: deepseek-v4-flash (principal si hay clave), z.ai (solo si no
+             hay clave deepseek) y Gemini (respaldo de ambos). -->
+        <div class="vgl-fld"><label>Clave de la IA (DeepSeek — principal)<span class="vgl-hint">Clave de la API de DeepSeek (api.deepseek.com). El redactor usa deepseek-v4-flash con esta clave; si falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-deepseek-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Clave de la IA (z.ai — alternativo)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). Solo se usa si NO hay clave de DeepSeek; si GLM-5.3 falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Clave de la IA (Gemini — respaldo)<span class="vgl-hint">Se usa sola si no hay clave de DeepSeek ni de z.ai, o como único reintento cuando el principal falla. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
         <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere alguna de las claves de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO; v18.0.144 — ya NO guarda historias clínicas
              identificadas: es un CACHÉ mínimo, cifrado y seudonimizado (sin cédulas dentro
@@ -35765,7 +35769,21 @@
         iaKey.value = v ? "••••••••" : "";
       });
     }
+    // v18.8.0 — clave de DeepSeek (deepseek-v4-flash, principal si hay clave):
+    // mismo patrón de máscara que Gemini/z.ai.
+    const dsKey = q("#c-deepseek-key");
+    if (dsKey) {
+      try { dsKey.value = mtrLeerClaveDeepseek() ? "••••••••" : ""; } catch (e) {}
+      dsKey.addEventListener("change", () => {
+        let v = String(dsKey.value || "");
+        if (/^[•\s]+$/.test(v)) return;                  // solo la máscara: no la tocó
+        v = v.replace(/[•]/g, "").trim();
+        mtrGuardarClaveDeepseek(v);                      // v vacío la borra
+        dsKey.value = v ? "••••••••" : "";
+      });
+    }
     // v18.2 — clave de z.ai (proveedor principal, GLM-5.3): mismo patrón de máscara que Gemini.
+    // v18.8.0 — pasa a ser ALTERNATIVO: solo entra si no hay clave de DeepSeek.
     const zaiKey = q("#c-zai-key");
     if (zaiKey) {
       try { zaiKey.value = mtrLeerClaveZai() ? "••••••••" : ""; } catch (e) {}
@@ -38795,8 +38813,8 @@ responsabilidad profesional frente a sus pacientes ni frente a la ley.
 ### T-16 · Inteligencia artificial con supervisión humana
 Cuando usted usa la función de redacción asistida, el programa **nunca envía el texto completo**:
 reconstruye un borrador a partir de una lista cerrada de campos y lo envía —sin nombre, documento
-ni dato que identifique al paciente— a un servicio de inteligencia artificial: Z.ai (GLM) o
-Google Gemini, según cuál esté configurado en el panel. Su clave de ese servicio se guarda
+ni dato que identifique al paciente— a un servicio de inteligencia artificial: DeepSeek
+(deepseek-v4-flash), Z.ai (GLM) o Google Gemini, según cuál esté configurado en el panel. Su clave de ese servicio se guarda
 únicamente en su navegador y nunca se envía a ningún otro destino. Lo que vuelve es un borrador
 que usted lee, corrige y decide si inserta: nada se inserta en la historia clínica sin su acción
 expresa. Si prefiere no usar esa función, no la use: el resto de la herramienta funciona igual.
@@ -46665,11 +46683,22 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   function mtrLeerClaveZai() {
     try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_ZAI_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
   }
-  // ¿Hay ALGUNA clave de IA configurada (z.ai o Gemini)? Los gates de entrada al
-  // redactor (dock, inyectores, panel, Generar) preguntan esto, no por un proveedor
-  // concreto: el médico no elige proveedor, la escalera sí.
+  // v18.8.0 — CLAVE DE DEEPSEEK (deepseek-v4-flash, API oficial api.deepseek.com).
+  // Mismo patrón ofuscado que z.ai/Gemini: la fija el médico en Ajustes, nunca en
+  // claro ni en logs. Si está presente, es el PRIMARIO de la escalera (por delante
+  // de z.ai); Gemini sigue siendo el respaldo de siempre.
+  const MTR_DEEPSEEK_KEY = "vgl_deepseek_key";
+  function mtrGuardarClaveDeepseek(clave) {
+    try { if (typeof GM_setValue === "undefined") return false; const c = String(clave || "").trim(); if (!c) { GM_setValue(MTR_DEEPSEEK_KEY, null); return true; } GM_setValue(MTR_DEEPSEEK_KEY, _vglOfusca(c)); return true; } catch (e) { return false; }
+  }
+  function mtrLeerClaveDeepseek() {
+    try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_DEEPSEEK_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
+  }
+  // ¿Hay ALGUNA clave de IA configurada (deepseek, z.ai o Gemini)? Los gates de
+  // entrada al redactor (dock, inyectores, panel, Generar) preguntan esto, no por
+  // un proveedor concreto: el médico no elige proveedor, la escalera sí.
   function mtrHayClaveIA() {
-    try { return !!(mtrLeerClaveZai() || mtrLeerClaveGemini()); } catch (e) { return false; }
+    try { return !!(mtrLeerClaveDeepseek() || mtrLeerClaveZai() || mtrLeerClaveGemini()); } catch (e) { return false; }
   }
   function _mtrModeloIdx() {
     try {
@@ -47938,6 +47967,30 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       },
       parsear: (cruda) => mtrRespuestaGemini(cruda),
     },
+    // v18.8.0 — deepseek-v4-flash (API oficial de DeepSeek, forma OpenAI): el
+    // system viaja en su ROLE propio (el modelo lo lee como OpenAI estándar, a
+    // diferencia de z.ai que exige un solo turno con el system pegado) y la
+    // respuesta es choices[0].message.content — la misma forma que ya lee
+    // mtrRespuestaZai, que se reutiliza como parseador. Sin campos de
+    // razonamiento: el prompt de sistema ya ordena «responde ÚNICAMENTE con el
+    // texto final, sin explicar nada».
+    deepseek: {
+      id: "deepseek",
+      modelos: ["deepseek-v4-flash"],
+      url: () => "https://api.deepseek.com/v1/chat/completions",
+      headers: (clave) => ({ "Content-Type": "application/json", "Authorization": "Bearer " + clave }),
+      cuerpo: (modelo, system, user) => {
+        const messages = [{ role: "user", content: user }];
+        if (system) messages.unshift({ role: "system", content: system });
+        return JSON.stringify({
+          model: modelo,
+          messages: messages,
+          temperature: 0.2,
+          max_tokens: 8192,
+        });
+      },
+      parsear: (cruda) => mtrRespuestaZai(cruda),
+    },
   };
   function mtrProveedorIA(id) { return MTR_PROVEEDORES_IA[id] || null; }
 
@@ -48033,9 +48086,13 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         // y Gemini de RESPALDO. El médico no elige proveedor: si el primario no está
         // configurado, Gemini conserva SU rotación completa de hoy; si lo está y falla
         // por algo que merezca rotar, Gemini entra UNA vez con el modelo del modo.
+        // v18.8.0 — con clave deepseek, el primario pasa a ser deepseek-v4-flash
+        // (un intento) y z.ai queda inactivo: prioridad deepseek > z.ai > Gemini.
+        const claveDs = mtrLeerClaveDeepseek();
         const claveZai = mtrLeerClaveZai();
         const claveGem = mtrLeerClaveGemini();
-        if (!claveZai && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
+        const clavePrim = claveDs || claveZai;
+        if (!clavePrim && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
         if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, texto: "", motivo: "sin GM_xmlhttpRequest" }); return; }
         const p = mtrRedaccionPrompt(modo, hoja, o);
         // El cuerpo de cada proveedor vive en MTR_PROVEEDORES_IA (gemini.cuerpo es la
@@ -48063,13 +48120,14 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         }
         _tel("ia.gen." + (modo || "?"));
         let intentos = 0;
-        // v18.2.0 (P9) — con clave z.ai: 1 intento z.ai + 1 de respaldo Gemini. Sin
-        // clave z.ai: la rotación COMPLETA de Gemini de hoy (longitud de su lista).
-        const maxIntentos = (claveZai ? 1 : 0) + (claveGem ? (claveZai ? 1 : MTR_GEMINI_MODELOS.length) : 0);
-        // El intento n de la escalera: primero z.ai (si hay clave), luego Gemini.
+        // v18.2.0 (P9) — con primario: 1 intento + 1 de respaldo Gemini. Sin
+        // primario: la rotación COMPLETA de Gemini de hoy (longitud de su lista).
+        const maxIntentos = (clavePrim ? 1 : 0) + (claveGem ? (clavePrim ? 1 : MTR_GEMINI_MODELOS.length) : 0);
+        // El intento n de la escalera: primero el primario (deepseek o z.ai), luego Gemini.
         const _slot = (n) => {
+          if (claveDs && n === 0) return { prov: MTR_PROVEEDORES_IA.deepseek, clave: claveDs, modelo: "deepseek-v4-flash" };
           if (claveZai && n === 0) return { prov: MTR_PROVEEDORES_IA.zai, clave: claveZai, modelo: "glm-5.3" };
-          const nGem = claveZai ? (n - 1) : n;
+          const nGem = clavePrim ? (n - 1) : n;
           const modelo = (nGem === 0) ? mtrModeloGemini(modo) : mtrModeloGemini();
           return { prov: MTR_PROVEEDORES_IA.gemini, clave: claveGem, modelo: modelo };
         };
@@ -49507,7 +49565,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
         + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
         + '<div id="vgl-ia-cifras"></div>'
-        + '<div class="vgl-rcv-pie" style="margin-top:6px">A la IA (GLM-5.3 de z.ai, o Gemini como respaldo) se envían datos clínicos y fechas de atención (necesarias para la cronología), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
+        + '<div class="vgl-rcv-pie" style="margin-top:6px">A la IA (DeepSeek, z.ai o Gemini, según la clave configurada) se envían datos clínicos y fechas de atención (necesarias para la cronología), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
         + '</div>';
       document.body.appendChild(modal);
 
@@ -49905,7 +49963,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         // y ocupa el único renglón que sí tenía que informarle. El dato no se pierde —sirve para
         // diagnosticar— pero se va al `title`, donde no estorba.
         btnGen.disabled = true; estado.textContent = "Redactando la nota…"; salida.value = "";
-        const _modeloInicial = mtrLeerClaveZai() ? "glm-5.3" : mtrModeloGemini(modoGen);   // v18.2 — z.ai es el principal
+        const _modeloInicial = mtrLeerClaveDeepseek() ? "deepseek-v4-flash" : (mtrLeerClaveZai() ? "glm-5.3" : mtrModeloGemini(modoGen));   // v18.8.0 — deepseek > z.ai > Gemini
         try { estado.title = "Modelo: " + _modeloInicial; } catch (e) {}
         _ultimoModelo = _modeloInicial;
         try { uxTrack("fn.ia.gen"); } catch (e) {}

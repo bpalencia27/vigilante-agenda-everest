@@ -126,8 +126,8 @@ responsabilidad profesional frente a sus pacientes ni frente a la ley.
 ### T-16 · Inteligencia artificial con supervisión humana
 Cuando usted usa la función de redacción asistida, el programa **nunca envía el texto completo**:
 reconstruye un borrador a partir de una lista cerrada de campos y lo envía —sin nombre, documento
-ni dato que identifique al paciente— a un servicio de inteligencia artificial: Z.ai (GLM) o
-Google Gemini, según cuál esté configurado en el panel. Su clave de ese servicio se guarda
+ni dato que identifique al paciente— a un servicio de inteligencia artificial: DeepSeek
+(deepseek-v4-flash), Z.ai (GLM) o Google Gemini, según cuál esté configurado en el panel. Su clave de ese servicio se guarda
 únicamente en su navegador y nunca se envía a ningún otro destino. Lo que vuelve es un borrador
 que usted lee, corrige y decide si inserta: nada se inserta en la historia clínica sin su acción
 expresa. Si prefiere no usar esa función, no la use: el resto de la herramienta funciona igual.

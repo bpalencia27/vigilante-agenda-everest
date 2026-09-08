@@ -4,6 +4,28 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.0] — 2026-09-08 (DeepSeek como proveedor principal de la redacción con IA)
+
+### 🤖 Redacción con IA: deepseek-v4-flash como proveedor principal
+El redactor de casillas ahora puede usar **DeepSeek** (modelo `deepseek-v4-flash`,
+API oficial de `api.deepseek.com`) como proveedor principal:
+
+- **El médico elige con la clave**: si en Ajustes pega la clave de DeepSeek, el
+  redactor usa `deepseek-v4-flash` a la primera. Si no la hay, z.ai (GLM-5.3)
+  conserva su puesto de siempre y Gemini sigue de respaldo — prioridad
+  **deepseek > z.ai > Gemini**, sin que el médico tenga que elegir proveedor a mano.
+- **El prompt no cambia**: el sistema de instrucciones afinado (fuente de verdad,
+  cero inferencia, cifras verificables) viaja completo, ahora en su *role* propio
+  de sistema, como exige la API de DeepSeek. La salida se parsea con el mismo
+  lector OpenAI-compatible de z.ai.
+- **Las reglas de siempre**: la clave se guarda solo en el navegador (ofuscada),
+  nunca en claro; el borrador sigue exigiendo revisión del médico antes de firmar.
+
+Pruebas en `tests/suite_99_ia_deepseek.js` (contrato del proveedor, parseo, escalera
+y no-regresión de z.ai/Gemini, protegidos a su vez por la suite 70).
+
+---
+
 ## [Versión 18.7.0] — 2026-09-08 (Acceso directo a Historias Clínicas y pestañas de impresión desde el dock)
 
 ### 📋 Un toque y a la historia del paciente en sala
