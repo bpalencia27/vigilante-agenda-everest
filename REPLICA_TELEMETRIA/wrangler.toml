@@ -26,4 +26,4 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"            # env.DB en worker.js
 database_name = "vigilante-telemetria"
-database_id = "REEMPLAZAR-tras-wrangler-d1-create"   # ← copiar el id real aquí
+database_id = "5ec80edc-7cad-48b3-baa4-2ba3f721cb9b"   # creada 2026-09-08 (wrangler d1 create)
