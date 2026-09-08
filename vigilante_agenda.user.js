@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.7
+// @version      18.8.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18789,6 +18789,100 @@
   // v18.2 (P11) — el registro se movió a _instalarLatidosBase(): el latido de liderazgo
   // no puede latir antes del consentimiento.
 
+  // =====================================================================
+  // [ORDEN #9 · 08-sep-2026] BOTÓN DE ACTUALIZACIÓN DEL PANEL — réplica del
+  // botón «Consultar» de «Citas del día». Análisis del registro de red
+  // consultar.har: el clic de ese botón es UN GET dinámico a
+  //   …/api/Medico/ObtenerConsultas?especialidadId=…&profesionalId=…
+  // que reemplaza la lista de citas SIN recargar la página (jamás un F5).
+  // El panel ya sabe repetir esa llamada — apiLeerAgenda(), URL aprendida por
+  // observación; ver el módulo API arriba — así que el botón nuevo hace:
+  //   · «Citas del día» delante: dispara el clic del botón REAL (la réplica
+  //     exacta pedida: misma llamada, mismo repintado de la página, y el
+  //     panel se realimenta del DOM como siempre);
+  //   · en cualquier otra pantalla (HC, órdenes…): la MISMA llamada que
+  //     activa Consultar —apiLeerAgenda()→ ObtenerConsultas— procesada por
+  //     la misma vía que el tick (_procesarFuenteAgenda): el panel se
+  //     actualiza al instante, sin recargar nada.
+  // Regla del proyecto: la lectura la pide el MÉDICO con un clic explícito;
+  // si la llamada aún no se aprendió esta sesión se dice POR QUÉ (casilla
+  // vacía antes que dato inventado: no hay nada que refrescar).
+  // =====================================================================
+  // ¿Es ESTE botón de Everest el «Consultar» de Citas del día? La clase real
+  // del HTML (button-medico, vista del HAR) también vive en otros botones de
+  // la pantalla («Guardar», …), así que la clase sola NUNCA alcanza: se exige
+  // además el rótulo «Consultar» (con los espacios y mayúscula que traiga).
+  function _esBotonConsultar(b) {
+    try {
+      if (!b || b.tagName !== "BUTTON") return false;
+      const cls = String(b.className || "");
+      if (!cls.split(/\s+/).includes("button-medico")) return false;
+      const txt = String(b.textContent || "").replace(/\s+/g, " ").trim();
+      return /^consultar$/i.test(txt);
+    } catch (e) { return false; }
+  }
+  function _btnConsultarEn(lista) {
+    try {
+      if (!lista) return null;
+      for (const b of lista) if (_esBotonConsultar(b)) return b;
+    } catch (e) {}
+    return null;
+  }
+  // v18.8.9 — el giro del ícono (aria-busy) es el único feedback del botón
+  // mientras la lectura va en vuelo: el resultado habla en #vgl-sum, como el
+  // resto del panel. Nunca se toca el texto del botón (mismo patrón que la
+  // campana: rótulo aparte para no comerse el ícono al reescribir).
+  let _vglRefrescando = false;
+  function _vglRefrescarPulso(activo) {
+    try {
+      const b = (el.root && typeof el.root.querySelector === "function") ? el.root.querySelector("#vgl-refresh") : null;
+      if (b) b.setAttribute("aria-busy", activo ? "true" : "false");
+    } catch (e) {}
+  }
+  function refrescarAgendaAhora() {
+    try { uxTrack("panel.agenda.refrescar"); } catch (e) {}
+    // Rama 1 — «Citas del día» delante: el botón real existe en el DOM.
+    try {
+      const btn = (typeof document.querySelectorAll === "function")
+        ? _btnConsultarEn(document.querySelectorAll("button.button-medico")) : null;
+      if (btn && typeof btn.click === "function") {
+        setSummary("Consultando en Everest…");
+        _vglRefrescarPulso(true);
+        btn.click();
+        // El repintado lo hace Angular por su cuenta: aquí solo se apaga el
+        // giro (no hay promesa que esperar, es el clic del propio Everest).
+        setTimeout(() => { _vglRefrescarPulso(false); }, 1500);
+        return;
+      }
+    } catch (e) {}
+    // Rama 2 — fuera de esa vista: la misma llamada que Consultar, directo.
+    if (_vglRefrescando) { setSummary("Ya se está actualizando…"); return; }
+    if (!API.url) {
+      setSummary("Todavía no aprendí la llamada de «Citas del día»: entre un momento a esa vista y vuelva a pulsar.", "warn");
+      return;
+    }
+    _vglRefrescando = true;
+    _vglRefrescarPulso(true);
+    setSummary("Actualizando la agenda…");
+    const currentEpoch = state.sessionEpoch;
+    API.ultimo = 0;                       // la cadencia vuelve a contar desde esta lectura
+    apiLeerAgenda().then((citas) => {
+      try {
+        if (state.killed || currentEpoch !== state.sessionEpoch) return;
+        if (citas === null) {
+          setSummary("No se pudo refrescar ahora: la llamada de «Citas del día» falló. Se reintenta solo.", "error");
+          return;
+        }
+        state.apiCitas = citas;
+        state.apiEn = Date.now();
+        // La MISMA vía que el tick (procesado, avisos si esta pestaña lidera,
+        // snapshot, render): el último argumento fuerza el pintado porque el
+        // médico acaba de pulsar el botón: el panel está visible sí o sí.
+        _procesarFuenteAgenda({ visible: true, citas }, "api", new Date(), true);
+      } finally { _vglRefrescando = false; _vglRefrescarPulso(false); }
+    });
+  }
+
 
   // ---- Overlay ----
   let el = {};
@@ -19767,6 +19861,24 @@
       #vgl-dot{cursor:pointer}
       #vgl-dot.salud-warn{background:var(--c-ambar);box-shadow:0 0 10px rgba(var(--rgb-ambar),.9);animation:vglPulse 2.4s ease-out infinite}
       #vgl-dock-dot.salud-warn{background:var(--c-ambar);box-shadow:0 0 10px rgba(var(--rgb-ambar),.9)}
+      /* [ORDEN #9 · 08-sep-2026] Botón de actualización del panel: réplica del
+         «Consultar» de Citas del día (mismo GET ObtenerConsultas, sin recargar
+         la página). Vive en la cabecera, junto al reloj y al semáforo — la zona
+         que el CSS hostil de Everest más ha agredido (v17.6.3, bug del color
+         del título), por eso los !important, como en #vgl-head y sus vecinos.
+         El giro del ícono ([aria-busy]) es el único feedback en vuelo. */
+      #vgl-refresh{
+        width:24px !important;height:24px !important;min-width:24px !important;min-height:24px !important;
+        flex:0 0 auto !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;
+        border-radius:var(--r-chip) !important;border:1px solid var(--line) !important;background:transparent !important;
+        color:var(--fg2) !important;cursor:pointer !important;padding:0 !important;margin:0 !important;line-height:1 !important;
+        transition:background .16s var(--ease-out),color .16s var(--ease-out),border-color .16s var(--ease-out) !important
+      }
+      #vgl-refresh:hover{background:rgba(var(--rgb-azul),.14) !important;color:var(--c-azul) !important;border-color:rgba(var(--rgb-azul),.45) !important}
+      #vgl-refresh:focus:not(:focus-visible){outline:none}
+      #vgl-refresh svg{width:14px !important;height:14px !important;pointer-events:none !important}
+      #vgl-refresh[aria-busy="true"] svg{animation:vglRefrescarGira .8s linear infinite !important}
+      @keyframes vglRefrescarGira{to{transform:rotate(360deg)}}
       /* [v17.6.5] Asa de ancho ajustable (borde izquierdo del panel) */
       .vgl-resize{
         position:absolute;left:0;top:0;bottom:0;width:8px;cursor:ew-resize;
@@ -22707,6 +22819,11 @@
         </div>
         <div id="vgl-title">Centinela</div>
         <span id="vgl-clock" title="Hora actual y tiempo de turno"></span>
+        <!-- [ORDEN #9 · 08-sep-2026] Actualizar las citas del día con la misma
+             llamada que el botón «Consultar» de Everest (ObtenerConsultas):
+             en «Citas del día» dispara el botón real; en cualquier otra
+             pantalla repite su llamada directo (ver refrescarAgendaAhora). -->
+        <button type="button" id="vgl-refresh" title="Actualizar las citas del día (igual que el botón Consultar de Citas del día, sin recargar la página)" aria-label="Actualizar las citas del día" aria-busy="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
         <span id="vgl-dot" title="Estado del asistente — tóquelo para ver qué está leyendo" role="button" tabindex="0"></span>
       </div>
       <div id="vgl-body">
@@ -22752,6 +22869,10 @@
     if (el.dot && el.dot.addEventListener) el.dot.addEventListener("click", () => _saludGlobitoToggle(el.root));
     if (el.sum) el.sum.setAttribute("aria-live", "polite");
     root.querySelector("#vgl-load").addEventListener("click", () => { uxTrack("panel.pym.abrir_archivo"); el.file.click(); });
+    // [ORDEN #9 · 08-sep-2026] Actualizar las citas del día: el clic explícito
+    // del médico dispara la MISMA lectura que el botón «Consultar» de Everest
+    // (ver refrescarAgendaAhora en el módulo API — la réplica, sin recargar).
+    root.querySelector("#vgl-refresh").addEventListener("click", refrescarAgendaAhora);
     root.querySelector("#vgl-bell").addEventListener("click", () => { uxTrack("panel.notificaciones.activar"); enableOsNotifications(); });
     root.querySelector("#vgl-rep").addEventListener("click", () => { uxTrack("panel.hoja.resumen"); toggleSheet("resumen"); });
     root.querySelector("#vgl-cfg").addEventListener("click", () => { uxTrack("panel.hoja.ajustes"); toggleSheet("ajustes"); });
@@ -37740,6 +37861,85 @@
     console.warn("[Vigilante] Monitor retirado: la identidad resuelta no tiene la capacidad «centinela» (PÚBLICO no construye UI).");
   }
 
+  // v18.8.9 (ORDEN #9) — EL PROCESADO DE UNA LECTURA, UNA SOLA VÍA. Este era el
+  // cuerpo del tick (colorAndAlert por cita con fallo aislado, siembra del
+  // estado inicial, avisos solo del líder, snapshot, relevo entre pestañas,
+  // deadline/sondeo/pre-consulta/productividad y el pintado) y se extrajo TAL
+  // CUAL para que el botón de actualización (refrescarAgendaAhora, módulo API)
+  // refresque por la MISMA vía que el sondeo — nunca una segunda lógica de
+  // procesado que pudiera divergir de la del tick. `forzarPintado` (solo lo
+  // usa el botón) pinta aunque la vista no sea vigilada: el médico acaba de
+  // pulsar en el panel, está visible sí o sí. Con false, el comportamiento es
+  // idéntico al del tick histórico, línea por línea.
+  function _procesarFuenteAgenda(data, source, now, forzarPintado) {
+    // v18.8.9 (ORDEN #9) — la variable local del tick NO viaja en esta extracción:
+    // dentro de tick() `enVistaVigilada` era una const local (seccionActiva() !==
+    // "otra") que este ámbito ya no ve; sin recalcularla aquí el nombre resolvía a
+    // nada (ReferenceError en runtime, invisible para node --check). Se recalcula
+    // por llamada: mismo resultado que el tick histórico, que la calculaba una vez
+    // por vuelta antes de este bloque.
+    const secc = seccionActiva();
+    const enVistaVigilada = secc !== "otra";
+    // v18.8.9 — `leader` era la OTRA variable local del tick (const leader =
+    // heartbeat()), que este ámbito tampoco ve (ReferenceError en runtime, como
+    // enVistaVigilada). Se relee de state: heartbeat() ya lo dejó al día justo
+    // antes de llamarnos en el tick, así que aquí vale exactamente lo mismo que
+    // la local histórica. Para el botón aplica las reglas de líder del sondeo:
+    // solo la pestaña líder avisa, comparte, ajusta el sondeo y registra
+    // productividad — el refresco manual no las esquiva ni las duplica.
+    const leader = state.leader;
+    if (data && data.citas.length) {
+      // v14.2.0 (auditoría pre-producción) — antes, una sola cita con datos atípicos que
+      // hiciera lanzar a colorAndAlert abortaba TODO el .map(): el catch de tick() (más
+      // abajo) solo hace console.error (invisible para el médico) y, como la cita
+      // problemática sigue en la agenda, el mismo fallo se repetía cada ciclo el resto del
+      // día, congelando en silencio panel y avisos para TODOS los pacientes. Ahora un fallo
+      // aislado en UNA cita se registra y se omite SOLO esa, sin tumbar a las demás.
+      const processed = data.citas.map((a) => {
+        try { return colorAndAlert(a, now); }
+        catch (eCA) { console.error("[Vigilante] colorAndAlert falló para una cita (se omite solo esa, las demás siguen):", eCA); return null; }
+      }).filter(Boolean);
+      if (!state.summarized) {
+        // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
+        // v14.1.5 — ...pero SOLO la primera vez del día en TODO el navegador, no una vez
+        // por pestaña. `state.notified` y `state.summarized` viven en memoria de cada
+        // pestaña, así que cada relevo de liderazgo estrenaba una siembra: el nuevo
+        // líder marcaba a TODOS los pacientes como ya vistos sin avisar de ninguno, y
+        // `maybeNotify` los tapaba después con su `if (prev === undefined) return`. Ese
+        // es el "a veces NO te avisa" — no un aviso tarde, un aviso que no llega nunca.
+        // Con el relevo por visibilidad de esta misma versión los relevos son MÁS
+        // frecuentes, así que sin esto el arreglo de arriba habría empeorado el otro
+        // síntoma. La siembra se comparte entre pestañas y se rehace cada día.
+        state.summarized = true;
+        _sembrarEstadoInicial(processed);
+        // v12.5.14 — helloOncePerDay ya se auto-protege contra duplicados entre pestañas
+        // (localStorage "vgl_hello" por día): no depende de "leader" para eso. Quitar esa
+        // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña
+        // esté en HCHealth, aunque la pestaña líder (la que sondea el API) esté en otro
+        // módulo de Everest en ese momento.
+        if (_enModuloHCHealth()) { helloOncePerDay(processed); _onboardingColores(); }
+      } else if (leader) {
+        // v17.1.0 (#126) — la sincronización del relevo se mudó ARRIBA, junto a
+        // heartbeat(): aquí solo se ejecutaba cuando el tick traía agenda, y en una
+        // pestaña que no es «Citas del día» eso no pasa nunca. Ver la nota completa allá.
+        processed.forEach(maybeNotify);
+      }
+      state.lastSnapshot = { at: now, list: processed, source };
+      if (leader) { share(processed); _reprogramarDeadline(processed); _ajustarSondeo(processed); }
+      if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
+      // v17.0.0 — PRODUCTIVIDAD: se registran las atendidas de la agenda propia. Solo
+      // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del
+      // reloj no infla nada (era la advertencia del médico: «ojo con las duplicaciones»).
+      if (leader) { try { mtrProdRegistrar(processed); } catch (e) {} }
+      if (enVistaVigilada || forzarPintado) render(processed, source, now);
+    } else if (enVistaVigilada || forzarPintado) {
+      if (state.shared && Date.now() - state.shared.t < 60000) {
+        render(state.shared.list, "compartido", new Date(state.shared.t));
+      } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
+      else { render([], null, null); }
+    }
+  }
+
   function tick() {
     try {
       if (state.killed) return;
@@ -38063,56 +38263,10 @@
           setSummary("Sin lectura de la agenda: los avisos de llegadas están pausados.");   // [M6] marca C0 persistente mientras viva la condición
         }
       } else if (state.sinAgendaEp) state.sinAgendaEp = null;
-      if (data && data.citas.length) {
-        // v14.2.0 (auditoría pre-producción) — antes, una sola cita con datos atípicos que
-        // hiciera lanzar a colorAndAlert abortaba TODO el .map(): el catch de tick() (más
-        // abajo) solo hace console.error (invisible para el médico) y, como la cita
-        // problemática sigue en la agenda, el mismo fallo se repetía cada ciclo el resto del
-        // día, congelando en silencio panel y avisos para TODOS los pacientes. Ahora un fallo
-        // aislado en UNA cita se registra y se omite SOLO esa, sin tumbar a las demás.
-        const processed = data.citas.map((a) => {
-          try { return colorAndAlert(a, now); }
-          catch (eCA) { console.error("[Vigilante] colorAndAlert falló para una cita (se omite solo esa, las demás siguen):", eCA); return null; }
-        }).filter(Boolean);
-        if (!state.summarized) {
-          // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
-          // v14.1.5 — ...pero SOLO la primera vez del día en TODO el navegador, no una vez
-          // por pestaña. `state.notified` y `state.summarized` viven en memoria de cada
-          // pestaña, así que cada relevo de liderazgo estrenaba una siembra: el nuevo
-          // líder marcaba a TODOS los pacientes como ya vistos sin avisar de ninguno, y
-          // `maybeNotify` los tapaba después con su `if (prev === undefined) return`. Ese
-          // es el "a veces NO te avisa" — no un aviso tarde, un aviso que no llega nunca.
-          // Con el relevo por visibilidad de esta misma versión los relevos son MÁS
-          // frecuentes, así que sin esto el arreglo de arriba habría empeorado el otro
-          // síntoma. La siembra se comparte entre pestañas y se rehace cada día.
-          state.summarized = true;
-          _sembrarEstadoInicial(processed);
-          // v12.5.14 — helloOncePerDay ya se auto-protege contra duplicados entre pestañas
-          // (localStorage "vgl_hello" por día): no depende de "leader" para eso. Quitar esa
-          // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña
-          // esté en HCHealth, aunque la pestaña líder (la que sondea el API) esté en otro
-          // módulo de Everest en ese momento.
-          if (_enModuloHCHealth()) { helloOncePerDay(processed); _onboardingColores(); }
-        } else if (leader) {
-          // v17.1.0 (#126) — la sincronización del relevo se mudó ARRIBA, junto a
-          // heartbeat(): aquí solo se ejecutaba cuando el tick traía agenda, y en una
-          // pestaña que no es «Citas del día» eso no pasa nunca. Ver la nota completa allá.
-          processed.forEach(maybeNotify);
-        }
-        state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) { share(processed); _reprogramarDeadline(processed); _ajustarSondeo(processed); }
-        if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
-        // v17.0.0 — PRODUCTIVIDAD: se registran las atendidas de la agenda propia. Solo
-        // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del
-        // reloj no infla nada (era la advertencia del médico: «ojo con las duplicaciones»).
-        if (leader) { try { mtrProdRegistrar(processed); } catch (e) {} }
-        if (enVistaVigilada) render(processed, source, now);
-      } else if (enVistaVigilada) {
-        if (state.shared && Date.now() - state.shared.t < 60000) {
-          render(state.shared.list, "compartido", new Date(state.shared.t));
-        } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
-        else { render([], null, null); }
-      }
+      // v18.8.9 (ORDEN #9) — el procesado y el pintado viven en
+      // _procesarFuenteAgenda(): el botón de actualización del panel refresca
+      // por la MISMA vía (ver la nota junto a su definición).
+      _procesarFuenteAgenda(data, source, now);
 
       // Vía directa, SIEMPRE al final (haya datos o no, y en TODA la aplicación desde
       // v12.3.11): si aún no se aprendió la llamada se busca en el registro de

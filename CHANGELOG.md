@@ -4,6 +4,42 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.9] — 2026-09-08 (Botón de actualización en el panel: réplica exacta de «Consultar», sin recargar la página)
+
+Pedido del médico (ORDEN #9): un botón en la cabecera del panel que refresque las
+citas del día con **exactamente la misma consulta** que el botón «Consultar» de
+la vista «Citas del día» — el mismo GET que dispara el archivo de registro de red
+`consultar.har` — pero **sin recargar la página completa**.
+
+### 🔄 Cómo refresca, según dónde esté el médico
+- **En «Citas del día»**: el botón pulsa el «Consultar» real de Everest, igual
+  que si el médico lo hubiera clicado — Everest repinta por su cuenta y el panel
+  se entera por su vigilancia normal.
+- **En cualquier otra vista** (consulta activa, laboratorios, …): el botón repite
+  la llamada que Everest hace al pulsar «Consultar» (la misma URL aprendida por
+  observación) y repinta el panel al instante, **sin tocar la página** — nada de
+  F5: la consulta abierta ni se entera. Si la llamada falla, avisa y el refresco
+  automático de siempre sigue a cargo.
+
+### 🛡️ Correcciones de fondo que vinieron con el pedido
+Al extraer el procesado compartido para que el botón y el ciclo automático usen
+una **única vía**, aparecieron dos errores latentes (variables sin declarar que
+solo estallaban en el momento justo del refresco manual) — corregidos y
+verificados por mutación. El botón sigue la disciplina del proyecto: actúa solo
+con un clic del médico y nunca pisa lo que el médico haya escrito a mano.
+
+### 🧪 Verificación
+Suite nueva `suite_105_boton_actualizar.js` (13/13), endurecida además contra dos
+falsos verdes de su propia lectura del DOM pintado (verificados por mutación en
+solitario). Censo de blindaje CSS actualizado (676 → 701) y sincronización de
+versión R5.1 completada. Banco completo **3702/3702, EXIT=0 real**.
+
+*(Nota: la v18.8.8 del orquestador —FASE A/B/C, refactor en tres bloques— no se
+publicó como versión independiente; sus actas están en
+`docs/REGISTRO_DECISIONES.md` y su verificación final queda para la FASE E.)*
+
+---
+
 ## [Versión 18.8.7] — 2026-09-08 (Notificaciones: una sola vez por evento, aislamiento total entre instancias y desviación horaria sin negativos)
 
 Orden del médico con el registro real de auditoría de notificaciones adjunto. Se

@@ -13756,3 +13756,45 @@ de 10 a 17 casos (selector + default + gate Gemini + C.3 no-recalcula el JSON v6
 |---|---|---|---|
 | user.js mtrGeminiRedactar — rama de preferencia «gemini» sin su clave (fallback del gate) | `(claveGem ? "gemini" : claveDs ? "deepseek" : claveZai ? "zai" : "")` → `(claveGem ? "gemini" : "")`: sin la clave de Gemini la escalera ya no cae al siguiente disponible — con preferencia gemini y solo clave deepseek el redactor muere en «sin_clave» | NO | *suite_99* caso nuevo «FASE C (C.2): gate Gemini — preferencia gemini sin su clave cae al siguiente disponible…»: mutante rojo («responde deepseek (obtuvo false)»); restaurado 17 ok EXIT=0 |
 | user.js mtrIaPreferencia — validación de la preferencia al LEER (selector) | `(v === "deepseek" || v === "zai" || v === "gemini")` → sin `"gemini"`: la preferencia guardada «gemini» deja de reconocerse y cae a «auto» — el médico elige Gemini y el sistema lo ignora (y Gemini deja de ser primario con su clave: entran 2 llamadas, deepseek+gemini) | NO | *suite_99* casos nuevos FASE C (C.1): «la preferencia queda persistida» rojo («esperaba "gemini" y obtuvo "auto"») y «gemini responde a la primera: UNA sola llamada» rojo («esperaba 1 y obtuvo 2»); restaurado 17 ok EXIT=0 |
+
+## v18.8.9 (Botón de actualización del panel, réplica de «Consultar» — ORDEN #9 del 08-sep-2026)
+
+El botón #vgl-refresh de la cabecera del panel replica el «Consultar» de «Citas del día»
+(que NO recarga la página: GET dinámico a ObtenerConsultas, evidencia consultar.har).
+Dos ramas: con «Citas del día» delante, clic nativo del botón real de Everest; en
+cualquier otra pantalla, la misma llamada por la MISMA vía de procesado que el sondeo —
+para eso el cuerpo del tick (colorAndAlert, siembra, avisos del líder, snapshot,
+relevo/sondeo/productividad y pintado) se extrajo a `_procesarFuenteAgenda(data, source,
+now, forzarPintado)`. La extracción dejó DOS ReferenceError latentes, invisibles para
+`node --check` (son resolución de nombres, no sintaxis), que la suite_105 cazó antes de
+tocar producción: las variables locales del tick `enVistaVigilada` (const de
+seccionActiva) y `leader` (const de heartbeat()) no viajan en el bloque extraído, y el
+nombre resolvía a nada — el tick entero de agenda habría muerto en runtime. Fix: ambas
+se recalculan dentro de la función (seccionActiva() y state.leader, que heartbeat ya
+dejó al día), idéntico al histórico. Suite_105 nueva: 13 casos (reconocimiento del botón
+real, rama nativa con cero red, rama API feliz/fallo/reentrante sobre el panel montado,
+y el par D que ata la vista + forzarPintado).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_esBotonConsultar` — célula de la rama nativa (reconocer el botón real de Everest) | `return /^consultar$/i.test(txt);` → `return false;`: el botón real nunca se reconoce y el refresco cae a la rama API aunque «Citas del día» esté delante | NO | *suite_105* grupo A/B: «el botón del encargo… es reconocido» rojo, «espacios, saltos y mayúsculas…» rojo, «_btnConsultarEn…» rojo y «rama 1: con el botón real en el DOM recibe el clic nativo y NO llama al API» rojo; restaurado 13 ok EXIT=0 |
+| user.js `_procesarFuenteAgenda` — condición de pintado del procesado | `if (enVistaVigilada || forzarPintado) render(...)` → sin `|| forzarPintado`: el botón ya no pinta fuera de «Citas del día» (y el `else if` vacío deja el panel en el último snapshot, como si la pulsación no existiera) | NO | *suite_105* grupo D: «_procesarFuenteAgenda con forzarPintado=true… pinta aunque la vista no sea la de agenda» rojo («marca inicial» quedó en el resumen); restaurado 13 ok EXIT=0 |
+
+**Endurecimiento posterior (corrección de la SUITE, no de producción).** La primera corrida
+del banco completo salió «13 ok» y el proceso murió DESPUÉS de la última suite con el
+assert de la lista del caso C2 evaluándose en un timer huérfano. Dos defectos de la suite,
+ambos con lección: (1) los casos async C2/C3/C4 estaban declarados con `t.caso` en vez de
+`t.casoAsync` — `t.caso` no espera promesas, el runner contaba «ok» al instante y un fallo
+posterior reventaba el proceso como rechazo no capturado al final del banco (por eso en
+solitario «13 ok» era un falso verde: el proceso salía antes de que el assert llegara a
+correr); (2) el assert leía `#vgl-list` a pelo, pero `render()` monta las tarjetas en un
+DocumentFragment y el DOM falso no mueve los hijos del fragmento al hacer appendChild — la
+lista queda con UN hijo (el propio fragmento), nunca 2. Fix con el patrón ya establecido de
+suite_15_interfaz_avanzada (v18.0.106): las tarjetas se leen dentro del fragmento cuando
+es el único hijo (`tarjetasDe`), y D2 (que «pasaba» viendo el fragmento como si fuera la
+tarjeta) ahora verifica el marcador real `__vglKey` de render. Mutación de control de la
+red nueva:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| suite_105 `tarjetasDe` — lectura de la lista pintada | resolver el fragmento (`unica._esFragmento → unica.children`) → devolver `lista.children` a pelo: la lista «tiene» 1 hijo (el fragmento) y nunca las 2 tarjetas | NO | *suite_105* caso C2 «la lista del panel se repintó con las dos citas (tarjetas reales de render)» y D2 «y es una tarjeta real de render…» rojos — ahora EN SOLITARIO, porque los casos esperan de verdad con `t.casoAsync` (11 ok 2 FALLAN); restaurado 13 ok EXIT=0 |
