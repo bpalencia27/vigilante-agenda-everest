@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.8.2
+// @version      18.8.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.8.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6997,6 +6997,34 @@
     return Math.round(left);
   }
 
+  // =====================================================================
+  //  v18.8.3 — AUDITORÍA DEL WIDGET (G1): el clampeo de mtrPosicionPanelJuntoA solo
+  //  cubría el panel del widget de FÁRMACOS (abre a un lado del ancla). El badge de
+  //  exámenes (#vgl-cw-examenes) está CENTRADO entre "Historial" y "Paquetes" por
+  //  encargo del médico (v17.41.0, translateX(-50%) en CSS) — no puede "abrirse al
+  //  otro lado", así que su defensa es distinta: al ABRIR (y en cada tick mientras
+  //  siga abierto), correr el `left` lo justo para que el div completo quepa en la
+  //  ventana con margen de 8px. Con translateX(-50%) el centro visual coincide con
+  //  `style.left`, así que mover left mueve todo el div en bloque. Se mide el ancho
+  //  REAL ya desplegado (shrink-to-fit ya actuó; este panel no tiene width fijo,
+  //  solo max-width:280px), nunca un ancho asumido. Al cerrar, el tick de 5s
+  //  restaura el centrado exacto del badge — no hay que recordar la posición vieja.
+  // =====================================================================
+  function _cwClamparPanelAbierto(widget) {
+    try {
+      if (!widget) return;
+      const m = 8;
+      const vw = (typeof window !== "undefined" && window.innerWidth) ? window.innerWidth : 1024;
+      const rect = widget.getBoundingClientRect();
+      const mitad = rect.width / 2;
+      const centro = rect.left + mitad;   // == style.left real (translateX(-50%))
+      let delta = 0;
+      if (centro - mitad < m) delta = m + mitad - centro;
+      else if (centro + mitad > vw - m) delta = (vw - m - mitad) - centro;
+      if (delta) widget.style.left = Math.round(centro + delta) + "px";
+    } catch (e) {}
+  }
+
   // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
   // mostrar. Nunca decide nada nuevo — reusa mtrTableroClinico, el mismo motor que ya
   // pinta la Sección 3 del Panel del paciente, para que las dos vistas nunca diverjan.
@@ -7076,6 +7104,7 @@
           _cwAbierto = !_cwAbierto;
           widget.classList.toggle("vgl-cw-abierto", _cwAbierto);
           widget.classList.remove("vgl-cw-atencion");   // el clic reconoce el aviso
+          if (_cwAbierto) _cwClamparPanelAbierto(widget);   // v18.8.3 — ver abajo
         });
         document.body.appendChild(widget);
       }
@@ -7093,6 +7122,7 @@
       widget.style.left = Math.round(centroX + _cwCoordX()) + "px";
       widget.style.top = Math.round(debajoDeAmbos + MTR_ALTO_FILA_CONDUCTA + MTR_HUECO_FILA_CONDUCTA + _cwCoordY()) + "px";
       widget.style.display = "";
+      if (_cwAbierto) _cwClamparPanelAbierto(widget);   // v18.8.3 — G1: re-clampear tras re-centrar; el tick no deshace el clampeo
 
       const datos = mtrWidgetExamenesDatos(resumen);
       // Firma barata: si nada de esto cambió desde el último tick, no se toca el
@@ -7149,6 +7179,25 @@
   // vencimiento un examen pasa de azul (al día) a ámbar (próximo). No es
   // una periodicidad clínica — la vigencia real sigue siendo la del paquete.
   const RCV_PENDIENTES_UMBRAL_DIAS = 30;
+
+  // v18.8.3 — rótulos amables para los CUPS del paquete RCV exprés (I10X): el nombre
+  // técnico del laboratorio ("Creatinina En Suero U Otros Fluidos") se conserva debajo
+  // como fuente de verdad, y arriba va la traducción para quien no maneja jerga de
+  // laboratorio (pedido de legibilidad para usuarios sin conocimientos médicos). Solo
+  // los CUPS con rótulo CONFIRMADO por el proyecto — sin rótulo, se muestra la desc
+  // sola, jamás un nombre adivinado (casilla vacía antes que dato inventado).
+  const RCV_ROTULOS_AMABLES = {
+    "903815": "Colesterol bueno (HDL)",
+    "903817": "Colesterol malo (LDL)",
+    "903818": "Colesterol total",
+    "903868": "Triglicéridos",
+    "903895": "Creatinina (salud del riñón)",
+    "903841": "Azúcar en sangre (glicemia)",
+    "907106": "Parcial de orina",
+    "903876": "Creatinina en orina",
+    "903026": "Albúmina en orina (riñón)",
+    "903426": "Hemoglobina glicosilada (azúcar de 3 meses)",
+  };
 
   // PURA: arma la fila de cada examen del paquete RCV con su última fecha
   // de orden (la MÁS RECIENTE por CUPS entre las órdenes vigentes de
@@ -7227,7 +7276,7 @@
   // PURA: el HTML del panel. Solo presentación de lo que rcvPendientesCalcular
   // armó — ninguna decisión nueva aquí. El par Última→Vence va SIEMPRE visible
   // en cada fila (requisito del encargo), con chip de estado por color.
-  function rcvPendientesHtml(datos, programaRotulo) {
+  function rcvPendientesHtml(datos, programaRotulo, estampa) {
     const d = datos || { filas: [], nPendientes: 0, vigenciaDias: null, sinDatosOrdenes: true };
     const chips = { vencido: "VENCIDO", proximo: "PRÓXIMO", pendiente: "PENDIENTE", aldia: "AL DÍA" };
     const filasHtml = (d.filas || []).map((f) => {
@@ -7237,9 +7286,13 @@
       const fechas = f.ultima
         ? "Última: " + escapeHtml(f.ultima) + " · Vence: " + venceTxt
         : "Última: sin registro · Vence: " + venceTxt;
+      // v18.8.3 — rótulo amable arriba (legible sin jerga), desc técnica del CUPS
+      // debajo (fuente de verdad). Sin rótulo confirmado, solo la desc.
+      const amable = RCV_ROTULOS_AMABLES[f.codigo] || "";
       return '<div class="vgl-rcvp-fila vgl-rcvp-f-' + f.estado + '">'
         + '<span class="vgl-rcvp-chip vgl-rcvp-chip-' + f.estado + '">' + (chips[f.estado] || escapeHtml(f.estado)) + '</span>'
-        + '<div class="vgl-rcvp-nom">' + escapeHtml(f.desc) + '</div>'
+        + '<div class="vgl-rcvp-nom">' + escapeHtml(amable || f.desc) + '</div>'
+        + (amable ? '<div class="vgl-rcvp-desc">' + escapeHtml(f.desc) + '</div>' : "")
         + '<div class="vgl-rcvp-fechas">' + fechas + '</div>'
         + '</div>';
     }).join("");
@@ -7247,6 +7300,12 @@
       ? '<div class="vgl-rcvp-nota">Sin órdenes vigentes consultables: todo queda como PENDIENTE (ante la duda, se muestra).</div>'
       : "";
     const rotulo = String(programaRotulo || "");
+    // v18.8.3 — pie con estampa de frescura: con dato real de Everest, el pie dice
+    // CUÁNDO se leyó (hoy HH:MM, o DD-MM HH:MM si es de otro día); sin consulta
+    // exitosa todavía, se mantiene el "se actualiza solo" — nunca se finge una hora.
+    const pie = "Vigencia RCV: " + (d.vigenciaDias || 0) + " días · "
+      + (estampa ? ("leído de Everest " + escapeHtml(estampa)) : "se actualiza solo")
+      + " · el médico decide";
     return '<div class="vgl-rcvp-head" title="Arrastrar para mover el panel">'
       + '<button type="button" class="vgl-rcvp-cerrar" aria-label="Cerrar el panel de próximos exámenes">✕</button>'
       + '<div class="vgl-rcvp-tit">Próximos exámenes · Riesgo cardiovascular</div>'
@@ -7255,15 +7314,23 @@
       + '</div>'
       + filasHtml
       + nota
-      + '<div class="vgl-rcvp-pie">Vigencia RCV: ' + (d.vigenciaDias || 0) + ' días · se actualiza solo · el médico decide</div>';
+      + '<div class="vgl-rcvp-pie">' + pie + '</div>';
   }
 
   let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
   const RCV_POS_KEY = "vgl_rcvp_pos";   // v18.8.2 — sesión: {x, y} px de left/top tras arrastrar
   let _rcvpArrastre = null, _rcvpCerradoDoc = "";
+  // v18.8.3 — SELLO DIARIO (actualización automática cada 24 h): día calendario del
+  // último refresco forzado del caché de órdenes vigentes. El TTL de 10 min ya
+  // garantiza frescura mientras el tick vive; este sello cubre el hueco restante
+  // (pestaña dormida toda la noche, timers ralentizados): la primera evaluación del
+  // panel en un día nuevo invalida el caché UNA vez, y la siguiente consulta trae el
+  // listado de exámenes del día — nunca un dato arrastrado de ayer.
+  let _rcvpDiaUltimoRefresco = "";
   function _rcvpResetParaTest() {
     _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false;
     _rcvpCerradoDoc = ""; _rcvpArrastre = null;   // v18.8.2
+    _rcvpDiaUltimoRefresco = "";   // v18.8.3
   }
   function _rcvpOcultar() {
     try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
@@ -7369,6 +7436,11 @@
       const pid = (resumen && resumen._pacienteIdLabs) || null;
       if (pid) {
         if (_rcvpEnVuelo) return;                 // un solo vuelo de red por vez
+        // v18.8.3 — sello diario: la primera evaluación del panel en cada día
+        // calendario invalida el caché de órdenes UNA vez (garantía de refresco
+        // automático cada 24 h; el resto del día lo mantiene fresco el TTL de 10 min).
+        const diaHoy = todayStamp();
+        if (_rcvpDiaUltimoRefresco !== diaHoy) { _rcvpDiaUltimoRefresco = diaHoy; try { _ordenesVigentesInvalidar(); } catch (e) {} }
         _rcvpEnVuelo = true;
         try { ordenes = await apiHcObtenerOrdenamientosVigentes(pid); }
         catch (e) { ordenes = null; }
@@ -7380,7 +7452,7 @@
       }
       if (docId !== _rcvpDocPrevio) { _rcvpDocPrevio = docId; _rcvpFirma = ""; }
       const datos = rcvPendientesCalcular(paquete, ordenes, todayStamp());
-      const html = rcvPendientesHtml(datos, rcvPendientesRotuloPrograma(resumen));
+      const html = rcvPendientesHtml(datos, rcvPendientesRotuloPrograma(resumen), _ordenesVigentesEstampa());
       // Firma barata: si nada cambió, no se toca el DOM (sin parpadeo).
       const firma = docId + "|" + datos.nPendientes + "|" + html.length;
       if (firma === _rcvpFirma) return;
@@ -15091,8 +15163,7 @@
         document.addEventListener("click", _vglHcCapturarClick, true);
         _vglHcListenerOk = true;
       }
-      // v18.7.0 (M1) — mismo patrón de listener único en captura para el botón de
-      // acceso directo a HC de las tarjetas del panel (ver _vglHcDirectoAbrir).
+      // v18.7.0 (M1): listener único en captura para el atajo directo a HC (_vglHcDirectoAbrir).
       if (!_vglHcDirectoListenerOk && typeof document !== "undefined" && typeof document.addEventListener === "function") {
         document.addEventListener("click", _vglHcDirectoAbrir, true);
         _vglHcDirectoListenerOk = true;
@@ -19603,7 +19674,14 @@
         width:330px;max-width:calc(100vw - 32px);max-height:64vh;overflow-y:auto;
         font-family:var(--font-stack);background:var(--bg-solid);
         border:1px solid var(--edge);border-radius:var(--r-card);
-        box-shadow:var(--shadow-float);padding:12px 14px;color:var(--fg) !important
+        box-shadow:var(--shadow-float);padding:12px 14px;color:var(--fg) !important;
+        /* v18.8.3 (auditoría del widget, responsividad) — sin border-box, el
+           max-width:calc(100vw - 32px) limitaba SOLO el contenido: en pantallas
+           angostas la caja real sumaba padding+borde (358 px en un móvil de 360) y el
+           borde derecho quedaba cortado e inalcanzable. Medido en Chromium/Firefox/
+           WebKit (360×640): con border-box la caja total respeta el tope y sobra
+           margen. En escritorio no cambia nada (330 px ya cabía). */
+        box-sizing:border-box
       }
       #vgl-rcv-pendientes .vgl-rcvp-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
       #vgl-rcv-pendientes .vgl-rcvp-tit{font-size:var(--t-small);font-weight:800;color:var(--fg) !important}
@@ -19615,6 +19693,8 @@
       #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-pendiente{border-left:3px solid var(--c-azul);padding-left:8px}
       #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-aldia{border-left:3px solid var(--c-verde);padding-left:8px}
       #vgl-rcv-pendientes .vgl-rcvp-nom{font-size:var(--t-mini);font-weight:700;color:var(--fg) !important;line-height:1.35}
+      /* v18.8.3 — desc técnica del CUPS debajo del rótulo amable: fuente de verdad, en un tono aparte */
+      #vgl-rcv-pendientes .vgl-rcvp-desc{font-size:var(--t-nano);color:var(--fg3) !important;line-height:1.3}
       #vgl-rcv-pendientes .vgl-rcvp-fechas{font-size:var(--t-micro);color:var(--fg2) !important;font-variant-numeric:tabular-nums}
       #vgl-rcv-pendientes .vgl-rcvp-chip{
         display:inline-block;align-self:flex-start;font-size:var(--t-nano);font-weight:800;letter-spacing:.6px;
@@ -19634,12 +19714,14 @@
          derecha) para que el título nunca se le monte encima. */
       #vgl-rcv-pendientes .vgl-rcvp-head{position:relative;cursor:grab;padding-right:26px;touch-action:none}
       #vgl-rcv-pendientes .vgl-rcvp-head.vgl-rcvp-arrastrando{cursor:grabbing}
+      /* v18.8.3 — 28×28 px: por encima del mínimo táctil (WCAG 2.5.8: 24 px); el
+         22×22 anterior era difícil de tocar en pantalla táctil durante la consulta */
       #vgl-rcv-pendientes .vgl-rcvp-cerrar{
-        position:absolute;top:2px;right:2px;width:22px;height:22px;
+        position:absolute;top:2px;right:2px;width:28px;height:28px;
         display:flex;align-items:center;justify-content:center;padding:0;
         border:1px solid transparent;border-radius:var(--r-pill);
         background:transparent;color:var(--fg2) !important;
-        font-size:var(--t-micro);line-height:1;cursor:pointer
+        font-size:var(--t-small);line-height:1;cursor:pointer
       }
       #vgl-rcv-pendientes .vgl-rcvp-cerrar:hover{
         background:rgba(var(--rgb-rojo),.14);border-color:rgba(var(--rgb-rojo),.38);color:var(--c-rojo) !important
@@ -23927,6 +24009,22 @@
   let _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 };
   const ORDENES_VIGENTES_TTL_MS = 10 * 60000;
   function _ordenesVigentesInvalidar() { _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 }; }
+  // v18.8.3 — estampa de frescura para el panel «Próximos exámenes»: la hora de la
+  // ÚLTIMA consulta EXITOSA a Everest (nunca la hora de un hit de caché), para que el
+  // médico vea de CUÁNDO es el dato que lee. "hoy HH:MM" si es de hoy; "DD-MM HH:MM"
+  // si el dato es de un día anterior — un dato de ayer se anuncia como de ayer, jamás
+  // como fresco. Vacío si no hay ninguna consulta exitosa todavía (casilla vacía antes
+  // que dato inventado).
+  function _ordenesVigentesEstampa() {
+    try {
+      if (!_ordenesVigentesCache.data || !_ordenesVigentesCache.ts) return "";
+      const d = new Date(_ordenesVigentesCache.ts);
+      const p2 = (n) => String(n).padStart(2, "0");
+      const dia = d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate());
+      const hm = p2(d.getHours()) + ":" + p2(d.getMinutes());
+      return (dia === todayStamp()) ? ("hoy " + hm) : (p2(d.getDate()) + "-" + p2(d.getMonth() + 1) + " " + hm);
+    } catch (e) { return ""; }
+  }
   async function apiHcObtenerOrdenamientosVigentes(pacienteId) {
     if (!pacienteId) return null;
     const key = String(pacienteId);

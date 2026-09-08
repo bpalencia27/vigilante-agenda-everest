@@ -7,6 +7,8 @@
 //  que ya pinta la Sección 3 del Panel), así que las dos vistas nunca divergen.
 // =====================================================================
 
+const { instalarDomEnriquecido } = require("./harness.js");   // v18.8.3 — para el clic real del badge (G1)
+
 const RESUMEN_ORDENAR = {
   programa: "HTA", factores: { hta: true },
   plan: {
@@ -131,7 +133,7 @@ module.exports = {
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
     "mtrItemsOrdenarConducta", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
     "mtrWidgetOrdenarConductaTick", "mtrOcultarBotonOrdenarPendientes", "mtrOcultarWidgetsConducta", "_cwoEstadoParaTest", "_cwoResetParaTest",
-    "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
+    "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA", "_cwClamparPanelAbierto",
     "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
   ],
 
@@ -879,6 +881,77 @@ module.exports = {
     });
     t.caso("mtrPosicionPanelJuntoA: sin window.innerWidth disponible, usa un ancho de reserva sensato (1024) sin reventar", () => {
       t.noLanza(() => api.mtrPosicionPanelJuntoA({ left: 10, right: 90, top: 20 }, 280));
+    });
+
+    // =====================================================================
+    //  v18.8.3 — G1 (auditoría del widget «Próximos exámenes»): el badge de
+    //  exámenes está CENTRADO entre Historial y Paquetes (translateX(-50%)),
+    //  así que no puede "abrirse al otro lado" como el panel del fármaco
+    //  (mtrPosicionPanelJuntoA). Su defensa es correr el `left` al ABRIR para
+    //  que el panel quepa en la ventana con margen de 8 px — el reporte
+    //  v17.34.0 (texto partido letra por letra contra el borde) no debe poder
+    //  volver por la ventana del badge.
+    // =====================================================================
+    t.caso("_cwClamparPanelAbierto: ventana angosta con el panel salido por la derecha — corre el left al margen", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 400;
+      // Con translateX(-50%) el centro visual coincide con style.left (340); el rect
+      // ya desplegado mide 280 de ancho: [200, 480] — 88 px fuera del margen derecho.
+      const w = { style: { left: "340px" }, getBoundingClientRect: () => ({ left: 200, width: 280 }) };
+      c.api._cwClamparPanelAbierto(w);
+      t.igual(w.style.left, "252px", "el panel queda [112, 392]: cabe justo con 8 px de margen");
+    });
+    t.caso("_cwClamparPanelAbierto: reporte v17.34.0 — badge pegado al borde izquierdo, el panel se corre a la derecha", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 1024;
+      const w = { style: { left: "-20px" }, getBoundingClientRect: () => ({ left: -160, width: 280 }) };
+      c.api._cwClamparPanelAbierto(w);
+      t.igual(w.style.left, "148px", "el panel queda [8, 288]: 8 px de margen, nunca letra partida");
+    });
+    t.caso("_cwClamparPanelAbierto: ventana ancha con espacio de sobra — no toca el centrado exacto del encargo v17.41.0", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 1024;
+      const w = { style: { left: "340px" }, getBoundingClientRect: () => ({ left: 200, width: 280 }) };
+      c.api._cwClamparPanelAbierto(w);
+      t.igual(w.style.left, "340px", "sin recorte que corregir, el badge sigue exactamente donde el médico lo pidió");
+    });
+    t.caso("_cwClamparPanelAbierto: entradas hostiles no revientan — null, sin rect, rect que lanza, pantalla diminuta", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api._cwClamparPanelAbierto(null), "widget null");
+      t.noLanza(() => c.api._cwClamparPanelAbierto({}), "sin getBoundingClientRect");
+      t.noLanza(() => c.api._cwClamparPanelAbierto({ style: {}, getBoundingClientRect: () => { throw new Error("boom"); } }), "rect que lanza");
+      c.env.win.innerWidth = 200;
+      const w = { style: { left: "340px" }, getBoundingClientRect: () => ({ left: 200, width: 280 }) };
+      c.api._cwClamparPanelAbierto(w);
+      t.cierto(isFinite(parseFloat(w.style.left)) && parseFloat(w.style.left) > -1e6,
+        "pantalla más angosta que el panel: izquierda finita, nunca NaN");
+    });
+
+    t.caso("v18.8.3 G1: el clic que abre el panel dispara el clampeo — ventana angosta, ancla junto al borde derecho", () => {
+      const c = cargar({ silencioso: true });
+      instalarDomEnriquecido(c.env.doc);
+      // Ancla junto al borde derecho (layout real de Everest del reporte v17.34.0):
+      // centroX = (300 + 460)/2 = 380; con una ventana de 400 el panel abierto (280)
+      // quedaría [240, 520] — más allá del margen de 8.
+      const historialBorde = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: 300, top: 20, width: 70, height: 30, right: 370, bottom: 50 }) };
+      const paquetesBorde = { textContent: "Paquetes", offsetParent: {}, getBoundingClientRect: () => ({ left: 380, top: 20, width: 80, height: 30, right: 460, bottom: 50 }) };
+      cablearHistoriaConducta(c.env, "1098765432", [historialBorde, paquetesBorde]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
+      c.env.win.innerWidth = 400;
+      c.api.mtrWidgetConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-examenes");
+      t.igual(el.style.left, "380px", "precondición: el badge quedó centrado sobre el ancla");
+      // El navegador despliega el panel (280 px de ancho real) centrado en 380: [240, 520].
+      el.getBoundingClientRect = () => ({ left: 240, width: 280 });
+      const arr = (el._listeners && el._listeners.click ? el._listeners.click : []).slice();
+      t.cierto(arr.length > 0, "el clic del badge tiene su escucha real");
+      for (const f of arr) f({ type: "click", target: el, currentTarget: el, stopPropagation() {}, preventDefault() {} });
+      t.igual(el.style.left, "252px", "el handler de clic clampeó el panel: [112, 392], margen de 8 px — nada de letra partida");
+      // El tick de 5 s re-centra el badge sobre el ancla (380): el re-clampeo debe
+      // devolverlo al margen mientras siga abierto — el tick no deshace el clampeo.
+      c.api.mtrWidgetConductaTick();
+      t.igual(el.style.left, "252px", "segundo tick con el panel abierto: re-centra y vuelve a clampear, nunca deja el panel salido");
     });
 
     // ---------- mtrWidgetOrdenarConductaTick ----------

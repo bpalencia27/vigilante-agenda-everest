@@ -65,7 +65,7 @@ module.exports = {
   nombre: "Panel Próximos exámenes RCV (v18.4.2): permiso, contexto HC, fechas y refresco",
 
   cubre: ["rcvPendientesCalcular", "rcvPendientesDebeVerse", "rcvPendientesHtml",
-    "rcvPendientesRotuloPrograma", "rcvPendientesTick"],
+    "rcvPendientesRotuloPrograma", "rcvPendientesTick", "_ordenesVigentesEstampa"],
 
   async pruebas(t, api, env, cargar) {
     // ============================ PURAS ============================
@@ -165,6 +165,34 @@ module.exports = {
       t.cierto(html.indexOf("vgl-rcvp-chip-vencido") < html.indexOf("vgl-rcvp-chip-pendiente"), "vencido se pinta arriba de pendiente");
       const d4 = api.rcvPendientesHtml({ filas: [], nPendientes: 0, sinDatosOrdenes: true, vigenciaDias: null }, "");
       t.cierto(d4.indexOf("Sin órdenes vigentes consultables") >= 0, "la nota D4 aparece cuando no hay datos");
+    });
+
+    t.caso("html (v18.8.3): rótulo amable arriba y desc técnica del CUPS debajo — legible sin jerga, sin perder la fuente de verdad", () => {
+      const r = api.rcvPendientesCalcular(PKG_88, [ordenDe("903815", desdeHoy(-200)), ordenDe("903817", desdeHoy(-179))], HOY);
+      const html = api.rcvPendientesHtml(r, "HTA", "");
+      t.cierto(html.indexOf("Colesterol bueno (HDL)") >= 0, "903815 se presenta con su nombre amable");
+      t.cierto(html.indexOf("Colesterol malo (LDL)") >= 0, "903817 también");
+      t.cierto(html.indexOf("vgl-rcvp-desc") >= 0, "la desc técnica va debajo, como fuente de verdad");
+      t.cierto(html.indexOf("Exámen Vencido") >= 0, "la desc técnica del CUPS sigue presente");
+      t.cierto(html.indexOf("Colesterol bueno (HDL)") < html.indexOf("Exámen Vencido"), "dentro de la misma fila: rótulo arriba, desc debajo");
+      // CUPS sin rótulo confirmado: solo la desc, sin segunda caja
+      const pkgRaro = { cie10: "I10X", vigenciaDias: 180, cups: [{ codigo: "999999", desc: "Exámen Sin Traducción" }] };
+      const r2 = api.rcvPendientesCalcular(pkgRaro, [], HOY);
+      const h2 = api.rcvPendientesHtml(r2, "", "");
+      t.cierto(h2.indexOf("Exámen Sin Traducción") >= 0, "sin rótulo confirmado: se muestra la desc sola");
+      t.falso(h2.indexOf("vgl-rcvp-desc") >= 0, "sin rótulo no hay segunda caja — no se duplica nada");
+    });
+
+    t.caso("pie (v18.8.3): con estampa anuncia la hora de lectura; sin estampa, honesto «se actualiza solo»", () => {
+      const r = api.rcvPendientesCalcular(PKG_88, [ordenDe("903815", desdeHoy(-200))], HOY);
+      const conEstampa = api.rcvPendientesHtml(r, "", "hoy 08:15");
+      t.cierto(conEstampa.indexOf("leído de Everest hoy 08:15") >= 0, "el pie dice de CUÁNDO es el dato que se lee");
+      t.cierto(conEstampa.indexOf("Vigencia RCV: 180 días") >= 0, "la vigencia del paquete sigue en el pie");
+      const sinEstampa = api.rcvPendientesHtml(r, "", "");
+      t.cierto(sinEstampa.indexOf("se actualiza solo") >= 0, "sin consulta exitosa: no se finge una hora");
+      t.falso(sinEstampa.indexOf("leído de Everest") >= 0, "nada de «leído de Everest» sin dato real");
+      const ayer = api.rcvPendientesHtml(r, "", "05-09 14:30");
+      t.cierto(ayer.indexOf("leído de Everest 05-09 14:30") >= 0, "un dato de otro día se anuncia como de ese día");
     });
 
     // ======================= INTEGRACIÓN: PERMISO =======================
@@ -345,6 +373,8 @@ module.exports = {
       t.cierto(!!w, "el panel sigue montado");
       t.cierto(w.innerHTML.indexOf("Sin órdenes vigentes consultables") >= 0, "la nota lo explica");
       t.falso(w.innerHTML.indexOf("AL DÍA") >= 0, "nada se da por cubierto");
+      t.cierto(w.innerHTML.indexOf("se actualiza solo") >= 0, "y el pie no finge una hora de lectura (sin consulta exitosa)");
+      t.falso(w.innerHTML.indexOf("leído de Everest") >= 0, "nada de «leído de Everest» con la red caída");
     });
 
     await t.casoAsync("refresco en vivo: una orden NUEVA cambia la fila sin recargar nada", async () => {
@@ -358,6 +388,45 @@ module.exports = {
       const w = widget88(c);
       t.falso(w.innerHTML.indexOf("vgl-rcvp-chip-vencido") >= 0, "ya no está vencido tras la orden nueva");
       t.cierto(w.innerHTML.indexOf("Vence: " + desdeHoy(175)) >= 0, "el vencimiento recalculado aparece");
+    });
+
+    // Re-congela el reloj del vm a otro instante (mismo patrón del congela-reloj inicial:
+    // __VGL88_DATE_ORIG ya es el Date original del contexto y se reusa tal cual).
+    const congelarReloj = (c, ms) => vm.runInContext(
+      "Date = class extends __VGL88_DATE_ORIG {" +
+      "  constructor(){ super(...(arguments.length ? arguments : [" + ms + "])); }" +
+      "  static now(){ return " + ms + "; }" +
+      "};",
+      c.ctx
+    );
+
+    await t.casoAsync("v18.8.3 frescura: sin consulta exitosa la estampa está vacía; tras el tick dice «hoy», y al día siguiente anuncia el dato de ayer", async () => {
+      const { c } = ctx88(102, "Eliseth Estrada");
+      t.igual(c.api._ordenesVigentesEstampa(), "", "casilla vacía antes que dato inventado: sin consulta, sin hora");
+      await c.api.rcvPendientesTick();
+      t.igual(c.api._ordenesVigentesEstampa(), "hoy 00:00", "tras la consulta exitosa: la hora del dato (reloj del fixture)");
+      const w1 = widget88(c);
+      t.cierto(w1.innerHTML.indexOf("leído de Everest hoy 00:00") >= 0, "el pie le dice al médico de CUÁNDO es el dato");
+      congelarReloj(c, msDe(desdeHoy(1)));
+      t.igual(c.api._ordenesVigentesEstampa(), "06-09 00:00", "un día después, el dato de ayer se anuncia como de ayer");
+    });
+
+    await t.casoAsync("v18.8.3 actualización automática 24 h: el sello diario invalida el caché UNA vez por día — el listado no arrastra datos de ayer", async () => {
+      const { c, red } = ctx88(102, "Eliseth Estrada");
+      // Primer tick a las 23:58: la consulta queda en caché con TTL de 10 min.
+      congelarReloj(c, msDe(HOY) + (23 * 60 + 58) * 60000);
+      await c.api.rcvPendientesTick();
+      t.igual(red.fetches, 1, "primer tick de la noche: consulta real a Everest");
+      await c.api.rcvPendientesTick();
+      t.igual(red.fetches, 1, "mismo día: el caché de 10 min responde, sin re-consultar");
+      // 4 minutos después ya es OTRO día calendario — y el TTL (10 min) aún no
+      // venció: sin el sello diario, el caché de AYER respondería y el listado
+      // arrastraría datos viejos (el hueco real que cubre la garantía de 24 h).
+      congelarReloj(c, msDe(desdeHoy(1)) + 2 * 60000);
+      await c.api.rcvPendientesTick();
+      t.igual(red.fetches, 2, "primer tick del día NUEVO con el TTL aún vigente: el sello diario invalida y se re-consulta Everest");
+      await c.api.rcvPendientesTick();
+      t.igual(red.fetches, 2, "y el resto del día nuevo: caché otra vez, una sola invalidación por día");
     });
 
     await t.casoAsync("sin parpadeo: la firma evita repintar cuando nada cambió, y cambia de paciente limpia el estado", async () => {
@@ -436,6 +505,15 @@ module.exports = {
       t.igual(sinMarca.join(", "), "", "ninguna regla de color sin !important");
       // (b) cero animaciones: anti-fatiga, nada parpadea en la periferia
       t.falso(/animation/.test(bloque), "el panel no anima nada");
+      // (b2) v18.8.3 — cierre táctil: 28×28 px, por encima del mínimo WCAG 2.5.8 (24 px)
+      t.cierto(/\.vgl-rcvp-cerrar\{[^}]*width:28px[^}]*height:28px/.test(bloque),
+        "el botón de cierre mide 28×28 px: tocable en pantalla táctil durante la consulta");
+      // (b3) v18.8.3 — responsividad: sin box-sizing:border-box, el max-width
+      // (100vw-32px) limitaba solo el CONTENIDO y la caja real sumaba padding+borde:
+      // en un móvil de 360 px el borde derecho quedaba cortado (medido en Chromium:
+      // 358 px de caja). Con border-box, la caja total respeta el tope.
+      t.cierto(/#vgl-rcv-pendientes\{[^}]*box-sizing:border-box/.test(bloque),
+        "la caja del panel usa box-sizing:border-box: el tope de ancho incluye padding y borde (no se corta en pantallas angostas)");
       // (c) registro en las DOS listas de tokens (oscura y clara) — sin la clara, el tema claro hereda Everest
       t.cierto(/#vgl-chooser-modal,#vgl-rcv-pendientes\{/.test(css), "registrado en la lista de tokens oscura");
       t.cierto(/#vgl-chooser-modal\.light,#vgl-rcv-pendientes\.light\{/.test(css), "y en la clara");

@@ -4,6 +4,59 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.8.3] — 2026-09-08 (Auditoría integral del widget «Próximos exámenes · Riesgo cardiovascular»)
+
+Auditoría completa del widget pedida por el médico: errores clasificados por
+criticidad (ninguno bloqueante, 2 graves, 3 leves, 1 documentado), corregidos con
+mutación verificada y probados en los 3 motores (Chromium, Firefox, WebKit) × 3
+tamaños de pantalla (móvil 360, tablet 768, escritorio 1366). Detalle trazable en
+`docs/AUDITORIA_WIDGET_RCV_20260908.md`.
+
+### 🩹 G1 — el panel del badge de exámenes ya no se corta en pantallas angostas
+El badge de Conducta se abre CENTRADO (encargo v17.41.0): el clampeo existente
+solo defendía paneles laterales de ancho fijo, así que en móvil/tablet el panel
+abierto podía quedar cortado por el borde e inalcanzable. Nuevo
+`_cwClamparPanelAbierto`: al abrir (clic) y en cada tick, corrige la posición
+midiendo el ancho REAL ya desplegado, con margen de 8 px; al cerrar, el tick
+restaura el centrado exacto.
+
+### 🩹 G2 — el listado se actualiza solo cada 24 h y dice de CUÁNDO es
+- **Sello diario**: el primer tick de un día calendario nuevo invalida el caché
+  una vez (pestaña dormida toda la noche incluida); el resto del día lo cubre el
+  TTL de 10 minutos. Nunca más un listado de ayer sin aviso.
+- **Estampa de frescura en el pie**: «leído de Everest hoy HH:MM» (o «DD-MM
+  HH:MM» si es de otro día) cuando hay consulta exitosa; «se actualiza solo»
+  cuando aún no la hubo. Nunca se finge una hora: casilla vacía antes que dato
+  inventado.
+
+### ✏️ Leves: táctil, lenguaje claro y responsividad
+- **L1**: botón de cierre a 28×28 px (mínimo táctil WCAG 2.5.8).
+- **L2**: rótulos amables para los 10 CUPS del programa (p. ej. «903815» →
+  «Colesterol bueno (HDL)») con la descripción técnica debajo como fuente de
+  verdad; sin rótulo confirmado, solo la desc — nunca un rótulo supuesto.
+- **L3**: `box-sizing:border-box` en la caja del panel — en un móvil de 360 px
+  el borde derecho quedaba cortado e inalcanzable (hallazgo de la propia
+  verificación en navegador).
+- **L4** (documentado, sin corregir): `todayStamp()` usa el día calendario en
+  hora local del equipo; sin daño medible hoy (el consultorio opera en Colombia)
+  y el cambio toca flujos fuera del widget — decisión del médico pendiente.
+
+### 🧪 Pruebas
+`suite_71` (+5 casos de clampeo, 90 en total), `suite_88` (rótulos, pie con
+estampa, frescura y medianoche con reloj congelado, CSS 28×28 y border-box),
+`suite_25` (contrato de `!important` a 669) y **verificación empírica en 3
+motores × 3 viewports con el CSS real del script contra un CSS «Everest»
+simulado agresivo**: 9 de 9 en verde (colores, cierre, panel dentro de la
+ventana, clampeo con la función real, centrado del badge, hover/focus). Safari
+no existe en Windows: WebKit es su motor de cascada, documentado honestamente.
+
+Siete mutaciones verificadas (M1-M7) con sus filas en
+`tests/INFORME_MUTACIONES.md`; documentación retroactiva de las mutaciones de
+términos de por vida y de la mini guía del aviso de actualización (pedidos 1 y 4
+de la sesión).
+
+---
+
 ## [Versión 18.8.2] — 2026-09-08 (Widget «Próximos exámenes»: ahora se cierra y se mueve)
 
 ### ✕ El panel de próximos exámenes por fin se deja cerrar
