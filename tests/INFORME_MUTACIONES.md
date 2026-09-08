@@ -13727,3 +13727,17 @@ _vigilarPanel). Suite nueva suite_104_sync_escritura.js (5/5).
 |---|---|---|---|
 | user.js _vglDomAlTocar (disparo del flush, zona compuerta DOM) | if (ev.type === "input" || ev.type === "change") _vglEscrituraDetectada(); → if (false && ev.type === "input") …: la escritura del médico vuelve a esperar los 20 s del vigilante — el panel abierto ya no se refleja en <1 s | NO | *suite_104* caso «la escritura del médico (input) adelanta al vigilante en <1 s…»: mutante rojo («esperaba 1 y obtuvo 0»); restaurado 5/5 |
 | user.js closeMod del panel (desregistro del vigilante urgente) | _vglPanelVigilanteRegistrar(null) eliminado del cierre: el slot queda apuntando al panel cerrado — la escritura del médico sigue adelantando un vigilante muerto el resto de la jornada | NO | *suite_104* caso «…al cerrar por la ✕ se libera»: mutante rojo («esperaba null y obtuvo undefined»); restaurado 5/5 + banco completo 3678/3678 EXIT=0 |
+
+## v18.8.8 FASE B (PANEL DEL PACIENTE — cabecera con programa + cita sugerida, y documento mascarado — auditoría del 07-sep + orden del 08-sep-2026)
+
+FASE B: el programa del paciente y su cita sugerida (ftl/control del MISMO plan que
+consume el agendador) suben a la CABECERA del panel, visibles desde las cinco pestañas
+(antes solo en Exámenes y en el bento), con su botón «Agendar» que abre
+`openAgendamientoModal` pre-cargado — nunca agenda por su cuenta. Y S5: el documento
+viaja mascarado («···» + últimos 4) en el encabezado del agendador; el clic lo revela
+mientras el modal siga abierto. Suite_67 ampliada de 47 a 51 (4 casos nuevos).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js pintar() del panel (relleno del slot de programa de cabecera, L28931) | `document.getElementById("vgl-panel-prog-slot")` → `…("-NOEXISTE")`: el chip de programa ya no se rellena — la cabecera queda muda y el programa vuelve a vivir solo en Exámenes (la cita sugerida se rellena, el programa no) | NO | *suite_67* caso nuevo «FASE B (B.2+B.4): el panel rellena los chips de cabecera…»: mutante rojo («y el chip de programa quedó relleno en la cabecera — visible también desde Exámenes (obtuvo false)»); restaurado 51 ok EXIT=0 |
+| user.js template del agendador (máscara del documento, L29745) | `${_vglHcMascara(apt.doc_id)}` → `${apt.doc_id}`: el documento viaja pelado en el encabezado del agendador — cualquier persona u ocular sobre la pantalla lo lee sin gesto alguno | NO | *suite_67* caso nuevo «FASE B (S5): el documento viaja mascarado en el agendador…»: mutante rojo («el documento viaja mascarado (··· + últimos 4) en el encabezado (obtuvo false)»); restaurado 51 ok EXIT=0 |

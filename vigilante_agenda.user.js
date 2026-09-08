@@ -28080,6 +28080,50 @@
   }
 
   // ---------- SECCIÓN 3: EXÁMENES Y VIGENCIAS ----------
+  // =====================================================================
+  //  FASE B (v18.8.8, orden del 08-sep-2026) — identidad y cita del paciente
+  //  en la CABECERA del Panel, visibles en las 5 pestañas.
+  // =====================================================================
+  // B.2: el programa del paciente como elemento propio. Antes solo la sección
+  // Exámenes lo nombraba; ahora un chip compacto vive en la cabecera (fuera del
+  // cuerpo que pintar() reescribe) y se actualiza en cada pintado. `d` es
+  // mtrTableroClinico(resumen): d.programa es un OBJETO SIEMPRE truthy — lo que
+  // dice si hay programa es `rector` (REGLA D, el mismo cuidado que ya tiene
+  // mtrPanelExamenesHtml). Devuelve "" cuando aún no hay resumen (nada que pintar).
+  // Sin reglas de color nuevas: reutiliza .vgl-tab-prog/.vgl-tab-mini, ya blindadas.
+  function mtrPanelProgChipHtml(d) {
+    if (!d) return "";
+    const p = d.programa || null;
+    if (!p || !p.rector) {
+      return '<div class="vgl-tab-prog"><b>Sin programa de crónicos</b>'
+        + ' <span class="vgl-tab-mini">(no puedo calcular vigencias ni órdenes sin saber el programa: marque hipertensión, diabetes o enfermedad renal en la historia y vuelva a abrir el módulo)</span></div>';
+    }
+    return '<div class="vgl-tab-prog"><b>Programa: ' + escapeHtml(String(p.rotulo || p.rector)) + '</b>'
+      + ((p.desplazados && p.desplazados.length) ? ' <span class="vgl-tab-mini">(también está en ' + escapeHtml(p.desplazados.join(" y ")) + ')</span>' : "")
+      + ' <span class="vgl-tab-mini">· rige vigencias y órdenes</span></div>';
+  }
+
+  // B.4: bloque «Cita sugerida» con acción. Muestra la toma/control que el motor ya
+  // calculó (d.fechas — el MISMO plan que consume el agendador) y un botón que abre
+  // openAgendamientoModal PRE-CARGADO: el agendador deriva su sugerencia de la caché
+  // del resumen, así que el clic (cableado en pintar, junto a los demás botones del
+  // módulo) vuelve a guardar la lectura en memoria antes de abrir — la fecha que el
+  // Panel muestra y la que el agendador preselecciona son la misma lectura. El médico
+  // manda: este botón solo ABRE el modal; nada se agenda por su cuenta. Devuelve ""
+  // cuando no hay ninguna fecha que sugerir. El botón usa .vgl-agm-btn sec (existente).
+  function mtrPanelCitaHtml(d) {
+    if (!d || !d.fechas) return "";
+    const f = d.fechas;
+    if (!f.ftl && !f.control) return "";
+    return '<div class="vgl-tab-fechas" style="margin-top:4px">🧪 Toma sugerida: <b>'
+      + escapeHtml(f.ftl ? mtrFechaLegible(f.ftl) : "—")
+      + '</b> · 🩺 Control: <b>'
+      + escapeHtml(f.control ? mtrFechaLegible(f.control) : "—")
+      + '</b>' + (f.motivoFtl ? ' <span class="vgl-tab-mini">(' + escapeHtml(f.motivoFtl) + ')</span>' : "")
+      + ' <button type="button" class="vgl-agm-btn sec" id="vgl-panel-agendar" title="Ver la cita sugerida y agendar (usted confirma todo)">Agendar</button>'
+      + '</div>';
+  }
+
   function mtrPanelExamenesHtml(d) {
     if (!d) return '<div class="vgl-agm-sec"><div class="vgl-agm-err">Sin datos suficientes para esta sección.</div></div>';
     const filaHtml = (x, clase) => '<div class="vgl-tab-fila ' + clase + '">'
@@ -28772,9 +28816,14 @@
       + '<div class="vgl-agm-title vgl-agm-kicker">' + MTR_ICONO_ACTIVITY + VGL_ROTULOS.panel + '</div>'
       + '<div class="vgl-agm-patient">' + escapeHtml(apt.nombre || apt.name || "Paciente") + '</div>'
       + '<div class="vgl-agm-sub">Todo lo del paciente en un solo sitio: lo que leí y de dónde, el riesgo y la función renal, qué ordenar, cómo viene evolucionando y sus medicamentos.</div>'
+      // v18.8.8 — FASE B (B.2/B.4): huecos de la cabecera para el programa del paciente y
+      // la cita sugerida. Viven FUERA de #vgl-panel-cuerpo (que pintar() reescribe entero),
+      // así que se ven en las 5 pestañas; pintar() los rellena en cada pasada desde `d`.
+      + '<div id="vgl-panel-prog-slot"></div>'
+      + '<div id="vgl-panel-cita-slot"></div>'
       + '</div><button class="vgl-agm-close" id="vgl-panel-x" aria-label="Cerrar">✕</button></div>'
       + '<div id="vgl-panel-nav-slot"></div>'
-      + '<div id="vgl-panel-cuerpo"><div class="vgl-agm-dinfo">Leyendo al paciente…</div></div>'
+      + '<div id="vgl-panel-cuerpo" aria-live="polite"><div class="vgl-agm-dinfo">Leyendo al paciente…</div></div>'
       + '</div>';
     document.body.appendChild(modal);
     { const x = modal.querySelector("#vgl-panel-x"); if (x && x.addEventListener) x.addEventListener("click", closeMod); }
@@ -28802,11 +28851,18 @@
       // v17.x.x — REFACTOR S+: punto de estado por pestaña (al día / revisar / sin dato),
       // derivado de los MISMOS datos que el tablero de «Estado de un vistazo» del Resumen
       // (mtrPanelResumenBentoDatos): misma regla de no-divergencia de v17.24.0.
+      // v18.8.8 — FASE B: `d` (mtrTableroClinico del resumen) se calcula UNA vez por
+      // pintado y se reutiliza en los puntos de estado, en las secciones que lo consumen
+      // (exámenes/riesgo) y en los chips de cabecera (programa y cita sugerida). Antes
+      // cada consumidor lo recalculaba por su cuenta; el cálculo es puro (sin red) y si
+      // algo falla se degrada a null con las secciones defendidas, igual que ya hacía el
+      // try/catch de los puntos de estado.
+      let d = null;
+      if (_resumen) { try { d = mtrTableroClinico(_resumen); } catch (e) { d = null; } }
       let _estados = null;
-      if (_resumen) {
+      if (d) {
         try {
-          const dE = mtrTableroClinico(_resumen);
-          const bento = mtrPanelResumenBentoDatos(_resumen, dE);
+          const bento = mtrPanelResumenBentoDatos(_resumen, d);
           const estados = {};
           (bento || []).forEach((c) => { estados[c.id] = c.estado; });
           const vals = Object.keys(estados).map((k) => estados[k]);
@@ -28831,7 +28887,6 @@
         // duplicidades); solo le faltaba un llamador desde que v17.28.0 la retiró.
         dentro = mtrPanelMedicamentosHtml(_resumen);
       } else {
-        const d = mtrTableroClinico(_resumen);
         dentro = (seccion === "examenes")
           ? mtrPanelExamenesHtml(d)
           : mtrPanelRiesgoRenalHtml(d, _ctxIncompleto ? _vglTextoContextoFaltante(_ctxIncompleto) : "");
@@ -28866,6 +28921,19 @@
         + '<button type="button" class="vgl-agm-btn pri" id="vgl-panel-cerrar">Cerrar</button>'
         + '</div>';
 
+      // v18.8.8 — FASE B (B.2/B.4): los chips de cabecera se rellenan en CADA pintado
+      // porque el resumen se renueva (labs nuevos, barridos, flush de escritura); los
+      // huecos viven en la cabecera, fuera del cuerpo que acaba de reescribirse, así que
+      // el programa y la cita sugerida se ven en las 5 pestañas. El botón «Agendar» nace
+      // aquí (innerHTML del slot) y se cablea abajo, igual que bl/bc/bHoja: cada pintado
+      // regenera el nodo, cada nodo recibe su único listener.
+      try {
+        const _progSlot = document.getElementById("vgl-panel-prog-slot");
+        if (_progSlot) _progSlot.innerHTML = mtrPanelProgChipHtml(d);
+        const _citaSlot = document.getElementById("vgl-panel-cita-slot");
+        if (_citaSlot) _citaSlot.innerHTML = mtrPanelCitaHtml(d);
+      } catch (e) {}
+
       if (nav) {
         nav.querySelectorAll(".vgl-panel-tab").forEach((b) => b.addEventListener("click", () => {
           const id = mtrPanelSeccionValida(b.getAttribute("data-panel-sec"));
@@ -28893,15 +28961,28 @@
       const bl = cuerpo.querySelector("#vgl-panel-labs");
       if (bl) bl.addEventListener("click", async () => {
         bl.disabled = true;
+        // v18.8.8 FASE B (R4/A3): cronómetro de 1 s en el «Buscando…» (setTimeout
+        // encadenado, no setInterval: suite_63 fija el primer setInterval del Panel
+        // tras la reconciliación de apertura). El botón lleva aria-live="off" mientras
+        // busca para que el segundero no se anuncie en la región viva del cuerpo.
+        try { bl.setAttribute("aria-live", "off"); } catch (e) {}
+        let _labsSegundos = 0, _labsTicker = null;
+        const _labsTick = () => {
+          _labsSegundos += 1;
+          if (!vivo() || !bl.isConnected) return;
+          try { bl.textContent = "Buscando… " + _labsSegundos + " s"; } catch (e) {}
+          _labsTicker = setTimeout(_labsTick, 1000);
+        };
+        _labsTicker = setTimeout(_labsTick, 1000);
         const antes = bl.textContent;
         bl.textContent = "Buscando…";
-        // v18.0.131 (barrido por recorridos, hallazgo 4) — ya NO se borra la caché antes de
-        // preguntar: `{fresco:true}` ya obliga a mtrCalcularResumenClinico a saltar la
-        // pre-carga y consultar en vivo, así que el borrado previo solo servía para dejar al
-        // paciente sin resumen si Athenea tardaba o fallaba. Si la lectura falla, la caché
-        // buena anterior sigue intacta (mtrCalcularResumenClinico ya no la sobrescribe).
+        // v18.0.131 (hallazgo 4): sin borrado previo — {fresco:true} ya obliga a consultar
+        // en vivo; si la lectura falla, mtrCalcularResumenClinico marca _lecturaAtheneaFallo
+        // y no pisa la caché buena anterior (el aviso de abajo lo dice; la limpieza del
+        // cronómetro ya ocurrió en el clearTimeout anterior).
         let _nuevo = null;
         try { _nuevo = await mtrCalcularResumenClinico(apt, vivo, { fresco: true }); } catch (e) {}
+        try { clearTimeout(_labsTicker); } catch (e) {}
         if (!vivo()) return;
         if (_nuevo && _nuevo._lecturaAtheneaFallo) {
           pintar("No se pudo leer el portal de laboratorios (Athenea). Se conservan los últimos datos buenos que hay.");
@@ -28921,6 +29002,19 @@
       if (bHoja) bHoja.addEventListener("click", () => {
         try { uxTrack("fn.panel.hojaEducativa"); } catch (e) {}
         imprimirHojaEducativa(_resumen, { nombre: apt.nombre || apt.name || "" });
+      });
+
+      // v18.8.8 — FASE B (B.4): «Agendar» del bloque «Cita sugerida» (vive en la cabecera,
+      // no en el cuerpo; por eso se busca en el documento, no en `cuerpo`). El agendador
+      // deriva su sugerencia de la CACHÉ del resumen: antes de abrirlo se vuelve a guardar
+      // la lectura en memoria del panel, para que la fecha que el panel muestra y la que el
+      // agendador preselecciona sean la misma lectura — la pre-carga del pedido. El médico
+      // manda: aquí solo se abre el modal; nada se agenda por su cuenta.
+      const bAgendar = document.getElementById("vgl-panel-agendar");
+      if (bAgendar) bAgendar.addEventListener("click", () => {
+        try { uxTrack("fn.panel.agendar"); } catch (e) {}
+        try { if (_resumen && mtrCacheResumenGuardar) mtrCacheResumenGuardar(apt.doc_id, _resumen); } catch (e) {}
+        openAgendamientoModal(apt);
       });
 
       // v17.6.0 — Meta de HbA1c individual: el botón ✏️ solo existe cuando
@@ -29648,7 +29742,7 @@
           <div style="min-width:0">
             <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 ${VGL_ROTULOS.agendar} · Programación de cita · Remisión RCV</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
-            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
+            <div class="vgl-agm-sub">Documento: <b id="vgl-agm-doc" style="cursor:pointer" title="Clic para ver el documento completo">${_vglHcMascara(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
           <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
         </div>
@@ -29917,6 +30011,16 @@
     const slotsEl = modal.querySelector("#vgl-agm-slots");
     if (slotsEl) slotsEl.setAttribute("aria-live", "polite");
     const dayChipsEl = modal.querySelector("#vgl-day-chips");
+    // v18.8.8 — FASE B (S5, auditoría 2026-09-07): la cédula viaja enmascarada en el
+    // encabezado (··· + últimos 4, la MISMA política del chip de la HC); el clic la
+    // revela mientras el modal siga abierto. El médico verifica identidad sin dejar el
+    // documento completo a la vista por defecto — revelar es un gesto explícito suyo.
+    const docEl = modal.querySelector("#vgl-agm-doc");
+    if (docEl) docEl.addEventListener("click", () => {
+      try { uxTrack("fn.agendar.revelarDoc"); } catch (e) {}
+      docEl.textContent = apt.doc_id;
+      docEl.removeAttribute("title");
+    });
 
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
