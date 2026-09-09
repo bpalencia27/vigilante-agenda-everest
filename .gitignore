@@ -35,3 +35,14 @@ node_modules
 # jamás se versiona. El deploy se hace a mano (tarea del frente) y el estado
 # sobra del repo.
 REPLICA_TELEMETRIA/.wrangler/
+
+# 09-sep — Artefactos de depuración de los agentes (skill TRAE-debugger). Son
+# efímeros y propios de cada sesión: se borran al cerrar el caso, nunca se
+# versionan (ver docs/FLUJO_MULTI_IDE.md §9).
+debug-*.md
+trae-debug-log-*.ndjson
+.dbg/
+
+# 09-sep — Identidad LOCAL del entorno (a qué entorno/modelo pertenece este
+# checkout). El candado .vgl-locks/ SÍ se versiona: es el canal compartido.
+.vgl-env.json

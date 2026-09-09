@@ -1,0 +1,29 @@
+#!/bin/sh
+# =====================================================================
+#  pre-commit — candado de archivos entre entornos
+#
+#  Rechaza el commit si alguno de los archivos preparados lo tiene tomado
+#  OTRO entorno de desarrollo (ver docs/FLUJO_MULTI_IDE.md).
+#
+#  FAIL-OPEN DOCUMENTADO: si node no está disponible, el candado se omite y
+#  el commit pasa. Un candado que impide trabajar por un fallo propio es peor
+#  que el conflicto que evita. Lo único DURO es un candado legible y ajeno.
+# =====================================================================
+if ! command -v node >/dev/null 2>&1; then
+  echo "vgl-lock: node no disponible — candado OMITIDO (fail-open documentado)"
+  exit 0
+fi
+
+node tools/vgl-lock.js check --staged
+code=$?
+
+if [ "$code" -eq 1 ]; then
+  echo ""
+  echo "COMMIT RECHAZADO: uno o más archivos preparados los tiene otro entorno."
+  echo "  · candado ya no vigente:   node tools/vgl-lock.js prune"
+  echo "  · lo tomas tú ahora:       node tools/vgl-lock.js acquire <ruta> --env=<tu-entorno>"
+  echo "  · candado muerto a mano:   node tools/vgl-lock.js release <ruta> --force"
+  exit 1
+fi
+
+exit 0
