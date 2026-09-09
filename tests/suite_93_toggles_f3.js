@@ -93,6 +93,32 @@ module.exports = {
       t.cierto(c.api.togSet("tog_agendar", true) === true && c.api.togActiva("tog_agendar") === true, "volver a encender restaura el flujo");
     });
 
+    t.caso("togActiva (BOLT, rendimiento v18.13.1): memo por tick — misma lectura reutilizada dentro de tick(), invalidada por togSet, nunca fuera de la ventana", () => {
+      const c = montar();
+      identidad(c, "DOC-9");
+      c.api.togSet("tog_agendar", true);
+      t.cierto(c.api.togActiva("tog_agendar") === true, "arranca encendido");
+
+      // Dentro de la ventana síncrona de un tick (state._enTickSync=true, calcada de
+      // state._docTick): togActiva() memoiza el mapa de "vgl_tog_DOC-9".
+      c.api.__state._enTickSync = true;
+      t.cierto(c.api.togActiva("tog_agendar") === true, "primera lectura de la ventana: fresca");
+      // Cambio DIRECTO del almacén sin pasar por togSet (simula otro proceso/pestaña
+      // editando la clave): la memo NO debe verlo mientras dure la ventana del tick.
+      c.api.writeJSON("vgl_tog_DOC-9", { tog_agendar: false });
+      t.cierto(c.api.togActiva("tog_agendar") === true,
+        "dentro de la MISMA ventana de tick, sigue viendo el valor memoizado, no el cambio directo del almacén");
+
+      // togSet() SÍ invalida la memo — es el único punto de escritura legítimo.
+      c.api.togSet("tog_agendar", false);
+      t.cierto(c.api.togActiva("tog_agendar") === false, "togSet invalida la memo: la siguiente lectura ya ve su propio cambio");
+
+      // Cierre de la ventana (equivalente al finally{} de tick()): fuera de ella, SIEMPRE fresco.
+      c.api.__state._enTickSync = false;
+      c.api.writeJSON("vgl_tog_DOC-9", { tog_agendar: true });
+      t.cierto(c.api.togActiva("tog_agendar") === true, "fuera de la ventana de tick, togActiva vuelve a leer fresco siempre");
+    });
+
     t.caso("jerarquía: un sub-toggle solo vive mientras su padre está encendido", () => {
       const c = montar();
       identidad(c, "DOC-3");

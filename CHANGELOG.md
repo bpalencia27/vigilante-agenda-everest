@@ -4,6 +4,20 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.13.1] — 2026-09-09 (Ajuste de rendimiento interno: menos lecturas repetidas del almacén en cada repaso)
+
+Una revisión nocturna de rendimiento encontró que, cada vez que el asistente repasa la
+pantalla mientras usted tiene una historia clínica abierta, algunos avisos internos
+consultaban la misma preferencia guardada varias veces seguidas sin necesidad. Ahora esa
+lectura se comparte dentro de un mismo repaso — sin cambiar ningún resultado, ninguna
+alerta ni ningún comportamiento visible.
+
+Verificación: banco de pruebas completo en verde antes y después (3774 comprobaciones);
+mutación deliberada (desactivar el ahorro) puso roja la prueba específica y fue
+restaurada — confirmando que el ahorro funciona sin alterar nada más.
+
+---
+
 ## [Versión 18.13.0] — 2026-09-09 (Segunda tanda de la mesa de expertos: el asistente se puede operar por completo con solo teclado o lector de pantalla)
 
 Continuación de la revisión integral de código de la versión anterior. Esta entrega
