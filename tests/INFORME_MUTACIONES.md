@@ -13825,19 +13825,38 @@ Orden A/B del médico (informe A/B, AB-6): el polling de fondo pasa a frecuencia
 | user.js `_cupoLatenciaMedir` — umbral que separa la ventana atribuible del hueco largo | Invertir el comparador del hueco (`ventana > huecoMax` → `ventana < huecoMax`): los cupos con lectura anterior reciente se contaban como nacidos en hueco y los del hueco largo como ventana normal | NO | *suite_107* 5 casos rojos (cupo nuevo con lectura reciente, tres cupos, rotación de lista, hueco largo e integración por `_procesarFuenteAgenda` — conteo y ventana invertidos); restaurado 9 ok |
 | user.js `apiCadencia` — reposo SIN_PENDIENTES (20 s) y jornada lejana LEJANO (15 s) | Restaurar los valores viejos 30000/20000 ms: el reposo vuelve a 30 s y la jornada lejana a 20 s | NO | *suite_13* 2 casos rojos («sin agenda: reposo de 20 s» y «lejos de la tolerancia… 15 s») y la cabecera del reloj («cada 20 s»); restaurado 64 ok, suite_107 intacta |
 
-## v18.10.0 — 08-sep-2026 (paquete A/B: barridos diferidos AB-1)
+## v18.10.0 — 08-sep-2026 (paquete A/B: barridos diferidos AB-1, reintento transitorio IA AB-2)
 
-AB-1 (informe A/B): la cosecha de la HC y los widgets de conducta/ordenar/farmaco/RCV salen
+AB-1 (informe A/B): la cosecha de la HC y los widgets de conducta/ordenar/fármaco/RCV salen
 del camino del tick con el toggle experimental tog_ab1_diferir (defecto:false — variante A
-historica para todos) y se encolan a idleRun en la variante B, con su MISMA etiqueta de RUM
-(comparacion A/B directa), anti-duplicado por etiqueta, re-chequeo de ctxValido AL CORRER
-(jamas cosecha al paciente equivocado si el medico navego en el intervalo) y doble red de
+histórica para todos) y se encolan a idleRun en la variante B, con su MISMA etiqueta de RUM
+(comparación A/B directa), anti-duplicado por etiqueta, re-chequeo de ctxValido AL CORRER
+(jamás cosecha al paciente equivocado si el médico navegó en el intervalo) y doble red de
 seguridad: sin requestIdleCallback cae al temporizador de idleRun, y si hasta el temporizador
-falla el barrido corre ya en linea. El repintado del panel se mide con nombre propio
+falla el barrido corre ya en línea. El repintado del panel se mide con nombre propio
 (tick.render, las 2 ramas). Suite nueva suite_108_ab1_diferidos.js (16 casos: 9 de unidad
 sobre la puerta + red de seguridad + etiqueta RUM en modo B + 4 estructurales del enganche
-real en el codigo vivo). Mutacion verificada:
+real en el código vivo). Mutación verificada:
 
-| Linea/Ubicacion | Mutacion Aplicada | Sobrevivio? | Asercion Faltante / Guardian |
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
-| user.js _ab1Diferir — condicion de la puerta | Invertir el comparador del toggle (togActiva(...) !== true → === true): con el toggle APAGADO (defecto de todos) el barrido se diferiria en vez de correr en linea | NO | suite_108 12 casos rojos: los 2 de toggle apagado (corre en linea + etiqueta RUM historica), todos los de toggle encendido (al invertir la condicion el toggle encendido ejecutaba en linea) y el modo B por el anillo; EXIT 1. Restaurado 16 ok EXIT=0 |
+| user.js `_ab1Diferir` — condición de la puerta | Invertir el comparador del toggle (togActiva(...) !== true → === true): con el toggle APAGADO (defecto de todos) el barrido se diferiría en vez de correr en línea | NO | suite_108 12 casos rojos: los 2 de toggle apagado (corre en línea + etiqueta RUM histórica), todos los de toggle encendido (al invertir la condición el toggle encendido ejecutaba en línea) y el modo B por el anillo; EXIT 1. Restaurado 16 ok EXIT=0 |
+
+AB-2 (informe A/B): reintento TRANSITORIO del mismo slot en mtrGeminiRedactar. Los escalones
+donde la escalera se rendía — timeout del ÚLTIMO eslabón agotado y error de red del enlace
+(proxy de la IPS) — ahora gastan una bala por tipo (ab2BalaRed/ab2BalaTimeout) que re-dispara
+el MISMO proveedor/modelo con backoff exponencial + jitter acotado (600·2ⁿ, tope 2400, patrón
+VK-01 de SYNAPSE) y re-check de o.control.cancelado al despertar. La bala NO consume la
+escalera (el «intento X de Y» repite su X), la de timeout solo aplica al último eslabón (los
+intermedios rotan como siempre) y la redacción queda acotada: red caída de verdad = bala
+única y el fallo honesto de siempre. Nueva métrica ia.primera.ms (convenio RUM: la clave
+cuenta generaciones y .total suma los ms reales hasta la primera respuesta útil, desde _t0).
+Suite nueva suite_109_ab2_reintentos.js (10 casos) + ajuste de 2 guardas envejecidas
+(suite_81 P10·6 anclaba «el disparo vive dentro del conector» a un tope de 8000 chars que el
+bloque nuevo cruzó → ancla al final real de la función; suite_57 contaba 7 disparos en el
+timeout total → 8 con la bala del último, distinguida de la repetición ciega v17.6.81 por la
+telemetría ia.timeout.rota=6 + ia.timeout.reintenta=1). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrGeminiRedactar` — bala de red en onerror | Anular la bala (if (ab2BalaRed) → if (false)): el error de red vuelve a resolver el fallo de inmediato, sin re-disparar el slot | NO | suite_109 4 casos rojos: blip de red (esperaba 2 disparos al MISMO slot y llegó 1), red caída (esperaba la bala única), cancelar durante el backoff (el reintento ya no existe que retirar) y la guarda estructural del orden en onerror; EXIT 1. Restaurado 10 ok EXIT=0 |

@@ -49426,6 +49426,28 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         // por CUALQUIERA de los dos motivos, sin mezclar sus nombres (el mensaje final que
         // lee el médico sigue distinguiendo cuál fue).
         const _mereceRotar = (status, texto) => mtrEsCuotaAgotada(status, texto) || mtrEsModeloSobrecargado(status, texto) || mtrEsModeloNoDisponible(status, texto);
+        // v18.10.0 (AB-2, informe A/B) — REINTENTO TRANSITORIO del MISMO slot: los
+        // escalones donde la escalera se rinde hoy son los más expuestos a blips que no
+        // son del modelo sino del ENLACE (timeout del último eslabón agotado, error de
+        // red del proxy de la IPS). Rendirse ahí obligaba al médico a pulsar Generar
+        // otra vez. Una bala por tipo (red/timeout) re-dispara el MISMO slot con backoff
+        // corto exponencial + jitter (patrón VK-01 de SYNAPSE): si el blip era pasajero,
+        // la generación sale; si persiste, la bala ya se gastó y se resuelve el fallo de
+        // siempre. NO consume intentos de la escalera: el «intento X de Y» repite su X
+        // (insistencia sobre el mismo escalón, no avance) y maxIntentos no cambia.
+        let ab2Paso = 0;              // reintentos transitorios acumulados (crece el backoff)
+        let ab2BalaRed = true;        // el error de red reintenta UNA vez el mismo slot
+        let ab2BalaTimeout = true;    // y el timeout del último eslabón, otra
+        const ab2Reintentar = (tipo) => {
+          const espera = Math.min(2400, 600 * Math.pow(2, ab2Paso++)) + Math.floor(Math.random() * 600);
+          setTimeout(() => {
+            try {
+              if (o.control && o.control.cancelado) return;   // cancelaron durante la espera
+              _tel("ia." + tipo + ".reintenta");
+              intentar();
+            } catch (e) { resolve({ ok: false, texto: "", motivo: "excepción: " + (e && e.message) }); }
+          }, espera);
+        };
         const intentar = () => {
           // v16.5.0 — CADENA CONSCIENTE DE CUOTA (advertencia del médico: free tier con 2
           // médicos posiblemente compartiendo clave). El PRIMER intento usa el modelo del
@@ -49489,11 +49511,22 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
                 _tel("ia.ok.model." + modelo);
                 _tel("ia.lat." + _telBucket());
                 _tel("ia.lat.model." + sMod + "." + _telBucket());
+                // v18.10.0 (AB-2) — latencia REAL hasta la primera respuesta útil de la
+                // generación (convenio RUM: la clave cuenta generaciones y .total suma
+                // ms; media = total/conteo). Medida desde _t0: si hubo rotación o
+                // reintento transitorio, su espera queda incluida — es lo que el médico
+                // sintió.
+                try { uxTrack("ia.primera.ms", { n: Date.now() - _t0 }); } catch (e) {}
               }
               else { _tel("ia.fallo"); _tel(mtrEsCuotaAgotada(status, cuerpoResp) ? "ia.fallo.cuota" : (mtrEsModeloSobrecargado(status, cuerpoResp) ? "ia.fallo.saturado" : (mtrEsModeloNoDisponible(status, cuerpoResp) ? "ia.fallo.nodisponible" : "ia.fallo.respuesta"))); }
               resolve(r);
             },
-            onerror: () => { if (o.control && o.control.cancelado) return; _tel("ia.fallo"); _tel("ia.fallo.red"); resolve({ ok: false, texto: "", motivo: "error de red (¿proxy de la IPS bloquea Gemini?)" }); },
+            onerror: () => {
+              if (o.control && o.control.cancelado) return;
+              _tel("ia.fallo"); _tel("ia.fallo.red");
+              if (ab2BalaRed) { ab2BalaRed = false; ab2Reintentar("red"); return; }   // v18.10.0 AB-2
+              resolve({ ok: false, texto: "", motivo: "error de red (¿proxy de la IPS bloquea Gemini?)" });
+            },
             // v17.6.69 — [reportado en consultorio, 26-ago-2026] BUG REAL: la rotación de
             // modelo (mtrRotarModelo/intentar, ver el bloque `_mereceRotar` de `onload` arriba)
             // solo se disparaba para respuestas HTTP con status reconocido (429/503/400/404/
@@ -49513,6 +49546,10 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
                 _tel("ia.timeout.rota");
                 intentos++; if (prov.id === "gemini") mtrRotarModelo(); intentar(); return;
               }
+              // v18.10.0 (AB-2) — último eslabón agotado: una bala re-dispara el MISMO
+              // slot con backoff antes de rendirse (un timeout de 25 s también puede ser
+              // un blip del enlace, no del modelo; la rotación ya no tiene a dónde ir).
+              if (ab2BalaTimeout) { ab2BalaTimeout = false; ab2Reintentar("timeout"); return; }
               resolve({ ok: false, texto: "", motivo: "tiempo agotado en todos los proveedores configurados" });
             },
           });
