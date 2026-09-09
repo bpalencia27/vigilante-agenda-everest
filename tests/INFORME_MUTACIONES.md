@@ -14022,3 +14022,32 @@ con el banco completo antes/después, sin fila propia.
 | user.js `checkVersionMinimum` — `needsUpdate` vía `mtrVersionEsMasNueva` | `const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);` → `const needsUpdate = false;` (el candado de versión mínima deja de dispararse) | NO | suite_30 caso «checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado…»: mutante rojo; EXIT 1 (12 ok, 1 falla). Restaurado 13 ok EXIT=0 |
 | user.js widget Próximos exámenes — guarda de clic dentro del panel abierto | `if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;` → `if (false && …) return;` (leer/seleccionar una fila del panel vuelve a cerrarlo de golpe) | NO | suite_71 caso «mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded…, y un clic DENTRO del panel abierto no lo cierra»: mutante rojo; EXIT 1 (90 ok, 1 falla). Restaurado 91 ok EXIT=0 |
 | user.js `hcAnexo5Render` / `a5Cerrar` — barra de Deshacer | Insertado `if (true) return;` justo antes de construir la barra `#vgl-a5-deshacer` (cerrar el aviso del Anexo 5 vuelve a ser irreversible al toque, sin recurso) | NO | suite_91 caso «F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso»: mutante rojo; EXIT 1 (28 ok, 1 falla). Restaurado 29 ok EXIT=0 |
+
+## v18.13.1 (BOLT — auditoría nocturna de rendimiento, quick win #1: memo por tick del mapa de toggles)
+
+Cartografía real (sección 2.3 del encargo): `togActiva()` lee `readJSON("vgl_tog_"+uid)`
+del almacén en CADA llamada; `hcAnexo5Render()` (que corre en cada vuelta de tick mientras
+la HC está abierta) llama `togActiva("tog_notif") || togActiva("tog_anexo5")`, y como
+`tog_anexo5` tiene `sub:"tog_notif"`, `togActiva` se reinvoca a sí mismo — hasta 3 lecturas
+síncronas de la MISMA clave de almacén por vuelta de tick, solo en esa línea. `avisoUniversal()`
+repite la lectura de `tog_notif` por su cuenta y queda cubierto "de rebote" por el mismo fix
+(no necesitó cambio propio).
+
+Fix: memo por tick calcado del patrón ya aceptado para `state._docTick`/`_vglDocDelTick()`
+(mismo criterio de riesgo). `state._enTickSync=true` se arma al entrar a `tick()` y se limpia
+en un `finally{}` (atraviesa cualquier `return` temprano), así que ningún llamador POSTERIOR a
+esa vuelta —clic, callback diferido, la vuelta siguiente con otro médico activo— puede leer un
+mapa de toggles cacheado de una vuelta anterior. `togActiva()` reutiliza `state._togMapTick`
+SOLO si `state._enTickSync` es true y el uid coincide; `togSet()` invalida la memo al escribir
+(único punto de escritura legítimo). Coherencia entre pestañas intacta: la memo nunca sobrevive
+fuera de la ventana síncrona de un solo `tick()`, así que un cambio de otra pestaña se ve en el
+siguiente tick como siempre.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `togActiva` — condición de la memo por tick | `if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {` → `if (false && …) {` (la memo nunca se usa, togActiva vuelve a leer fresco siempre) | NO | suite_93 caso «togActiva (BOLT, rendimiento v18.13.1): memo por tick…»: mutante rojo; EXIT 1 (10 ok, 1 falla). Restaurado 11 ok EXIT=0 |
+
+Banco completo: EXIT=0, 3774 comprobaciones (baseline y resultado idénticos — el fix no
+cambia ningún resultado observable de `togActiva`/`togSet`, solo cuántas veces se lee el
+almacén dentro de una misma vuelta de tick; sin instrumentación de conteo de lecturas en el
+banco, la reducción de I/O queda documentada aquí, no medida con una aserción numérica).

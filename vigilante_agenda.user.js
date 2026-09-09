@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.13.0
+// @version      18.13.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10203,13 +10203,31 @@
   function _togUid() {
     try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
   }
+  // v18.13.1 (BOLT, rendimiento) — lectura fresca real del mapa de toggles del uid
+  // (el ÚNICO punto de lectura de "vgl_tog_<uid>"; togSet() es el ÚNICO punto de
+  // escritura, verificado con grep antes de proponer la memo — sección 2.3 del
+  // encargo). Extraída de togActiva() para que el memo por tick (de abajo) y la
+  // invalidación de togSet() compartan la misma lectura sin duplicar código.
+  function _togMapaFresca(uid) { return readJSON("vgl_tog_" + uid, null) || {}; }
   function togActiva(k) {
     try {
       const def = VGL_TOGGLES.find((x) => x.k === k);
       if (!def) return true;                        // clave inexistente: fail-open documentado
       const uid = _togUid();
       if (!uid) return def.defecto !== false;       // sin identidad: defaults (todo activo)
-      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      // v18.13.1 (BOLT) — memo por tick (mismo patrón que state._docTick, F-P2):
+      // SOLO mientras state._enTickSync es true (ventana síncrona de una vuelta de
+      // tick(), ver tick()) se reutiliza state._togMapTick si es del mismo uid.
+      // Fuera de esa ventana (clics, Ajustes, callbacks diferidos) o con otro uid,
+      // se lee fresco siempre — igual que _vglDocDelTick() nunca memoiza la vía
+      // diferida.
+      let mapa;
+      if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {
+        mapa = state._togMapTick;
+      } else {
+        mapa = _togMapaFresca(uid);
+        if (state && state._enTickSync) { state._togMapTick = mapa; state._togMapTickUid = uid; }
+      }
       let act = (k in mapa) ? !!mapa[k] : (def.defecto !== false);
       if (act && def.sub && !togActiva(def.sub)) act = false;   // el padre manda
       return act;
@@ -10219,9 +10237,14 @@
     try {
       const uid = _togUid();
       if (!uid) return false;                       // sin identidad no se persiste nada
-      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      const mapa = _togMapaFresca(uid);
       mapa[k] = !!on;
       writeJSON("vgl_tog_" + uid, mapa);
+      // v18.13.1 (BOLT) — invalida la memo por tick: la escritura es el único punto
+      // que puede dejarla desactualizada dentro de la MISMA vuelta de tick() (p.
+      // ej. Ajustes llamando togSet en caliente); togActiva() vuelve a leer fresco
+      // en su siguiente llamada.
+      state._togMapTick = null; state._togMapTickUid = null;
       uxTrack("tog." + k + "." + (on ? "on" : "off"));
       try { createAccionesDockUI(); } catch (e2) {}   // re-pintado en caliente del dock
       // v18.6.2 (F-P3) — el interruptor de la caché de catálogos actúa en caliente:
@@ -38264,6 +38287,16 @@
   function tick() {
     try {
       if (state.killed) return;
+      // v18.13.1 (BOLT, rendimiento) — MEMO POR TICK DEL MAPA DE TOGGLES: mismo
+      // patrón ya establecido para state._docTick (F-P2). togActiva() lee
+      // "vgl_tog_<uid>" del almacén; dentro de una sola vuelta de tick() se leía
+      // hasta 3 veces la MISMA clave (p. ej. hcAnexo5Render: togActiva("tog_notif")
+      // + togActiva("tog_anexo5") cuyo `sub` vuelve a togActiva("tog_notif")).
+      // state._enTickSync delimita la ventana: SOLO mientras es true, togActiva()
+      // reutiliza state._togMapTick/_togMapTickUid; togSet() la invalida al
+      // escribir; cualquier llamador fuera de esta vuelta (clics, Ajustes,
+      // callbacks diferidos) sigue leyendo fresco, igual que _vglDocDelTick().
+      state._enTickSync = true;
       // v18.3.4 (hallazgo N8-B1) — RE-VISA DEL MONITOR: la ruta sin-identidad de
       // v18.3.2 monta #vgl-root antes de saber quién consulta (el montaje se
       // difiere en boot()). En cuanto la identidad ES conocida y el perfil
@@ -38651,6 +38684,16 @@
         }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }
+    finally {
+      // v18.13.1 (BOLT, rendimiento) — cierre de la ventana del memo por tick: se
+      // limpia SIEMPRE (incluidos los `return` tempranos de arriba, `finally` los
+      // atraviesa todos), así que ningún llamador posterior a esta vuelta —clic,
+      // callback diferido, la vuelta siguiente con otro médico activo— puede leer
+      // el mapa de toggles cacheado de esta vuelta.
+      state._enTickSync = false;
+      state._togMapTick = null;
+      state._togMapTickUid = null;
+    }
   }
 
   // v14.1.9 — La cabecera del informe descargable filtraba lo que todo el resto del
