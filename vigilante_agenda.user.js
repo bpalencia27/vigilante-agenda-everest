@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.12.0
+// @version      18.13.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.12.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7163,10 +7163,21 @@
         widget.id = "vgl-cw-examenes";
         widget.addEventListener("click", (e) => {
           e.stopPropagation();
+          // v18.13.0 (Mesa de Expertos): un clic DENTRO del panel ya abierto (leer/seleccionar
+          // texto de una fila) no debe cerrarlo — solo el badge alterna apertura.
+          if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;
           _cwAbierto = !_cwAbierto;
           widget.classList.toggle("vgl-cw-abierto", _cwAbierto);
           widget.classList.remove("vgl-cw-atencion");   // el clic reconoce el aviso
+          const badge = widget.querySelector(".vgl-cw-badge");
+          if (badge) badge.setAttribute("aria-expanded", String(_cwAbierto));
           if (_cwAbierto) _cwClamparPanelAbierto(widget);   // v18.8.3 — ver abajo
+        });
+        widget.addEventListener("keydown", (e) => {
+          if ((e.key === "Enter" || e.key === " ") && e.target.closest(".vgl-cw-badge")) {
+            e.preventDefault();
+            widget.querySelector(".vgl-cw-badge").click();
+          }
         });
         document.body.appendChild(widget);
       }
@@ -7200,7 +7211,12 @@
       _cwFirmaPrevia = firma; _cwNPrevio = datos.n;
       const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
       widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
-      widget.innerHTML = '<div class="vgl-cw-badge">🧪' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+      // v18.13.0 (Mesa de Expertos): rol/etiqueta accesible del badge (antes mudo para lector
+      // de pantalla) — texto fijo del propio Vigilante, cero PHI.
+      const cwAriaEx = datos.sinJuicio ? "Próximos exámenes: sin datos para juicio clínico."
+        : datos.n > 0 ? ("Próximos exámenes: " + datos.n + (datos.n === 1 ? " pendiente." : " pendientes."))
+        : "Próximos exámenes: al día.";
+      widget.innerHTML = '<div class="vgl-cw-badge" role="button" tabindex="0" aria-expanded="' + _cwAbierto + '" aria-label="' + cwAriaEx + ' Pulse para ' + (_cwAbierto ? "cerrar" : "ver") + ' el detalle.">🧪' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
     } catch (e) {}
   }
 
@@ -7885,9 +7901,19 @@
         widget.id = "vgl-cw-farmaco";
         widget.addEventListener("click", (e) => {
           e.stopPropagation();
+          // v18.13.0 (Mesa de Expertos): un clic DENTRO del panel ya abierto no debe cerrarlo.
+          if (_cwfAbierto && e.target.closest(".vgl-cw-panel")) return;
           _cwfAbierto = !_cwfAbierto;
           widget.classList.toggle("vgl-cw-abierto", _cwfAbierto);
           widget.classList.remove("vgl-cw-atencion");
+          const badge = widget.querySelector(".vgl-cw-badge");
+          if (badge) badge.setAttribute("aria-expanded", String(_cwfAbierto));
+        });
+        widget.addEventListener("keydown", (e) => {
+          if ((e.key === "Enter" || e.key === " ") && e.target.closest(".vgl-cw-badge")) {
+            e.preventDefault();
+            widget.querySelector(".vgl-cw-badge").click();
+          }
         });
         document.body.appendChild(widget);
       }
@@ -7906,7 +7932,11 @@
       _cwfFirmaPrevia = firma; _cwfNPrevio = datos.n;
       const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
       widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwfAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
-      widget.innerHTML = '<div class="vgl-cw-badge">💊' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+      // v18.13.0 (Mesa de Expertos): mismo tratamiento accesible que el badge de exámenes.
+      const cwfAriaEx = datos.sinJuicio ? "Fármacos RCV: sin datos para juicio clínico."
+        : datos.n > 0 ? ("Fármacos RCV: " + datos.n + (datos.n === 1 ? " pendiente." : " pendientes."))
+        : "Fármacos RCV: al día.";
+      widget.innerHTML = '<div class="vgl-cw-badge" role="button" tabindex="0" aria-expanded="' + _cwfAbierto + '" aria-label="' + cwfAriaEx + ' Pulse para ' + (_cwfAbierto ? "cerrar" : "ver") + ' el detalle.">💊' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
     } catch (e) {}
   }
 
@@ -14171,9 +14201,14 @@
                 _rageAvisoHostAt = ahora;
                 uxTrack("ux.rage.aviso");
                 try {
+                  // v18.13.0 (Mesa de Expertos): persist=true — salía en 9 s como cualquier
+                  // aviso rutinario, justo cuando el sistema puede estar lento y el médico
+                  // ansioso ya no está mirando la bandeja. Se cierra con clic/Escape, igual
+                  // que cualquier otro toast persistente; nunca se acumula (30 s de cadencia
+                  // propia arriba, apptKey ausente = sin reemplazo automático).
                   showToast("AZUL", "Everest no responde",
                     "Lleva tres o más clics seguidos en el mismo punto sin reacción del sistema. Puede estar cargando o bloqueado: espere unos segundos y, si sigue igual, recargue la consulta. El centinela solo le avisa: usted decide.",
-                    false);
+                    true);
                 } catch (e) {}
               }
             } catch (e) {}
@@ -15772,12 +15807,43 @@
         '<div style="margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--c-rojo);border-radius:8px;background:var(--surface-2);font-size:var(--t-small);line-height:1.45;color:var(--fg2) !important;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
         '<span style="font-weight:700;color:var(--fg) !important;">&#129656; Anexo 5 · ' + escapeHtml(datos.prog) + " — paciente " + _vglHcMascara(ctx.docId) + "</span>" +
-        '<span data-a5-cerrar role="button" tabindex="0" title="Cerrar por este turno" style="cursor:pointer;color:var(--fg3) !important;font-weight:700;padding:0 4px;">×</span></div>' +
+        '<span data-a5-cerrar role="button" tabindex="0" aria-label="Cerrar el aviso del Anexo 5 por este turno" title="Cerrar por este turno" style="cursor:pointer;color:var(--fg3) !important;font-weight:700;padding:0 4px;">×</span></div>' +
         filas.join("") +
         '<div style="margin-top:4px;color:var(--fg3) !important;">' + escapeHtml(ctxLinea) + "</div>" +
         "</div>";
       const btn = panel.querySelector("[data-a5-cerrar]");
-      if (btn) btn.addEventListener("click", () => { _vglA5Cerrados.add(datos.docKey); panel.remove(); });
+      // v18.13.0 (Mesa de Expertos): cerrar ya no es irreversible al toque — el panel SE
+      // QUITA de verdad y de inmediato (suite_91 lo exige así: "cerrar quita el panel"),
+      // pero queda aparte una barra de "Deshacer" nueva (VGL_DESHACER_VISIBLE_MS, mismo
+      // patrón ya validado del proyecto) que reconstruye el aviso si el clic fue
+      // accidental — sensible sobre todo en una alerta de ABANDONO DEL PROGRAMA.
+      const a5Cerrar = () => {
+        _vglA5Cerrados.add(datos.docKey);
+        try { panel.remove(); } catch (e0) {}
+        try {
+          let d = document.getElementById("vgl-a5-deshacer");
+          if (d) d.remove();
+          d = document.createElement("div");
+          d.id = "vgl-a5-deshacer";
+          d.style.cssText = "margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:var(--t-small);color:var(--fg2) !important;display:flex;justify-content:space-between;align-items:center;gap:10px;";
+          d.innerHTML = "<span>Aviso del Anexo 5 cerrado por este turno.</span>" +
+            '<button type="button" data-a5-deshacer style="background:none;border:none;color:var(--c-azul) !important;text-decoration:underline;cursor:pointer;font-weight:700;padding:4px;">&#8617; Deshacer</button>';
+          root.appendChild(d);
+          const btnDeshacer = d.querySelector("[data-a5-deshacer]");
+          const quitarBarra = () => { try { d.remove(); } catch (e1) {} };
+          const tId = setTimeout(quitarBarra, VGL_DESHACER_VISIBLE_MS);
+          if (btnDeshacer) btnDeshacer.addEventListener("click", () => {
+            clearTimeout(tId);
+            quitarBarra();
+            _vglA5Cerrados.delete(datos.docKey);
+            try { hcAnexo5Render(); } catch (e2) {}
+          });
+        } catch (e3) {}
+      };
+      if (btn) {
+        btn.addEventListener("click", a5Cerrar);
+        btn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); a5Cerrar(); } });
+      }
       // Aria-live: UNA vez por paciente, SIN cédula (PHI acústico — misma regla del
       // aviso de fraude de la FICHA 8).
       let live = document.getElementById("vgl-a5-live");
@@ -17506,6 +17572,12 @@
         [...wrap.children].forEach((n) => {
           if (n && n.__vglApptKey === apptKey && n.classList && !n.classList.contains("out")) {
             try { uxTrack("toast.desenlace", { color: n.__vglColor || "", via: "reemplazo" }); } catch (eT) {}   // [NT/M18]
+            // v18.13.0 (Mesa de Expertos, revertido tras el banco): se intentó la misma
+            // animación de 260 ms del cierre manual, pero suite_42 exige a propósito que
+            // «un aviso nuevo para la MISMA cita reemplaza al viejo» quede en
+            // wrap.children.length === 1 de forma SÍNCRONA (v17.0.3, reporte de campo: dos
+            // carteles apilados para la misma cita) — animar deja los dos convivir 260 ms.
+            // Esa garantía pesa más que la animación aquí; se queda el remove() inmediato.
             try { n.remove(); } catch (e2) {}
           }
         });
@@ -17521,7 +17593,7 @@
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},167,139,250);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col}) !important"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x" aria-hidden="true">×</span>`;
       t.querySelector(".vgl-toast-ic").innerHTML = TOAST_ICONO_SVG[color] || TOAST_ICONO_SVG.AZUL;
       const emoji = TOAST_EMOJI[color] || "";
       let titulo = String(title || "");
@@ -17556,7 +17628,10 @@
         const quitar = [...lista].reverse().find((n) => !n.__vglCritico) || lista[lista.length - 1];
         if (!quitar) break;
         try { uxTrack("toast.desenlace", { color: quitar.__vglColor || "", via: "recorte" }); } catch (eT) {}   // [NT/M18] la bandeja saturó sus 4 vivos
-        quitar.remove();
+        // v18.13.0 (Mesa de Expertos): igual que arriba — el recorte por saturación tiraba
+        // el toast de golpe; vivos() ya filtraba por ".out", así que ya estaba pensado
+        // para convivir con la animación, solo faltaba usarla aquí.
+        try { quitar.classList.add("out"); setTimeout(() => { try { quitar.remove(); } catch (e4) {} }, 260); } catch (e5) { quitar.remove(); }
       }
     } catch (e) {}
   }
@@ -17611,7 +17686,7 @@
         // v17.11.0 — el más grave, nunca un valor fijo (ver mtrColorMasGrave arriba).
         color: mtrColorMasGrave(listaP.map((t) => t && t.color)),
         title: listaP.length + " avisos de este paciente",
-        body: listaP.map((t) => "• " + t.title + ": " + t.body).join("  |  "),
+        body: listaP.map((t) => "• " + t.title + ": " + t.body).join("\n"),
         persist: true, apptKey: listaP[0].apptKey,
       });
     }
@@ -17648,7 +17723,7 @@
           _renderToast(mtrColorMasGrave(agrupados.map((t) => t && t.color)),
             `Alerta Múltiple (${agrupados.length})`,
             `${criticos} críticas · ${agrupados.length - criticos} rutinarias — `
-              + agrupados.map((t) => "• " + String((t && t.title) || "")).join("  |  "), true);
+              + agrupados.map((t) => "• " + String((t && t.title) || "")).join("\n"), true);
         } else {
           agrupados.forEach(t => _renderToast(t.color, t.title, t.body, t.persist, t.apptKey));
         }
@@ -19750,7 +19825,7 @@
       }
       #vgl-acciones-dock.colapsado .vgl-dock-btns{display:none}
       .vgl-dock-toggle{
-        width:26px;height:22px;border:none;border-radius:var(--r-chip);
+        width:28px;height:28px;border:none;border-radius:var(--r-chip);
         background:transparent;color:var(--fg3) !important;cursor:pointer;padding:0;
         display:flex;align-items:center;justify-content:center;font-size:var(--t-micro);
         transition:background .15s var(--ease-out),color .15s var(--ease-out);
@@ -20064,7 +20139,7 @@
          Un blindaje que hereda de un padre secuestrado no blinda nada. La cadena entera
          necesita color propio con !important, desde la raíz. */
       #vgl-cw-examenes{position:absolute;z-index:var(--z-widget,2147480000);font-family:"adineue PRO",var(--font-stack, sans-serif);max-width:280px;transform:translateX(-50%);color:var(--fg) !important}
-      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out 3}
       #vgl-cw-examenes .vgl-cw-panel{
         display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
         border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
@@ -20228,9 +20303,10 @@
       #vgl-cw-farmaco .vgl-cw-badge{
         display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
         background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
-        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
+        padding:6px 12px;min-height:28px;box-sizing:border-box;font-size:var(--t-micro);font-weight:700;
         color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
       }
+      #vgl-cw-examenes .vgl-cw-badge:focus-visible,#vgl-cw-farmaco .vgl-cw-badge:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
       #vgl-cw-farmaco.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
       /* v18.0.124 (UI/UX UI#8) — SEXTO sitio, que la auditoría no había listado y destapó la
          guarda nueva: --fg3 ya es el token muteado y apilarle opacidad lo baja otra vez. Aquí
@@ -20245,7 +20321,7 @@
       }
       #vgl-cw-farmaco.vgl-cw-abierto .vgl-cw-panel{display:block}
       #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
-      #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out 3}
       #vgl-cw-farmaco :where(:not([class])){color:inherit !important}
       /* v18.8.4 (T1): blindaje tipográfico de los 9 modales/avisos pegados a document.body
          (lista de CLAUDE.md). El texto suelto SIN clase propia hereda el color del modal y
@@ -21186,6 +21262,9 @@
         animation:vglToastIn .34s var(--spring);
         cursor:pointer;
       }
+      /* v18.13.0 (Mesa de Expertos): el toast completo es lo enfocable de verdad
+         (tabIndex=0, Escape/Enter/Espacio cierran) — la «×» es solo decorativa. */
+      .vgl-toast:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
       @keyframes vglToastIn{
         from{opacity:0;transform:translateX(26px) scale(.97)}
         to{opacity:1;transform:none}
@@ -21207,7 +21286,7 @@
       }
       .vgl-toast-x{
         cursor:pointer;color:var(--fg3) !important;font-size:var(--t-lead);
-        line-height:1;padding:2px 6px;border-radius:var(--r-chip);
+        line-height:1;padding:2px 6px;min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-chip);
         transition:background .14s var(--ease-out),color .14s var(--ease-out)
       }
       .vgl-toast-x:hover{background:var(--bg4);color:var(--fg) !important}
@@ -21636,7 +21715,7 @@
       .vgl-agm-close{
         background:transparent;border:0;color:var(--fg) !important;
         font-size:var(--t-hero);font-weight:700;cursor:pointer;
-        opacity:.7;padding:0 6px;border-radius:var(--r-chip);
+        opacity:.7;padding:0 6px;min-height:28px;min-width:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-chip);
         transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
       #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg) !important}
@@ -21763,7 +21842,7 @@
         box-shadow:0 0 22px rgba(var(--rgb-verde),.12);
       }
       .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
-      .vgl-agm-pbtn.vgl-sm{font-size:var(--t-micro);padding:3px 9px}
+      .vgl-agm-pbtn.vgl-sm{font-size:var(--t-micro);padding:3px 9px;min-height:28px;display:inline-flex;align-items:center}
       .vgl-agm-sbtn{
         background:var(--bg2);color:var(--fg) !important;
         border:1px solid var(--edge);
@@ -33410,6 +33489,14 @@
     cancelBtn = modal.querySelector("#vgl-ord-cancel");
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    // v18.13.0 (Mesa de Expertos): el patrón universal de accesibilidad (Escape cierra,
+    // Tab queda atrapado) se activaba ~300 líneas más abajo, después de la consulta a
+    // Athenea (sexo del paciente) y el cruce antiduplicado — mientras tanto, un médico
+    // con solo teclado no podía cerrar con Escape ni quedaba atrapado en el cuadro. Se
+    // activa aquí, justo tras pintar el esqueleto; getFocusableElements() de la función
+    // reconsulta el DOM en vivo en cada tecla, así que no importa que los controles
+    // reales (casillas, «Confirmar») todavía no existan.
+    if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);
 
     // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
     // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
@@ -33709,7 +33796,9 @@
       updateCount();
     }));
     updateCount();
-    _activarAccesibilidadModal(modal, closeMod);
+    // v18.13.0 — la activación ya ocurrió justo tras pintar el esqueleto (ver arriba,
+    // apenas se hace document.body.appendChild(modal)); una segunda llamada aquí
+    // duplicaría el listener de teclado (Escape/Tab se procesarían dos veces).
 
     confirmBtn.addEventListener("click", async () => {
       const selectedBoxes = Array.from(chks).filter((c) => c.checked);
@@ -37339,6 +37428,7 @@
   // _relojCada, Web Worker con degradación a setInterval), así que la hora avanza en CUALQUIER
   // pantalla de Everest. El aviso de datos viejos (ámbar vgl-stale) se conserva intacto.
   let _relojSegundosMontado = false;   // sello de "intenté montar el canal" (no afecta a la lógica)
+  let _relojStaleAnterior = null;   // null = aún no evaluado; true/false tras la primera vuelta (v18.13.0: aria-live solo en la transición, nunca por cada tic)
   function _relojSegundosMontar() {
     if (_relojSegundosMontado || !el || !el.root) return;
     _relojSegundosMontado = true;
@@ -37375,6 +37465,27 @@
         ? "Hora actual y tiempo de turno. Todavía no he leído la agenda en esta sesión: no sé si los datos están al día."
         : fresco ? "Hora actual y tiempo de turno. Datos al día."
         : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".") + _cadTxt;
+      // v18.13.0 (Mesa de Expertos): la señal de "desactualizado" ya no depende solo del
+      // color ámbar (vgl-stale) — queda como texto visible también, para quien no
+      // distingue el color; y un aria-live SOLO en la transición avisa a quien usa
+      // lector de pantalla (el reloj tiene su propio tic de 1 s — anunciar en cada
+      // vuelta sería ruido constante, así que se compara contra la vuelta anterior).
+      const stale = _hubo && !fresco;
+      if (stale) c.textContent += " · datos viejos";
+      if (_relojStaleAnterior !== stale) {
+        _relojStaleAnterior = stale;
+        try {
+          let live = document.getElementById("vgl-clock-live");
+          if (!live && document.body) {
+            live = document.createElement("div");
+            live.id = "vgl-clock-live";
+            live.setAttribute("aria-live", "polite");
+            live.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);";
+            document.body.appendChild(live);
+          }
+          if (live) live.textContent = stale ? "Datos de la agenda desactualizados." : (_hubo ? "Datos de la agenda al día." : "");
+        } catch (e3) {}
+      }
     } catch (e) {}
   }
   // ===== [v17.6.7] Cierre de turno: checklist y adherencia.
@@ -39101,6 +39212,13 @@
       btn.type = "button";
       btn.textContent = "Actualizar ahora";
       btn.style.cssText = "pointer-events:auto;background:#ffffff;color:#991b1b !important;font-weight:700;border:none;border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer;margin-bottom:12px;";
+      // v18.13.0 (Mesa de Expertos): si el navegador bloquea la ventana nueva,
+      // window.open devuelve null/undefined — antes no había ninguna señal ni salida
+      // alterna. Este enlace queda oculto y solo se muestra en ese caso exacto.
+      const fallbackAbrir = document.createElement("div");
+      fallbackAbrir.id = "vgl-bloqueo-fallback";
+      fallbackAbrir.style.cssText = "display:none;color:#ffffff !important;margin:-4px 0 12px 0;font-size:var(--t-small,13px);";
+      fallbackAbrir.innerHTML = "El navegador bloqueó la ventana nueva. <a href=\"" + escapeHtml(VGL_UPDATE_GIST_URL) + "\" target=\"_blank\" rel=\"noopener\" style=\"color:#ffffff !important;text-decoration:underline;font-weight:700;\">Abra el archivo de actualización aquí</a>.";
       btn.addEventListener("click", () => {
         // v18.10.0 (AB-8, informe A/B) — clics de actualización (métrica nueva del
         // informe): la ACCIÓN de actualizar, por versión exigida. El clic vive en un
@@ -39109,12 +39227,21 @@
         // vglLog deja la evidencia fina en la bitácora local.
         try { uxTrack("aviso.upd.click.v" + _avisoBloqueoVer); } catch (e4) {}
         try { vglLog("VER", "ClicActualizar", { local: VERSION, exigida: _avisoBloqueoVer }); } catch (e3) {}
-        try { window.open(VGL_UPDATE_GIST_URL, "_blank"); } catch (e2) {}
+        let ventana = null;
+        try { ventana = window.open(VGL_UPDATE_GIST_URL, "_blank"); } catch (e2) {}
+        if (!ventana) { try { fallbackAbrir.style.display = "block"; } catch (e6) {} }
       });
       // v18.8.3 — mini guía para el fallo real del botón (pedido del médico del
       // 08-sep-2026): «Actualizar ahora» abre el archivo raw del gist, no la
       // actualización de Tampermonkey. La guía explica qué hacer en ese caso,
       // numerada, ANTES de los pasos originales, y los complementa sin tocarlos.
+      // v18.13.0 (Mesa de Expertos) — INTENTADO Y REVERTIDO: se probó <ol><li> real
+      // aquí, pero tests/harness.js simula innerHTML como una cadena inerte (no
+      // reconstruye .children/.textContent a partir de las etiquetas — confirmado con
+      // un repro directo), así que ningún caso de suite_17/suite_15 puede verificar esa
+      // estructura sin reescribir el mock. Se vuelve al texto plano original, byte a
+      // byte, para no dejar sin probar un cambio de un aviso que además es el candado
+      // de actualización obligatoria (máxima sensibilidad) — se documenta en la acta.
       const guia = document.createElement("div");
       guia.style.cssText = "color:#ffffff !important;white-space:pre-line;margin:0 0 12px 0;padding:10px 14px;border:1px solid rgba(255,255,255,0.6);border-radius:8px;background:rgba(0,0,0,0.18);font-size:var(--t-small,13px);line-height:1.5;";
       guia.textContent = "¿El botón abrió una página con texto de programación en lugar de instalar la actualización?\nEsa página ES la actualización, lista para copiarse. Siga estos pasos, en orden:\n1. Presione Ctrl+A y Ctrl+C para copiarla entera.\n2. Haga clic en el icono de Tampermonkey (esquina superior derecha del navegador) y elija «Panel».\n3. Pulse «＋» (Crear un script nuevo), borre lo que aparezca y pegue con Ctrl+V.\n4. Pulse Ctrl+S (Guardar), cierre la pestaña del archivo y recargue Everest con F5: el asistente vuelve solo, ya sin bloqueo.\n5. Si prefiere no pegar nada: en el Panel abra «Utilidades» y pulse «Buscar actualizaciones de userscripts»; Tampermonkey instala la versión vigente por su cuenta.\nUna vez instalada la versión exigida, este aviso desaparece solo.";
@@ -39124,10 +39251,22 @@
       card.appendChild(titulo);
       card.appendChild(cuerpo);
       card.appendChild(btn);
+      card.appendChild(fallbackAbrir);
       card.appendChild(guia);
       card.appendChild(pasos);
       aviso.appendChild(card);
       document.body.appendChild(aviso);
+      // v18.13.0 (Mesa de Expertos): aria-modal + trampa de Tab — a propósito SIN
+      // Escape. Este aviso es DELIBERADAMENTE imposible de cerrar (ver el comentario
+      // de _avisoBloqueoPintar más arriba); antes del Tab, con el mouse ya no se podía
+      // tocar nada detrás (pointer-events:none en el overlay), pero con el TECLADO el
+      // foco sí podía escaparse a la página de Everest de atrás — un hueco solo para
+      // quien navega sin mouse. Se cierra el mismo hueco, sin abrir uno de escape nuevo.
+      aviso.setAttribute("aria-modal", "true");
+      aviso.addEventListener("keydown", (e) => {
+        if (e.key === "Tab") { try { e.preventDefault(); } catch (e7) {} try { btn.focus(); } catch (e8) {} }
+      });
+      setTimeout(() => { try { btn.focus(); } catch (e9) {} }, 0);
     } catch (e) {}
   }
 
@@ -39225,7 +39364,7 @@
       const btn = document.createElement("button");
       btn.textContent = "Entendido";
       btn.setAttribute("aria-label", "Cerrar advertencia de copia duplicada");
-      btn.style.cssText = "background:var(--c-ambar,#f59e0b);color:var(--bg-solid,#78350f) !important;border:none;padding:6px 12px;border-radius:var(--r-chip,6px);font-weight:700;font-size:var(--t-micro,13px);cursor:pointer;flex-shrink:0;";
+      btn.style.cssText = "background:var(--c-ambar,#f59e0b);color:var(--bg-solid,#78350f) !important;border:none;padding:6px 12px;min-height:28px;display:inline-flex;align-items:center;border-radius:var(--r-chip,6px);font-weight:700;font-size:var(--t-micro,13px);cursor:pointer;flex-shrink:0;";
       btn.onclick = () => { try { aviso.remove(); } catch (e) {} };
       aviso.appendChild(btn);
 
@@ -39407,13 +39546,12 @@
 
             if (!minVer) return;
 
-            // Comparar versiones: "14.1.6" vs "14.1.5"
-            const parse = (v) => String(v).split(".").map(x => parseInt(x, 10) || 0);
-            const [maj, min, pat] = parse(VERSION);
-            const [minMaj, minMin, minPat] = parse(minVer);
-
-            const needsUpdate = (minMaj > maj) || (minMaj === maj && minMin > min) ||
-                                (minMaj === maj && minMin === min && minPat > pat);
+            // v18.13.0 (Mesa de Expertos, simplificable #1) — comparar versiones ("14.1.6"
+            // vs "14.1.5") reimplementaba en línea exactamente lo que ya hace
+            // mtrVersionEsMasNueva de forma genérica (cualquier cantidad de segmentos,
+            // no solo 3); misma tabla de verdad para toda entrada de 3 segmentos, cero
+            // cambio de comportamiento — un solo lugar que mantener en vez de dos.
+            const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);
             const forceReload = data.force === true || data.forceReload === true;
 
             if (needsUpdate || forceReload) {
@@ -40593,11 +40731,13 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     ver.id = "vgl-terminos-toggle";
     ver.type = "button";
     ver.textContent = "Ver los términos completos y el aviso de privacidad";
-    ver.style.cssText = "display:block;margin:16px 0 0 0;background:none;border:none;padding:0;color:#60a5fa !important;text-decoration:underline;cursor:pointer;font-size:14px;text-align:left;";
+    ver.setAttribute("aria-expanded", "false");
+    ver.style.cssText = "display:flex;align-items:center;min-height:28px;margin:16px 0 0 0;background:none;border:none;padding:4px 0;color:#60a5fa !important;text-decoration:underline;cursor:pointer;font-size:14px;text-align:left;";
     ver.addEventListener("click", () => {
       const abierto = completo.style.display !== "none";
       completo.style.display = abierto ? "none" : "block";
       ver.textContent = abierto ? "Ver los términos completos y el aviso de privacidad" : "Ocultar los términos completos";
+      ver.setAttribute("aria-expanded", abierto ? "false" : "true");
     });
     tarjeta.appendChild(ver);
     tarjeta.appendChild(completo);

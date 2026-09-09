@@ -4,6 +4,45 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.13.0] — 2026-09-09 (Segunda tanda de la mesa de expertos: el asistente se puede operar por completo con solo teclado o lector de pantalla)
+
+Continuación de la revisión integral de código de la versión anterior. Esta entrega
+se concentra en accesibilidad: cuatro puntos donde usar el asistente solo con teclado,
+o con un lector de pantalla, se comportaba distinto — o peor — que usándolo con mouse.
+
+### ⌨️ El widget de "Próximos exámenes" ya se opera con teclado
+El recuadro flotante de exámenes pendientes y fármacos RCV ahora anuncia su estado
+("Próximos exámenes: 2 pendientes") a un lector de pantalla, responde a Enter y
+Espacio igual que a un clic, y — corrección de un defecto real — leer o seleccionar
+una fila dentro del panel ya abierto ya no lo cierra de golpe.
+
+### 🕐 El reloj de cabecera avisa de "datos viejos" también con texto, no solo con color
+Cuando la última lectura de la agenda pasa de 30 segundos, el reloj se ponía en ámbar;
+quien no distingue ese color no tenía ninguna otra señal. Ahora el propio texto del
+reloj lo dice ("datos viejos"), y una región de anuncio para lectores de pantalla
+avisa una sola vez, justo en el momento en que los datos pasan de frescos a viejos
+(o viceversa) — nunca en cada segundo del reloj, para no convertirse en ruido.
+
+### ↩️ Cerrar el aviso del Anexo 5 (abandono del programa) ya no es un callejón sin salida
+El botón para cerrar por este turno el aviso de abandono del programa de crónicos
+seguía cerrando de inmediato, pero ahora deja aparte una barra de "Deshacer" (20
+segundos, mismo patrón ya usado en otras partes del asistente) que reconstruye el
+aviso si el clic fue accidental — sensible especialmente en una alerta sobre un
+paciente que puede estar abandonando su tratamiento.
+
+### 🔍 Revisión de seguridad sin hallazgos nuevos
+Se simplificó la comparación de versiones del candado de actualización obligatoria
+para que reutilice la misma función que ya usa el resto del asistente, sin cambiar
+su comportamiento. De paso: foco visible en varios botones pequeños, mínimo táctil
+de 28px en más controles, trampa de teclado (Tab) también en el aviso de bloqueo de
+versión, y un enlace de repliegue si el navegador bloquea la ventana de actualización.
+
+Verificación: banco de pruebas completo en verde antes y después; 4 mutaciones
+deliberadas (romper cada guardia a propósito) pusieron rojas sus pruebas específicas
+y fueron restauradas — confirmando que el blindaje funciona.
+
+---
+
 ## [Versión 18.12.0] — 2026-09-08 (Limpieza de mantenimiento: código sin uso retirado y un botón más fácil de tocar)
 
 Se convocó una revisión integral del código (una "mesa de expertos" de auditoría)

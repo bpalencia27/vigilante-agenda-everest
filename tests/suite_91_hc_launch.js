@@ -361,6 +361,30 @@ module.exports = {
       t.cierto(c.api.hcAnexo5Render() === false, "y no vuelve a aparecer para ese paciente en este turno");
     });
 
+    // v18.13.0 (Mesa de Expertos, UX): cerrar una alerta de ABANDONO DEL PROGRAMA de un
+    // solo toque, sin recurso, era el hallazgo — ahora queda una barra de "Deshacer"
+    // (VGL_DESHACER_VISIBLE_MS) aparte del panel, que lo reconstruye si el clic fue
+    // accidental. El panel SIGUE desapareciendo de inmediato (no se relaja esa garantía).
+    t.caso("F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
+      c.api.__state.pymAbandono = EST_A5().pymAbandono;
+      t.cierto(c.api.hcAnexo5Render() === true, "el panel se pinta");
+      const panel = c.env.doc.getElementById("vgl-a5-panel");
+      const btn = panel.querySelector("[data-a5-cerrar]");
+      btn._listeners.click[0]();
+      t.cierto(!c.env.doc.getElementById("vgl-a5-panel"), "cerrar quita el panel de verdad e inmediato");
+      const barra = c.env.doc.getElementById("vgl-a5-deshacer");
+      t.cierto(!!barra, "queda una barra de Deshacer aparte");
+      t.cierto(barra.innerHTML.indexOf("cerrado por este turno") >= 0, "explica lo que pasó");
+      const btnDeshacer = barra.querySelector("[data-a5-deshacer]");
+      t.cierto(!!btnDeshacer && btnDeshacer._listeners.click.length === 1, "el botón de Deshacer escucha el clic");
+      btnDeshacer._listeners.click[0]();
+      t.cierto(!c.env.doc.getElementById("vgl-a5-deshacer"), "Deshacer retira su propia barra");
+      t.cierto(!!c.env.doc.getElementById("vgl-a5-panel"), "y el clic de Deshacer, por sí solo, reconstruye el panel");
+    });
+
     t.caso("F2/hcAnexo5Render (v18.8.4 T1): el panel se pinta con variables de tema, sin colores duros", () => {
       const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
         + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
