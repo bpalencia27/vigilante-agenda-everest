@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.11.0
+// @version      18.11.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.11.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.11.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12541,6 +12541,17 @@
     // con la meta cumplida (25 puntos) podía leerse como «RAC 25 mg/g» (patológico) en
     // vez de «meta lograda». Ver a5AlertasDe: ahora usa v[6], nunca m[4][0].
     const cRac = norm.findIndex((x) => x === "MICROALBU_CREATINURIA1");
+    // v18.11.1 (seguimiento ORDEN #8) — filtro de plausibilidad del RAC: la propia
+    // auditoría de la base piloto (_audit_base_sep_raw.txt) marca 22 filas REALES de
+    // esta columna con «≥6 dígitos» como «¿PHI fuera de sitio?» (rango real
+    // documentado: 0.1–2797). Antes de este fix cualquier valor de la celda —por
+    // grande, negativo o absurdo que fuera— viajaba intacto hasta el aviso del
+    // médico. Casilla vacía antes que dato inventado: un valor negativo o de 6+
+    // dígitos no es un RAC real, así que se descarta (0 = sin valor, mismo
+    // contrato que ya usa el resto del indexador) en vez de mostrarse como si lo
+    // fuera — y de paso nunca se arriesga a pintar en pantalla lo que la
+    // auditoría sospecha que es un identificador de paciente mal ubicado.
+    const numRac = (v) => { const x = num(v); return x >= 0 && x < 100000 ? x : 0; };
     const map = new Map();
     const todos = new Set();
     return {
@@ -12551,7 +12562,7 @@
         const rem = [];
         colsRem.forEach(([i, label]) => { if (stripAccents(String(row[i] == null ? "" : row[i])).trim().toUpperCase() === "REMITIR" && rem.indexOf(label) < 0) rem.push(label); });
         const m = colsMeta.map(([cPts, cFecha]) => [cPts >= 0 ? num(row[cPts]) : 0, cFecha >= 0 ? num(row[cFecha]) : 0]);
-        const v = [cSis >= 0 ? num(row[cSis]) : 0, cDia >= 0 ? num(row[cDia]) : 0, cCa >= 0 ? num(row[cCa]) : 0, cA1c >= 0 ? num(row[cA1c]) : 0, cLdl >= 0 ? num(row[cLdl]) : 0, cGlu >= 0 ? num(row[cGlu]) : 0, cRac >= 0 ? num(row[cRac]) : 0];
+        const v = [cSis >= 0 ? num(row[cSis]) : 0, cDia >= 0 ? num(row[cDia]) : 0, cCa >= 0 ? num(row[cCa]) : 0, cA1c >= 0 ? num(row[cA1c]) : 0, cLdl >= 0 ? num(row[cLdl]) : 0, cGlu >= 0 ? num(row[cGlu]) : 0, cRac >= 0 ? numRac(row[cRac]) : 0];
         map.set(docKey, {
           prog: cProg >= 0 ? String(row[cProg] == null ? "" : row[cProg]).trim().slice(0, 24) : "",
           ctrl: cCtrl >= 0 ? num(row[cCtrl]) : 0,

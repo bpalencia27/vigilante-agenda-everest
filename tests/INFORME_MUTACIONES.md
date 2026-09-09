@@ -13938,3 +13938,39 @@ ningún tramo «RAC » con solo los puntos). Banco completo EXIT=0 antes y despu
 |---|---|---|---|
 | user.js `makeAnexo5Indexer` — lectura de la columna RAC | `cRac >= 0 ? num(row[cRac]) : 0` → `false ? num(row[cRac]) : 0` (el indexador nunca lee la columna, `v[6]` siempre 0) | NO | suite_92 caso «F1/Anexo 5: el core indexa la TERCERA hoja…»: mutante rojo («valores de contexto v7…: esperaba [138,84,102,7.2,112,98,25] y obtuvo [138,84,102,7.2,112,98,0]»); EXIT 1. Restaurado 39 ok EXIT=0 |
 | user.js `a5AlertasDe` — campo `rac` del contexto | `rac: v[6] \|\| 0` → `rac: (m[4] && m[4][0]) \|\| 0` (vuelve el defecto original: puntos de la meta rotulados como RAC) | NO | suite_91 caso «F2/a5AlertasDe: las CUATRO alertas…»: mutante rojo («con valor real indexado (v[6]=6.93) el contexto lleva 6.93 mg/g, no los puntos: esperaba 6.93 y obtuvo 0»); EXIT 1. Restaurado 28 ok EXIT=0 |
+
+## v18.11.1 — seguimiento ORDEN #8: filtro de plausibilidad del RAC (revisión de código sobre el fix v18.11.0)
+
+Una revisión de código sobre el fix v18.11.0 encontró que el nuevo valor real de la
+RAC (columna `MICROALBU/CREATINURIA1`) se mostraba en el aviso sin ningún chequeo de
+rango, pese a que la propia auditoría de la base piloto (`_audit_base_sep_raw.txt`
+línea 94) ya marcaba 22 filas REALES de esa exacta columna con «≥6 dígitos» como
+«¿PHI fuera de sitio?» (rango real documentado: 0.1–2797). Sin filtro, cualquiera de
+esos valores se habría mostrado en el aviso del Anexo 5 como si fuera un resultado de
+laboratorio real — violando «casilla vacía antes que dato inventado» y, en el peor
+caso, arriesgando mostrar en pantalla lo que la auditoría sospecha que es un
+identificador de paciente mal ubicado («Cero PHI»).
+
+**Fix**: nueva función `numRac` en `makeAnexo5Indexer` (además de `num`, que sigue
+sin tocarse para los demás campos): descarta como 0 (mismo contrato de «sin valor»
+que ya usa el resto del indexador) todo valor negativo o de 6 dígitos o más
+(`x >= 0 && x < 100000`), justo el criterio que la propia auditoría ya usaba para
+marcar las filas sospechosas. Los valores reales documentados (0.1–2797) pasan
+intactos. Único punto de lectura de la columna (`v[6]` en el `push` del indexador):
+sin segundo consumidor que rodee el filtro.
+
+Prueba nueva en suite_92 (`makeAnexo5Indexer` con headers mínimos
+`["Numero Documento", "MICROALBU/CREATINURIA1"]`, sin pasar por el pipeline XLSX
+completo): 5 casos — el máximo real documentado (2797) y un valor justo bajo el
+límite (99999) pasan intactos; 6 dígitos exactos (100000), 6 dígitos (123456) y un
+valor negativo (-6.93) se descartan a 0. Banco completo EXIT=0 antes y después.
+
+Housekeeping de versión al subir `@version`/`VERSION` a 18.11.1: `package.json`
+tiene su propia comprobación de sincronización cuádruple (suite de Kill-Switch,
+R5.1) y una fila de `tests/suite_75_disco.js` (M2, «la fila lleva versión, lote, día
+y el extra del evento») hardcodea la versión viva como literal — ambos se actualizan
+en cada bump, no son casos nuevos, son mantenimiento esperado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` — filtro `numRac` | `x >= 0 && x < 100000 ? x : 0` → `x` (el filtro de plausibilidad deja de aplicarse, vuelve el defecto: cualquier valor viaja intacto) | NO | suite_92 caso «makeAnexo5Indexer (seguimiento ORDEN #8)…»: mutante rojo («6 dígitos exactos…: esperaba 0 y obtuvo 100000»); EXIT 1 (39 ok, 1 falla). Restaurado 40 ok EXIT=0 |

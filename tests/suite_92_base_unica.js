@@ -454,6 +454,25 @@ module.exports = {
       t.cierto(res.anexo5.has("7000001"), "pero sí está en su propio mapa para el aviso");
     });
 
+    // v18.11.1 (seguimiento ORDEN #8) — filtro de plausibilidad del RAC: la propia
+    // auditoría de la base piloto (_audit_base_sep_raw.txt) marca 22 filas REALES de
+    // MICROALBU/CREATINURIA1 con «≥6 dígitos» como «¿PHI fuera de sitio?» (rango real
+    // documentado: 0.1–2797). El indexador debe descartar (casilla vacía) cualquier
+    // valor negativo o de 6+ dígitos en vez de mostrarlo como si fuera un RAC real.
+    t.caso("makeAnexo5Indexer (seguimiento ORDEN #8): valores implausibles de RAC se descartan — casilla vacía, jamás PHI mostrado", () => {
+      const ix = api.makeAnexo5Indexer(["Numero Documento", "MICROALBU/CREATINURIA1"]);
+      ix.push(["8000001", "2797"]);      // máximo real documentado en la auditoría: intacto
+      ix.push(["8000002", "99999"]);     // 5 dígitos, justo bajo el límite: intacto
+      ix.push(["8000003", "100000"]);    // 6 dígitos exactos: la auditoría lo marca como sospechoso
+      ix.push(["8000004", "123456"]);    // 6 dígitos: mismo filtro
+      ix.push(["8000005", "-6.93"]);     // negativo: fisiológicamente imposible
+      t.igual(ix.map.get("8000001").v[6], 2797, "el máximo real documentado (2797 mg/g) pasa sin tocar");
+      t.igual(ix.map.get("8000002").v[6], 99999, "justo bajo el límite de 6 dígitos: pasa sin tocar");
+      t.igual(ix.map.get("8000003").v[6], 0, "6 dígitos exactos: la propia auditoría lo marca «¿PHI fuera de sitio?» — se descarta, no se muestra");
+      t.igual(ix.map.get("8000004").v[6], 0, "6 dígitos: mismo filtro");
+      t.igual(ix.map.get("8000005").v[6], 0, "negativo: fisiológicamente imposible, casilla vacía antes que dato inventado");
+    });
+
     await t.casoAsync("F1/Anexo 5: el mapa viaja en el paquete v4 y sobrevive descarga→caché→recarga", async () => {
       const cont = contadorBase();
       cont.bufFn = libroConAnexo5;

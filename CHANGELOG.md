@@ -4,6 +4,25 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.11.1] — 2026-09-08 (El RAC del Anexo 5 se filtra antes de mostrarse: un valor implausible ya no aparece como si fuera un resultado real)
+
+Una revisión de código sobre la corrección de la versión anterior (18.11.0) encontró
+que el nuevo valor real de la RAC se mostraba en el aviso sin ningún chequeo de
+plausibilidad — y la propia auditoría de la base piloto ya había marcado 22 filas de
+esa misma columna con valores de 6 o más dígitos bajo la nota «¿PHI fuera de sitio?»
+(rango real documentado: 0.1 a 2797). Sin un filtro, cualquiera de esos valores
+habría aparecido en el aviso como si fuera un resultado de laboratorio real.
+
+Desde esta versión, el indexador descarta (deja la casilla vacía, nunca inventa) todo
+valor de RAC negativo o de 6 dígitos o más antes de que llegue al aviso. Los valores
+reales documentados (0.1 a 2797) siguen mostrándose intactos.
+
+Verificación: banco de pruebas completo en verde antes y después; mutación deliberada
+(anular el filtro de plausibilidad) puso roja la prueba específica y fue restaurada —
+confirmando que el blindaje funciona.
+
+---
+
 ## [Versión 18.11.0] — 2026-09-08 (El aviso del Anexo 5 ahora muestra el resultado real de laboratorio de la RAC, nunca el puntaje de la meta)
 
 Al revisar la sección del Anexo 5 contra el libro real de la base piloto se encontró
