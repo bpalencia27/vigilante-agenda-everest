@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.13.2
+// @version      18.14.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -21,6 +21,7 @@
 // @connect      login.live.com
 // @connect      svc.ms
 // @connect      script.google.com
+// @connect      workers.dev
 // @connect      script.googleusercontent.com
 // @connect      googleusercontent.com
 // @connect      gist.githubusercontent.com
@@ -1037,7 +1038,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10915,7 +10916,9 @@
     // [v17.6.7] Cierre de turno: dedup de avisos UNA vez por cita (checklist).
     checkCierreAvisados: new Set(),
     notified: new Map(), summarized: false, osNotif: false,
-    lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/AKfycbwXwwQdSGGMyt4X6Wf5YbJVRZjB_z_cYEVVpRoebO_VrobIhtHKD3nAJs689kq3R7tC/exec",
+    // v18.14.0 (ORDEN #7) — réplica Cloudflare del chequeo de versión mínima
+    // (GET JSON, mismo contrato que VersionCheck.gs); ver TABLERO.url arriba.
+    lastVersionCheck: 0, versionCheckUrl: "https://vigilante-telemetria.bpalencia27.workers.dev/vcheck",
     leader: false, shared: null,
     // v5.0
     filtro: "todas", busqueda: "", muteUntil: 0, sheet: null, lastRefresh: null,
@@ -13289,8 +13292,13 @@
   //  Cola diminuta (máx. 30) por si no hay red; se reintenta cada 10 min.
   // =====================================================================
   const TABLERO = {
-    url: "https://script.google.com/macros/s/AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv-cYKVNFe6j9VbNK1wOI3VOD0zIBHyXMgCT3zNBl/exec",
-    token: "vgl-2026", // debe coincidir con el TOKEN del Apps Script (ver carpeta TABLERO)
+    // v18.14.0 (ORDEN #7, cableado de la flota) — réplica Cloudflare Workers + D1
+    // (REPLICA_TELEMETRIA/) en lugar del Apps Script original. Contrato idéntico
+    // (mismo token, mismos acuses "ok"/"dup"/"no"/"err"): el cliente no distingue
+    // backend. El GAS (script.google.com) queda vivo y sin tráfico como respaldo
+    // frío — ver REPLICA_TELEMETRIA/README.md §4 para revertir este único valor.
+    url: "https://vigilante-telemetria.bpalencia27.workers.dev/",
+    token: "vgl-2026", // debe coincidir con el TOKEN del worker (REPLICA_TELEMETRIA/worker.js)
   };
   const repUrl = () => (S.reporteUrl && /^https?:/i.test(S.reporteUrl)) ? S.reporteUrl.trim() : TABLERO.url;
   const repOn = () => !!S.reporte && !!repUrl() && typeof GM_xmlhttpRequest !== "undefined";
@@ -13314,7 +13322,10 @@
     try {
       paso("Estado del envío (v17.58.2: la telemetría es obligatoria)", !!S.reporte, S.reporte ? "encendido" : "APAGADO (estado imposible por UI desde v17.58.2)");
       const u = repUrl();
-      paso("Dirección del panel", !!u && /^https:\/\/script\.google\.com\//.test(u), u ? "" : "sin dirección");
+      // v18.14.0 — acepta el backend GAS histórico (script.google.com, por si un
+      // administrador vuelve a apuntar S.reporteUrl allí) Y el worker Cloudflare
+      // (cualquier subdominio *.workers.dev) como direcciones válidas.
+      paso("Dirección del panel", !!u && /^https:\/\/(script\.google\.com\/|[\w.-]+\.workers\.dev\/)/.test(u), u ? "" : "sin dirección");
       paso("Permiso de red del navegador", typeof GM_xmlhttpRequest !== "undefined", typeof GM_xmlhttpRequest !== "undefined" ? "" : "falta el permiso del gestor de scripts");
       let colaN = 0, colaVieja = "";
       try { repQLoad(); colaN = (repQ || []).length; if (colaN && repQ[0] && repQ[0].ts) { const min = Math.round((Date.now() - new Date(repQ[0].ts).getTime()) / 60000); colaVieja = "la más vieja lleva " + (min < 60 ? min + " min" : Math.round(min / 60) + " h") + " esperando"; } } catch (e) {}

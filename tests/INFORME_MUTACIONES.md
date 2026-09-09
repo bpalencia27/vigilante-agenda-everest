@@ -14085,3 +14085,25 @@ manual, lo que habría duplicado `alContinuar()` en cada Escape. No se auditó C
 esta sesión (bloqueo de entorno documentado en `.deepseek/logs/2026-09-09/palette-informe.md`)
 — ninguno de los dos cambios toca CSS, así que la verificación de la sección 4 (color contra
 Everest simulado) no aplica.
+
+## v18.14.0 (ORDEN #7 — cableado de la flota al worker Cloudflare)
+
+Los 4 puntos de código del cableado documentado en `REPLICA_TELEMETRIA/README.md` §4:
+`TABLERO.url` (telemetría POST), `versionCheckUrl` (candado de versión mínima GET),
+el regex de `repDiagnostico()` (acepta GAS o `*.workers.dev`) y `@connect workers.dev`.
+El GAS (`script.google.com`) queda vivo y sin tráfico como respaldo frío — un solo
+valor (`TABLERO.url`) revierte el cambio si hiciera falta. El worker ya estaba
+desplegado y probado en vivo (ORDEN #7, `f70c05c`); esta entrega es solo el cableado
+del cliente, decisión explícita del médico. El punto 5 del README (destino del
+tablero Google Sheets histórico) queda sin resolver — decisión pendiente, no bloquea
+el cableado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `TABLERO.url` | `"https://vigilante-telemetria.bpalencia27.workers.dev/"` → vuelto al GAS original (`AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv…`) | NO | suite_11 caso «repUrl: sin URL personalizada devuelve la del tablero de fábrica» (y otros 2 de la misma suite que usan `URL_FABRICA`): mutante rojo; EXIT 1 (48 ok, 3 fallan). Restaurado 51 ok EXIT=0 |
+
+Suites tocadas sin cambio de comportamiento propio (solo el matcher del mock que
+identifica la URL del backend en las pruebas, de `script.google.com` a `workers.dev`,
+ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
+(3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
+caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
