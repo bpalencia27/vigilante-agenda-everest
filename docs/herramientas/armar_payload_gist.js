@@ -5,7 +5,7 @@ const [,, fuente, novedades, salida] = process.argv;
 const src = fs.readFileSync(fuente, "utf8");
 const nov = fs.readFileSync(novedades, "utf8");
 const payload = {
-  description: "Vigilante de Agenda — Everest/Athenea (v18.8.7)",
+  description: "Vigilante de Agenda — Everest/Athenea (v18.11.0)",
   files: {
     "gistfile1.txt": { content: src },
     "gistfile2.txt": { content: nov },
