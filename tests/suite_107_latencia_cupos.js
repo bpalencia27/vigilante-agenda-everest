@@ -111,8 +111,14 @@ module.exports = {
       t.cierto(st.lastSnapshot && st.lastSnapshot.list.length === 1, "el snapshot quedó listo (misma vía que el tick y el botón)");
 
       const citas2 = [cita("123", "08:00 AM"), cita("456", "08:20 AM")];
-      c.api._procesarFuenteAgenda({ visible: true, citas: citas2 }, "api", new Date(), false);
+      // La segunda lectura viaja con now = (ahora real + 4000 ms): el medidor exige
+      // ventana ESTRICTAMENTE positiva (now - ant.at > 0) y dos `new Date()` seguidos
+      // pueden caer en el MISMO milisegundo real — ese empate no es un hueco largo ni
+      // una no-detección: es la lectura más rápida posible, sin latencia que medir.
+      // Forzar los 4000 ms garantiza la ventana y de paso verifica el .total.
+      c.api._procesarFuenteAgenda({ visible: true, citas: citas2 }, "api", new Date(Date.now() + 4000), false);
       t.igual(acc(c, "cupo.nuevo"), 1, "la segunda lectura ve el cupo nuevo y lo cuenta — el enganche vive en el procesado");
+      t.cierto(acc(c, "cupo.nuevo.total") >= 4000, "y su ventana viaja en el .total con los ms forzados");
     });
 
     // ============ frecuencias del polling ajustadas por la misma orden ============

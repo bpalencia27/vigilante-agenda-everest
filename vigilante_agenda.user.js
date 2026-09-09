@@ -10161,6 +10161,7 @@
     { k: "tog_hc_chip", label: "Chip de contexto de la HC", desc: "Chip con cédula enmascarada y origen del contexto al abrir la historia clínica." },
     { k: "tog_perf_cache", label: "Caché de catálogos de Everest", desc: "EXPERIMENTAL: sirve ParDiagnosticos y ParCiudades (≈2,9 MB por apertura de HC) desde caché local tras demostrar dos lecturas idénticas en vivo. Solo catálogos globales de la IPS: jamás toca peticiones por paciente o por cita. Apagarlo restaura la red original al instante.", defecto: false },
     { k: "tog_perf_informe", label: "Métricas del caché de catálogos", desc: "Conteos anónimos de la caché de catálogos (servidas, bytes ahorrados, confirmaciones) en la telemetría interna. Solo lectura: no altera la red.", sub: "tog_perf_cache" },
+    { k: "tog_ab1_diferir", label: "Barridos diferidos (A/B)", desc: "EXPERIMENTAL (informe A/B, AB-1): la cosecha de la HC y los widgets de conducta/ordenar/fármaco/RCV corren en el hueco de inactividad del navegador en vez de en línea en cada vuelta. El procesado de la agenda, el pintado del panel y los avisos jamás se difieren. Apagado = comportamiento original.", defecto: false },
   ];
   function _togUid() {
     try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
@@ -37985,13 +37986,51 @@
       // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del
       // reloj no infla nada (era la advertencia del médico: «ojo con las duplicaciones»).
       if (leader) { try { mtrProdRegistrar(processed); } catch (e) {} }
-      if (enVistaVigilada || forzarPintado) render(processed, source, now);
+      // v18.10.0 (AB-1) — el repintado se mide con nombre propio: era el gran
+      // sospechoso sin etiqueta del tirón periódico. Misma cubeta RUM que los
+      // barridos (solo anilla ≥ 50 ms), así la comparación A/B es directa.
+      if (enVistaVigilada || forzarPintado) _rumTramo("tick.render", function () { render(processed, source, now); });
     } else if (enVistaVigilada || forzarPintado) {
-      if (state.shared && Date.now() - state.shared.t < 60000) {
-        render(state.shared.list, "compartido", new Date(state.shared.t));
-      } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
-      else { render([], null, null); }
+      _rumTramo("tick.render", function () {
+        if (state.shared && Date.now() - state.shared.t < 60000) {
+          render(state.shared.list, "compartido", new Date(state.shared.t));
+        } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
+        else { render([], null, null); }
+      });
     }
+  }
+
+  // v18.10.0 (AB-1) — BARRIDOS NO CRÍTICOS FUERA DEL CAMINO DEL TICK.
+  // La cosecha de la HC (barre el DOM entero y reserializa el almacén de hasta
+  // 80 pacientes; v17.43.0 la señala como primer sospechoso del tirón) y los
+  // widgets de conducta/ordenar/fármaco/RCV corren hoy en línea, cada vuelta.
+  // Con el toggle AB-1 (tog_ab1_diferir, variante B del experimento) se encolan
+  // a idleRun: el tick queda con lo crítico (procesado, pintado, avisos, sondeo)
+  // y el barrido corre en el hueco libre con su MISMA etiqueta de RUM, para que
+  // la comparación A/B sea directa. Garantías:
+  //   - ctxValido se re-evalúa AL CORRER: si el médico ya navegó (otra sección
+  //     u otro paciente) el barrido se descarta — jamás cosecha ni pinta al
+  //     paciente equivocado; el siguiente tick encola el del contexto nuevo.
+  //   - anti-duplicado por etiqueta: una sola cosecha pendiente por vuelta.
+  //   - si encolar falla, el barrido corre ya: el trabajo nunca se pierde.
+  //   - toggle APAGADO (defecto:false): ejecuta en línea, idéntico al histórico.
+  const _ab1Pendientes = {};
+  function _ab1Diferir(nombre, fn, ctxValido) {
+    const ejecutar = function () {
+      try { _ab1Pendientes[nombre] = false; } catch (eP) {}
+      try { _rumTramo(nombre, fn); } catch (eT) {}
+    };
+    try {
+      if (togActiva("tog_ab1_diferir") !== true) { ejecutar(); return; }
+      if (_ab1Pendientes[nombre]) return;              // ya hay un barrido igual esperando el hueco
+      _ab1Pendientes[nombre] = true;
+      idleRun(function () {
+        try {
+          if (ctxValido && !ctxValido()) { _ab1Pendientes[nombre] = false; return; }
+        } catch (eC) { _ab1Pendientes[nombre] = false; return; }
+        ejecutar();
+      }, 700);
+    } catch (eQ) { ejecutar(); }
   }
 
   function tick() {
@@ -38137,13 +38176,17 @@
         // instrumentar"). Estos tres son justamente los sospechosos del tirón de 5 s que
         // el médico reporta, así que son los primeros en instrumentarse: si el tiempo se
         // va aquí, la bitácora lo dirá con nombre propio en vez de dejarlo en «algo tardó».
-        try { _rumTramo("tick.widget.conducta", mtrWidgetConductaTick); } catch (e) {}
-        try { _rumTramo("tick.widget.ordenar", mtrWidgetOrdenarConductaTick); } catch (e) {}
-        try { _rumTramo("tick.widget.farmaco", mtrWidgetFarmacoTick); } catch (e) {}
+        // v18.10.0 (AB-1) — los widgets pasan por la puerta AB-1: con el toggle
+        // apagado corren aquí en línea, como siempre; con el toggle encendido
+        // se difieren al hueco libre y se descartan si el médico ya salió de la
+        // historia clínica antes de correr.
+        _ab1Diferir("tick.widget.conducta", mtrWidgetConductaTick, function () { return seccionActiva() === "historia"; });
+        _ab1Diferir("tick.widget.ordenar", mtrWidgetOrdenarConductaTick, function () { return seccionActiva() === "historia"; });
+        _ab1Diferir("tick.widget.farmaco", mtrWidgetFarmacoTick, function () { return seccionActiva() === "historia"; });
         // v18.4.2 — panel «Próximos exámenes RCV»: solo dentro de la historia
         // clínica (la compuerta interna re-visa permiso, ruta, sección y
         // paciente en cada tick — ver rcvPendientesTick).
-        try { _rumTramo("tick.widget.rcvpendientes", rcvPendientesTick); } catch (e) {}
+        _ab1Diferir("tick.widget.rcvpendientes", rcvPendientesTick, function () { return seccionActiva() === "historia"; });
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {
           const dockEl = document.getElementById("vgl-acciones-dock");
@@ -38152,7 +38195,13 @@
           // v16.1.0 — se guarda lo que esta pestaña revela. v17.43.0 — instrumentada:
           // es el primer sospechoso del tirón periódico (barre el DOM entero y reserializa
           // el almacén de hasta 80 pacientes, cada vuelta).
-          try { _rumTramo("tick.cosecha", function () { return _vglCosecharDePantalla(docId); }); } catch (e2) {}
+          // v18.10.0 (AB-1) — la cosecha se difiere con el toggle AB-1 y, al
+          // correr, re-valida que el dock siga mostrando AL MISMO paciente: si el
+          // médico navegó en el intervalo, se descarta (nunca se cosecha al
+          // paciente equivocado) y el siguiente tick encola la del contexto nuevo.
+          _ab1Diferir("tick.cosecha", function () { _vglCosecharDePantalla(docId); }, function () {
+            try { const d = document.getElementById("vgl-acciones-dock"); const id = d && d.dataset ? d.dataset.vglDoc : ""; return id === docId; } catch (eC) { return false; }
+          });
           // v18.5.1-hc — anuncio accesible (aria-live) del lanzador de historia
           // clínica: una sola vez por paciente con alerta de inasistencia.
           try { hcTickVigia(docId); } catch (e2) {}
@@ -38172,7 +38221,9 @@
           const docId2 = dockEl2 && dockEl2.dataset ? dockEl2.dataset.vglDoc : "";
           // v18.0.134 (A3.1) — misma compuerta que en la vía principal: sin movimiento del
           // DOM no hay nada nuevo que cosechar en las subpantallas tampoco.
-          try { if (_vglDomEstaSucia()) _vglCosecharDePantalla(docId2); } catch (e2) {}
+          // v18.10.0 (AB-1) — diferida también; la compuerta de DOM sucio se
+          // re-evalúa al correr, no al encolar.
+          _ab1Diferir("tick.cosecha.sub", function () { if (_vglDomEstaSucia()) _vglCosecharDePantalla(docId2); }, function () { return seccionActiva() !== "historia" && _enModuloHCHealth(); });
           try { _vglVigilarTextoLibre(docId2); } catch (e2) {}
         } catch (e) {}
       }

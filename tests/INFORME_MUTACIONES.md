@@ -13824,3 +13824,20 @@ Orden A/B del médico (informe A/B, AB-6): el polling de fondo pasa a frecuencia
 |---|---|---|---|
 | user.js `_cupoLatenciaMedir` — umbral que separa la ventana atribuible del hueco largo | Invertir el comparador del hueco (`ventana > huecoMax` → `ventana < huecoMax`): los cupos con lectura anterior reciente se contaban como nacidos en hueco y los del hueco largo como ventana normal | NO | *suite_107* 5 casos rojos (cupo nuevo con lectura reciente, tres cupos, rotación de lista, hueco largo e integración por `_procesarFuenteAgenda` — conteo y ventana invertidos); restaurado 9 ok |
 | user.js `apiCadencia` — reposo SIN_PENDIENTES (20 s) y jornada lejana LEJANO (15 s) | Restaurar los valores viejos 30000/20000 ms: el reposo vuelve a 30 s y la jornada lejana a 20 s | NO | *suite_13* 2 casos rojos («sin agenda: reposo de 20 s» y «lejos de la tolerancia… 15 s») y la cabecera del reloj («cada 20 s»); restaurado 64 ok, suite_107 intacta |
+
+## v18.10.0 — 08-sep-2026 (paquete A/B: barridos diferidos AB-1)
+
+AB-1 (informe A/B): la cosecha de la HC y los widgets de conducta/ordenar/farmaco/RCV salen
+del camino del tick con el toggle experimental tog_ab1_diferir (defecto:false — variante A
+historica para todos) y se encolan a idleRun en la variante B, con su MISMA etiqueta de RUM
+(comparacion A/B directa), anti-duplicado por etiqueta, re-chequeo de ctxValido AL CORRER
+(jamas cosecha al paciente equivocado si el medico navego en el intervalo) y doble red de
+seguridad: sin requestIdleCallback cae al temporizador de idleRun, y si hasta el temporizador
+falla el barrido corre ya en linea. El repintado del panel se mide con nombre propio
+(tick.render, las 2 ramas). Suite nueva suite_108_ab1_diferidos.js (16 casos: 9 de unidad
+sobre la puerta + red de seguridad + etiqueta RUM en modo B + 4 estructurales del enganche
+real en el codigo vivo). Mutacion verificada:
+
+| Linea/Ubicacion | Mutacion Aplicada | Sobrevivio? | Asercion Faltante / Guardian |
+|---|---|---|---|
+| user.js _ab1Diferir — condicion de la puerta | Invertir el comparador del toggle (togActiva(...) !== true → === true): con el toggle APAGADO (defecto de todos) el barrido se diferiria en vez de correr en linea | NO | suite_108 12 casos rojos: los 2 de toggle apagado (corre en linea + etiqueta RUM historica), todos los de toggle encendido (al invertir la condicion el toggle encendido ejecutaba en linea) y el modo B por el anillo; EXIT 1. Restaurado 16 ok EXIT=0 |

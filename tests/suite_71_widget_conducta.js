@@ -1187,7 +1187,12 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       const iHistoria = src.indexOf('if (secc === "historia")');
       t.cierto(iHistoria >= 0, "debe existir la rama de la sección historia en tick()");
-      const bloque = src.slice(iHistoria, iHistoria + 1800);
+      // v18.10.0 (AB-1) — la rama creció (comentario del experimento + las llamadas a la
+      // puerta _ab1Diferir con su re-chequeo de contexto): 1800 chars ya cortaban a mitad
+      // de la llamada de ordenar y FARMACO quedaba fuera de la ventana. 4500 cubren la
+      // rama entera (los widgets viven al final, junto a la cosecha diferida); la ventana
+      // sigue siendo la rama «historia» del tick y nada más.
+      const bloque = src.slice(iHistoria, iHistoria + 4500);
       // v17.43.0 — los tres pasaron de `mtrWidgetXTick()` a
       // `_rumTramo("tick.widget.x", mtrWidgetXTick)` para poder cronometrarlos. La
       // INTENCIÓN de esta prueba no cambia ni un ápice —el defecto que existe para evitar
@@ -1196,8 +1201,11 @@ module.exports = {
       // Se busca el nombre SIN paréntesis a propósito: pasarlo como referencia a _rumTramo
       // es una forma tan válida de engancharlo como llamarlo directamente, y atarse a la
       // sintaxis exacta haría que esta prueba se rompiera en cada refactor inocente.
+      // v18.10.0 (AB-1) — desde el paquete A/B la referencia puede llevar DETRÁS la coma
+      // del tercer argumento (el re-chequeo de contexto de la puerta _ab1Diferir):
+      // `_ab1Diferir("tick.widget.x", mtrWidgetXTick, function () {…})` — misma intención.
       const enganchado = (nombre) =>
-        bloque.indexOf(nombre + "()") >= 0 || bloque.indexOf(", " + nombre + ")") >= 0;
+        bloque.indexOf(nombre + "()") >= 0 || bloque.indexOf(", " + nombre + ")") >= 0 || bloque.indexOf(", " + nombre + ",") >= 0;
       t.cierto(enganchado("mtrWidgetConductaTick"),
         "mtrWidgetConductaTick debe engancharse dentro de la rama de historia — si esto falla, el widget de exámenes volvió a quedar sin pintar en consulta real");
       t.cierto(enganchado("mtrWidgetFarmacoTick"),
