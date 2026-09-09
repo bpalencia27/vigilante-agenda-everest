@@ -9,6 +9,10 @@
 #    4. Banco completo:                               node tests/runner.js
 #       (opcional: pasar un sufijo de suite como $1, p. ej. "suite_94", para
 #        filtrar el banco — misma semántica que el argumento del runner).
+#    5. Frescura de la telemetría remota (T0-4):        GET ultimaFila al worker
+#       Cloudflare de REPLICA_TELEMETRIA — ROJO si la última fila recibida lleva
+#       más de 48 h, si el pipeline no tiene ni una fila o si el worker no
+#       responde: sin telemetría fresca no hay termómetro para los A/B.
 #  Escribe en .deepseek/logs/<YYYY-MM-DD>/:
 #    - RESUMEN.md                  (resumen ejecutivo de la noche)
 #    - <chequeo>.log               (salida completa por chequeo)
@@ -119,11 +123,11 @@ echo "  node: $(node --version 2>/dev/null || echo '?')"
 echo ""
 
 # --- 2. Sintaxis del userscript ----------------------------------------------
-nota "1/3  Sintaxis del userscript..."
+nota "1/4  Sintaxis del userscript..."
 correr "01_sintaxis_userscript" "node --check vigilante_agenda.user.js" node --check "$US_ARCHIVO"
 
 # --- 3. Sintaxis de todos los .js de tests/ -----------------------------------
-nota "2/3  Sintaxis de tests/*.js..."
+nota "2/4  Sintaxis de tests/*.js..."
 # OJO: los paréntesis son SUBSHELL a propósito — el `exit "$fallo"` de dentro solo
 # termina el subshell, no el script (con llaves { } habría matado el chequeo entero).
 (
@@ -150,12 +154,51 @@ fi
 echo "sintaxis de tests/*.js|$exit_real|$DIR_LOG/02_sintaxis_suites.log" >> "$DIR_LOG/.estado_noche"
 
 # --- 4. Banco completo --------------------------------------------------------
-nota "3/3  Banco de pruebas..."
+nota "3/4  Banco de pruebas..."
 if [ -n "$FILTRO" ]; then
   correr "03_banco_filtrado_${FILTRO//[^A-Za-z0-9_]/_}" "node tests/runner.js '$FILTRO'" node "$RAIZ/tests/runner.js" "$FILTRO"
 else
   correr "03_banco_completo" "node tests/runner.js (banco completo)" node "$RAIZ/tests/runner.js"
 fi
+
+# --- 5. Frescura de la telemetría remota (T0-4) ---------------------------------
+# El termómetro de los A/B: si la flota no reporta no hay experimento que medir.
+# La última fila del worker Cloudflare (REPLICA_TELEMETRIA) no puede llevar más de
+# 48 h muda; sin respuesta o sin filas también es ROJO (fail-closed). El token se
+# lee del propio worker.js — fuente única, jamás duplicado en este script.
+nota "4/4  Frescura de la telemetría (worker Cloudflare)…"
+(
+  TELE_URL="https://vigilante-telemetria.bpalencia27.workers.dev"
+  TELE_TOKEN="$(grep -m1 'const TOKEN = "' "$RAIZ/REPLICA_TELEMETRIA/worker.js" | sed -n 's/.*"\([^"]*\)".*/\1/p')"
+  if [ -z "$TELE_TOKEN" ]; then
+    echo "FALLA: no se pudo leer TOKEN de REPLICA_TELEMETRIA/worker.js"
+    exit 1
+  fi
+  node -e '
+    const UMBRAL = 48;
+    fetch(process.argv[1], { signal: AbortSignal.timeout(15000) })
+      .then((r) => r.text())
+      .then((t) => {
+        const d = JSON.parse(t);
+        if (!d || d.ok !== true) throw new Error("respuesta no válida: " + String(t).slice(0, 140));
+        console.log("última fila recibida: " + (d.ultima || "NINGUNA") + " · " + d.filas + " lotes · ahora: " + d.ahora);
+        if (d.horas === null) { console.log("FALLA: el pipeline NO tiene ni una fila — sin termómetro no hay A/B"); process.exit(1); }
+        console.log("antigüedad de la última fila: " + d.horas + " h");
+        if (d.horas > UMBRAL) { console.log("FALLA: la telemetría lleva " + d.horas + " h sin reportar (> 48 h): el pipeline está mudo"); process.exit(1); }
+        console.log("fresca (≤ 48 h): el pipeline reporta. VERDE.");
+      })
+      .catch((e) => { console.error("FALLA: " + (e && e.message ? e.message : e)); process.exit(1); });
+  ' "$TELE_URL/?accion=ultimaFila&token=$TELE_TOKEN"
+) > "$DIR_LOG/04_frescura_telemetria.log" 2>&1
+exit_real=$?
+if [ "$exit_real" -eq 0 ]; then
+  VERDES=$((VERDES + 1))
+  printf '  [OK]  frescura de la telemetría ≤ 48 h (EXIT=%s)\n' "$exit_real"
+else
+  ROJOS=$((ROJOS + 1))
+  printf '  [FALLA] frescura de la telemetría (EXIT=%s) — detalle: %s\n' "$exit_real" "$DIR_LOG/04_frescura_telemetria.log"
+fi
+echo "frescura de la telemetría (T0-4)|$exit_real|$DIR_LOG/04_frescura_telemetria.log" >> "$DIR_LOG/.estado_noche"
 
 # --- Resumen ejecutivo --------------------------------------------------------
 FIN_EPOCA="$(date +%s)"

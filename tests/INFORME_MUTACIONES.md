@@ -13879,3 +13879,28 @@ enganche vivo). Mutación verificada:
 | Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
 | user.js `_detectarRageClick` — puerta del aviso azul | Anular la puerta (if (ahora - _rageAvisoHostAt > 30000) → if (false && ...)): la ráfaga del host se cuenta y se registra pero el toast AZUL jamás sale (ni ux.rage.aviso) | NO | suite_110 4 casos rojos: ráfaga de 3 clics (esperaba ux.rage.aviso=1), el martilleo de 6 clics (el aviso no se repite, pero SÍ sale una vez), la ráfaga nueva tras 650 ms (esperaba el aviso de la primera ráfaga) y el reset por target distinto; EXIT 1. Restaurado 11 ok EXIT=0 |
+AB-8 + T0-4 (informe A/B): la flota se queda en versiones viejas pese a entender el
+aviso (el 97 %): AB-8 sostiene que no es desconocimiento sino falta de ACCIÓN, y esta
+entrega la mide sin tocar el tono del aviso (eso lo decide el médico). El aviso diario
+de actualización (mtrCheckActualizacionGist) queda MEDIDO por versión anunciada —
+aviso.upd.visible.vX, una vez por versión gracias a los anti-duplicados existentes
+(diario y por versión) — y el clic de «Actualizar ahora» del bloqueo por versión
+obsoleta (_avisoBloqueoPintar) es la ACCIÓN: aviso.upd.click.vX por versión exigida,
+CADA pulsación cuenta (es acción, no exposición: no se deduplica), con la evidencia
+fina en la bitácora local (vglLog VER/ClicActualizar, {local, exigida}) y el conteo
+ANTES de abrir la pestaña del gist (nada se pierde si la ventana no abre). El clic
+vive en un script en candado (state.killed): uxTrack sobrevive porque su timer de
+volcado es propio y el beforeunload vuelca. T0-4: el worker de REPLICA_TELEMETRIA
+expone ultimaFila (GET con el mismo token): MAX(recibido) de lotes — toda escritura
+pasa por ahí, ISO-8601 UTC, el MAX lexicográfico ES el máximo temporal — y el chequeo
+nocturno (.deepseek/run-nightly-checks.sh) añade el paso 5 de frescura: ROJO si la
+última fila lleva más de 48 h, si el pipeline no tiene ni una fila o si el worker no
+responde (fail-closed), con el token leído del propio worker.js (fuente única, jamás
+duplicado). Suite nueva suite_111_ab8_version.js (8 casos: la exposición por versión
+anunciada y sus anti-duplicados, el clic = ACCIÓN medida con bitácora, cada pulsación
+cuenta, 2 estructurales del enganche vivo en user.js + el estructural de T0-4 en
+worker.js y run-nightly-checks.sh). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_avisoBloqueoPintar` — uxTrack del clic de «Actualizar ahora» | Anular la medición de la ACCIÓN (try { uxTrack("aviso.upd.click.v" + _avisoBloqueoVer) → if (false) …): el clic abre la pestaña del gist igual, pero ni el conteo del informe (aviso.upd.click.vX) sale | NO | suite_111 3 casos rojos: la ACCIÓN medida (esperaba aviso.upd.click.v99.0.0=1 y llegó undefined), cada pulsación cuenta (esperaba 2 con la v98.0.5) y la guarda estructural del orden (el try de uxTrack anclado en el código vivo, antes de abrir la pestaña); EXIT 1. Restaurado 8 ok EXIT=0 |

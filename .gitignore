@@ -30,3 +30,8 @@ docs/propuesta_bento/index.html
 
 # 02-sep — también el ENLACE SIMBÓLICO (node_modules/ solo cubre el directorio real)
 node_modules
+
+# Wrangler — estado local del despliegue de REPLICA_TELEMETRIA (sesión OAuth, caché):
+# jamás se versiona. El deploy se hace a mano (tarea del frente) y el estado
+# sobra del repo.
+REPLICA_TELEMETRIA/.wrangler/

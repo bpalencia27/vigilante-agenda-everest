@@ -38739,6 +38739,12 @@
             if (!mtrVersionEsMasNueva(remota, VERSION)) return;
             if (localStorage.getItem("vgl_upd_avisada") === remota) return; // una vez por versión
             localStorage.setItem("vgl_upd_avisada", remota);
+            // v18.10.0 (AB-8, informe A/B) — el aviso de actualización queda MEDIDO por versión
+            // anunciada (aviso.upd.visible.vX, una vez por versión): AB-8 sostiene que la
+            // flota no se queda por desconocer (el 97 % entiende el aviso) sino por no
+            // accionar — este conteo dice QUÉ versión se anunció en cada equipo, y el
+            // clic del botón del bloqueo (aviso.upd.click.vX) dice quién pasó a la acción.
+            try { uxTrack("aviso.upd.visible.v" + remota); } catch (e) {}
             notify("AZUL", "⬆ Actualización v" + remota + " disponible",
               "Tampermonkey la instalará solo en su ciclo diario.\nPara tenerla YA: icono de Tampermonkey → Utilidades → «Buscar actualizaciones de userscripts».",
               false, "updnew|" + remota);
@@ -39036,6 +39042,13 @@
       btn.textContent = "Actualizar ahora";
       btn.style.cssText = "pointer-events:auto;background:#ffffff;color:#991b1b !important;font-weight:700;border:none;border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer;margin-bottom:12px;";
       btn.addEventListener("click", () => {
+        // v18.10.0 (AB-8, informe A/B) — clics de actualización (métrica nueva del
+        // informe): la ACCIÓN de actualizar, por versión exigida. El clic vive en un
+        // script en candado (state.killed): uxTrack sobrevive (su timer de volcado es
+        // propio y el beforeunload vuelca) y el conteo queda en la ventana local; el
+        // vglLog deja la evidencia fina en la bitácora local.
+        try { uxTrack("aviso.upd.click.v" + _avisoBloqueoVer); } catch (e4) {}
+        try { vglLog("VER", "ClicActualizar", { local: VERSION, exigida: _avisoBloqueoVer }); } catch (e3) {}
         try { window.open(VGL_UPDATE_GIST_URL, "_blank"); } catch (e2) {}
       });
       // v18.8.3 — mini guía para el fallo real del botón (pedido del médico del

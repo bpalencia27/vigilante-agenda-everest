@@ -66,9 +66,11 @@ export default {
         return json({ status: "ok", ...VCHECK, timestamp: new Date().toISOString() });
       }
 
-      // Única acción de GET: listaAcceso (texto plano con JSON dentro).
+      // Acciones de GET (texto plano con JSON dentro, mismo token):
+      //   listaAcceso → padrón de acceso; ultimaFila → frescura del pipeline (T0-4).
       if (request.method === "GET") {
         if (url.searchParams.get("token") !== TOKEN) return txt("no");
+        if (url.searchParams.get("accion") === "ultimaFila") return txt(JSON.stringify(await ultimaFila(db)));
         if (url.searchParams.get("accion") !== "listaAcceso") return txt("no");
         return txt(JSON.stringify(await listaAcceso(db)));
       }
@@ -195,6 +197,29 @@ async function filaSimple(db, tabla, comunes, body, def) {
   const q = ["?", "?", "?", "?", "?", "?", ...cols.map(() => "?")].join(", ");
   const vals = cols.map((c) => (c in def.texto ? celda(body[c], def.texto[c]) : numero(body[c])));
   await db.prepare(`INSERT INTO ${tabla} (${colSql}) VALUES (${q})`).bind(...comunes([]), ...vals).run();
+}
+
+// ── ultimaFila (GET, T0-4): frescura del pipeline para el chequeo nocturno ──────
+// Toda escritura pasa primero por `lotes` (dedup), así que MAX(recibido) ahí dice
+// cuándo fue la última vez que LA FLOTA reportó — cualquier evento. El chequeo
+// nocturno del repo se pone ROJO si esta fila lleva más de 48 h: sin telemetría
+// fresca no hay termómetro para los experimentos A/B. `recibido` es ISO-8601
+// UTC (texto): el MAX lexicográfico ES el máximo temporal.
+async function ultimaFila(db) {
+  const ahora = new Date().toISOString();
+  const { results } = await db.prepare(
+    "SELECT MAX(recibido) AS ultima, COUNT(*) AS filas FROM lotes"
+  ).all();
+  const fila = (results && results[0]) || {};
+  const ultima = String(fila.ultima || "");
+  let horas = null;
+  if (ultima) horas = Math.max(0, (new Date(ahora).getTime() - new Date(ultima).getTime()) / 3600000);
+  return {
+    ok: true, ahora,
+    ultima: ultima || null,
+    filas: Number(fila.filas) || 0,
+    horas: horas === null ? null : Math.round(horas * 10) / 10,
+  };
 }
 
 // ── listaAcceso (GET): misma semántica que _hojaAcceso + _listaAccesoRespuesta ──
