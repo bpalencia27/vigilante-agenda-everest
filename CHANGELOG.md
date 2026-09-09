@@ -4,6 +4,19 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.13.2] — 2026-09-09 (Dos cuadros más que ya se manejan por completo con teclado)
+
+Una revisión de accesibilidad encontró dos cuadros que se habían quedado fuera de la
+mejora de la versión anterior: el de «Ordenamiento de exámenes» y el que confirma datos
+antes de calcular el riesgo. En ambos, la tecla Tab podía sacar el foco del cuadro hacia
+el fondo de Everest mientras el cuadro seguía tapando la pantalla — ya no.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (una por cuadro) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el arreglo funciona sin cambiar nada más.
+
+---
+
 ## [Versión 18.13.1] — 2026-09-09 (Ajuste de rendimiento interno: menos lecturas repetidas del almacén en cada repaso)
 
 Una revisión nocturna de rendimiento encontró que, cada vez que el asistente repasa la

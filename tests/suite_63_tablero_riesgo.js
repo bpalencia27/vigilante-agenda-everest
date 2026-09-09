@@ -549,6 +549,31 @@ module.exports = {
       t.falso(!!d.body.children.find((n) => n.id === "vgl-confirma-modal" && n.isConnected !== false && n.parentElement), "no se vuelve a preguntar lo ya confirmado");
     });
 
+    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — el modal cerraba con Escape
+    // pero no atrapaba Tab: reemplazado el listener manual de Escape por el gestor
+    // universal (_activarAccesibilidadModal), con _luego() como ÚNICA salida — un
+    // solo listener, no dos, para no llamar a alContinuar() dos veces por un mismo
+    // Escape (ver suite_68 "una salida común para la ✕ y Escape", que NO puede
+    // pasar de largo el doble disparo porque solo revisa que exista la función).
+    t.caso("PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab con el gestor universal y Escape llama a alContinuar UNA sola vez", () => {
+      const c = cargar({ silencioso: true });
+      let vecesAlContinuar = 0;
+      const alContinuar = () => { vecesAlContinuar++; };
+      const disc = [{
+        clave: "hipertension", etiqueta: "Hipertensión arterial", porQue: "cambia la tabla de vigencias",
+        afirman: [{ fuente: "Historia", detalle: "casilla marcada" }],
+        niegan: [{ fuente: "PyM", detalle: "no figura" }],
+      }];
+      c.api._vglModalConfirmarDatos({ doc_id: "12345678" }, disc, alContinuar);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-confirma-modal");
+      t.cierto(!!modal, "el cuadro se pinta");
+      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length === 1),
+        "un solo listener 'keydown' (lo instala _activarAccesibilidadModal) — no dos");
+      modal._listeners.keydown[0]({ key: "Escape", preventDefault() {}, stopPropagation() {} });
+      t.igual(vecesAlContinuar, 1, "Escape continúa el flujo UNA sola vez, no dos (antes había dos listeners que podían dispararse ambos)");
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-confirma-modal"), "y el cuadro se cierra");
+    });
+
     t.caso("_vglModalConfirmarDatos responde por la puerta compartida (humo)", () => {
       t.noLanza(() => {
         const ok = api._vglModalConfirmarDatos({ doc_id: "" }, [], null);

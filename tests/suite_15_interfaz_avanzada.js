@@ -6516,6 +6516,22 @@ module.exports = {
       t.cierto(/if \(ordenarBtn\) ordenarBtn\.style\.display = "";\s*\n\s*repintar\(\);/.test(src), "y al conseguirlo repinta y devuelve «Ordenar pendientes»");
     });
 
+    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — #vgl-paquete-modal era el
+    // único modal de "Ordenamiento de exámenes" que NO pasaba por el gestor universal:
+    // sin captura de Tab, sin auto-foco, sin retorno de foco al cerrar, y sin NINGÚN
+    // manejador de teclado — ni siquiera Escape. Mismo patrón que el hallazgo #43
+    // (_vglChooserModal) de arriba.
+    await t.casoAsync("PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal: atrapa Tab y cierra con Escape", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      await c.api.openPaquetesModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-paquete-modal");
+      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length),
+        "el modal tiene un listener 'keydown' propio (lo instala _activarAccesibilidadModal) — antes no tenía ninguno");
+      t.cierto(!!(modal._listeners && modal._listeners.click && modal._listeners.click.length),
+        "y sigue conservando su canal de cierre de siempre (clic afuera)");
+    });
+
     t.caso("v18.0.118 (UI/UX #10 + decisión de Ordenar): el «Siguiente» del paso 2 explica por qué está apagado; Ordenar abre el PDF detrás sin robar la pantalla", () => {
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.igual((src.match(/step2Next\.textContent = "Elija un horario para continuar"/g) || []).length, 1, "sin turno elegido, el botón del paso 2 lo dice");

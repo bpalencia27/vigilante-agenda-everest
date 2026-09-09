@@ -14051,3 +14051,37 @@ Banco completo: EXIT=0, 3774 comprobaciones (baseline y resultado idénticos —
 cambia ningún resultado observable de `togActiva`/`togSet`, solo cuántas veces se lee el
 almacén dentro de una misma vuelta de tick; sin instrumentación de conteo de lecturas en el
 banco, la reducción de I/O queda documentada aquí, no medida con una aserción numérica).
+
+## v18.13.2 (PALETTE — auditoría nocturna UX/accesibilidad: dos modales sin captura de Tab)
+
+Revisión estática (Read/Grep) de los 10 call-sites conocidos de `_activarAccesibilidadModal`
+contra los ids de modal reales del script: 2 de los ~11 modales en vivo quedaron fuera de la
+lista, ambos hallazgo Alta (barrera total para navegación solo-teclado):
+
+- `#vgl-paquete-modal` (`openPaquetesModal`, "Ordenamiento de exámenes"): `role="dialog"`/
+  `aria-modal="true"` declarados pero CERO manejadores de teclado — ni Tab atrapado, ni
+  Escape, ni auto-foco, ni retorno de foco al disparador.
+- `#vgl-confirma-modal` (`_vglModalConfirmarDatos`, reconciliador de discrepancias): sí
+  cerraba con Escape (listener manual propio), pero sin captura de Tab.
+
+Fix: conectar ambos al gestor universal ya probado, mismo patrón que los otros 9 modales.
+En `#vgl-confirma-modal` esto exigió más cuidado que un cambio mecánico: el modal ya tenía
+su propio listener de Escape (`_luego`), y `_activarAccesibilidadModal` instala OTRO listener
+de `keydown` que también maneja Escape — sumar el nuevo sin quitar el viejo habría hecho que
+Escape disparara `_luego()` DOS veces (dos `alContinuar()`, dos `uxTrack`), justo lo que
+`tests/suite_68_v17_cola.js` ("una salida común para la ✕ y Escape") documenta como el
+contrato a proteger. Se reemplazó el listener manual por la llamada al gestor, pasando
+`_luego` como único `closeCallback` — un solo listener, mismo comportamiento observable.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `openPaquetesModal` — conexión a `_activarAccesibilidadModal` | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);` → `if (false && …) {…}` (el modal vuelve a no tener listener de teclado) | NO | suite_15 caso «PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal…»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
+| user.js `_vglModalConfirmarDatos` — conexión a `_activarAccesibilidadModal` (reemplaza el listener manual de Escape) | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);` → `if (false && …) {…}` (Escape deja de cerrar el modal: sin listener de teclado alguno) | NO | suite_63 caso «PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab…, Escape llama a alContinuar UNA sola vez»: mutante rojo (alContinuar quedó en 0, no 1); EXIT 1 (61 ok, 1 falla). Restaurado 62 ok EXIT=0 |
+
+Verificado además, sin mutación aparte (mismo caso ya lo demuestra): el conteo de
+`modal._listeners.keydown` en `#vgl-confirma-modal` es exactamente **1** tras el fix — antes
+del fix habría sido 2 si simplemente se hubiera AÑADIDO el gestor sin quitar el listener
+manual, lo que habría duplicado `alContinuar()` en cada Escape. No se auditó Chromium en
+esta sesión (bloqueo de entorno documentado en `.deepseek/logs/2026-09-09/palette-informe.md`)
+— ninguno de los dos cambios toca CSS, así que la verificación de la sección 4 (color contra
+Everest simulado) no aplica.
