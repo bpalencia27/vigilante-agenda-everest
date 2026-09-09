@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.13.1
+// @version      18.13.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -27159,6 +27159,11 @@
     if (closeBtn) closeBtn.addEventListener("click", closeMod);
     const bgClick = (e) => { if (e.target === modal) closeMod(); };
     modal.addEventListener("click", bgClick);
+    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — este modal tenía
+    // role="dialog"/aria-modal="true" pero NINGÚN manejador de teclado: ni Tab
+    // atrapado, ni Escape, ni retorno de foco al disparador. Mismo gestor que
+    // usan los otros 10 modales en vivo.
+    if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);
 
     const body = modal.querySelector("#vgl-paquete-body");
     const ordenarBtn = modal.querySelector("#vgl-paquete-ordenar");
@@ -29860,7 +29865,14 @@
       };
       const x = modal.querySelector("#vgl-conf-x");
       if (x && x.addEventListener) x.addEventListener("click", _luego);
-      modal.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); _luego(); } });
+      // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — este modal cerraba con
+      // Escape pero no atrapaba Tab (el foco podía salir hacia Everest con el cuadro
+      // aún tapando la pantalla). Se reemplaza el listener manual de Escape por el
+      // gestor universal (mismo patrón que los otros 10 modales en vivo): sigue
+      // siendo _luego() la ÚNICA salida para la ✕ y Escape — un solo listener, no
+      // dos, para no llamar a alContinuar() dos veces (ver suite_68 "una salida
+      // común para la ✕ y Escape").
+      if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);
 
       // =================================================================
       //  v17.7.0 — EL REPASO: el cuadro mira la pantalla de AHORA, no la de hace un rato
