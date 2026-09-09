@@ -23,6 +23,7 @@
   [OK]    suite_10_eventos_auditoria.js
   [OK]    suite_110_ab3_rage_host.js
   [OK]    suite_111_ab8_version.js
+  [OK]    suite_112_mesa_expertos_muertas.js
   [OK]    suite_11_reportes.js
   [OK]    suite_12_sharepoint_piloto.js
   [OK]    suite_13_api_agenda.js

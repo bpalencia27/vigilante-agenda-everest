@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.13.0
+// @version      18.14.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -21,6 +21,7 @@
 // @connect      login.live.com
 // @connect      svc.ms
 // @connect      script.google.com
+// @connect      workers.dev
 // @connect      script.googleusercontent.com
 // @connect      googleusercontent.com
 // @connect      gist.githubusercontent.com
@@ -1037,7 +1038,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.13.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10203,13 +10204,31 @@
   function _togUid() {
     try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
   }
+  // v18.13.1 (BOLT, rendimiento) — lectura fresca real del mapa de toggles del uid
+  // (el ÚNICO punto de lectura de "vgl_tog_<uid>"; togSet() es el ÚNICO punto de
+  // escritura, verificado con grep antes de proponer la memo — sección 2.3 del
+  // encargo). Extraída de togActiva() para que el memo por tick (de abajo) y la
+  // invalidación de togSet() compartan la misma lectura sin duplicar código.
+  function _togMapaFresca(uid) { return readJSON("vgl_tog_" + uid, null) || {}; }
   function togActiva(k) {
     try {
       const def = VGL_TOGGLES.find((x) => x.k === k);
       if (!def) return true;                        // clave inexistente: fail-open documentado
       const uid = _togUid();
       if (!uid) return def.defecto !== false;       // sin identidad: defaults (todo activo)
-      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      // v18.13.1 (BOLT) — memo por tick (mismo patrón que state._docTick, F-P2):
+      // SOLO mientras state._enTickSync es true (ventana síncrona de una vuelta de
+      // tick(), ver tick()) se reutiliza state._togMapTick si es del mismo uid.
+      // Fuera de esa ventana (clics, Ajustes, callbacks diferidos) o con otro uid,
+      // se lee fresco siempre — igual que _vglDocDelTick() nunca memoiza la vía
+      // diferida.
+      let mapa;
+      if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {
+        mapa = state._togMapTick;
+      } else {
+        mapa = _togMapaFresca(uid);
+        if (state && state._enTickSync) { state._togMapTick = mapa; state._togMapTickUid = uid; }
+      }
       let act = (k in mapa) ? !!mapa[k] : (def.defecto !== false);
       if (act && def.sub && !togActiva(def.sub)) act = false;   // el padre manda
       return act;
@@ -10219,9 +10238,14 @@
     try {
       const uid = _togUid();
       if (!uid) return false;                       // sin identidad no se persiste nada
-      const mapa = readJSON("vgl_tog_" + uid, null) || {};
+      const mapa = _togMapaFresca(uid);
       mapa[k] = !!on;
       writeJSON("vgl_tog_" + uid, mapa);
+      // v18.13.1 (BOLT) — invalida la memo por tick: la escritura es el único punto
+      // que puede dejarla desactualizada dentro de la MISMA vuelta de tick() (p.
+      // ej. Ajustes llamando togSet en caliente); togActiva() vuelve a leer fresco
+      // en su siguiente llamada.
+      state._togMapTick = null; state._togMapTickUid = null;
       uxTrack("tog." + k + "." + (on ? "on" : "off"));
       try { createAccionesDockUI(); } catch (e2) {}   // re-pintado en caliente del dock
       // v18.6.2 (F-P3) — el interruptor de la caché de catálogos actúa en caliente:
@@ -10892,7 +10916,9 @@
     // [v17.6.7] Cierre de turno: dedup de avisos UNA vez por cita (checklist).
     checkCierreAvisados: new Set(),
     notified: new Map(), summarized: false, osNotif: false,
-    lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/AKfycbwXwwQdSGGMyt4X6Wf5YbJVRZjB_z_cYEVVpRoebO_VrobIhtHKD3nAJs689kq3R7tC/exec",
+    // v18.14.0 (ORDEN #7) — réplica Cloudflare del chequeo de versión mínima
+    // (GET JSON, mismo contrato que VersionCheck.gs); ver TABLERO.url arriba.
+    lastVersionCheck: 0, versionCheckUrl: "https://vigilante-telemetria.bpalencia27.workers.dev/vcheck",
     leader: false, shared: null,
     // v5.0
     filtro: "todas", busqueda: "", muteUntil: 0, sheet: null, lastRefresh: null,
@@ -13266,8 +13292,13 @@
   //  Cola diminuta (máx. 30) por si no hay red; se reintenta cada 10 min.
   // =====================================================================
   const TABLERO = {
-    url: "https://script.google.com/macros/s/AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv-cYKVNFe6j9VbNK1wOI3VOD0zIBHyXMgCT3zNBl/exec",
-    token: "vgl-2026", // debe coincidir con el TOKEN del Apps Script (ver carpeta TABLERO)
+    // v18.14.0 (ORDEN #7, cableado de la flota) — réplica Cloudflare Workers + D1
+    // (REPLICA_TELEMETRIA/) en lugar del Apps Script original. Contrato idéntico
+    // (mismo token, mismos acuses "ok"/"dup"/"no"/"err"): el cliente no distingue
+    // backend. El GAS (script.google.com) queda vivo y sin tráfico como respaldo
+    // frío — ver REPLICA_TELEMETRIA/README.md §4 para revertir este único valor.
+    url: "https://vigilante-telemetria.bpalencia27.workers.dev/",
+    token: "vgl-2026", // debe coincidir con el TOKEN del worker (REPLICA_TELEMETRIA/worker.js)
   };
   const repUrl = () => (S.reporteUrl && /^https?:/i.test(S.reporteUrl)) ? S.reporteUrl.trim() : TABLERO.url;
   const repOn = () => !!S.reporte && !!repUrl() && typeof GM_xmlhttpRequest !== "undefined";
@@ -13291,7 +13322,10 @@
     try {
       paso("Estado del envío (v17.58.2: la telemetría es obligatoria)", !!S.reporte, S.reporte ? "encendido" : "APAGADO (estado imposible por UI desde v17.58.2)");
       const u = repUrl();
-      paso("Dirección del panel", !!u && /^https:\/\/script\.google\.com\//.test(u), u ? "" : "sin dirección");
+      // v18.14.0 — acepta el backend GAS histórico (script.google.com, por si un
+      // administrador vuelve a apuntar S.reporteUrl allí) Y el worker Cloudflare
+      // (cualquier subdominio *.workers.dev) como direcciones válidas.
+      paso("Dirección del panel", !!u && /^https:\/\/(script\.google\.com\/|[\w.-]+\.workers\.dev\/)/.test(u), u ? "" : "sin dirección");
       paso("Permiso de red del navegador", typeof GM_xmlhttpRequest !== "undefined", typeof GM_xmlhttpRequest !== "undefined" ? "" : "falta el permiso del gestor de scripts");
       let colaN = 0, colaVieja = "";
       try { repQLoad(); colaN = (repQ || []).length; if (colaN && repQ[0] && repQ[0].ts) { const min = Math.round((Date.now() - new Date(repQ[0].ts).getTime()) / 60000); colaVieja = "la más vieja lleva " + (min < 60 ? min + " min" : Math.round(min / 60) + " h") + " esperando"; } } catch (e) {}
@@ -27136,6 +27170,11 @@
     if (closeBtn) closeBtn.addEventListener("click", closeMod);
     const bgClick = (e) => { if (e.target === modal) closeMod(); };
     modal.addEventListener("click", bgClick);
+    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — este modal tenía
+    // role="dialog"/aria-modal="true" pero NINGÚN manejador de teclado: ni Tab
+    // atrapado, ni Escape, ni retorno de foco al disparador. Mismo gestor que
+    // usan los otros 10 modales en vivo.
+    if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);
 
     const body = modal.querySelector("#vgl-paquete-body");
     const ordenarBtn = modal.querySelector("#vgl-paquete-ordenar");
@@ -29837,7 +29876,14 @@
       };
       const x = modal.querySelector("#vgl-conf-x");
       if (x && x.addEventListener) x.addEventListener("click", _luego);
-      modal.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); _luego(); } });
+      // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — este modal cerraba con
+      // Escape pero no atrapaba Tab (el foco podía salir hacia Everest con el cuadro
+      // aún tapando la pantalla). Se reemplaza el listener manual de Escape por el
+      // gestor universal (mismo patrón que los otros 10 modales en vivo): sigue
+      // siendo _luego() la ÚNICA salida para la ✕ y Escape — un solo listener, no
+      // dos, para no llamar a alContinuar() dos veces (ver suite_68 "una salida
+      // común para la ✕ y Escape").
+      if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);
 
       // =================================================================
       //  v17.7.0 — EL REPASO: el cuadro mira la pantalla de AHORA, no la de hace un rato
@@ -38264,6 +38310,16 @@
   function tick() {
     try {
       if (state.killed) return;
+      // v18.13.1 (BOLT, rendimiento) — MEMO POR TICK DEL MAPA DE TOGGLES: mismo
+      // patrón ya establecido para state._docTick (F-P2). togActiva() lee
+      // "vgl_tog_<uid>" del almacén; dentro de una sola vuelta de tick() se leía
+      // hasta 3 veces la MISMA clave (p. ej. hcAnexo5Render: togActiva("tog_notif")
+      // + togActiva("tog_anexo5") cuyo `sub` vuelve a togActiva("tog_notif")).
+      // state._enTickSync delimita la ventana: SOLO mientras es true, togActiva()
+      // reutiliza state._togMapTick/_togMapTickUid; togSet() la invalida al
+      // escribir; cualquier llamador fuera de esta vuelta (clics, Ajustes,
+      // callbacks diferidos) sigue leyendo fresco, igual que _vglDocDelTick().
+      state._enTickSync = true;
       // v18.3.4 (hallazgo N8-B1) — RE-VISA DEL MONITOR: la ruta sin-identidad de
       // v18.3.2 monta #vgl-root antes de saber quién consulta (el montaje se
       // difiere en boot()). En cuanto la identidad ES conocida y el perfil
@@ -38651,6 +38707,16 @@
         }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }
+    finally {
+      // v18.13.1 (BOLT, rendimiento) — cierre de la ventana del memo por tick: se
+      // limpia SIEMPRE (incluidos los `return` tempranos de arriba, `finally` los
+      // atraviesa todos), así que ningún llamador posterior a esta vuelta —clic,
+      // callback diferido, la vuelta siguiente con otro médico activo— puede leer
+      // el mapa de toggles cacheado de esta vuelta.
+      state._enTickSync = false;
+      state._togMapTick = null;
+      state._togMapTickUid = null;
+    }
   }
 
   // v14.1.9 — La cabecera del informe descargable filtraba lo que todo el resto del

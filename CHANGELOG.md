@@ -4,6 +4,50 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.0] — 2026-09-09 (El envío de reportes cambia de Google Sheets a un servidor propio en Cloudflare — usted no notará ningún cambio)
+
+El servidor que recibía en silencio los reportes anónimos de uso (sin datos de
+pacientes) migró de Google Apps Script a un servidor propio en Cloudflare, ya
+probado en producción. Es un cambio interno de infraestructura: el aviso, el botón
+«Probar conexión» y todo lo que usted ve se comportan exactamente igual que antes.
+
+De respaldo, el servidor anterior de Google queda activo por si hiciera falta volver
+atrás — no lo notará en ningún caso.
+
+Verificación: banco de pruebas completo en verde antes y después (3774
+comprobaciones); mutación deliberada (devolver el envío al servidor anterior) puso
+roja la prueba específica y fue restaurada — confirmando que el cambio de dirección
+funciona como se espera.
+
+---
+
+## [Versión 18.13.2] — 2026-09-09 (Dos cuadros más que ya se manejan por completo con teclado)
+
+Una revisión de accesibilidad encontró dos cuadros que se habían quedado fuera de la
+mejora de la versión anterior: el de «Ordenamiento de exámenes» y el que confirma datos
+antes de calcular el riesgo. En ambos, la tecla Tab podía sacar el foco del cuadro hacia
+el fondo de Everest mientras el cuadro seguía tapando la pantalla — ya no.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (una por cuadro) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el arreglo funciona sin cambiar nada más.
+
+---
+
+## [Versión 18.13.1] — 2026-09-09 (Ajuste de rendimiento interno: menos lecturas repetidas del almacén en cada repaso)
+
+Una revisión nocturna de rendimiento encontró que, cada vez que el asistente repasa la
+pantalla mientras usted tiene una historia clínica abierta, algunos avisos internos
+consultaban la misma preferencia guardada varias veces seguidas sin necesidad. Ahora esa
+lectura se comparte dentro de un mismo repaso — sin cambiar ningún resultado, ninguna
+alerta ni ningún comportamiento visible.
+
+Verificación: banco de pruebas completo en verde antes y después (3774 comprobaciones);
+mutación deliberada (desactivar el ahorro) puso roja la prueba específica y fue
+restaurada — confirmando que el ahorro funciona sin alterar nada más.
+
+---
+
 ## [Versión 18.13.0] — 2026-09-09 (Segunda tanda de la mesa de expertos: el asistente se puede operar por completo con solo teclado o lector de pantalla)
 
 Continuación de la revisión integral de código de la versión anterior. Esta entrega

@@ -14022,3 +14022,88 @@ con el banco completo antes/después, sin fila propia.
 | user.js `checkVersionMinimum` — `needsUpdate` vía `mtrVersionEsMasNueva` | `const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);` → `const needsUpdate = false;` (el candado de versión mínima deja de dispararse) | NO | suite_30 caso «checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado…»: mutante rojo; EXIT 1 (12 ok, 1 falla). Restaurado 13 ok EXIT=0 |
 | user.js widget Próximos exámenes — guarda de clic dentro del panel abierto | `if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;` → `if (false && …) return;` (leer/seleccionar una fila del panel vuelve a cerrarlo de golpe) | NO | suite_71 caso «mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded…, y un clic DENTRO del panel abierto no lo cierra»: mutante rojo; EXIT 1 (90 ok, 1 falla). Restaurado 91 ok EXIT=0 |
 | user.js `hcAnexo5Render` / `a5Cerrar` — barra de Deshacer | Insertado `if (true) return;` justo antes de construir la barra `#vgl-a5-deshacer` (cerrar el aviso del Anexo 5 vuelve a ser irreversible al toque, sin recurso) | NO | suite_91 caso «F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso»: mutante rojo; EXIT 1 (28 ok, 1 falla). Restaurado 29 ok EXIT=0 |
+
+## v18.13.1 (BOLT — auditoría nocturna de rendimiento, quick win #1: memo por tick del mapa de toggles)
+
+Cartografía real (sección 2.3 del encargo): `togActiva()` lee `readJSON("vgl_tog_"+uid)`
+del almacén en CADA llamada; `hcAnexo5Render()` (que corre en cada vuelta de tick mientras
+la HC está abierta) llama `togActiva("tog_notif") || togActiva("tog_anexo5")`, y como
+`tog_anexo5` tiene `sub:"tog_notif"`, `togActiva` se reinvoca a sí mismo — hasta 3 lecturas
+síncronas de la MISMA clave de almacén por vuelta de tick, solo en esa línea. `avisoUniversal()`
+repite la lectura de `tog_notif` por su cuenta y queda cubierto "de rebote" por el mismo fix
+(no necesitó cambio propio).
+
+Fix: memo por tick calcado del patrón ya aceptado para `state._docTick`/`_vglDocDelTick()`
+(mismo criterio de riesgo). `state._enTickSync=true` se arma al entrar a `tick()` y se limpia
+en un `finally{}` (atraviesa cualquier `return` temprano), así que ningún llamador POSTERIOR a
+esa vuelta —clic, callback diferido, la vuelta siguiente con otro médico activo— puede leer un
+mapa de toggles cacheado de una vuelta anterior. `togActiva()` reutiliza `state._togMapTick`
+SOLO si `state._enTickSync` es true y el uid coincide; `togSet()` invalida la memo al escribir
+(único punto de escritura legítimo). Coherencia entre pestañas intacta: la memo nunca sobrevive
+fuera de la ventana síncrona de un solo `tick()`, así que un cambio de otra pestaña se ve en el
+siguiente tick como siempre.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `togActiva` — condición de la memo por tick | `if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {` → `if (false && …) {` (la memo nunca se usa, togActiva vuelve a leer fresco siempre) | NO | suite_93 caso «togActiva (BOLT, rendimiento v18.13.1): memo por tick…»: mutante rojo; EXIT 1 (10 ok, 1 falla). Restaurado 11 ok EXIT=0 |
+
+Banco completo: EXIT=0, 3774 comprobaciones (baseline y resultado idénticos — el fix no
+cambia ningún resultado observable de `togActiva`/`togSet`, solo cuántas veces se lee el
+almacén dentro de una misma vuelta de tick; sin instrumentación de conteo de lecturas en el
+banco, la reducción de I/O queda documentada aquí, no medida con una aserción numérica).
+
+## v18.13.2 (PALETTE — auditoría nocturna UX/accesibilidad: dos modales sin captura de Tab)
+
+Revisión estática (Read/Grep) de los 10 call-sites conocidos de `_activarAccesibilidadModal`
+contra los ids de modal reales del script: 2 de los ~11 modales en vivo quedaron fuera de la
+lista, ambos hallazgo Alta (barrera total para navegación solo-teclado):
+
+- `#vgl-paquete-modal` (`openPaquetesModal`, "Ordenamiento de exámenes"): `role="dialog"`/
+  `aria-modal="true"` declarados pero CERO manejadores de teclado — ni Tab atrapado, ni
+  Escape, ni auto-foco, ni retorno de foco al disparador.
+- `#vgl-confirma-modal` (`_vglModalConfirmarDatos`, reconciliador de discrepancias): sí
+  cerraba con Escape (listener manual propio), pero sin captura de Tab.
+
+Fix: conectar ambos al gestor universal ya probado, mismo patrón que los otros 9 modales.
+En `#vgl-confirma-modal` esto exigió más cuidado que un cambio mecánico: el modal ya tenía
+su propio listener de Escape (`_luego`), y `_activarAccesibilidadModal` instala OTRO listener
+de `keydown` que también maneja Escape — sumar el nuevo sin quitar el viejo habría hecho que
+Escape disparara `_luego()` DOS veces (dos `alContinuar()`, dos `uxTrack`), justo lo que
+`tests/suite_68_v17_cola.js` ("una salida común para la ✕ y Escape") documenta como el
+contrato a proteger. Se reemplazó el listener manual por la llamada al gestor, pasando
+`_luego` como único `closeCallback` — un solo listener, mismo comportamiento observable.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `openPaquetesModal` — conexión a `_activarAccesibilidadModal` | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);` → `if (false && …) {…}` (el modal vuelve a no tener listener de teclado) | NO | suite_15 caso «PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal…»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
+| user.js `_vglModalConfirmarDatos` — conexión a `_activarAccesibilidadModal` (reemplaza el listener manual de Escape) | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);` → `if (false && …) {…}` (Escape deja de cerrar el modal: sin listener de teclado alguno) | NO | suite_63 caso «PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab…, Escape llama a alContinuar UNA sola vez»: mutante rojo (alContinuar quedó en 0, no 1); EXIT 1 (61 ok, 1 falla). Restaurado 62 ok EXIT=0 |
+
+Verificado además, sin mutación aparte (mismo caso ya lo demuestra): el conteo de
+`modal._listeners.keydown` en `#vgl-confirma-modal` es exactamente **1** tras el fix — antes
+del fix habría sido 2 si simplemente se hubiera AÑADIDO el gestor sin quitar el listener
+manual, lo que habría duplicado `alContinuar()` en cada Escape. No se auditó Chromium en
+esta sesión (bloqueo de entorno documentado en `.deepseek/logs/2026-09-09/palette-informe.md`)
+— ninguno de los dos cambios toca CSS, así que la verificación de la sección 4 (color contra
+Everest simulado) no aplica.
+
+## v18.14.0 (ORDEN #7 — cableado de la flota al worker Cloudflare)
+
+Los 4 puntos de código del cableado documentado en `REPLICA_TELEMETRIA/README.md` §4:
+`TABLERO.url` (telemetría POST), `versionCheckUrl` (candado de versión mínima GET),
+el regex de `repDiagnostico()` (acepta GAS o `*.workers.dev`) y `@connect workers.dev`.
+El GAS (`script.google.com`) queda vivo y sin tráfico como respaldo frío — un solo
+valor (`TABLERO.url`) revierte el cambio si hiciera falta. El worker ya estaba
+desplegado y probado en vivo (ORDEN #7, `f70c05c`); esta entrega es solo el cableado
+del cliente, decisión explícita del médico. El punto 5 del README (destino del
+tablero Google Sheets histórico) queda sin resolver — decisión pendiente, no bloquea
+el cableado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `TABLERO.url` | `"https://vigilante-telemetria.bpalencia27.workers.dev/"` → vuelto al GAS original (`AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv…`) | NO | suite_11 caso «repUrl: sin URL personalizada devuelve la del tablero de fábrica» (y otros 2 de la misma suite que usan `URL_FABRICA`): mutante rojo; EXIT 1 (48 ok, 3 fallan). Restaurado 51 ok EXIT=0 |
+
+Suites tocadas sin cambio de comportamiento propio (solo el matcher del mock que
+identifica la URL del backend en las pruebas, de `script.google.com` a `workers.dev`,
+ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
+(3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
+caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
