@@ -14001,3 +14001,24 @@ qué se prefirió no tocarlos en esta tanda.
 | user.js `EQUIPO_ID_KEY` (muerta #10) | Reintroduce `const EQUIPO_ID_KEY = "vgl_equipo_id";` (huérfana desde la migración a `obsIdentidadEquipo`) | NO | suite_112 caso «EQUIPO_ID_KEY ya no se declara…»: mutante rojo («sin la constante muerta (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
 | user.js `restartPolling` — variable `pollTimer` (muerta #11) | Reintroduce `let pollTimer = null;` y la rama `if (pollTimer) clearInterval(...)` (nunca recibía un id real desde v14.2.12) | NO | suite_09 caso «restartPolling (v18.12.0): la variable pollTimer y su rama muerta ya no existen…»: mutante rojo («pollTimer ya no se declara (obtuvo true)»); EXIT 1 (36 ok, 1 falla). Restaurado 37 ok EXIT=0 |
 | user.js CSS `#vgl-refresh` — 24px → 28px (UX #17) | `width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;` → los mismos 4 valores vueltos a `24px` | NO | suite_105 caso «fuente (UX v18.12.0): #vgl-refresh mide 28px…»: mutante rojo («width 28px (obtuvo false)»); EXIT 1 (13 ok, 1 falla). Restaurado 14 ok EXIT=0 |
+
+## v18.13.0 (Mesa de Expertos: segunda tanda — accesibilidad de teclado/lector de pantalla, y un cierre irreversible que ganó su «Deshacer»)
+
+Continuación de la revisión integral (ver v18.12.0): esta tanda cierra cuatro hallazgos
+de accesibilidad (WCAG) sobre superficies que un médico usando solo teclado o un lector
+de pantalla no podía operar igual de bien que con mouse, más un refactor de
+simplificación (comparación de versiones delegada a `mtrVersionEsMasNueva`, cero cambio
+de comportamiento). El resto de cambios de esta entrega (foco visible en botones,
+mínimo táctil de 28px en varios controles más, trampa de Tab en el aviso de bloqueo de
+versión, enlace de repliegue si el navegador bloquea la ventana de actualización,
+animación de salida en el recorte de toasts por saturación) son CSS/DOM de refuerzo
+sobre un comportamiento ya cubierto por pruebas existentes (no abren una rama de
+comportamiento nueva que una mutación pueda cazar de forma distinta) y se verificaron
+con el banco completo antes/después, sin fila propia.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `actualizarRelojCabecera` — texto «· datos viejos» | `if (stale) c.textContent += " · datos viejos";` → `if (false && stale) c.textContent += " · datos viejos";` (la señal de desactualizado vuelve a depender solo del color) | NO | suite_13 caso «actualizarRelojCabecera (Mesa de Expertos): 'datos viejos' es texto visible…»: mutante rojo; EXIT 1 (64 ok, 1 falla). Restaurado 65 ok EXIT=0 |
+| user.js `checkVersionMinimum` — `needsUpdate` vía `mtrVersionEsMasNueva` | `const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);` → `const needsUpdate = false;` (el candado de versión mínima deja de dispararse) | NO | suite_30 caso «checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado…»: mutante rojo; EXIT 1 (12 ok, 1 falla). Restaurado 13 ok EXIT=0 |
+| user.js widget Próximos exámenes — guarda de clic dentro del panel abierto | `if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;` → `if (false && …) return;` (leer/seleccionar una fila del panel vuelve a cerrarlo de golpe) | NO | suite_71 caso «mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded…, y un clic DENTRO del panel abierto no lo cierra»: mutante rojo; EXIT 1 (90 ok, 1 falla). Restaurado 91 ok EXIT=0 |
+| user.js `hcAnexo5Render` / `a5Cerrar` — barra de Deshacer | Insertado `if (true) return;` justo antes de construir la barra `#vgl-a5-deshacer` (cerrar el aviso del Anexo 5 vuelve a ser irreversible al toque, sin recurso) | NO | suite_91 caso «F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso»: mutante rojo; EXIT 1 (28 ok, 1 falla). Restaurado 29 ok EXIT=0 |
