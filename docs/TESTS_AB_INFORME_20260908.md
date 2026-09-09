@@ -608,3 +608,30 @@ primaria SIN regresión en las de seguridad, replicada en al menos 2 semanas no
 consecutivas → B se fusiona como comportamiento único en la siguiente versión y el
 experimento se cierra con acta en `docs/` (resultado, tamaño de efecto, decisión).
 
+---
+
+## 7. Estado de implementación — cierre del paquete v18.10.0 (08-sep-2026)
+
+Orden del médico: «APLICA TODAS LAS PROPUESTAS DE LOS TEST A/B», con implementación y
+commit POR SEPARADO de cada frente y UN SOLO bump (v18.10.0) al cierre. Estado final
+por propuesta:
+
+| Propuesta | Estado de cierre |
+|---|---|
+| **AB-1** Rendimiento: INP atribuible (barridos del tick) | **APLICADO** (`e17cd57`): los barridos no críticos se difieren a la cola de idleRun en la variante B (toggle `tog_ab1_diferir`, defecto:false = variante A histórica para todos) con doble red de seguridad (requestIdleCallback → temporizador de idleRun → en línea). Suite_108 16/16; mutación M-AB1 (puerta invertida) 12 rojos→verde. |
+| **AB-2** IA: robustez de la redacción (escalera) | **APLICADO** (`e411c1b`): reintento TRANSITORIO del mismo slot cuando el último eslabón agota su timeout o el enlace falla por red — una bala por tipo, backoff exponencial + jitter acotado, re-check de cancelación al despertar; el fallo de red verdadero conserva el aviso honesto. Nueva métrica `ia.primera.ms`. Suite_109 10/10; mutación M-AB2 4 rojos→verde. |
+| **AB-3** UX host: rage clicks | **APLICADO** (`e8901e8`): ráfaga de 3 clics en 600 ms sobre la UI del host → conteo + señal AZUL informativa (anti-spam 30 s) + selector anónimo en la bitácora local (sin id, sin texto, sin PHI: mueren las cédulas por saneo y prefijo vgl-). Suite_110 11/11; mutación M-AB3 4 rojos→verde. |
+| **AB-4** Autollenado de laboratorios | **ACTA SIN CÓDIGO** (decisión del médico): evento raro (~3/día), exige diccionario de mapeo y ventana de 6-8 semanas; arriesga sugerir una casilla equivocada. No maduro para esta entrega. |
+| **AB-5** Exclusiones de normalidad fija | **ACTA SIN CÓDIGO** (decisión del médico): evento raro (~15/día, 8+ semanas) y el riesgo es el **falso normal — prohibido** en este proyecto. |
+| **AB-6** Red: volumen de `citasdisponibles` | **FUERA de esta orden** (sin cambio): la reducción de consultas de agenda de v18.9.0 (reposo 20/15 s) y el monitoreo RUM siguen como estaban; el experimento formal de caché no se instrumentó. |
+| **AB-7** Adopción del panel / recuadro de pendientes | **ACTA SIN CÓDIGO** (decisión del médico): el canal de Conducta está suspendido y el refactor del panel sigue abierto — reordenar pestañas se difiere. |
+| **AB-8** Comunicación/adopción de versiones | **APLICADO** (`2531f0a`, con T0-4): sin tocar el tono del aviso (lo decide el médico), la exposición queda medida por versión anunciada (`aviso.upd.visible.vX`, una vez por versión) y el clic de «Actualizar ahora» es la ACCIÓN (`aviso.upd.click.vX`, cada pulsación, con bitácora local `{local, exigida}`) — el clic vive en un script en candado y uxTrack sobrevive. Suite_111 8/8; mutación M-AB8 3 rojos→verde. |
+| **T0-4** (Requisito T0: frescura del pipeline) | **APLICADO** (`2531f0a`): el worker expone `ultimaFila` (MAX(recibido) de lotes, mismo token) y el chequeo nocturno corre el paso de frescura — ROJO si la última fila lleva >48 h, si no hay filas o si el worker no responde (fail-closed); verificado EN VIVO (fila real a 2,2 h) y chequeo nocturno completo VERDE 4/4. |
+| **R1-R9** Infraestructura de experimentación | **DOCUMENTADOS SIN INSTALAR** (decisión del médico): los frentes aplicados llevan instrumentación mínima (etiquetas RUM propias, toggles, mutación por rama) sin la maquinaria formal de sorteo/registro, que solo se justifica con experimentos de rama B abiertos. |
+
+Cada frente aplicado cerró con su mutación verificada (rojo→restaurar→verde) y fila en
+`tests/INFORME_MUTACIONES.md`; el cierre del paquete (bump único v18.10.0, CHANGELOG sin
+jerga y esta sección) consta en el registro de decisiones junto con la acta de publicación
+del gist verificada byte a byte.
+
+

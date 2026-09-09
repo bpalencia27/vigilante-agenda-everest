@@ -4,7 +4,53 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
-## [Versión 18.9.0] — 2026-09-08 (El Vigilante consulta la agenda más seguido en los momentos de calma y ahora mide cuánto tarda en ver un cupo nuevo)
+## [Versión 18.10.0] — 2026-09-08 (El Vigilante aplica las propuestas de los ensayos A/B: repasos que no estorban, la IA que se recupera de un tropiezo pasajero, aviso amable cuando Everest no responde y registros anónimos de las actualizaciones)
+
+El médico ordenó aplicar las propuestas de los ensayos A/B del 7 y 8 de septiembre. Se
+aplicaron las que valen la pena — cada una con sus propias pruebas y su verificación —
+y las demás quedaron documentadas con su justificación, sin instalarse, para que el
+médico decida. Cero cambios en el tono de los avisos: eso no se toca sin orden.
+
+### U0001F9F9 Los repasos de cada ciclo esperan a que el navegador esté libre
+Cada cierto tiempo el Vigilante repasa la pantalla para tener todo al día. Esos repasos
+no urgentes ahora esperan a que el navegador no esté ocupado — así jamás compiten con
+lo que usted está haciendo. Y con doble red de seguridad: si el navegador nunca se
+desocupa, el repaso se hace igual al momento. Para usted no cambia nada visible: solo
+se nota en que la consulta responde más suave en los momentos de mucho trabajo.
+
+### U0001F504 La IA se recupera sola de un tropiezo pasajero
+Al pedir la redacción de un hallazgo, si la conexión falla por un instante o el último
+intento se agota por demora, el Vigilante reintenta una sola vez con el mismo motor
+antes de rendirse. La espera entre intentos crece con calma (con un pequeño azar para
+no golpear todos a la vez) y si usted cancela mientras espera, se detiene al instante.
+Un tropiezo pasajero ya no deja la consulta sin redactar; si la red está caída de
+verdad, el aviso honesto de siempre, sin inventos.
+
+### ☝️ Aviso amable cuando Everest no responde
+Si Everest se queda mudo y usted hace tres clics rápidos en el mismo lugar (por
+ejemplo, en una celda de la agenda), el Vigilante le avisa en un cartel azul — como
+máximo una vez cada 30 segundos — y anota en su bitácora local dónde ocurrió, sin
+nombres ni datos de pacientes: solo el tipo de elemento y su posición. El centinela
+solo le avisa: usted decide qué hacer. Y para no molestar, el aviso nace silencioso
+si la ráfaga fue sobre los propios botones del Vigilante.
+
+### U0001F4CA Las actualizaciones quedan medidas, sin nombres
+Cada vez que se anuncia una versión nueva (una vez por versión) y cada vez que se
+pulsa «Actualizar ahora» en el aviso de versión obligatoria, queda un registro
+anónimo de la versión anunciada o exigida — nunca datos de pacientes. Así se sabrá,
+con los datos reales de la jornada, si el aviso lleva a actualizar o si hace falta
+algo más. Y el chequeo nocturno del proyecto ahora vigila que los consultorios sigan
+reportando: si la última señal recibida lleva más de 48 horas, la noche sale en rojo
+— sin telemetría fresca no hay manera de medir ningún ensayo.
+
+### 🧪 Verificación
+Cuatro frentes, cada uno con su suite nueva de pruebas (108 a 111) y su mutación
+verificada (romper la pieza a propósito → las pruebas se ponen rojas → restaurar →
+verdes), con su fila en el informe de mutaciones. El worker de telemetría quedó
+desplegado y probado en vivo, y el chequeo nocturno completo salió VERDE 4/4.
+Banco completo 3761/3761, EXIT=0 real.
+
+
 
 Orden del médico con los datos de los ensayos A/B. Cuatro puntos, los cuatro cumplidos:
 
