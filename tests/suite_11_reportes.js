@@ -20,7 +20,9 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
-    const URL_FABRICA = /^https:\/\/script\.google\.com\/macros\//;
+    // v18.14.0 — TABLERO.url de fábrica pasó del Apps Script al worker Cloudflare
+    // (REPLICA_TELEMETRIA/, ORDEN #7); mismo contrato, nuevo dominio.
+    const URL_FABRICA = /^https:\/\/vigilante-telemetria\.bpalencia27\.workers\.dev\//;
     const tick = (ms) => new Promise((r) => setTimeout(r, ms === undefined ? 15 : ms));
 
     // Red simulada: registra cada GM_xmlhttpRequest y contesta según "modo".
