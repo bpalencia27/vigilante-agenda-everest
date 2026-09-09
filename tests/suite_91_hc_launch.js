@@ -308,7 +308,15 @@ module.exports = {
       t.igual(r.suma, 58);
       t.falso(r.cumpleSuma, "58 < 75");
       t.igual(r.contexto.ta, "138/84", "contexto: TA sistólica/diastólica");
-      t.igual(r.contexto.rac, 0, "RAC sin puntos (pendiente) con fecha aparte");
+      t.igual(r.contexto.rac, 0, "sin valor real de RAC indexado (v[6] ausente) → 0 (v18.11.0: los puntos de la meta jamás se rotulan como mg/g)");
+      // v18.11.0 (ORDEN #8) — el tramo RAC del contexto es el VALOR real (v[6]), nunca los puntos.
+      const recRacReal = Object.assign({}, REC_A5, { v: REC_A5.v.concat(6.93) });
+      t.igual(api.a5AlertasDe("1018888777", EST_A5(recRacReal), HOY_S).contexto.rac, 6.93,
+        "con valor real indexado (v[6]=6.93) el contexto lleva 6.93 mg/g, no los puntos");
+      const recRacPuntos = Object.assign({}, REC_A5, { m: REC_A5.m.map((p) => p.slice()), v: REC_A5.v.slice() });
+      recRacPuntos.m[4] = [25, HOY_S - 10];   // meta cumplida: 25 PUNTOS, con fecha, SIN valor real
+      t.igual(api.a5AlertasDe("1018888777", EST_A5(recRacPuntos), HOY_S).contexto.rac, 0,
+        "meta con 25 puntos y SIN valor real → 0: el defecto v18.6.1 leía «RAC 25» como si fuera mg/g");
       // Abandono por PES aunque el control sea reciente.
       const recAlDia = Object.assign({}, REC_A5, { ctrl: HOY_S - 10 });
       const r2 = api.a5AlertasDe("1018888777", EST_A5(recAlDia, true), HOY_S);
@@ -381,6 +389,25 @@ module.exports = {
       t.falso(html2.indexOf("#15803D") >= 0, "y ya no pinta el verde duro");
       // Regla R: los !important literales inline se conservan exactamente (10, contados).
       t.igual((html.match(/!important/g) || []).length, 10, "los 10 !important inline siguen literales");
+    });
+
+    t.caso("F2/hcAnexo5Render (v18.11.0 ORDEN #8): el tramo RAC es el valor real en mg/g — nunca los puntos de la meta", () => {
+      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+      const recRacReal = Object.assign({}, REC_A5, { v: REC_A5.v.concat(6.93) });
+      c.api.__state.pymAnexo5 = EST_A5(recRacReal).pymAnexo5;
+      c.api.__state.pymAbandono = EST_A5(recRacReal).pymAbandono;
+      t.cierto(c.api.hcAnexo5Render() === true, "panel con el valor real indexado");
+      t.cierto(c.env.doc.getElementById("vgl-a5-panel").innerHTML.indexOf("RAC 6.93") >= 0,
+        "la línea de contexto muestra el RAC real de la columna del libro (6.93 mg/g)");
+      // Meta cumplida (25 puntos) pero SIN valor real: el tramo se calla. Rotular «RAC 25»
+      // era el defecto v18.6.1 — un cumplimiento de 25 puntos se leía como 25 mg/g.
+      const recRacPuntos = Object.assign({}, REC_A5, { m: REC_A5.m.map((p) => p.slice()), v: REC_A5.v.slice() });
+      recRacPuntos.m[4] = [25, HOY_S - 10];
+      c.api.__state.pymAnexo5 = EST_A5(recRacPuntos).pymAnexo5;
+      t.cierto(c.api.hcAnexo5Render() === true, "re-render con meta cumplida y sin valor");
+      t.falso(c.env.doc.getElementById("vgl-a5-panel").innerHTML.indexOf("RAC ") >= 0,
+        "sin valor real indexado no aparece «RAC 25» ni tramo alguno: casilla vacía");
     });
 
     t.caso("F2/hcAnexo5Render: sin HC abierta por DOM, o sin dato del Anexo 5, no hay panel", () => {

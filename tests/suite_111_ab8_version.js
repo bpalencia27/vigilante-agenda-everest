@@ -68,7 +68,7 @@ module.exports = {
     });
 
     t.caso("sin versión nueva NO hay aviso ni telemetría (el gist al día no ensucia el conteo)", () => {
-      const c = base({ gmxhr: gistCon("18.10.0") });   // el gist dice la versión LOCAL
+      const c = base({ gmxhr: gistCon("18.11.0") });   // el gist dice la versión LOCAL
       c.api.mtrCheckActualizacionGist();
       const acc = accionesUX(c);
       t.cierto(acc["aviso.upd.visible.v18.9.0"] === undefined, "al día: ni se anuncia ni se cuenta");

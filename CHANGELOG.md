@@ -4,6 +4,33 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.11.0] — 2026-09-08 (El aviso del Anexo 5 ahora muestra el resultado real de laboratorio de la RAC, nunca el puntaje de la meta)
+
+Al revisar la sección del Anexo 5 contra el libro real de la base piloto se encontró
+que el aviso mostraba, bajo el rótulo «RAC», el **puntaje de cumplimiento de la meta**
+(un número de 0 a 25) en lugar del **resultado real del laboratorio** en mg/g. Un
+paciente con la meta ya lograda (25 puntos) podía leerse en el aviso como si tuviera
+25 mg/g de albuminuria — un resultado patológico — cuando en realidad no había ningún
+valor de laboratorio así de alto: era solo su puntaje.
+
+Desde esta versión, el aviso lee el valor real que trae la columna de laboratorio del
+libro y lo muestra con su fecha. Si ese valor todavía no está disponible, el aviso
+simplemente no menciona la RAC — nunca vuelve a mostrar un puntaje disfrazado de
+resultado de laboratorio.
+
+De paso, se revisaron una a una las 38 columnas de la hoja del Anexo 5 contra lo que
+el Vigilante lee hoy: 33 ya estaban sincronizadas (32 antes + esta corrección). Las 5
+restantes (el estado oficial del programa y unos valores recientes de colesterol
+HDL, triglicéridos e índice de masa corporal, más la marca de "Estudiado para ERC")
+quedan documentadas para que el médico decida si deben incorporarse más adelante.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (dejar de leer la columna del valor real, y volver a mostrar el puntaje
+como si fuera el resultado) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el blindaje funciona.
+
+---
+
 ## [Versión 18.10.0] — 2026-09-08 (El Vigilante aplica las propuestas de los ensayos A/B: repasos que no estorban, la IA que se recupera de un tropiezo pasajero, aviso amable cuando Everest no responde y registros anónimos de las actualizaciones)
 
 El médico ordenó aplicar las propuestas de los ensayos A/B del 7 y 8 de septiembre. Se

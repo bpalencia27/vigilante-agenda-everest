@@ -13904,3 +13904,37 @@ worker.js y run-nightly-checks.sh). Mutación verificada:
 | Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
 | user.js `_avisoBloqueoPintar` — uxTrack del clic de «Actualizar ahora» | Anular la medición de la ACCIÓN (try { uxTrack("aviso.upd.click.v" + _avisoBloqueoVer) → if (false) …): el clic abre la pestaña del gist igual, pero ni el conteo del informe (aviso.upd.click.vX) sale | NO | suite_111 3 casos rojos: la ACCIÓN medida (esperaba aviso.upd.click.v99.0.0=1 y llegó undefined), cada pulsación cuenta (esperaba 2 con la v98.0.5) y la guarda estructural del orden (el try de uxTrack anclado en el código vivo, antes de abrir la pestaña); EXIT 1. Restaurado 8 ok EXIT=0 |
+
+## v18.11.0 — ORDEN #8 (UI/UX + sincronización con la base piloto): el RAC del Anexo 5 ahora es el valor de laboratorio real, nunca los puntos de la meta
+
+Rehecho tras un vaciado accidental del árbol de trabajo (el intento original, v18.8.11,
+nunca llegó a commitearse). Punto 2/3 de la ORDEN #8: sincronización del aviso del
+Anexo 5 contra las 38 columnas reales de la hoja «ANEXO 5 JULIO» de la base piloto —
+verificado con el parser ZIP+XML del libro real (`_base_piloto_sep.xlsx`, 2026-09-07).
+
+**Defecto encontrado**: el indexador (`makeAnexo5Indexer`) nunca leía la columna 33
+(«MICROALBU/CREATINURIA1», el valor de laboratorio real de la RAC en mg/g). El aviso
+(`a5AlertasDe`) rotulaba el tramo «RAC» con `m[4][0]` — los PUNTOS de cumplimiento de
+la meta `CUMPLE_MICROALBUMINURIA` (0-25) — como si fueran el resultado de laboratorio.
+Efecto real: un paciente con la meta CUMPLIDA (25 puntos) podía leerse en el aviso
+como «RAC 25 mg/g» (albuminuria franca, patológica) en vez de «meta lograda».
+
+**Fix**: nueva columna `cRac` en el indexador (mismo patrón `findIndex` que las demás),
+`v` pasa de 6 a 7 elementos (`v[6]` = RAC real); `a5AlertasDe` usa `v[6] || 0`, nunca
+`m[4][0]`. Sin valor real indexado → el tramo no se pinta (casilla vacía). Verificado
+que `pymAnexo5`/`a.v`/`a.m[4]` NO tienen un segundo consumidor en el archivo (grep
+completo): la corrección es única y completa. Con este fix, 33 de 38 columnas del
+libro quedan sincronizadas (quedan 5 sin mostrar por diseño: clasificación del
+programa, HDL/triglicéridos/IMC recientes y «Estudiado para ERC» — documentadas en
+el informe final para decisión del médico, no implementadas sin su visto bueno).
+
+Suite_92 ampliada (el indexador: `a.v[6] === 25` con la columna del libro poblada) y
+suite_91 ampliada (`a5AlertasDe` con valor real → `contexto.rac` = el valor; con meta
+cumplida de 25 puntos y SIN valor real → `contexto.rac` = 0, el caso que replica el
+defecto histórico exacto; `hcAnexo5Render` pinta «RAC 6.93» con valor real y NO pinta
+ningún tramo «RAC » con solo los puntos). Banco completo EXIT=0 antes y después.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` — lectura de la columna RAC | `cRac >= 0 ? num(row[cRac]) : 0` → `false ? num(row[cRac]) : 0` (el indexador nunca lee la columna, `v[6]` siempre 0) | NO | suite_92 caso «F1/Anexo 5: el core indexa la TERCERA hoja…»: mutante rojo («valores de contexto v7…: esperaba [138,84,102,7.2,112,98,25] y obtuvo [138,84,102,7.2,112,98,0]»); EXIT 1. Restaurado 39 ok EXIT=0 |
+| user.js `a5AlertasDe` — campo `rac` del contexto | `rac: v[6] \|\| 0` → `rac: (m[4] && m[4][0]) \|\| 0` (vuelve el defecto original: puntos de la meta rotulados como RAC) | NO | suite_91 caso «F2/a5AlertasDe: las CUATRO alertas…»: mutante rojo («con valor real indexado (v[6]=6.93) el contexto lleva 6.93 mg/g, no los puntos: esperaba 6.93 y obtuvo 0»); EXIT 1. Restaurado 28 ok EXIT=0 |

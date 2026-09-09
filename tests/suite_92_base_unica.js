@@ -448,7 +448,8 @@ module.exports = {
       t.igual(a.m[0], [10, 46100], "GLICEMIA: 10 puntos con fecha de toma");
       t.igual(a.m[4], [0, 46090], "MICROALBUMINURIA: 0 puntos, fecha de la columna con typo FECHA_MICROALBU/CREATINURIA1");
       t.igual(a.m[5], [0, 0], "HBA1C: 0 puntos y SIN fecha (FECHA_DE_TOMA_GLICOSILADA, sin HEMO — el typo del libro)");
-      t.igual(a.v, [138, 84, 102, 7.2, 112, 98], "valores de contexto: TA s/d, circunferencia, HbA1c, LDL, glicemia");
+      t.igual(a.v, [138, 84, 102, 7.2, 112, 98, 25], "valores de contexto v7 (v18.11.0): TA s/d, circunferencia, HbA1c, LDL, glicemia y el RAC real en mg/g (col MICROALBU/CREATINURIA1, 25)");
+      t.igual(res.anexo5.get("5150076").v[6], 25, "el RAC real (25) es DISTINTO de los puntos de la meta (a.m[4][0] = 0): esa diferencia es justo lo que el defecto v18.6.1 confundía");
       t.falso(res.todos.has("7000001"), "el paciente SOLO del Anexo 5 NO entra en todos: la tarjeta no puede decir «al día» por estar en el programa");
       t.cierto(res.anexo5.has("7000001"), "pero sí está en su propio mapa para el aviso");
     });

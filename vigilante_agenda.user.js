@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.10.0
+// @version      18.11.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.10.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.11.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12475,7 +12475,10 @@
   //
   // Salida por documento (compacta para el paquete v4):
   //   { prog, ctrl:<serial|0>, suma, tfg, est:<1-5|0>, ekg:<serial|0>,
-  //     rem:["Nutrición",…], m:[[pts,fecha]×9 en orden FIJO], v:[sis,dia,ca,a1c,ldl,glu] }
+  //     rem:["Nutrición",…], m:[[pts,fecha]×9 en orden FIJO],
+  //     v:[sis,dia,ca,a1c,ldl,glu,rac] } — v[6] = RAC real en mg/g (v18.11.0, ORDEN #8):
+  //     la col «MICROALBU/CREATINURIA1» del libro. Antes el aviso rotulaba «RAC» con los
+  //     PUNTOS de CUMPLE_MICROALBUMINURIA (0-25): un cumplimiento de 25 se leía «RAC 25».
   // m: orden fijo = GLICEMIA, LDL, HDL, TRIGLICÉRIDOS, MICROALBUMINURIA, HBA1C, TA, IMC,
   //    CIRCUNFERENCIA — cada una [puntos, fechaToma serial|0]. Las tres últimas no
   //    tienen columna de fecha en el libro real: fecha siempre 0 (se miden en consulta).
@@ -12530,6 +12533,14 @@
     const cA1c = norm.findIndex((x) => x === "HEMOBLOBINA_GLICOSILADA" || x === "HEMOGLOBINA_GLICOSILADA1" || x === "HEMOGLOBINA_GLICOSILADA_1");
     const cLdl = norm.findIndex((x) => x === "COLESTEROL_LDL1");
     const cGlu = norm.findIndex((x) => x === "GLICEMIA1");
+    // v18.11.0 (ORDEN #8, UI/UX + sincronización con la base piloto) — valor REAL de la
+    // RAC (mg/g), columna 33 de 38 del libro, con su typo real («MICROALBU/CREATINURIA1»,
+    // sin espacio antes de la barra). Hasta esta versión NUNCA se leía: el aviso rotulaba
+    // el tramo «RAC» con los PUNTOS de cumplimiento de la meta (0-25, de
+    // CUMPLE_MICROALBUMINURIA) como si fueran el resultado de laboratorio — un paciente
+    // con la meta cumplida (25 puntos) podía leerse como «RAC 25 mg/g» (patológico) en
+    // vez de «meta lograda». Ver a5AlertasDe: ahora usa v[6], nunca m[4][0].
+    const cRac = norm.findIndex((x) => x === "MICROALBU_CREATINURIA1");
     const map = new Map();
     const todos = new Set();
     return {
@@ -12540,7 +12551,7 @@
         const rem = [];
         colsRem.forEach(([i, label]) => { if (stripAccents(String(row[i] == null ? "" : row[i])).trim().toUpperCase() === "REMITIR" && rem.indexOf(label) < 0) rem.push(label); });
         const m = colsMeta.map(([cPts, cFecha]) => [cPts >= 0 ? num(row[cPts]) : 0, cFecha >= 0 ? num(row[cFecha]) : 0]);
-        const v = [cSis >= 0 ? num(row[cSis]) : 0, cDia >= 0 ? num(row[cDia]) : 0, cCa >= 0 ? num(row[cCa]) : 0, cA1c >= 0 ? num(row[cA1c]) : 0, cLdl >= 0 ? num(row[cLdl]) : 0, cGlu >= 0 ? num(row[cGlu]) : 0];
+        const v = [cSis >= 0 ? num(row[cSis]) : 0, cDia >= 0 ? num(row[cDia]) : 0, cCa >= 0 ? num(row[cCa]) : 0, cA1c >= 0 ? num(row[cA1c]) : 0, cLdl >= 0 ? num(row[cLdl]) : 0, cGlu >= 0 ? num(row[cGlu]) : 0, cRac >= 0 ? num(row[cRac]) : 0];
         map.set(docKey, {
           prog: cProg >= 0 ? String(row[cProg] == null ? "" : row[cProg]).trim().slice(0, 24) : "",
           ctrl: cCtrl >= 0 ? num(row[cCtrl]) : 0,
@@ -15650,7 +15661,10 @@
       if (!par[0] && !par[1]) pendientes.push(A5_METAS_LAB[i]);
     }
     const m = a.m || [];
-    const v = a.v || [0, 0, 0, 0, 0, 0];
+    // v18.11.0 (ORDEN #8) — v7: v[6] es el RAC real. Un registro viejo en caché (paquete
+    // en v de 6, anterior al fix) da 0 → el tramo queda vacío hasta el próximo refresco:
+    // casilla vacía, jamás puntos.
+    const v = a.v || [0, 0, 0, 0, 0, 0, 0];
     return {
       docKey: k, prog: a.prog || "programa RCV",
       abandono: (sinControl || enPES) ? { sinControl: sinControl, pes: enPES, ultimo: a.ctrl } : null,
@@ -15659,7 +15673,12 @@
       contexto: {
         fechaControl: a.ctrl || 0, tfg: a.tfg || 0, estadio: a.est || 0,
         ta: (v[0] && v[1]) ? v[0] + "/" + v[1] : "", circ: v[2] || 0, a1c: v[3] || 0,
-        ldl: v[4] || 0, glu: v[5] || 0, rac: m[4] ? m[4][0] : 0, racFecha: m[4] ? m[4][1] : 0,
+        ldl: v[4] || 0, glu: v[5] || 0,
+        // v18.11.0 (ORDEN #8) — rac = VALOR real de la col. 33 (mg/g). 0 = sin valor
+        // indexado → el aviso no pinta el tramo. Los puntos de la meta (m[4][0], 0-25)
+        // jamás se rotulan como RAC: un cumplimiento de 25 puntos se leía «RAC 25» como
+        // si fuera mg/g — ese era el defecto.
+        rac: v[6] || 0, racFecha: m[4] ? m[4][1] : 0,
         ekg: a.ekg || 0,
       },
     };
