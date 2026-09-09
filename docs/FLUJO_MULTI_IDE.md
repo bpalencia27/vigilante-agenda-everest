@@ -132,6 +132,21 @@ si no los hay, la prueba real es el banco sobre la fusión. Se borra al terminar
 Cadencia recomendada: **antes de cada compuerta §2** y al menos una vez al día
 mientras los dos carriles estén activos.
 
+### Evidencia de la última corrida (2026-09-09)
+
+```
+PRUEBA DE INTEGRACIÓN ENTRE RAMAS
+  OK    worktree        worktree desechable en %TEMP%\vgl-integrate-<aleatorio>
+  OK    fusion          sin conflictos de texto
+  OK    banco_integrado 3785 pasan / 0 fallan
+PASA
+```
+
+`alt-ide/multi-ide-workflow-2026-09-09` sobre `claude/sf-v18.6.1-fix`: los 10 archivos
+del flujo (tools, hook, docs, suite) conviven con la base **sin conflicto de texto** y el
+banco completo sigue verde **sobre la fusión**, no solo sobre cada rama por separado.
+Exit 0.
+
 ---
 
 ## 7. Puesta en marcha, paso a paso
