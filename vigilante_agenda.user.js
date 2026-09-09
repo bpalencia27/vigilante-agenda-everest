@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.11.1
+// @version      18.12.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.11.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.12.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7514,6 +7514,13 @@
   // nueva, así el panel refleja el cambio en el siguiente tick, sin recargar).
   async function rcvPendientesTick(doc) {
     try {
+      // v18.12.0 (Mesa de Expertos) -- `doc` era un parámetro fantasma: el cuerpo
+      // usaba `document` global directo en sus 3 lecturas de DOM, rompiendo el
+      // idioma que sí siguen mtrWidgetConductaTick/mtrWidgetOrdenarConductaTick/
+      // mtrWidgetFarmacoTick (reciben `doc` y lo usan). Se restaura la consistencia
+      // sin cambiar comportamiento: en producción siempre se llama sin argumento,
+      // así que `d` sigue siendo `document`.
+      const d = doc || document;
       // Compuerta completa re-visada EN CADA TICK: la identidad puede llegar
       // tarde y el padrón puede retirar el permiso a mitad de jornada.
       const secc = seccionActiva();
@@ -7570,9 +7577,9 @@
       const firma = docId + "|" + datos.nPendientes + "|" + html.length;
       if (firma === _rcvpFirma) return;
       _rcvpFirma = firma;
-      let widget = document.getElementById("vgl-rcv-pendientes");
+      let widget = d.getElementById("vgl-rcv-pendientes");
       if (!widget) {
-        widget = document.createElement("div");
+        widget = d.createElement("div");
         widget.id = "vgl-rcv-pendientes";
         widget.setAttribute("role", "region");
         widget.setAttribute("aria-label", "Próximos exámenes");
@@ -7601,7 +7608,7 @@
             }
           }
         });
-        document.body.appendChild(widget);
+        d.body.appendChild(widget);
       }
       widget.className = isLight() ? "light" : "";
       widget.style.display = "";
@@ -11042,8 +11049,13 @@
     return true;
   }
 
-  let pollTimer = null; // v14.2.12 — se conserva el nombre por compatibilidad; el reloj real es _relojCada("tick", …)
-  function restartPolling() { if (!el || !el.root) return; if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } _relojCada("tick", CONFIG.POLL_MS, tick); }
+  // v18.12.0 (Mesa de Expertos, muerta confirmada #11) — `pollTimer` nunca recibía
+  // un id de timer real (el reloj de verdad es el canal "tick" de _relojCada) y su
+  // rama `if (pollTimer) clearInterval(...)` era por tanto una rama imposible desde
+  // v14.2.12. Verificado por doble refutación adversarial: cero asignaciones en las
+  // 55.000 líneas del archivo. Se retira la variable y la rama muerta; el reinicio
+  // real (registrar/reemplazar el canal "tick") no cambia.
+  function restartPolling() { if (!el || !el.root) return; _relojCada("tick", CONFIG.POLL_MS, tick); }
   // ---- Coordinación entre pestañas: SOLO UNA vigila y notifica (evita avisos repetidos) ----
   const TABID = String(Math.random()).slice(2) + Date.now();
 
@@ -13487,7 +13499,11 @@
   // persona ni del equipo real: ni nombre, ni usuario, ni IP, ni huella del navegador —
   // es un número de serie sin significado, que además el médico puede sobrescribir
   // poniéndole nombre al equipo en Ajustes.
-  const EQUIPO_ID_KEY = "vgl_equipo_id";
+  // v18.12.0 (Mesa de Expertos, muerta confirmada #10) — EQUIPO_ID_KEY quedó
+  // huérfana: la identidad de equipo se delegó al módulo obs (obsIdentidadEquipo,
+  // abajo), que define su propia clave (OBS_EQUIPO_LS = "vgl_equipo_id", marcada
+  // "legado v12.6.9: se migra, no se borra"). Este residuo de la implementación
+  // vieja no tenía ningún otro lector en las 55.000 líneas del archivo.
   function _equipoId() {
     // v18.3 (P13·1.1) — delega en el módulo obs: misma prioridad que siempre
     // (ajuste manual → id persistente → id nuevo), pero el id ahora vive en GM
@@ -17494,7 +17510,9 @@
           }
         });
       }
-      const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
+      // v18.12.0 (Mesa de Expertos, muerta confirmada #9) -- `tint` se calculaba y
+      // nunca se leía en esta función: el innerHTML del toast solo usa `col`. Retirado.
+      const col = COLORS[color] || COLORS.AZUL;
       const t = document.createElement("div"); t.className = "vgl-toast";
       t.__vglApptKey = apptKey || "";
       t.__vglColor = color;   // [NT/M18] para el desenlace del toast
@@ -19978,8 +19996,11 @@
          que el CSS hostil de Everest más ha agredido (v17.6.3, bug del color
          del título), por eso los !important, como en #vgl-head y sus vecinos.
          El giro del ícono ([aria-busy]) es el único feedback en vuelo. */
+      /* v18.12.0 (Mesa de Expertos, UX #17) -- 24px -> 28px: mínimo táctil WCAG 2.5.8,
+         el mismo estándar que el proyecto ya adoptó en el panel RCV vecino
+         (.vgl-rcvp-cerrar/.vgl-rcvp-min) tras un reporte de campo de toques fallidos. */
       #vgl-refresh{
-        width:24px !important;height:24px !important;min-width:24px !important;min-height:24px !important;
+        width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;
         flex:0 0 auto !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;
         border-radius:var(--r-chip) !important;border:1px solid var(--line) !important;background:transparent !important;
         color:var(--fg2) !important;cursor:pointer !important;padding:0 !important;margin:0 !important;line-height:1 !important;
@@ -22417,12 +22438,13 @@
       /* ==== [v12.3.13] CSS del modal de agendamiento — antes inline en openAgendamientoModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
       /* ---- Bento grid (micro-grilla asimétrica 12 col) ---- */
       #vgl-agendar-modal .vgl-agm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
-      #vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}
+      /* v18.12.0 (Mesa de Expertos, muerta confirmada #8) -- .vgl-agm-c5/.vgl-agm-c7
+         quedaron huérfanas: ningún elemento del markup real de openAgendamientoModal
+         las usa (solo c6/c12). Retiradas de aquí y de la media query siguiente. */
       #vgl-agendar-modal .vgl-agm-c6{grid-column:span 6}
-      #vgl-agendar-modal .vgl-agm-c7{grid-column:span 7}
       #vgl-agendar-modal .vgl-agm-c12{grid-column:span 12}
       @media (max-width:640px){
-        #vgl-agendar-modal .vgl-agm-c5,#vgl-agendar-modal .vgl-agm-c6,#vgl-agendar-modal .vgl-agm-c7{grid-column:span 12}
+        #vgl-agendar-modal .vgl-agm-c6{grid-column:span 12}
       }
       #vgl-agendar-modal .vgl-agm-cell{
         background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 62%),var(--bg2);
@@ -37781,10 +37803,15 @@
 
 
   // Autocomprobación criptográfica de integridad SHA-256 (R1.9)
-  async function verificarIntegridadArranque(fuenteOpcional) {
+  // v18.12.0 (Mesa de Expertos) -- el parámetro `fuenteOpcional` era fantasma: la
+  // única llamada real (checkVersionMinimum) siempre invoca la función sin
+  // argumentos, y los tests inyectan una fuente falsa vía GM_info.scriptSource
+  // (harness.js), no como argumento. Se retira el parámetro y la rama que lo leía;
+  // el comportamiento observable es idéntico (siempre se lee GM_info.scriptSource).
+  async function verificarIntegridadArranque() {
     try {
-      let src = fuenteOpcional;
-      if (!src && typeof GM_info !== "undefined" && GM_info && GM_info.scriptSource) {
+      let src = null;
+      if (typeof GM_info !== "undefined" && GM_info && GM_info.scriptSource) {
         src = GM_info.scriptSource;
       }
       if (!src) return { status: "skipped", reason: "no_source" };
@@ -38366,7 +38393,8 @@
       // el bloque leader+enVistaVigilada), que junta PyM + abandono RCV + labs vencidos en
       // UN solo modal por paciente. Aquí solo se barre cualquier banner que hubiera quedado
       // pintado por una versión anterior en una pestaña abierta desde ayer. createPymBannerUI
-      // y checkRecordatorioPym siguen DEFINIDAS (las cubren sus pruebas), pero ya no se llaman.
+      // y checkRecordatorioPym NO siguen definidas: se retiraron por completo (Mesa de
+      // Expertos, v18.12.0) -- esta limpieza defensiva del banner huérfano queda igual.
       const pbViejo = document.getElementById("vgl-pym-banner");
       if (pbViejo) pbViejo.remove();
 
@@ -38505,7 +38533,9 @@
           // checkLabsVencidos() (y el PyM iba por el banner de arriba): hasta tres modales
           // seguidos por paciente. Ahora un solo check junta PyM + abandono RCV + labs
           // vencidos en UN modal por paciente (sin interruptor: siempre activo). Los checks
-          // viejos quedan DEFINIDOS (los cubren sus pruebas) pero ya no se llaman aquí.
+          // viejos (checkAbandonoPES/checkLabsVencidos) NO quedan definidos: se retiraron
+          // por completo (Mesa de Expertos, v18.12.0) -- checkAvisoUniversal es el único
+          // camino real desde v14.2.0.
           checkAvisoUniversal();
         }
       }

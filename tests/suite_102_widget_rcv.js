@@ -371,5 +371,25 @@ module.exports = {
         t.cierto(FUENTE.indexOf(a) >= 0, "ancla: " + a.slice(0, 64));
       }
     });
+
+    // v18.12.0 (Mesa de Expertos, callejón dock #5) — rcvPendientesTick(doc) recibía
+    // un parámetro fantasma: todo su cuerpo leía `document` global en vez de `doc`,
+    // rompiendo el idioma que sí siguen mtrWidgetConductaTick/mtrWidgetOrdenarConductaTick/
+    // mtrWidgetFarmacoTick. Se restauró la consistencia (const d = doc || document;) sin
+    // cambiar comportamiento en producción (siempre se llama sin argumento).
+    t.caso("fuente (F1, v18.12.0): rcvPendientesTick usa `doc` consistentemente, como sus hermanos del dock", () => {
+      const iFn = FUENTE.indexOf("async function rcvPendientesTick(doc) {");
+      t.cierto(iFn >= 0, "la firma sigue aceptando doc");
+      // Límite real: el siguiente miembro del módulo (evita depender de la
+      // indentación exacta de la llave de cierre, y del CRLF del archivo).
+      const iCierre = FUENTE.indexOf("function _cwoEstadoParaTest", iFn);
+      t.cierto(iCierre > iFn, "se encontró el siguiente miembro tras rcvPendientesTick");
+      const cuerpo = FUENTE.slice(iFn, iCierre);
+      t.cierto(cuerpo.indexOf("const d = doc || document;") >= 0, "el parámetro doc ya no es fantasma: se usa (con respaldo a document)");
+      t.falso(/[^.]document\./.test(cuerpo.replace("const d = doc || document;", "")), "ninguna lectura de DOM del cuerpo usa `document` directo (todas pasan por `d`)");
+      t.cierto(cuerpo.indexOf("d.getElementById(\"vgl-rcv-pendientes\")") >= 0, "getElementById vía d");
+      t.cierto(cuerpo.indexOf("d.createElement(\"div\")") >= 0, "createElement vía d");
+      t.cierto(cuerpo.indexOf("d.body.appendChild(widget)") >= 0, "appendChild vía d");
+    });
   },
 };

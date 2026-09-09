@@ -390,6 +390,17 @@ module.exports = {
       }
     });
 
+    // v18.12.0 (Mesa de Expertos, muerta confirmada #11) — `pollTimer` nunca recibía
+    // un id real; su rama `if (pollTimer) clearInterval(...)` era imposible desde
+    // v14.2.12. Se retiró junto con la variable; restartPolling sigue reprogramando
+    // el canal "tick" igual que siempre.
+    t.caso("restartPolling (v18.12.0): la variable pollTimer y su rama muerta ya no existen en el fuente", () => {
+      const s = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(s.indexOf("let pollTimer") >= 0, "pollTimer ya no se declara");
+      t.cierto(s.indexOf('function restartPolling() { if (!el || !el.root) return; _relojCada("tick", CONFIG.POLL_MS, tick); }') >= 0,
+        "restartPolling queda reducido a la guarda real + el reinicio del canal tick");
+    });
+
     // ===================================================================
     // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): la migración "estreno"
     // (v14.2.0) solo debe encender motorPortado/iaRedaccion/uxTelemetria/reporte en

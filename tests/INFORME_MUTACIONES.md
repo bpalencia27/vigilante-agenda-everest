@@ -13974,3 +13974,30 @@ en cada bump, no son casos nuevos, son mantenimiento esperado.
 | Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
 | user.js `makeAnexo5Indexer` — filtro `numRac` | `x >= 0 && x < 100000 ? x : 0` → `x` (el filtro de plausibilidad deja de aplicarse, vuelve el defecto: cualquier valor viaja intacto) | NO | suite_92 caso «makeAnexo5Indexer (seguimiento ORDEN #8)…»: mutante rojo («6 dígitos exactos…: esperaba 0 y obtuvo 100000»); EXIT 1 (39 ok, 1 falla). Restaurado 40 ok EXIT=0 |
+
+## v18.12.0 (Mesa de Expertos: primera tanda — código muerto confirmado por doble refutación adversarial)
+
+Auditoría integral con enjambre de subagentes (10 subsistemas × 4 roles: arqueóloga
+del código muerto, cartógrafa de flujos, simplificadora, UX clínica; 91 hallazgos
+crudos). Los 11 candidatos a "código muerto" pasaron por una segunda ronda de
+verificación: 2 refutadores independientes por candidato intentando encontrar
+cualquier invocación real (directa, indirecta, desde tests) antes de confirmarlo —
+14 candidatos adicionales SÍ tenían un consumidor real y quedaron descartados sin
+tocar (ver `docs/INFORME_MESA_EXPERTOS_20260908.md`, cesto de "muertas descartadas").
+
+Esta primera tanda aplica 8 de los 11 "muerta confirmada" de menor riesgo (más una
+mejora de UX de accesibilidad, mínimo táctil WCAG 2.5.8) con la disciplina completa
+del proyecto. Quedan documentados y sin tocar (cesto C, riesgo medio por tocar
+compuertas sensibles) `mtrCompuertaPerfil()` (arranque/consentimiento) y la variable
+`callar` de `colorAndAlert()` (alertas ROJO) — ver el informe para el detalle de por
+qué se prefirió no tocarlos en esta tanda.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `verificarIntegridadArranque` — firma sin `fuenteOpcional` (muerta #1) | `async function verificarIntegridadArranque() {` → `async function verificarIntegridadArranque(fuenteOpcional) {` (reintroduce el parámetro fantasma) | NO | suite_31 caso «verificarIntegridadArranque (v18.12.0): el parámetro fuenteOpcional ya no existe…»: mutante rojo («la firma quedó sin parámetros (obtuvo false)»); EXIT 1 (74 ok, 1 falla). Restaurado 75 ok EXIT=0 |
+| user.js `rcvPendientesTick(doc)` — `const d = doc \|\| document;` (muerta #5) | `const d = doc \|\| document;` → `const d = document;` (el parámetro `doc` vuelve a ser fantasma) | NO | suite_102 caso «fuente (F1, v18.12.0): rcvPendientesTick usa `doc` consistentemente…»: mutante rojo («el parámetro doc ya no es fantasma: se usa (obtuvo false)»); EXIT 1 (11 ok, 1 falla). Restaurado 12 ok EXIT=0 |
+| user.js CSS `.vgl-agm-c5`/`.vgl-agm-c7` (muerta #8) | Reintroduce `#vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}` (clase huérfana que ningún markup real usa) | NO | suite_112 caso «.vgl-agm-c5 y .vgl-agm-c7 ya no se definen…»: mutante rojo («sin .vgl-agm-c5 (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `_renderToast` — variable `tint` (muerta #9) | Reintroduce `tint = TINT[color] \|\| TINT.AZUL` (nunca se leía en el resto de la función) | NO | suite_112 caso «_renderToast ya no calcula `tint`…»: mutante rojo («sin la variable muerta \`tint\` (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `EQUIPO_ID_KEY` (muerta #10) | Reintroduce `const EQUIPO_ID_KEY = "vgl_equipo_id";` (huérfana desde la migración a `obsIdentidadEquipo`) | NO | suite_112 caso «EQUIPO_ID_KEY ya no se declara…»: mutante rojo («sin la constante muerta (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `restartPolling` — variable `pollTimer` (muerta #11) | Reintroduce `let pollTimer = null;` y la rama `if (pollTimer) clearInterval(...)` (nunca recibía un id real desde v14.2.12) | NO | suite_09 caso «restartPolling (v18.12.0): la variable pollTimer y su rama muerta ya no existen…»: mutante rojo («pollTimer ya no se declara (obtuvo true)»); EXIT 1 (36 ok, 1 falla). Restaurado 37 ok EXIT=0 |
+| user.js CSS `#vgl-refresh` — 24px → 28px (UX #17) | `width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;` → los mismos 4 valores vueltos a `24px` | NO | suite_105 caso «fuente (UX v18.12.0): #vgl-refresh mide 28px…»: mutante rojo («width 28px (obtuvo false)»); EXIT 1 (13 ok, 1 falla). Restaurado 14 ok EXIT=0 |

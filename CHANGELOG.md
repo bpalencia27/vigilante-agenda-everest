@@ -4,6 +4,41 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.12.0] — 2026-09-08 (Limpieza de mantenimiento: código sin uso retirado y un botón más fácil de tocar)
+
+Se convocó una revisión integral del código (una "mesa de expertos" de auditoría)
+para encontrar piezas que ya no se usan, atajos que no llevan a ninguna parte y
+oportunidades de mejorar la experiencia. Esta primera entrega de esa revisión
+aplica los cambios más seguros y de menor riesgo; el resto queda documentado
+para próximas entregas.
+
+### 🧹 Código sin uso retirado
+Ocho piezas de código que ya no cumplían ninguna función (una variable que
+nunca se usaba, un parámetro que nunca se llenaba, comentarios que hablaban de
+funciones que ya no existen, estilos huérfanos) se retiraron. Ninguna de estas
+piezas tenía efecto en lo que usted ve o hace en el asistente — su retiro no
+cambia nada de su experiencia, solo deja el código más claro para quien lo
+mantenga.
+
+### ➕ Botón de actualizar más fácil de tocar
+El botón para actualizar las citas del día en el panel creció de 24 a 28
+píxeles — el mismo tamaño mínimo que ya tienen los demás botones pequeños del
+panel, pensado para tocarse con precisión incluso con prisa o en pantalla
+táctil.
+
+### 🔍 Revisión de seguridad sin hallazgos nuevos
+Se revisaron varios puntos de seguridad y rendimiento señalados en una
+auditoría anterior (registro de eventos, validación de mensajes entre
+pestañas, verificación de integridad del script). Todos ya estaban resueltos
+desde una versión previa — se confirma y se documenta, sin necesidad de tocar
+código.
+
+Verificación: banco de pruebas completo en verde antes y después; 7 cambios,
+cada uno con su propia prueba que se pone roja si el cambio se revierte por
+accidente.
+
+---
+
 ## [Versión 18.11.1] — 2026-09-08 (El RAC del Anexo 5 se filtra antes de mostrarse: un valor implausible ya no aparece como si fuera un resultado real)
 
 Una revisión de código sobre la corrección de la versión anterior (18.11.0) encontró

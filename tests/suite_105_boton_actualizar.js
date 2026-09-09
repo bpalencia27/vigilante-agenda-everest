@@ -326,5 +326,20 @@ module.exports = {
       t.cierto(tarjetas[0] && tarjetas[0].__vglKey !== undefined, "y es una tarjeta real de render (__vglKey), no el fragmento vacío ni el aviso de filtro");
       t.cierto(st.lastSnapshot.list.length === 1, "y el snapshot quedó al día");
     });
+
+    // v18.12.0 (Mesa de Expertos, UX #17) — mínimo táctil WCAG 2.5.8: el botón de
+    // actualizar medía 24px (por debajo del estándar de 28px que el proyecto ya
+    // adoptó en el panel RCV vecino tras un reporte de campo de toques fallidos).
+    t.caso("fuente (UX v18.12.0): #vgl-refresh mide 28px, el mínimo táctil del proyecto", () => {
+      const s = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const i = s.indexOf("#vgl-refresh{");
+      t.cierto(i >= 0, "la regla existe");
+      const bloque = s.slice(i, s.indexOf("}", i));
+      t.cierto(bloque.indexOf("width:28px !important") >= 0, "width 28px");
+      t.cierto(bloque.indexOf("height:28px !important") >= 0, "height 28px");
+      t.cierto(bloque.indexOf("min-width:28px !important") >= 0, "min-width 28px");
+      t.cierto(bloque.indexOf("min-height:28px !important") >= 0, "min-height 28px");
+      t.falso(bloque.indexOf("24px") >= 0, "sin restos del tamaño viejo (24px)");
+    });
   },
 };

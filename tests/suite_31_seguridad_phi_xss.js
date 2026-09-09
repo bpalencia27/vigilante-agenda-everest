@@ -435,6 +435,16 @@ module.exports = {
       t.igual(res.sha256, expectedHash);
     });
 
+    // v18.12.0 (Mesa de Expertos, muerta confirmada #1) — el parámetro `fuenteOpcional`
+    // era fantasma: la única llamada real (checkVersionMinimum) siempre invoca sin
+    // argumentos, y los tests inyectan la fuente vía GM_info.scriptSource, no como
+    // argumento. Se retiró el parámetro; la función sigue leyendo GM_info.scriptSource.
+    t.caso("verificarIntegridadArranque (v18.12.0): el parámetro fuenteOpcional ya no existe en la firma", () => {
+      const s = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(s.indexOf("async function verificarIntegridadArranque() {") >= 0, "la firma quedó sin parámetros");
+      t.falso(s.indexOf("async function verificarIntegridadArranque(fuenteOpcional)") >= 0, "sin restos del parámetro fantasma");
+    });
+
     // =================================================================
     //  v17.9.0 — LA BARRERA. Lo que Everest guarda entra; lo que identifica al paciente NO.
     //
