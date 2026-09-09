@@ -14068,7 +14068,42 @@
     } catch (e) { return "generico"; }
   }
 
+  // v18.10.0 (AB-3, informe A/B) — SELECTOR ANÓNIMO del elemento que no responde. El
+  // rage click sobre la UI del host se contaba (ux.rage.host) pero sin decir DÓNDE: un
+  // id ajeno del estilo "paciente_juan_perez" jamás puede viajar (el catálogo de
+  // _rageEtiqueta lo bloquea). Este selector describe solo la ESTRUCTURA: tag + hasta
+  // 3 clases sin el prefijo vgl- y saneadas (uxClaveLimpia mata los números de 6+
+  // dígitos — las cédulas mueren ahí) + nth-child entre sus hermanos. Sin id, sin
+  // texto, sin atributos: cero PHI por construcción.
+  function _rageSelectorAnonimo(t) {
+    try {
+      if (!t || typeof t.tagName !== "string") return "";
+      const tag = String(t.tagName).toLowerCase();
+      if (!tag || tag === "body" || tag === "html" || tag === "#document") return "";
+      let clases = [];
+      try {
+        const cruda = String(t.getAttribute && t.getAttribute("class") || (typeof t.className === "string" ? t.className : ""));
+        for (const c of cruda.split(/\s+/)) {
+          if (!c || /^vgl-/.test(c)) continue;
+          let limpia = "";
+          try { limpia = uxClaveLimpia(c); } catch (e) {}
+          if (limpia && limpia.length >= 2 && clases.length < 3) clases.push(limpia);
+        }
+      } catch (e) {}
+      let n = "";
+      try {
+        const pn = t.parentNode;
+        if (pn && pn.children && typeof pn.children.length === "number") {
+          const idx = Array.prototype.indexOf.call(pn.children, t);
+          if (idx >= 0) n = ":nth-child(" + (idx + 1) + ")";
+        }
+      } catch (e) {}
+      return (tag + (clases.length ? "." + clases.join(".") : "") + n).slice(0, 60);
+    } catch (e) { return ""; }
+  }
+
   let _lastClickTarget = null, _lastClickTime = 0, _rageClickCount = 0;
+  let _rageAvisoHostAt = 0;   // v18.10.0 (AB-3): anti-spam del aviso azul (uno por ráfaga y como mucho cada 30 s)
   function _detectarRageClick(e) {
     try {
       if (!e || !e.target) return;
@@ -14079,7 +14114,32 @@
       if (_lastClickTarget === t && (now - _lastClickTime) < 600) {
         _rageClickCount++;
         if (_rageClickCount === 3) {
-          uxTrack("ux.rage." + _rageEtiqueta(t));
+          const etiqueta = _rageEtiqueta(t);
+          uxTrack("ux.rage." + etiqueta);
+          // v18.10.0 (AB-3, informe A/B) — la variante B SOLO informa (el médico decide,
+          // jamás actúa por su cuenta): cuando la ráfaga cae sobre la UI del host que no
+          // responde, aviso AZUL con anti-spam y la coordenada estructural queda medida.
+          // El tag es universo cerrado (HTML) y viaja en la clave del panel; el selector
+          // fino (clases + nth-child) va a la bitácora local, porque el transporte remoto
+          // solo acepta claves de catálogo con conteos — un selector ajeno no puede ser
+          // clave (inyección) ni etiqueta (PHI).
+          if (etiqueta === "host") {
+            try {
+              const tag = t && typeof t.tagName === "string" ? String(t.tagName).toLowerCase() : "";
+              if (tag) uxTrack("ux.rage.host.tag." + tag);
+              try { vglLog("UX", "RageHost", { sel: _rageSelectorAnonimo(t) }); } catch (e) {}
+              const ahora = Date.now();
+              if (ahora - _rageAvisoHostAt > 30000) {
+                _rageAvisoHostAt = ahora;
+                uxTrack("ux.rage.aviso");
+                try {
+                  showToast("AZUL", "Everest no responde",
+                    "Lleva tres o más clics seguidos en el mismo punto sin reacción del sistema. Puede estar cargando o bloqueado: espere unos segundos y, si sigue igual, recargue la consulta. El centinela solo le avisa: usted decide.",
+                    false);
+                } catch (e) {}
+              }
+            } catch (e) {}
+          }
         }
       } else {
         _lastClickTarget = t;

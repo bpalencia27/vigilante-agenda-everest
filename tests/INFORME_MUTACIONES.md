@@ -13860,3 +13860,22 @@ telemetría ia.timeout.rota=6 + ia.timeout.reintenta=1). Mutación verificada:
 | Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
 |---|---|---|---|
 | user.js `mtrGeminiRedactar` — bala de red en onerror | Anular la bala (if (ab2BalaRed) → if (false)): el error de red vuelve a resolver el fallo de inmediato, sin re-disparar el slot | NO | suite_109 4 casos rojos: blip de red (esperaba 2 disparos al MISMO slot y llegó 1), red caída (esperaba la bala única), cancelar durante el backoff (el reintento ya no existe que retirar) y la guarda estructural del orden en onerror; EXIT 1. Restaurado 10 ok EXIT=0 |
+AB-3 (informe A/B): el rage click sobre la UI del host por fin dice DÓNDE, sin PHI. Antes
+solo se contaba (ux.rage.host); ahora la ráfaga de 3 clics en 600 ms (umbral intacto) sobre
+un elemento ajeno lleva una señal informativa SOLO para el host — la variante B jamás
+actúa por su cuenta: el médico decide — y dos coordenadas: el tag (universo cerrado
+HTML, p.ej. ux.rage.host.tag.td) viaja en la clave del panel, y el selector fino
+(_rageSelectorAnonimo: tag + hasta 3 clases sin el prefijo vgl- y saneadas por
+uxClaveLimpia — mueren las cédulas de 6+ dígitos — + nth-child entre hermanos; sin id,
+sin texto, sin atributos) va a la bitácora local (vglLog UX/RageHost) porque el
+transporte remoto solo acepta claves de catálogo con conteos: un selector ajeno no puede
+ser clave (inyección) ni etiqueta (PHI). El aviso azul («Everest no responde») tiene
+anti-spam de 30 s (_rageAvisoHostAt) y queda medido (ux.rage.aviso). Suite nueva
+suite_110_ab3_rage_host.js (11 casos: 5 del selector directo — incluidas las cédulas y
+las clases vgl- que se filtran, 5 de ráfagas — ráfaga nueva tras 650 ms reales contra el
+anti-spam, reset por cambio de target, la UI propia NO avisa — y 2 estructurales del
+enganche vivo). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_detectarRageClick` — puerta del aviso azul | Anular la puerta (if (ahora - _rageAvisoHostAt > 30000) → if (false && ...)): la ráfaga del host se cuenta y se registra pero el toast AZUL jamás sale (ni ux.rage.aviso) | NO | suite_110 4 casos rojos: ráfaga de 3 clics (esperaba ux.rage.aviso=1), el martilleo de 6 clics (el aviso no se repite, pero SÍ sale una vez), la ráfaga nueva tras 650 ms (esperaba el aviso de la primera ráfaga) y el reset por target distinto; EXIT 1. Restaurado 11 ok EXIT=0 |
