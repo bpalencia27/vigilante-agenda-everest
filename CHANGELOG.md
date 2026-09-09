@@ -4,6 +4,24 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.12.1] — 2026-09-09 (El aviso de «Everest no responde» deja de repetirse)
+
+El asistente le avisa cuando usted hace tres clics seguidos sobre la misma zona
+de Everest sin que el sistema reaccione — señal de que la página está cargando
+o bloqueada. Ese aviso tenía un freno de treinta segundos que vivía solo en la
+pestaña abierta: cada vez que la consulta se recargaba, el freno volvía a cero
+y el aviso podía reaparecer una y otra vez durante toda la jornada, incluso
+cuando el problema de fondo era el mismo.
+
+Ahora ese aviso pasa por el mismo registro diario que usa el resto de avisos del
+asistente: **una sola vez por jornada y navegador**, salga por la pestaña que
+salga. El asistente sigue midiendo *todas* las ráfagas de clics (para saber si
+Everest está fallando más de lo normal), pero deja de interrumpirle con el mismo
+mensaje. El umbral que lo dispara (tres clics seguidos en menos de 600 ms) no
+cambia.
+
+---
+
 ## [Versión 18.12.0] — 2026-09-08 (Limpieza de mantenimiento: código sin uso retirado y un botón más fácil de tocar)
 
 Se convocó una revisión integral del código (una "mesa de expertos" de auditoría)

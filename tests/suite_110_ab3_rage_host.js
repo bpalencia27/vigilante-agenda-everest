@@ -131,6 +131,26 @@ module.exports = {
       t.igual(filasRageHost(c).length, 2, "la coordenada fina sí se registra en cada ráfaga (diagnóstico, no ruido)");
     });
 
+    // v18.12.1 (E-1) — el aviso «Everest no responde» se reimprimía toda la jornada: el
+    // único freno (30 s) vivía en memoria de la pestaña y cada recarga lo ponía a cero.
+    // Ahora pasa por el registro compartido del día (vgl_vistos): una ráfaga, un aviso.
+    t.caso("E-1 (v18.12.1): el aviso del host NO reaparece al recargar — una vez por jornada", () => {
+      const almacen = {};   // el localStorage que sobrevive a la recarga
+      const c1 = cargar({ silencioso: true, almacen });
+      c1.api.__S.uxTelemetria = true;
+      const ev1 = { target: celdaHost("fila-paciente celda-hora") };
+      c1.api._detectarRageClick(ev1); c1.api._detectarRageClick(ev1); c1.api._detectarRageClick(ev1);
+      t.igual(accionesUX(c1)["ux.rage.aviso"], 1, "la primera ráfaga de la jornada sí avisa (una sola vez)");
+      // Recarga real: mismo localStorage, memoria de módulo en cero (_rageAvisoHostAt = 0).
+      const c2 = cargar({ silencioso: true, almacen });
+      c2.api.__S.uxTelemetria = true;
+      const ev2 = { target: celdaHost("fila-paciente celda-hora") };
+      c2.api._detectarRageClick(ev2); c2.api._detectarRageClick(ev2); c2.api._detectarRageClick(ev2);
+      const acc2 = accionesUX(c2);
+      t.igual(acc2["ux.rage.host"], 2, "la ráfaga posterior a la recarga se sigue midiendo (no se deja de medir)");
+      t.igual(acc2["ux.rage.aviso"], 1, "pero el aviso no se repite: es el mismo hecho del día, no un aviso nuevo");
+    });
+
     t.caso("la ráfaga sobre NUESTRA UI se cuenta con su etiqueta del catálogo — y NO avisa: no es el sistema el que falla", () => {
       const c = base();
       const propio = botonPropio();
@@ -172,6 +192,7 @@ module.exports = {
       t.cierto(s.indexOf("cero PHI por construcción") >= 0, "el comentario declara la regla: cero PHI por construcción");
       t.cierto(s.indexOf('if (etiqueta === "host")') > s.indexOf("uxTrack(\"ux.rage.\" + etiqueta)"), "la señal solo acompaña a las ráfagas del host");
       t.cierto(s.indexOf("> 30000") > s.indexOf("_rageAvisoHostAt"), "el anti-spam del aviso es de 30 s");
+      t.cierto(s.indexOf('_avisoUnaVezPorNavegador("ragehost|aviso")') > 0, "v18.12.1: además pasa por el registro compartido del día (una vez por jornada)");
       t.cierto(s.indexOf('uxTrack("ux.rage.aviso")') >= 0, "la señal queda medida (se sabe cuándo se mostró)");
     });
 

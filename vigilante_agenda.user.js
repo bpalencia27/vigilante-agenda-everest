@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.12.0
+// @version      18.12.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1037,7 +1037,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.12.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.12.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14167,7 +14167,15 @@
               if (tag) uxTrack("ux.rage.host.tag." + tag);
               try { vglLog("UX", "RageHost", { sel: _rageSelectorAnonimo(t) }); } catch (e) {}
               const ahora = Date.now();
-              if (ahora - _rageAvisoHostAt > 30000) {
+              // v18.12.1 (E-1) — El freno de 30 s vivía SOLO en memoria de la pestaña:
+              // cada recarga lo devolvía a cero y un martilleo sobre Everest reimprimía
+              // el aviso toda la jornada (el «EVEREST ESTÁ LENTO» que el médico reportó
+              // como insoportable). Ahora pasa por el registro compartido del día
+              // (vgl_vistos, el mismo de todos los avisos): UNA ráfaga del host, UN aviso
+              // por jornada y navegador, salga por la pestaña que salga. La métrica
+              // ux.rage.host sigue contando TODAS las ráfagas: se deja de molestar, no de
+              // medir. El umbral (3 clics/600 ms) y el freno de 30 s quedan intactos.
+              if (ahora - _rageAvisoHostAt > 30000 && _avisoUnaVezPorNavegador("ragehost|aviso")) {
                 _rageAvisoHostAt = ahora;
                 uxTrack("ux.rage.aviso");
                 try {
