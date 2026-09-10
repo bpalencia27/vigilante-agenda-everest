@@ -1,0 +1,472 @@
+diff --git a/package.json b/package.json
+index 2788aa3..8e2c807 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "vigilante-agenda-everest",
+-  "version": "18.12.0",
++  "version": "18.14.0",
+   "description": "Banco de pruebas del Vigilante",
+   "private": true,
+   "scripts": {
+diff --git a/tests/INFORME_MUTACIONES.md b/tests/INFORME_MUTACIONES.md
+index f755607..0bab097 100644
+--- a/tests/INFORME_MUTACIONES.md
++++ b/tests/INFORME_MUTACIONES.md
+@@ -14001,3 +14001,109 @@ qué se prefirió no tocarlos en esta tanda.
+ | user.js `EQUIPO_ID_KEY` (muerta #10) | Reintroduce `const EQUIPO_ID_KEY = "vgl_equipo_id";` (huérfana desde la migración a `obsIdentidadEquipo`) | NO | suite_112 caso «EQUIPO_ID_KEY ya no se declara…»: mutante rojo («sin la constante muerta (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+ | user.js `restartPolling` — variable `pollTimer` (muerta #11) | Reintroduce `let pollTimer = null;` y la rama `if (pollTimer) clearInterval(...)` (nunca recibía un id real desde v14.2.12) | NO | suite_09 caso «restartPolling (v18.12.0): la variable pollTimer y su rama muerta ya no existen…»: mutante rojo («pollTimer ya no se declara (obtuvo true)»); EXIT 1 (36 ok, 1 falla). Restaurado 37 ok EXIT=0 |
+ | user.js CSS `#vgl-refresh` — 24px → 28px (UX #17) | `width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;` → los mismos 4 valores vueltos a `24px` | NO | suite_105 caso «fuente (UX v18.12.0): #vgl-refresh mide 28px…»: mutante rojo («width 28px (obtuvo false)»); EXIT 1 (13 ok, 1 falla). Restaurado 14 ok EXIT=0 |
++
++## v18.13.0 (Mesa de Expertos: segunda tanda — accesibilidad de teclado/lector de pantalla, y un cierre irreversible que ganó su «Deshacer»)
++
++Continuación de la revisión integral (ver v18.12.0): esta tanda cierra cuatro hallazgos
++de accesibilidad (WCAG) sobre superficies que un médico usando solo teclado o un lector
++de pantalla no podía operar igual de bien que con mouse, más un refactor de
++simplificación (comparación de versiones delegada a `mtrVersionEsMasNueva`, cero cambio
++de comportamiento). El resto de cambios de esta entrega (foco visible en botones,
++mínimo táctil de 28px en varios controles más, trampa de Tab en el aviso de bloqueo de
++versión, enlace de repliegue si el navegador bloquea la ventana de actualización,
++animación de salida en el recorte de toasts por saturación) son CSS/DOM de refuerzo
++sobre un comportamiento ya cubierto por pruebas existentes (no abren una rama de
++comportamiento nueva que una mutación pueda cazar de forma distinta) y se verificaron
++con el banco completo antes/después, sin fila propia.
++
++| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
++|---|---|---|---|
++| user.js `actualizarRelojCabecera` — texto «· datos viejos» | `if (stale) c.textContent += " · datos viejos";` → `if (false && stale) c.textContent += " · datos viejos";` (la señal de desactualizado vuelve a depender solo del color) | NO | suite_13 caso «actualizarRelojCabecera (Mesa de Expertos): 'datos viejos' es texto visible…»: mutante rojo; EXIT 1 (64 ok, 1 falla). Restaurado 65 ok EXIT=0 |
++| user.js `checkVersionMinimum` — `needsUpdate` vía `mtrVersionEsMasNueva` | `const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);` → `const needsUpdate = false;` (el candado de versión mínima deja de dispararse) | NO | suite_30 caso «checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado…»: mutante rojo; EXIT 1 (12 ok, 1 falla). Restaurado 13 ok EXIT=0 |
++| user.js widget Próximos exámenes — guarda de clic dentro del panel abierto | `if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;` → `if (false && …) return;` (leer/seleccionar una fila del panel vuelve a cerrarlo de golpe) | NO | suite_71 caso «mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded…, y un clic DENTRO del panel abierto no lo cierra»: mutante rojo; EXIT 1 (90 ok, 1 falla). Restaurado 91 ok EXIT=0 |
++| user.js `hcAnexo5Render` / `a5Cerrar` — barra de Deshacer | Insertado `if (true) return;` justo antes de construir la barra `#vgl-a5-deshacer` (cerrar el aviso del Anexo 5 vuelve a ser irreversible al toque, sin recurso) | NO | suite_91 caso «F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso»: mutante rojo; EXIT 1 (28 ok, 1 falla). Restaurado 29 ok EXIT=0 |
++
++## v18.13.1 (BOLT — auditoría nocturna de rendimiento, quick win #1: memo por tick del mapa de toggles)
++
++Cartografía real (sección 2.3 del encargo): `togActiva()` lee `readJSON("vgl_tog_"+uid)`
++del almacén en CADA llamada; `hcAnexo5Render()` (que corre en cada vuelta de tick mientras
++la HC está abierta) llama `togActiva("tog_notif") || togActiva("tog_anexo5")`, y como
++`tog_anexo5` tiene `sub:"tog_notif"`, `togActiva` se reinvoca a sí mismo — hasta 3 lecturas
++síncronas de la MISMA clave de almacén por vuelta de tick, solo en esa línea. `avisoUniversal()`
++repite la lectura de `tog_notif` por su cuenta y queda cubierto "de rebote" por el mismo fix
++(no necesitó cambio propio).
++
++Fix: memo por tick calcado del patrón ya aceptado para `state._docTick`/`_vglDocDelTick()`
++(mismo criterio de riesgo). `state._enTickSync=true` se arma al entrar a `tick()` y se limpia
++en un `finally{}` (atraviesa cualquier `return` temprano), así que ningún llamador POSTERIOR a
++esa vuelta —clic, callback diferido, la vuelta siguiente con otro médico activo— puede leer un
++mapa de toggles cacheado de una vuelta anterior. `togActiva()` reutiliza `state._togMapTick`
++SOLO si `state._enTickSync` es true y el uid coincide; `togSet()` invalida la memo al escribir
++(único punto de escritura legítimo). Coherencia entre pestañas intacta: la memo nunca sobrevive
++fuera de la ventana síncrona de un solo `tick()`, así que un cambio de otra pestaña se ve en el
++siguiente tick como siempre.
++
++| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
++|---|---|---|---|
++| user.js `togActiva` — condición de la memo por tick | `if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {` → `if (false && …) {` (la memo nunca se usa, togActiva vuelve a leer fresco siempre) | NO | suite_93 caso «togActiva (BOLT, rendimiento v18.13.1): memo por tick…»: mutante rojo; EXIT 1 (10 ok, 1 falla). Restaurado 11 ok EXIT=0 |
++
++Banco completo: EXIT=0, 3774 comprobaciones (baseline y resultado idénticos — el fix no
++cambia ningún resultado observable de `togActiva`/`togSet`, solo cuántas veces se lee el
++almacén dentro de una misma vuelta de tick; sin instrumentación de conteo de lecturas en el
++banco, la reducción de I/O queda documentada aquí, no medida con una aserción numérica).
++
++## v18.13.2 (PALETTE — auditoría nocturna UX/accesibilidad: dos modales sin captura de Tab)
++
++Revisión estática (Read/Grep) de los 10 call-sites conocidos de `_activarAccesibilidadModal`
++contra los ids de modal reales del script: 2 de los ~11 modales en vivo quedaron fuera de la
++lista, ambos hallazgo Alta (barrera total para navegación solo-teclado):
++
++- `#vgl-paquete-modal` (`openPaquetesModal`, "Ordenamiento de exámenes"): `role="dialog"`/
++  `aria-modal="true"` declarados pero CERO manejadores de teclado — ni Tab atrapado, ni
++  Escape, ni auto-foco, ni retorno de foco al disparador.
++- `#vgl-confirma-modal` (`_vglModalConfirmarDatos`, reconciliador de discrepancias): sí
++  cerraba con Escape (listener manual propio), pero sin captura de Tab.
++
++Fix: conectar ambos al gestor universal ya probado, mismo patrón que los otros 9 modales.
++En `#vgl-confirma-modal` esto exigió más cuidado que un cambio mecánico: el modal ya tenía
++su propio listener de Escape (`_luego`), y `_activarAccesibilidadModal` instala OTRO listener
++de `keydown` que también maneja Escape — sumar el nuevo sin quitar el viejo habría hecho que
++Escape disparara `_luego()` DOS veces (dos `alContinuar()`, dos `uxTrack`), justo lo que
++`tests/suite_68_v17_cola.js` ("una salida común para la ✕ y Escape") documenta como el
++contrato a proteger. Se reemplazó el listener manual por la llamada al gestor, pasando
++`_luego` como único `closeCallback` — un solo listener, mismo comportamiento observable.
++
++| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
++|---|---|---|---|
++| user.js `openPaquetesModal` — conexión a `_activarAccesibilidadModal` | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);` → `if (false && …) {…}` (el modal vuelve a no tener listener de teclado) | NO | suite_15 caso «PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal…»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
++| user.js `_vglModalConfirmarDatos` — conexión a `_activarAccesibilidadModal` (reemplaza el listener manual de Escape) | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);` → `if (false && …) {…}` (Escape deja de cerrar el modal: sin listener de teclado alguno) | NO | suite_63 caso «PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab…, Escape llama a alContinuar UNA sola vez»: mutante rojo (alContinuar quedó en 0, no 1); EXIT 1 (61 ok, 1 falla). Restaurado 62 ok EXIT=0 |
++
++Verificado además, sin mutación aparte (mismo caso ya lo demuestra): el conteo de
++`modal._listeners.keydown` en `#vgl-confirma-modal` es exactamente **1** tras el fix — antes
++del fix habría sido 2 si simplemente se hubiera AÑADIDO el gestor sin quitar el listener
++manual, lo que habría duplicado `alContinuar()` en cada Escape. No se auditó Chromium en
++esta sesión (bloqueo de entorno documentado en `.deepseek/logs/2026-09-09/palette-informe.md`)
++— ninguno de los dos cambios toca CSS, así que la verificación de la sección 4 (color contra
++Everest simulado) no aplica.
++
++## v18.14.0 (ORDEN #7 — cableado de la flota al worker Cloudflare)
++
++Los 4 puntos de código del cableado documentado en `REPLICA_TELEMETRIA/README.md` §4:
++`TABLERO.url` (telemetría POST), `versionCheckUrl` (candado de versión mínima GET),
++el regex de `repDiagnostico()` (acepta GAS o `*.workers.dev`) y `@connect workers.dev`.
++El GAS (`script.google.com`) queda vivo y sin tráfico como respaldo frío — un solo
++valor (`TABLERO.url`) revierte el cambio si hiciera falta. El worker ya estaba
++desplegado y probado en vivo (ORDEN #7, `f70c05c`); esta entrega es solo el cableado
++del cliente, decisión explícita del médico. El punto 5 del README (destino del
++tablero Google Sheets histórico) queda sin resolver — decisión pendiente, no bloquea
++el cableado.
++
++| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
++|---|---|---|---|
++| user.js `TABLERO.url` | `"https://vigilante-telemetria.bpalencia27.workers.dev/"` → vuelto al GAS original (`AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv…`) | NO | suite_11 caso «repUrl: sin URL personalizada devuelve la del tablero de fábrica» (y otros 2 de la misma suite que usan `URL_FABRICA`): mutante rojo; EXIT 1 (48 ok, 3 fallan). Restaurado 51 ok EXIT=0 |
++
++Suites tocadas sin cambio de comportamiento propio (solo el matcher del mock que
++identifica la URL del backend en las pruebas, de `script.google.com` a `workers.dev`,
++ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
++(3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
++caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
+diff --git a/tests/suite_11_reportes.js b/tests/suite_11_reportes.js
+index b30144f..503c44a 100644
+--- a/tests/suite_11_reportes.js
++++ b/tests/suite_11_reportes.js
+@@ -20,7 +20,9 @@ module.exports = {
+   ],
+ 
+   async pruebas(t, api, env, cargar) {
+-    const URL_FABRICA = /^https:\/\/script\.google\.com\/macros\//;
++    // v18.14.0 — TABLERO.url de fábrica pasó del Apps Script al worker Cloudflare
++    // (REPLICA_TELEMETRIA/, ORDEN #7); mismo contrato, nuevo dominio.
++    const URL_FABRICA = /^https:\/\/vigilante-telemetria\.bpalencia27\.workers\.dev\//;
+     const tick = (ms) => new Promise((r) => setTimeout(r, ms === undefined ? 15 : ms));
+ 
+     // Red simulada: registra cada GM_xmlhttpRequest y contesta según "modo".
+diff --git a/tests/suite_13_api_agenda.js b/tests/suite_13_api_agenda.js
+index 2230ee9..544d36a 100644
+--- a/tests/suite_13_api_agenda.js
++++ b/tests/suite_13_api_agenda.js
+@@ -453,6 +453,43 @@ module.exports = {
+       t.cierto(clock.title.indexOf("cada 5 s") >= 0, "en la ventana crítica, el tooltip refleja los 5 s reales — no el mismo texto de antes");
+     });
+ 
++    // v18.13.0 (Mesa de Expertos, UX): la señal de "desactualizado" era solo de color
++    // (vgl-stale) — ahora también hay texto visible y un aria-live que anuncia SOLO en
++    // la transición (el reloj tiene su propio tic de 1 s; anunciar en cada vuelta sería
++    // ruido constante para quien usa lector de pantalla).
++    t.caso("actualizarRelojCabecera (Mesa de Expertos): 'datos viejos' es texto visible, y el aria-live solo anuncia en la transición", () => {
++      const c = cargar({ silencioso: true });
++      const clock = c.env.doc.createElement("span");
++      clock.id = "vgl-clock";
++      c.env.doc.body.appendChild(clock);
++
++      // Arranque (sin ultimaLectura): nunca se afirma "al día" ni se alarma de más.
++      c.api.__state.ultimaLectura = 0;
++      c.api.actualizarRelojCabecera();
++      t.falso(clock.textContent.indexOf("datos viejos") >= 0, "sin lectura todavía, no se dice 'datos viejos'");
++      t.falso(clock.classList.contains("vgl-stale"), "ni se pinta en alarma al arrancar");
++
++      // Datos viejos (más de 30 s): texto visible, no solo color.
++      c.api.__state.ultimaLectura = Date.now() - 40000;
++      c.api.actualizarRelojCabecera();
++      t.cierto(clock.textContent.indexOf("datos viejos") >= 0, "desactualizado: el texto lo dice, no solo el color");
++      const live = c.env.doc.getElementById("vgl-clock-live");
++      t.cierto(!!live && live.getAttribute("aria-live") === "polite", "existe la región aria-live propia del reloj");
++      t.cierto(live.textContent.indexOf("desactualizados") >= 0, "primera transición (null -> stale): anuncia");
++
++      // Segunda vuelta con el MISMO estado (sigue viejo): no debe volver a tocar el
++      // aria-live — se marca el texto con un centinela para comprobar que no lo pisa.
++      live.textContent = "__centinela__";
++      c.api.actualizarRelojCabecera();
++      t.igual(live.textContent, "__centinela__", "sin transición real, el aria-live no se vuelve a escribir (nada de ruido cada 1 s)");
++
++      // Datos frescos de nuevo: SÍ hay transición -> sí se anuncia, y el texto visible se retira.
++      c.api.__state.ultimaLectura = Date.now();
++      c.api.actualizarRelojCabecera();
++      t.falso(clock.textContent.indexOf("datos viejos") >= 0, "al refrescar, el texto 'datos viejos' se retira");
++      t.cierto(live.textContent !== "__centinela__", "transición real (stale -> fresco): sí anuncia");
++    });
++
+     // ---------- tickApi ----------
+     await t.casoAsync("tickApi: sin URL aprendida no dispara ninguna consulta", async () => {
+       const e = entornoApi();
+diff --git a/tests/suite_15_interfaz_avanzada.js b/tests/suite_15_interfaz_avanzada.js
+index 3f72178..7f9949d 100644
+--- a/tests/suite_15_interfaz_avanzada.js
++++ b/tests/suite_15_interfaz_avanzada.js
+@@ -6516,6 +6516,22 @@ module.exports = {
+       t.cierto(/if \(ordenarBtn\) ordenarBtn\.style\.display = "";\s*\n\s*repintar\(\);/.test(src), "y al conseguirlo repinta y devuelve «Ordenar pendientes»");
+     });
+ 
++    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — #vgl-paquete-modal era el
++    // único modal de "Ordenamiento de exámenes" que NO pasaba por el gestor universal:
++    // sin captura de Tab, sin auto-foco, sin retorno de foco al cerrar, y sin NINGÚN
++    // manejador de teclado — ni siquiera Escape. Mismo patrón que el hallazgo #43
++    // (_vglChooserModal) de arriba.
++    await t.casoAsync("PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal: atrapa Tab y cierra con Escape", async () => {
++      const c = cargar({ silencioso: true });
++      enriquecerDom(c);
++      await c.api.openPaquetesModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
++      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-paquete-modal");
++      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length),
++        "el modal tiene un listener 'keydown' propio (lo instala _activarAccesibilidadModal) — antes no tenía ninguno");
++      t.cierto(!!(modal._listeners && modal._listeners.click && modal._listeners.click.length),
++        "y sigue conservando su canal de cierre de siempre (clic afuera)");
++    });
++
+     t.caso("v18.0.118 (UI/UX #10 + decisión de Ordenar): el «Siguiente» del paso 2 explica por qué está apagado; Ordenar abre el PDF detrás sin robar la pantalla", () => {
+       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+       t.igual((src.match(/step2Next\.textContent = "Elija un horario para continuar"/g) || []).length, 1, "sin turno elegido, el botón del paso 2 lo dice");
+diff --git a/tests/suite_17_nucleo.js b/tests/suite_17_nucleo.js
+index 15c4a4c..80f469a 100644
+--- a/tests/suite_17_nucleo.js
++++ b/tests/suite_17_nucleo.js
+@@ -790,9 +790,9 @@ module.exports = {
+         silencioso: true,
+         gmxhr: (o) => {
+           // v18.4.1 — solo el chequeo de versión es GET; el POST de telemetría del
+-          // propio bloqueo (verlock) también va a script.google.com y NO debe servirse
+-          // aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
+-          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
++          // propio bloqueo (verlock) también va al worker (workers.dev, v18.14.0) y NO
++          // debe servirse aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
++          if (o.method !== "GET" || !String(o.url).includes("workers.dev")) return;
+           llamadas.push(o.url);
+           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+         },
+@@ -824,7 +824,7 @@ module.exports = {
+       const c = cargar({
+         silencioso: true,
+         gmxhr: (o) => {
+-          if (!String(o.url).includes("script.google.com")) return;
++          if (!String(o.url).includes("workers.dev")) return;
+           llamadas.push(o.url);
+           o.onload({ responseText: JSON.stringify(respuesta) });
+         },
+@@ -850,7 +850,7 @@ module.exports = {
+         silencioso: true,
+         gmxhr: (o) => {
+           // solo GET del chequeo de versión: el POST "verlock" debe quedarse en la cola
+-          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
++          if (o.method !== "GET" || !String(o.url).includes("workers.dev")) return;
+           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+         },
+       });
+@@ -880,7 +880,7 @@ module.exports = {
+       const c = cargar({
+         silencioso: true,
+         gmxhr: (o) => {
+-          if (!String(o.url).includes("script.google.com")) return;
++          if (!String(o.url).includes("workers.dev")) return;
+           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+         },
+       });
+@@ -897,7 +897,7 @@ module.exports = {
+       const c = cargar({
+         silencioso: true,
+         gmxhr: (o) => {
+-          if (!String(o.url).includes("script.google.com")) return;
++          if (!String(o.url).includes("workers.dev")) return;
+           o.onerror({});
+         },
+       });
+@@ -1096,7 +1096,7 @@ module.exports = {
+         : []);
+       await c.api.autoFetchAtheneaLabsForActivePatient();
+       // v18.3 (P13) — el nacimiento del id de equipo emite «obs.equipo.nuevo»
+-      // diferido un tick hacia el TABLERO (script.google.com). Esta prueba mide
++      // diferido un tick hacia el TABLERO (worker Cloudflare, v18.14.0). Esta prueba mide
+       // las llamadas a ATENEA: contar solo las del dominio de Everest.
+       const llamadasAthenea = llamadas.filter((u) => String(u).includes("atheneasoluciones"));
+       t.igual(llamadasAthenea.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
+@@ -1143,7 +1143,7 @@ module.exports = {
+ 
+       await c.api.autoFetchAtheneaLabsForActivePatient();
+       // v18.3 (P13) — ídem: el aviso «obs.equipo.nuevo» del primer arranque viaja
+-      // a script.google.com y no cuenta como llamada a Athenea.
++      // al worker (v18.14.0) y no cuenta como llamada a Athenea.
+       t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
+ 
+       // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min
+diff --git a/tests/suite_30_killswitch_canario.js b/tests/suite_30_killswitch_canario.js
+index 03a079b..8bcd10e 100644
+--- a/tests/suite_30_killswitch_canario.js
++++ b/tests/suite_30_killswitch_canario.js
+@@ -254,6 +254,26 @@ module.exports = {
+       t.falso(c.api.__state.disabledFeatures.has("moduloExperimental"), "canary habilitó la característica para eq-piloto-01");
+     });
+ 
++    // v18.13.0 (Mesa de Expertos, simplificable #1) — la comparación de versiones
++    // ("14.1.6" vs "14.1.5") dejó de reimplementarse en línea y ahora delega en
++    // mtrVersionEsMasNueva; esta prueba ancla que el candado de versión mínima SIGUE
++    // disparándose igual que antes del refactor.
++    t.caso("checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado de actualización (needsUpdate vía mtrVersionEsMasNueva)", () => {
++      const c = cargar({
++        silencioso: true,
++        gmxhr: (opts) => {
++          opts.onload({
++            status: 200,
++            responseText: JSON.stringify({ minVersion: "99.0.0" }),
++          });
++        },
++      });
++      c.api.__state.lastVersionCheck = 0;
++      c.api.checkVersionMinimum();
++      t.igual(c.env.win.sessionStorage.getItem("vgl_upd|99.0.0"), "1",
++        "el camino de actualización obligatoria se tomó (needsUpdate=true) — la marca de recarga quedó puesta");
++    });
++
+     // =================================================================
+     //  v18.0.53 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
+     //  EL KILL-SWITCH SE ACTIVABA EN SILENCIO TOTAL.
+diff --git a/tests/suite_63_tablero_riesgo.js b/tests/suite_63_tablero_riesgo.js
+index bf19883..fd2eae4 100644
+--- a/tests/suite_63_tablero_riesgo.js
++++ b/tests/suite_63_tablero_riesgo.js
+@@ -549,6 +549,31 @@ module.exports = {
+       t.falso(!!d.body.children.find((n) => n.id === "vgl-confirma-modal" && n.isConnected !== false && n.parentElement), "no se vuelve a preguntar lo ya confirmado");
+     });
+ 
++    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — el modal cerraba con Escape
++    // pero no atrapaba Tab: reemplazado el listener manual de Escape por el gestor
++    // universal (_activarAccesibilidadModal), con _luego() como ÚNICA salida — un
++    // solo listener, no dos, para no llamar a alContinuar() dos veces por un mismo
++    // Escape (ver suite_68 "una salida común para la ✕ y Escape", que NO puede
++    // pasar de largo el doble disparo porque solo revisa que exista la función).
++    t.caso("PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab con el gestor universal y Escape llama a alContinuar UNA sola vez", () => {
++      const c = cargar({ silencioso: true });
++      let vecesAlContinuar = 0;
++      const alContinuar = () => { vecesAlContinuar++; };
++      const disc = [{
++        clave: "hipertension", etiqueta: "Hipertensión arterial", porQue: "cambia la tabla de vigencias",
++        afirman: [{ fuente: "Historia", detalle: "casilla marcada" }],
++        niegan: [{ fuente: "PyM", detalle: "no figura" }],
++      }];
++      c.api._vglModalConfirmarDatos({ doc_id: "12345678" }, disc, alContinuar);
++      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-confirma-modal");
++      t.cierto(!!modal, "el cuadro se pinta");
++      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length === 1),
++        "un solo listener 'keydown' (lo instala _activarAccesibilidadModal) — no dos");
++      modal._listeners.keydown[0]({ key: "Escape", preventDefault() {}, stopPropagation() {} });
++      t.igual(vecesAlContinuar, 1, "Escape continúa el flujo UNA sola vez, no dos (antes había dos listeners que podían dispararse ambos)");
++      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-confirma-modal"), "y el cuadro se cierra");
++    });
++
+     t.caso("_vglModalConfirmarDatos responde por la puerta compartida (humo)", () => {
+       t.noLanza(() => {
+         const ok = api._vglModalConfirmarDatos({ doc_id: "" }, [], null);
+diff --git a/tests/suite_71_widget_conducta.js b/tests/suite_71_widget_conducta.js
+index 0b6cfb7..4b9e9ac 100644
+--- a/tests/suite_71_widget_conducta.js
++++ b/tests/suite_71_widget_conducta.js
+@@ -230,6 +230,28 @@ module.exports = {
+       t.igual(el.style.top, topEsperado + "px", "en una segunda fila, debajo de donde iría 'Ordenar pendientes'");
+     });
+ 
++    // v18.13.0 (Mesa de Expertos, UX): el badge era mudo para lector de pantalla (sin
++    // role/aria-expanded) y el alternador de apertura no distinguía un clic en el
++    // badge de un clic DENTRO del panel ya abierto — leer/seleccionar una fila lo
++    // cerraba de golpe.
++    t.caso("mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded en el badge, y un clic DENTRO del panel abierto no lo cierra", () => {
++      const c = cargar({ silencioso: true });
++      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
++      c.api.__S.conductaWidgets = true;
++      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
++      c.api.mtrWidgetConductaTick();
++      const el = c.env.doc.getElementById("vgl-cw-examenes");
++      t.cierto(el.innerHTML.indexOf('role="button"') >= 0, "el badge es un botón real para lectores de pantalla");
++      t.cierto(el.innerHTML.indexOf('aria-expanded="false"') >= 0, "arranca cerrado: aria-expanded=false");
++      t.cierto(!!el._listeners.click && el._listeners.click.length === 1, "un solo listener de clic en el widget");
++      el._listeners.click[0]({ target: { closest: () => null }, stopPropagation() {} });
++      t.cierto(el.classList.contains("vgl-cw-abierto"), "el primer clic (badge, fuera del panel) abre el panel");
++      el._listeners.click[0]({ target: { closest: (sel) => (sel === ".vgl-cw-panel" ? {} : null) }, stopPropagation() {} });
++      t.cierto(el.classList.contains("vgl-cw-abierto"), "un clic DENTRO del panel ya abierto NO lo cierra (antes sí)");
++      el._listeners.click[0]({ target: { closest: () => null }, stopPropagation() {} });
++      t.falso(el.classList.contains("vgl-cw-abierto"), "un clic en el badge (fuera del panel) SÍ cierra");
++    });
++
+     t.caso("mtrWidgetConductaTick: sin botón 'Paquetes' visible (otra sub-pantalla de Conducta), el widget se oculta", () => {
+       const c = cargar({ silencioso: true });
+       cablearHistoriaConducta(c.env, "1098765432", []);   // Conducta activa, pero sin el botón
+diff --git a/tests/suite_75_disco.js b/tests/suite_75_disco.js
+index ca3e2e5..dbc031a 100644
+--- a/tests/suite_75_disco.js
++++ b/tests/suite_75_disco.js
+@@ -921,7 +921,7 @@ module.exports = {
+       const fila = red.cuerpos().find((p) => p.evento === "prueba");
+       t.igual(fila.evento, "prueba");
+       t.igual(fila.dia, FECHA, "día del reloj congelado");
+-      t.igual(fila.ver, "18.12.0", "versión viva");
++      t.igual(fila.ver, "18.14.0", "versión viva");
+       t.igual(fila.cosa, 1, "extra mergeado");
+       t.cierto(typeof fila.token === "string" && fila.token.length > 0, "token del tablero");
+       t.cierto(/-/.test(String(fila.lote)), "lote trazable");
+diff --git a/tests/suite_91_hc_launch.js b/tests/suite_91_hc_launch.js
+index 33fe29e..77d1af8 100644
+--- a/tests/suite_91_hc_launch.js
++++ b/tests/suite_91_hc_launch.js
+@@ -361,6 +361,30 @@ module.exports = {
+       t.cierto(c.api.hcAnexo5Render() === false, "y no vuelve a aparecer para ese paciente en este turno");
+     });
+ 
++    // v18.13.0 (Mesa de Expertos, UX): cerrar una alerta de ABANDONO DEL PROGRAMA de un
++    // solo toque, sin recurso, era el hallazgo — ahora queda una barra de "Deshacer"
++    // (VGL_DESHACER_VISIBLE_MS) aparte del panel, que lo reconstruye si el clic fue
++    // accidental. El panel SIGUE desapareciendo de inmediato (no se relaja esa garantía).
++    t.caso("F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso", () => {
++      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
++        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
++      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
++      c.api.__state.pymAbandono = EST_A5().pymAbandono;
++      t.cierto(c.api.hcAnexo5Render() === true, "el panel se pinta");
++      const panel = c.env.doc.getElementById("vgl-a5-panel");
++      const btn = panel.querySelector("[data-a5-cerrar]");
++      btn._listeners.click[0]();
++      t.cierto(!c.env.doc.getElementById("vgl-a5-panel"), "cerrar quita el panel de verdad e inmediato");
++      const barra = c.env.doc.getElementById("vgl-a5-deshacer");
++      t.cierto(!!barra, "queda una barra de Deshacer aparte");
++      t.cierto(barra.innerHTML.indexOf("cerrado por este turno") >= 0, "explica lo que pasó");
++      const btnDeshacer = barra.querySelector("[data-a5-deshacer]");
++      t.cierto(!!btnDeshacer && btnDeshacer._listeners.click.length === 1, "el botón de Deshacer escucha el clic");
++      btnDeshacer._listeners.click[0]();
++      t.cierto(!c.env.doc.getElementById("vgl-a5-deshacer"), "Deshacer retira su propia barra");
++      t.cierto(!!c.env.doc.getElementById("vgl-a5-panel"), "y el clic de Deshacer, por sí solo, reconstruye el panel");
++    });
++
+     t.caso("F2/hcAnexo5Render (v18.8.4 T1): el panel se pinta con variables de tema, sin colores duros", () => {
+       const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
+         + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+diff --git a/tests/suite_93_toggles_f3.js b/tests/suite_93_toggles_f3.js
+index b7a03b3..e6ad574 100644
+--- a/tests/suite_93_toggles_f3.js
++++ b/tests/suite_93_toggles_f3.js
+@@ -93,6 +93,32 @@ module.exports = {
+       t.cierto(c.api.togSet("tog_agendar", true) === true && c.api.togActiva("tog_agendar") === true, "volver a encender restaura el flujo");
+     });
+ 
++    t.caso("togActiva (BOLT, rendimiento v18.13.1): memo por tick — misma lectura reutilizada dentro de tick(), invalidada por togSet, nunca fuera de la ventana", () => {
++      const c = montar();
++      identidad(c, "DOC-9");
++      c.api.togSet("tog_agendar", true);
++      t.cierto(c.api.togActiva("tog_agendar") === true, "arranca encendido");
++
++      // Dentro de la ventana síncrona de un tick (state._enTickSync=true, calcada de
++      // state._docTick): togActiva() memoiza el mapa de "vgl_tog_DOC-9".
++      c.api.__state._enTickSync = true;
++      t.cierto(c.api.togActiva("tog_agendar") === true, "primera lectura de la ventana: fresca");
++      // Cambio DIRECTO del almacén sin pasar por togSet (simula otro proceso/pestaña
++      // editando la clave): la memo NO debe verlo mientras dure la ventana del tick.
++      c.api.writeJSON("vgl_tog_DOC-9", { tog_agendar: false });
++      t.cierto(c.api.togActiva("tog_agendar") === true,
++        "dentro de la MISMA ventana de tick, sigue viendo el valor memoizado, no el cambio directo del almacén");
++
++      // togSet() SÍ invalida la memo — es el único punto de escritura legítimo.
++      c.api.togSet("tog_agendar", false);
++      t.cierto(c.api.togActiva("tog_agendar") === false, "togSet invalida la memo: la siguiente lectura ya ve su propio cambio");
++
++      // Cierre de la ventana (equivalente al finally{} de tick()): fuera de ella, SIEMPRE fresco.
++      c.api.__state._enTickSync = false;
++      c.api.writeJSON("vgl_tog_DOC-9", { tog_agendar: true });
++      t.cierto(c.api.togActiva("tog_agendar") === true, "fuera de la ventana de tick, togActiva vuelve a leer fresco siempre");
++    });
++
+     t.caso("jerarquía: un sub-toggle solo vive mientras su padre está encendido", () => {
+       const c = montar();
+       identidad(c, "DOC-3");
