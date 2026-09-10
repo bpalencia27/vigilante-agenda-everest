@@ -1315,8 +1315,9 @@ module.exports = {
       cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
       // v17.x.x — el clic ya no consulta en vivo de una: abre el menú y la consulta corre
       // solo al elegir una opción. Aquí se elige «Historial por analito» (la ruta completa).
+      // v18.14.4 — el menú de dos opciones se retiró: el clic va derecho a la lectura
+      // universal (el último resultado de cada analito, sin ventana temporal).
       btn.onclick();
-      elegirOpcionChooser(cLab, "historial");
       await esperar(0); // deja correr la cadena async de _ejecutarLlenadoExamenes
       t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
       t.cierto(btn.innerHTML.includes("No se pudo leer el laboratorio"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
@@ -1325,46 +1326,10 @@ module.exports = {
       t.igual(btn.innerHTML, "🧪 Exámenes", "el botón vuelve a su rótulo");
     });
 
-    // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura del selector de «Exámenes»): las dos
-    // opciones deben elegir IGUAL —el último resultado de cada analito— y diferenciarse solo
-    // en la ventana: 90 días arriba, sin límite abajo. La versión anterior se quedaba con los
-    // de UNA sola fecha (la máxima), así que un analito cuyo último resultado fuera de doce
-    // días antes desaparecía de la pantalla aunque estuviera dentro de los 90.
-    t.caso("v18.0.64: la opción de 90 días conserva el último de CADA analito dentro de la ventana", () => {
-      const hoy = "2026-09-01";
-      const labs = [
-        { NombreParametro: "CREATININA", fechaResultado: "2026-08-20", Resultado: "1.0" },   // dentro
-        { NombreParametro: "GLICEMIA", fechaResultado: "2026-08-20", Resultado: "90" },      // dentro
-        { NombreParametro: "LDL", fechaResultado: "2026-08-08", Resultado: "100" },          // dentro, OTRA fecha
-        { NombreParametro: "HBA1C", fechaResultado: "2026-01-15", Resultado: "6.5" },        // fuera (229 días)
-      ];
-      const r = cLab.api._mtrLabsRecientes(labs, hoy);
-      const nombres = r.map((l) => l.NombreParametro).sort();
-      t.igual(nombres.join(","), "CREATININA,GLICEMIA,LDL",
-        "el LDL de otra fecha SIGUE ahí: es el último disponible de ese analito y está dentro de los 90 días");
-      t.falso(nombres.includes("HBA1C"), "y lo de hace más de 90 días no entra");
-    });
-
-    t.caso("v18.0.64: los bordes de la ventana de 90 días", () => {
-      const hoy = "2026-09-01";
-      const enBorde = [
-        { NombreParametro: "A", fechaResultado: "2026-06-03", Resultado: "1" },   // 90 días justos
-        { NombreParametro: "B", fechaResultado: "2026-06-02", Resultado: "1" },   // 91 días
-        { NombreParametro: "C", fechaResultado: "2026-09-01", Resultado: "1" },   // hoy
-      ];
-      const r = cLab.api._mtrLabsRecientes(enBorde, hoy).map((l) => l.NombreParametro).sort();
-      t.igual(r.join(","), "A,C", "el día 90 entra, el 91 no, y el de hoy por supuesto");
-    });
-
-    t.caso("v18.0.64: sin ninguna fecha legible NO se le borra la pantalla al médico", () => {
-      const sinFecha = [
-        { NombreParametro: "CREATININA", Resultado: "1.0" },
-        { NombreParametro: "LDL", Resultado: "100" },
-      ];
-      t.igual(cLab.api._mtrLabsRecientes(sinFecha, "2026-09-01").length, 2,
-        "si el parseo de fechas falla entero, se devuelve la lista tal cual — no se descarta a ciegas");
-      t.igual(cLab.api._mtrLabsRecientes([], "2026-09-01").length, 0, "lista vacía se devuelve vacía");
-    });
+    // v18.14.4 — ORDEN DEL MÉDICO (10-sep): la opción de 90 días («Última toma completa») y
+    // su filtro `_mtrLabsRecientes` se retiraron del producto. Sus tres casos se van con ella:
+    // no queda ninguna ventana temporal que probar, porque la única lectura que existe es la
+    // universal (el último resultado de cada analito, sin importar cuándo se hizo).
 
     // ===== v18.0.30 — HONESTIDAD DE AUTO-LABS (hallazgos L6643 / L6614 / L6714) =====
     // Este contexto SÍ completa la cadena de 3 pasos de Athenea (BusquedaPaciente ->
@@ -1461,8 +1426,7 @@ module.exports = {
       mockPacienteLabs(cLabOk, btn);
       const dicho = grabarBoton(btn);
       const nacidos = grabarBody(cLabOk);
-      btn.onclick();
-      elegirOpcionChooser(cLabOk, "historial");
+      btn.onclick();   // v18.14.4 — sin menú: el clic va derecho a buscar
       await esperarA(() => dicho.some((x) => x.includes("no toqué nada") || x.startsWith("✓")), 5000);
 
       t.cierto(dicho.some((x) => x.includes("no toqué nada")),
@@ -1487,8 +1451,7 @@ module.exports = {
       mockPacienteLabs(cKill, btn, bandeja);
       cKill.api.emergencyTeardown("Prueba: llenado desactivado");
       const dicho = grabarBoton(btn);
-      btn.onclick();
-      elegirOpcionChooser(cKill, "historial");
+      btn.onclick();   // v18.14.4 — sin menú: el clic va derecho a buscar
       // dos señales que esperar: el aviso del botón y el aviso flotante (que llega más
       // tarde, porque showToast agrupa en una cola antes de pintar).
       await esperarA(() => dicho.some((x) => x.includes("desactivado ahora mismo")), 5000);
@@ -1540,22 +1503,31 @@ module.exports = {
     });
 
     // =====================================================================
-    // v18.0.131 (barrido por recorridos, hallazgo 5) — REPORTE DEL BARRIDO: «Última toma
-    // completa» recortaba `labs` a los últimos 90 días y DESPUÉS cacheaba esa misma lista YA
-    // recortada en `_labsPrefetch` — la caché compartida (Panel, Agendar, Redactor IA, 10 min
-    // de TTL) perdía analitos vigentes tomados hace más de 90 días, no solo lo que se escribe
-    // en la historia con esta opción concreta.
+    // v18.0.131 (hallazgo 5) → v18.14.4 — el defecto original («Última toma completa»
+    // recortaba `labs` a los últimos 90 días y DESPUÉS cacheaba esa lista ya recortada en
+    // `_labsPrefetch`, así que la caché compartida de 10 min —Panel, Agendar, Redactor IA—
+    // perdía analitos vigentes) desaparece de raíz al retirarse la opción: ya no hay recorte.
+    // La guarda se conserva, invertida: se exige que la caché se llene con la lectura ÍNTEGRA
+    // y que NO quede ningún filtro por fecha en el flujo, para que nadie reintroduzca una
+    // ventana que vuelva a esconder un analito vigente.
     // =====================================================================
-    t.caso("v18.0.131 (hallazgo 5): _labsPrefetch se llena con la lectura ÍNTEGRA, ANTES del recorte de 90 días de «Última toma completa»", () => {
+    t.caso("v18.14.4: el flujo de Exámenes cachea la lectura ÍNTEGRA y no filtra por fecha (la ventana de 90 días no puede volver)", () => {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
       const i = src.indexOf("async function _ejecutarLlenadoExamenes");
       t.cierto(i > 0, "se localiza el flujo de Auto-Labs");
       const cuerpo = src.slice(i, src.indexOf("\n      document.body.appendChild(btn);", i));
-      const iCache = cuerpo.indexOf("_labsPrefetch = { docId, labs, ts: Date.now() };");
-      const iRecorte = cuerpo.indexOf('if (modo === "ultima" && labs && labs.length > 0)');
-      t.cierto(iCache >= 0 && iRecorte >= 0, "se localizan el guardado de la caché y el recorte de 90 días");
-      t.cierto(iCache < iRecorte,
-        "la caché se llena ANTES de que «labs» se reasigne recortado — si el orden se invierte, la caché compartida pierde analitos vigentes por 10 minutos");
+      t.cierto(cuerpo.indexOf("_labsPrefetch = { docId, labs, ts: Date.now() };") >= 0,
+        "la caché compartida se llena con lo que Athenea trajo, sin filtrar");
+      // Guarda general: «labs» se asigna UNA sola vez (la lectura de Athenea). Cualquier
+      // recorte posterior —con el nombre que sea— tendría que reasignarla y esto se pone rojo.
+      // Se mira el CÓDIGO sin comentarios y con un `=` que no sea comparación (`labs===null`
+      // aparece en las notas y no es una asignación).
+      const codigoFn = cuerpo.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+      t.igual((codigoFn.match(/\blabs\s*=[^=]/g) || []).length, 1,
+        "«labs» se asigna una sola vez: ningún filtro posterior puede esconder un analito");
+      t.falso(/modo === "ultima"/.test(cuerpo), "no queda el modo de 90 días");
+      t.falso(/_mtrLabsRecientes|MTR_LABS_VENTANA_RECIENTE_DIAS/.test(cuerpo),
+        "ni el filtro por fecha ni su constante viven ya en este flujo");
     });
 
     // =====================================================================
@@ -1641,8 +1613,7 @@ module.exports = {
       const casillaHb = { value: "", isConnected: true, type: "text" };
       const getByIdMock = cOv.env.doc.getElementById;
       cOv.env.doc.getElementById = (id) => (id === "resultadoHemoglobina" ? casillaHb : getByIdMock(id));
-      btn.onclick();
-      elegirOpcionChooser(cOv, "historial");
+      btn.onclick();   // v18.14.4 — sin menú: el clic va derecho a buscar
       await esperarA(() => (bandeja.children || []).length > 0, 5000);
       const cuerpos = (bandeja.children || []).map((n) => {
         try { return String(n.querySelector(".vgl-toast-b").textContent || ""); } catch (e) { return ""; }
@@ -1699,8 +1670,7 @@ module.exports = {
       const fechaCr = { value: "", isConnected: true, type: "date", id: "fechaResultCreatinina" };
       const getByIdMock = cOk.env.doc.getElementById;
       cOk.env.doc.getElementById = (id) => (id === "resultadoHemoglobina" ? casillaHb : id === "resultadoCreatinina" ? casillaCr : id === "fechaResultCreatinina" ? fechaCr : getByIdMock(id));
-      btn.onclick();
-      elegirOpcionChooser(cOk, "historial");
+      btn.onclick();   // v18.14.4 — sin menú: el clic va derecho a buscar
       await esperarA(() => llegados.length >= 2, 5000);
       await esperar(20);
       t.igual(casillaCr.value, "1.2", "control del caso: Auto-Labs SÍ escribió la creatinina (count>0)");
@@ -1736,11 +1706,13 @@ module.exports = {
       for (const esperado of ["creatinina escrita", "HEMOGLOBINA GLICOSILADA", "GLICEMIA = 99999", "exige HEMOGLOBINA"]) {
         t.cierto(cuerpo.indexOf(esperado) >= 0, "el cuerpo conserva «" + esperado + "»");
       }
-      // Y el cableado: los seis showToast de Auto-Labs (rama principal y de reintento) llevan la clave.
+      // Y el cableado: los avisos de Auto-Labs que quedan (rama principal y de reintento)
+      // llevan la clave. v18.14.4 — eran SEIS; el AMBAR «Exámenes · sin casilla» se retiró por
+      // orden del médico, así que quedan CINCO.
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      // v18.0.119 — dos de los seis (los de «casilla obligatoria») pasaron a dos líneas porque el
+      // v18.0.119 — dos de los cinco (los de «casilla obligatoria») pasaron a dos líneas porque el
       // texto ahora explica POR QUÉ está vacía y qué hacer; se cuentan las dos formas.
-      t.igual(((src.match(/, false, "labs\|" \+ docId\)/g) || []).length + (src.match(/\n\s*false, "labs\|" \+ docId\)/g) || []).length), 6, "los seis avisos de Auto-Labs viajan con apptKey «labs|cédula»");
+      t.igual(((src.match(/, false, "labs\|" \+ docId\)/g) || []).length + (src.match(/\n\s*false, "labs\|" \+ docId\)/g) || []).length), 5, "los cinco avisos de Auto-Labs viajan con apptKey «labs|cédula»");
       // Hermanos con título compartido en el mismo flush (el AZUL se tragaba el AMBAR):
       t.igual((src.match(/showToast\("AMBAR", "Redactar con IA · sin datos"/g) || []).length, 2, "los dos AMBAR que siguen al AZUL «Leyendo…» del Redactor tienen título propio (el de «no activada» sale antes y solo)");
       t.cierto(/showToast\("AMBAR", "Modo programador · Ajustes sin guardar"/.test(src), "el AMBAR de Modo programador (fila 33a) tiene título propio");
@@ -5839,20 +5811,21 @@ module.exports = {
       t.cierto(/sanitizePII\(String\(cuerpo\)\)\.slice\(0, 120\)/.test(src), "sino un extracto saneado");
     });
 
-    t.caso("v18.0.109 (B11): con una consulta de exámenes en vuelo, un segundo clic en «Exámenes» no abre otro chooser", () => {
+    t.caso("v18.0.109 (B11) + v18.14.4: con una consulta de exámenes en vuelo, un segundo clic en «Exámenes» no dispara otra búsqueda", () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
       c.env.doc.getElementById = (id) => (id === "anamesis" ? {} : null);
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 111111", closest: () => null }] : []);
       c.api.createLabInjectorUI();
       const btn = c.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
-      const choosers = () => c.env.doc.body.children.filter((n) => n.id === "vgl-chooser-modal").length;
+      // v18.14.4 — ya no hay cuadro de elección que abrir: la guarda de doble disparo se mide
+      // por el rótulo del botón, que es lo que cambia al arrancar la búsqueda.
       btn.dataset.vglEnCurso = "1";
       btn.onclick();
-      t.igual(choosers(), 0, "en vuelo: el clic no abre el chooser (antes: el segundo pisaba el veredicto del primero)");
+      t.igual(btn.innerHTML, "🧪 Exámenes", "en vuelo: el clic no arranca nada (antes: el segundo pisaba el veredicto del primero)");
       btn.dataset.vglEnCurso = "";
       btn.onclick();
-      t.igual(choosers(), 1, "sin nada en vuelo, el clic abre el chooser como siempre");
+      t.cierto(btn.innerHTML.indexOf("Buscando resultados") >= 0, "sin nada en vuelo, el clic arranca la búsqueda");
     });
 
     // =====================================================================
@@ -5976,7 +5949,9 @@ module.exports = {
       t.cierto(/id="vgl-paquete-title">\$\{ICO\.pkg\} \$\{VGL_ROTULOS\.control\}/.test(src), "título de Próximo control");
       t.cierto(/MTR_ICONO_ACTIVITY \+ VGL_ROTULOS\.panel \+ '<\/div>'/.test(src), "título del Panel");
       t.cierto(/MTR_IA_ICONOS\.pluma \+ VGL_ROTULOS\.redactar \+ ' · Redacción asistida/.test(src), "título del Redactor");
-      t.cierto(/titulo: VGL_ROTULOS\.examenes,/.test(src), "el chooser de Exámenes");
+      // v18.14.4 — el rótulo «Exámenes» se retiró del diccionario con el menú de dos
+      // opciones: el botón ya no abre cuadro de elección (va derecho a la lectura universal).
+      t.falso(/VGL_ROTULOS\.examenes/.test(src), "el rótulo «Exámenes» ya no vive en el diccionario");
       t.cierto(/use «\$\{VGL_ROTULOS\.agendar\}»; para pedir exámenes nuevos, «\$\{VGL_ROTULOS\.ordenar\}»/.test(src), "la leyenda de Laboratorios remite a «Agendar» y «Ordenar», no a nombres que no están en el dock");
       t.falso(/use Programación de cita;/.test(src), "el nombre viejo a secas ya no se usa como referencia");
       await c.api.openLaboratoriosModal({ doc_id: "111111", nombre: "PACIENTE PRUEBA" });
@@ -6015,7 +5990,9 @@ module.exports = {
       t.igual(c.env.storage.getItem("vgl_chooser_"), null, "sin `recordar` no se guarda nada");
       t.cierto(!!sinRec, "y el cuadro abre igual");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/titulo: VGL_ROTULOS\.examenes,[\s\S]{0,200}recordar: "examenes",/.test(src), "el menú de «Exámenes» recuerda");
+      // v18.14.4 — el menú de «Exámenes» ya no existe (una sola lectura posible): no deja
+      // recuerdo porque no hay nada que recordar.
+      t.falso(/recordar: "examenes"/.test(src), "el menú de «Exámenes» se retiró con su recuerdo");
     });
 
     await t.casoAsync("v18.0.112 (C12): con antecedentes por documentar, el dock muestra el botón atenuado «📝 Faltan antecedentes» en lugar del Panel, y abre el ayudante", async () => {

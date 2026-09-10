@@ -14256,3 +14256,30 @@ en esas dos ventanas).
 | user.js `a5ResumenLinea` L15787 — singular/plural de la línea | el ternario del singular por el plural fijo (`nEst + " estudios pendientes de ordenar"`) | NO | suite_91 caso «F2/a5ResumenLinea (v18.14.3, decisión 4.2)…» («y un estudio, en singular» → obtuvo false): EXIT 1 (27 ok, 1 falla). Restaurado 28 ok EXIT=0 |
 | user.js `CONFIG.SP.base.horasRefresco` L10689 — ventana exclusiva del refresco (decisión 4.5) | `[6, 12]` → `[6, 12, 18]` (una tercera ventana que el comité NO aprobó: el anexo se actualizaría también a las 18:00) | NO | suite_102 caso «ventana de refresco (decisión 4.5)…» («solo dos ventanas: 06:00 y 12:00: esperaba "6,12" y obtuvo "6,12,18"») + suite_92 (2 casos de ventana rojos): EXIT 1 (8 ok, 1 falla) y (38 ok, 2 fallan). Restaurado 9 ok / 40 ok EXIT=0 |
 | user.js `avisoUniversal` L17065 — el anexo NO se exime del presupuesto (decisión 4.4, APROBADA) | `const exentoR3 = !!(abandono \|\| prioridadRcv);` → `!!(abandono \|\| prioridadRcv \|\| anexo5)` (el anexo saltaría el tope diario de interrupciones, que es justo lo que el comité aprobó NO hacer) | NO | suite_102 caso «presupuesto (decisión 4.4, aprobada): el Anexo 5 sigue SUJETO al tope diario…»: mutante rojo. Lo cazan DOS aserciones independientes: la de fuente («la exención del nivel 3 sigue siendo exactamente abandono RCV + prioridadRcv» → obtuvo false, la que reporta el runner por orden) y la de comportamiento («con el cupo agotado, un aviso que SOLO trae el anexo queda suprimido» → el aviso se pintaría y devolvería true). EXIT 1 (9 ok, 1 falla). Restaurado 10 ok EXIT=0 |
+
+## v18.14.4 — Se retira la opción de 90 días del botón «Exámenes» (con su menú entero) y los dos avisos AMBAR que interrumpían sin decidir nada
+
+Orden del médico del 10-sep-2026 (captura del selector de «Exámenes»). Lo que cambió en
+código: (1) el botón `🧪 Exámenes` ya NO abre cuadro de elección —queda una sola lectura
+posible, la universal—, así que el clic va derecho a `_ejecutarLlenadoExamenes(docId, btn)`;
+(2) se retiraron `MTR_LABS_VENTANA_RECIENTE_DIAS` y `_mtrLabsRecientes` con sus dos llamadas,
+la clave `examenes` de `VGL_ROTULOS` y el recuerdo `vgl_chooser_examenes`; (3) se retiró el
+AMBAR «Se agregó parte de lo pendiente» («No se pudo con: …») en sus DOS entradas de
+«Ordenar pendientes» —la tabla del widget sigue mostrando qué entró y qué no— y el AMBAR
+«Exámenes · sin casilla». La conducta NO cambió: lo que no se pudo agregar no se agrega y lo
+que no tiene casilla no se escribe; solo dejaron de salir los avisos. El verde de éxito
+ahora sale ÚNICAMENTE cuando no falló ninguno.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `btn.onclick` del inyector L8111 — el clic va derecho a buscar | el `_ejecutarLlenadoExamenes(docId, btn);` directo devuelto a un `_vglChooserModal({ opciones: [{ id: "ultima", … }, { id: "historial", … }] })` (alguien vuelve a poner el menú de dos opciones) | NO | suite_90 caso «CONTRATO (v18.14.4) — el botón «Exámenes» ya NO abre menú…» («la opción de 90 días («Última toma completa») se retiró» → obtuvo true): EXIT 1 (23 ok, 1 falla). Y suite_102 caso «fuente (F1): la pastilla 📋 Anexo 5…» («sin rastro de lo retirado en v18.14.4: id: "ultima"» → obtuvo true): EXIT 1 (9 ok, 1 falla). Restaurado 24 ok / 10 ok EXIT=0 |
+| user.js `_ejecutarLlenadoExamenes` L8136 — la lista que se escribe es la que Athenea trajo | reinsertado un recorte por fecha justo después de llenar la caché: `if (labs) labs = labs.filter((l) => String(l.fechaResultado \|\| "") >= "2026-06-01");` | NO | suite_15 caso «v18.14.4: el flujo de Exámenes cachea la lectura ÍNTEGRA y no filtra por fecha…» (««labs» se asigna una sola vez: ningún filtro posterior puede esconder un analito: esperaba 1 y obtuvo 2») + 4 casos de flujo rojos por el recorte: EXIT 1 (270 ok, 5 fallan). Restaurado 275 ok EXIT=0. NOTA: esta guarda es general (cuenta ASIGNACIONES a `labs`, no el nombre del filtro), así que caza cualquier reaparición del recorte aunque se llame distinto |
+| user.js `_cwoClic` L7526 — el AMBAR «No se pudo con: …» de «Ordenar pendientes» | la telemetría del conteo devuelta al `showToast("AMBAR", "Se agregó parte de lo pendiente", … "No se pudo con: " + …)` | NO | suite_102 caso «fuente (F1): la pastilla 📋 Anexo 5…» («sin rastro de lo retirado en v18.14.4: Se agregó parte de lo pendiente» → obtuvo true): EXIT 1 (9 ok, 1 falla). Restaurado 10 ok EXIT=0 |
+| user.js `_ejecutarLlenadoExamenes` L8228 — el AMBAR «Exámenes · sin casilla» | reinsertado el `showToast("AMBAR", "Exámenes · sin casilla", …, "labs\|" + docId)` dentro del bloque `sinCasilla` | NO | Lo cazan DOS aserciones independientes: suite_15 «v18.0.104: cuatro avisos de Auto-Labs…» («los cinco avisos de Auto-Labs viajan con apptKey «labs\|cédula»: esperaba 5 y obtuvo 6») y suite_102 («sin rastro de lo retirado en v18.14.4: Exámenes · sin casilla» → obtuvo true). EXIT 1 (274 ok, 1 falla) y (9 ok, 1 falla). Restaurado 275 ok / 10 ok EXIT=0 |
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.814 pasan, EXIT 0**;
+`node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.4 sincronizada en los 4
+puntos: header, const, package.json y suite_75). Las 4 mutaciones de arriba, rojas y
+restauradas. Baja de 3.817 a 3.814: se retiraron los 3 casos de `_mtrLabsRecientes` (6
+comprobaciones) y se añadieron 3 guardas nuevas (la del censo de suite_102 y las dos de
+suite_15/suite_90).

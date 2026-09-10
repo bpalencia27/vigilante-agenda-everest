@@ -15,7 +15,8 @@
 //   1. mtrUroRecomendacion — el motor PURO de recomendación (qué término
 //      sugiere el perfil de Labs + síntomas, y con qué fundamento).
 //   2. CONTRATOS DE FUENTE — el léxico completo y el hook en el camino
-//      común de éxito de _ejecutarLlenadoExamenes (ambos modos).
+//      común de éxito de _ejecutarLlenadoExamenes (v18.14.4: un solo
+//      camino, sin menú de elección).
 //   3. _vglMenuInterpretacionUro — el menú con DOM real del arnés: solo
 //      abre con casilla vacía y mismo paciente; al elegir escribe vía
 //      setNgValue y registra el fundamento; las guardas (casilla llena,
@@ -130,11 +131,11 @@ module.exports = {
       t.igual(new Set(terminos).size, 12, "sin términos repetidos");
     });
 
-    t.caso("CONTRATO — las opciones 1 y 2 del botón «Exámenes» desembocan en _ejecutarLlenadoExamenes", () => {
-      t.cierto(FUENTE.indexOf('{ id: "ultima"') >= 0, "existe la opción 1 (última toma completa)");
-      t.cierto(FUENTE.indexOf('{ id: "historial"') >= 0, "existe la opción 2 (historial por analito)");
-      t.cierto(FUENTE.indexOf("onPick: (modo) => { _ejecutarLlenadoExamenes(docId, btn, modo); }") >= 0,
-        "ambas opciones entran por el MISMO camino de llenado");
+    t.caso("CONTRATO (v18.14.4) — el botón «Exámenes» ya NO abre menú: entra directo al camino de llenado", () => {
+      t.falso(FUENTE.indexOf('{ id: "ultima"') >= 0, "la opción de 90 días («Última toma completa») se retiró");
+      t.falso(FUENTE.indexOf('{ id: "historial"') >= 0, "y con ella el menú entero: queda una sola lectura, la universal");
+      t.cierto(FUENTE.indexOf("_ejecutarLlenadoExamenes(docId, btn);") >= 0,
+        "el clic entra DIRECTO por el camino de llenado, sin cuadro de elección");
     });
 
     t.caso("CONTRATO — tras el llenado exitoso se ofrece el menú de interpretación (camino común, una sola vez)", () => {
@@ -146,7 +147,7 @@ module.exports = {
       // La primera función del IIFE declarada DESPUÉS del inicio marca el fin del cuerpo:
       // el hook debe quedar antes de ella (dentro de _ejecutarLlenadoExamenes).
       const iSgteFn = FUENTE.indexOf("\n  function ", iFn + 10);
-      t.cierto(iSgteFn > iHook, "el hook vive DENTRO de _ejecutarLlenadoExamenes: lo cubren ambos modos");
+      t.cierto(iSgteFn > iHook, "el hook vive DENTRO de _ejecutarLlenadoExamenes: lo cubre el único camino de llenado");
       const iToastExito = FUENTE.indexOf('labs|" + docId', iFn);
       t.cierto(iToastExito > 0 && iHook > iToastExito, "se ofrece tras el aviso de éxito, no en los abortos");
       // Y no hay una segunda llamada con (docId, labs): el menú no puede abrirse dos veces.

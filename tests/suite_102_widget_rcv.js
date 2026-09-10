@@ -403,6 +403,11 @@ module.exports = {
       for (const muerto of ["vgl-rcv-pendientes", "vgl_rcvp_pos", "rcvPendientesClamparPos", "_rcvpPillAsegurar", "_rcvpMinimizar", "rcvPendientesHtml"]) {
         t.falso(codigo.indexOf(muerto) >= 0, "sin rastro del panel retirado: " + muerto);
       }
+      // v18.14.4 — retirados por orden del médico: la opción de 90 días de «Exámenes» con su
+      // filtro, el menú de elección que ya no decidía nada, y los dos avisos AMBAR.
+      for (const muerto of ["_mtrLabsRecientes", "MTR_LABS_VENTANA_RECIENTE_DIAS", 'id: "ultima"', "VGL_ROTULOS.examenes", "Se agregó parte de lo pendiente", "Exámenes · sin casilla"]) {
+        t.falso(codigo.indexOf(muerto) >= 0, "sin rastro de lo retirado en v18.14.4: " + muerto);
+      }
       // v18.14.3 (4.1 opción B) — el panel del anexo DENTRO de la historia también se
       // retiró: ni función, ni nodo, ni su barra de Deshacer, ni su región aria-live.
       for (const muerto of ["hcAnexo5Render", "vgl-a5-panel", "vgl-a5-deshacer", "vgl-a5-live", "_vglA5Cerrados", "_vglA5Anunciado"]) {

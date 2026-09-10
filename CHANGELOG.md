@@ -4,6 +4,33 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.4] — 2026-09-10 (Menos preguntas y menos avisos: el asistente se calla lo que no decide nada)
+
+**El botón «🧪 Exámenes» ya no le pregunta nada: trae todo, siempre.**
+Antes, al pulsarlo, salía un cuadro con dos opciones —«Última toma completa» (solo los
+resultados de los últimos 90 días) e «Historial por analito» (sin límite de tiempo)—. La
+primera se retiró por completo. Ahora el botón va derecho a buscar y trae **el último
+resultado de cada analito, sin importar cuándo se hizo**: ningún examen vigente se queda
+fuera por tener una fecha vieja, y usted se ahorra una decisión en cada consulta.
+
+**Dejan de aparecer dos avisos ámbar que interrumpían sin resolver nada.**
+El primero salía al pulsar «Ordenar lo pendiente» cuando alguno de los exámenes no entraba
+en el sistema: le repetía la lista de lo que no se pudo agregar. El segundo salía al llenar
+exámenes cuando un resultado llegaba pero la pantalla abierta no tenía dónde escribirlo.
+Ninguno de los dos cambia lo que el asistente hace —lo que no entra sigue sin entrar, y lo
+que no tiene casilla sigue sin escribirse—: solo dejan de taparle la consulta con un aviso
+que usted ya puede ver donde corresponde (la tabla de pendientes y el módulo de
+Laboratorios). Se conservan intactos los avisos que sí exigen una acción suya.
+
+**Lo que NO cambió.** El asistente sigue sin inventar ni sobrescribir nada: si un resultado
+no se pudo escribir, no se escribe en ningún otro lado, y si un examen no se pudo ordenar,
+no se ordena. Los avisos verdes de «se agregó» y «casillas escritas» siguen saliendo igual.
+
+Verificación: banco de pruebas completo en verde (3.814 comprobaciones), con las mutaciones
+de control documentadas en `tests/INFORME_MUTACIONES.md` (sección «v18.14.4»).
+
+---
+
 ## [Versión 18.14.3] — 2026-09-10 (El Anexo 5 queda en un solo lugar, y su aviso dice el hecho en una línea)
 
 **El Anexo 5 ya no aparece tres veces.** Al abrir la historia clínica salía un panel con el

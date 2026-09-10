@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.3
+// @version      18.14.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7516,9 +7516,14 @@
       if (r.agregados.length) {
         markOrdenLabsConductaHoy(docId, r.agregados);
         const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+        // v18.14.4 — el AMBAR «Se agregó parte de lo pendiente» («No se pudo con: …») se
+        // RETIRA por orden del médico. Lo que no entró queda a la vista en la tabla del
+        // widget, que es donde él lo revisa; el aviso flotante solo repetía esa lista. La
+        // conducta NO cambia: lo que no se pudo agregar no se agrega, jamás se finge que sí
+        // —por eso el verde de éxito solo sale cuando no falló ninguno—, y el conteo sigue
+        // viajando a la telemetría.
         if (r.fallidos.length) {
-          const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
-          showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
+          try { uxTrack("widget.ordenarConducta.fallidos", { n: r.fallidos.length }); } catch (eF) {}
         } else {
           showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
         }
@@ -8006,44 +8011,15 @@
     return modal;
   }
 
-  // v18.0.64 — ORDEN DEL MÉDICO (01-sep, con captura del selector): «EL BOTÓN DE ÚLTIMA
-  // TOMA COMPLETA DEBE FUNCIONAR COMO EL DE ABAJO DE TODOS LOS ANALITOS, LA DIFERENCIA ES
-  // QUE SOLAMENTE TRAE A LA PANTALLA LOS RESULTADOS DE LOS ÚLTIMOS 90 DÍAS … PARA AMBOS
-  // DEBE SER EL ÚLTIMO RESULTADO DISPONIBLE POR CADA ANALITO PERO RESPETANDO ESAS
-  // CONDICIONES».
-  //
-  // NO estaba configurado así. La versión anterior (_mtrLabsSoloUltimaToma, v17.x.x) se
-  // quedaba con los resultados de UNA sola fecha: la máxima. Si la toma más fresca solo
-  // traía creatinina y glicemia, el LDL de doce días antes —dentro de los 90— DESAPARECÍA
-  // de la pantalla, aunque fuera el último resultado disponible de ese analito. Las dos
-  // opciones deben elegir igual (el último de cada analito, que es lo que ya hace
-  // injectLabsIntoCronicos); lo único que cambia es la VENTANA: aquí 90 días, abajo sin
-  // límite.
-  const MTR_LABS_VENTANA_RECIENTE_DIAS = 90;
-  function _mtrLabsRecientes(labs, hoyIso) {
-    if (!Array.isArray(labs) || !labs.length) return labs;
-    const hoy = mtrFechaDesdeIso(hoyIso || todayStamp());
-    if (!hoy) return labs;
-    let algunaFechaLegible = false;
-    const dentro = [];
-    for (const lab of labs) {
-      let iso = null;
-      try { const f = _extractAtheneaFecha(lab); iso = f && f.iso ? f.iso : null; } catch (e) { iso = null; }
-      if (!iso) continue;                       // sin fecha no se puede afirmar que es reciente
-      const f = mtrFechaDesdeIso(iso);
-      if (!f) continue;
-      algunaFechaLegible = true;
-      const dias = Math.round((hoy.getTime() - f.getTime()) / 86400000);
-      // El -1 absorbe el desfase de zona horaria de un resultado de HOY; no es una ventana
-      // hacia el futuro, es el mismo día visto desde otro huso.
-      if (dias >= -1 && dias <= MTR_LABS_VENTANA_RECIENTE_DIAS) dentro.push(lab);
-    }
-    // Si NINGUNA fecha se pudo leer, el filtro no sabe nada y devolver una lista vacía
-    // sería borrarle la pantalla al médico por un fallo de parseo. Se devuelve tal cual,
-    // igual que hacía la versión anterior: no se descarta nada a ciegas.
-    if (!algunaFechaLegible) return labs;
-    return dentro;
-  }
+  // v18.14.4 — ORDEN DEL MÉDICO (10-sep): RETIRADA la opción de 90 días («Última toma
+  // completa»). El menú de «🧪 Exámenes» ofrece EXCLUSIVAMENTE la lectura universal —el
+  // último resultado de cada analito, sin límite temporal—, que es la que ya hacía
+  // injectLabsIntoCronicos. Con la opción se fueron su constante y su filtro
+  // (`MTR_LABS_VENTANA_RECIENTE_DIAS`, `_mtrLabsRecientes`): ya no hay ningún recorte por
+  // fecha en este flujo, así que tampoco hay una ventana que pueda esconder un analito
+  // vigente. El menú de dos opciones desaparece con ella: un solo camino no se pregunta.
+  // (El recorte por fecha vivía aquí: `MTR_LABS_VENTANA_RECIENTE_DIAS` y `_mtrLabsRecientes`
+  // se retiraron en la v18.14.4 junto con la opción de 90 días del menú de Exámenes.)
 
   // [REQ 07-sep — interpretación general del uroanálisis] EL MENÚ. Se invoca ~1,5 s
   // después del llenado del botón «🧪 Exámenes» (opciones «Última toma completa» e
@@ -8132,19 +8108,12 @@
               _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧪 Exámenes");
               return;
           }
-          _vglChooserModal({
-              titulo: VGL_ROTULOS.examenes,
-              descripcion: "¿Qué resultados traigo a la historia? (Enter: la de la última vez · 1/2: por número)",
-              recordar: "examenes",   // v18.0.112 (C20)
-              opciones: [
-                  { id: "ultima", icono: "🧪", rotulo: "Última toma completa", desc: "El último resultado de cada analito, solo si se hizo en los últimos " + MTR_LABS_VENTANA_RECIENTE_DIAS + " días." },
-                  { id: "historial", icono: "🗂", rotulo: "Historial por analito", desc: "El último resultado de cada analito, sin importar cuándo se hizo." },
-              ],
-              onPick: (modo) => { _ejecutarLlenadoExamenes(docId, btn, modo); },
-          });
+          // v18.14.4 — SIN menú. Quedaba una sola lectura posible (la universal), y un menú
+          // de una opción es una interrupción que no decide nada: el clic va derecho a buscar.
+          _ejecutarLlenadoExamenes(docId, btn);
       };
 
-      async function _ejecutarLlenadoExamenes(docId, btn, modo) {
+      async function _ejecutarLlenadoExamenes(docId, btn) {
           try { btn.dataset.vglEnCurso = "1"; } catch (e) {}
           btn.innerHTML = "⏳ Buscando resultados de laboratorio...";
           uxTrack("labs.autollenado.click");
@@ -8160,22 +8129,11 @@
               // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
               // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
               // el robot no repita esta misma consulta 30 s después.
-              // v18.0.131 (barrido por recorridos, hallazgo 5) — se cachea la lectura ÍNTEGRA,
-              // ANTES del recorte de «Última toma completa» que viene abajo. La caché
-              // (_labsPrefetch) la comparte todo el script durante 10 min (Panel, Agendar,
-              // Redactor IA): si se cachea ya recortada a 90 días, un analito vigente tomado
-              // hace 120 días desaparece del resto del script, no solo de esta escritura — y
-              // la ventana de 90 días es una decisión de QUÉ SE ESCRIBE en la historia con
-              // esta opción concreta, no de qué sabe el script del paciente.
+              // v18.0.131 (barrido por recorridos, hallazgo 5) — se cachea la lectura ÍNTEGRA.
+              // v18.14.4 — ya no hay recorte posterior que pudiera envenenar esta caché (la
+              // opción de 90 días se retiró), pero el orden se conserva: la caché compartida
+              // (Panel, Agendar, Redactor IA) guarda lo que Athenea trajo, sin filtrar.
               if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
-              // v18.0.64 — opción «Última toma completa»: se recorta la VENTANA a los
-              // últimos 90 días y la elección del último por analito la sigue haciendo
-              // injectLabsIntoCronicos, igual que en la opción de abajo.
-              if (modo === "ultima" && labs && labs.length > 0) {
-                  const _antes = labs.length;
-                  labs = _mtrLabsRecientes(labs);
-                  if (labs.length !== _antes) uxTrack("labs.autollenado.solo_recientes", { antes: _antes, despues: labs.length });
-              }
               if (labs && labs.length > 0) {
                   const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r = injectLabsIntoCronicos(labs, docId, await _contextoOficialParaLabs(docId));
@@ -8259,27 +8217,14 @@
                   // motor clínico destacada. 1,5 s: deja aterrizar los reintentos de los
                   // componentes (300/900 ms). Cerrar sin elegir la deja vacía, como siempre.
                   setTimeout(() => { try { _vglMenuInterpretacionUro(docId, labs); } catch (eUro) {} }, 1500);
-                  // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
-                  // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
-                  // casilla en esta vista» que prometía el comentario del código no existía.
-                  // Por eso el médico reportaba una y otra vez «la fecha del uroanálisis no
-                  // se llena» sin que el asistente dijera jamás que no había dónde
-                  // escribirla. Un resultado que llegó de Athenea y no se pudo escribir es
-                  // información clínica que él necesita: si no se dice, se queda creyendo
-                  // que la historia quedó diligenciada.
+                  // v18.14.4 — ORDEN DEL MÉDICO (10-sep): el aviso AMBAR «Exámenes · sin
+                  // casilla» se RETIRA. `sinCasilla` sigue calculándose y sigue contándose en
+                  // la telemetría (es el diagnóstico de «llegó un resultado y esta pantalla no
+                  // tiene dónde escribirlo»), pero deja de interrumpir con un aviso flotante:
+                  // los analitos sin casilla se ven en el módulo de Laboratorios, que es donde
+                  // el médico los consulta. El asistente no cambia de conducta —sigue sin
+                  // inventar ni escribir en otra parte—, solo deja de avisar por pantalla.
                   if (Array.isArray(r.sinCasilla) && r.sinCasilla.length) {
-                      const _nombresSc = r.sinCasilla.map((k) => {
-                          const w = WHITELIST_13_LABS.find((x) => x.key === k);
-                          return (w && w.names && w.names[0]) ? w.names[0] : String(k).replace(/_/g, " ");
-                      });
-                      // 02-sep (cierre adversarial, fila 44) — títulos DISTINTOS para los avisos
-                      // AMBAR de este clic: showToast deduplica por apptKey|título dentro del
-                      // mismo flush, así que el VERDE de éxito («Exámenes») se tragaba el AMBAR
-                      // de obligatoriasVacias —el arreglo #41 era mudo justo cuando Auto-Labs
-                      // hacía su trabajo— y «sin casilla» e «implausibles» se tragaban entre sí.
-                      showToast("AMBAR", "Exámenes · sin casilla",
-                          "Llegaron resultados de " + _nombresSc.join(", ") + " pero esta pantalla no tiene la casilla donde escribirlos. "
-                          + "Reviselos en el módulo de Laboratorios y escríbalos a mano si hacen falta.", false, "labs|" + docId);
                       try { uxTrack("labs.autollenado.sincasilla", { n: r.sinCasilla.length }); } catch (e) {}
                   }
                   // v17.6.8 — AUDITORÍA 5 MÓDULOS: el bloqueo por plausibilidad era MUDO
@@ -8321,7 +8266,6 @@
                       if (okl) {
                           btn.innerHTML = "⏳ Reintentando…";
                           let labs2 = await getAtheneaLabsAuto(docId);
-                          if (modo === "ultima" && labs2 && labs2.length > 0) labs2 = _mtrLabsRecientes(labs2);
                           if (labs2 && labs2.length > 0) {
                               const _fotoRC = Array.from(document.querySelectorAll('input[id^="resultado"], input[id^="fechaResult"]')).map((el) => ({ el, prev: String(el.value == null ? "" : el.value) }));
                   const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
@@ -8496,7 +8440,6 @@
     panel: "Panel del paciente",
     redactar: "Redactar",
     control: "Próximo control",
-    examenes: "Exámenes",
     faltan: "Faltan antecedentes",
   });
   // v18.0.112 (C12) — abre el ayudante de llenado con lo que falta; si esas casillas no se
@@ -27175,9 +27118,11 @@
           if (r.agregados.length) {
             markOrdenLabsConductaHoy(docId, r.agregados);
             const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+            // v18.14.4 — mismo retiro que en la otra entrada de «Ordenar pendientes»: sin
+            // AMBAR «No se pudo con: …». La tabla del widget es la que muestra qué entró y
+            // qué no; el verde solo sale cuando no falló ninguno.
             if (r.fallidos.length) {
-              const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
-              showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
+              try { uxTrack("widget.paquete.ordenar.fallidos", { n: r.fallidos.length }); } catch (eF) {}
             } else {
               showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
             }
