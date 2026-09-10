@@ -1,48 +1,8 @@
-# Vigilante de Agenda — exclusiones estándar
-#
-# v17.6.1 — este archivo no existía en la copia de trabajo (verificado el 2026-08-22).
-# Sin él, un `git add -A`/`git add .` de rutina puede colar caché de Python compilada
-# (que arrastra lo que sea que esté en los .py de origen) o capturas de red con datos
-# reales de pacientes hacia un commit sin que nadie lo note — exactamente el patrón que
-# ya documentó docs/SECRETOS_EXPUESTOS.md para otros secretos históricos. Revise que este
-# archivo también exista (o fusione estas líneas) en la copia real del repositorio en su
-# equipo; esta copia de trabajo en la nube es independiente de esa.
-
-# Caché de bytecode de Python — se regenera sola, no debe versionarse
-__pycache__/
-*.pyc
-*.pyo
-
-# Capturas de red (HTTP Archive) — pueden contener datos reales de pacientes y
-# credenciales/cookies de sesión vivas
-*.har
-
-# Entornos virtuales y artefactos locales comunes
-.venv/
-venv/
-*.egg-info/
-.pytest_cache/
-
-# Node
-node_modules/
-respaldos/
-docs/propuesta_bento/index.html
-
-# 02-sep — también el ENLACE SIMBÓLICO (node_modules/ solo cubre el directorio real)
-node_modules
-
-# Wrangler — estado local del despliegue de REPLICA_TELEMETRIA (sesión OAuth, caché):
-# jamás se versiona. El deploy se hace a mano (tarea del frente) y el estado
-# sobra del repo.
-REPLICA_TELEMETRIA/.wrangler/
-
-# 09-sep — Artefactos de depuración de los agentes (skill TRAE-debugger). Son
-# efímeros y propios de cada sesión: se borran al cerrar el caso, nunca se
-# versionan (ver docs/FLUJO_MULTI_IDE.md §9).
-debug-*.md
-trae-debug-log-*.ndjson
-.dbg/
-
-# 09-sep — Identidad LOCAL del entorno (a qué entorno/modelo pertenece este
-# checkout). El candado .vgl-locks/ SÍ se versiona: es el canal compartido.
-.vgl-env.json
+﻿node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+.vscode/
+.idea/
