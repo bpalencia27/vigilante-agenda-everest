@@ -4,6 +4,28 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.5] — 2026-09-10 (La fecha del control vuelve a moverse con el plan de laboratorio)
+
+**La tarjeta «🧪 Agendar también la Toma de Muestras» ya no se queda con la fecha vieja.**
+Al mover la fecha del control —pulsando otro día, escribiéndola en el calendario o cuando el
+asistente salta solo al día que sí tiene agenda—, el texto de esa tarjeta seguía mostrando la
+fecha anterior (`… → control 09/10/2026` aunque usted ya hubiera puesto el 08/01/2027),
+mientras el resumen del paso 3 sí decía la fecha nueva. Las dos partes del asistente decían
+cosas distintas sobre la misma cita. Ahora el «→ control» se actualiza **en el mismo
+instante** en que usted cambia la fecha, por cualquier camino, y coincide siempre con la
+«Fecha deseada» que aparece arriba y con el resumen final. La hora y la fecha de la toma se
+siguen calculando igual que antes (5 días hábiles antes del control, o lo que usted haya
+elegido a mano).
+
+**Lo que NO cambió.** El asistente sigue sin inventar ni mover nada por su cuenta: si usted
+eligió la fecha de la toma a mano, se respeta; si no hay cupo verificado, se dice; y la cita
+solo se crea cuando usted confirma.
+
+Verificación: banco de pruebas completo en verde (3.817 comprobaciones), con las mutaciones
+de control documentadas en `tests/INFORME_MUTACIONES.md` (sección «v18.14.5»).
+
+---
+
 ## [Versión 18.14.4] — 2026-09-10 (Menos preguntas y menos avisos: el asistente se calla lo que no decide nada)
 
 **El botón «🧪 Exámenes» ya no le pregunta nada: trae todo, siempre.**

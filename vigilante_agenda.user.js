@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.4
+// @version      18.14.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30447,7 +30447,11 @@
       const vigilaHora = setInterval(() => {
         try {
           if (!vivo()) { clearInterval(vigilaHora); return; }
-          _pintarPlanHora();
+          // v18.14.5 — el vigilante repinta la LÍNEA COMPLETA, no solo la hora: así el
+          // «→ control» sigue a la fecha de control por cualquier camino que la mueva, incluso
+          // uno que no pase por `cargarHoras()`. Es la red de seguridad del punto único; la
+          // ruta normal (el clic) se pinta al instante, esta solo cubre lo imprevisto.
+          _pintarPlanLinea();
         } catch (e) { clearInterval(vigilaHora); }
       }, 1500);
     }
@@ -30458,11 +30462,15 @@
       _planDet.classList.toggle("vgl-d-none", abierto);
       _planCambiar.textContent = abierto ? "✎ Cambiar fecha u hora" : "▲ Ocultar ajustes";
     });
+    let _planCtrlUltimo = null;
     function _pintarPlanLinea() {
       const el = modal.querySelector("#vgl-agm-plan-ctrl");
       if (!el) return;
-      el.innerHTML = (selectedDateInfo && selectedDateInfo.fmt)
+      const texto = (selectedDateInfo && selectedDateInfo.fmt)
         ? ` → control <b>${escapeHtml(selectedDateInfo.fmt)}</b>` : "";
+      // Sin parpadeo: el vigilante de abajo llama a esta función cada 1,5 s, y reescribir el
+      // mismo HTML no aporta nada. Solo se toca el DOM cuando el texto cambia de verdad.
+      if (_planCtrlUltimo !== texto) { _planCtrlUltimo = texto; el.innerHTML = texto; }
       _pintarPlanHora();
     }
     // v16.1.0 — PEDIDO DEL MÉDICO: «las fechas y la hora siempre visibles». La hora de la
@@ -30630,6 +30638,14 @@
     // que no sea un objeto con agendas cae a la consulta real de siempre.
     async function cargarHoras(resAgendasCrudas) {
       if (!selectedDateInfo) return;
+      // v18.14.5 — PUNTO ÚNICO DE LA FECHA DE CONTROL. `cargarHoras()` es el estrangulamiento
+      // por el que pasa TODO cambio de la fecha de control: el clic en un chip de día, el salto
+      // automático al día con agenda propia, el calendario manual y cualquier `renderDayChips`.
+      // La línea del plan («— toma … → control …») se pintaba SOLO desde la rama de la
+      // preselección ⭐, así que al mover la fecha el «→ control» quedaba vacío o pegado al
+      // valor anterior mientras el resumen del paso 3 sí decía la fecha nueva. Se repinta aquí,
+      // en el mismo tick y ANTES de cualquier `await`: el cambio se ve sin esperar red.
+      try { _pintarPlanLinea(); } catch (ePlan) {}
       const token = ++_cargarHorasToken;
       selectedTurnoObj = null;
       selectedTurnoCtx = null;

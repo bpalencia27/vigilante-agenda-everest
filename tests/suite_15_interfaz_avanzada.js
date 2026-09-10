@@ -2936,6 +2936,98 @@ module.exports = {
       t.cierto(botonTurno.classList.contains("active"));
     });
 
+    // =====================================================================
+    // v18.14.5 — LA FECHA DE CONTROL DEL PLAN SE QUEDABA PEGADA (reporte con captura:
+    // «toma 30/12/2026 … → control 09/10/2026» con la Fecha del Control ya en 08/01/2027).
+    // Evidencia de runtime (Debug Server, sesión `agendar-plan-control-stale`): el span
+    // `#vgl-agm-plan-ctrl` se pintaba SOLO desde la rama de la preselección ⭐, así que al
+    // mover la fecha de control no se repintaba — quedaba vacío, o pegado al valor viejo,
+    // mientras el resumen del paso 3 sí decía la fecha nueva. `cargarHoras()` es el
+    // estrangulamiento de TODO cambio de fecha; ahí vive el repintado.
+    // =====================================================================
+    const cargarAgendaCompleta = () => cargar({
+      silencioso: true,
+      fetch: async (url) => {
+        const u = String(url);
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [{ id: 9, descripcion: "Nefroprotección", swProgramaEspecial: true }] } });
+        if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+        if (u.includes("BuscarCitasDisponibles")) {
+          const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+          return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+        }
+        if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+        if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:40 AM", estado: "ACT" }] });
+        return respuestaJson({});
+      },
+      gmxhr: (o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "07:36:00" }] }) });
+        else if (o.onerror) o.onerror("url no simulada");
+      },
+    });
+    const abrirPaso2 = async () => {
+      const c = cargarAgendaCompleta();
+      enriquecerDom(c);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(60);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const q = (id) => modal.querySelector("#" + id);
+      disparar(q("vgl-step-1-next"), "click");
+      await esperar(120);
+      return { c, q };
+    };
+    const fechaDe = (nodo) => (String((nodo && nodo.innerHTML) || "").match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1];
+
+    await t.casoAsync("v18.14.5: al mover la fecha de control, el «→ control» del plan se repinta y coincide con la Fecha deseada", async () => {
+      const { q } = await abrirPaso2();
+      const chips = q("vgl-day-chips").children;
+      t.cierto(chips.length > 1, "hay chips de día de control: " + chips.length);
+      const antes = String(q("vgl-agm-plan-ctrl").innerHTML || "");
+      const otro = chips.find((b) => b && b.classList && !b.classList.contains("active"));
+      t.cierto(!!otro, "hay un chip de día distinto del central para pulsar");
+      disparar(otro, "click");
+      await esperar(200);
+      const deseada = fechaDe(q("vgl-agm-date-info"));
+      t.cierto(!!deseada, "la «Fecha deseada» dice una fecha legible");
+      const plan = String(q("vgl-agm-plan-ctrl").innerHTML || "");
+      t.cierto(plan.indexOf(deseada) >= 0, "el plan dice la MISMA fecha que la Fecha deseada (obtuvo «" + plan + "», esperaba " + deseada + ")");
+      t.falso(plan === antes, "y no se quedó con el valor anterior («" + antes + "»)");
+    });
+
+    await t.casoAsync("v18.14.5: el calendario manual cruza de año — 08/01/2027 aparece en el plan Y en el resumen del paso 3", async () => {
+      const { q } = await abrirPaso2();
+      const mInp = q("vgl-agm-manual-fecha");
+      t.cierto(!!mInp, "existe el campo de fecha manual del control");
+      mInp.value = "2027-01-08";
+      disparar(mInp, "change");
+      await esperar(200);
+      t.igual(fechaDe(q("vgl-agm-date-info")), "08/01/2027", "la Fecha deseada tomó la fecha manual");
+      t.igual(fechaDe(q("vgl-agm-plan-ctrl")), "08/01/2027", "y el plan la siguió (es el caso de la captura)");
+      disparar(q("vgl-step-2-next"), "click");
+      await esperar(120);
+      const resumen = String(q("vgl-summary-content").innerHTML || "");
+      t.cierto(resumen.indexOf("08/01/2027") >= 0, "el resumen del paso 3 dice lo mismo: plan y resumen no pueden discrepar");
+    });
+
+    t.caso("v18.14.5 (fuente): el plan se repinta en el punto único (cargarHoras) y el vigilante cubre la línea completa", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const iFn = src.indexOf("async function cargarHoras");
+      t.cierto(iFn > 0, "se localiza cargarHoras");
+      const candidatos = [src.indexOf("\n    async function ", iFn + 10), src.indexOf("\n    function ", iFn + 10)].filter((x) => x > iFn);
+      const iFin = candidatos.length ? Math.min(...candidatos) : iFn + 9000;
+      const cuerpo = src.slice(iFn, iFin);
+      t.cierto(/try \{ _pintarPlanLinea\(\); \} catch \(ePlan\) \{\}/.test(cuerpo),
+        "cargarHoras repinta la línea del plan: es el estrangulamiento de TODO cambio de la fecha de control");
+      const iVig = src.indexOf("const vigilaHora = setInterval(");
+      t.cierto(iVig > 0, "se localiza el vigilante de la línea del plan");
+      const bloqueVig = src.slice(iVig, iVig + 700);
+      t.cierto(/_pintarPlanLinea\(\)/.test(bloqueVig), "el vigilante repinta la LÍNEA completa (no solo la hora)");
+      const iPlan = src.indexOf("function _pintarPlanLinea(");
+      t.cierto(iPlan > 0, "se localiza _pintarPlanLinea");
+      t.cierto(/_planCtrlUltimo !== texto/.test(src.slice(iPlan, iPlan + 700)),
+        "y solo toca el DOM si el texto cambió: el vigilante la llama cada 1,5 s y reescribir el mismo HTML parpadea");
+    });
+
     // v18.0.78 — HALLAZGO PENDIENTE (docs/REGLAS_MEDICO_20260901.md, «hazlo»): en modo
     // control-primero (el normal, sin _labsPrimero), la fecha de toma sugerida (5 días
     // hábiles antes del control) tampoco verificaba cupo real en AppCita — mismo defecto
@@ -2986,7 +3078,13 @@ module.exports = {
     // inspección de fuente, mismo patrón que ya usa este archivo para _afinarLabsPrimeroConCupos.
     t.caso("REGRESIÓN — el afinado de cargarHoras respeta labs-primero y la elección manual, y busca hacia atrás sin pasar del ideal (hallazgo pendiente REGLAS_MEDICO #2)", () => {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
-      const zonaCargarHoras = src.slice(src.indexOf("async function cargarHoras("), src.indexOf("async function cargarHoras(") + 2600);   // v18.0.118: el bloque creció con el recuadro de decisión
+      // v18.14.5 — la ventana fija de 2600 caracteres se quedaba corta cada vez que el bloque
+      // crecía (ya pasó en v18.0.118). Se ancla al inicio de la función SIGUIENTE, así el
+      // caso mide la función completa y no depende de una distancia escrita a mano.
+      const _iniCargarHoras = src.indexOf("async function cargarHoras(");
+      const _finCargarHoras = src.indexOf("async function cargarHorasLab(");
+      t.cierto(_iniCargarHoras > 0 && _finCargarHoras > _iniCargarHoras, "se pudo delimitar cargarHoras() por inspección de fuente");
+      const zonaCargarHoras = src.slice(_iniCargarHoras, _finCargarHoras);
       t.cierto(/if \(!_labsPrimero && !_labFechaTomaElegidaManual\) \{/.test(zonaCargarHoras),
         "no se afina en modo labs-primero (ese modo ya se afina con _afinarLabsPrimeroConCupos) ni si el médico ya eligió a mano");
       const zonaAfinar = src.slice(src.indexOf("async function _afinarTomaControlPrimeroConCupos("), src.indexOf("async function _afinarTomaControlPrimeroConCupos(") + 1500);

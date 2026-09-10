@@ -14283,3 +14283,36 @@ puntos: header, const, package.json y suite_75). Las 4 mutaciones de arriba, roj
 restauradas. Baja de 3.817 a 3.814: se retiraron los 3 casos de `_mtrLabsRecientes` (6
 comprobaciones) y se añadieron 3 guardas nuevas (la del censo de suite_102 y las dos de
 suite_15/suite_90).
+
+## v18.14.5 — La fecha de control del plan de laboratorio se quedaba pegada (reporte con captura)
+
+Reporte del médico con captura: con la fecha del control ya movida a **08/01/2027**, la
+tarjeta «🧪 Agendar también la Toma de Muestras» seguía diciendo
+`toma 30/12/2026 … → control 09/10/2026`. Evidencia de runtime (Debug Server, sesión
+`agendar-plan-control-stale`, sondas D1–D4 ya retiradas): el span `#vgl-agm-plan-ctrl` se
+pintaba desde **un solo sitio** — la rama de la preselección ⭐ —, así que al mover la fecha
+por un chip de día, por el calendario manual o por el salto automático al día con agenda
+propia, la línea del plan **no se repintaba** (quedaba vacía o con el valor viejo) mientras
+el resumen del paso 3 sí decía la fecha nueva. `_pintarPlanLinea` no aparecía ni una vez en
+el run `pre`, mientras `cargarHoras` sí recibía la fecha nueva. Fix: (1) `cargarHoras()` es
+el estrangulamiento de TODO cambio de la fecha de control, y ahí se repinta —en el mismo
+tick y ANTES de cualquier `await`—; (2) el vigilante de 1,5 s pasa a repintar la **línea
+completa** (antes solo la hora) como red de seguridad; (3) guarda anti-parpadeo: solo se
+toca el DOM si el texto cambió. Medición post-fix con el driver: plan `30/09/2026` y
+latencia clic→pantalla de **4 ms**.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `cargarHoras` L30654 — el punto único de la fecha de control | retirado el `try { _pintarPlanLinea(); } catch (ePlan) {}` (vuelve a pintarse solo desde la rama de la preselección ⭐: es el bug de la captura) | NO | Lo cazan TRES aserciones independientes, dos de ellas de COMPORTAMIENTO: suite_15 «v18.14.5: al mover la fecha de control, el «→ control» del plan se repinta…» («el plan dice la MISMA fecha que la Fecha deseada (obtuvo «», esperaba 30/09/2026)») y «v18.14.5: el calendario manual cruza de año — 08/01/2027 aparece en el plan Y en el resumen del paso 3» («y el plan la siguió (es el caso de la captura): esperaba "08/01/2027" y obtuvo undefined»), más la guarda de fuente «v18.14.5 (fuente): el plan se repinta en el punto único…». EXIT 1 (275 ok, 3 fallan). Restaurado 278 ok EXIT=0 |
+| user.js vigilante del plan L30454 — la red de seguridad de la línea | `_pintarPlanLinea()` devuelta a `_pintarPlanHora()` (el vigilante vuelve a cubrir solo la hora, como antes de v18.14.5) | NO | suite_15 caso «v18.14.5 (fuente): el plan se repinta en el punto único (cargarHoras) y el vigilante cubre la línea completa» («el vigilante repinta la LÍNEA completa (no solo la hora)» → obtuvo false): EXIT 1 (277 ok, 1 falla). Restaurado 278 ok EXIT=0 |
+| user.js `_pintarPlanLinea` L30473 — la guarda anti-parpadeo | `if (_planCtrlUltimo !== texto) { _planCtrlUltimo = texto; el.innerHTML = texto; }` → `el.innerHTML = texto;` (reescribe el mismo HTML en cada tick del vigilante) | NO | suite_15 caso «v18.14.5 (fuente)…» («y solo toca el DOM si el texto cambió: el vigilante la llama cada 1,5 s y reescribir el mismo HTML parpadea» → obtuvo false): EXIT 1 (277 ok, 1 falla). Restaurado 278 ok EXIT=0 |
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.817 pasan, EXIT 0** (dos corridas
+completas consecutivas); `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.5
+sincronizada en los 4 puntos: header, const, package.json y suite_75). Las 3 mutaciones de
+arriba, rojas y restauradas. Sube de 3.814 a 3.817: **3 casos nuevos** en suite_15 (el
+repintado al mover la fecha, el cruce de año por calendario manual y la guarda de fuente) —
+el contador de esa suite pasó de 275 a 278, exactamente +3. Además se corrigió el anclaje
+del caso preexistente «REGRESIÓN — el afinado de cargarHoras…»: su ventana fija de 2.600
+caracteres dejó de alcanzar el bloque al crecer la función, y ahora se delimita por el
+inicio de la función siguiente (no depende de una distancia escrita a mano).
