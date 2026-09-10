@@ -4,6 +4,18 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.3] — 2026-09-09 (El panel de próximos exámenes de riesgo cardiovascular ya no se abre solo)
+
+El panel «Próximos exámenes · Riesgo cardiovascular» aparecía automáticamente
+al abrir la historia de un paciente inscrito en el programa. Ahora, en su
+lugar, asoma solo una pequeña pastilla con su rótulo — sin ningún dato del
+paciente — y usted decide cuándo pulsarla para ver el panel completo. Al
+cerrarlo, tanto el panel como la pastilla desaparecen para ese paciente.
+
+Verificación: banco de pruebas completo en verde (3797 comprobaciones).
+
+---
+
 ## [Versión 18.14.2] — 2026-09-09 (Administrar los permisos de otros médicos ahora exige permiso de desarrollador)
 
 «Permisos por médico (administración)», el bloque de Ajustes donde se decide qué

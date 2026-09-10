@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.2
+// @version      18.14.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7401,7 +7401,12 @@
   let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
   const RCV_POS_KEY = "vgl_rcvp_pos";   // v18.8.2 — sesión: {x, y} px de left/top tras arrastrar
   let _rcvpArrastre = null, _rcvpCerradoDoc = "";
-  let _rcvpMinimizado = false;   // v18.8.6 — minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse
+  // v18.8.6 — minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse.
+  // F5 (Solicitud F, no intrusivo) — el ESTADO DE FÁBRICA pasó de expandido a minimizado:
+  // el panel completo YA NO se auto-abre nunca; solo la pastilla (sin datos de paciente)
+  // asoma cuando hay un programa RCV identificado, y el médico decide cuándo verlo
+  // pulsándola. Bajo demanda, ver/ocultar cuando el médico quiera — nunca antes.
+  let _rcvpMinimizado = true;
   // v18.8.3 — SELLO DIARIO (actualización automática cada 24 h): día calendario del
   // último refresco forzado del caché de órdenes vigentes. El TTL de 10 min ya
   // garantiza frescura mientras el tick vive; este sello cubre el hueco restante
@@ -7413,8 +7418,14 @@
     _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false;
     _rcvpCerradoDoc = ""; _rcvpArrastre = null;   // v18.8.2
     _rcvpDiaUltimoRefresco = "";   // v18.8.3
-    _rcvpMinimizado = false;   // v18.8.6
+    _rcvpMinimizado = true;   // v18.8.6 / F5 — estado de fábrica: minimizado
   }
+  // F5 (Solicitud F) — SOLO para pruebas: simula que el médico ya pulsó la pastilla
+  // de reapertura (mismo efecto que su listener de clic), para que las suites que
+  // prueban el CONTENIDO del panel (fechas, vigencias, permisos) no tengan que
+  // repetir el gesto de expandirlo en cada caso. El propio caso que prueba «nace
+  // minimizado, sin auto-apertura» NO usa este atajo.
+  function _rcvpExpandirParaTest() { _rcvpMinimizado = false; _rcvpFirma = ""; _rcvpPillQuitar(); }
   function _rcvpOcultar() {
     try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
   }
@@ -7550,7 +7561,10 @@
         _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
         // v18.8.6 — sin contexto (sin paciente o fuera de la historia) el minimizado
         // se desarma: no queda pastilla huérfana ni estado colgado.
-        _rcvpMinimizado = false;
+        // F5 (Solicitud F) — «desarmar» ya no es «false» (expandido): el estado de
+        // fábrica es MINIMIZADO (pastilla), así que al perder el contexto se vuelve
+        // a ESE estado, no al panel completo.
+        _rcvpMinimizado = true;
         _rcvpPillQuitar();
         return;
       }
@@ -7560,16 +7574,21 @@
       // firma cambia con el docId, no hay forma de que el display quede en none).
       if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }
       _rcvpCerradoDoc = "";
-      // v18.8.6 — minimizado: ningún tick resucita el panel (ni con datos nuevos ni
-      // al cambiar de paciente) mientras el médico no pulse la pastilla; solo se
-      // mantiene la pastilla presente. Al reabrir, la firma limpia fuerza el
-      // repintado con el paciente actual.
-      if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
-      if (!resumen) { _rcvpOcultar(); return; }   // sin programa identificado no hay a qué alinear el panel
+      if (!resumen) { _rcvpOcultar(); _rcvpPillQuitar(); return; }   // sin programa identificado no hay a qué alinear el panel
       const paquete = PYM_CATALOG.find((p) => p && p.cie10 === "I10X") || null;
-      if (!paquete) { _rcvpOcultar(); return; }
+      if (!paquete) { _rcvpOcultar(); _rcvpPillQuitar(); return; }
+      // v18.8.6/F5 — minimizado (estado de FÁBRICA desde F5: nunca se auto-abre el
+      // panel completo, solo esta pastilla — sin datos de paciente, ver su propio
+      // comentario) — ningún tick resucita el panel (ni con datos nuevos ni al
+      // cambiar de paciente) mientras el médico no la pulse. Se revisa AQUÍ, ya
+      // confirmado que este paciente sí tiene programa RCV identificado (si no
+      // fuera así, ya se habría retirado la pastilla arriba): así la pastilla
+      // nunca aparece para un paciente sin nada que mostrar, y tampoco se gasta
+      // la llamada de red de las órdenes vigentes mientras esté minimizado. Al
+      // reabrir, la firma limpia fuerza el repintado con el paciente actual.
+      if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }
       let ordenes = null;
       const pid = (resumen && resumen._pacienteIdLabs) || null;
       if (pid) {

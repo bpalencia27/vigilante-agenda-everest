@@ -14266,3 +14266,38 @@ de terceros.
 Banco completo tras el cambio: `node tests/runner.js` → 3796 pasan, EXIT 0.
 `node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.2 en los 4 puntos.
 
+## v18.14.3 (Solicitud F, paso F5 — widget de laboratorios RCV no intrusivo)
+
+El panel «Próximos exámenes · Riesgo cardiovascular» (`#vgl-rcv-pendientes`) se
+auto-abría solo con entrar a la historia de un paciente con programa RCV
+identificado (aunque ya tenía minimizar/reapertura por pastilla desde v18.8.6,
+el estado de FÁBRICA era expandido). Ahora el estado de fábrica es MINIMIZADO:
+`let _rcvpMinimizado` nace en `true` (antes `false`), y el reinicio al perder
+el contexto (`!rcvPendientesDebeVerse`) también vuelve a `true` (antes `false`).
+El chequeo de minimizado se movió, dentro de `rcvPendientesTick()`, a DESPUÉS
+de confirmar que el paciente sí tiene programa RCV (`resumen`/`paquete`) —
+si no lo tiene, ahora también se retira cualquier pastilla huérfana
+(`_rcvpPillQuitar()` añadido a esos dos `return` tempranos) — así la pastilla
+nunca aparece sin nada real que mostrar, y minimizado no gasta la llamada de
+red de órdenes vigentes. Nueva función de prueba `_rcvpExpandirParaTest()`
+(mismo efecto que el clic real de la pastilla) para que las suites de
+CONTENIDO (88, 102) no tengan que repetir el gesto en cada caso — se inyecta
+envolviendo `cargar` una sola vez en cada suite; el caso dedicado a probar
+«nace minimizado» usa el `cargar` real (`cargarSinExpandir`).
+
+Suites ajustadas (sin cambio de intención, solo al nuevo estado de fábrica):
+- `suite_88_rcv_pendientes.js`: `cargar` envuelto para auto-expandir; un caso
+  (revocación granular) necesitó una segunda llamada a `_rcvpExpandirParaTest()`
+  porque el tick con la cap revocada pasa por el reinicio a minimizado.
+- `suite_102_widget_rcv.js`: mismo envoltorio; el caso "sin contexto el
+  minimizado se desarma" se reescribió — antes esperaba que el panel completo
+  reapareciera solo al volver el contexto, ahora espera que reaparezca la
+  PASTILLA (el panel nunca se auto-abre).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `let _rcvpMinimizado` | `true` → vuelto a `false` (estado de fábrica: expandido) | NO | suite_88 caso «F5: el panel nace MINIMIZADO — nunca se auto-abre...»: mutante rojo; EXIT 1 (24 ok, 1 falla). Restaurado 25 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3797 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.3 en los 4 puntos.
+

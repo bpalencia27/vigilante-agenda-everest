@@ -84,9 +84,21 @@ module.exports = {
 
   cubre: ["rcvPendientesClamparPos", "rcvPendientesHtml", "rcvPendientesTick",
     "rcvPendientesRotuloPrograma", "esMedicoRCVActivo", "extractPacienteAbierto",
-    "seccionActiva", "isLight", "uxTrack", "mtrCacheResumenLeer", "mtrCacheResumenGuardar"],
+    "seccionActiva", "isLight", "uxTrack", "mtrCacheResumenLeer", "mtrCacheResumenGuardar",
+    "_rcvpExpandirParaTest"],
 
-  async pruebas(t, api, env, cargar) {
+  async pruebas(t, api, env, cargarSinExpandir) {
+    // F5 (Solicitud F, no intrusivo) — el panel nace MINIMIZADO (pastilla) por
+    // defecto: esta suite prueba la MECÁNICA del panel YA ABIERTO (cierre, arrastre,
+    // posición) — nada de eso cambió con F5 — así que cada instancia se expande una
+    // vez, como si el médico ya hubiera pulsado la pastilla (_rcvpExpandirParaTest).
+    // Los propios casos que prueban minimizar/reabrir siguen partiendo de "ya abierto"
+    // y ejercitan el ciclo completo desde ahí, igual que antes de F5.
+    const cargar = (opciones) => {
+      const c = cargarSinExpandir(opciones);
+      try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
+      return c;
+    };
     function ctx102(extra) {
       const ex = extra || {};
       const red = {
@@ -330,7 +342,7 @@ module.exports = {
       t.igual(widget102(c).style.display, "", "al cambiar de paciente vuelve solo, sin pastilla");
     });
 
-    await t.casoAsync("sin contexto el minimizado se desarma: no queda pastilla huérfana", async () => {
+    await t.casoAsync("sin contexto el minimizado se desarma: no queda pastilla huérfana, y al volver el contexto reaparece la PASTILLA (F5: nunca el panel directo)", async () => {
       const c = ctx102();
       await c.api.rcvPendientesTick();
       const w = widget102(c);
@@ -339,11 +351,13 @@ module.exports = {
       cablear102(c, "");   // sin cédula → sin paciente abierto → la compuerta cae
       await c.api.rcvPendientesTick();
       t.falso(!!pill102(c), "sin contexto la pastilla se retira");
-      // Vuelve el contexto: el panel reaparece sin necesitar la pastilla (el
-      // minimizado ya estaba desarmado).
+      // Vuelve el contexto: F5 — el estado de fábrica es MINIMIZADO, así que "se
+      // desarma" ya no significa "vuelve el panel completo": vuelve la pastilla
+      // otra vez (nunca se auto-abre el panel sin que el médico lo pida).
       cablear102(c, "5150076");
       await c.api.rcvPendientesTick();
-      t.igual(widget102(c).style.display, "", "con contexto de nuevo el panel vuelve directo");
+      t.igual(widget102(c).style.display, "none", "con contexto de nuevo el panel SIGUE sin auto-abrirse");
+      t.cierto(!!pill102(c), "en su lugar, la pastilla reaparece por su cuenta");
     });
 
     // ==================== REGRESIÓN DE FUENTE (F1) ====================

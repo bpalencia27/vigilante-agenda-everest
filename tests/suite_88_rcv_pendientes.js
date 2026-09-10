@@ -22,6 +22,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { disparar } = require("./harness.js");
 
 const LISTA_RCV = {
   version: "2026-09-06.1",
@@ -65,9 +66,23 @@ module.exports = {
   nombre: "Panel Próximos exámenes RCV (v18.4.2): permiso, contexto HC, fechas y refresco",
 
   cubre: ["rcvPendientesCalcular", "rcvPendientesDebeVerse", "rcvPendientesHtml",
-    "rcvPendientesRotuloPrograma", "rcvPendientesTick", "_ordenesVigentesEstampa"],
+    "rcvPendientesRotuloPrograma", "rcvPendientesTick", "_ordenesVigentesEstampa",
+    "_rcvpExpandirParaTest"],
 
-  async pruebas(t, api, env, cargar) {
+  async pruebas(t, api, env, cargarSinExpandir) {
+    // F5 (Solicitud F, no intrusivo) — el panel nace MINIMIZADO (pastilla) por
+    // defecto: ya no se auto-abre. Esta suite prueba el CONTENIDO del panel YA
+    // EXPANDIDO (fechas, vigencias, permisos, escapes) — nada de eso cambió con
+    // F5 — así que cada instancia se expande una vez aquí, como si el médico ya
+    // hubiera pulsado la pastilla de reapertura (_rcvpExpandirParaTest, mismo
+    // efecto que su listener de clic real). El caso dedicado a probar «nace
+    // minimizado, sin auto-apertura, la pastilla no expone datos del paciente»
+    // usa `cargarSinExpandir` (el `cargar` real, sin este paso) a propósito.
+    const cargar = (opciones) => {
+      const c = cargarSinExpandir(opciones);
+      try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
+      return c;
+    };
     // ============================ PURAS ============================
     t.caso("calcular: vencido/próximo/al día/pendiente con Última y Vence correctos (vigencia 180)", () => {
       const ordenes = [
@@ -233,7 +248,10 @@ module.exports = {
     const ctx88 = (uid, nombre, extra) => {
       const ex = extra || {};
       const red = ex.red || crearRed();
-      const c = cargar({
+      // F5 — `ex.sinExpandir` usa el `cargar` REAL (sin el auto-expandido de esta
+      // suite): solo el caso dedicado a probar «nace minimizado» lo pide.
+      const _cargarCtx = ex.sinExpandir ? cargarSinExpandir : cargar;
+      const c = _cargarCtx({
         silencioso: true,
         almacen: { vgl_acceso_lista: JSON.stringify(LISTA_RCV) },
         fetch: red.fetch,
@@ -323,6 +341,10 @@ module.exports = {
       t.cierto(!!quitada && Array.isArray(quitada.off) && quitada.off.indexOf("rcv") >= 0, "la entrada local se retiró");
       t.falso(c.api.permisosCapRevocada("rcv"), "sin la entrada local la cap vuelve a estar activa");
       t.cierto(c.api.esMedicoRCVActivo(), "y la compuerta del panel abre otra vez");
+      // F5 — el tick con la cap revocada pasó por rcvPendientesDebeVerse()===false,
+      // que reinicia el panel a su estado de fábrica (minimizado): se re-expande,
+      // como si el médico volviera a pulsar la pastilla, para comprobar el CONTENIDO.
+      c.api._rcvpExpandirParaTest();
       await c.api.rcvPendientesTick();
       t.cierto(montado88(c), "al quitar la revocación el panel vuelve a montarse");
       const w = widget88(c);
@@ -481,6 +503,35 @@ module.exports = {
       };
       c.api.tick();
       t.falso(montado88(c), "tick() retiró el panel al salir de la historia (no queda flotando sobre Citas del día)");
+    });
+
+    // =====================================================================
+    // F5 (Solicitud F, no intrusivo) — el panel completo YA NO se auto-abre nunca:
+    // solo una pastilla (sin datos de paciente) asoma cuando hay un programa RCV
+    // identificado, y el médico decide cuándo verlo pulsándola. Este caso usa el
+    // `cargar` REAL (sin el auto-expandido del resto de la suite) para probar
+    // justamente el estado de fábrica.
+    // =====================================================================
+    await t.casoAsync("F5: el panel nace MINIMIZADO — nunca se auto-abre; solo la pastilla (sin datos del paciente) asoma, y el médico la abre/cierra cuando quiere", async () => {
+      const { c } = ctx88(101, "Brandon Jesús Palencia Martínez", { sinExpandir: true });
+      await c.api.rcvPendientesTick();
+      t.falso(montado88(c), "primer tick con un paciente RCV pendiente: el panel NO se auto-abre");
+      const pill = c.env.doc.body.children.find((n) => n.id === "vgl-rcv-pendientes-pill");
+      t.cierto(!!pill, "en su lugar asoma la pastilla, sola");
+      t.falso(pill.textContent.indexOf("Hipertensión") >= 0 || pill.textContent.indexOf("777") >= 0,
+        "la pastilla no lleva ni el programa ni el id del paciente — solo su rótulo genérico");
+      // El médico la pulsa: recién ahí se abre el panel, con los datos reales.
+      disparar(pill, "click");
+      await c.api.rcvPendientesTick();
+      t.cierto(montado88(c), "al pulsar la pastilla, el panel se abre bajo demanda");
+      const w = widget88(c);
+      t.cierto(w.innerHTML.indexOf("Programa: Hipertensión arterial") >= 0, "y muestra el contenido real del paciente");
+      // El médico lo cierra (mismo efecto que su botón «Cerrar»,
+      // ya cableado y probado a fondo en suite_102): vuelve a ocultarse, ni
+      // panel ni pastilla, para ESTE paciente.
+      c.api._rcvpCerrar();
+      t.igual(w.style.display, "none", "al cerrar, el panel se oculta");
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-rcv-pendientes-pill"), "y tampoco queda una pastilla huérfana");
     });
 
     // ============================ CSS / REGISTROS ============================
