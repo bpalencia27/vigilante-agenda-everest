@@ -1228,6 +1228,75 @@ module.exports = {
         `--fg3 (${rClaro.toFixed(2)}:1) quedó igual o MÁS contrastado que --fg2 (${rFg2.toFixed(2)}:1): se invirtió la jerarquía de énfasis del panel`);
     });
 
+    // v18.12.2 (E-2) — el médico reportó la sección de horarios del agendamiento en
+    // «blanco sobre blanco» (texto y fondo del mismo color, horas ilegibles). La causa
+    // raíz posible —revisada a mano— es la familia documentada arriba (v12.6.6): un modal
+    // sin tokens hereda NADA y cada var(--X) queda inválida; el color salta al blanco del
+    // tema claro de Everest y el texto heredado se pierde contra el mismo fondo. En HEAD el
+    // CSS estaba sano; esta guarda lo CONGELA: exige que el canvas de horarios del modal
+    // declare fondo propio, que la loseta y su tema claro lleven color !important, que
+    // #vgl-agendar-modal siga en las dos listas de tokens (oscuro y claro), y que el texto
+    // de las horas cumpla AA (>=4.5:1) contra el fondo opaco del sistema en AMBOS temas.
+    // ratio(fg, --bg-solid) es el piso real del contraste: en oscuro los velos aclaran el
+    // fondo (mejor para el texto claro) y en claro lo oscurecen (mejor para el texto
+    // oscuro); sin velos es donde el ratio es MÍNIMO.
+    t.caso("v18.12.2 (E-2) - los horarios de agendamiento jamás vuelven a texto/fondo del mismo color", () => {
+      const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const la = lum(a), lb = lum(b); const hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); };
+      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      const bloqueDe = (selector) => {
+        const ini = cssClean.indexOf(selector);
+        if (ini < 0) return null;
+        return cssClean.slice(ini, cssClean.indexOf("}", ini) + 1);
+      };
+
+      // (a) El canvas de horarios del modal declara fondo y borde propios (refuerzo E-2).
+      const canvas = bloqueDe("#vgl-agendar-modal .vgl-agm-slots{");
+      t.cierto(!!canvas && /background:var\(--bg2\)/.test(canvas) && /border:1px solid var\(--line\)/.test(canvas),
+        `el canvas #vgl-agendar-modal .vgl-agm-slots declara background:var(--bg2) y border propio (si falla, el refuerzo E-2 se perdió y el fondo vuelve a depender de la regla base)${canvas ? "" : " — no se halló la regla"}`);
+
+      // (b) La loseta y su tema claro traen color con !important (nunca texto heredado).
+      const loseta = bloqueDe(".vgl-agm-sbtn{");
+      const losetaLight = bloqueDe("#vgl-agendar-modal.light .vgl-agm-sbtn,");
+      t.cierto(!!loseta && /color:var\(--fg\)\s*!important/.test(loseta) && /background:var\(--bg2\)/.test(loseta),
+        `la loseta base .vgl-agm-sbtn declara color:var(--fg) !important y fondo propio`);
+      t.cierto(!!losetaLight && /color:var\(--fg\)\s*!important/.test(losetaLight),
+        `el tema claro de la loseta (#vgl-agendar-modal.light .vgl-agm-sbtn) también fuerza color:var(--fg) !important — es la pieza que en v12.10.9 perdió contra el CSS del host`);
+
+      // (c) #vgl-agendar-modal sigue en las DOS listas de contenedores con tokens.
+      const REclaroLista = /#vgl-root\.light[^{]*\{[\s\S]*?\}/;
+      const REoscuroLista = /(^|\n)\s*#vgl-root,#vgl-lab-injector[^{]*\{[\s\S]*?\}/;
+      const bloqueClaro = REclaroLista.exec(cssClean);
+      const bloqueOscuro = REoscuroLista.exec(cssClean);
+      t.cierto(!!bloqueClaro && bloqueClaro[0].includes("#vgl-agendar-modal.light"),
+        "el modal de agendamiento sigue en la lista de contenedores con tokens del tema CLARO (sin él, cada var(--X) es inválida y el texto salta al blanco del host)");
+      t.cierto(!!bloqueOscuro && bloqueOscuro[0].includes("#vgl-agendar-modal"),
+        "el modal de agendamiento sigue en la lista de contenedores con tokens del tema OSCURO");
+
+      // (d) Contraste AA del texto de las horas contra el fondo opaco del sistema, ambos temas.
+      const leerToken = (bloque, token) => {
+        if (!bloque) return null;
+        const m = new RegExp(`--${token}\\s*:\\s*([^;]+);`).exec(bloque[0]);
+        return m ? m[1].trim() : null;
+      };
+      const fgClaro = leerToken(bloqueClaro, "fg");
+      const bgSolidClaro = leerToken(bloqueClaro, "bg-solid");
+      t.cierto(!!fgClaro && /^#[0-9a-fA-F]{6}$/.test(bgSolidClaro || ""),
+        `se leyeron --fg/--bg-solid del bloque claro (fg=${fgClaro} bgSolid=${bgSolidClaro}) — si falla, el bloque cambió de forma y hay que revisar el contraste a mano`);
+      const rClaro = ratio(hex(fgClaro), hex(bgSolidClaro));
+      t.cierto(rClaro >= 4.5,
+        `tema CLARO: el texto de los horarios (${fgClaro}) sobre el fondo del sistema (${bgSolidClaro}) da ${rClaro.toFixed(2)}:1, bajo el mínimo AA de 4.5:1 — exactamente la familia del «blanco sobre blanco»`);
+
+      const fgOscuro = leerToken(bloqueOscuro, "fg");
+      const bgSolidOscuro = leerToken(bloqueOscuro, "bg-solid");
+      t.cierto(!!fgOscuro && /^#[0-9a-fA-F]{6}$/.test(bgSolidOscuro || ""),
+        `se leyeron --fg/--bg-solid del bloque oscuro (fg=${fgOscuro} bgSolid=${bgSolidOscuro}) — si falla, revise el contraste a mano, no borre la prueba`);
+      const rOscuro = ratio(hex(fgOscuro), hex(bgSolidOscuro));
+      t.cierto(rOscuro >= 4.5,
+        `tema OSCURO: el texto de los horarios (${fgOscuro}) sobre el fondo del sistema (${bgSolidOscuro}) da ${rOscuro.toFixed(2)}:1, bajo el mínimo AA de 4.5:1`);
+    });
+
     // v17.6.41 — AUDITORÍA S+ (barrido total, 24-ago-2026): .vgl-toast-rail se crea en JS
     // (el <i class="vgl-toast-rail"> de cada toast) pero nunca tuvo regla base de CSS —
     // sin width/height, la franja de color que distingue el tipo de aviso (rojo/verde/

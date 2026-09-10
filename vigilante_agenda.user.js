@@ -23,6 +23,7 @@
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
 // @connect      googleusercontent.com
+// @connect      vigilante-telemetria.bpalencia27.workers.dev
 // @connect      gist.githubusercontent.com
 // @connect      generativelanguage.googleapis.com
 // @connect      api.z.ai
@@ -13239,7 +13240,17 @@
     url: "https://script.google.com/macros/s/AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv-cYKVNFe6j9VbNK1wOI3VOD0zIBHyXMgCT3zNBl/exec",
     token: "vgl-2026", // debe coincidir con el TOKEN del Apps Script (ver carpeta TABLERO)
   };
-  const repUrl = () => (S.reporteUrl && /^https?:/i.test(S.reporteUrl)) ? S.reporteUrl.trim() : TABLERO.url;
+  // v18.12.3 (CF) — CABLEADO DE LA FLOTA. La fábrica es el Apps Script de Google
+  // (TABLERO.url). El worker de Cloudflare (REPLICA_TELEMETRIA/) replica su contrato
+  // byte a byte —incluidos listaAcceso y /vcheck— y es el destino de la migración
+  // decidida por el dueño. La compuerta CABLEADO_CF pasa la flota entera al worker y
+  // vive en FALSE de fábrica: la migración solo se activa DESPUÉS de desplegar y
+  // validar el worker (P1), nunca antes, o la telemetría de los consultorios muere en
+  // silencio. La URL escrita en Ajustes (S.reporteUrl) sigue mandando por encima de
+  // la compuerta: permite probar el worker en un equipo sin migrar la flota.
+  const VGL_CF_TELEMETRIA = "https://vigilante-telemetria.bpalencia27.workers.dev";
+  const CABLEADO_CF = false; // true SOLO tras desplegar y validar el worker — jamás en fábrica
+  const repUrl = () => (S.reporteUrl && /^https?:/i.test(S.reporteUrl)) ? S.reporteUrl.trim() : (CABLEADO_CF ? VGL_CF_TELEMETRIA : TABLERO.url);
   const repOn = () => !!S.reporte && !!repUrl() && typeof GM_xmlhttpRequest !== "undefined";
   // true = la Hoja lo recibió de verdad (Google a veces contesta 200 con una página
   // de login o error HTML: eso NO cuenta como recibido).
@@ -13261,7 +13272,14 @@
     try {
       paso("Estado del envío (v17.58.2: la telemetría es obligatoria)", !!S.reporte, S.reporte ? "encendido" : "APAGADO (estado imposible por UI desde v17.58.2)");
       const u = repUrl();
-      paso("Dirección del panel", !!u && /^https:\/\/script\.google\.com\//.test(u), u ? "" : "sin dirección");
+      // v18.12.3 (CF) — la puerta abre con los DOS destinos legítimos: el Apps Script de
+      // fábrica y el worker de Cloudflare (migración CABLEADO_CF o S.reporteUrl). Una
+      // dirección ajena sigue cerrando la puerta: el diagnóstico no debe dar verde a un
+      // receptor que no conoce el contrato.
+      const _esFabrica = /^https:\/\/script\.google\.com(?:\/|$)/.test(u || "");
+      const _esWorker = /^https:\/\/vigilante-telemetria\.bpalencia27\.workers\.dev(?:\/|$)/.test(u || "");
+      paso("Dirección del panel", !!u && (_esFabrica || _esWorker),
+        u ? (_esWorker ? "worker Cloudflare (migración CF)" : _esFabrica ? "" : "host no reconocido: " + u.slice(0, 48)) : "sin dirección");
       paso("Permiso de red del navegador", typeof GM_xmlhttpRequest !== "undefined", typeof GM_xmlhttpRequest !== "undefined" ? "" : "falta el permiso del gestor de scripts");
       let colaN = 0, colaVieja = "";
       try { repQLoad(); colaN = (repQ || []).length; if (colaN && repQ[0] && repQ[0].ts) { const min = Math.round((Date.now() - new Date(repQ[0].ts).getTime()) / 60000); colaVieja = "la más vieja lleva " + (min < 60 ? min + " min" : Math.round(min / 60) + " h") + " esperando"; } } catch (e) {}
@@ -22495,9 +22513,14 @@
       }
 
       /* ---- Horarios como grilla de losetas ---- */
+      /* v18.12.2 (E-2) — el canvas de horarios declara SU fondo y borde, no hereda los de
+         la regla base .vgl-agm-slots (id 21753): si esa base se pierde o el host la pisa,
+         el contenedor queda con fondo propio y las horas nunca caen a texto/fondo del
+         mismo color (el «blanco sobre blanco» reportado). Mismo token, cero cambio visual. */
       #vgl-agendar-modal .vgl-agm-slots{
         display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;
-        max-height:224px;padding:12px;border-radius:var(--r-field)
+        max-height:224px;padding:12px;border-radius:var(--r-field);
+        background:var(--bg2);border:1px solid var(--line)
       }
       #vgl-agendar-modal .vgl-agm-slots .vgl-agm-loading,
       #vgl-agendar-modal .vgl-agm-slots .vgl-agm-err{grid-column:1/-1}
