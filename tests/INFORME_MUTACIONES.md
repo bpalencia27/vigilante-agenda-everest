@@ -14301,3 +14301,39 @@ Suites ajustadas (sin cambio de intención, solo al nuevo estado de fábrica):
 Banco completo tras el cambio: `node tests/runner.js` → 3797 pasan, EXIT 0.
 `node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.3 en los 4 puntos.
 
+## v18.14.4 (Solicitud F, paso F6 — fatiga visual: silenciar rutina y central de notificaciones)
+
+El agrupamiento de toasts (por paciente, y el colapso a "Alerta Múltiple" con
+más de 3 en un mismo flush) y el tope de visualización simultánea (máximo 4
+toasts vivos en pantalla) YA EXISTÍAN desde v17.6.9/v17.11.0 — F6 no los
+tocó. Lo que faltaba y se añadió:
+- **Preferencia de frecuencia/tipo**: `S.avisosRutinariosOff` (Ajustes →
+  "Avisos rutinarios silenciados"). Con ella activa, `_avisoRutinarioSilenciado(color)`
+  calla `showToast()`/`notify()` para AZUL/VERDE/FUCSIA — **ROJO/MORADO/AMBAR
+  (confirmación extemporánea, inasistencia, última llamada) JAMÁS se silencian**,
+  invariante de seguridad clínica que no depende de la preferencia del médico.
+  `avisoEsCritico(color)` se extrajo del `const critico = ...` que ya vivía
+  inline en `_renderToast` (evita una 5ª repetición del mismo literal
+  ROJO/MORADO/AMBAR, disciplina F4).
+- **Central de notificaciones**: bitácora mínima en memoria (`_avisoHistorial`,
+  anillo de 30) que anota SOLO `{ts, color}` de cada aviso que `_renderToast`
+  sí pintó — NUNCA título ni cuerpo (cero PHI). Vista de solo lectura en
+  Ajustes ("Últimos avisos de este turno", `avisoHistorialHtml`): un punto de
+  color por aviso, con la hora relativa al pasar el cursor. Se reinicia con
+  `diaNuevo()`.
+
+Nueva `tests/suite_114_fatiga_visual.js`. Nota de arnés (documentada en el
+propio caso): los toasts NO críticos se autocierran a los 9 s en producción,
+y el arnés capa TODO `setTimeout` a ~1 ms (`tests/harness.js:116`) — así que
+un no-crítico ya se autocerró para cuando una prueba pudiera inspeccionar el
+DOM tras esperar el flush; la central de notificaciones (que no se borra
+sola) es la prueba correcta de "sí se pintó" para esos casos. Lo crítico
+(ROJO) SÍ se comprueba en el DOM en vivo, porque nunca se autocierra.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `function _avisoRutinarioSilenciado` | `S.avisosRutinariosOff === true && !avisoEsCritico(color)` → vuelto a solo `S.avisosRutinariosOff === true` (silenciaría TAMBIÉN lo crítico) | NO | suite_114 casos «invariante de seguridad» y «con la preferencia encendida... un ROJO SÍ»: mutante rojo; EXIT 1 (6 ok, 2 fallan). Restaurado 8 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3805 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.4 en los 4 puntos.
+

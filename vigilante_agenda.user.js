@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.3
+// @version      18.14.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9999,6 +9999,12 @@
     refresco: 5,              // segundos entre lecturas
     tema: "oscuro",           // oscuro | claro | auto (sigue a Windows)
     sonido: true,             // tonos por color
+    // F6 (Solicitud F, fatiga visual) — apaga SOLO los avisos rutinarios (AZUL/VERDE/
+    // FUCSIA): confirmaciones a tiempo, informativos, paciente nuevo. Los críticos
+    // (ROJO/AMBAR/MORADO — confirmación extemporánea, inasistencia, última llamada)
+    // NUNCA se silencian: eso lo decide el color en avisoEsCritico(), no este ajuste.
+    // Apagado por defecto: nadie pierde un aviso que ya recibía sin haberlo pedido.
+    avisosRutinariosOff: false,
     volumen: 0.15,            // 0.02 – 0.60
     insistir: false,          // v14.2.0 — falso por defecto: sonido de flanco único, sin repique
     cartel: false,            // cartel grande dentro de Everest (apagado: solo Windows)
@@ -16222,6 +16228,7 @@
     try { if (typeof _diagUroNombresVistos !== "undefined" && _diagUroNombresVistos && typeof _diagUroNombresVistos.clear === "function") _diagUroNombresVistos.clear(); } catch (e) {}
     try { if (typeof _mtrMedsCache !== "undefined" && _mtrMedsCache) _mtrMedsCache = { pacienteId: null, lista: null, ts: 0 }; } catch (e) {}
     try { _vglLimpiarSesionDia(); } catch (e) {}   // v18.0.134 (M8) — mapas de sesión, día nuevo
+    try { _avisoHistorialLimpiar(); } catch (e) {}   // F6 — central de notificaciones, día nuevo
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
     setSummary("Nuevo día: se reinició el seguimiento.");
@@ -17636,6 +17643,52 @@
   };
   const TOAST_EMOJI = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️", FUCSIA: "🆕" };
 
+  // F6 (Solicitud F, fatiga visual) — PURA: ¿este color es de los que jamás se
+  // silencian? Mismo criterio que ya usaba _renderToast en línea (ROJO/MORADO/AMBAR:
+  // confirmación extemporánea, última llamada, inasistencia vencida) — ahora
+  // extraído para que la preferencia "avisos rutinarios silenciados" (más abajo)
+  // consulte la MISMA regla, en vez de repetirla.
+  function avisoEsCritico(color) { return color === "ROJO" || color === "MORADO" || color === "AMBAR"; }
+  // ¿Debe callarse este aviso por la preferencia del médico? Fail-open hacia lo
+  // crítico: con la preferencia encendida, SOLO lo rutinario (AZUL/VERDE/FUCSIA)
+  // se calla — jamás un color crítico, sea cual sea el valor de S.avisosRutinariosOff.
+  function _avisoRutinarioSilenciado(color) { return S.avisosRutinariosOff === true && !avisoEsCritico(color); }
+
+  // F6 — CENTRAL DE NOTIFICACIONES: bitácora mínima de los avisos que sí se
+  // pintaron (color + hora, JAMÁS título/cuerpo: cero PHI, ver CLAUDE.md). Vive
+  // en memoria de esta pestaña (como el resto del estado de sesión del panel);
+  // se reinicia con diaNuevo(). Anillo de 30 — la vista solo enseña los últimos.
+  const AVISO_HISTORIAL_MAX = 30;
+  let _avisoHistorial = [];
+  function _avisoHistorialAnotar(color) {
+    try {
+      _avisoHistorial.push({ ts: Date.now(), color: String(color || "AZUL") });
+      if (_avisoHistorial.length > AVISO_HISTORIAL_MAX) _avisoHistorial.splice(0, _avisoHistorial.length - AVISO_HISTORIAL_MAX);
+    } catch (e) {}
+  }
+  function _avisoHistorialLeer() { return _avisoHistorial.slice(); }
+  function _avisoHistorialLimpiar() { _avisoHistorial = []; }
+  // PURA: "hace N min/h" a partir de un ts (mismo formato que ya usa Ajustes para
+  // "Último envío confirmado", ver repUltOk en renderSettings).
+  function _avisoHistorialRelativo(ts, ahora) {
+    const min = Math.max(0, Math.round(((ahora || Date.now()) - ts) / 60000));
+    return min < 1 ? "hace un momento" : min < 60 ? "hace " + min + " min" : "hace " + Math.round(min / 60) + " h";
+  }
+  // PURA: la "Central de notificaciones" — SOLO color y hora relativa, jamás
+  // título ni cuerpo (cero PHI, la bitácora nunca los guardó). Del más reciente
+  // al más viejo; cada chip lleva su color como fondo (mismo var(--c-X) del resto
+  // del panel) y su hora relativa como texto, para verlo de un vistazo sin abrir
+  // nada — la fatiga visual que F6 pide reducir no se arregla con OTRA cosa que leer.
+  function avisoHistorialHtml(historial, ahora) {
+    const lista = (Array.isArray(historial) ? historial : []).slice().reverse();
+    if (!lista.length) return '<span class="vgl-hint">Sin avisos todavía en este turno.</span>';
+    return '<div class="vgl-avh-fila">' + lista.map((e) => {
+      const col = String((e && e.color) || "AZUL").toLowerCase().replace(/[^a-z]/g, "") || "azul";
+      const rel = _avisoHistorialRelativo((e && e.ts) || 0, ahora);
+      return `<span class="vgl-avh-chip" style="background:var(--c-${col})" title="${escapeHtml(rel)}"></span>`;
+    }).join("") + "</div>";
+  }
+
   // [NT/M18] — ¿está el médico ESCRIBIENDO en la historia? (textarea/input de texto o
   // contentEditable con foco). Solo para telemetría anónima de interrupciones: nunca
   // para suprimir avisos (la supresión durante escritura quedó descartada por D4).
@@ -17684,7 +17737,8 @@
       if (emoji && titulo.indexOf(emoji) === 0) titulo = titulo.slice(emoji.length).replace(/^\s+/, "");
       t.querySelector(".vgl-toast-title").textContent = titulo;
       t.querySelector(".vgl-toast-b").textContent = body;
-      const critico = color === "ROJO" || color === "MORADO" || color === "AMBAR";
+      const critico = avisoEsCritico(color);
+      _avisoHistorialAnotar(color);   // F6 — central de notificaciones: solo color + hora
       // [NT-115/M15] — accesibilidad: lo crítico anuncia por role="alert" (assertive);
       // lo rutinario por role="status" (polite). Y el toast es cerrable con TECLADO
       // (Tab lo enfoca, Esc/Enter lo cierra): antes la «×» era decorativa y el cierre
@@ -17777,6 +17831,10 @@
     return out;
   }
   function showToast(color, title, body, persist, apptKey) {
+    // F6 (Solicitud F, fatiga visual) — con "avisos rutinarios silenciados" activo,
+    // lo no crítico (AZUL/VERDE/FUCSIA) ni siquiera se encola: los críticos jamás
+    // pasan por esta puerta (avisoEsCritico los deja pasar siempre).
+    if (_avisoRutinarioSilenciado(color)) return;
     // v18.0.135 (Avisos #4) — el toast es un canal DE LA PÁGINA, y la página del Vigilante
     // es el módulo clínico HCHealth: fuera de él no se dibuja NADA. Era la fuga reportada
     // por el médico («la misma notificación azul cian que está arriba me aparece la
@@ -17818,6 +17876,9 @@
   // Solo Windows. El toast dentro de la página queda como RESPALDO únicamente si Windows
   // no está disponible (permiso no concedido/denegado), para no perder un aviso de fraude.
   function notify(color, title, body, persist, uid) {
+    // F6 (Solicitud F, fatiga visual) — mismo criterio que showToast: rutinario
+    // silenciado no sale por NINGÚN canal (ni página ni sistema operativo).
+    if (_avisoRutinarioSilenciado(color)) return;
     // v15.4.0 — UN solo canal por aviso (política de arriba). Con la pestaña visible, el
     // aviso sale dentro de la página y NADA va al sistema: el médico ya está mirando aquí,
     // y la notificación de Windows encima era exactamente la sobrecarga reportada. Con la
@@ -23022,6 +23083,11 @@
       #vgl-root #vgl-sheet .vgl-col:empty::after{content:"";display:block;height:3px;border-radius:2px;background:var(--bg3)}
       #vgl-root #vgl-sheet .vgl-seg{width:100%;border-radius:5px;min-height:2px}
       #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:var(--t-strong);font-weight:800;color:var(--fg) !important;background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
+      /* F6 (Solicitud F) — central de notificaciones: una fila de puntos de color, uno
+         por aviso mostrado en el turno. Sin texto propio (el color y la hora relativa
+         bastan): la fatiga visual no se arregla añadiendo MÁS que leer. */
+      #vgl-root #vgl-sheet .vgl-avh-fila{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+      #vgl-root #vgl-sheet .vgl-avh-chip{width:10px;height:10px;border-radius:50%;flex:0 0 auto;box-shadow:var(--glow-edge)}
       /* [v12.3.13] .vgl-fld tiene métricas DISTINTAS en Resumen (11px, gap heredado 12px) y en Ajustes (12px, gap 14px).
          Antes nunca convivían (cada hoja traía su bloque de estilos y solo existía uno en el DOM); ya consolidadas en esta
          hoja única, la regla posterior pisaría a la anterior. El :has() reproduce esa exclusividad: solo aplica la regla
@@ -36824,6 +36890,14 @@
              ventana modal y pestaña parpadeando) los maneja el sistema automáticamente; se retiran
              de Ajustes para no recargar el menú. v15.4.0: un aviso = un canal visible; la
              ventana emergente se eliminó por duplicada. -->
+        <!-- F6 (Solicitud F, fatiga visual) — preferencia de frecuencia/tipo: apaga SOLO
+             lo rutinario (confirmaciones a tiempo, informativos, paciente nuevo). Lo
+             crítico (confirmación extemporánea, inasistencia, última llamada) nunca se
+             apaga con este interruptor — eso lo decide el color del aviso, no el médico. -->
+        <div class="vgl-fld"><label>Avisos rutinarios silenciados<span class="vgl-hint">Apaga las confirmaciones a tiempo y los avisos informativos (paciente nuevo, etc.). Las alertas críticas —confirmación extemporánea, inasistencia, última llamada para confirmar— siguen sonando siempre, sin excepción.</span></label>${sw("c-avisos-rutina-off", S.avisosRutinariosOff === true)}</div>
+        <!-- F6 — central de notificaciones: un vistazo a los últimos avisos de este turno,
+             sin abrir nada — solo color y hora, jamás título ni paciente. -->
+        <div class="vgl-fld"><label>Últimos avisos de este turno<span class="vgl-hint">Un punto por aviso mostrado, del más reciente al más viejo. Pase el cursor sobre uno para ver hace cuánto.</span></label><div id="c-avisos-historial">${avisoHistorialHtml(_avisoHistorialLeer())}</div></div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
@@ -36902,6 +36976,7 @@
     bind("#c-check", "checkCierre", (n) => n.checked);
     bind("#c-adh", "adherencia", (n) => n.checked);
     bind("#c-snd", "sonido", (n) => n.checked);
+    bind("#c-avisos-rutina-off", "avisosRutinariosOff", (n) => n.checked);   // F6
     // v15.8.0 (N4) — plantillas del SMS real (modo programador).
     bind("#c-sms-plantilla", "smsPlantillaCita", (n) => n.value);
     bind("#c-sms-plantilla-lab", "smsPlantillaLab", (n) => n.value);

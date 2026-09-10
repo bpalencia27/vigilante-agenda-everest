@@ -4,6 +4,22 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.4] — 2026-09-09 (Menos avisos rutinarios si usted lo pide, y un vistazo a los últimos de su turno)
+
+Dos novedades contra la fatiga de tantos avisos:
+
+- **Avisos rutinarios silenciados** (Ajustes → Alertas y sonido): apaga las
+  confirmaciones a tiempo y los avisos informativos. Las alertas críticas
+  —confirmación extemporánea, inasistencia, última llamada para confirmar—
+  siguen sonando siempre, sin excepción: eso no se puede apagar.
+- **Últimos avisos de este turno** (Ajustes): un punto de color por cada
+  aviso que se le mostró, del más reciente al más viejo — pase el cursor
+  sobre uno para ver hace cuánto. Sin nombres ni datos de pacientes.
+
+Verificación: banco de pruebas completo en verde (3805 comprobaciones).
+
+---
+
 ## [Versión 18.14.3] — 2026-09-09 (El panel de próximos exámenes de riesgo cardiovascular ya no se abre solo)
 
 El panel «Próximos exámenes · Riesgo cardiovascular» aparecía automáticamente
