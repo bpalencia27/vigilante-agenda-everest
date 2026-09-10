@@ -1,0 +1,10 @@
+{
+  "name": "replica-telemetria",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Réplica Cloudflare Workers + D1 del tablero de telemetría del Vigilante de Agenda (contrato TABLERO/Codigo.gs + VersionCheck.gs).",
+  "type": "module",
+  "scripts": {
+    "test": "node test_replica.mjs"
+  }
+}

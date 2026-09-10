@@ -1024,5 +1024,121 @@ module.exports = {
       t.falso(!!res && res._resumenDegradado === true,
         "sin sabotaje el motor NO degrada — solo así esta prueba ejercita de verdad la rama del guardado que leía la variable mal scopeada");
     });
+
+    // =====================================================================
+    // v18.8.8 — FASE B (auditoría del panel 2026-09-07 + orden del 08-sep).
+    // B.2: el programa del paciente sube a la CABECERA (chip visible en las
+    // cinco pestañas — antes solo vivía en Exámenes y en el bento). B.4: la
+    // cita sugerida (ftl/control del motor, el MISMO plan que consume el
+    // agendador) sube también a la cabecera, con su botón «Agendar» que abre
+    // openAgendamientoModal pre-cargado — nunca agenda por su cuenta. Cero
+    // reglas de color nuevas (reutilizan .vgl-tab-prog/.vgl-tab-mini/
+    // .vgl-tab-fechas/.vgl-agm-btn sec, ya blindadas contra el CSS de
+    // Everest): no hay Chromium que correr por esto.
+    // =====================================================================
+    t.caso("FASE B (B.2): el chip de programa — con rector dice el programa y que rige vigencias; sin rector no calcula nada y lo dice; sin tablero no pinta", () => {
+      const d = api.mtrTableroClinico(RESUMEN_DEMO);
+      const html = api.mtrPanelProgChipHtml(d);
+      t.cierto(html.indexOf("Programa: Hipertensión arterial") >= 0,
+        "RESUMEN_DEMO (programa HTA) → el chip nombra el programa por su rótulo");
+      t.cierto(html.indexOf("también está en ERC y DM2") >= 0,
+        "y avisa de los otros programas en los que el paciente está inscrito");
+      t.cierto(html.indexOf("rige vigencias y órdenes") >= 0,
+        "y deja claro que ese programa manda sobre vigencias y órdenes");
+      t.falso(html.indexOf("undefined") >= 0, "sin ningún hueco relleno con 'undefined'");
+
+      const sinRector = api.mtrTableroClinico(Object.assign({}, RESUMEN_DEMO, { programa: null }));
+      const htmlSin = api.mtrPanelProgChipHtml(sinRector);
+      t.cierto(htmlSin.indexOf("Sin programa de crónicos") >= 0,
+        "sin rector el chip avisa que NO puede calcular vigencias ni órdenes");
+      t.cierto(htmlSin.indexOf("marque hipertensión, diabetes o enfermedad renal") >= 0,
+        "y dice la acción concreta para destrabarlo");
+      t.igual(api.mtrPanelProgChipHtml(null), "", "sin tablero (aún leyendo) no pinta nada");
+    });
+
+    t.caso("FASE B (B.4): el bloque de cita sugerida — solo existe cuando el motor tiene fechas; con ellas muestra la toma, el control y el botón Agendar", () => {
+      t.igual(api.mtrPanelCitaHtml(null), "", "sin tablero no pinta nada");
+      t.igual(api.mtrPanelCitaHtml(api.mtrTableroClinico(RESUMEN_DEMO)), "",
+        "RESUMEN_DEMO no trae ftl ni control → bloque vacío: NO se inventa una cita que el motor no calculó");
+      const conFechas = api.mtrTableroClinico(Object.assign({}, RESUMEN_DEMO, {
+        plan: { vencidos: [], faltantes: [], ftl: "2026-09-18", motivoFtl: "RAC vencido", control: { fecha: "2026-09-25" } },
+      }));
+      const html = api.mtrPanelCitaHtml(conFechas);
+      t.cierto(html.indexOf("Toma sugerida:") >= 0 && html.indexOf("Control:") >= 0,
+        "con fechas del motor, el bloque muestra la toma sugerida y el control");
+      t.cierto(html.indexOf("RAC vencido") >= 0, "y dice el motivo que fija la toma, si lo hay");
+      t.cierto(html.indexOf('id="vgl-panel-agendar"') >= 0 && html.indexOf("usted confirma todo") >= 0,
+        "trae el botón Agendar que solo abre el modal (el título lo dice: usted confirma todo)");
+      const soloControl = api.mtrPanelCitaHtml(api.mtrTableroClinico(Object.assign({}, RESUMEN_DEMO, {
+        plan: { ftl: null, control: { fecha: "2026-09-25" } },
+      })));
+      t.cierto(soloControl.indexOf("Control:") >= 0 && soloControl.indexOf("Toma sugerida:") >= 0,
+        "con solo el control, la toma se muestra como «—» (casilla vacía antes que invento)");
+    });
+
+    await t.casoAsync("FASE B (B.2+B.4): el panel rellena los chips de cabecera en cada pintado — se ven también desde Exámenes, y el clic en Agendar abre el agendador", async () => {
+      const c = await cargar({ silencioso: true });
+      const d = c.env.doc;
+      const base = d.createElement;
+      d.createElement = function (tag) {
+        const e = base(tag);
+        const memo = new Map();
+        e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, d.createElement("div")); return memo.get(sel); };
+        e.querySelectorAll = () => [];
+        return e;
+      };
+      // Los slots viven en la cabecera del modal y el código los busca con
+      // document.getElementById (fuera del cuerpo que pintar() reescribe): se
+      // siembran como hijos de body para que el arnés los encuentre, igual que
+      // el arnés encuentra el modal por body.children.
+      const sProg = d.createElement("div"); sProg.id = "vgl-panel-prog-slot"; d.body.appendChild(sProg);
+      const sCita = d.createElement("div"); sCita.id = "vgl-panel-cita-slot"; d.body.appendChild(sCita);
+      const bAg = d.createElement("button"); bAg.id = "vgl-panel-agendar"; d.body.appendChild(bAg);
+      const resumenConFechas = Object.assign({}, RESUMEN_DEMO, {
+        plan: { vencidos: [], faltantes: [{ nombre: "RAC" }], ftl: "2026-09-18", control: { fecha: "2026-09-25" } },
+      });
+      c.api.mtrCacheResumenGuardar("777888999", resumenConFechas);
+
+      await c.api.openPanelPacienteModal({ doc_id: "777888999", nombre: "PACIENTE DE PRUEBA" }, { seccion: "examenes" });
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-panel-modal");
+      t.cierto(!!modal, "el panel abre en la sección Exámenes");
+      t.cierto(String(sProg.innerHTML).indexOf("Programa: Hipertensión arterial") >= 0,
+        "y el chip de programa quedó relleno en la cabecera — visible también desde Exámenes");
+      t.cierto(String(sCita.innerHTML).indexOf("Toma sugerida:") >= 0 && String(sCita.innerHTML).indexOf("Agendar") >= 0,
+        "y el bloque de cita sugerida (con su botón) también vive en la cabecera");
+      t.cierto(!!(bAg._listeners && bAg._listeners.click && bAg._listeners.click.length),
+        "el botón Agendar quedó cableado a su manejador");
+
+      bAg._listeners.click[0]();
+      const ag = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!ag, "el clic ABRE el modal del agendador — y nada se agenda por su cuenta");
+      const xAg = ag.querySelector("#vgl-agm-x");
+      t.cierto(!!(xAg._listeners && xAg._listeners.click && xAg._listeners.click.length),
+        "el modal del agendador está entero (con su ✕ cableada)");
+    });
+
+    await t.casoAsync("FASE B (S5): el documento viaja mascarado en el agendador — ··· + últimos 4 a la vista, y el clic lo revela mientras el modal siga abierto", async () => {
+      const c = await cargar({ silencioso: true });
+      const d = c.env.doc;
+      const base = d.createElement;
+      d.createElement = function (tag) {
+        const e = base(tag);
+        const memo = new Map();
+        e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, d.createElement("div")); return memo.get(sel); };
+        e.querySelectorAll = () => [];
+        return e;
+      };
+      c.api.openAgendamientoModal({ doc_id: "777888999", nombre: "PACIENTE DE PRUEBA" });
+      const ag = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!ag, "el agendador abre");
+      const html = String(ag.innerHTML || "");
+      t.cierto(html.indexOf("···8999") >= 0, "el documento viaja mascarado (··· + últimos 4) en el encabezado");
+      t.falso(html.indexOf(">777888999<") >= 0, "y el documento completo NO queda expuesto por defecto");
+      const docEl = ag.querySelector("#vgl-agm-doc");
+      t.cierto(!!(docEl._listeners && docEl._listeners.click && docEl._listeners.click.length),
+        "el documento mascarado quedó con su manejador de revelado");
+      docEl._listeners.click[0]();
+      t.igual(docEl.textContent, "777888999", "el clic revela el documento completo — un gesto explícito del médico");
+    });
   },
 };

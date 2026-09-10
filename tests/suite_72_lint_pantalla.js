@@ -29,8 +29,7 @@ module.exports = {
   cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
     "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
     "_tableroQueCambio", "mtrTextoDestinoTelemetria",
-    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades",
-    "respaldoDiceDe", "traerRespaldoSoloParaConsulta"],
+    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades"],
 
   async pruebas(t, api, env) {
     const src = fs.readFileSync(RUTA, "utf8");
@@ -350,29 +349,25 @@ module.exports = {
     //  mutaciones; lo que sigue es la D del enjambre, extendida.
     // =================================================================
 
-    t.caso("REGLA D (#Tanda 4) — «no tiene actividades pendientes» exige haber mirado una lista", () => {
+    t.caso("REGLA D (#Tanda 4) — «no tiene actividades pendientes» exige haber mirado una base", () => {
       // El modal de Órdenes daba la MISMA frase —una afirmación sobre el paciente— en tres
-      // situaciones distintas: lista cargada y sin pendientes (cierta), paciente que no
-      // figura en la lista (no se sabe), y lista sin cargar (no se miró nada). Patrón G.
-      const sinLista = api.pymMotivoSinActividades({ listaCargada: false });
-      t.igual(sinLista.motivo, "sin_lista", "sin lista, el motivo es la lista");
-      t.falso(/para este paciente|no tiene/i.test(sinLista.texto),
+      // situaciones distintas: base cargada y sin pendientes (cierta), paciente que no
+      // figura en el libro (no se sabe), y base sin cargar (no se miró nada). Patrón G.
+      // v18.6.0 — con la base única los motivos viven como sin_base / no_esta_en_base /
+      // sin_pendientes; la lección de la Regla D queda intacta.
+      const sinBase = api.pymMotivoSinActividades({ listaCargada: false });
+      t.igual(sinBase.motivo, "sin_base", "sin base, el motivo es la base");
+      t.falso(/para este paciente|no tiene/i.test(sinBase.texto),
         "y el texto NO afirma nada sobre el paciente");
-      t.cierto(/no lo sé/.test(sinLista.texto), "dice que es ignorancia, con esas palabras");
-
-      // La base piloto y la lista de otro día son el mismo caso: no es la de hoy.
-      t.igual(api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true }).motivo, "sin_lista",
-        "la base de respaldo no es la lista de la sede");
-      t.igual(api.pymMotivoSinActividades({ listaCargada: true, diaDistinto: true }).motivo, "sin_lista",
-        "la lista de ayer no responde por hoy");
+      t.cierto(/no lo sé/.test(sinBase.texto), "dice que es ignorancia, con esas palabras");
 
       const noEsta = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false });
-      t.igual(noEsta.motivo, "no_esta_en_lista", "está la lista, pero él no figura en ella");
-      t.cierto(/NO aparece en la lista/.test(noEsta.texto), "y se dice cuál es la duda");
+      t.igual(noEsta.motivo, "no_esta_en_base", "está la base, pero él no figura en ella");
+      t.cierto(/NO aparece en la base/.test(noEsta.texto), "y se dice cuál es la duda");
 
       const ok = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: true });
       t.igual(ok.motivo, "sin_pendientes", "solo aquí se puede afirmar que no tiene pendientes");
-      t.cierto(/está en la lista/.test(ok.texto), "y la afirmación viene con su evidencia");
+      t.cierto(/está en la base/.test(ok.texto), "y la afirmación viene con su evidencia");
 
       // `pacienteEnLista: null` = todavía no se ha indexado ninguna base. No se puede
       // afirmar que el paciente no esté: manda el primer motivo.
@@ -390,22 +385,25 @@ module.exports = {
     // podido mirar" saliendo para un paciente que SÍ se pudo mirar (en el
     // respaldo) y no arrojó nada ahí. La pertenencia separa los dos casos.
     // =================================================================
-    t.caso("RESPALDO ACTIVO — «se negó a mostrarme» eran dos casos con una sola frase", () => {
-      const esta = api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: true });
-      t.igual(esta.motivo, "piloto_esta_sin_pendientes", "está en el respaldo y de allí no salió nada: motivo propio");
-      t.cierto(/SÍ figura en la base de respaldo/.test(esta.texto), "lo primero que dice es que SÍ lo miró en esa base");
+    t.caso("BASE ÚNICA (v18.6.0) — «se negó a mostrarme» eran dos casos con una sola frase", () => {
+      // La lección v18.0.139 sobrevive a la migración: la pertenencia (pymTodos)
+      // separa "lo miré y no salió nada" de "no pude mirarlo". Con la base única ya
+      // no hay bandera de respaldo: los dos casos viven como sin_pendientes vs
+      // no_esta_en_base, cada uno con su frase.
+      const esta = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: true });
+      t.igual(esta.motivo, "sin_pendientes", "está en la base y de allí no salió nada: motivo propio");
+      t.cierto(/está en la base de prevención/.test(esta.texto), "lo primero que dice es que SÍ lo miró en esa base");
       t.falso(/NO he podido mirar/.test(esta.texto), "ya no dice que no pudo mirar: miró y no salió nada");
-      t.cierto(/NO prueba que esté al día/.test(esta.texto), "y el vacío del respaldo no se pasa por 'al día'");
 
-      const noEsta = api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: false });
-      t.igual(noEsta.motivo, "piloto_no_esta", "no figura en el respaldo: motivo propio también");
-      t.cierto(/NO figura en la base de respaldo/.test(noEsta.texto), "la ausencia se dice con su dirección");
-      t.cierto(/ni en el respaldo lo puedo ver/.test(noEsta.texto), "honestidad de siempre: es ignorancia, no un hallazgo");
+      const noEsta = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false });
+      t.igual(noEsta.motivo, "no_esta_en_base", "no figura en el libro: motivo propio también");
+      t.cierto(/NO aparece en la base/.test(noEsta.texto), "la ausencia se dice con su dirección");
+      t.falso(/al día/.test(noEsta.texto), "honestidad de siempre: es ignorancia, no un hallazgo");
 
       // Sin poder comprobar la pertenencia (índice sin cargar), el mensaje es el de
       // siempre: no se inventa ni presencia ni ausencia.
-      t.igual(api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true, pacienteEnLista: null }).motivo,
-        "sin_lista", "sin índice no se afirma nada sobre el paciente");
+      t.igual(api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: null }).motivo,
+        "sin_pendientes", "sin índice no se afirma nada sobre el paciente");
     });
 
     // =================================================================
@@ -426,87 +424,24 @@ module.exports = {
       pymRespNombre: "BASE PILOTO", pymRespMTime: "2026-05-20T10:00:00Z",
     }, extra || {});
 
-    t.caso("RESPALDO — al paciente que SÍ está en la lista oficial no se le consulta el respaldo", () => {
-      // La contención número uno: la oficial manda. Si ella lo conoce, su respuesta es la
-      // única — incluido su "al día". El respaldo no puede contradecirla ni completarla.
-      t.igual(api.respaldoDiceDe("111", _estado()), null,
-        "está en la oficial: el respaldo no se consulta, y la pantalla se pinta igual que antes");
-    });
+    t.caso("BASE ÚNICA (v18.6.0) — los tres motivos de la Regla D, sin respaldo que consultar", () => {
+      // v18.6.0 — la consulta al respaldo (respaldoDiceDe y cía.) fue RETIRADA con el
+      // archivo diario: el índice activo ES la base. Las lecciones de Regla D que este
+      // bloque fijaba sobreviven traducidas a los tres motivos vivos.
+      const sinBase = api.pymMotivoSinActividades({ listaCargada: false });
+      t.igual(sinBase.motivo, "sin_base", "sin base cargada el hueco es del sistema");
+      t.cierto(/NO he podido mirar/.test(sinBase.texto), "se dice ignorancia, no hallazgo");
+      t.cierto(/no lo sé/.test(sinBase.texto), "y explícitamente");
 
-    t.caso("RESPALDO — solo responde por quien la oficial NO conoce", () => {
-      const con = api.respaldoDiceDe("222", _estado());
-      t.igual(con.estado, "con_pendientes", "no está en la oficial y el respaldo sí lo tiene, con actividades");
-      t.igual(con.lista.length, 2, "y devuelve las que tiene anotadas");
-      t.igual(con.fuente, "BASE PILOTO", "con el nombre del archivo de donde salió");
-      t.igual(con.fecha, "2026-05-20T10:00:00Z", "y su fecha: el médico tiene que poder pesar la antigüedad");
+      const fuera = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false });
+      t.igual(fuera.motivo, "no_esta_en_base", "paciente que no cruza: motivo propio");
+      t.cierto(/NO aparece en la base de prevención/.test(fuera.texto), "la ausencia sale con su dirección");
+      t.falso(/al día/i.test(fuera.texto), "jamás se dice 'al día' por omisión");
 
-      const vacio = api.respaldoDiceDe("333", _estado());
-      t.igual(vacio.estado, "sin_pendientes", "está en el respaldo pero sin nada anotado — y eso NO es 'al día'");
-
-      const nadie = api.respaldoDiceDe("999", _estado());
-      t.igual(nadie.estado, "tampoco_esta", "no está en ninguna de las dos: se dice, no se calla");
-    });
-
-    t.caso("RESPALDO — si la lista ACTIVA ya es el respaldo, no se le pregunta dos veces a la misma fuente", () => {
-      t.igual(api.respaldoDiceDe("222", _estado({ pymFallback: true })), null,
-        "con la piloto como lista activa, consultar el respaldo sería preguntarle dos veces a la misma base");
-    });
-
-    t.caso("RESPALDO — sin lista oficial cargada, o sin respaldo, no se inventa nada", () => {
-      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: new Set() })), null,
-        "sin oficial cargada no hay con qué comparar: no se consulta");
-      t.igual(api.respaldoDiceDe("222", _estado({ pymTodos: null })), null,
-        "ni cuando todavía no se ha indexado ninguna base");
-      t.igual(api.respaldoDiceDe("222", _estado({ pymRespTodos: null })), null,
-        "y sin respaldo cargado tampoco: la tarjeta se queda como estaba");
-      t.igual(api.respaldoDiceDe("", _estado()), null, "sin documento no se consulta nada");
-    });
-
-    t.caso("RESPALDO — el mensaje del modal dice de dónde salió el dato y nunca lo pasa por dato de hoy", () => {
-      const con = api.pymMotivoSinActividades({
-        listaCargada: true, pacienteEnLista: false,
-        respaldo: { estado: "con_pendientes", lista: ["Tamización cardiometabólica"], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
-      });
-      t.igual(con.motivo, "no_esta_en_lista_pero_en_respaldo", "es un motivo propio, no el genérico");
-      t.cierto(/BASE PILOTO/.test(con.texto), "nombra el archivo del que salió");
-      t.cierto(/2026-05-20/.test(con.texto), "y su fecha");
-      t.cierto(/Tamización cardiometabólica/.test(con.texto), "dice qué figura pendiente");
-      t.cierto(/no es la agenda de hoy|puede estar desactualizado/i.test(con.texto),
-        "y advierte que no es la lista de hoy antes de que el médico ordene nada");
-
-      const vacio = api.pymMotivoSinActividades({
-        listaCargada: true, pacienteEnLista: false,
-        respaldo: { estado: "sin_pendientes", lista: [], fuente: "BASE PILOTO", fecha: "2026-05-20T10:00:00Z" },
-      });
-      t.igual(vacio.motivo, "no_esta_en_lista_respaldo_vacio", "motivo propio también");
-      t.cierto(/NO quiere decir que esté al día/i.test(vacio.texto),
-        "REGLA D al revés: que una base vieja no tenga nada anotado no prueba que hoy no le falte nada");
-
-      const nada = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false, respaldo: null });
-      t.igual(nada.motivo, "no_esta_en_lista", "sin respaldo que consultar, el mensaje de siempre, intacto");
-    });
-
-    await t.casoAsync("RESPALDO — un fallo de red NO quema el intento del día, y la lista activa queda intacta", async () => {
-      // El primer diseño marcaba el día ANTES de descargar, "para no reintentar en bucle".
-      // Con eso, un fallo de red al arrancar la jornada —la sesión de SharePoint a medio
-      // despertar, que es exactamente cuando esto corre— dejaba al respaldo sin responder
-      // el día entero: el médico volvía a ver "Dato faltante" en pacientes que SÍ están en
-      // la base, que es justo lo que pidió evitar. La marca se pone solo al conseguirlo.
-      const st = api.__state;
-      st.pym = new Map([["111", ["Tamización cardiometabólica"]]]);
-      st.pymTodos = new Set(["111"]);
-      st.pymFile = "Agenda_Dia_CMB.xlsx"; st.pymFallback = false;
-      st.pymResp = new Map(); st.pymRespTodos = null; st.pymRespCargado = "";
-      // En el banco no hay SharePoint: la descarga falla siempre, que es el caso a fijar.
-      const hecho = await api.traerRespaldoSoloParaConsulta();
-      t.falso(hecho, "sin poder bajar el archivo, devuelve que no lo consiguió");
-      t.igual(env.win.GM_getValue("vgl_resp_dl", ""), "",
-        "y NO marca el día: el siguiente intento puede volver a probarlo");
-      // Las contenciones que hacen que esto no rompa nada, comprobadas tras ejecutarlo:
-      t.igual(st.pymFile, "Agenda_Dia_CMB.xlsx", "la lista activa sigue siendo la oficial");
-      t.falso(st.pymFallback, "y no se marca como respaldo");
-      t.igual(st.pym.size, 1, "ni se toca el mapa de la lista activa");
-      t.igual(st.pymRespTodos, null, "y sin descarga no se inventa un índice de consulta");
+      const sinPend = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: true });
+      t.igual(sinPend.motivo, "sin_pendientes", "quien está y no tiene: la única frase afirmativa válida");
+      t.cierto(/está en la base de prevención y no tiene actividades pendientes/.test(sinPend.texto),
+        "ese caso —y solo ese— puede afirmar sobre el paciente");
     });
 
     t.caso("REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada", () => {

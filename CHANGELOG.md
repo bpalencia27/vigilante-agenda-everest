@@ -4,6 +4,967 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.5] — 2026-09-10 (Dos correcciones: "avisos rutinarios silenciados" ahora calla de verdad, y cerrar el panel de riesgo cardiovascular ya no lo vuelve a abrir solo)
+
+Una revisión independiente encontró que la preferencia "avisos rutinarios
+silenciados" (v18.14.4) no callaba nada cuando usted no estaba mirando la
+pestaña — que es precisamente cuando más se usa. Corregido: ahora calla en
+todos los casos, salvo lo crítico, que nunca se calla.
+
+También se encontró que cerrar el panel de "Próximos exámenes · Riesgo
+cardiovascular" (v18.14.3) volvía a dejarlo auto-abriéndose para el
+siguiente paciente. Corregido: cerrar ya no reintroduce esa intrusión.
+
+Verificación: banco de pruebas completo en verde (3809 comprobaciones).
+
+---
+
+## [Versión 18.14.4] — 2026-09-09 (Menos avisos rutinarios si usted lo pide, y un vistazo a los últimos de su turno)
+
+Dos novedades contra la fatiga de tantos avisos:
+
+- **Avisos rutinarios silenciados** (Ajustes → Alertas y sonido): apaga las
+  confirmaciones a tiempo y los avisos informativos. Las alertas críticas
+  —confirmación extemporánea, inasistencia, última llamada para confirmar—
+  siguen sonando siempre, sin excepción: eso no se puede apagar.
+- **Últimos avisos de este turno** (Ajustes): un punto de color por cada
+  aviso que se le mostró, del más reciente al más viejo — pase el cursor
+  sobre uno para ver hace cuánto. Sin nombres ni datos de pacientes.
+
+Verificación: banco de pruebas completo en verde (3805 comprobaciones).
+
+---
+
+## [Versión 18.14.3] — 2026-09-09 (El panel de próximos exámenes de riesgo cardiovascular ya no se abre solo)
+
+El panel «Próximos exámenes · Riesgo cardiovascular» aparecía automáticamente
+al abrir la historia de un paciente inscrito en el programa. Ahora, en su
+lugar, asoma solo una pequeña pastilla con su rótulo — sin ningún dato del
+paciente — y usted decide cuándo pulsarla para ver el panel completo. Al
+cerrarlo, tanto el panel como la pastilla desaparecen para ese paciente.
+
+Verificación: banco de pruebas completo en verde (3797 comprobaciones).
+
+---
+
+## [Versión 18.14.2] — 2026-09-09 (Administrar los permisos de otros médicos ahora exige permiso de desarrollador)
+
+«Permisos por médico (administración)», el bloque de Ajustes donde se decide qué
+función puede ejecutar cada médico del equipo, se veía con cualquier perfil
+COMPLETO. Como muestra el nombre y la cédula de TODOS los médicos y permite
+tocar sus permisos, ahora requiere el mismo permiso de desarrollador de la
+versión anterior. Sus propios interruptores personales («Funcionalidades por
+médico») siguen viéndose igual que siempre: eso es solo suyo.
+
+Verificación: banco de pruebas completo en verde (3796 comprobaciones).
+
+---
+
+## [Versión 18.14.1] — 2026-09-09 (El menú de opciones de desarrollador ahora exige permiso, no solo el atajo de teclado)
+
+La sección técnica de Ajustes (claves de la IA, carpeta cifrada local, diagnóstico
+interno, bitácora de eventos) se abría con un atajo de teclado (Ctrl+Shift+D) que
+cualquier médico podía usar. Ahora, además del atajo, quien esté en sesión necesita
+un permiso de desarrollador concedido explícitamente en el padrón — sin él, la
+sección no aparece (y, a diferencia de antes, tampoco queda escondida en el código
+de la página: simplemente no se genera).
+
+Esto no cambia nada para el uso clínico normal: ningún control de los que usa a
+diario en consulta vive en esa sección.
+
+Verificación: banco de pruebas completo en verde (3795 comprobaciones).
+
+---
+
+## [Versión 18.14.0] — 2026-09-09 (El envío de reportes queda listo para migrar a Cloudflare — la migración se activa por compuerta, no ha ocurrido sola)
+
+El servidor que recibe en silencio los reportes anónimos de uso (sin datos de
+pacientes) tiene desde hoy una réplica propia en Cloudflare Workers + D1,
+desplegada y probada en vivo. Es un cambio interno de infraestructura: el aviso,
+el botón «Probar conexión» y todo lo que usted ve se comportan exactamente igual
+que antes.
+
+**La flota sigue enviando al servidor de Google.** La migración a Cloudflare se
+activa deliberadamente (compuerta `CABLEADO_CF` o la URL de un equipo en Ajustes)
+y nunca por accidente: primero se valida en un puesto piloto. El servidor de
+Google sigue siendo el destino de fábrica y el canal de actualizaciones de
+versión permanece independiente en Google.
+
+Verificación: banco de pruebas completo en verde (3788 comprobaciones); el worker
+replica el contrato byte a byte con validación en vivo 9/9 (acuses, `listaAcceso`,
+volumen por día y token por cabecera).
+
+---
+
+## [Versión 18.13.2] — 2026-09-09 (Dos cuadros más que ya se manejan por completo con teclado)
+
+Una revisión de accesibilidad encontró dos cuadros que se habían quedado fuera de la
+mejora de la versión anterior: el de «Ordenamiento de exámenes» y el que confirma datos
+antes de calcular el riesgo. En ambos, la tecla Tab podía sacar el foco del cuadro hacia
+el fondo de Everest mientras el cuadro seguía tapando la pantalla — ya no.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (una por cuadro) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el arreglo funciona sin cambiar nada más.
+
+---
+
+## [Versión 18.13.1] — 2026-09-09 (Ajuste de rendimiento interno: menos lecturas repetidas del almacén en cada repaso)
+
+Una revisión nocturna de rendimiento encontró que, cada vez que el asistente repasa la
+pantalla mientras usted tiene una historia clínica abierta, algunos avisos internos
+consultaban la misma preferencia guardada varias veces seguidas sin necesidad. Ahora esa
+lectura se comparte dentro de un mismo repaso — sin cambiar ningún resultado, ninguna
+alerta ni ningún comportamiento visible.
+
+Verificación: banco de pruebas completo en verde antes y después (3774 comprobaciones);
+mutación deliberada (desactivar el ahorro) puso roja la prueba específica y fue
+restaurada — confirmando que el ahorro funciona sin alterar nada más.
+
+---
+
+## [Versión 18.13.0] — 2026-09-09 (Segunda tanda de la mesa de expertos: el asistente se puede operar por completo con solo teclado o lector de pantalla)
+
+Continuación de la revisión integral de código de la versión anterior. Esta entrega
+se concentra en accesibilidad: cuatro puntos donde usar el asistente solo con teclado,
+o con un lector de pantalla, se comportaba distinto — o peor — que usándolo con mouse.
+
+### ⌨️ El widget de "Próximos exámenes" ya se opera con teclado
+El recuadro flotante de exámenes pendientes y fármacos RCV ahora anuncia su estado
+("Próximos exámenes: 2 pendientes") a un lector de pantalla, responde a Enter y
+Espacio igual que a un clic, y — corrección de un defecto real — leer o seleccionar
+una fila dentro del panel ya abierto ya no lo cierra de golpe.
+
+### 🕐 El reloj de cabecera avisa de "datos viejos" también con texto, no solo con color
+Cuando la última lectura de la agenda pasa de 30 segundos, el reloj se ponía en ámbar;
+quien no distingue ese color no tenía ninguna otra señal. Ahora el propio texto del
+reloj lo dice ("datos viejos"), y una región de anuncio para lectores de pantalla
+avisa una sola vez, justo en el momento en que los datos pasan de frescos a viejos
+(o viceversa) — nunca en cada segundo del reloj, para no convertirse en ruido.
+
+### ↩️ Cerrar el aviso del Anexo 5 (abandono del programa) ya no es un callejón sin salida
+El botón para cerrar por este turno el aviso de abandono del programa de crónicos
+seguía cerrando de inmediato, pero ahora deja aparte una barra de "Deshacer" (20
+segundos, mismo patrón ya usado en otras partes del asistente) que reconstruye el
+aviso si el clic fue accidental — sensible especialmente en una alerta sobre un
+paciente que puede estar abandonando su tratamiento.
+
+### 🔍 Revisión de seguridad sin hallazgos nuevos
+Se simplificó la comparación de versiones del candado de actualización obligatoria
+para que reutilice la misma función que ya usa el resto del asistente, sin cambiar
+su comportamiento. De paso: foco visible en varios botones pequeños, mínimo táctil
+de 28px en más controles, trampa de teclado (Tab) también en el aviso de bloqueo de
+versión, y un enlace de repliegue si el navegador bloquea la ventana de actualización.
+
+Verificación: banco de pruebas completo en verde antes y después; 4 mutaciones
+deliberadas (romper cada guardia a propósito) pusieron rojas sus pruebas específicas
+y fueron restauradas — confirmando que el blindaje funciona.
+
+---
+
+## [Versión 18.12.1] — 2026-09-09 (El aviso de «Everest no responde» deja de repetirse)
+
+El asistente le avisa cuando usted hace tres clics seguidos sobre la misma zona
+de Everest sin que el sistema reaccione — señal de que la página está cargando
+o bloqueada. Ese aviso tenía un freno de treinta segundos que vivía solo en la
+pestaña abierta: cada vez que la consulta se recargaba, el freno volvía a cero
+y el aviso podía reaparecer una y otra vez durante toda la jornada, incluso
+cuando el problema de fondo era el mismo.
+
+Ahora ese aviso pasa por el mismo registro diario que usa el resto de avisos del
+asistente: **una sola vez por jornada y navegador**, salga por la pestaña que
+salga. El asistente sigue midiendo *todas* las ráfagas de clics (para saber si
+Everest está fallando más de lo normal), pero deja de interrumpirle con el mismo
+mensaje. El umbral que lo dispara (tres clics seguidos en menos de 600 ms) no
+cambia.
+
+---
+
+## [Versión 18.12.0] — 2026-09-08 (Limpieza de mantenimiento: código sin uso retirado y un botón más fácil de tocar)
+
+Se convocó una revisión integral del código (una "mesa de expertos" de auditoría)
+para encontrar piezas que ya no se usan, atajos que no llevan a ninguna parte y
+oportunidades de mejorar la experiencia. Esta primera entrega de esa revisión
+aplica los cambios más seguros y de menor riesgo; el resto queda documentado
+para próximas entregas.
+
+### 🧹 Código sin uso retirado
+Ocho piezas de código que ya no cumplían ninguna función (una variable que
+nunca se usaba, un parámetro que nunca se llenaba, comentarios que hablaban de
+funciones que ya no existen, estilos huérfanos) se retiraron. Ninguna de estas
+piezas tenía efecto en lo que usted ve o hace en el asistente — su retiro no
+cambia nada de su experiencia, solo deja el código más claro para quien lo
+mantenga.
+
+### ➕ Botón de actualizar más fácil de tocar
+El botón para actualizar las citas del día en el panel creció de 24 a 28
+píxeles — el mismo tamaño mínimo que ya tienen los demás botones pequeños del
+panel, pensado para tocarse con precisión incluso con prisa o en pantalla
+táctil.
+
+### 🔍 Revisión de seguridad sin hallazgos nuevos
+Se revisaron varios puntos de seguridad y rendimiento señalados en una
+auditoría anterior (registro de eventos, validación de mensajes entre
+pestañas, verificación de integridad del script). Todos ya estaban resueltos
+desde una versión previa — se confirma y se documenta, sin necesidad de tocar
+código.
+
+Verificación: banco de pruebas completo en verde antes y después; 7 cambios,
+cada uno con su propia prueba que se pone roja si el cambio se revierte por
+accidente.
+
+---
+
+## [Versión 18.11.1] — 2026-09-08 (El RAC del Anexo 5 se filtra antes de mostrarse: un valor implausible ya no aparece como si fuera un resultado real)
+
+Una revisión de código sobre la corrección de la versión anterior (18.11.0) encontró
+que el nuevo valor real de la RAC se mostraba en el aviso sin ningún chequeo de
+plausibilidad — y la propia auditoría de la base piloto ya había marcado 22 filas de
+esa misma columna con valores de 6 o más dígitos bajo la nota «¿PHI fuera de sitio?»
+(rango real documentado: 0.1 a 2797). Sin un filtro, cualquiera de esos valores
+habría aparecido en el aviso como si fuera un resultado de laboratorio real.
+
+Desde esta versión, el indexador descarta (deja la casilla vacía, nunca inventa) todo
+valor de RAC negativo o de 6 dígitos o más antes de que llegue al aviso. Los valores
+reales documentados (0.1 a 2797) siguen mostrándose intactos.
+
+Verificación: banco de pruebas completo en verde antes y después; mutación deliberada
+(anular el filtro de plausibilidad) puso roja la prueba específica y fue restaurada —
+confirmando que el blindaje funciona.
+
+---
+
+## [Versión 18.11.0] — 2026-09-08 (El aviso del Anexo 5 ahora muestra el resultado real de laboratorio de la RAC, nunca el puntaje de la meta)
+
+Al revisar la sección del Anexo 5 contra el libro real de la base piloto se encontró
+que el aviso mostraba, bajo el rótulo «RAC», el **puntaje de cumplimiento de la meta**
+(un número de 0 a 25) en lugar del **resultado real del laboratorio** en mg/g. Un
+paciente con la meta ya lograda (25 puntos) podía leerse en el aviso como si tuviera
+25 mg/g de albuminuria — un resultado patológico — cuando en realidad no había ningún
+valor de laboratorio así de alto: era solo su puntaje.
+
+Desde esta versión, el aviso lee el valor real que trae la columna de laboratorio del
+libro y lo muestra con su fecha. Si ese valor todavía no está disponible, el aviso
+simplemente no menciona la RAC — nunca vuelve a mostrar un puntaje disfrazado de
+resultado de laboratorio.
+
+De paso, se revisaron una a una las 38 columnas de la hoja del Anexo 5 contra lo que
+el Vigilante lee hoy: 33 ya estaban sincronizadas (32 antes + esta corrección). Las 5
+restantes (el estado oficial del programa y unos valores recientes de colesterol
+HDL, triglicéridos e índice de masa corporal, más la marca de "Estudiado para ERC")
+quedan documentadas para que el médico decida si deben incorporarse más adelante.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (dejar de leer la columna del valor real, y volver a mostrar el puntaje
+como si fuera el resultado) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el blindaje funciona.
+
+---
+
+## [Versión 18.10.0] — 2026-09-08 (El Vigilante aplica las propuestas de los ensayos A/B: repasos que no estorban, la IA que se recupera de un tropiezo pasajero, aviso amable cuando Everest no responde y registros anónimos de las actualizaciones)
+
+El médico ordenó aplicar las propuestas de los ensayos A/B del 7 y 8 de septiembre. Se
+aplicaron las que valen la pena — cada una con sus propias pruebas y su verificación —
+y las demás quedaron documentadas con su justificación, sin instalarse, para que el
+médico decida. Cero cambios en el tono de los avisos: eso no se toca sin orden.
+
+### U0001F9F9 Los repasos de cada ciclo esperan a que el navegador esté libre
+Cada cierto tiempo el Vigilante repasa la pantalla para tener todo al día. Esos repasos
+no urgentes ahora esperan a que el navegador no esté ocupado — así jamás compiten con
+lo que usted está haciendo. Y con doble red de seguridad: si el navegador nunca se
+desocupa, el repaso se hace igual al momento. Para usted no cambia nada visible: solo
+se nota en que la consulta responde más suave en los momentos de mucho trabajo.
+
+### U0001F504 La IA se recupera sola de un tropiezo pasajero
+Al pedir la redacción de un hallazgo, si la conexión falla por un instante o el último
+intento se agota por demora, el Vigilante reintenta una sola vez con el mismo motor
+antes de rendirse. La espera entre intentos crece con calma (con un pequeño azar para
+no golpear todos a la vez) y si usted cancela mientras espera, se detiene al instante.
+Un tropiezo pasajero ya no deja la consulta sin redactar; si la red está caída de
+verdad, el aviso honesto de siempre, sin inventos.
+
+### ☝️ Aviso amable cuando Everest no responde
+Si Everest se queda mudo y usted hace tres clics rápidos en el mismo lugar (por
+ejemplo, en una celda de la agenda), el Vigilante le avisa en un cartel azul — como
+máximo una vez cada 30 segundos — y anota en su bitácora local dónde ocurrió, sin
+nombres ni datos de pacientes: solo el tipo de elemento y su posición. El centinela
+solo le avisa: usted decide qué hacer. Y para no molestar, el aviso nace silencioso
+si la ráfaga fue sobre los propios botones del Vigilante.
+
+### U0001F4CA Las actualizaciones quedan medidas, sin nombres
+Cada vez que se anuncia una versión nueva (una vez por versión) y cada vez que se
+pulsa «Actualizar ahora» en el aviso de versión obligatoria, queda un registro
+anónimo de la versión anunciada o exigida — nunca datos de pacientes. Así se sabrá,
+con los datos reales de la jornada, si el aviso lleva a actualizar o si hace falta
+algo más. Y el chequeo nocturno del proyecto ahora vigila que los consultorios sigan
+reportando: si la última señal recibida lleva más de 48 horas, la noche sale en rojo
+— sin telemetría fresca no hay manera de medir ningún ensayo.
+
+### 🧪 Verificación
+Cuatro frentes, cada uno con su suite nueva de pruebas (108 a 111) y su mutación
+verificada (romper la pieza a propósito → las pruebas se ponen rojas → restaurar →
+verdes), con su fila en el informe de mutaciones. El worker de telemetría quedó
+desplegado y probado en vivo, y el chequeo nocturno completo salió VERDE 4/4.
+Banco completo 3761/3761, EXIT=0 real.
+
+
+
+Orden del médico con los datos de los ensayos A/B. Cuatro puntos, los cuatro cumplidos:
+
+### 📋 La regla de los horarios 06:00/12:00 queda aclarada
+Esos horarios de refresco corresponden **exclusivamente a la base piloto** del proyecto (el libro SEPTIEMBRE1) y se eliminó cualquier redacción que los presentara como una restricción general del sistema. Corrección documental: el funcionamiento no cambia.
+
+### ⏱️ Consultas de la agenda más ágiles en los momentos de calma
+Cuando no hay nada urgente, el Vigilante consultaba la agenda cada 30 segundos (y cada 20 en la mayor parte de la jornada). Ahora consulta cada 20 y cada 15 segundos: el tiempo máximo que un cupo nuevo puede esperar a ser visto baja de 30 a 20 segundos, y de 20 a 15 en plena jornada. Las velocidades de las situaciones urgentes (el minuto de gracia, el cruce de los 6 minutos, la franja de ediciones tardías) **no cambian ni un segundo**: allí la vigilancia ya era máxima.
+La carga extra es mínima: la consulta es la misma y liviana que dispara el botón «Consultar» de la vista de citas, y solo ocurre mientras el panel está abierto. El refresco programado de la base (06:00 y 12:00, exclusivo de la base piloto SEPTIEMBRE1) **no se tocó**: es el horario de descarga del libro y es independiente de estas consultas de agenda.
+
+### 📏 Medición nueva: cuánto tarda el Vigilante en detectar un cupo nuevo
+Cada vez que aparece en la agenda una cita que la consulta anterior no tenía, el Vigilante mide el tiempo transcurrido desde esa consulta anterior (el tiempo máximo que el cupo pudo estar esperando a ser visto) y lo registra **de forma anónima** — sin nombres ni datos de pacientes, solo tiempos. Con esta medición se podrá validar, con los datos reales de la jornada, el efecto de las consultas más frecuentes. Si entre una consulta y otra pasó mucho rato (por ejemplo, el Vigilante volvió de un descanso de la pestaña), el hallazgo se anota aparte, **sin** atribuirle un tiempo que la frecuencia de consulta no explica.
+
+### 🧪 Verificación
+Suite nueva de pruebas 107 — latencia de detección de cupos (9/9) — verificada por **dos mutaciones** (rojo → restaurar → verde): una rompe la medición (invertido el límite entre la espera normal y el descanso largo) y la otra restaura las frecuencias viejas. Banco completo **3716/3716, EXIT=0 real**. Los detalles técnicos de la decisión quedaron en el registro de decisiones; el informe de los ensayos A/B ya refleja la corrección del punto 1.
+
+## [Versión 18.8.10] — 2026-09-08 (Auditoría de confirmaciones extemporáneas: quién estaba en la sesión queda registrado en cada reclamo)
+
+Tras revisar el archivo de auditoría del día 08-sep y la bitácora del Vigilante,
+se cierra la **ORDEN #10** con tres resultados:
+
+### ✅ La ventana de confirmación es estricta: 6 minutos, sin excepciones
+La regla ya era rígida por construcción — la sospecha de confirmación fuera de
+plazo nace solo cuando el Vigilante observa en vivo una cita que sigue **sin
+presentarse** después del minuto 6 y luego aparece **en sala**. Se fijaron los
+dos bordes de la frontera con pruebas exactas (+5,9 min: ingreso a tiempo, sin
+ninguna alerta; +6,0 min exactos: la ventana cerró; +6,1 min: alerta completa).
+Del archivo del día: la única confirmación fuera de plazo del turno (+11,8 min)
+sí apareció marcada como tal, y la llegada de +4,9 min se contó a tiempo —
+**cero confirmaciones válidas fuera de plazo, cero falsas acusaciones**.
+
+### 🖊️ Cada registro de la bitácora ahora dice quién estaba en la sesión
+El archivo de reclamación (`auditoria_vigilante_*.csv`) gana la columna
+**«Usuario»** al final: quién estaba identificado en el sistema cuando el
+Vigilante registró cada hecho. La identidad sale únicamente del usuario en
+sesión (la misma que firma las citas): si el sistema aún no la ha revelado, la
+celda queda **vacía** — el Vigilante nunca inventa un responsable. El aviso
+anónimo en vivo al tablero no cambia: sigue sin nombres, por diseño.
+
+### 🧪 Verificación
+Suite nueva `suite_106_orden10_extemporaneos.js` (5/5), con los bordes exactos
+de la ventana y la columna nueva, verificada por **dos mutaciones** (rojo →
+restaurar → verde). Banco completo **3707/3707, EXIT=0 real**. El informe
+íntegro de la auditoría quedó en `docs/AUDITORIA_ORDEN10.md`.
+
+## [Versión 18.8.9] — 2026-09-08 (Botón de actualización en el panel: réplica exacta de «Consultar», sin recargar la página)
+
+Pedido del médico (ORDEN #9): un botón en la cabecera del panel que refresque las
+citas del día con **exactamente la misma consulta** que el botón «Consultar» de
+la vista «Citas del día» — el mismo GET que dispara el archivo de registro de red
+`consultar.har` — pero **sin recargar la página completa**.
+
+### 🔄 Cómo refresca, según dónde esté el médico
+- **En «Citas del día»**: el botón pulsa el «Consultar» real de Everest, igual
+  que si el médico lo hubiera clicado — Everest repinta por su cuenta y el panel
+  se entera por su vigilancia normal.
+- **En cualquier otra vista** (consulta activa, laboratorios, …): el botón repite
+  la llamada que Everest hace al pulsar «Consultar» (la misma URL aprendida por
+  observación) y repinta el panel al instante, **sin tocar la página** — nada de
+  F5: la consulta abierta ni se entera. Si la llamada falla, avisa y el refresco
+  automático de siempre sigue a cargo.
+
+### 🛡️ Correcciones de fondo que vinieron con el pedido
+Al extraer el procesado compartido para que el botón y el ciclo automático usen
+una **única vía**, aparecieron dos errores latentes (variables sin declarar que
+solo estallaban en el momento justo del refresco manual) — corregidos y
+verificados por mutación. El botón sigue la disciplina del proyecto: actúa solo
+con un clic del médico y nunca pisa lo que el médico haya escrito a mano.
+
+### 🧪 Verificación
+Suite nueva `suite_105_boton_actualizar.js` (13/13), endurecida además contra dos
+falsos verdes de su propia lectura de lo que el panel muestra en pantalla
+(verificados por mutación en solitario). Censo de blindaje CSS actualizado
+(676 → 701) y sincronización de versión R5.1 completada. Banco completo
+**3702/3702, EXIT=0 real**.
+
+*(Nota: la v18.8.8 del orquestador —FASE A/B/C, refactor en tres bloques— no se
+publicó como versión independiente; sus actas están en
+`docs/REGISTRO_DECISIONES.md` y su verificación final queda para la FASE E.)*
+
+---
+
+## [Versión 18.8.7] — 2026-09-08 (Notificaciones: una sola vez por evento, aislamiento total entre instancias y desviación horaria sin negativos)
+
+Orden del médico con el registro real de auditoría de notificaciones adjunto. Se
+identificaron tres patrones anómalos y se corrigieron los tres, con verificación
+por mutación de cada uno.
+
+### 🔔 Una notificación, una sola fila de auditoría — en cualquier instancia
+El CSV traía rachas de «lectura tras relevo sin confirmar» para los MISMOS
+pacientes (hasta siete líneas por un solo hecho): el candado de esa rama vivía en
+la memoria de cada pestaña, y la gracia del relevo se reabre con cada cambio de
+pestaña. Ahora un candado compartido del día (`vgl_audit_unico`) decide, dentro de
+la bitácora, quién escribe cada fila: la primera instancia que gana la marca
+registra el evento; las demás callan. La unicidad es por (tipo de evento, cita,
+día) para los nueve tipos de notificación; para `CAMBIO_ESTADO` la marca incluye
+además la transición (previo → estado), para no amputar transiciones posteriores
+legítimas de la misma cita.
+
+### 🧱 Aislamiento total entre ventanas y pestañas
+Ninguna notificación se comparte, sincroniza ni propaga entre instancias: cada
+pestaña emite sus avisos en su propia ventana o no emite. Lo ÚNICO que viaja por
+el almacén común es el candado anti-duplicado — sin ningún dato del paciente —,
+que es justamente lo que impide que dos instancias emitan lo mismo (los dos
+requisitos juntos: ni propagación, ni duplicados).
+
+### 🔀 Sin pares dobles CAMBIO_ESTADO + INGRESO_A_TIEMPO
+El CSV mostraba al mismo paciente con ambas filas en el mismo segundo: la
+transición la escribía `colorAndAlert` y, en el MISMO tick, `maybeNotify`
+escribía el evento tipado con el que se cuenta. La llegada a sala queda ahora
+registrada UNA sola vez, por su evento tipado (INGRESO_A_TIEMPO, o
+FRAUDE_EXTEMPORANEO si llegó tarde) — el que sustenta el conteo y la reclamación.
+`CAMBIO_ESTADO` sigue cubriendo las transiciones sin evento propio (en sala →
+atendido, el hueco de lectura, las oscilaciones de vuelta).
+
+### ⏱️ Desviación horaria sin negativos
+Las filas con -35.3 y -43.7 minutos (pacientes confirmados ANTES de la hora de la
+cita) ensuciaban la trazabilidad de las asistencias, que se reclaman por llegadas
+TARDE. La bitácora normaliza ahora cualquier desviación negativa a 0; los
+retrasos positivos se conservan tal cual.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md`
+(candado de unicidad, supresión del par doble y normalización del minuto
+negativo — las tres cayeron rojas en la suite nueva y volvieron a verde).
+Suite nueva `suite_103_unicidad_notificaciones.js` (7/7). Banco completo
+3673/3673, EXIT=0 real.
+
+---
+
+## [Versión 18.8.6] — 2026-09-08 (Widget RCV: minimizar con pastilla de reapertura + verificación de los modales del dock)
+
+Pedido en vivo del médico: el panel «Próximos exámenes · Riesgo cardiovascular»
+debía poder minimizarse, cerrarse y volver a abrirse con un estado consistente
+durante toda la sesión, y los modales «[IMPRESION DIAGNOSTICA]» y «[CONDUCTA]»
+del dock de la Historia Clínica quedaban bajo verificación integral.
+
+### ➖ Minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse
+El botón «—» (gemelo del cierre, 28×28 px, táctil) oculta el panel y deja una
+pastilla «▣ Próximos exámenes» fija abajo a la izquierda (left:14, bottom:58 —
+encima de la barra de módulos minimizados, que baja a left:14 cuando el panel
+principal se oculta). Mientras esté minimizado, NINGÚN tick lo resucita, ni
+siquiera con contenido nuevo del mismo paciente: el estado de sesión es estable.
+Pulsar la pastilla la retira, limpia la firma de repintado y el siguiente tick
+devuelve el panel con los datos del paciente que esté ABIERTO en ese momento —
+nunca los del paciente anterior (anti-cruce de pacientes). Cerrar con ✕ desarma
+el minimizado y su pastilla, y si el contexto clínico desaparece (sin historia
+abierta), el minimizado se desarma solo: no quedan pastillas huérfanas.
+
+### 🧪 Verificación de los modales del dock (Impresión Diagnóstica / Conducta)
+Auditoría del cableado v18.7.0: los botones nacen solo con su pestaña montada
+(`_tabImp`/`_tabCond` en la firma de repintado), el clic usa `_vglClicablePestana`
+y si la pestaña falta el flujo falla cerrado con aviso ámbar. Suites 97, 98 y 15
+en verde (11 + 6 + 303 comprobaciones): sin pestañas no nacen, al montarse la
+pestaña el botón reaparece solo, y el acceso directo abre la pestaña correcta.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (puerta
+del minimizado en el tick, guard de arrastre del botón «—» y limpieza de firma de
+la pastilla — todas cayeron rojas y volvieron a verde), 4 casos nuevos en
+suite_102 (11/11), censo CSS de suite_25 actualizado (676 `!important`).
+Verificación Chromium (`docs/herramientas/chromium_186.py`) contra un «Everest»
+simulado agresivo: los 21 colores/posiciones verificados sobreviven, incluida la
+pastilla — un `<button>` sin clase cuyo único escudo es su regla por id con
+`!important`.
+
+---
+
+## [Versión 18.8.5] — 2026-09-08 (Aviso de actualización obligatoria: solo en HCHealth y en UNA sola pestaña)
+
+Pedido en vivo del médico: «LA ACTUALIZACIÓN OBLIGATORIA DEL SCRIPT DEBE SALIR
+SOLAMENTE AQUI https://neps.everestintelligent.com/viva/HCHealth/ Y UNA SOLA
+VENTANA/PESTAÑA NO SE DEBE REPETIR ESE AVISO EN LAS OTRAS INSTANCIAS».
+
+### 📍 El aviso solo existe en el módulo clínico HCHealth
+Antes, cada pestaña de Everest con una versión vieja pintaba su propio modal de
+bloqueo, en cualquier pantalla del hospital. Ahora la puerta de URL
+(`_enModuloHCHealth()`, la misma regla del resto de funciones clínicas) corta el
+aviso fuera de `/viva/HCHealth/`: en las demás páginas el asistente sigue
+bloqueado (regla de proyecto) pero sin el cartel, y ninguna pestaña ajena al
+módulo clínico puede quedarse con el turno de mostrarlo.
+
+### 🪟 Una sola pestaña/ventana lo muestra (arriendo entre pestañas)
+La pestaña que gana el arriendo lo escribe en `localStorage`
+(`vgl_aviso_bloqueo_claim`, compartido por todas las pestañas de Everest del
+navegador) y lo renueva cada 10 s; las demás ven un arriendo ajeno fresco y se
+callan, aunque su reloj queda vigilando para tomar el relevo si la dueña muere
+(TTL de 2 min, generoso a propósito: Chrome estrangula los temporizadores de
+pestañas ocultas a uno por minuto y la dueña debe poder renovar). El linaje vive
+en `sessionStorage` (`vgl_aviso_bloqueo_linaje`): recargar la pestaña dueña no la
+convierte en «otra instancia» y recupera su arriendo al instante. Con guard
+anti-carrera (dos pestañas que reclaman a la vez: gana la última escritura) y
+fail-open (si el storage no responde, el bloqueo se muestra igual — es la regla
+suprema).
+
+Trazabilidad: 4 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (puerta
+de URL, cerradura del arriendo en sus dos sentidos y linaje del F5 — todas
+cayeron rojas y volvieron a verde), 4 casos nuevos en suite_17, banco completo
+en verde (3662 comprobaciones).
+
+---
+
+## [Versión 18.8.4] — 2026-09-08 (T1: Anexo 5 con variables de tema + blindaje tipográfico de los 9 modales/avisos pegados a body)
+
+Cierre del encargo T1 de la sesión: auditoría CSS de los modales y avisos que se
+pegan directamente a `document.body` (la lista de CLAUDE.md) y rediseño del panel
+del Anexo 5 de la HC con variables de tema.
+
+### 🎨 El panel del Anexo 5 se pinta con variables de tema, no con colores duros
+El aviso de abandono/pendientes/remitir/metas dentro de la Historia Clínica usaba
+colores duros (azul noche `#0F172A`, rojo `#B91C1C`, ámbar `#B45309`, azul
+`#1D4ED8`, verde `#15803D`, gris pizarra `#334155`/`#64748B`, fondo y borde
+`rgba(15,23,42,…)` y un `font-size:12px` fijo). Ahora usa las variables de tema
+del proyecto (`--fg`, `--fg2`, `--fg3`, `--c-rojo`, `--c-ambar`, `--c-azul`,
+`--c-verde`, `--surface-2`, `--line`, `--t-small`): legible en tema oscuro y en
+tema claro, y coherente con el resto de la UI. Los `!important` de cada estilo
+inline se conservan exactamente donde estaban (Regla R) y el acento semántico del
+borde izquierdo rojo se mantiene. Verificado en Chromium contra el CSS real de la
+hoja con un «Everest» simulado agresivo
+(`div,span,p,b,small,label,button{color:… !important}`): los 12 colores del panel
+sobreviven en ambos temas.
+
+### 🛡️ Blindaje tipográfico agrupado de los 9 modales/avisos pegados a body
+Los 9 contenedores de la lista de CLAUDE.md (`#vgl-pym-modal`, `#vgl-pes-modal`,
+`#vgl-labs-modal`, `#vgl-labsv-modal`, `#vgl-postcita-panel`,
+`#vgl-agendar-modal`, `#vgl-ordenar-modal`, `#vgl-toasts`, `#vgl-pausa-clinica`)
+ya tenían sus reglas de color con `!important` (auditoría: 252 reglas reales,
+0 violaciones), pero el texto suelto SIN clase propia (un `<b>`/`<span>` dentro de
+un párrafo) no estaba protegido contra reglas genéricas de Everest. Nueva regla
+agrupada con el patrón de especificidad CERO
+`#vgl-… :where(:not([class])){color:inherit !important}`: quien lleva color propio
+lleva clase propia (v18.0.16), y el suelto hereda el color del contenedor.
+Verificado en Chromium: el suelto de los 9 contenedores sobrevive a un Everest
+simulado realista y las clases con color propio sobreviven al agresivo.
+
+Trazabilidad: 3 mutaciones verificadas en `tests/INFORME_MUTACIONES.md` (blindaje
+sin un selector, color duro reintroducido, `!important` retirado de una regla de
+modal — las tres cayeron rojas y volvieron a verde), banco completo en verde
+(3658 comprobaciones), verificación Chromium con el patrón de
+`docs/herramientas/chromium_102.py`.
+
+---
+
+## [Versión 18.8.3] — 2026-09-08 (Auditoría integral del widget «Próximos exámenes · Riesgo cardiovascular»)
+
+Auditoría completa del widget pedida por el médico: errores clasificados por
+criticidad (ninguno bloqueante, 2 graves, 3 leves, 1 documentado), corregidos con
+mutación verificada y probados en los 3 motores (Chromium, Firefox, WebKit) × 3
+tamaños de pantalla (móvil 360, tablet 768, escritorio 1366). Detalle trazable en
+`docs/AUDITORIA_WIDGET_RCV_20260908.md`.
+
+### 🩹 G1 — el panel del badge de exámenes ya no se corta en pantallas angostas
+El badge de Conducta se abre CENTRADO (encargo v17.41.0): el clampeo existente
+solo defendía paneles laterales de ancho fijo, así que en móvil/tablet el panel
+abierto podía quedar cortado por el borde e inalcanzable. Nuevo
+`_cwClamparPanelAbierto`: al abrir (clic) y en cada tick, corrige la posición
+midiendo el ancho REAL ya desplegado, con margen de 8 px; al cerrar, el tick
+restaura el centrado exacto.
+
+### 🩹 G2 — el listado se actualiza solo cada 24 h y dice de CUÁNDO es
+- **Sello diario**: el primer tick de un día calendario nuevo invalida el caché
+  una vez (pestaña dormida toda la noche incluida); el resto del día lo cubre el
+  TTL de 10 minutos. Nunca más un listado de ayer sin aviso.
+- **Estampa de frescura en el pie**: «leído de Everest hoy HH:MM» (o «DD-MM
+  HH:MM» si es de otro día) cuando hay consulta exitosa; «se actualiza solo»
+  cuando aún no la hubo. Nunca se finge una hora: casilla vacía antes que dato
+  inventado.
+
+### ✏️ Leves: táctil, lenguaje claro y responsividad
+- **L1**: botón de cierre a 28×28 px (mínimo táctil WCAG 2.5.8).
+- **L2**: rótulos amables para los 10 CUPS del programa (p. ej. «903815» →
+  «Colesterol bueno (HDL)») con la descripción técnica debajo como fuente de
+  verdad; sin rótulo confirmado, solo la desc — nunca un rótulo supuesto.
+- **L3**: `box-sizing:border-box` en la caja del panel — en un móvil de 360 px
+  el borde derecho quedaba cortado e inalcanzable (hallazgo de la propia
+  verificación en navegador).
+- **L4** (documentado, sin corregir): `todayStamp()` usa el día calendario en
+  hora local del equipo; sin daño medible hoy (el consultorio opera en Colombia)
+  y el cambio toca flujos fuera del widget — decisión del médico pendiente.
+
+### 🧪 Pruebas
+`suite_71` (+5 casos de clampeo, 90 en total), `suite_88` (rótulos, pie con
+estampa, frescura y medianoche con reloj congelado, CSS 28×28 y border-box),
+`suite_25` (contrato de `!important` a 669) y **verificación empírica en 3
+motores × 3 viewports con el CSS real del script contra un CSS «Everest»
+simulado agresivo**: 9 de 9 en verde (colores, cierre, panel dentro de la
+ventana, clampeo con la función real, centrado del badge, hover/focus). Safari
+no existe en Windows: WebKit es su motor de cascada, documentado honestamente.
+
+Siete mutaciones verificadas (M1-M7) con sus filas en
+`tests/INFORME_MUTACIONES.md`; documentación retroactiva de las mutaciones de
+términos de por vida y de la mini guía del aviso de actualización (pedidos 1 y 4
+de la sesión).
+
+---
+
+## [Versión 18.8.2] — 2026-09-08 (Widget «Próximos exámenes»: ahora se cierra y se mueve)
+
+### ✕ El panel de próximos exámenes por fin se deja cerrar
+El widget «Próximos exámenes · Riesgo cardiovascular / Programa: …» tenía un fallo
+de usabilidad crítico: no podía cerrarse ni moverse, y quedaba clavado en su
+esquina. Ahora:
+- **Botón de cierre visible y accesible** en la esquina superior derecha de la
+  barra del panel: un `<button>` nativo con nombre accesible («Cerrar el panel de
+  próximos exámenes»), operable con clic, Enter o Espacio, y con anillo de foco
+  visible para navegación por teclado.
+- **Cierre por paciente, no para siempre**: al cerrarlo, el panel no resucita
+  mientras el médico siga en ese paciente — ni siquiera si llegan datos nuevos de
+  ese mismo paciente. Al abrir otro paciente, vuelve solo.
+
+### 🖐️ Arrastre libre con la barra superior
+- La **barra superior es la única zona de agarre**: se arrastra desde ahí y el
+  cursor lo anuncia (grab/grabbing). El botón de cierre jamás inicia arrastre.
+- La **posición se preserva en la sesión** (GM `vgl_rcvp_pos`) y se restaura al
+  volver a pintar, clampada a la ventana actual: rotar el monitor o cambiar de
+  resolución nunca deja el panel fuera del alcance (mínimo 96 px visibles).
+- La raíz se anuncia como región («Próximos exámenes») para lectores de pantalla.
+
+### 🛡️ Blindaje verificado contra el CSS de Everest
+Cada color nuevo del botón lleva `!important` (el panel vive pegado a
+`document.body`, fuera de `#vgl-root`) y se verificó en Chromium contra un CSS
+«Everest» simulado agresivo (`div,span,p,b,small,label,button{color:X
+!important}`): los 11 colores del panel, el hover y el anillo de foco sobreviven
+todos. La escala tipográfica queda cableada a `--t-micro` (Regla G de la cascada).
+
+### 🧪 Pruebas
+Suite nueva `suite_102` (7 casos: clampeo por pantallas reales 320×480 a
+1920×1080, accesibilidad del botón, cierre por paciente, arrastre con persistencia,
+restauración clampada, y exclusión del botón como zona de agarre) + regresión
+`suite_88` (20/20) y `suite_25` (33/33, contrato de `!important` actualizado a
+668). Dos mutaciones verificadas (guard del botón y guard del cierre por
+paciente) con sus filas en `tests/INFORME_MUTACIONES.md`.
+
+---
+
+## [Versión 18.8.1] — 2026-09-08 (Bienvenida a todos los médicos: solo términos y condiciones, y permisos por médico)
+
+### 🚪 La puerta de entrada ahora es solo su aceptación
+Se retiran las restricciones de inicio y de uso por padrón: el script ya no le cierra
+el paso a ningún médico de la IPS.
+
+- **Todo médico entra**: esté o no en la lista, la primera pantalla es únicamente la
+  aceptación de términos y condiciones. Al aceptar, el script arranca completo.
+- **La lista dejó de recortar**: quien no aparece en el padrón (o el padrón no está
+  disponible) recibe el perfil COMPLETO — todas las funciones visibles y utilizables.
+  La única medida que apaga a un médico entero sigue siendo la lista de bloqueo,
+  que se mantiene por seguridad.
+- **La decisión es local e inmediata**: la pantalla de términos no espera ninguna
+  consulta a la red; el rechazo se respeta durante 12 horas y el diagnóstico de la
+  compuerta solo se escribe cuando el arranque se silencia (bloqueo o rechazo fresco),
+  nunca cuando simplemente se pregunta o se acepta.
+
+### 🎛️ Permisos por médico × función (administración desde Ajustes)
+Todos los médicos ven todas las funciones del sistema. Para cada médico se puede
+activar o desactivar el **uso** de cada función, desde el nuevo grupo
+**«Permisos por médico»** de Ajustes (visible para el perfil COMPLETO):
+
+- **Por cédula o por nombre completo** se añade al médico a la lista y se desmarca lo
+  que se le quiere desactivar. Por defecto todo nace **encendido (ON)** — para los
+  médicos que ya estaban y para los que vayan llegando.
+- **Se desactiva el uso, no la vista**: el botón sigue a la vista; al intentarlo, avisa
+  que la función está desactivada y no abre ni escribe nada.
+- **La hoja «acceso» del tablero manda en lo remoto**: la columna `off` de la lista
+  remota desactiva funciones (se refresca cada 4 h); los ajustes locales del equipo
+  pueden volver a encenderlas (marcar ON) o desactivarlas adicionalmente, y la fila
+  local se puede quitar con «Quitar» para volver a mandar el padrón.
+- **Usted no puede desactivarse funciones a sí mismo**: la casilla se re-marca sola con
+  el aviso de que sus revocaciones se administran desde el padrón.
+- **Centinela no se puede desactivar** para nadie.
+
+### 🧾 Auditoría de cada cambio de permisos
+Cada activación o desactivación queda anotada en este equipo con **quién** hizo el
+cambio, **cuándo** (fecha y hora), **a qué médico** y **qué función**, con un registro
+que se conserva hasta 200 entradas, y cada cambio viaja además al tablero como evento
+`permiso_cambio`. Las anotaciones del padrón usan el uid o el login del médico en
+sesión; sin identidad, la casilla del autor queda vacía.
+
+Pruebas en `tests/suite_101_permisos.js` (15/15: unidad de revocación, estado efectivo,
+menú con su guarda D5, auditoría local y remota, y corte de ejecución en los seis
+puntos) con las suites 78/80/82 adaptadas al nuevo fail-open; 3 mutaciones verificadas
+(fail-open, inmunidad de centinela y guarda D5) en `tests/INFORME_MUTACIONES.md`.
+
+---
+
+## [Versión 18.8.0] — 2026-09-08 (DeepSeek como proveedor principal de la redacción con IA)
+
+### 🤖 Redacción con IA: deepseek-v4-flash como proveedor principal
+El redactor de casillas ahora puede usar **DeepSeek** (modelo `deepseek-v4-flash`,
+API oficial de `api.deepseek.com`) como proveedor principal:
+
+- **El médico elige con la clave**: si en Ajustes pega la clave de DeepSeek, el
+  redactor usa `deepseek-v4-flash` a la primera. Si no la hay, z.ai (GLM-5.3)
+  conserva su puesto de siempre y Gemini sigue de respaldo — prioridad
+  **deepseek > z.ai > Gemini**, sin que el médico tenga que elegir proveedor a mano.
+- **El prompt no cambia**: el sistema de instrucciones afinado (fuente de verdad,
+  cero inferencia, cifras verificables) viaja completo, ahora en su *role* propio
+  de sistema, como exige la API de DeepSeek. La salida se parsea con el mismo
+  lector OpenAI-compatible de z.ai.
+- **Las reglas de siempre**: la clave se guarda solo en el navegador (ofuscada),
+  nunca en claro; el borrador sigue exigiendo revisión del médico antes de firmar.
+
+Pruebas en `tests/suite_99_ia_deepseek.js` (contrato del proveedor, parseo, escalera
+y no-regresión de z.ai/Gemini, protegidos a su vez por la suite 70).
+
+---
+
+## [Versión 18.7.0] — 2026-09-08 (Acceso directo a Historias Clínicas y pestañas de impresión desde el dock)
+
+### 📋 Un toque y a la historia del paciente en sala
+Las tarjetas del panel «En sala» muestran ahora un botón violeta **«Historias Clínicas»**.
+Un solo clic abre la historia del paciente — el mismo gesto que el botón nativo de
+«Citas del día» (nada de botones «Atender» propios: la decisión v14.0.2 se mantiene).
+
+Pensado para el momento exacto de atender:
+
+- **Solo en «En sala»**: el atajo aparece únicamente cuando el paciente está en sala;
+  los demás estados no lo muestran.
+- **Nunca abre el paciente equivocado**: la tarjeta empareja su fila nativa por cédula
+  exacta (o, si la tarjeta no trae cédula, por hora y estado). Si hay cero filas o más
+  de una candidata —o está fuera de Citas del día—, no clica nada y avisa en ámbar
+  cómo hacerlo a mano.
+- **Cero red propia**: el botón solo replica el clic del botón nativo de Everest; el
+  módulo VGL-HC existente (hint + precarga) sigue haciendo el resto.
+
+Pruebas y mutaciones en `tests/suite_97_hc_directo.js`.
+
+### 🖨 📋 Impresión Diagnóstica y Conducta a un clic desde el dock de la historia
+El dock de la historia clínica ofrece dos accesos directos nuevos —**Impresión
+Diagnóstica** y **Conducta**— que saltan a las pestañas de la nota que se imprimen al
+cerrar la consulta.
+
+- **Solo cuando existen**: los botones nacen únicamente si la pestaña ya está montada
+  en la pantalla (el dock puede aparecer antes que el editor de la nota); al montarse,
+  el dock se repinta solo y el acceso aparece.
+- **El gesto es de Everest**: cada botón clica el enlace real de su pestaña
+  (`a#impDiagnostica` / `a#conducta`), sin red ni escritura propias.
+- **A prueba de pantallas**: si la pestaña ya no está al momento del clic, aviso ámbar
+  y nada más — jamás se inventa una pestaña.
+
+Pruebas y mutaciones en `tests/suite_98_hc_pestanas.js`.
+
+### 🧪 Script de prueba en la consola (F12): PROBAR_CENTINELA
+Para comprobar el Centinela en vivo se entrega **PROBAR_CENTINELA.js**, un script de
+consola que se pega en F12 y descarga un reporte JSON **redactado** (cero datos de
+paciente: solo rutas, conteos y estados técnicos).
+
+- **Prueba A (solo lectura)**: confirma que el panel y el dock están vivos y cuenta
+  los atajos instalados (Historias Clínicas, Impresión Diagnóstica, Conducta).
+- **Prueba B (con rollback automático)**: simula por un instante las pestañas de la
+  nota y comprueba que los accesos del dock aparecen; después retira todo y deja la
+  pantalla exactamente como estaba — no toca casillas ni datos de ningún paciente.
+- **A prueba de errores**: si las pestañas reales ya están en pantalla o quedó algo de
+  una prueba anterior, la prueba B no corre y lo avisa en el propio reporte.
+
+Uso: F12 → Consola → pegar el script → esperar ~15 s → se descarga
+`probar_centinela_….json` con el resultado.
+
+---
+
+## [Versión 18.6.2] — 2026-09-07 (Toggles en Ajustes y una apertura de Historia Clínica más ligera)
+
+### ⚙️ Los interruptores de funcionalidad ya se mueven desde Ajustes
+El grupo «Funcionalidades por médico» (solo perfil COMPLETO) pinta cada toggle
+registrado con su mecanismo: encender o apagar aplica **en caliente** (el botón del dock
+aparece o desaparece al instante), se guarda por médico y no pasa por el borrador de
+Ajustes. Los sub-interruptores se muestran solo con su padre activo y se ocultan o
+recuperan en vivo. Pruebas y mutaciones en `tests/suite_15_interfaz_avanzada.js`.
+
+### 🚀 Apertura de HC más ligera (informe antes/después en `docs/INFORME_RENDIMIENTO_BASELINE_V0.md`)
+- **Menos una petición fallida por búsqueda**: retirada la ruta de respaldo que el HAR
+  de producción mostraba devolviendo 400 tres de tres veces. El peor caso de la cascada
+  baja de 2 peticiones a 1.
+- **La cédula se lee una vez por segundo, no cuatro**: el tick del vigilante toma una
+  foto del paciente abierto y la comparten los llamadores síncronos; la vía diferida
+  sigue leyendo fresca (protección anti-cruce intacta).
+- **Chip «última HC» en el lanzador**: fecha de cierre, clasificación y riesgo
+  cardiovascular con el contrato real de Everest, una consulta por paciente (caché de
+  10 minutos), la cédula jamás viaja al servicio.
+- **Caché de catálogos globales bajo interruptor** (APAGADO por defecto): al encenderla,
+  los dos catálogos de parametrización de la IPS (~2,9 MB por apertura de HC) se
+  confirman con doble lectura idéntica y desde la tercera apertura se sirven sin red.
+  TTL de un día, todo fallo devuelve el flujo original intacto, cero datos de paciente.
+
+### 📚 Evidencia cerrada en matriz
+`docs/INFORME_EVIDENCIA_HAR.md` estrena la §10 «Matriz de cobertura HAR → código»: cada
+hallazgo de la captura real cruza con su estado en esta versión — lo implementado tiene
+prueba de banco y mutación verificada; lo no implementado se dice sin adornos y con el
+porqué.
+
+### 🔍 Redactor con IA: trazabilidad de la «foto» y red de seguridad de preámbulos
+El plan de la auditoría del redactor (`docs/INFORME_AUDITORIA_REDACTOR_IA.md`) queda
+aplicado: cada nota lleva un **sello de trazabilidad** —declara en el prompt la edad de
+la lectura de pantalla y la hora local de la generación—, los **preámbulos** del modelo
+(«Claro, aquí tiene…») se quitan antes de que usted los vea, en todos los modos, y el
+verificador de afirmaciones estrena **telemetría anónima** (`ia.fuentes.flag`,
+`ia.fuentes.sin_linea`) sin una sola palabra de texto clínico. El cambio de proveedor y
+la certificación «S+» pedidos siguen rechazados con evidencia (§5 del informe).
+
+---
+
+## [Versión 18.6.1] — 2026-09-07 (Toggles de funcionalidad y el Anexo 5 del programa RCV)
+
+### 📋 El Anexo 5 se indexa desde el libro
+Tercera hoja del libro SEPTIEMBRE1: metas de riesgo cardiovascular (glicemia, LDL,
+HbA1c, microalbuminuria…), estadio renal, EKG y remisiones, con emparejamiento de
+columnas tolerante a errores de escritura del libro y emparejamiento por documento.
+La salida vive en un mapa aparte (no se mezcla con el índice general).
+
+### 🔔 Aviso del Anexo 5 al abrir la HC
+Con la historia abierta, el panel avisa qué metas del programa tiene pendientes el
+paciente y sus fechas de toma — solo lectura, la casilla del médico intacta.
+
+### ⚙️ Toggles de funcionalidad (primera entrega, por consola)
+Registro `VGL_TOGGLES` con persistencia por médico, jerarquía padre-hijo y regla
+asimétrica: lo que solo apaga piezas no esenciales nace encendido; lo que limita el
+flujo (como solo-labs) nace APAGADO y solo se enciende por decisión explícita. La
+interfaz en Ajustes llega en la versión siguiente.
+
+---
+
+## [Versión 18.5.2] — 2026-09-07 (Lanzador asistido de Historia Clínica + prefetch de órdenes)
+
+### 🩺 VGL-HC: el botón «Historias Clínicas» ahora deja contexto seguro
+El botón nativo `btn btn-primary-medic` del MFE HCHealth (verificado contra el bundle
+público real, espejo del 07-sep) es el único momento en que se sabe QUÉ paciente se
+abre: Everest resuelve la pareja cita↔paciente por red y no en la URL. Al capturar ese
+clic, el asistente anota la cédula de la fila (hint con TTL de 15 s, nunca fabrica
+pacientes) y pinta un **chip accesible** (`role=status`, dentro del panel, cédula
+ENMASCARADA `···1234`) que dice si el paciente tiene alerta de inasistencia
+reincidente. Con lector de pantalla, el aviso se anuncia UNA vez por paciente y
+**sin decir la cédula en voz alta**. El botón hermano «Consentimientos» (misma clase)
+queda excluido por guardia de texto. Pruebas y mutaciones en `tests/suite_91_hc_launch.js`.
+
+### ⚡ Prefetch especulativo de órdenes vigentes al abrir la HC (v18.5.2-hc2)
+Confirmado con traza de red real (HAR del consultorio, ~95 llamadas y ~7 s por
+apertura): en el hueco del clic se precalienta la MISMA cadena que ya usan el banner
+antiduplicado y el modal de órdenes (cédula → id interno → órdenes vigentes). Es
+puramente especulativo — 1 intento, sin reintentos, sin ruido, bajo el cortacircuitos
+de 3 fallos/5 min, con dedup en vuelo — y si falla, el chip y el hint siguen íntegros
+(fallar cerrado). La cédula JAMÁS viaja como id de paciente. Sin escrituras nuevas.
+
+### 📚 Evidencia y documentación
+Análisis integral del flujo con dos capturas HAR reales del dominio (con cuerpos de
+respuesta): estructura JSON de la historia, cadena completa del clic, flujo de punta
+a punta del modal de ordenamiento (documentado; el guardado sigue siendo solo del
+médico), errores del servidor y brechas de captura restantes. Informes:
+`docs/INFORME_MEJORA_INTEGRAL_HC.md` y `docs/INFORME_EVIDENCIA_HAR.md`.
+
+---
+
+## [Versión 18.6.0] — 2026-09-07 (Base única SEPTIEMBRE1: adiós al Agenda Día, refrescos 06:00/12:00)
+
+### 🎯 El mandato
+El médico decretó la migración total: **todo el sistema —panel del Centinela y cada
+componente del script— se alimenta EXCLUSIVAMENTE de «BASE PILOTO DE CONSULTA  BELLO
+SEPTIEMBRE1.xlsx»** (GUID `6594b356-…`, 22,5 MB, enlace anónimo verificado), con refresco
+**a las 06:00 y a las 12:00 (UTC-5 Bogotá)** y cero dependencia del extinto archivo diario
+«Agenda_Dia_CMB». Auditoría completa con el archivo REAL descargado en
+`AUDITORIA/INFORME_BASE_PILOTO_SEP_20260907.md`.
+
+### 🔬 Lo que la auditoría empírica evitó
+Simular el comportamiento del script contra el libro real demostró que la migración
+«solo cambiar el GUID» habría dejado el módulo **muerto en silencio**: la selección de hoja
+por puntaje elegía «CITASDIA AGOSTO» (histórico de 97,6 MB, puntaje máximo 400) y ahí la
+columna de identificación se resolvía a **«TIPO_DOCUMENTO»** («CC», «TI»…) en vez de
+«NRO_IDENTIFICACION» → 0 pacientes indexados → todas las tarjetas en «sin registro en PyM»
+sin un solo error visible. Correcciones: hoja fuente **fijada por configuración**
+(«citas dia regional»), `DOC_EXACT` ampliado («NRO IDENTIFICACION» con espacio, etc.),
+fallback blando que jamás elige una columna «TIPO …», y guardián de índice vacío que
+rechaza el libro sin tocar la caché buena.
+
+### 🔧 La base única
+- **Hojas fijadas**: «citas dia regional» (citas operativas: Identificacion + Susceptible +
+  Abandonados_PES) **+ hoja PROCEX** indexada con traductor nuevo: «Aplica Cobertura/Fenix
+  VPH/CCU» = pendiente → chips de cérvix VPH/CCU, mamografía, PSA y SOMF (opción B
+  confirmada por el médico: recupera las tamizaciones que el archivo diario traía). Se
+  indexan todas las filas, sin filtro por fecha de cita.
+- **Refresco 06:00 y 12:00 Bogotá** (UTC-5 fijo, calculado desde UTC: el huso del equipo no
+  puede adelantar ni saltar ventanas). Minutero que vigila la compuerta; el sello de cada
+  ventana se pone SOLO si los metadatos (1 KB) respondieron — una falla de red a las 06:05
+  reintenta al minuto siguiente, no deja la copia vieja hasta el mediodía.
+- **Eliminado por completo** el flujo del diario: listado de carpetas, selección por nombre
+  con tokens de fecha, captador de la pestaña SharePoint, caché `vgl_pym` (con limpieza de
+  migración que devuelve hasta 12 MB al almacén), recordatorio «Falta el PyM de hoy»,
+  consulta al respaldo y todos sus mensajes. `spFallbackUrls` queda en 2 vías por GUID — la
+  tercera (shareId de MAYO) se retiró porque habría entregado el libro de un mes pasado.
+- **Mantenimiento (requisito del médico)**: log de actualizaciones `vgl_base_log` (anillo de
+  60 filas, fase/ms/MB/mtime/errores, SIN PHI); integridad post-descarga (firma PK + ZIP +
+  hoja fijada + índice no vacío); **rollback automático** — la caché solo se reemplaza tras
+  validar el índice nuevo, en fallo se sirve la última copia buena y se reintenta; métricas
+  al tablero (`base.descarga.ms.*`, `base.indice.pacientes.*`) que alimentan las alertas de
+  flota ya existentes; reintentos con renovación de cookie ante 401/403.
+- **T_DESCARGA 120 s → 180 s** (la base pesa 22,5 MB, 60 % más que la de mayo).
+- **Bug latente heredado corregido**: `FRIENDLY_NORM` no viajaba serializado al Web Worker
+  (desde v18.0.92 cualquier entorno con Worker real moría con ReferenceError al indexar la
+  primera celda; en producción no explotaba porque el CSP de Everest fuerza el hilo
+  principal).
+
+Pruebas y mutaciones: suites 03/12/05/16 reescritas + nueva **suite 92 de staging**
+(ventanas de refresco con reloj congelado, rollback, integridad, recuperación, log).
+
+---
+
+## [Versión 18.5.0] — 2026-09-07 (Pacientes nuevos por turno: fuera el botón «NUEVOS», toast FUCSIA)
+
+### 🐞 La causa del «todos son nuevos» de la mañana
+El botón «👤 Nuevos (N)» y su modal decidían «nuevo» contra una **memoria de 90 días por médico**
+(`vgl_aviso_hist_<uid>`), no contra la lista de citas del día. Esa memoria caduca (purga de 90 días,
+vacaciones, navegador limpio): bastaba una cédula vieja sobreviviente para desactivar el arranque
+silencioso, y la primera lectura de la mañana clasificaba «nuevo» a TODA la agenda. El botón, el
+modal, el contador del dock y la memoria de 90 días fueron **retirados por completo**.
+
+### 🟣 Toast FUCSIA con línea base por turno (AM y PM)
+El reemplazo no memoriza médicos: fotografía la **lista inicial de cédulas** de la agenda al
+arrancar cada turno (AM: 00–11 h · PM: 12–23 h) y, con cada lectura del API de agenda (cero red
+extra), dispara de inmediato un toast **FUCSIA (#e879f9 — color exclusivo, ningún otro aviso ni
+elemento de la interfaz lo usa)** por cada paciente que entra después y no estaba en esa foto.
+Misma estructura, animación y comportamiento de los toasts de cambio de leyenda (mismo canal,
+autocierre, cierre por clic/teclado, no crítico). Guardias: gracia de 120 s tras la foto para
+absorber lecturas incompletas del arranque; dedup por cita (cédula@hora) y entre pestañas; sin
+nombres en disco (solo cédula y hora, barridas al cambiar de turno o día); la capa de acceso
+`aviso_paciente_nuevo` sigue mandando. Términos de privacidad actualizados a v1.4 (T-47 n.º 4).
+Pruebas y mutaciones en `tests/suite_79_aviso_paciente.js`.
+
+---
+
+### 🧪 El menú de interpretación del uroanálisis tras «Exámenes»
+Athenea llena las casillas de los COMPONENTES del parcial (nitritos, leucocitos…), pero la
+casilla GENERAL —la interpretación global que va junto a la fecha— siempre quedaba vacía.
+Ahora, tras usar **🧪 Exámenes** (opción 1 «Última toma completa» u opción 2 «Historial por
+analito»), si esa casilla está VACÍA se despliega un menú numerado con 12 términos
+generalistas (NORMAL, ANORMAL, GLUCOSURIA, HEMATURIA, PROTEINURIA, BACTERIURIA,
+LEUCOCITURIA (PIURIA), CRISTALURIA, NITRITOS POSITIVOS, SUGESTIVO DE ITU,
+BACTERIURIA ASINTOMÁTICA, MUESTRA CONTAMINADA).
+
+La primera opción es la **RECOMENDADA** por el motor clínico (⭐ con su fundamento a la
+vista): analiza los componentes recién escritos y los síntomas urinarios confirmados del
+paciente — p. ej. tira sugestiva + síntomas → «SUGESTIVO DE ITU»; sin síntomas →
+«BACTERIURIA ASINTOMÁTICA (no se trata)». Sin base suficiente, ninguna opción se presenta
+como recomendada: **el script sugiere, el médico decide.** El fundamento de lo elegido
+queda registrado por paciente (libreta local). Cerrar sin elegir deja la casilla vacía,
+como siempre. Pruebas y mutaciones en `tests/suite_90_uro_menu.js`.
+
+---
+
+## [Versión 18.4.4] — 2026-09-07 (Permiso individual: programa PyM opcional para Medicina General)
+
+### 🎫 `pym_opcional`: agendar sin programa especial cuando su especialidad no es RCV
+La hoja "acceso" del tablero gana una columna de capacidades individuales. Hoy existe
+una: `pym_opcional`, sembrada exclusivamente para la Dra. Gloria Alejandra Jaramillo
+Montoya (Medicina General) — su modal de **Agendar** ya no exige elegir programa
+especial/PyM (HTA, HTA+DM, Nefroprotección…) para confirmar la cita, y el selector
+lo anuncia («— programa (opcional para su perfil) —»). Para todos los demás médicos
+la obligatoriedad queda exactamente como estaba: el permiso vive solo en el padrón
+del servidor (blocklist gana siempre; reverting = borrar la celda). Pruebas de
+regresión y mutaciones en suite_78/89; detalle en `docs/CAMBIOS_permiso_pym_opcional.md`.
+
+---
+
 ## [Versión 18.3.0] — 2026-09-05 (La IA con red de seguridad, y el consentimiento antes de nada)
 
 ### 🪜 La escalera de IA (m2m)

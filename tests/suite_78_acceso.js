@@ -10,6 +10,13 @@
 //  órdenes PyM, que el mapeo de implementación demostró ser la misma
 //  superficie que el modal L30103 (único escritor apiOrdenamientoGuardar).
 //
+//  v18.8.1 — FAIL-OPEN: el padrón ya no recorta a nadie. Todo médico NO
+//  bloqueado resuelve COMPLETO (las 13 capacidades), haya o no identidad
+//  y haya o no lista válida; la blocklist es la única decisión que apaga
+//  a un médico entero, y el recorte fino por función vive en la capa de
+//  revocación granular (suite 101). La gracia de 12 h sobrevive por
+//  compatibilidad, pero ya no decide ningún acceso.
+//
 //  Los NOMBRES del padrón NO viven en el userscript (7A): la suite los
 //  siembra en `vgl_acceso_lista` como haría la lista remota (arreglo B2).
 // =====================================================================
@@ -96,14 +103,15 @@ module.exports = {
       t.falso(c.api.esMedicoRCVActivo(), "envoltorio: LABORATORIOS no es RCV");
     });
 
-    t.caso("B1: uid vivo pero fuera del padrón → PÚBLICO: solo psic_odonto y pym", () => {
+    t.caso("B1 (v18.8.1 fail-open): uid fuera del padrón → COMPLETO con las 13 capacidades (el padrón ya no recorta a nadie)", () => {
       const c = cargarCon(cargar, listaEnStorage());
       conDoctor(c.api, 555, "Médico Nuevosur del Hospital");
-      t.igual(c.api.accesoPerfil(), "PUBLICO");
-      for (const cap of CAPS_PUBLICAS) t.cierto(c.api.accesoCap(cap), "PÚBLICO debe tener " + cap + " (1C)");
-      for (const cap of CAPS_LABS.concat(CAPS_SOLO_COMPLETO)) t.falso(c.api.accesoCap(cap), "PÚBLICO NO debe tener " + cap);
-      t.falso(c.api.mtrEsMedicoAutorizado(), "PÚBLICO no es autorizado");
-      t.falso(c.api.esMedicoRCVActivo(), "PÚBLICO no es RCV");
+      t.igual(c.api.accesoPerfil(), "COMPLETO");
+      for (const cap of CAPS_LABS.concat(CAPS_SOLO_COMPLETO, CAPS_PUBLICAS)) {
+        t.cierto(c.api.accesoCap(cap), "fail-open COMPLETO debe tener " + cap);
+      }
+      t.cierto(c.api.mtrEsMedicoAutorizado(), "envoltorio: fail-open COMPLETO es autorizado");
+      t.cierto(c.api.esMedicoRCVActivo(), "envoltorio: fail-open COMPLETO es RCV");
     });
 
     t.caso("B1 (6A): blocklist por uid gana SIEMPRE — ni las capacidades públicas se montan", () => {
@@ -136,12 +144,12 @@ module.exports = {
       t.falso(c.api.accesoCap("rcv"), "el nombre no puede promover capacidades sobre el uid");
     });
 
-    t.caso("B1: sin identidad y sin gracia → PÚBLICO con las públicas montadas (interpretación declarada 1C)", () => {
+    t.caso("B1 (v18.8.1 fail-open): sin identidad y sin gracia → COMPLETO (la compuerta de arranque es la aceptación de términos, no el padrón)", () => {
       const c = cargarCon(cargar, listaEnStorage());
       conDoctor(c.api, 0, "");
-      t.igual(c.api.accesoPerfil(), "PUBLICO");
+      t.igual(c.api.accesoPerfil(), "COMPLETO");
       t.cierto(c.api.accesoCap("pym"), "sin identidad las públicas siguen montándose, como hoy");
-      t.falso(c.api.accesoCap("laboratorios"), "las privadas cerradas");
+      t.cierto(c.api.accesoCap("laboratorios"), "fail-open: ni las privadas se cierran por falta de identidad");
     });
 
     t.caso("B1 (D2): gracia fresca (<12 h) sin identidad → último perfil confirmado", () => {
@@ -152,32 +160,32 @@ module.exports = {
       t.cierto(c.api.accesoCap("agendar_labs"), "la gracia restaura capacidades del perfil");
     });
 
-    t.caso("B1 (D2): gracia VENCIDA (13 h) → PÚBLICO", () => {
+    t.caso("B1 (D2 · v18.8.1): gracia VENCIDA (13 h) → COMPLETO (el fallback de la gracia ya no recorta: fail-open)", () => {
       const almacen = listaEnStorage({ vgl_acceso_ultimo_ok: JSON.stringify({ perfil: "COMPLETO", ts: Date.now() - 13 * 60 * 60 * 1000 }) });
       const c = cargarCon(cargar, almacen);
       conDoctor(c.api, 0, "");
-      t.igual(c.api.accesoPerfil(), "PUBLICO");
+      t.igual(c.api.accesoPerfil(), "COMPLETO");
     });
 
-    t.caso("B1 (D2): la gracia NO se aplica cuando SÍ hay identidad — uid desconocido con gracia COMPLETO fresca", () => {
-      const almacen = listaEnStorage({ vgl_acceso_ultimo_ok: JSON.stringify({ perfil: "COMPLETO", ts: Date.now() - 60 * 60 * 1000 }) });
+    t.caso("B1 (D2 · v18.8.1): con identidad la gracia no participa — uid desconocido resuelve COMPLETO fail-open, no hereda la gracia", () => {
+      const almacen = listaEnStorage({ vgl_acceso_ultimo_ok: JSON.stringify({ perfil: "LABORATORIOS", ts: Date.now() - 60 * 60 * 1000 }) });
       const c = cargarCon(cargar, almacen);
       conDoctor(c.api, 555, "Médico Cualquiera");
-      t.igual(c.api.accesoPerfil(), "PUBLICO", "el uid es definitivo: desconocido es PÚBLICO, no hereda la gracia del PC");
-      t.falso(c.api.accesoCap("rcv"));
+      t.igual(c.api.accesoPerfil(), "COMPLETO", "con identidad la gracia no se mira: fail-open COMPLETO, no LABORATORIOS");
+      t.cierto(c.api.accesoCap("rcv"), "fail-open: rcv abierto");
     });
 
-    t.caso("B1 (D3): lista corrupta o con schema roto NO se aplica — se degrada a PÚBLICO sin reventar", () => {
+    t.caso("B1 (D3 · v18.8.1): lista corrupta o con schema roto NO se aplica — fail-open COMPLETO sin reventar", () => {
       const c1 = cargarCon(cargar, { vgl_acceso_lista: "{esto no es json" });
       conDoctor(c1.api, 101, "");
-      t.igual(c1.api.accesoPerfil(), "PUBLICO", "JSON roto → lista ignorada");
+      t.igual(c1.api.accesoPerfil(), "COMPLETO", "JSON roto → lista ignorada, fail-open");
 
       const rota = JSON.parse(JSON.stringify(LISTA_OK));
       delete rota.perfiles.COMPLETO;
       const c2 = cargarCon(cargar, { vgl_acceso_lista: JSON.stringify(rota) });
       conDoctor(c2.api, 101, "");
-      t.igual(c2.api.accesoPerfil(), "PUBLICO", "schema incompleto → lista ignorada");
-      t.falso(c2.api.mtrEsMedicoAutorizado(), "nada se monta sobre una lista inválida");
+      t.igual(c2.api.accesoPerfil(), "COMPLETO", "schema incompleto → lista ignorada, fail-open");
+      t.cierto(c2.api.mtrEsMedicoAutorizado(), "fail-open: autorizado pese a la lista inválida");
     });
 
     t.caso("B1: accesoListaValida rechaza unidad por unidad los campos que D3 exige", () => {
@@ -202,7 +210,7 @@ module.exports = {
       t.igual(c3.api.accesoLeerLista(), null, "sin lista guardada → null, no excepción");
     });
 
-    t.caso("B1 (D2): resolver con identidad ESCRIBE vgl_acceso_ultimo_ok; PÚBLICO no lo escribe", () => {
+    t.caso("B1 (D2 · v18.8.1): resolver con identidad DEL padrón ESCRIBE vgl_acceso_ultimo_ok; fuera del padrón (fail-open) no alimenta la gracia", () => {
       const c = cargarCon(cargar, listaEnStorage());
       conDoctor(c.api, 201, "Maryuris Terán");
       c.api.accesoPerfil();
@@ -215,7 +223,7 @@ module.exports = {
       const c2 = cargarCon(cargar, listaEnStorage());
       conDoctor(c2.api, 555, "Desconocido Total");
       c2.api.accesoPerfil();
-      t.falso(!!c2.env.almacen["vgl_acceso_ultimo_ok"], "PÚBLICO no alimenta la gracia");
+      t.falso(!!c2.env.almacen["vgl_acceso_ultimo_ok"], "el fail-open no pasa por la anotación: sin fila en el padrón no hay gracia que escribir");
     });
 
     t.caso("B1: mtrNormalizarNombre se conserva estable (tildes, mayúsculas, espacios dobles)", () => {
@@ -432,12 +440,15 @@ module.exports = {
       sinEmbudo(t, c, ["fn.agendar.open", "fn.labs.open", "fn.panel.open", "fn.redactor.open", "fn.redactor.complete", "fn.ia.open"]);
     });
 
-    await t.casoAsync("B3 (capa b): PÚBLICO (uid vivo fuera del padrón) tampoco abre nada privado", async () => {
+    await t.casoAsync("B3 (capa b · v18.8.1): fuera del padrón es COMPLETO fail-open — abre los seis puntos y el embudo los cuenta", async () => {
       const c = ctxB3(555, "Médico Nuevosur del Hospital");
-      t.igual(c.api.accesoPerfil(), "PUBLICO", "precondición del contexto");
+      t.igual(c.api.accesoPerfil(), "COMPLETO", "precondición del contexto (fail-open)");
       await ejercerPrivados(c);
-      ningunModal(t, c);
-      sinEmbudo(t, c, ["fn.agendar.open", "fn.labs.open", "fn.panel.open", "fn.redactor.open", "fn.redactor.complete", "fn.ia.open"]);
+      for (const id of IDS_78) t.cierto(montado(c, id), "fail-open debe montar " + id);
+      const vistas = uxClaves(c);
+      for (const k of ["fn.agendar.open", "fn.labs.open", "fn.panel.open", "fn.redactor.complete", "fn.ia.open"]) {
+        t.cierto(vistas.indexOf(k) >= 0, "embudo presente: " + k);
+      }
     });
 
     await t.casoAsync("B3 (capa b): LABORATORIOS abre lo suyo (laboratorios + agendar toma) y NADA más", async () => {
@@ -478,6 +489,41 @@ module.exports = {
       for (const k of ["fn.agendar.open", "fn.labs.open", "fn.panel.open", "fn.redactor.complete", "fn.ia.open"]) {
         t.cierto(vistas.indexOf(k) >= 0, "embudo presente: " + k);
       }
+    });
+
+    // =====================================================================
+    //  v18.4.4 — CAPACIDADES EXTRA POR MÉDICO (requerimiento del 07-sep): la
+    //  6ª columna del padrón ("caps", sembrada por el TABLERO v12.10.15)
+    //  concede permisos individuales. Hoy: `pym_opcional` = el modal Agendar
+    //  no exige programa especial/PyM (Medicina General u otra especialidad
+    //  sin RCV). Los NOMBRES de estos fixtures son SIMULADOS (cero PHI).
+    // =====================================================================
+    t.caso("v18.4.4: accesoCapExtra lee la cap individual del padrón (uid manda, nombre respalda)", () => {
+      const lista = JSON.parse(JSON.stringify(LISTA_OK));
+      lista.version = "2026-09-07.1";
+      lista.perfiles.COMPLETO.push({ uid: 105, nombre: "Medicina General Simulada", caps: ["pym_opcional"] });
+      const almacen = { vgl_acceso_lista: JSON.stringify(lista) };
+      const c = cargarCon(cargar, almacen);
+      conDoctor(c.api, 105, "Medicina General Simulada");
+      t.cierto(c.api.accesoCapExtra("pym_opcional") === true, "su entrada del padrón trae la cap");
+      t.cierto(c.api.accesoCapExtra("otra_cap") === false, "una cap que su entrada no trae es false");
+      const c2 = cargarCon(cargar, almacen);
+      conDoctor(c2.api, 0, "Eliseth Estrada");   // por NOMBRE: entrada sin caps
+      t.cierto(c2.api.accesoCapExtra("pym_opcional") === false, "una entrada sin caps no hereda nada (la exención es fila por fila)");
+      const c3 = cargarCon(cargar, listaEnStorage());
+      conDoctor(c3.api, 101, "Brandon Jesús Palencia Martínez");
+      t.cierto(c3.api.accesoCapExtra("pym_opcional") === false, "un padrón SIN la columna deja la obligatoriedad intacta: nadie más se exime");
+    });
+
+    t.caso("v18.4.4: blocklist gana SIEMPRE sobre las caps extra", () => {
+      const lista = JSON.parse(JSON.stringify(LISTA_OK));
+      lista.version = "2026-09-07.2";
+      lista.perfiles.COMPLETO.push({ uid: 106, nombre: "Revocada Simulada", caps: ["pym_opcional"] });
+      lista.blocklist.push({ uid: 106, nombre: "Revocada Simulada", motivo: "prueba" });
+      const c = cargarCon(cargar, { vgl_acceso_lista: JSON.stringify(lista) });
+      conDoctor(c.api, 106, "Revocada Simulada");
+      t.igual(c.api.accesoPerfil(), "BLOQUEADO", "precondición");
+      t.cierto(c.api.accesoCapExtra("pym_opcional") === false, "bloqueada no conserva la cap");
     });
 
     // =====================================================================
@@ -539,19 +585,18 @@ module.exports = {
       t.igual(x.red.gmxhrs.length, 0, "CERO llamadas de GM_xmlhttpRequest");
     });
 
-    await t.casoAsync("B4 (capa c): PÚBLICO escribe lo público (pym) y NADA más", async () => {
+    await t.casoAsync("B4 (capa c · v18.8.1): fuera del padrón es COMPLETO fail-open — escribe TODO", async () => {
       const x = ctxC(555, "Médico Nuevosur del Hospital");
-      t.igual(x.c.api.accesoPerfil(), "PUBLICO", "precondición del contexto");
-      const res = await x.c.api.pageFetchJson(U78.ordGuardar, { method: "POST", body: "{}" });
-      t.cierto(!!res && res.error === false, "GuardarOrdenamiento SÍ sale: pym es pública");
-      t.igual(x.red.fetches.length, 1, "exactamente la escritura permitida");
-      t.igual(await x.c.api.pageFetchJson(U78.asignar, { method: "POST", body: "{}" }), null, "AsignarTurno: cerrado en seco");
-      t.falso((await x.c.api._apiPostConDetalle(U78.cancelar, "{}")).ok, "CancelarCita: cerrado en seco");
+      t.igual(x.c.api.accesoPerfil(), "COMPLETO", "precondición del contexto (fail-open)");
+      const res = await x.c.api.pageFetchJson(U78.asignar, { method: "POST", body: "{}" });
+      t.cierto(!!res && res.error === false, "AsignarTurno sale (fail-open)");
+      t.cierto((await x.c.api._apiPostConDetalle(U78.cancelar, "{}")).ok, "CancelarCita sale (fail-open)");
+      const r = await x.c.api._fetchConTope(x.fetch, U78.sms, {});
+      t.cierto(!!(r && r.ok), "EnviarSMS sale (fail-open)");
       const g = await x.c.api.gmPostJsonEx(U78.appAgendar, {});
-      t.falso(g.ok, "AppCita AgendarCita: cerrado en seco");
-      t.cierto(await rechazaCon(x.c.api._fetchConTope(x.fetch, U78.sms, {}), /VGL_ACCESO|compuerta/), "EnviarSMS: cerrado en seco");
-      t.igual(x.red.fetches.length, 1, "no salió ninguna escritura privada más");
-      t.igual(x.red.gmxhrs.length, 0, "ni por GM_xmlhttpRequest");
+      t.cierto(g.ok, "AppCita sale (fail-open)");
+      t.igual(x.red.fetches.length, 3, "asignar + cancelar + sms");
+      t.igual(x.red.gmxhrs.length, 1, "agendar labs por GM");
     });
 
     await t.casoAsync("B4 (capa c): LABORATORIOS escribe agendar_labs y no las escrituras de control", async () => {
@@ -590,7 +635,7 @@ module.exports = {
       t.falso(!!x.c.env.storage.getItem("vgl_api_url"), "BLOQUEADO: no persiste vgl_api_url");
       const y = ctxC(555, "Médico Nuevosur del Hospital");
       y.c.api.apiRecordar(U78.lectura);
-      t.cierto(!!y.c.env.storage.getItem("vgl_api_url"), "PÚBLICO: sí la persiste (pym es pública)");
+      t.cierto(!!y.c.env.storage.getItem("vgl_api_url"), "fuera del padrón (fail-open COMPLETO): sí la persiste");
     });
 
     await t.casoAsync("B4 (capa c): las LECTURAS (URL fuera de la tabla) pasan para todos, incluso BLOQUEADO", async () => {
@@ -610,24 +655,28 @@ module.exports = {
     //  ruta sin-identidad-aceptado. Ahora: (a) con identidad conocida se
     //  exige ANTES de montar; (b) sin identidad NO se bloquea (v18.3.2, caso
     //  Dra. Gloria: el montaje se difiere, no se cancela); (c) cuando la
-    //  identidad llega tarde y resuelve PÚBLICO, la re-visa de tick() retira
-    //  el monitor — «PÚBLICO no construye UI», la promesa del comentario de
-    //  mtrCompuertaDecision.
+    //  identidad llega tarde y resuelve sin «centinela», la re-visa de
+    //  tick() retira el monitor — «sin centinela no hay UI», la promesa del
+    //  comentario de mtrCompuertaDecision.
+    //  v18.8.1 — con el fail-open ya no existe el perfil PÚBLICO: el único
+    //  sujeto con identidad sin «centinela» es el BLOQUEADO (999). La
+    //  revocación granular excluye a «centinela» (PERMISOS_CAPS_REVOCABLES),
+    //  así que la blocklist es la única ruta que llega aquí con identidad.
     // =====================================================================
-    await t.casoAsync("N8-B1 (v18.3.4): «centinela» se exige al montar el monitor — PÚBLICO con identidad no monta #vgl-root; sin identidad se difiere y tick() retira al resolver PÚBLICO", async () => {
-      // (a) PÚBLICO con identidad resuelta: boot() NO monta el monitor. Se
+    await t.casoAsync("N8-B1 (v18.3.4 · v18.8.1): «centinela» se exige al montar el monitor — BLOQUEADO con identidad no monta #vgl-root; sin identidad se difiere y tick() retira al resolver BLOQUEADO", async () => {
+      // (a) BLOQUEADO con identidad resuelta: boot() NO monta el monitor. Se
       // blinda tick() con state.killed para aislar ESTA compuerta: sin el
       // escudo, la re-visa de tick() (que applySettings dispara en el propio
       // arranque) retiraría el monitor aunque la compuerta de boot faltara, y
       // la aserción mediría la otra barrera, no esta.
       const c1 = cargar({ silencioso: true, almacen: listaEnStorage(), gmxhr: (o) => o.onerror(new Error("sin red")) });
-      conDoctor(c1.api, 555, "Médico Nuevosur del Hospital");
+      conDoctor(c1.api, 999, "Prueba Bloqueada Uno");
       enriquecerDom78(c1);
-      t.igual(c1.api.accesoPerfil(), "PUBLICO", "precondición: identidad fuera del padrón");
-      t.falso(c1.api.accesoCap("centinela"), "precondición: PÚBLICO no tiene «centinela» (matriz suite 80)");
+      t.igual(c1.api.accesoPerfil(), "BLOQUEADO", "precondición: identidad en la blocklist");
+      t.falso(c1.api.accesoCap("centinela"), "precondición: BLOQUEADO no tiene «centinela» (matriz suite 80)");
       c1.api.__state.killed = true;   // escudo: tick() no puede retirar nada
       c1.api.boot();
-      t.falso(montado(c1, "vgl-root"), "boot() NO monta #vgl-root para PÚBLICO con identidad conocida");
+      t.falso(montado(c1, "vgl-root"), "boot() NO monta #vgl-root para BLOQUEADO con identidad conocida");
       // (b) Sin identidad conocida (ruta sin-identidad de v18.3.2): el montaje
       // NO se bloquea — se difiere. Bloquear aquí reviviría el «no aparece
       // nada» de la Dra. Gloria.
@@ -644,9 +693,9 @@ module.exports = {
       const vigAntes = c2.api.__vglDomVigilanciaParaTest();
       t.cierto(!!vigAntes.obs, "montaje: el observer de DOM quedó referenciado a nivel de módulo");
       t.cierto(typeof vigAntes.alTocar === "function", "montaje: los listeners de captura quedaron referenciados");
-      // (c) La identidad llega tarde y resuelve PÚBLICO: la re-visa de tick()
+      // (c) La identidad llega tarde y resuelve BLOQUEADO: la re-visa de tick()
       // retira el monitor montado.
-      conDoctor(c2.api, 555, "Médico Nuevosur del Hospital");
+      conDoctor(c2.api, 999, "Prueba Bloqueada Uno");
       c2.api.tick();
       t.falso(montado(c2, "vgl-root"), "tick() retira el monitor cuando la identidad resuelta no tiene «centinela»");
       // v18.3.5 (higiene N3, T1) — el retiro también SUELTA la vigilancia de DOM

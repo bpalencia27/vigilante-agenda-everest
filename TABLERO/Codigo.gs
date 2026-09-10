@@ -1,6 +1,42 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.11.1 — 07-09-2026 (revisión exhaustiva post-modificaciones):
+ *   1. REGRESIÓN CAZADA: _listaAccesoRespuesta NO emitía `caps` (la 6ª columna
+ *      de "acceso"), aunque la semilla la siembra y el cliente v18.4.4+ las
+ *      exige (accesoCapExtra → Array.isArray(e.caps)). Producción sí las emite
+ *      (parche del 07-sep): desplegar el repo tal cual REGRESABA pym_opcional
+ *      de la Dra. Gloria en silencio. Restaurada la emisión: caps:[...]
+ *      (minúsculas, sin vacíos) en cada entrada de perfiles.
+ *   2. ROBUSTEZ: _sincronizarAccesoUid lee las columnas de "acceso_uid" por
+ *      NOMBRE de encabezado (recibido/uid/nombre) con fallback a los índices
+ *      canónicos — misma lección del v12.10.13: _hoja() migra columnas al
+ *      FINAL y una hoja histórica puede tener otro orden.
+ *   Verificado: node --check + standalone Node (13 aserciones: sincronización con
+ *      encabezado canónico y migrado, caps, mutaciones blindaje/ambigüedad/caps).
+ *
+ * v12.11.0 — 07-09-2026: SINCRONIZACIÓN AUTOMÁTICA DE UIDS (acceso_uid → acceso).
+ * Incidencia real (Eliseth Estrada): su fila de "acceso" tiene uid VACÍO, así que el
+ * matching del cliente va por NOMBRE EXACTO y basta con que Everest reporte su nombre
+ * con una grafía distinta para que resuelva PÚBLICO y el centinela no se monte
+ * («monitor retirado»), aunque el padrón la traiga COMPLETO. Hasta ahora el flujo era
+ * manual: el dueño lee "acceso_uid" y copia uid↔nombre a "acceso" A MANO. Ahora:
+ *   - `_sincronizarAccesoUid(ss)` corre SOLO en cada `?accion=listaAcceso` y también
+ *     desde el menú («Sincronizar uids…») o el editor (`SincronizarAccesoUid()`).
+ *   - Para cada fila de "acceso" con uid VACÍO busca el ÚLTIMO reporte de
+ *     "acceso_uid" cuyo nombre normalizado sea EXACTO; si no hay exacto, acepta un
+ *     candidato ÚNICO que comparta primer y último token (≥2 tokens) y entonces
+ *     corrige TAMBIÉN el nombre de la fila al EXACTO que reportó Everest.
+ *   - REGLA D1 + BLINDAJE: el uid MANDA sobre el nombre, y una celda uid ya llena
+ *     JAMÁS se modifica (ni para corregirla): la sincronización solo ESCRIBE en
+ *     celdas uid VACÍAS. Un uid ya asignado a otra fila se reporta como conflicto
+ *     y no se escribe (un uid regalado a otro médico es el peor error posible aquí).
+ *   - Ambiguo o sin reporte: no se toca nada, queda en el reporte (`sinDato` /
+ *     `ambiguos`) — casilla vacía antes que dato inventado.
+ *   - PROPAGACIÓN: la flota lee la lista cada 4 h y al guardar Ajustes (refresco
+ *     forzado, ya existente en el userscript): el cambio queda visible ≤4 h después
+ *     de detectada la discrepancia, o inmediato tras guardar Ajustes.
+ *
  * v12.10.14 — 05-09-2026: AUTORIZACIÓN de la Dra. Gloria Alejandra Jaramillo
  * Montoya (perfil COMPLETO). Solo cambia la SEMILLA de la hoja "acceso": +1 fila
  * en el padrón (8 nombres). OJO: la siembra SOLO ocurre si la hoja "acceso" NO
@@ -335,6 +371,11 @@ function onOpen() {
       .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
       .addItem("Reparar encabezados de telemetría", "repararEncabezadosTelemetria")
       .addItem("Ver lista de acceso (JSON)", "verListaAcceso")
+      .addItem("Sincronizar uids (acceso_uid → acceso)", "sincronizarUidsMenu")   // v12.11.0
+      .addSeparator()
+      .addItem("Revisar alertas ahora", "revisarAlertas")                       // v18.4.0
+      .addItem("Instalar revisión diaria de alertas (23:30)", "instalarAlertasDiarias")
+      .addItem("Quitar revisión diaria de alertas", "quitarAlertasDiarias")
       .addToUi();
   } catch (e) {}
 }
@@ -355,6 +396,12 @@ function doGet(e) {
     var q = (e && e.parameter) || {};
     if (String(q.token || "") !== TOKEN) return _txt("no");
     if (String(q.accion || "") !== "listaAcceso") return _txt("no");
+    // v12.11.0 — SINCRONIZACIÓN AUTOMÁTICA antes de responder: cada lectura de la
+    // flota reconcilia "acceso" con lo que "acceso_uid" reportó (llena uids VACÍOS,
+    // corrige nombres con discrepancia única, jamás toca un uid ya fijado). Si algo
+    // falla aquí, la respuesta se sirve igual con la hoja como esté: la
+    // sincronización NUNCA puede tumbar la lista.
+    try { _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet()); } catch (eSync) {}
     return _txt(JSON.stringify(_listaAccesoRespuesta(SpreadsheetApp.getActiveSpreadsheet())));
   } catch (err) {
     return _txt("err");
@@ -383,20 +430,21 @@ function _hojaAcceso(ss) {
     h = _hoja(ss, "acceso", hd);
     try {
       var filas = [
-        ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", ""],
-        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", ""],
-        ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", ""],
-        ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", ""],
-        ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", ""],
-        ["COMPLETO", "", "Eliseth Estrada", "activo", ""],
-        ["COMPLETO", "", "María Edineth Pino", "activo", ""],
-        ["COMPLETO", "", "Sinaí Mijares", "activo", ""],
-        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", ""],
-        ["LABORATORIOS", "", "Maryuris Terán", "activo", ""],
-        ["LABORATORIOS", "", "Daniela Zuluaga", "activo", ""],
-        ["LABORATORIOS", "", "Moisés Carpio", "activo", ""]
+        ["# LISTA DE ACCESO (v18.1.0) - la edita el dueño; se ignora toda fila cuyo perfil empiece por #", "", "", "", "", ""],
+        ["# perfil: COMPLETO o LABORATORIOS (mayús./minús. da igual) | estado: activo (o vacío) / bloqueado o inactivo (revoca en silencio)", "", "", "", "", ""],
+        ["# uid: SOLO dígitos, sin puntos (ver hoja acceso_uid). VACÍO = uid sintético mientras el matching va por nombre", "", "", "", "", ""],
+        ["# Una fila sin nombre no sirve: uid y nombre son ambos requeridos", "", "", "", "", ""],
+        ["# caps extra (v12.10.15, col 6): capacidades individuales separadas por coma. Hoy: pym_opcional = el modal Agendar NO exige programa especial/PyM (Medicina General u otra especialidad sin RCV); desarrollador (F2) = ve la sección técnica de Ajustes (Ctrl+Shift+D) y el bloque de credenciales de Athenea", "", "", "", "", ""],
+        ["COMPLETO", "", "Brandon Jesús Palencia Martínez", "activo", "", "desarrollador"],
+        ["COMPLETO", "", "Eliseth Estrada", "activo", "", ""],
+        ["COMPLETO", "", "María Edineth Pino", "activo", "", ""],
+        ["COMPLETO", "", "Sinaí Mijares", "activo", "", ""],
+        ["COMPLETO", "", "Gloria Alejandra Jaramillo Montoya", "activo", "", "pym_opcional"],
+        ["LABORATORIOS", "", "Maryuris Terán", "activo", "", ""],
+        ["LABORATORIOS", "", "Daniela Zuluaga", "activo", "", ""],
+        ["LABORATORIOS", "", "Moisés Carpio", "activo", "", ""]
       ];
-      h.getRange(h.getLastRow() + 1, 1, filas.length, 5).setValues(filas);
+      h.getRange(h.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);
     } catch (e) {}
   }
   return h;
@@ -438,7 +486,16 @@ function _listaAccesoRespuesta(ss) {
         blocklist.push({ uid: uid, nombre: nombre, motivo: _celda(fila[4], 60).trim() });
         continue;
       }
-      perfiles[perfil].push({ uid: uid, nombre: nombre });
+      // v18.4.4 — CAPS EXTRA (col 6, separadas por coma, en minúsculas). El cliente
+      // las lee con accesoCapExtra(), que exige Array.isArray(e.caps): si esta
+      // respuesta no las emite, un permiso individual (p. ej. pym_opcional de la
+      // Dra. Gloria) muere en silencio en toda la flota. Producción ya las emite
+      // (parche del 07-sep); este archivo no puede quedarse atrás o desplegar
+      // desde el repo REGRESA el permiso sin ningún error visible.
+      var caps = String(fila[5] == null ? "" : fila[5]).split(",")
+        .map(function (s) { return s.trim().toLowerCase(); })
+        .filter(function (s) { return s.length > 0; });
+      perfiles[perfil].push({ uid: uid, nombre: nombre, caps: caps });
     }
   } catch (e) {}
   var version = "v" + _djb2(JSON.stringify(perfiles) + "|" + JSON.stringify(blocklist));
@@ -450,6 +507,172 @@ function _listaAccesoRespuesta(ss) {
 function _accesoUidSintetico(nombre) {
   return 900000000 + (_djb2(String(nombre == null ? "" : nombre)) % 99999999);
 }
+
+// =====================================================================
+//  v12.11.0 — SINCRONIZACIÓN AUTOMÁTICA acceso_uid → acceso
+//  ------------------------------------------------------------------
+//  La hoja "acceso" nace con uids VACÍOS (nunca se inventan) y hasta hoy el
+//  dueño copiaba uid↔nombre A MANO leyendo "acceso_uid". Mientras el uid está
+//  vacío, el matching del cliente va por NOMBRE EXACTO normalizado: cualquier
+//  grafía distinta en Everest (apellido adicional, tilde, orden) resuelve
+//  PÚBLICO y el centinela no se monta — la incidencia real de Eliseth.
+//  Esta pieza cierra el ciclo AUTOMÁTICAMENTE en cada listaAcceso:
+//   · uid VACÍO + nombre EXACTO (normalizado) en "acceso_uid" → se copia el uid.
+//   · uid VACÍO + discrepancia con candidato ÚNICO (mismo primer y último
+//     token, ≥2 tokens en la fila) → se copia el uid Y se corrige el nombre
+//     al EXACTO que reportó Everest.
+//   · REGLA D1 + BLINDAJE: una celda uid ya llena JAMÁS se toca — el uid
+//     manda sobre el nombre y queda fijo para siempre. Un uid que ya pertenece
+//     a otra fila se reporta como conflicto y NO se escribe: regalarle el
+//     perfil de otro médico es el peor fallo posible de este roster.
+//   · Ambiguo (varios candidatos) o sin reporte: no se escribe nada; queda
+//     en el reporte. Casilla vacía antes que dato inventado.
+//  ES5 puro y defensivo como el resto: nunca lanza, nunca rompe listaAcceso.
+// =====================================================================
+
+// Normalización de nombres para comparar: MAYÚSCULAS, sin tildes, espacios
+// colapsados — la MISMA semántica que mtrNormalizarNombre del userscript
+// (stripAccents + toUpperCase + collapse), para que hoja y reporte comparen
+// igual aquí que en el cliente.
+function _normNombreAcceso(s) {
+  var r = String(s == null ? "" : s).toUpperCase()
+    .replace(/[ÁÀÄÂÃÅ]/g, "A").replace(/[ÉÈËÊ]/g, "E").replace(/[ÍÌÏÎ]/g, "I")
+    .replace(/[ÓÒÖÔÕ]/g, "O").replace(/[ÚÙÜÛ]/g, "U").replace(/Ñ/g, "N").replace(/Ç/g, "C")
+    .replace(/\s+/g, " ").trim();
+  return r;
+}
+
+// El sincronizador. Devuelve un reporte legible (nunca lanza):
+//   { llenados:[...], corregidos:[...], sinDato:[...], ambiguos:[...],
+//     conflictoUid:[...], escrituras:n }
+function _sincronizarAccesoUid(ss) {
+  var rep = { llenados: [], corregidos: [], sinDato: [], ambiguos: [], conflictoUid: [], escrituras: 0 };
+  try {
+    // Última identidad reportada por Everest para cada nombre normalizado.
+    // v12.11.0 (revisión del 07-sep) — las columnas se buscan por NOMBRE de
+    // encabezado, no por posición fija: la lección del v12.10.13 es que _hoja()
+    // migra las columnas que faltan AL FINAL y una hoja histórica puede tener
+    // otro orden. Si el encabezado no se puede leer, caen los índices canónicos
+    // (recibido=0 … lote=5 | uid=6 | nombre=7 | perfil=8).
+    var hUid = ss.getSheetByName("acceso_uid");
+    if (!hUid || hUid.getLastRow() < 2) {
+      rep.sinDato.push("(la hoja acceso_uid aún no tiene reportes)");
+      return rep;
+    }
+    var filasUid = hUid.getDataRange().getValues();
+    var hdUid = filasUid[0] || [];
+    var colUid = hdUid.indexOf("uid"); var colNombre = hdUid.indexOf("nombre"); var colRecibido = hdUid.indexOf("recibido");
+    if (colUid < 0) colUid = 6;
+    if (colNombre < 0) colNombre = 7;
+    if (colRecibido < 0) colRecibido = 0;
+    var porNombre = {};
+    for (var i = 1; i < filasUid.length; i++) {
+      var f = filasUid[i] || [];
+      var uid = toNumero(f[colUid]);
+      var nombre = _celda(f[colNombre], 100).trim();
+      if (!(uid > 0) || !nombre) continue;
+      var k = _normNombreAcceso(nombre);
+      if (!k) continue;
+      var t = (f[colRecibido] && typeof f[colRecibido].getTime === "function") ? f[colRecibido].getTime() : 0;
+      var prev = porNombre[k];
+      if (!prev || t >= prev.t) porNombre[k] = { uid: uid, nombre: nombre, t: t }; // el más reciente manda
+    }
+
+    var hAcc = _hojaAcceso(ss);
+    var datos = hAcc.getDataRange().getValues();
+    var uidsFijados = {};   // uid → nombre de la fila de "acceso" que YA lo tiene
+    var parches = [];       // { filaHoja, uid, nombreNuevo|null, rotulo, reportado, corregido }
+    for (var j = 1; j < datos.length; j++) {
+      var filaA = datos[j] || [];
+      var perfil = String(filaA[0] == null ? "" : filaA[0]).trim().toUpperCase();
+      if (!perfil || perfil.charAt(0) === "#" || (perfil !== "COMPLETO" && perfil !== "LABORATORIOS")) continue;
+      var nombreAcc = _celda(filaA[2], 100).trim();
+      if (!nombreAcc) continue;                       // fila a medias: no se toca
+      var uidAcc = toNumero(filaA[1]);
+      if (uidAcc > 0) { uidsFijados[uidAcc] = nombreAcc; continue; }   // BLINDAJE D1: uid ya fijado, JAMÁS se modifica
+      var kAcc = _normNombreAcceso(nombreAcc);
+      var hit = porNombre[kAcc] || null;
+      var corregirNombre = false;
+      if (!hit) {
+        // Discrepancia de nombre: candidato único que comparta PRIMER y ÚLTIMO
+        // token de la fila (con ≥2 tokens). "ELISETH ESTRADA" casa con un
+        // reporte "ELISETH ESTRADA PEÑA", pero un apellido distinto NO casa.
+        var toks = kAcc.split(" ");
+        if (toks.length >= 2) {
+          var cands = [];
+          for (var k2 in porNombre) {
+            var t2 = k2.split(" ");
+            var tiene = {};
+            for (var x = 0; x < t2.length; x++) tiene[t2[x]] = 1;
+            if (tiene[toks[0]] && tiene[toks[toks.length - 1]]) cands.push(k2);
+          }
+          if (cands.length === 1) { hit = porNombre[cands[0]]; corregirNombre = true; }
+          else if (cands.length > 1) { rep.ambiguos.push(nombreAcc + " → " + cands.length + " candidatos en acceso_uid"); continue; }
+        }
+        if (!hit) { rep.sinDato.push(nombreAcc + " (sin reporte en acceso_uid)"); continue; }
+      }
+      if (uidsFijados[hit.uid]) {
+        rep.conflictoUid.push(nombreAcc + " ↔ uid " + hit.uid + " ya fijado a «" + uidsFijados[hit.uid] + "»: no se escribe");
+        continue;
+      }
+      uidsFijados[hit.uid] = nombreAcc;
+      parches.push({
+        filaHoja: j + 1, uid: hit.uid,
+        nombreNuevo: (corregirNombre && hit.nombre !== nombreAcc) ? hit.nombre : null,
+        rotulo: nombreAcc, reportado: hit.nombre, corregido: corregirNombre
+      });
+    }
+    for (var p = 0; p < parches.length; p++) {
+      try {
+        hAcc.getRange(parches[p].filaHoja, 2).setValue(parches[p].uid);
+        if (parches[p].nombreNuevo) hAcc.getRange(parches[p].filaHoja, 3).setValue(parches[p].nombreNuevo);
+        rep.escrituras++;
+        var linea = parches[p].rotulo + " → uid " + parches[p].uid +
+          (parches[p].corregido && parches[p].nombreNuevo ? " (nombre corregido a «" + parches[p].reportado + "»)" : "");
+        (parches[p].corregido ? rep.corregidos : rep.llenados).push(linea);
+      } catch (eW) {}
+    }
+  } catch (e) {}
+  return rep;
+}
+
+// Manual, desde el EDITOR de Apps Script: ejecutar y leer el reporte en el log.
+// Devuelve el mismo objeto que el menú — sirve también de verificación tras
+// desplegar (ver TEST_sincronizacion para la verificación completa).
+function SincronizarAccesoUid() {
+  var rep = _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet());
+  try { Logger.log(JSON.stringify(rep)); } catch (eL) {}
+  return rep;
+}
+
+// Menú del dueño: sincroniza y muestra el reporte sin salir de la Hoja.
+function sincronizarUidsMenu() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var rep = _sincronizarAccesoUid(SpreadsheetApp.getActiveSpreadsheet());
+    ui.alert("Sincronización acceso_uid → acceso (v12.11.0)", JSON.stringify(rep, null, 2), ui.ButtonSet.OK);
+  } catch (e) {}
+}
+
+// Verificación post-despliegue: corre la sincronización y devuelve el estado
+// de la lista para Eliseth + el reporte completo. Ejecutar UNA vez en el editor
+// tras implementar y leer el log (mismo patrón que TEST_caps).
+function TEST_sincronizacion() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var rep = _sincronizarAccesoUid(ss);
+  var lista = _listaAccesoRespuesta(ss);
+  var eliseth = [];
+  for (var perfil in lista.perfiles) {
+    for (var i = 0; i < lista.perfiles[perfil].length; i++) {
+      var e = lista.perfiles[perfil][i];
+      if (_normNombreAcceso(e.nombre).indexOf("ELISETH") >= 0) eliseth.push({ perfil: perfil, uid: e.uid, nombre: e.nombre });
+    }
+  }
+  var salida = { reporte: rep, eliseth: eliseth, version: lista.version };
+  Logger.log(JSON.stringify(salida, null, 2));
+  return salida;
+}
+
 
 // djb2 (variante clásica con init 5381) con máscara de 31 bits en cada paso:
 // en Apps Script V8 y en Node da el MISMO resultado (el & normaliza el
@@ -592,6 +815,12 @@ function armarResumen() {
   var flota = {};
   var versionMasAlta = "0";
   var totalReportes = 0;
+  // v18.4.6 — DEDUP POR LOTE EN "uso". El export real del 07-sep (docs/
+  // AUDITORIA_TELEMETRIA_EXPORT_20260907.md §1) demostró 10.042 filas de reenvío
+  // (54 % de la hoja): el CacheService es best-effort y evicta, así que la hoja
+  // NO puede asumirse sin repeticiones. Sin esto, «Reportes» y «Acciones de uso
+  // (ux, acum.)» salían inflados ~2,2×. Se conserva la PRIMERA copia de cada lote.
+  var usoLotesVistos = {};
 
   fuentes.forEach(function (fte) {
     var sh = ss.getSheetByName(fte.nombre);
@@ -600,9 +829,16 @@ function armarResumen() {
     var hd = vals.shift() || [];
     var c = function (name) { return hd.indexOf(name); };
     var ci = { eq: c("equipo"), ver: c("ver"), rec: c("recibido"), fraude: c("fraude"), inasist: c("inasistencia"),
-               atiempo: c("atiempo"), ultima: c("ultima"), n: c("n"), nav: c("nav"), so: c("so") };
+               atiempo: c("atiempo"), ultima: c("ultima"), n: c("n"), nav: c("nav"), so: c("so"), lote: c("lote") };
     if (ci.eq < 0) return;
     vals.forEach(function (r) {
+      // v18.4.6 — ver §1 de la auditoría: solo la PRIMERA copia de cada lote de
+      // "uso" cuenta (nReportes, primero/ultimo/ver y uxAcum). Filas sin lote
+      // (anteriores a v12.6.9) se cuentan como siempre.
+      if (fte.nombre === "uso" && ci.lote >= 0) {
+        var ltUso = String(r[ci.lote] || "").trim();
+        if (ltUso) { if (usoLotesVistos[ltUso]) return; usoLotesVistos[ltUso] = 1; }
+      }
       // v12.6.9 — Las filas anteriores a esta versión llegaron SIN equipo (dependía de
       // un ajuste manual). Se conservan, pero agrupadas aparte y rotuladas, para que no
       // se confundan con un consultorio real que hoy sí se identifica solo.
@@ -919,3 +1155,197 @@ function _sinDigitosLargos(v) {
 function _val(fila, idx) { return idx >= 0 ? fila[idx] : ""; }
 
 function _txt(s) { return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.TEXT); }
+
+// =====================================================================
+// v18.4.0 — ALERTAS DEL TABLERO: que el silencio se vea SOLO.
+// ---------------------------------------------------------------------
+// El canal de errores estuvo mudo medio año (v17.2.0→v18.0.66) y nadie lo
+// notó hasta que el médico exportó la Hoja a mano (docs/TELEMETRIA_20260901.md
+// §1). Estas reglas leen lo que YA llega por `uso` y `error` (cero cambios de
+// esquema, cero eventos nuevos del cliente) y escriben una fila por anomalía
+// en la hoja "alertas", con dedup por día+equipo+tipo. Todo el cálculo vive en
+// calcularAlertas(), PURA (sin SpreadsheetApp), para poder ejercerla desde
+// TABLERO/simulacion_local.js contra el .gs real.
+//
+// Reglas (umbrales elegidos contra los incidentes REALES del export):
+//  1. canal-mudo   — ≥5 errores detectados (error.js/api/promesa), 0 entregados
+//                    (error.entregado) y 0 filas en la hoja `error` ese día:
+//                    habría cazado el incidente del 27-ago el mismo día.
+//  2. tormenta     — ≥15 huellas distintas (error.distintos) en un día.
+//  3. anomalia     — z-score ≥ 3 del día vs los 7 previos (≥4 con datos),
+//                    con hoy ≥ 5: la subida súbita del 27-ago (81 detectados
+//                    en seis equipos) entra sin que un lunes normal dispare.
+//  4. api-degradada— un endpoint con ≥20 fallos y ≥50 % de tasa de error.
+// =====================================================================
+var ALERTA_CANAL_MUDO_DETECTADOS = 5;
+var ALERTA_TORMENTA_DISTINTOS = 15;
+var ALERTA_Z_HISTORIA_MIN = 4;    // días previos con datos, mínimo para opinar
+var ALERTA_Z_UMBRAL = 3;
+var ALERTA_Z_HOY_MIN = 5;
+var ALERTA_API_ERR_MIN = 20;
+var ALERTA_API_TASA = 0.5;
+
+// "YYYY-MM-DD" o "". Sheets auto-parsea "2026-09-05" como fecha aunque el
+// emisor lo mande como texto (_celda no fuerza formato), y getValues() lo
+// devuelve como Date: sin esta normalización esas filas se saltarían EN
+// SILENCIO y las alertas mirarían una hoja que parece llena y está vacía.
+function _diaIso(v) {
+  if (v instanceof Date) return v.getFullYear() + "-" + ("0" + (v.getMonth() + 1)).slice(-2) + "-" + ("0" + v.getDate()).slice(-2);
+  return String(v == null ? "" : v).slice(0, 10);
+}
+
+// Agrega la hoja "uso" (deduplicando por lote, como enseña el export real:
+// los reenvíos de la cola duplican ventanas) y la hoja "error" (conteo de
+// filas entregadas). Estructura de salida:
+//   { porEquipoDia: { equipo: { dia: { detectados, entregados, distintos,
+//                                      filasError, api: { ep: {ok, err} } } } } }
+function _alertasAgregar(ss) {
+  var agg = { porEquipoDia: {} };
+  var dia = function (eq, d) {
+    var porEq = agg.porEquipoDia[eq] || (agg.porEquipoDia[eq] = {});
+    return porEq[d] || (porEq[d] = { detectados: 0, entregados: 0, distintos: 0, filasError: 0, api: {} });
+  };
+  var sh = ss.getSheetByName("uso");
+  if (sh && sh.getLastRow() >= 2) {
+    var vals = sh.getDataRange().getValues();
+    var hd = vals.shift() || [];
+    var c = function (n) { return hd.indexOf(n); };
+    var ci = { eq: c("equipo"), deDia: c("deDia"), lote: c("lote"), acciones: c("acciones") };
+    if (ci.eq >= 0 && ci.deDia >= 0) {
+      var vistos = {};
+      vals.forEach(function (r) {
+        var eq = String(r[ci.eq] || "").trim();
+        var d = _diaIso(r[ci.deDia]);
+        if (!eq || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+        // dedup por lote: el mismo lote reenviado (TTL de 6 h vencido) ya contó
+        var lote = ci.lote >= 0 ? String(r[ci.lote] || "") : "";
+        if (lote) { if (vistos[lote]) return; vistos[lote] = 1; }
+        var acc = {};
+        try { acc = JSON.parse(String(r[ci.acciones] || "{}")) || {}; } catch (e2) { acc = {}; }
+        var celda = dia(eq, d);
+        for (var k in acc) {
+          var v = toNumero(acc[k]);
+          if (v <= 0 || k === "_recortadas" || k.slice(-7) === ".total") continue;
+          if (k === "error.js" || k === "error.api" || k === "error.promesa") celda.detectados += v;
+          else if (k === "error.entregado") celda.entregados += v;
+          else if (k === "error.distintos") celda.distintos = Math.max(celda.distintos, v);
+          else if (k.indexOf("api.") === 0) {
+            var m = /^(api\..+)\.(ok|err)$/.exec(k);
+            if (m) { var ep = celda.api[m[1]] || (celda.api[m[1]] = { ok: 0, err: 0 }); ep[m[2]] += v; }
+          }
+        }
+      });
+    }
+  }
+  var she = ss.getSheetByName("error");
+  if (she && she.getLastRow() >= 2) {
+    var vale = she.getDataRange().getValues();
+    var hde = vale.shift() || [];
+    var ce = function (n) { return hde.indexOf(n); };
+    var cie = { eq: ce("equipo"), d: ce("dia") };
+    if (cie.eq >= 0 && cie.d >= 0) {
+      vale.forEach(function (r) {
+        var eq = String(r[cie.eq] || "").trim();
+        var d = String(r[cie.d] || "").slice(0, 10);
+        if (eq && d) dia(eq, d).filasError++;
+      });
+    }
+  }
+  return agg;
+}
+
+// PURA: recibe lo que produce _alertasAgregar y devuelve las alertas del día
+// más reciente con datos de cada equipo. Sin SpreadsheetApp, sin fechas del
+// reloj: el "hoy" de cada equipo es su último día reportado, así el cálculo es
+// reproducible desde el simulador y desde un trigger de madrugada.
+function calcularAlertas(agg) {
+  var alertas = [];
+  var equipos = Object.keys(agg.porEquipoDia).sort();
+  equipos.forEach(function (eq) {
+    var dias = Object.keys(agg.porEquipoDia[eq]).sort();
+    if (!dias.length) return;
+    var hoy = dias[dias.length - 1];
+    var c = agg.porEquipoDia[eq][hoy];
+    // 1. canal-mudo: detectados sin ENTREGA NI FILA — el defecto de la v17.2.0.
+    if (c.detectados >= ALERTA_CANAL_MUDO_DETECTADOS && c.entregados === 0 && c.filasError === 0) {
+      alertas.push({ dia: hoy, equipo: eq, tipo: "canal-mudo", severidad: "alta",
+        detalle: c.detectados + " errores detectados y NINGUNO entregado (0 filas en la hoja error)" });
+    }
+    // 2. tormenta de defectos distintos.
+    if (c.distintos >= ALERTA_TORMENTA_DISTINTOS) {
+      alertas.push({ dia: hoy, equipo: eq, tipo: "tormenta", severidad: "alta",
+        detalle: c.distintos + " huellas de error distintas en un solo dia" });
+    }
+    // 3. anomalia por z-score contra los 7 dias previos (minimo 4 con datos).
+    var previos = dias.slice(Math.max(0, dias.length - 8), dias.length - 1);
+    if (previos.length >= ALERTA_Z_HISTORIA_MIN && c.detectados >= ALERTA_Z_HOY_MIN) {
+      var media = 0;
+      previos.forEach(function (d2) { media += agg.porEquipoDia[eq][d2].detectados; });
+      media = media / previos.length;
+      var varianza = 0;
+      previos.forEach(function (d2) { var dif = agg.porEquipoDia[eq][d2].detectados - media; varianza += dif * dif; });
+      var desv = Math.sqrt(varianza / previos.length);
+      if (desv < 1) desv = 1;   // piso: sin variacion historica, cualquier salto es anomalia
+      var z = (c.detectados - media) / desv;
+      if (z >= ALERTA_Z_UMBRAL) {
+        alertas.push({ dia: hoy, equipo: eq, tipo: "anomalia", severidad: "media",
+          detalle: c.detectados + " errores hoy contra media " + (Math.round(media * 10) / 10) + " de " + previos.length + " dias (z=" + (Math.round(z * 10) / 10) + ")" });
+      }
+    }
+    // 4. endpoint degradado: fallos masivos con tasa de error >= 50 %.
+    Object.keys(c.api).sort().forEach(function (ep) {
+      var a = c.api[ep];
+      var total = a.ok + a.err;
+      if (a.err >= ALERTA_API_ERR_MIN && total > 0 && a.err / total >= ALERTA_API_TASA) {
+        alertas.push({ dia: hoy, equipo: eq, tipo: "api-degradada", severidad: "media",
+          detalle: ep + ": " + a.err + " fallos de " + total + " llamadas (" + Math.round((a.err / total) * 100) + " %)" });
+      }
+    });
+  });
+  return alertas;
+}
+
+// Lee, calcula y escribe en la hoja "alertas" {recibido, dia, equipo, tipo,
+// severidad, detalle}, SIN repetir lo ya anotado (dia+equipo+tipo).
+function revisarAlertas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var nuevas = calcularAlertas(_alertasAgregar(ss));
+  if (!nuevas.length) { try { SpreadsheetApp.getActive().toast("Sin alertas nuevas."); } catch (e) {} return; }
+  var hoja = _hoja(ss, "alertas", ["recibido", "dia", "equipo", "tipo", "severidad", "detalle"]);
+  var ya = {};
+  var vals = hoja.getDataRange().getValues();
+  var hd = vals.shift() || [];
+  var ci = { d: hd.indexOf("dia"), eq: hd.indexOf("equipo"), t: hd.indexOf("tipo") };
+  if (ci.d >= 0 && ci.eq >= 0 && ci.t >= 0) {
+    vals.forEach(function (r) { ya[r[ci.d] + "|" + r[ci.eq] + "|" + r[ci.t]] = 1; });
+  }
+  var filas = [];
+  nuevas.forEach(function (a) {
+    var clave = a.dia + "|" + a.equipo + "|" + a.tipo;
+    if (ya[clave]) return;
+    ya[clave] = 1;
+    filas.push([new Date(), _celda(a.dia, 10), _celda(a.equipo, 40), _celda(a.tipo, 20), _celda(a.severidad, 10), _celda(_sinDigitosLargos(a.detalle), 180)]);
+  });
+  if (filas.length) {
+    hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, 6).setValues(filas);
+    try { SpreadsheetApp.getActive().toast("Alertas nuevas: " + filas.length); } catch (e) {}
+  } else {
+    try { SpreadsheetApp.getActive().toast("Sin alertas nuevas."); } catch (e) {}
+  }
+}
+
+// Trigger diario (lo instala/quita el dueño una vez desde el menú; idempotente).
+function instalarAlertasDiarias() {
+  try {
+    var ya = false;
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "revisarAlertas") ya = true; });
+    if (!ya) ScriptApp.newTrigger("revisarAlertas").timeBased().atHour(23).nearMinute(30).everyDays(1).create();
+    try { SpreadsheetApp.getActive().toast("Revision diaria de alertas instalada (23:30)."); } catch (e) {}
+  } catch (e) { try { SpreadsheetApp.getActive().toast("No se pudo instalar: " + e); } catch (e2) {} }
+}
+function quitarAlertasDiarias() {
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "revisarAlertas") ScriptApp.deleteTrigger(t); });
+    try { SpreadsheetApp.getActive().toast("Revision diaria de alertas quitada."); } catch (e) {}
+  } catch (e) { try { SpreadsheetApp.getActive().toast("No se pudo quitar: " + e); } catch (e2) {} }
+}

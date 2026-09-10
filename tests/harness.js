@@ -216,6 +216,429 @@ function crearEntorno(opciones) {
   return { win, storage, gm, doc, almacen, intervalos: _intervalos };
 }
 
+// ---------- enriquecedor DOM compartido (SF-01, 2026-09-06) ----------
+//
+// El arnés trae nodos planos sin parser ni selectores, pero los modales de
+// producción se construyen con innerHTML y se consultan con querySelector/
+// querySelectorAll por todas partes. Este enriquecedor nació dentro de
+// suite_73 (recorridos del modal de agendar) y se extrajo TAL CUAL al arnés
+// para que sea la única fuente de verdad de todas las suites de simulación
+// (encargo SUPERPROMPT_SIMULACION_FLUJOS, regla: nunca un segundo
+// enriquecedor paralelo). MUTA los nodos del arnés: nunca toca el archivo
+// de producción. Todo lo que añade imita al navegador real.
+
+const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+const ENTIDADES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+function decodificarEntidades(s) {
+  return String(s).replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (todo, cuerpo) => {
+    if (cuerpo[0] === "#") {
+      const esHex = cuerpo[1] === "x" || cuerpo[1] === "X";
+      const code = parseInt(cuerpo.slice(esHex ? 2 : 1), esHex ? 16 : 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : todo;
+    }
+    return Object.prototype.hasOwnProperty.call(ENTIDADES, cuerpo) ? ENTIDADES[cuerpo] : todo;
+  });
+}
+
+// Nula el _parent de todo un subárbol: el getElementById del arnés
+// solo ve nodos con _parent, así que esto es lo que hace que los
+// internos de un modal cerrado desaparezcan de verdad.
+function desconectar(sub) {
+  sub._parent = null;
+  for (const h of sub.children || []) desconectar(h);
+}
+
+function aplicarCssEnLinea(nodo, css) {
+  const st = nodo.style;
+  if (!st) return;
+  st.cssText = css;
+  String(css).split(";").forEach((decl) => {
+    const ix = decl.indexOf(":");
+    if (ix < 0) return;
+    const prop = decl.slice(0, ix).trim();
+    const val = decl.slice(ix + 1).trim();
+    if (!prop) return;
+    st[prop.replace(/-([a-z])/g, (x, c) => c.toUpperCase())] = val;
+  });
+}
+
+// Parser de HTML: tags de apertura/cierre, autocierre, void elements
+// (input es crítico aquí), atributos con comillas dobles, simples o
+// sin comillas, comentarios multilínea y entidades básicas.
+function parsearHtml(doc, padre, html) {
+  const s = String(html);
+  const pila = [padre];
+  let i = 0;
+  while (i < s.length) {
+    if (s.startsWith("<!--", i)) {
+      const fin = s.indexOf("-->", i + 4);
+      i = fin < 0 ? s.length : fin + 3;
+      continue;
+    }
+    if (s[i] === "<" && s[i + 1] === "/") {
+      const fin = s.indexOf(">", i);
+      const tagCierre = s.slice(i + 2, fin).trim().toLowerCase();
+      for (let k = pila.length - 1; k >= 1; k--) {
+        if (pila[k].tagName && pila[k].tagName.toLowerCase() === tagCierre) { pila.length = k; break; }
+      }
+      i = fin < 0 ? s.length : fin + 1;
+      continue;
+    }
+    if (s[i] === "<" && /[a-zA-Z]/.test(s[i + 1] || "")) {
+      const finTag = s.indexOf(">", i);
+      if (finTag < 0) break;
+      let interior = s.slice(i + 1, finTag);
+      const autocierre = interior.endsWith("/");
+      if (autocierre) interior = interior.slice(0, -1);
+      const mTag = interior.match(/^([a-zA-Z][a-zA-Z0-9-]*)/);
+      const tag = mTag ? mTag[1].toLowerCase() : "div";
+      const nodo = doc.createElement(tag);
+      const restante = interior.slice(mTag ? mTag[0].length : 0);
+      const reAtr = /([^\s"'=<>\/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+      let mA;
+      while ((mA = reAtr.exec(restante))) {
+        const nombre = mA[1];
+        const crudo = mA[2] !== undefined ? mA[2] : (mA[3] !== undefined ? mA[3] : (mA[4] !== undefined ? mA[4] : ""));
+        const valor = decodificarEntidades(crudo);
+        nodo.setAttribute(nombre, valor);
+        if (nombre === "class") nodo.className = valor;
+        else if (nombre === "style") aplicarCssEnLinea(nodo, valor);
+        else if (nombre === "value" && "value" in nodo) nodo.value = valor;
+        else if (nombre === "checked") nodo.checked = true;
+        else if (nombre === "disabled") nodo.disabled = true;
+        else if (nombre === "type" && "type" in nodo) nodo.type = valor;
+      }
+      pila[pila.length - 1].appendChild(nodo);
+      if (!autocierre && !VOID_TAGS.has(tag)) pila.push(nodo);
+      i = finTag + 1;
+      continue;
+    }
+    let finTexto = s.indexOf("<", i);
+    if (finTexto < 0) finTexto = s.length;
+    if (finTexto > i) {
+      const tn = doc.createTextNode(decodificarEntidades(s.slice(i, finTexto)));
+      pila[pila.length - 1].appendChild(tn);
+    }
+    i = finTexto === i ? i + 1 : finTexto;
+  }
+}
+
+function serializar(nodo) {
+  const partes = [];
+  for (const h of nodo.children || []) {
+    if (h.tagName) {
+      const attrs = Object.keys(h.attributes || {}).map((k) => {
+        const esc = String(h.attributes[k]).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+        return " " + k + '="' + esc + '"';
+      }).join("");
+      const tag = String(h.tagName).toLowerCase();
+      if (VOID_TAGS.has(tag)) partes.push("<" + tag + attrs + ">");
+      else partes.push("<" + tag + attrs + ">" + serializar(h) + "</" + tag + ">");
+    } else {
+      partes.push(String(h.textContent || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+    }
+  }
+  return partes.join("");
+}
+
+function soloTexto(nodo) {
+  let out = "";
+  for (const h of nodo.children || []) out += h.tagName ? soloTexto(h) : String(h.textContent || "");
+  return out;
+}
+
+// ----- motor de selectores: compuestos, :not(), [attr op valor],
+// descendiente e hijo, listas con coma -----
+function partirPorComas(sel) {
+  const out = [];
+  let actual = "", prof = 0, comilla = null;
+  for (const c of String(sel)) {
+    if (comilla) { actual += c; if (c === comilla) comilla = null; continue; }
+    if (c === '"' || c === "'") { comilla = c; actual += c; continue; }
+    if (c === "(" || c === "[") prof++;
+    if (c === ")" || c === "]") prof--;
+    if (c === "," && prof === 0) { out.push(actual); actual = ""; continue; }
+    actual += c;
+  }
+  if (actual.trim()) out.push(actual);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+
+function parseCompuesto(comp) {
+  const partes = [];
+  const s = comp.trim();
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === " ") { i++; continue; }
+    if (c === "*") { partes.push({ t: "tag", v: "*" }); i++; continue; }
+    if (/[a-zA-Z]/.test(c)) {
+      let j = i;
+      while (j < s.length && /[a-zA-Z0-9-]/.test(s[j])) j++;
+      partes.push({ t: "tag", v: s.slice(i, j).toUpperCase() });
+      i = j; continue;
+    }
+    if (c === "#") {
+      let j = i + 1;
+      while (j < s.length && /[\w-]/.test(s[j])) j++;
+      partes.push({ t: "id", v: s.slice(i + 1, j) });
+      i = j; continue;
+    }
+    if (c === ".") {
+      let j = i + 1;
+      while (j < s.length && /[\w-]/.test(s[j])) j++;
+      partes.push({ t: "cls", v: s.slice(i + 1, j) });
+      i = j; continue;
+    }
+    if (c === "[") {
+      const fin = s.indexOf("]", i);
+      if (fin < 0) break;
+      const mA = s.slice(i + 1, fin).match(/^([^\s~^$*|=]+)(?:\s*([~^$*|]?=)\s*(.*))?$/);
+      if (mA) {
+        const valor = mA[3] !== undefined ? mA[3].replace(/^['"]|['"]$/g, "") : undefined;
+        partes.push({ t: "attr", attr: mA[1].toLowerCase(), op: mA[2], v: valor });
+      }
+      i = fin + 1; continue;
+    }
+    if (s.startsWith(":not(", i)) {
+      let prof = 1, j = i + 5;
+      while (j < s.length && prof > 0) {
+        if (s[j] === "(") prof++;
+        else if (s[j] === ")") prof--;
+        j++;
+      }
+      partes.push({ t: "not", sub: parseCompuesto(s.slice(i + 5, j - 1)) });
+      i = j; continue;
+    }
+    i++;
+  }
+  return partes;
+}
+
+// La presencia de un atributo consulta también las propiedades que el
+// navegador refleja: producción escribe btn.disabled como propiedad y
+// luego pregunta por button:not([disabled]).
+function atributoReflejado(n, attr) {
+  if (Object.prototype.hasOwnProperty.call(n.attributes, attr)) return { tiene: true, valor: String(n.attributes[attr]) };
+  if (attr === "disabled") return n.disabled === true ? { tiene: true, valor: "disabled" } : { tiene: false };
+  if (attr === "checked") return n.checked === true ? { tiene: true, valor: "checked" } : { tiene: false };
+  if (attr === "value") return (typeof n.value === "string" && n.value !== "") ? { tiene: true, valor: n.value } : { tiene: false };
+  if (attr === "id") return n.id ? { tiene: true, valor: n.id } : { tiene: false };
+  return { tiene: false };
+}
+
+function matchParte(n, p) {
+  switch (p.t) {
+    case "tag": return p.v === "*" || n.tagName === p.v;
+    case "id": return n.id === p.v;
+    case "cls": return !!(n.classList && n.classList._s.has(p.v));
+    case "attr": {
+      const r = atributoReflejado(n, p.attr);
+      if (!r.tiene) return false;
+      if (!p.op) return true;
+      const val = r.valor;
+      switch (p.op) {
+        case "=": return val === p.v;
+        case "^=": return p.v !== "" && val.startsWith(p.v);
+        case "$=": return p.v !== "" && val.endsWith(p.v);
+        case "*=": return p.v !== "" && val.includes(p.v);
+        case "~=": return val.split(/\s+/).includes(p.v);
+        case "|=": return val === p.v || val.startsWith(p.v + "-");
+        default: return false;
+      }
+    }
+    case "not": return !matchCompuesto(n, p.sub);
+    default: return false;
+  }
+}
+function matchCompuesto(n, partes) { return partes.every((p) => matchParte(n, p)); }
+
+function partirCadena(sel) {
+  const tokens = [];
+  let actual = "", prof = 0, pendienteHijo = false;
+  const empujar = () => {
+    if (actual.trim()) {
+      tokens.push({ rel: pendienteHijo ? ">" : " ", comp: parseCompuesto(actual.trim()) });
+      pendienteHijo = false;
+    }
+    actual = "";
+  };
+  for (const c of sel) {
+    if (c === "(" || c === "[") prof++;
+    if (c === ")" || c === "]") prof--;
+    if (prof === 0 && c === ">") { empujar(); pendienteHijo = true; continue; }
+    if (prof === 0 && c === " ") { empujar(); continue; }
+    actual += c;
+  }
+  empujar();
+  return tokens;
+}
+
+function cumpleCadena(n, tokens) {
+  if (!tokens.length) return false;
+  if (!matchCompuesto(n, tokens[tokens.length - 1].comp)) return false;
+  let idx = tokens.length - 2;
+  let actual = n;
+  while (idx >= 0) {
+    const tk = tokens[idx];
+    let padre = actual._parent;
+    let hallado = false;
+    while (padre && padre.tagName) {
+      if (matchCompuesto(padre, tk.comp)) { hallado = true; break; }
+      if (tk.rel === ">") break;
+      padre = padre._parent;
+    }
+    if (!hallado) return false;
+    actual = padre;
+    idx--;
+  }
+  return true;
+}
+
+function matcheaSelector(n, sel) {
+  return partirPorComas(sel).some((alt) => cumpleCadena(n, partirCadena(alt)));
+}
+
+function dfsNodos(raiz) {
+  const out = [];
+  (function rec(nodo) {
+    for (const h of nodo.children || []) {
+      if (h.tagName) out.push(h);
+      if (h.children && h.children.length) rec(h);
+    }
+  })(raiz);
+  return out;
+}
+
+function enriquecerDom(doc, n) {
+  // toggle con semántica DOM: sin force explícito alterna (el del
+  // arnés base borra la clase, lo que rompería irAPaso).
+  n.classList.toggle = function (c, f) {
+    const tiene = this._s.has(c);
+    const nuevo = f === undefined ? !tiene : !!f;
+    if (nuevo) this._s.add(c); else this._s.delete(c);
+    return nuevo;
+  };
+  Object.defineProperty(n, "className", {
+    configurable: true, enumerable: true,
+    get() { return [...n.classList._s].join(" "); },
+    set(v) {
+      n.classList._s.clear();
+      String(v == null ? "" : v).split(/\s+/).filter(Boolean).forEach((c) => n.classList._s.add(c));
+    },
+  });
+  const attrDe = (k) => "data-" + String(k).replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  n.dataset = new Proxy({}, {
+    get(_, k) {
+      if (typeof k !== "string") return undefined;
+      const v = n.getAttribute(attrDe(k));
+      return v === null ? undefined : v;
+    },
+    set(_, k, v) {
+      if (typeof k !== "string") return false;
+      if (v === undefined || v === null) n.removeAttribute(attrDe(k));
+      else n.setAttribute(attrDe(k), String(v));
+      return true;
+    },
+    deleteProperty(_, k) { if (typeof k === "string") n.removeAttribute(attrDe(k)); return true; },
+    has(_, k) { return typeof k === "string" && n.getAttribute(attrDe(k)) !== null; },
+  });
+  Object.defineProperty(n, "innerHTML", {
+    configurable: true, enumerable: true,
+    get() { return serializar(n); },
+    set(v) {
+      for (const h of n.children || []) desconectar(h);
+      n.children.length = 0;
+      parsearHtml(doc, n, String(v));
+    },
+  });
+  Object.defineProperty(n, "textContent", {
+    configurable: true, enumerable: true,
+    get() { return soloTexto(n); },
+    set(v) {
+      for (const h of n.children || []) desconectar(h);
+      n.children.length = 0;
+      const tn = doc.createTextNode(String(v));
+      tn._parent = n;
+      n.children.push(tn);
+    },
+  });
+  n.removeChild = function (c) {
+    const ix = this.children.indexOf(c);
+    if (ix >= 0) this.children.splice(ix, 1);
+    desconectar(c);
+    return c;
+  };
+  n.removeEventListener = function (ev, f) {
+    const arr = this._listeners[ev];
+    if (!arr) return;
+    const ix = arr.indexOf(f);
+    if (ix >= 0) arr.splice(ix, 1);
+  };
+  Object.defineProperty(n, "parentElement", { configurable: true, get() { return n._parent || null; } });
+  n.contains = function (otro) {
+    if (otro === this) return true;
+    for (const h of this.children || []) if (h.contains && h.contains(otro)) return true;
+    return false;
+  };
+  n.matches = (sel) => matcheaSelector(n, sel);
+  n.closest = (sel) => {
+    let cur = n;
+    while (cur) {
+      if (cur.tagName && matcheaSelector(cur, sel)) return cur;
+      cur = cur._parent;
+    }
+    return null;
+  };
+  n.querySelectorAll = (sel) => dfsNodos(n).filter((x) => matcheaSelector(x, sel));
+  n.querySelector = (sel) => dfsNodos(n).find((x) => matcheaSelector(x, sel)) || null;
+  return n;
+}
+
+// Parchea el document del arnés para que TODOS los nodos que cree a
+// partir de ahora vengan enriquecidos (parser, selectores, dataset,
+// classList). Se llama UNA vez por contexto, justo después de cargar().
+function instalarDomEnriquecido(doc) {
+  const crearOriginal = doc.createElement;
+  const textoOriginal = doc.createTextNode;
+  doc.createElement = (tag) => enriquecerDom(doc, crearOriginal(tag));
+  doc.createTextNode = (tx) => {
+    const tn = textoOriginal(tx);
+    tn.nodeType = 3;
+    tn._parent = null;
+    return tn;
+  };
+}
+
+// F5 (revisión post-entrega) — suite_88 y suite_102 definían, cada una por su
+// cuenta, el mismo envoltorio de `cargar()` para simular que el médico ya pulsó
+// la pastilla de reapertura del panel RCV (_rcvpExpandirParaTest) antes de que
+// cada caso empiece — porque ambas suites prueban CONTENIDO/mecánica del panel
+// YA ABIERTO, no el estado de fábrica (minimizado) que introdujo F5. Una sola
+// copia aquí, en vez de dos copias byte a byte en cada archivo de prueba.
+function cargarExpandidoRCV(cargarBase, opciones) {
+  const c = cargarBase(opciones);
+  try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
+  return c;
+}
+
+// Dispara TODOS los listeners del tipo en COPIA de la lista (un
+// handler puede deregistrar a otro) y NO re-lanza sus errores: un
+// listener roto no debe enmascarar lo que la prueba está midiendo.
+// Los errores se guardan en el nodo y se loguean con el prefijo que
+// cada suite pasa (así la salida del banco sigue diciendo quién fue).
+function disparar(nodo, tipo, prefijo) {
+  const arr = (nodo && nodo._listeners && nodo._listeners[tipo] ? nodo._listeners[tipo] : []).slice();
+  for (const f of arr) {
+    try { f({ type: tipo, target: nodo, currentTarget: nodo, preventDefault() {}, stopPropagation() {} }); }
+    catch (e) {
+      nodo._ultimoError = e;
+      console.error((prefijo || "[simulacion]") + " listener de '" + tipo + "' lanzó:", e && e.message ? e.message : e);
+    }
+  }
+}
+
 // Detecta `const/let NOMBRE = ... =>` contando paréntesis en vez de con una sola
 // regex de ancho fijo: la regex anterior (`[^;=\n]{0,90}?=>`) no podía cruzar el
 // '=' de un parámetro por defecto (`(url, data = {}) =>`), así que gmPostJson y
@@ -328,4 +751,4 @@ function cargar(opciones) {
   return { api, env: ent, ctx, totalDeclaradas: nombres.length, expuestas: Object.keys(api).filter(k => !k.startsWith("__")).length };
 }
 
-module.exports = { cargar, crearEntorno, RUTA };
+module.exports = { cargar, crearEntorno, RUTA, enriquecerDom, instalarDomEnriquecido, disparar, cargarExpandidoRCV };

@@ -1051,6 +1051,26 @@ module.exports = {
       c.api.__state.activeDoctor = AUTHORIZED;
       c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_04));
     }
+    // v18.8.1 (fail-open) — el sujeto denegado de estas pruebas ya NO se siembra "sin
+    // padrón": desde el contrato nuevo, accesoPerfil() NUNCA devuelve PÚBLICO y todo
+    // médico no bloqueado resuelve COMPLETO (esté o no en el padrón, con o sin sesión).
+    // El ÚNICO perfil recortado es BLOQUEADO (blocklist del padrón por uid o nombre
+    // EXACTO), así que el análogo moderno del «médico NO autorizado» es uno en la
+    // blocklist. Padrón gemelo de LISTA_ACCESO_04, con la entrada de bloqueo:
+    const BLOQUEADO = { id: 999, name: "Prueba Bloqueada" };
+    const LISTA_ACCESO_04_CON_BLOQUEADO = {
+      version: "test-04.2",
+      perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
+      blocklist: [{ uid: 999, nombre: "Prueba Bloqueada", motivo: "banco" }],
+    };
+    function bloquear(c) {
+      c.api.__state.activeDoctor = BLOQUEADO;
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_04_CON_BLOQUEADO));
+    }
+    // v18.8.1 — el FUERA del padrón ya no es PÚBLICO: por fail-open es COMPLETO. uid
+    // sintético de médico, sin entrada en LISTA_ACCESO_04 (y sin blocklist): resuelve
+    // COMPLETO aunque el padrón exista.
+    const FUERA_DE_PADRON = { id: 555, name: "MEDICO SIN PADRON" };
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).
@@ -1632,19 +1652,31 @@ module.exports = {
     // RCV del aviso universal. Solo los autorizados la ven "normal" (con 50 % por fuera de
     // meta); los no autorizados la ven SOLO si el paciente está en un programa de Ruta
     // Crónicos, juzgando vencidos con la vigencia original (tabla por estadio, sin 50 %).
-    await t.casoAsync("checkAvisoUniversal: médico NO autorizado sin programa de Ruta Crónicos no ve la sección de labs RCV", async () => {
+    // v18.8.1 — FAIL-OPEN (contrato nuevo): accesoPerfil() ya NUNCA devuelve PÚBLICO —
+    // quien no está en la blocklist es COMPLETO aunque esté fuera del padrón, con o sin
+    // sesión. La siembra vieja de «NO autorizado» (cargar sin padrón y sin médico) ahora
+    // resuelve COMPLETO y SÍ ve labs — por eso las dos pruebas de abajo siembran el
+    // sujeto denegado como BLOQUEADO (blocklist del padrón, uid 999), el único perfil que
+    // el contrato nuevo recorta, y la prueba que sigue a ellas afirma la cara nueva del
+    // fail-open: un médico FUERA del padrón (uid 555) ve la lista normal, como el 707.
+    await t.casoAsync("checkAvisoUniversal v18.8.1: médico BLOQUEADO sin programa de Ruta Crónicos no ve la sección de labs RCV", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
-      // Sin autorizar(): el médico activo es no autorizado (o aún no detectado).
+      bloquear(c);   // v18.8.1 — el denegado de verdad ya no es «fuera del padrón» (eso es COMPLETO): es BLOQUEADO por la blocklist
       mockPacienteAbierto(c, DOC_LABSV);
       await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
       const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
       c.api.checkAvisoUniversal();
       t.falso(c.api.avisoYaVisto(uid),
-        "sin programa de crónicos detectado, la sección de labs se silencia para el no autorizado (no hay aviso de labs)");
+        "sin programa de crónicos detectado, la sección de labs se silencia para el BLOQUEADO (no hay aviso de labs)");
     });
 
-    await t.casoAsync("checkAvisoUniversal: médico NO autorizado SÍ ve labs RCV vencidos si el paciente está en Ruta Crónicos", async () => {
+    // v18.8.1 — la distinción por programa sigue viva SOLO para el perfil recortado: un
+    // BLOQUEADO con paciente en Ruta Crónicos recibe el aviso (la blocklist corta caps y
+    // UI, no la alerta de prioridad cardiovascular del aviso único), pero SIEMPRE como
+    // mensaje de prioridad — jamás la lista de analitos, que es del perfil COMPLETO.
+    await t.casoAsync("checkAvisoUniversal v18.8.1: médico BLOQUEADO con paciente en Ruta Crónicos SÍ recibe el aviso de labs RCV vencidos — solo el mensaje de prioridad", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      bloquear(c);
       mockPacienteAbierto(c, DOC_LABSV);
       await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
       // Siembra un resumen con programa rector: el paciente está en Ruta Crónicos (HTA).
@@ -1657,9 +1689,30 @@ module.exports = {
       // #anamesis, así que se busca el modal entre los hijos del body.
       const m = c.env.doc.body.children.find((n) => n.id === "vgl-pym-modal");
       t.cierto(!!m && /Priorice riesgo cardiovascular/.test(m.innerHTML || ""),
-        "el no autorizado ve el mensaje de prioridad cardiovascular, no la lista cruda");
+        "el BLOQUEADO ve el mensaje de prioridad cardiovascular, no la lista cruda");
       t.falso(!!m && /Laboratorios RCV sin resultado vigente/.test(m.innerHTML || ""),
-        "y NO ve el encabezado de la lista de analitos (eso es solo del autorizado)");
+        "y NO ve el encabezado de la lista de analitos (eso es solo del COMPLETO)");
+    });
+
+    // v18.8.1 (fail-open) — la cara nueva del contrato: un médico FUERA del padrón ya no
+    // es PÚBLICO con la sección silenciada. Resuelve COMPLETO y la sección de labs RCV le
+    // aparece NORMAL, como al autorizado del padrón (uid 707): la lista de analitos, no el
+    // mensaje de prioridad.
+    await t.casoAsync("checkAvisoUniversal v18.8.1 (fail-open): médico fuera del padrón SÍ ve la lista de labs RCV (COMPLETO)", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      c.api.__state.activeDoctor = FUERA_DE_PADRON;   // uid 555: sin entrada en LISTA_ACCESO_04
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_04));   // padrón válido, sin 555 y sin blocklist
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // 0 labs -> 7 analitos RCV faltantes
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid),
+        "fuera del padrón -> COMPLETO (fail-open): los labs vencidos disparan el aviso único");
+      const m = c.env.doc.body.children.find((n) => n.id === "vgl-pym-modal");
+      t.cierto(!!m && /Laboratorios RCV sin resultado vigente/.test(m.innerHTML || ""),
+        "ve el encabezado de la lista de analitos, como el autorizado del padrón");
+      t.falso(!!m && /Priorice riesgo cardiovascular/.test(m.innerHTML || ""),
+        "y NO el mensaje de prioridad: ese queda solo para el perfil recortado");
     });
 
     // Variante de planLabsVencidos que ECHA DE VUELTA la cédula que de verdad se buscó (en

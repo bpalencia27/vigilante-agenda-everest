@@ -1,0 +1,29 @@
+# VIGILANTE DE AGENDA — config de despliegue Cloudflare (réplica de telemetría)
+# ============================================================================
+# Uso (una sola vez por cuenta):
+#   npm i -g wrangler            (o: npx wrangler@latest …)
+#   wrangler login
+#   wrangler d1 create vigilante-telemetria            → copia el id a database_id
+#   wrangler d1 execute vigilante-telemetria --remote --file=schema.sql
+#   wrangler deploy
+#
+# Después de desplegar, probar en vivo SIN tocar la flota:
+#   curl -X POST https://<worker>.workers.dev/ -H "Content-Type: application/json" ^
+#        -d '{"token":"vgl-2026","evento":"prueba","lote":"lote-cero-manual","dia":"2026-09-08","equipo":"EQ-MANUAL","ver":"0.0.0"}'
+#   → primera vez "ok", repetir → "dup" (el dedup permanente responde).
+#
+# El CABLEADO del userscript (TABLERO.url, repDiagnostico, versionCheckUrl,
+# @connect) es una decisión del médico y queda documentado en README.md §4 —
+# la flota sigue apuntando al GAS hasta que el dueño diga lo contrario.
+
+name = "vigilante-telemetria"
+main = "worker.js"
+compatibility_date = "2026-09-08"
+
+# workers.dev activo para probar sin dominio propio.
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"            # env.DB en worker.js
+database_name = "vigilante-telemetria"
+database_id = "5ec80edc-7cad-48b3-baa4-2ba3f721cb9b"   # creada 2026-09-08 (wrangler d1 create)

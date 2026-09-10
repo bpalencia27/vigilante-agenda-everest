@@ -254,6 +254,26 @@ module.exports = {
       t.falso(c.api.__state.disabledFeatures.has("moduloExperimental"), "canary habilitó la característica para eq-piloto-01");
     });
 
+    // v18.13.0 (Mesa de Expertos, simplificable #1) — la comparación de versiones
+    // ("14.1.6" vs "14.1.5") dejó de reimplementarse en línea y ahora delega en
+    // mtrVersionEsMasNueva; esta prueba ancla que el candado de versión mínima SIGUE
+    // disparándose igual que antes del refactor.
+    t.caso("checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado de actualización (needsUpdate vía mtrVersionEsMasNueva)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (opts) => {
+          opts.onload({
+            status: 200,
+            responseText: JSON.stringify({ minVersion: "99.0.0" }),
+          });
+        },
+      });
+      c.api.__state.lastVersionCheck = 0;
+      c.api.checkVersionMinimum();
+      t.igual(c.env.win.sessionStorage.getItem("vgl_upd|99.0.0"), "1",
+        "el camino de actualización obligatoria se tomó (needsUpdate=true) — la marca de recarga quedó puesta");
+    });
+
     // =================================================================
     //  v18.0.53 — HALLAZGO DEL ENJAMBRE DE FUNCIONES (01-sep), gravedad alta:
     //  EL KILL-SWITCH SE ACTIVABA EN SILENCIO TOTAL.

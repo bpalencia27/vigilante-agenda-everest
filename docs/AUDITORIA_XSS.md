@@ -137,3 +137,18 @@ function escapeHtml(s) {
 2. **Invariante 2:** Para textos planos sin etiquetas HTML, utilizar siempre `.textContent` en lugar de `.innerHTML`.
 3. **Invariante 3:** Prohibido el uso de manejadores inline `onclick="..."` en cadenas HTML. Asociar eventos únicamente mediante `addEventListener`.
 4. **Invariante 4:** Todas las URLs externas y enlaces deben validarse contra el protocolo `^https?:\/\/` y codificar sus parámetros con `encodeURIComponent()`.
+
+---
+
+## ACTUALIZACIÓN v18.4.3 (2026-09-06, auditoría integral)
+
+El archivo creció ~3.5× desde el barrido original (14-ago); este es el re-conteo verificado contra el fuente actual:
+
+| Métrica | 14-ago-2026 | 06-sep-2026 (v18.4.3) |
+|---|---|---|
+| Sumideros HTML (`.innerHTML =` + `insertAdjacentHTML` + `document.write`) | 73 | **134** (129 + 3 + 2) |
+| Llamadas a `escapeHtml()` | ~150 | **316** |
+| Atributos `onclick=` inline en cadenas HTML | 1 (modal Labs) | **0** — cerrado en v18.4.1 (ruta única `closeMod` vía `addEventListener`) |
+| `eval` / `new Function` | 0 | **0** |
+
+Estado de las invariantes: la **Invariante 3 queda cerrada** (0 `onclick` inline; fijada por suite_31). Las invariantes 1, 2 y 4 se mantienen; el caso especial `_vglFeedbackBoton` (aviso de botón con datos potencialmente externos) pasó por `escapeHtml()` en el propio sumidero (v18.4.1, suite_31). Sin PHI en los sumideros: la memoria clínica (`vgl_cosecha`) y el historial de inasistencias (`vgl_nosh_hist`) ahora descansan CIFRADOS en disco (sobre AES-GCM "VGLC1:", clave de equipo de la carpeta v18.0.144) — ver suite_89.

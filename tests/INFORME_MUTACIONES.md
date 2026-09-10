@@ -13511,4 +13511,908 @@ suite_75 **50/0**, suite_78 **35/0**, suite_82 **22/0** individuales. El único
 cambio de producto respecto del verde completo 3.400/0 de hoy (sección D1) es el
 string `@version` de la cabecera, y las tres suites que leen esa línea están
 verificadas post-fix. E2E final: **6/6**.
+## SF-01 (encargo SUPERPROMPT_SIMULACION_FLUJOS) — el enriquecedor DOM de suite_73 pasa al arnés
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| suite_73_recorridos.js ~L149 (montar) | Sustituida `instalarDomEnriquecido(c.env.doc)` por la mera referencia `instalarDomEnriquecido;` (la suite abre el modal SIN el enriquecedor compartido: nodos planos, sin parser ni selectores) | NO | Ninguna: las 9 comprobaciones de *Suite 73 · Recorridos del modal Agendar* cayeron a rojo de inmediato (0 ok / 9 FALLAN, exit 1). Restaurada al instante; suite_73 volvió a 9/9 (exit 0). |
+
+Cambio de INFRAESTRUCTURA de pruebas, no de producto: el enriquecedor DOM (parser
+HTML, motor de selectores, dataset, classList con semántica real) que vivía dentro
+de suite_73 se extrajo TAL CUAL a `tests/harness.js` (exporta `enriquecerDom`,
+`instalarDomEnriquecido` y `disparar`) y suite_73 ahora lo consume con
+`require("./harness.js")`. Verificación de inocencia con colisión de sesiones en el
+mismo árbol: otra sesión reescribió `vigilante_agenda.user.js` EN PLENA corrida
+(sha256 0DEFA0F1→6072D32D) y el banco intermedio dio 3377/23; suite_02 aislada con
+mi harness sobre el userscript ya estable dio 33/33. Banco final con userscript
+estable: **3.397 pasan / 3 fallan** = flake ANTIDUP de suite_15 (precedente AE-011;
+aislada pasa 269/269) + 2 de suite_82 (TERMINOS_TEXTO vs docs desincronizados por
+la sesión paralela, territorio ajeno a SF-01). Cronología completa en
+`AUDITORIA/REGISTRO_SIMULACIONES.md` (SF-01).
+
+## SF-02 (encargo SUPERPROMPT_SIMULACION_FLUJOS) — suite_85 nace con R0 y su mutación
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| suite_85_simulacion_m1.js ~L87 (router AsignarTurno) | Mock de confirmación invertido: `{error:true, data:{motivo:"Fallo simulado"}}` en vez de `{error:false, radicado>0}` — el servidor NUNCA confirma la cita | NO | Ninguna: *R0.8: la marca antiduplicado se escribió SOLO tras la confirmación real (radicado > 0)* (suite_85) cayó a rojo con exit 1. Restaurado el mock; suite_85 volvió a 1/1 (exit 0). |
+
+Suite nueva de simulación (infra del encargo SF): escenario R0 del médico (§6) —
+control+labs → 1 mes → retroceder → solo control → 3 meses → fecha concreta → aceptar →
+reabrir. Corre contra el enriquecedor DOM compartido del arnés (SF-01) con turnos
+ESTABLES por fecha (mismos turnoId en el sondeo inicial y en la verificación fresca
+pre-confirmación; si rotaran, el modal declararía «cupo perdido» y jamás crearía la
+cita). La mutación demuestra que la aserción F5 (marca antiduplicado solo con
+confirmación real) muerde. Hallazgo S-0002 (DESV): el eje labs se oculta
+(`display:none`) pero no se desmonta — ver `AUDITORIA/REGISTRO_SIMULACIONES.md` §2.
+
+## TC (encargo SUPERPROMPT_TERMINOS_BLINDAJE) — Términos v1.2: anonimización + blindaje, doc y template sincronizados
+
+`docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md` pasa de v1.1 a v1.2 (anonimización del
+creador, cláusulas de blindaje T-38/T-39/T-40/T-42/T-43/T-44/T-45, índice y IDs
+estables T-##). El documento vive embebido carácter a carácter en `TERMINOS_TEXTO`
+(user.js ~L36811) y su versión en `TERMINOS_VERSION` (L36797): subir el texto a
+1.2 exige tocar las tres piezas a la vez — es exactamente lo que vigila P11·9.
+`TERMINOS_RESUMEN` (L36802, PARTE 1 en limpio) se desidentiza en el mismo paso.
+Suite_82: 6 aserciones de versión 1.1→1.2 (L159, L206-210, L221, L253-254, L378,
+L387). `node --check` limpio en `tests/suite_82_consentimiento.js`. Tras el diff:
+suite_82 **22 pasan / 0 fallan**. Cronología y expedientes en
+`AUDITORIA/REGISTRO_TERMINOS.md` e `AUDITORIA/INFORME_AUDITORIA_TERMINOS.md`.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| user.js ~L37040 (TERMINOS_TEXTO, cláusula T-32) | «**Doce meses**» → «**Doce mesee**» dentro del template embebido (el archivo docs/ queda intacto) | NO | Ninguna: *suite_82: P11·9 — «TERMINOS_TEXTO === docs/… — primera diferencia en el carácter 13605»* — mutante 21 pasan / 1 falla; restaurado 22/0 |
+| user.js L36797 (TERMINOS_VERSION) | `"1.2"` → `"9.9"` sin tocar documento ni template (constancia y vigencia firman una versión que ningún texto respalda) | NO | Ninguna: *suite_82: 5 casos en rojo* — P11·4 «constancia con versión y fecha-hora», P11·7 «constancia vigente aunque antigua: NO se re-pregunta», P11·9 «la versión vigente de la constante: esperaba “1.2” y obtuvo “9.9”», P11·15 «la constancia firma con el login de sesión…» y P11·16 «constancia vigente + sin identidad = arranque directo» — mutante 17 pasan / 5 fallan; restaurado 22/0 |
+| user.js L8842 (_vglFeedbackBoton, v18.4.1) | `escapeHtml(texto)` → `texto` a pelo (el aviso del botón vuelve a entrar CRUDO al sumidero innerHTML) | NO | Ninguna: *suite_31: «v18.3.6 XSS — _vglFeedbackBoton escapa el aviso: un payload HTML se VE, no se ejecuta»* — mutante 53 pasan / 1 falla; restaurado 54/0 |
+| user.js L24833 (plantilla del modal de Laboratorios, v18.4.1) | reponer `onclick="this.closest('#vgl-labs-modal').remove()"` en el botón Cerrar (regresa el único onclick inline del archivo, saltándose closeMod) | NO | Ninguna: *suite_31: «v18.3.6 — el modal de Laboratorios cierra SOLO por closeMod: cero onclick inline»* — mutante 53 pasan / 1 falla; restaurado 54/0 |
+| user.js ~L20875 (hoja maestra de buildOverlay, v18.4.1) | reponer la regla `@media (prefers-reduced-motion:reduce)` duplicada que la auditoría retiró (regresan 2 !important muertos y la copia doble) | NO | Ninguna: *suite_25: «la fusión de hojas de v12.3.13 no dejó reglas duplicadas exactas»* Y «Regla G — total de !important» (656 ≠ 654) — mutante 31 pasan / 2 fallan; restaurado 33/0 |
+| user.js ~L5202 (_vglCosechaPersistir, v18.4.3) | en el persist de la memoria clínica, ignorar el sobre cifrado y volver a escribir `JSON.stringify(todo)` en claro (H5 desactivado) | NO | Ninguna: *suite_89: 6 casos en rojo* — el disco sin sobre «VGLC1:», la redonda por disco, la migración, el otro-equipo y nosh — mutante 20 pasan / 6 fallan; restaurado 26/0 |
+| user.js ~L5174 (_vglCosechaHidratar, v18.4.3) | borrar la guarda PENDING: una hidratación tardía puede pisar la escritura en vuelo con el disco viejo | NO | Ninguna: *suite_89: «H5 — CARRERA: una escritura en vuelo (PENDING) no puede ser pisada…»* y 3 casos dependientes — mutante 22 pasan / 4 fallan; restaurado 26/0 |
+| user.js L36354 (checkVersionMinimum, rama post-recarga, v18.4.1) | anular `aplicarBloqueoVersionObsoleta(minVer)` y devolver el aviso pasivo `setSummary` de antes (la versión obsoleta vuelve a poder usarse indefinidamente) | NO | Ninguna: *suite_17: «checkVersionMinimum: tras recarga sin efecto, la versión vieja se BLOQUEA»* — 4 aserciones en rojo («bloqueo», candado GM, modal, telemetría verlock) — mutante 53 pasan / 4 fallan; restaurado 57/0 |
+| user.js L36336 (guard de historia clínica en checkVersionMinimum, v18.4.1) | `if (seccionActiva() === "historia")` → `if (false && …)`: el bloqueo por versión cae aunque haya consulta activa | NO | Ninguna: *suite_17: «con historia clínica abierta el bloqueo se DIFIERE (nunca interrumpe la consulta)»* — «en consulta activa no se bloquea» y candado GM en rojo — mutante 55 pasan / 2 fallan; restaurado 57/0 (verificado en copia aislada del banco por escrituras paralelas en el repo) |
+| user.js L36079 (_vglCandadoVersionArranque, v18.4.1) | `GM_deleteValue(VGL_VERSION_LOCK_GM)` → `if (false && …)`: el candado jamás se limpia y la versión NUEVA seguiría bloqueada al arrancar | NO | Ninguna: *suite_17: «_vglCandadoVersionArranque: con la versión ya instalada el candado se limpia solo y arranca normal»* — «candado limpio automáticamente: esperaba undefined y obtuvo "0.0.1"» — mutante 56 pasan / 1 fallan; restaurado 57/0 (verificado en copia aislada del banco) |
+
+## v18.4 — Telemetría: carril prioritario, muestreo por prioridad, beacon de último recurso y alertas del tablero
+
+Nacido del export real del tablero (docs/TELEMETRIA_20260901.md): el 27-ago seis
+equipos en v18.0.4 emitieron 81 errores que nunca llegaron y la demora de la cola
+era el temporizador completo de 10 min. Tres cambios en el userscript
+(carril prioritario en `reportar`/`repFlush` con autolimitación de 1 min tras
+fallo propio, muestreo por prioridad P0 error.*/rep.* → P1 uso → P2 rum.*/api.*
+en `uxEnviarVentana`, y beacon de único recurso al descartar tras 3 rechazos) y
+las alertas del lado servidor en TABLERO/Codigo.gs (`calcularAlertas` pura:
+canal-mudo/tormenta/z-score/api-degradada; `revisarAlertas` con dedup
+día+equipo+tipo; menú + trigger diario). Suite nueva: `tests/suite_87_telemetria_v18_4.js`
+(la 86 está tomada por la cadena de auditoría de arranque); simulador extendido:
+`TABLERO/simulacion_local.js` bloque «v18.4.0 — ALERTAS DEL TABLERO».
+Verificación final tras restaurar TODAS las mutaciones: `node tests/runner.js
+suite_87` → 6/6 verde; `node TABLERO/simulacion_local.js` → exit 0 con
+«alertas v18.4: TODO OK». NOTA de escrituras paralelas en el repo: durante esta
+tarea otra tarea guardaba el userscript desde instantáneas que contenían
+mutaciones transitorias y las RESUCITÓ dos veces (MUTACIÓN-1) y una vez (M-6/M-7);
+cada resurrección se detectó porque el banco la ponía roja y se restauró de
+inmediato — al cierre, `grep MUTACION-` no encuentra nada en user.js ni Codigo.gs.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| user.js L12281 (repFlush, v18.4) | `if (idx < 0) idx = 0; idx = 0;`: la selección de evidencia se calcula y se tira — la cola vuelve a ser FIFO puro y un error espera detrás de 79 filas de uso | NO | Ninguna: *suite_87: «en el ciclo de repFlush la evidencia sale ANTES que el uso que la precede»* — «el error sale primero aunque era el tercero en la cola: esperaba "error" y obtuvo "entorno"» |
+| user.js L12381 (reportar, v18.4) | carril `if ((evento === "error" \|\| evento === "fraude") && false)`: la evidencia vuelve a esperar el backoff de 3 min y el temporizador de 10 min | NO | Ninguna: *suite_87: «con backoff activo (fallo fresco) la evidencia sale igual y el uso espera»* — «la evidencia intenta salir aunque el backoff esté fresco (obtuvo false)» |
+| user.js L12382 (reportar, v18.4) | throttle `if (true)`: el carril reintenta en cada error contra un panel caído — la tormenta de red que el backoff de v17.6.14 cerró | NO | Ninguna: *suite_87: «tras un fallo del carril, la ráfaga siguiente NO martillea el panel»* — «esperaba 1 y obtuvo 2» llamadas de red |
+| user.js L13290 (uxEnviarVentana, v18.4) | `_prioMuestreo` plano (toda clase → 1): al desbordar el presupuesto se omite por orden de inserción y la evidencia de fallo (última en el objeto) queda fuera del envío | NO | Ninguna: *suite_87: «si la ventana no cabe, se sacrifican rum.*/api.* antes que error.*/rep.*»* — «la contabilidad de la cola también: esperaba 1 y obtuvo undefined» |
+| user.js L12301 (repFlush descarte, v18.4) | beacon de último recurso `if (false && repBeacon(fila))`: la fila descartada se pierde sin el intento final | NO | Ninguna: *suite_87: «la fila de error descartada tras 3 rechazos sale por beacon una última vez…»* — «0 beacon(s)» y «rep.descarte.beacon» ausente |
+| TABLERO/Codigo.gs L1038 (calcularAlertas) | regla canal-mudo `if (false && …)`: el defecto de la v17.2.0 (errores detectados, cero entregados) vuelve a ser invisible | NO | Ninguna: *simulador TABLERO/simulacion_local.js: «FALLA alertas: canal-mudo no disparó»* (exit 1); restaurado exit 0 |
+| TABLERO/Codigo.gs L990 (_alertasAgregar) | dedup por lote `if (lote && false)`: el reenvío de la misma ventana cuenta doble (66 en vez de 33) e infla todas las alertas | NO | Ninguna: *simulador: «FALLA alertas: canal-mudo contó 66 errores detectados… (33 esperados: ¿dedup por lote roto?)»* (exit 1); restaurado exit 0 |
+| TABLERO/Codigo.gs L1093 (revisarAlertas) | dedup de la hoja `if (ya[clave] && false) return;`: cada re-ejecución reescribe las mismas alertas | NO | Ninguna: *simulador: «FALLA alertas: … re-visión duplicó filas: 4 -> 8»* (exit 1); restaurado exit 0 |
+| user.js RUM_ENDPOINTS (v18.4.6, _rumEndpointLabel) | patrón `CargarMedicamentosPaciente` → `…PacienteX`: los medicamentos del paciente vuelven a caer en `api.otro` (sin atribución en el RUM) | NO | Ninguna: *suite_87: «v18.4.6: los cinco endpoints reales que caían en api.otro llevan etiqueta propia»* — «esperaba "medicamentosPaciente" y obtuvo "otro"» |
+| TABLERO/Codigo.gs armarResumen (v18.4.6) | dedup por lote `if (usoLotesVistos[ltUso] && false) return;`: los reenvíos de "uso" vuelven a inflar «Reportes» y «Acciones de uso» (~2,2×, medido en el export del 07-sep) | NO | Ninguna: *simulador TABLERO/simulacion_local.js: «FALLA dedup resumen: ux acum con dup: obtuvo 207 (107 esperados…)» y reportes 3≠2* (exit 1); restaurado «dedup armarResumen v18.4.6: TODO OK» |
+
+## v18.4.2 â€” 06-sep-2026 (Panel Â«PrÃ³ximos exÃ¡menes RCVÂ» del paciente abierto, suite_88)
+
+Mutaciones aplicadas sobre el archivo de producciÃ³n y restauradas DE INMEDIATO, una por
+una (regla del proyecto: cada mutaciÃ³n se restaura antes de pasar a la siguiente). Cada
+corrida dejÃ³ roja la aserciÃ³n especÃ­fica y la suite_88 volviÃ³ a 19/19 al restaurar.
+
+| LÃ­nea | MutaciÃ³n Aplicada | Â¿SobreviviÃ³? | AserciÃ³n Faltante (si sobreviviÃ³) |
+|---|---|---|---|
+| user.js L7185 (rcvPendientesDebeVerse, v18.4.2) | Retirada la condiciÃ³n `o.autorizado === true &&` de la compuerta (el panel se pinta para cualquier mÃ©dico, sin permiso del padrÃ³n) | NO | Ninguna: *suite_88: Â«debeVerse: las CUATRO condiciones a la vezÂ»* â€” Â«sin permiso (obtuvo true)Â»; y la integraciÃ³n Â«PÃšBLICO, LABORATORIOS, BLOQUEADO y sin identidad NO ven el panelÂ» cayÃ³ a rojo. |
+| user.js L7167 (rcvPendientesCalcular, v18.4.2) | Borde de vencimiento `dias < 0` â†’ `dias <= 0` (un examen que vence HOY pasa a VENCIDO en rojo) | NO | Ninguna: *suite_88: Â«vence HOY: prÃ³ximo, no vencido: esperaba "proximo" y obtuvo "vencido"Â»*. |
+| user.js L36014 (hook de tick(), v18.4.2) | Enganche `_rumTramo("tick.widget.rcvpendientes", rcvPendientesTick)` vaciado (`try { }`): el panel solo existirÃ­a llamÃ¡ndolo a mano â€” la ruta de producciÃ³n nunca lo pinta | NO | Ninguna: *suite_88: Â«enganche real: tick() (la ruta de producciÃ³n) pinta el panel sin llamarlo a manoÂ» â€” Â«el hook _rumTramo vive (obtuvo false)Â»*. |
+
+Guardianes acompaÃ±antes ajustados por el mismo cambio (no mutaciones): suite_25 Regla J
+(z-widget 6 â†’ 7 sitios: #vgl-rcv-pendientes) y Regla G (total !important 654 â†’ 668: 13
+reglas de color del panel + 1 menciÃ³n en su comentario; el censo cuenta texto crudo).
+
+| user.js L24419 (_recordatorioLabHtml, v18.4.2) | \.rc-card{width:578px�}\ ? \width:680px\ (la tarjeta del recordatorio de laboratorio vuelve al ancho viejo: la reducci�n al 85% desaparece SIN tocar el resto de la escala) | NO | Ninguna: *suite_62: �recordatorio de la toma (v18.4.2): todas las medidas quedaron al 85% de la escala anterior�* � aserci�n �tarjeta: 680px ? 578px (�0,85)� en rojo � mutante 59 pasan / 1 falla; restaurado 60/0 |
+| user.js L24369 (imprimirRecordatorioCita, rama de respaldo, v18.4.2) | anular el \setTimeout(� pestana.print() �, 900)\ del respaldo (la ventana de impresi�n del recordatorio de cita de control ya NO se abre sola: vuelve a quedar solo la pesta�a con el PDF) | NO | Ninguna: *suite_15: �imprimirRecordatorioCita (v18.4.2): tras abrir la pesta�a, print() se dispara SOLO � sin pasos intermedios�* � �esperaba 1 y obtuvo 0� en rojo � mutante 270 pasan / 1 falla; restaurado 271/0 |
+| user.js L28891 (cargarHoras, filtro de agendas, v18.4.2) | \
+ombreObjetivo = esPropia ? doctorName : _medicoFiltro\ ? \
+ombreObjetivo = doctorName\ (el selector de m�dico queda decorativo: siempre filtra por la agenda propia y la de OTRO m�dico jam�s se muestra) | NO | Ninguna: *suite_15: �openAgendamientoModal (v18.4.2): el selector de m�dico permite buscar y elegir la agenda de OTRO m�dico�* � �el turno del OTRO m�dico aparece y es seleccionable (obtuvo false)� en rojo � mutante 270 pasan / 1 falla; restaurado 271/0 |
+| user.js avisoUniversal presupuesto (M1/NT-101) | `const exentoR3 = !!(abandono \|\| prioridadRcv)` ? `false` (el presupuesto vuelve a poder callar un ABANDONO RCV R=3 con el cupo agotado) | NO | Ninguna: *suite_89: �M1/NT-101: presupuesto agotado calla PyM (R=2) pero NUNCA al abandono RCV (R=3)�* � �pasa SIEMPRE (obtuvo false)� en rojo � mutante 19 pasan / 1 falla; restaurado 20/0 |
+| user.js avisoUniversal carrera (M2/NT-102) | desactivar el re-chequeo pre-appendChild (`if (false && uidAviso �)`): la pesta�a que pierde la carrera vuelve a pintar el modal duplicado | NO | Ninguna: *suite_89: �M2/NT-102: el modal que pierde la carrera de pesta�as no pinta ni gasta cupo�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js osNotify fb (M3/NT-104) | respaldo sin revertir la marca ni gatear HCHealth (el aviso vuelve a quedar �contado y nunca visto� tras SO suprimido + pantalla ajena) | NO | Ninguna: *suite_89: �M3/NT-104: SO suprimido + fallback bloqueado ? la marca se REVIERTE�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible soBody (M9/NT-106) | quitar `p.soBody` de la llamada al SO (el Centro de actividades de Windows vuelve a recibir nombre+c�dula) | NO | Ninguna: *suite_89: �M9/NT-106: el cuerpo del SO identifica por HORA, sin nombre ni c�dula�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _encolarAvisoPendiente (M10/NT-107) | re-agregar `body: p.body` al payload de la cola (PHI en claro en localStorage) | NO | Ninguna: *suite_89: �M10/NT-107: la cola localStorage guarda SIN nombre ni c�dula��* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible VERDE (M13) | `if (p.color === "VERDE" && false) return true` (un VERDE R=1 vuelve a gastar notificaci�n del SO con pesta�a desatendida) | NO | Ninguna: *suite_89: �M13: un VERDE con la pesta�a desatendida NO sale al SO�* � �cero notificaciones de Windows (obtuvo 1)� en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _dispararAvisoAudible ROJO forzar (Q2/NT-109b) | `startNag("ROJO", false)` (el tono del ROJO vuelve a caer dentro del �Silenciar 15 min� y perderse para siempre) | NO | Ninguna: *suite_89: �Q2/NT-109b: el tono del ROJO suena DENTRO del silencio temporal�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js avisoPacHistPodar corte (M21/NT-123) | `const corte = 0` (la purga temporal de 90 d�as desaparece: c�dulas para siempre en localStorage) | NO | Ninguna: *suite_89: �M21/NT-123: el hist�rico� purga los ts de hace m�s de 90 d�as�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js muteFor sello (M4/NT-109a) | no escribir `vgl_mute_hasta` en localStorage (el silencio vuelve a ser privado de cada pesta�a) | NO | Ninguna: *suite_89: �M4/NT-109a: el silencio de una pesta�a lo ve la otra�* en rojo � mutante 19/1; restaurado 20/0 |
+| user.js _vglTopeHora (M5/NT-108) | `if (false && arr.length >= tope)` (el tope 3/hora del aviso �3+ PyM� queda anulado) | NO | Ninguna: *suite_89: �M5/NT-108: 3+ PyM avisa UNA vez por cita (silencioso), con tope 3/hora�* en rojo � mutante 19/1; restaurado 20/0 |
+| ~11004 | accesoCapExtra: return false inmediato (la cap nunca se concede) | NO | - |
+| ~30296 | guarda de _confirmarCita: quitar accesoCapExtra(pym_opcional) de la condición (!false) | NO | - |
+| 1418 | MTR_URO_TERMINOS: quitar "CRISTALURIA" del léxico (el menú pierde un término) | NO | - |
+| 7889 | _vglMenuInterpretacionUro: invertir la guarda de casilla vacía (`!==`→`===`: el menú abre con la casilla LLENA y no abre con la VACÍA) | NO | - |
+| 50370 | mtrUroRecomendacion: invertir las ramas de síntomas (true→BACTERIURIA ASINTOMÁTICA, false→SUGESTIVO DE ITU) | NO | - |
+| 8085 | hook de _ejecutarLlenadoExamenes: `_vglMenuInterpretacionUro(docId, [])` (el menú abre sin los labs recién escritos) | NO | - |
+| 7907 | onPick del menú: `if (false)` en la re-verificación de casilla llena (pisa lo que el LIS/médico escribió con el menú abierto) | NO | - |
+| 5200 | guarda PENDING de _vglCosechaHidratar: `if (false && …)` (la hidratación tardía vuelve a pisar la escritura en vuelo) — re-verify tras estabilizar el caso CARRERA (flaky cazado el 07-sep con crypto inyectado que retrasa encrypt 120 ms) | NO | - |
+| TABLERO/Codigo.gs 554 | sincronizador de uids (v12.11.0): quitar el blindaje `uidAcc > 0` (una celda uid ya fijada vuelve a poder sobrescribirse) — standalone Node (_sync_test.js temporal, 12 aserciones): mutante 7 pasan / 5 FALLAN; restaurado 12/0 | NO | - |
+| TABLERO/Codigo.gs 571 | sincronizador de uids (v12.11.0): aceptar candidatos ambiguos (`cands.length > 1` escribe el primero: uid de un médico a otro con nombre parecido) — standalone Node: mutante 9 pasan / 3 FALLAN; restaurado 12/0 | NO | - |
+| TABLERO/Codigo.gs ~475 | _listaAccesoRespuesta (v12.11.1): omitir el campo caps de las entradas (la regresión cazada: accesoCapExtra exige Array.isArray(e.caps) y pym_opcional muere en silencio) — standalone Node (13 aserciones, encabezados canónico y migrado): mutante 10 pasan / 3 FALLAN; restaurado 13/0. Re-verify de las mutaciones de blindaje (2 FALLAN) y ambigüedad (2 FALLAN) sobre el mismo arnés | NO | - |
+| user.js 11237 (v18.5.0 shiftOf) | turno AM/PM: `< 12` → `<= 12` (las 12:00 caerían en AM y el turno PM nacería sin foto propia) — suite_79 en rojo («12:00 ya es PM: esperaba "PM" y obtuvo "AM"»); restaurado 15/0 | NO | - |
+| user.js 11282 (v18.5.0 enGracia) | gracia de arranque inerte (`false && …`): la foto de la lista inicial volvería a avisar a TODA la agenda (el defecto del 07-sep renacía) — suite_79 en rojo («a los 90 s de la foto, en gracia: esperaba 0 y obtuvo 1»); restaurado 15/0 | NO | - |
+| user.js 11283 (v18.5.0 silencio del seed) | quitar SOLO el `seed ||` de `if (seed \|\| enGracia) continue` — sobrevive porque la gracia recién sembrada (reg.ts = ahora) ya cubre todo el pase de siembra: `seed` es cinturón-y-tirantes documentado, no una rama viva con la gracia en 120 s | SÍ | Ninguna real: la conducta que `seed` protege queda cazada por la mutación de la GRACIA (fila anterior), que sí enrojece; `seed` se conserva como defensa si algún día SHIFT_BASE_GRACE_MS baja a 0 |
+| user.js 11266 (v18.5.0 capa a) | `if (false && !accesoCap("aviso_paciente_nuevo"))` (PÚBLICO y BLOQUEADO vuelven a evaluar y a aprender fotos) — suite_79 en rojo («PÚBLICO no evalúa el aviso: esperaba null»); restaurado 15/0 | NO | - |
+| user.js 11305 (v18.5.0 toast FUCSIA) | `toast("FUCSIA"` → `toast("VERDE"` (el aviso de paciente nuevo pierde su color exclusivo y se confunde con la llegada a tiempo) — suite_79 en rojo («color exclusivo del aviso de paciente nuevo: esperaba "FUCSIA"»); restaurado 15/0 | NO | - |
+| user.js 11250 (v18.5.0 shiftSweepOldBaselines) | `&& false` en la condición de barrido (las fotos de turnos y días pasados quedan para siempre con cédulas en localStorage) — suite_79 en rojo («tras el cambio de turno solo vive la foto vigente»); restaurado 15/0 | NO | - |
+| user.js ~14685 (v18.5.1-hc guardia hermano) | invertir la guardia de texto `indexOf(VGL_HC_GUARDIA_TEXTO) !== -1` → `=== -1` (el botón hermano "Consentimientos", que COMPARE la clase btn-primary-medic, se confundiría con "Historias Clínicas" y el botón real dejaría de reconocerse) — suite_91 en rojo 13/3 («clase btn-primary-medic + ' Historias Clínicas ' → true (obtuvo false)»); restaurado 16/0 | NO | - |
+| user.js ~14665 (v18.5.1-hc TTL del hint) | `VGL_HC_HINT_TTL_MS = 15000` → `-1` (el hint del clic en agenda nunca caduca y puede fabricar contexto de un paciente ya cerrado) — suite_91 en rojo 12/4 («hay contexto tras el clic (obtuvo false)» y «el hint anterior sobrevive… obtuvo null»); restaurado 16/0 | NO | - |
+| user.js ~14733 (v18.5.1-hc máscara PHI) | `_vglHcMascara`: `s.slice(-4)` → `s` (la cédula COMPLETA se pintaría en el chip de contexto) — suite_91 en rojo 15/1 («cédula enmascarada ···+4 finales (obtuvo false)» + la aserción de cédula completa en pantalla); restaurado 16/0 | NO | - |
+| user.js ~14785 (v18.5.1-hc dedupe aria-live) | anular el dedupe del anuncio (`if (false && _vglHcLiveDoc === …)`) — el lector de pantalla repetiría el aviso de inasistencia en CADA tick (5 s) durante toda la consulta — suite_91 en rojo 15/1 («tick siguiente: dedupe, no repite (obtuvo false)»); restaurado 16/0 | NO | - |
+| user.js 14710 (v18.5.2-hc2 prefetch al clic) | comentar la llamada `hcPrefetch(docId)` dentro de `_vglHcCapturarClick` (el clic capturaría el hint pero ya no precalentaría la cadena de órdenes: el cruce antiduplicado volvería a pagar los ~7 s de cascada de Everest) — suite_91 en rojo 20/1 («el clic generó tráfico de prefetch (obtuvo false)»); restaurado 21/0 | NO | - |
+| user.js 14735 (v18.5.2-hc2 dedup en vuelo) | anular `if (GHOST.promises.has(promKey)) return false` (dos clics rápidos sobre el mismo botón lanzarían DOS cadenas de red simultáneas para el mismo paciente) — suite_91 en rojo 20/1 («segunda llamada en vuelo: dedup, no repite (obtuvo false)»); restaurado 21/0 | NO | - |
+| user.js 14738 (v18.5.2-hc2 flag especulativo) | `{ especulativo: true }` → `{}` (el prefetch volvería a reintentar 3 veces y a narrar fallos: con Everest caído, cada clic de HC gritaría en consola e insistiría contra un servidor enfermo) — suite_91 en rojo 20/1 («el prefetch viaja como especulativo (obtuvo false)», contrato estructural del bloque); restaurado 21/0 | NO | - |
+
+## v18.6.0 — Base única SEPTIEMBRE1 (mandato del médico 07-sep: 100 % base nueva, refrescos 06:00/12:00 Bogotá)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_readPymWorkbookStreamCore` (rama `if (opts && opts.main)`, ~L11922) | `opts && opts.main` → `opts && false`: la hoja fijada se ignora y vuelve a mandar el puntaje (el libro real de 12 hojas elegiría «CITASDIA AGOSTO» → 0 pacientes, hallazgo H1) | NO | *suite_16 «la hoja FIJADA gana aunque su puntaje sea menor…»* + *suite_12 «éxito: hoja fijada le gana al señuelo CITASDIA AGOSTO»*: mutante 16→5 rojos (29 ok) y 12→3 rojos (38 ok); restaurado 34/0 y 42/0 |
+| user.js `_readPymWorkbookStreamCore` (guardián `!indexer.todos.size`, ~L11996) | guardián de índice vacío desactivado (`if (false)`): un libro sin documentos legibles se instala y cachea en silencio | NO | *suite_16 «…lanza “no produjo ningún paciente”»*: mutante 1 rojo (33 ok); restaurado 34/0 |
+| user.js `pilotoFreshCheck` (sello tras meta, ~L13935) | `GM_setValue(PILOTO_CHK, v.sello)` inmediatamente tras el meta OK (antes de la descarga): una descarga fallida deja la ventana sellada con la copia vieja hasta el mediodía (hallazgo del revisor adversarial) | NO | *suite_92 «STAGING: meta anuncia cambio pero la DESCARGA falla → la ventana NO se sella…»*: mutante 1 rojo (34 ok); restaurado 35/0 |
+| user.js `loadPymBaseDescarga` (orden aplicar→guardar, ~L14009) | `pilotoGuardar` ANTES de `applyPymIdx`: un libro rechazado por el mtr (60 documentos, 0 actividades) queda cacheado y toda recarga lo readmite — rollback roto | NO (primera pasada SÍ sobrevivió: se añadió el guardián que faltaba y se repitió) | *suite_12 «libro con ≥50 documentos y CERO actividades (mtr) → rechazado y NADA queda cacheado»*: mutante 1 rojo (41 ok); restaurado 42/0. La primera corrida de la mutación con solo los casos existentes pasó en verde — hueco real de cobertura, cerrado con el caso nuevo |
+| user.js `findDocIdx` (fallback blando, ~L11913) | se retiró `!x.startsWith("TIPO_")`: «TIPO_DOCUMENTO» vuelve a ser elegible como columna de cédula (el defecto exacto de la hoja CITASDIA AGOSTO) | NO | *suite_03 «TIPO_DOCUMENTO jamás es la cédula»* + caso hermano: mutante 2 rojos (30 ok); restaurado 32/0 |
+| user.js `esAplicaPendiente` (~L11817) | `"aplica "` → `"aplica"` (sin espacio): «Aplicar…»/«reaplica» pasarían por pendientes de tamización | NO | *suite_03 «‘aplica’ sin espacio no»*: mutante 1 rojo (31 ok); restaurado 32/0 |
+| user.js `readPymWorkbookStream` (catch eInit, fallback sin Worker, ~L11991) | `_readPymWorkbookStreamCore(arrayBuffer)` SIN opts: el camino de PRODUCCIÓN bajo el CSP de Everest perdía las hojas fijadas (hallazgo CRÍTICO del revisor) | NO | *suite_16 «el FALLBACK del Worker… RESPETA la hoja fijada (camino de producción bajo CSP)»*: mutante 1 rojo (33 ok); restaurado 34/0 |
+
+### Cierre de las 3 fallas heredadas del árbol (v18.5.x en curso) — mismo commit de v18.6.0
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `RUM_ENDPOINTS` (5 patrones nuevos de v18.4.6, ~L22174) | patrón `CargarMedicamentosPaciente` comentado: el endpoint vuelve a caer en `api.otro` (2.489 llamadas sin atribución eran el hallazgo original) | NO | *suite_87 «los cinco endpoints reales que caían en api.otro llevan etiqueta propia»*: mutante 1 rojo (7 ok); restaurado 8/0 |
+| docs/TERMINOS_Y_AVISO_DE_PRIVACIDAD.md L2 (portada) | (sin mutación de código: era un desincronizado doc↔constante) el doc decía «Versión 1.3» con la constante y TERMINOS_VERSION ya en 1.4 | — | *suite_82 «P11·9 — TERMINOS_TEXTO es el documento del repo, idéntico carácter a carácter»* es el guardián de la vinculación versión↔texto: corregido el doc a 1.4 → 22/0 |
+| tests/suite_79 (caso «dedup entre pestañas») | (bug de la prueba, no del código) la 2ª pestaña se creaba SIN médico → `accesoCap("aviso_paciente_nuevo")` falso → `shiftNewPatientEval` devolvía null por diseño de la capa a y el caso leía `r.toasts` | — | el propio caso, ahora con `conDoctor(c2.api, …)`: 15/0. El null por capa a ya lo fija el caso «PÚBLICO no evalúa el aviso» |
+
+## v18.6.1 (F1, delegación v2 §O2) — Indexador del Anexo 5
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` (emparejamiento CUMPLE_*↔FECHA_*, ~L11870) | emparejamiento de fechas por nombre desactivado (`cFecha` jamás se fija): las fechas de toma de las 9 metas llegarían todas en 0 — el aviso diría «pendiente» de todo | NO | *suite_92 «F1/Anexo 5: el core indexa la TERCERA hoja con los typos del libro real»* (m[0]=[10,46100] y m[4]=[0,46090], las dos parejas con typo): mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `packPym` (campo `a5`, ~L12240) | `a5: ""` fijo: el Anexo 5 indexado NO viaja en el paquete — cada arranque lo perdería y el aviso quedaría mudo pese a caché caliente | NO | *suite_92 «F1/Anexo 5: el mapa viaja en el paquete v4 y sobrevive descarga→caché→recarga»* (/"a5":"\{/ + restauración .size===2): mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `_readPymWorkbookStreamCore` (bloque Anexo 5, ~L12005) | documentos del Anexo 5 FUSIONADOS en `todos`: un paciente solo del programa haría que la tarjeta diga «Al día · sin PyM pendiente» | NO | *suite_92 «…el paciente SOLO del Anexo 5 NO entra en todos»*: mutante 1 rojo (38 ok); restaurado 39/0 |
+| user.js `_readPymWorkbookStreamCore` (resolución `opts.anexo5`, ~L11947) | hoja ignorada (`if (opts.anexo5 && false)`): la tercera hoja jamás se lee | NO | *suite_92* casos «TERCERA hoja…» y «mapa viaja en el paquete v4» (sheetAnexo5 vacío + state.pymAnexo5 0): mutante 2 rojos (37 ok); restaurado 39/0 |
+
+## v18.6.1 (F2, delegación v2 §O2.3) — Aviso del Anexo 5 al abrir la HC
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `A5_DIAS_ABANDONO` (~L14680) | umbral 183 → 99999 días: la regla «más de 6 meses sin control» del libro jamás dispara | NO | *suite_91 «F2/a5AlertasDe: las CUATRO alertas»* (abandono.sinControl) + caso hermano del panel: mutante 2 rojos (24 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (título del panel, ~L14735) | máscara fuera: la cédula COMPLETA del paciente en pantalla | NO | *suite_91 «F2/hcAnexo5Render: panel DENTRO de #vgl-root…»* («···8777» + cédula completa jamás): mutante 1 rojo (25 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (cierre manual, ~L14742) | `_vglA5Cerrados.add(…)` fuera: cerrar el panel no persiste y resucita al siguiente tick, martillando al médico toda la consulta | NO | *suite_91* misma («y no vuelve a aparecer para ese paciente en este turno»): mutante 1 rojo (25 ok); restaurado 26/0 |
+| user.js `hcAnexo5Render` (guarda origen, ~L14722) | exigencia `origen === "dom"` fuera: el aviso salta con el SOLO clic del botón HC, antes de que la historia exista | NO | *suite_91 «sin HC abierta por DOM… el aviso exige la historia ABIERTA»*: mutante 1 rojo (25 ok); restaurado 26/0 |
+
+## v18.6.1 (F3, mandato «toggles por médico») — Toggles de funcionalidad
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `VGL_TOGGLES` (entrada `tog_agendar_labs`, ~L9797) | `defecto: false` fuera: el restrictivo nace ACTIVO por fail-open y desvía TODA la agenda a solo-labs sin que nadie lo pida (la regresión de 53 rojos) | NO | *suite_93* caso «sin identidad todo nace activo SALVO el restrictivo»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `togActiva` (jerarquía `sub`, ~L9815) | `!togActiva(def.sub)` → `false`: el padre deja de mandar y un hijo persistido revive con su módulo apagado | NO | *suite_93* caso «jerarquía: un sub-toggle solo vive mientras su padre está encendido»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openAgendamientoModal` (compuerta, ~L28333) | `if (!togActiva("tog_agendar")) return false;` fuera: con el módulo apagado el modal se abre igual | NO | *suite_93* caso «con el módulo apagado corta en seco, sin modal»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openAgendamientoModal` (desvío sub-toggle, ~L28334) | `if (togActiva("tog_agendar_labs")) return openLabSoloModal(apt);` fuera: con la limitación encendida se abre el modal COMPLETO, no el ligero de toma de muestras | NO | *suite_93* caso «con el sub-toggle encendido desvía a la toma de muestras»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `openPanelPacienteModal` (compuerta, ~L27404) | `if (!togActiva("tog_pacientes")) return false;` fuera: el panel del paciente se abre con su toggle apagado | NO | *suite_93* caso «openLaboratoriosModal y openPanelPacienteModal: compuertas apagadas cortan en seco»: mutante 1 rojo (9 ok); restaurado 10/0 |
+| user.js `createAccionesDockUI` (firma `_sigDock`, ~L8470) | `togActiva("tog_agendar") ? "TA" : "ta"` fuera de la firma: la guarda v14.2.0 bloquea el re-pintado en caliente de `togSet()` y el botón Agendar NO reaparece al encender el toggle (bug real cazado por la suite) | NO | *suite_93* caso «capa b del dock: al volver, reaparece»: mutante 1 rojo (9 ok); restaurado 10/0 |
+
+## v18.6.2 (pendiente §A.3 de la delegación) — UI de toggles en Ajustes
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderSettings` (compuerta `grpToggles`, ~L34866) | `!accesoCap("toggles_funcionalidades") ? "" :` → `false ? "" :`: el grupo «Funcionalidades por médico» se pinta para TODO perfil (PÚBLICO y laboratorio incluidos) | NO | *suite_15* caso «el grupo solo se pinta para médicos (capacidad toggles_funcionalidades)»: mutante 1 rojo (273 ok); restaurado 274/0 |
+| user.js `renderSettings` (listener de cada interruptor, ~L35110) | `const ok = togSet(def.k, tg.checked);` → `const ok = true;`: el interruptor deja de persistir — ni la clave `vgl_tog_<uid>` se escribe ni el flujo cambia en caliente | NO | *suite_15* caso «el interruptor de un toggle aplica EN CALIENTE con togSet»: mutante 2 rojos (272 ok, el caso de persistencia y el de sub-toggles que siembra con togSet); restaurado 274/0 |
+| user.js `renderSettings` (ocultado en vivo de sub-toggles, ~L35113) | `fila.classList.toggle("vgl-d-none", !tg.checked)` fuera: al mover al padre, el sub-toggle queda visible aunque la jerarquía lo tenga apagado | NO | *suite_15* caso «los sub-toggles solo se pintan con su padre activo y se ocultan/recuperan en vivo»: mutante 1 rojo (273 ok); restaurado 274/0 |
+| user.js `apiAccesoBuscarPaciente` (cascada `paths`, ~L22661) | ruta de respaldo SIN `TipoDocumento` REINTRODUCIDA en el array: el peor caso vuelve a costar 2 peticiones, una de ellas la ruta 400 de producción (evidencia HAR 3/3, §9.4.1) | NO | *suite_94* caso «B/cascada: peor caso cuesta HOY 1 petición (v18.6.2, ruta 400 retirada)»: mutante 1 rojo (esperaba 1, obtuvo 2); restaurado 11/0 |
+| user.js `_vglDocDelTick` (memo por tick del paciente abierto, ~L14536) | preferencia por la foto `state._docTick` neutralizada (`&& false`): los llamadores síncronos del tick vuelven a barrer `.text-muted` en cada llamada — la lectura única por tick se pierde y la cédula vuelve a leerse del DOM | NO | *suite_94* caso «D/memo tick: hcPacienteContexto usa la foto del tick sin barrer el DOM»: mutante 1 rojo (devolvió la cédula del DOM, 1 barrido); restaurado 13/0 — y la vía fresca sin foto (D2, que protege al guard anti-cruce) queda verde en ambos estados |
+| user.js `_vglUltimaHcUtilizable` (contrato de ObtenerUltimaHCPes, ~L23413) | exigencia de una clave AJENA al contrato real: la respuesta real deja de pasar y el chip de última HC jamás pinta la línea (ni siquiera con datos buenos) | NO | *suite_94* casos «E/utilizable: solo el objeto del contrato real pasa» y «E/chip: pinta fecha + clasificación + riesgo»: mutante 2 rojos (13 ok); restaurado 15/0 |
+| user.js `mtrPerfCacheClasificar` (exclusión por-cita/por-paciente del caché de catálogos, ~L23513) | defensa de la URL completa desactivada (`if (false && …)`): una URL de catálogo con `?citaId=` pasa a clasificarse elegible — el caché tocaría peticiones por cita, justo lo que el diseño prohíbe | NO | *suite_95* caso «A/clasificacion»: mutante 1 rojo (esperaba null y obtuvo "ParCiudades" para `?citaId=123`); restaurado 6/0 |
+| user.js `_perfCacheAnotar` (protocolo de doble lectura del caché de catálogos, ~L23590) | condición de confirmación rota (`\|\| true`): la 2.ª lectura idéntica ya no confirma nunca — no hay persistencia ni servido desde caché, y el ahorro de red de F-P3 desaparece por completo | NO | *suite_95* casos «B/fetch», «C/xhr» y «E/persistencia»: mutante 3 rojos (esperaba confirmación/servido y obtuvo red); restaurado 6/0 |
+| user.js `mtrSelloContextoTexto` (sello de trazabilidad de la foto hacia la IA, R-Grounding ~L47512) | retorno fijo `"SELLO ROTO"`: el prompt pierde la declaración de edad de la lectura y hora de generación — la trazabilidad del grounding prometida en INFORME_AUDITORIA_REDACTOR_IA §4 desaparece | NO | *suite_96* caso «B/sello»: mutante 1 rojo (esperaba el sello exacto y obtuvo "SELLO ROTO"); restaurado 4/0 |
+| user.js `mtrQuitarPreambuloIA` (saneador de preámbulos para todos los modos, R-Grounding ~L47532) | guarda del bucle rota (`\|\| true`): ninguna línea se quita jamás — los preámbulos del modelo («Claro, aquí tiene…») vuelven a llegar al médico en todos los modos | NO | *suite_96* caso «A/saneador»: mutante 1 rojo (esperaba el texto sin preámbulo y obtuvo el original); restaurado 4/0 |
+| user.js `mtrTrackFuentesIA` (etiqueta anónima del verificador de afirmaciones, R-Grounding ~L47550) | rama `sin_linea` neutralizada (`if (false && …)`): cuando el modelo omite la línea FUENTES, la telemetría calla — el verificador operando a ciegas deja de contarse | NO | *suite_96* caso «D/telemetria»: mutante 1 rojo (esperaba "ia.fuentes.sin_linea" y obtuvo null); restaurado 4/0 |
+| suite_88 `ctx88` (congelación del reloj del vm al fixture HOY="2026-09-06", patrón suite_94 — fix de fixture, sin tocar producción) | congelación desactivada (`if (false) vm.runInContext(…`): el tick de producción vuelve a leer el reloj REAL y, con la medianoche ya pasada del 06-sep, la orden «vence HOY» del fixture se reclasifica VENCIDA | NO | *suite_88* caso «refresco en vivo: una orden NUEVA cambia la fila sin recargar nada»: mutante 1 rojo (18 ok, «ya no está vencido tras la orden nueva (obtuvo true)»); restaurado 19/0 |
+
+## v18.7.0 (M1, mandato «acceso directo a historias clínicas en el panel del centinela») — Botón .vgl-hc-directo en la tarjeta
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `render` (gate `esEnSala`, ~L36396) | `const esEnSala = !!(a.estado && …includes("sala"))` → `const esEnSala = true`: el acceso directo a HC se pinta en TODO estado (incluido «Atendido») — el atajo deja de respetar el momento operativo de atender y reaparece el gesto que v14.0.2 mandó retirar | NO | *suite_97* caso «la tarjeta «En sala» pinta el acceso directo…; las demás no»: mutante 1 rojo (10 ok, «Atendido» ofrecía el atajo); restaurado 11/0 |
+| user.js `_vglHcDirectoFila` (fail-closed de emparejamiento, ~L14832) | `return candidatos.length === 1 ? candidatos[0] : null` → `return candidatos[0] \|\| null`: con DOS filas que empatan (misma cédula, o misma hora+estado en el respaldo) el atajo clica la primera que aparece — se abre la historia del paciente equivocado | NO | *suite_97* casos «fail-closed: …ambigüedad» y «respaldo por hora+estado: dos filas…→ fail-closed»: mutante 2 rojos (9 ok, clics 1 en vez de 0); restaurado 11/0 |
+
+## v18.7.0 (M2, mandato «pestañas de impresión diagnóstica y conducta») — Accesos directos en el dock de la HC
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `createAccionesDockUI` (guard de presencia de pestaña, ~L8743) | `if (_tabImp)` → `if (true)`: el botón «Impresión Diagnóstica» nace AUNQUE la pestaña no esté montada (pantalla distinta al editor de la nota) — el dock ofrece un acceso directo muerto que siempre termina en aviso ámbar | NO | *suite_98* casos «sin pestañas montadas… los botones no nacen» y «firma del dock: al MONTARSE la pestaña después…» (primer tramo, que exige ausencia sin pestaña): mutante 2 rojos (4 ok); restaurado 6/0 |
+| user.js `createAccionesDockUI` (firma `_sigDock`, ~L8500) | segmento `_tabImp ? "TI" : "ti"` fuera de la firma: la presencia de la pestaña deja de entrar en el contrato de repintado — si la pestaña se monta después del dock, el botón no reaparece solo | NO | *suite_15* caso «v18.0.118 (UI/UX #5)…» (aserción de firma actualizada para cubrir RS/rs + TI/ti + TC/tc): mutante 1 rojo (273 ok); restaurado 274/0 |
+
+## v18.8.0 (DeepSeek, mandato «edición de los prompts adaptándolos a deepseek v4 flash») — Tercer proveedor de IA como primario
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `MTR_PROVEEDORES_IA.deepseek.cuerpo` (~L47960) | `messages.unshift({ role: "system", content: system })` → `role: "assistant"`: el prompt de sistema viaja como turno de asistente — deepseek lo leería como parte del diálogo, no como instrucción, y todo el contrato OpenAI del proveedor queda roto | NO | *suite_99* caso DS·1 «contrato del proveedor deepseek»: mutante 1 rojo (ancla literal byte-exacta con `"role":"system"`); restaurado 10/10 |
+
+## v18.8.1 (Compuerta solo términos + fail-open + permisos por médico × función, mandato del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `accesoPerfil` (fallback fail-open, L11416) | `return "COMPLETO"` → `return "LABORATORIOS"`: el médico fuera del padrón vuelve a quedar recortado — el fail-open muere y el padrón recorta de nuevo a los compañeros nuevos | NO | *suite_80* casos «B6 matriz capa a/b» y «capa c» (el 555 debe resolver COMPLETO con las 13): mutante 3 rojos; restaurado 9/9 |
+| user.js `permisosCapRevocada` (inmunidad de centinela, L11142) | `cap === "centinela"` → `cap === "centinela_mutado"`: una fila local con off:["centinela"] apaga el panel Centinela del médico — la única cap no revocable deja de ser inmune | NO | *suite_101* casos «P101·U6» (centinela inmune en la unidad) y «P101·F1» (ancla literal de fuente): mutante 2 rojos; restaurado 15/15 |
+| user.js listener delegado del menú de permisos (guarda D5, L35989) | `if (esUnoMismo && !cb.checked)` → `if (false && …)`: el médico en sesión puede desmarcarse funciones a sí mismo — la auto-revocación prohibida por D5 vuelve a colarse | NO | *suite_101* caso «P101·I2 (menú Ajustes)»: mutante 1 rojo (el desmarque propio no se deshace en el acto); restaurado 15/15 |
+
+## v18.8.2 (Widget «Próximos exámenes»: cierre accesible + arrastre libre, mandato del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_rcvpArrastrarInicio` (guard del botón de cierre, ~L7309) | `if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar")) return;` → comentada: un pointerdown sobre el botón ✕ inicia el arrastre — cerrar y mover dejan de ser excluyentes | NO | *suite_102* caso «el botón de cierre jamás inicia el arrastre (y fuera de la barra tampoco)»: mutante 1 rojo («sin agarre desde el botón de cierre (obtuvo true)»); restaurado 7/7 |
+| user.js `rcvPendientesTick` (guard del cierre por paciente, ~L7359) | `docId === _rcvpCerradoDoc` → `docId === _rcvpCerradoDoc + "_x"`: el guard nunca dispara y un tick con contenido nuevo en el MISMO paciente cerrado resucita el panel | NO | *suite_102* caso «cierre: el botón oculta el panel y NO resucita…» paso «mismo paciente con contenido nuevo: el cierre aguanta» (resumen re-sembrado con otro programa para que la firma cambie — el guard corta antes que la firma): mutante 2 rojos (ese paso + ancla F1); restaurado 7/7 |
+
+## v18.8.3 (Auditoría integral del widget «Próximos exámenes · Riesgo cardiovascular» + cierres documentales de términos y mini guía)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrConsentimientoConstancia` (autorreparación del respaldo de por vida, L39662) | `if (!l || l.version !== c.version || l.ts !== c.ts || l.id !== c.id) mtrTerminosLsGuardar(...)` → `if (false) …`: el respaldo del localStorage deja de autorrepararse solo — una aceptación guardada con forma vieja no se actualiza al arrancar | NO | *suite_78* P11·8: mutante 1 rojo («y el respaldo de por vida se autorreparó solo en el localStorage (obtuvo false)»); restaurado verde |
+| user.js `mtrConsentimientoConstancia` (rescate del arranque directo desde localStorage, L39667) | `if (l2 && typeof l2 === "object" && l2.version === TERMINOS_VERSION && typeof l2.ts === "number" && l2.ts)` → `if (false) …`: la copia de aceptación del localStorage no autoriza el arranque directo — todo médico vuelve a pasar por la pregunta de términos en cada máquina | NO | *suite_78* P11·22: mutante 1 rojo («la copia del localStorage autoriza el arranque directo (motivo «preguntar») (obtuvo false)»); restaurado verde |
+| user.js `_mostrarAvisoBloqueoVersion` (orden del card del aviso obligatorio, L38292-38296) | `card.appendChild(btn); card.appendChild(guia); card.appendChild(pasos);` → `card.appendChild(btn); card.appendChild(pasos); card.appendChild(guia);`: la mini guía numerada cae DESPUÉS de los pasos originales — el orden pensado (botón → guía → pasos) se rompe | NO | *suite_17* caso «orden del card: botón → mini guía → pasos originales»: mutante 1 rojo; restaurado verde |
+| user.js handler de clic del badge (clampeo al abrir, L7107) | `if (_cwAbierto) _cwClamparPanelAbierto(widget);` → `if (false && _cwAbierto) …`: el clic que abre el panel ya no clampa — en ventana angosta el panel abierto queda cortado por el borde derecho, inalcanzable (G1) | NO | *suite_71* caso «v18.8.3 G1: el clic que abre el panel dispara el clampeo…»: mutante 1 rojo («el handler de clic clampeó el panel: [112, 392], margen de 8 px — nada de letra partida: esperaba "252px" y obtuvo "380px"»); restaurado 90/90 |
+| user.js `mtrWidgetConductaTick` (re-clampeo del tick, L7125) | `if (_cwAbierto) _cwClamparPanelAbierto(widget);` → `if (false && _cwAbierto) …`: el tick re-centra el badge pero ya no re-clampa el panel abierto — en ventana angosta el panel vuelve a quedar salido (G1) | NO | *suite_71* caso «v18.8.3 G1: el clic que abre el panel dispara el clampeo…»: mutante 1 rojo («segundo tick con el panel abierto: re-centra y vuelve a clampear, nunca deja el panel salido: esperaba "252px" y obtuvo "380px"»); restaurado 90/90 |
+| user.js `_ordenesVigentesEstampa` (estampa de frescura, L24020) | `return "";` temprano tras el guard de caché: la estampa queda vacía SIEMPRE, aun con consulta exitosa — el pie ya no dice de cuándo es el dato (G2) | NO | *suite_88* caso «v18.8.3 frescura: sin consulta exitosa la estampa está vacía…»: mutante 1 rojo («tras la consulta exitosa: la hora del dato (reloj del fixture): esperaba "hoy 00:00" y obtuvo ""»); restaurado 24/24 |
+| user.js sello diario del panel (invalidación única por día, L7443) | `if (_rcvpDiaUltimoRefresco !== diaHoy) { … _ordenesVigentesInvalidar(); … }` → `if (false && …)`: el primer tick del día nuevo ya no invalida el caché — una pestaña dormida toda la noche sigue mostrando el listado de AYER dentro del TTL (G2) | NO | *suite_88* caso «v18.8.3 actualización automática 24 h: el sello diario invalida el caché UNA vez por día…»: mutante 1 rojo («primer tick del día NUEVO con el TTL aún vigente: el sello diario invalida y se re-consulta Everest: esperaba 2 y obtuvo 1»); restaurado 24/24 |
+| user.js `RCV_ROTULOS_AMABLES` (rótulos amables, L7190) | clave `"903815"` → `"903815X"`: el CUPS del HDL pierde su rótulo amable — el paciente vuelve a ver solo la jerga técnica (L2) | NO | *suite_88* caso «html (v18.8.3): rótulo amable arriba y desc técnica del CUPS debajo…»: mutante 1 rojo («903815 se presenta con su nombre amable (obtuvo false)»); restaurado 24/24 |
+| user.js regla CSS del cierre (táctil, L19720) | `width:28px;height:28px` → `width:22px;height:22px`: el botón ✕ cae por debajo del mínimo táctil WCAG 2.5.8 (L1) | NO | *suite_88* caso «CSS: el panel está registrado en tokens…»: mutante 1 rojo («el botón de cierre mide 28×28 px: tocable en pantalla táctil durante la consulta (obtuvo false)»); restaurado 24/24 |
+| user.js regla raíz del panel (box-sizing, L19684) | línea `box-sizing:border-box` eliminada: el max-width vuelve a limitar solo el CONTENIDO y la caja real suma padding+borde — el borde derecho se corta en móvil de 360 px (L3) | NO | *suite_88* caso «CSS: el panel está registrado en tokens…»: mutante 1 rojo («la caja del panel usa box-sizing:border-box: el tope de ancho incluye padding y borde (no se corta en pantallas angostas) (obtuvo false)»); restaurado 24/24 |
+
+
+## v18.8.4 (T1 — rediseño del Anexo 5 con variables de tema + blindaje tipográfico de los 9 modales/avisos pegados a body)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js blindaje tipográfico agrupado (hoja de estilos, L19814) | selector `#vgl-toasts :where(:not([class])),` eliminado de la regla agrupada: el texto suelto del contenedor de toasts queda otra vez expuesto a las reglas genéricas de Everest | NO | *suite_25* caso «v18.8.4 (T1) — blindaje tipográfico de los 9 modales/avisos pegados a body»: mutante rojo («el modal vgl-toasts tiene su blindaje en la regla (obtuvo false)»); restaurado 34/34 |
+| user.js `hcAnexo5Render` título del panel (L15489) | `color:var(--fg) !important` → `color:#0F172A !important`: el título vuelve a color duro — rompe el rediseño a variables de tema y en tema oscuro queda ilegible (tinta casi negra sobre fondo negro) | NO | *suite_91* caso «F2/hcAnexo5Render (v18.8.4 T1): el panel se pinta con variables de tema, sin colores duros»: mutante rojo («sin el color duro #0F172A en el panel (obtuvo true)»); restaurado 27/27 |
+| user.js regla `.vgl-labsv-lead` (hoja de estilos, L20925) | `color:var(--fg2) !important` → `color:var(--fg2)`: el lead de Labs-V pierde su !important — cualquier regla de Everest de especificidad ≥10 o con !important la pinta de otro color (el bug exacto de la v12.10.5) | NO | *suite_25* Regla P: mutante rojo («Expuestas: 1 — .vgl-labsv-lead {color:var(--fg2)}: esperaba 0 y obtuvo 1»; el censo de la Regla G también cayó: «salió 669» contra 670); restaurado 34/34 |
+
+## v18.8.5 (Aviso de actualización obligatoria SOLO en HCHealth y en UNA sola pestaña, pedido en vivo del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js puerta de URL del aviso (`_mostrarAvisoBloqueoVersion`, L38345) | `if (!_enModuloHCHealth()) return;` → `if (false && …)`: el aviso vuelve a salir en TODAS las páginas de Everest — se pierde la restricción «solamente en /viva/HCHealth/» | NO | *suite_17* caso «fuera de HCHealth no sale (y no reclama el arriendo)»: mutante rojo («sin modal fuera del módulo clínico (obtuvo false)»); restaurado 63/63 |
+| user.js cerradura del arriendo (`_avisoBloqueoReclamar`, L38306) | `claim.id !== lin` → `claim.id === lin + "_zzz"`: el arriendo ajeno fresco deja de bloquear — TODAS las pestañas pintan el aviso a la vez, el «una sola» muere | NO | *suite_17* caso «UNA sola pestaña lo muestra…»: mutante rojo («la segunda pestaña NO repite el aviso (obtuvo false)»); restaurado 63/63 |
+| user.js cerradura del arriendo (`_avisoBloqueoReclamar`, L38306) | `claim.id !== lin` → `claim.id !== lin + "_x"`: la comparación nunca da falso — NI la propia dueña puede renovar (F5 pierde el arriendo) y el reloj cree que perdió y retira su modal | NO | *suite_17* casos «el linaje sobrevive al F5…» y «el reloj del arriendo…»: mutante 2 rojos («recargada, la MISMA pestaña recupera su arriendo al instante (no espera el TTL) (obtuvo false)» y «y la dueña conserva su modal (obtuvo false)»); restaurado 63/63 |
+| user.js linaje del arriendo (`_avisoBloqueoLinaje`, L38292) | `if (s) { _avisoBloqueoLinajeCache = s; return s; }` → `if (false)`: el linaje de sessionStorage se ignora — recargar la dueña la convierte en «otra instancia» y debe esperar el TTL para reclamar | NO | *suite_17* caso «el linaje sobrevive al F5…»: mutante rojo («recargada, la MISMA pestaña recupera su arriendo al instante (no espera el TTL) (obtuvo false)»); restaurado 63/63 |
+
+## v18.8.6 (Widget RCV — minimizar con pastilla de reapertura, pedido en vivo del 08-sep-2026)
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `rcvPendientesTick` (puerta del minimizado, L7480) | `if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }` → `if (false && …)`: un tick con contenido nuevo resucita el panel aun minimizado — el estado de minimizado deja de ser estable durante la sesión | NO | *suite_102* caso «minimizar: el botón «—» baja el panel a la pastilla y ningún tick lo resucita (ni con datos nuevos)»: mutante rojo («ni con contenido nuevo resucita mientras esté minimizado: esperaba "none" y obtuvo ""»); restaurado 11/11 |
+| user.js `_rcvpArrastrarInicio` (guard del botón de minimizar, L7418) | `.closest(".vgl-rcvp-cerrar, .vgl-rcvp-min")` → `.closest(".vgl-rcvp-cerrar")`: un pointerdown sobre el botón «—» inicia el arrastre — minimizar y mover dejan de ser excluyentes, y minimizar se vuelve inalcanzable al primer intento | NO | *suite_102* caso «el botón de cierre jamás inicia el arrastre (y fuera de la barra tampoco)» (paso v18.8.6 del botón «—»): mutante rojo («el botón de minimizar tampoco inicia el arrastre (obtuvo true)»); restaurado 11/11 |
+| user.js clic de la pastilla `_rcvpPillAsegurar` (limpieza de firma, L7397) | `_rcvpFirma = "";` → eliminada: la pastilla ya no fuerza el repintado — al reabrir con OTRO paciente abierto, el panel no vuelve a pintarse con los datos del paciente actual (se queda oculto, en la nada) | NO | *suite_102* caso «reapertura: la pastilla devuelve el panel con los datos del paciente ABIERTO ahora (no del anterior)»: mutante rojo («reabierto: esperaba "" y obtuvo "none"»); restaurado 11/11 |
+| user.js lista de tokens de tema (hoja de estilos, L19002 y L19109) | `#vgl-rcv-pendientes-pill` AUSENTE de los bloques de tokens (oscuro y `.light`): la pastilla es un overlay `position:fixed` pegado a body y queda fuera de `#vgl-root` — sus `var(--bg-solid)/var(--fg)/var(--edge)` no resuelven y sale sin tarjeta, con el azul heredado del host (el bug exacto del comentario histórico de esa regla) | NO | *suite_06* aserción «estos overlays viven fuera de #vgl-root y no heredan los tokens: saldrían sin tarjeta»: mutante rojo («esperaba [] y obtuvo ["vgl-rcv-pendientes-pill"]»); restaurado (ambos bloques) 11/11 + banco verde |
+
+## v18.8.7 (Unicidad de notificaciones por evento, aislamiento entre instancias y desviación sin negativos — orden del 08-sep-2026 con CSV real)
+
+Orden del médico con el registro de auditoría adjunto: notificaciones UNA sola vez por evento válido (rachas de `LECTURA_TRAS_RELEVO_SIN_CONFIRMAR` de los mismos pacientes, hasta siete líneas por hecho), aislamiento TOTAL entre ventanas/pestañas/instancias, sin pares dobles `CAMBIO_ESTADO + INGRESO_A_TIEMPO`, sin minutos negativos (-35.3, -43.7) en la columna de desviación, y control de unicidad por (evento, cita, día) en cualquier instancia. Suite nueva `suite_103_unicidad_notificaciones.js` (7/7).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_auditMarcaUnica` (candado compartido de unicidad en `logEvent`) | `if (mapa[marca]) return false;` → `if (false && …)`: la marca del almacén compartido (`vgl_audit_unico`) deja de bloquear — cualquier instancia vuelve a escribir la fila del mismo evento, y regresan las rachas entre pestañas | NO | *suite_103* 4 casos: «una misma notificación se escribe UNA sola vez…», «dos instancias con almacén compartido…», «la constancia de «lectura tras relevo» no se repite entre instancias» y «la misma transición vista por dos instancias…»: mutante 4 rojos; restaurado 7/7 |
+| user.js `colorAndAlert` (supresión del CAMBIO_ESTADO redundante en la llegada a sala) | `const _esLlegadaASala = st.includes("en sala") && !prev.includes("en sala");` → `false && …`: vuelve el par doble CAMBIO_ESTADO + INGRESO_A_TIEMPO del mismo paciente en la misma hora programada | NO | *suite_103* caso «la llegada a sala se registra UNA vez (INGRESO_A_TIEMPO) y no se duplica como CAMBIO_ESTADO»: mutante rojo; restaurado 7/7 |
+| user.js `logEvent` (normalización de la desviación horaria) | `if (ev && typeof ev.min === "number" … ev.min = 0;` → `false && …`: los minutos negativos vuelven a la bitácora (-35.3, -43.7), ensuciando la trazabilidad de las asistencias | NO | *suite_103* caso «la desviación horaria nunca se registra negativa en la auditoría»: mutante rojo («-43.7 se normaliza a 0…»); restaurado 7/7 |
+## v18.8.8 FASE A (Sincronización en tiempo real — orden del 08-sep-2026)
+
+Orden del médico: «actualización inmediata de los datos ingresados por el médico». Hasta
+v18.8.7 el repintado del PANEL DEL PACIENTE esperaba su vigilante de 20 s. FASE A: los
+listeners de captura de la compuerta (input/change/click) distinguen la ESCRITURA real
+(input/change) de la navegación (click) y programan un flush con debounce de 700 ms que
+adelanta el vigilante del panel abierto (slot _vglPanelVigilanteFn, extraído a
+_vigilarPanel). Suite nueva suite_104_sync_escritura.js (5/5).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js _vglDomAlTocar (disparo del flush, zona compuerta DOM) | if (ev.type === "input" || ev.type === "change") _vglEscrituraDetectada(); → if (false && ev.type === "input") …: la escritura del médico vuelve a esperar los 20 s del vigilante — el panel abierto ya no se refleja en <1 s | NO | *suite_104* caso «la escritura del médico (input) adelanta al vigilante en <1 s…»: mutante rojo («esperaba 1 y obtuvo 0»); restaurado 5/5 |
+| user.js closeMod del panel (desregistro del vigilante urgente) | _vglPanelVigilanteRegistrar(null) eliminado del cierre: el slot queda apuntando al panel cerrado — la escritura del médico sigue adelantando un vigilante muerto el resto de la jornada | NO | *suite_104* caso «…al cerrar por la ✕ se libera»: mutante rojo («esperaba null y obtuvo undefined»); restaurado 5/5 + banco completo 3678/3678 EXIT=0 |
+
+## v18.8.8 FASE B (PANEL DEL PACIENTE — cabecera con programa + cita sugerida, y documento mascarado — auditoría del 07-sep + orden del 08-sep-2026)
+
+FASE B: el programa del paciente y su cita sugerida (ftl/control del MISMO plan que
+consume el agendador) suben a la CABECERA del panel, visibles desde las cinco pestañas
+(antes solo en Exámenes y en el bento), con su botón «Agendar» que abre
+`openAgendamientoModal` pre-cargado — nunca agenda por su cuenta. Y S5: el documento
+viaja mascarado («···» + últimos 4) en el encabezado del agendador; el clic lo revela
+mientras el modal siga abierto. Suite_67 ampliada de 47 a 51 (4 casos nuevos).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js pintar() del panel (relleno del slot de programa de cabecera, L28931) | `document.getElementById("vgl-panel-prog-slot")` → `…("-NOEXISTE")`: el chip de programa ya no se rellena — la cabecera queda muda y el programa vuelve a vivir solo en Exámenes (la cita sugerida se rellena, el programa no) | NO | *suite_67* caso nuevo «FASE B (B.2+B.4): el panel rellena los chips de cabecera…»: mutante rojo («y el chip de programa quedó relleno en la cabecera — visible también desde Exámenes (obtuvo false)»); restaurado 51 ok EXIT=0 |
+| user.js template del agendador (máscara del documento, L29745) | `${_vglHcMascara(apt.doc_id)}` → `${apt.doc_id}`: el documento viaja pelado en el encabezado del agendador — cualquier persona u ocular sobre la pantalla lo lee sin gesto alguno | NO | *suite_67* caso nuevo «FASE B (S5): el documento viaja mascarado en el agendador…»: mutante rojo («el documento viaja mascarado (··· + últimos 4) en el encabezado (obtuvo false)»); restaurado 51 ok EXIT=0 |
+
+## v18.8.8 FASE C (Motor de IA preferido + gate Gemini — orden del 08-sep-2026, SUPERPROMPT_ORQUESTADOR_REFACTOR_INTEGRAL fases C.1-C.3)
+
+El médico ya no está atado al orden histórico de la escalera: en Ajustes → modo
+programador elige el «Motor de IA preferido» (`vgl_ia_pref`: auto | deepseek | zai |
+gemini). «Automático» (default del sistema) conserva el orden histórico byte a byte:
+DeepSeek V4 Flash si hay su clave y, si no, z.ai; Gemini solo con su propia clave y,
+con Gemini preferido, corre su rotación completa de modelos sin respaldo. Sin la clave
+del preferido, la escalera cae al siguiente disponible (fail-open). Suite_99 ampliada
+de 10 a 17 casos (selector + default + gate Gemini + C.3 no-recalcula el JSON v68).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js mtrGeminiRedactar — rama de preferencia «gemini» sin su clave (fallback del gate) | `(claveGem ? "gemini" : claveDs ? "deepseek" : claveZai ? "zai" : "")` → `(claveGem ? "gemini" : "")`: sin la clave de Gemini la escalera ya no cae al siguiente disponible — con preferencia gemini y solo clave deepseek el redactor muere en «sin_clave» | NO | *suite_99* caso nuevo «FASE C (C.2): gate Gemini — preferencia gemini sin su clave cae al siguiente disponible…»: mutante rojo («responde deepseek (obtuvo false)»); restaurado 17 ok EXIT=0 |
+| user.js mtrIaPreferencia — validación de la preferencia al LEER (selector) | `(v === "deepseek" || v === "zai" || v === "gemini")` → sin `"gemini"`: la preferencia guardada «gemini» deja de reconocerse y cae a «auto» — el médico elige Gemini y el sistema lo ignora (y Gemini deja de ser primario con su clave: entran 2 llamadas, deepseek+gemini) | NO | *suite_99* casos nuevos FASE C (C.1): «la preferencia queda persistida» rojo («esperaba "gemini" y obtuvo "auto"») y «gemini responde a la primera: UNA sola llamada» rojo («esperaba 1 y obtuvo 2»); restaurado 17 ok EXIT=0 |
+
+## v18.8.9 (Botón de actualización del panel, réplica de «Consultar» — ORDEN #9 del 08-sep-2026)
+
+El botón #vgl-refresh de la cabecera del panel replica el «Consultar» de «Citas del día»
+(que NO recarga la página: GET dinámico a ObtenerConsultas, evidencia consultar.har).
+Dos ramas: con «Citas del día» delante, clic nativo del botón real de Everest; en
+cualquier otra pantalla, la misma llamada por la MISMA vía de procesado que el sondeo —
+para eso el cuerpo del tick (colorAndAlert, siembra, avisos del líder, snapshot,
+relevo/sondeo/productividad y pintado) se extrajo a `_procesarFuenteAgenda(data, source,
+now, forzarPintado)`. La extracción dejó DOS ReferenceError latentes, invisibles para
+`node --check` (son resolución de nombres, no sintaxis), que la suite_105 cazó antes de
+tocar producción: las variables locales del tick `enVistaVigilada` (const de
+seccionActiva) y `leader` (const de heartbeat()) no viajan en el bloque extraído, y el
+nombre resolvía a nada — el tick entero de agenda habría muerto en runtime. Fix: ambas
+se recalculan dentro de la función (seccionActiva() y state.leader, que heartbeat ya
+dejó al día), idéntico al histórico. Suite_105 nueva: 13 casos (reconocimiento del botón
+real, rama nativa con cero red, rama API feliz/fallo/reentrante sobre el panel montado,
+y el par D que ata la vista + forzarPintado).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_esBotonConsultar` — célula de la rama nativa (reconocer el botón real de Everest) | `return /^consultar$/i.test(txt);` → `return false;`: el botón real nunca se reconoce y el refresco cae a la rama API aunque «Citas del día» esté delante | NO | *suite_105* grupo A/B: «el botón del encargo… es reconocido» rojo, «espacios, saltos y mayúsculas…» rojo, «_btnConsultarEn…» rojo y «rama 1: con el botón real en el DOM recibe el clic nativo y NO llama al API» rojo; restaurado 13 ok EXIT=0 |
+| user.js `_procesarFuenteAgenda` — condición de pintado del procesado | `if (enVistaVigilada || forzarPintado) render(...)` → sin `|| forzarPintado`: el botón ya no pinta fuera de «Citas del día» (y el `else if` vacío deja el panel en el último snapshot, como si la pulsación no existiera) | NO | *suite_105* grupo D: «_procesarFuenteAgenda con forzarPintado=true… pinta aunque la vista no sea la de agenda» rojo («marca inicial» quedó en el resumen); restaurado 13 ok EXIT=0 |
+
+**Endurecimiento posterior (corrección de la SUITE, no de producción).** La primera corrida
+del banco completo salió «13 ok» y el proceso murió DESPUÉS de la última suite con el
+assert de la lista del caso C2 evaluándose en un timer huérfano. Dos defectos de la suite,
+ambos con lección: (1) los casos async C2/C3/C4 estaban declarados con `t.caso` en vez de
+`t.casoAsync` — `t.caso` no espera promesas, el runner contaba «ok» al instante y un fallo
+posterior reventaba el proceso como rechazo no capturado al final del banco (por eso en
+solitario «13 ok» era un falso verde: el proceso salía antes de que el assert llegara a
+correr); (2) el assert leía `#vgl-list` a pelo, pero `render()` monta las tarjetas en un
+DocumentFragment y el DOM falso no mueve los hijos del fragmento al hacer appendChild — la
+lista queda con UN hijo (el propio fragmento), nunca 2. Fix con el patrón ya establecido de
+suite_15_interfaz_avanzada (v18.0.106): las tarjetas se leen dentro del fragmento cuando
+es el único hijo (`tarjetasDe`), y D2 (que «pasaba» viendo el fragmento como si fuera la
+tarjeta) ahora verifica el marcador real `__vglKey` de render. Mutación de control de la
+red nueva:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| suite_105 `tarjetasDe` — lectura de la lista pintada | resolver el fragmento (`unica._esFragmento → unica.children`) → devolver `lista.children` a pelo: la lista «tiene» 1 hijo (el fragmento) y nunca las 2 tarjetas | NO | *suite_105* caso C2 «la lista del panel se repintó con las dos citas (tarjetas reales de render)» y D2 «y es una tarjeta real de render…» rojos — ahora EN SOLITARIO, porque los casos esperan de verdad con `t.casoAsync` (11 ok 2 FALLAN); restaurado 13 ok EXIT=0 |
+
+## v18.8.10 (ORDEN #10 — auditoría de confirmaciones extemporáneas)
+
+Dos cambios de comportamiento en producción: logEvent adjunta el usuario de la sesión
+(`state.activeDoctor`, login de Everest — jamás inventado, casilla vacía si la sesión aún
+no se capturó) a cada fila local que no traiga campo propio, y exportAudit gana la
+columna «Usuario» al final de cada fila del CSV (al final para no mover las columnas
+históricas). Suite_106 nueva: 5 casos — bordes exactos de la ventana estricta de 6 min
+(confirmar a +5,9 → VERDE/INGRESO_A_TIEMPO y cero fraude; a +5,99 la sospecha aún no
+nace y a +6,00 exactos la marca nace con `>=`; a +6,1 la cadena completa: ROJO una vez con
+sonido, UNA fila FRAUDE_EXTEMPORANEO y jamás INGRESO_A_TIEMPO, hora original y doc
+conservados) y el usuario en bitácora + CSV (celda vacía sin sesión).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `logEvent` — bloque v18.8.10 que adjunta `usr` de la sesión | `if (ev && ev.usr === undefined)` → `if (false && …)`: el adjunto nunca ocurre y ninguna fila lleva sesión | NO | *suite_106* «la bitácora y el CSV llevan el usuario de la sesión en cada fila» rojo («la fila de la bitácora lleva la sesión que estaba delante: esperaba "MEDICO DE PRUEBA" y obtuvo undefined»); restaurado 5 ok |
+| user.js `exportAudit` — celda final de cada fila | Quitar `e.usr \|\| ""` de la fila (el head conserva «Usuario»): la columna se declara pero las filas no llevan el dato | NO | *suite_106* ambos casos del CSV rojos («la fila del hecho termina con el usuario de la sesión (obtuvo false)» y «la fila termina en el nombre del paciente, con la celda de usuario vacía (obtuvo false)»); restaurado 5 ok |
+
+## v18.9.0 — 08-sep-2026 (frecuencias del polling 20/15 s + medición de latencia de detección de cupos)
+
+Orden A/B del médico (informe A/B, AB-6): el polling de fondo pasa a frecuencias más altas en los dos niveles de reposo (sin agenda 30→20 s; jornada lejana 20→15 s) SIN tocar el refresco programado de la base piloto, y se estrena la medición de la latencia de detección de cupos nuevos — `_cupoLatenciaMedir`, que compara cada lectura contra la anterior (`state.lastSnapshot`), cuenta los cupos ausentes en la lectura previa y reporta la ventana como techo de su edad (`cupo.nuevo` + `cupo.nuevo.total`; `cupo.nuevo.hueco` sin ventana cuando la lectura anterior es un recuerdo de más de huecoMax). Suite nueva `suite_107_latencia_cupos.js` (9 casos). Dos mutaciones verificadas:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_cupoLatenciaMedir` — umbral que separa la ventana atribuible del hueco largo | Invertir el comparador del hueco (`ventana > huecoMax` → `ventana < huecoMax`): los cupos con lectura anterior reciente se contaban como nacidos en hueco y los del hueco largo como ventana normal | NO | *suite_107* 5 casos rojos (cupo nuevo con lectura reciente, tres cupos, rotación de lista, hueco largo e integración por `_procesarFuenteAgenda` — conteo y ventana invertidos); restaurado 9 ok |
+| user.js `apiCadencia` — reposo SIN_PENDIENTES (20 s) y jornada lejana LEJANO (15 s) | Restaurar los valores viejos 30000/20000 ms: el reposo vuelve a 30 s y la jornada lejana a 20 s | NO | *suite_13* 2 casos rojos («sin agenda: reposo de 20 s» y «lejos de la tolerancia… 15 s») y la cabecera del reloj («cada 20 s»); restaurado 64 ok, suite_107 intacta |
+
+## v18.10.0 — 08-sep-2026 (paquete A/B: barridos diferidos AB-1, reintento transitorio IA AB-2)
+
+AB-1 (informe A/B): la cosecha de la HC y los widgets de conducta/ordenar/fármaco/RCV salen
+del camino del tick con el toggle experimental tog_ab1_diferir (defecto:false — variante A
+histórica para todos) y se encolan a idleRun en la variante B, con su MISMA etiqueta de RUM
+(comparación A/B directa), anti-duplicado por etiqueta, re-chequeo de ctxValido AL CORRER
+(jamás cosecha al paciente equivocado si el médico navegó en el intervalo) y doble red de
+seguridad: sin requestIdleCallback cae al temporizador de idleRun, y si hasta el temporizador
+falla el barrido corre ya en línea. El repintado del panel se mide con nombre propio
+(tick.render, las 2 ramas). Suite nueva suite_108_ab1_diferidos.js (16 casos: 9 de unidad
+sobre la puerta + red de seguridad + etiqueta RUM en modo B + 4 estructurales del enganche
+real en el código vivo). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_ab1Diferir` — condición de la puerta | Invertir el comparador del toggle (togActiva(...) !== true → === true): con el toggle APAGADO (defecto de todos) el barrido se diferiría en vez de correr en línea | NO | suite_108 12 casos rojos: los 2 de toggle apagado (corre en línea + etiqueta RUM histórica), todos los de toggle encendido (al invertir la condición el toggle encendido ejecutaba en línea) y el modo B por el anillo; EXIT 1. Restaurado 16 ok EXIT=0 |
+
+AB-2 (informe A/B): reintento TRANSITORIO del mismo slot en mtrGeminiRedactar. Los escalones
+donde la escalera se rendía — timeout del ÚLTIMO eslabón agotado y error de red del enlace
+(proxy de la IPS) — ahora gastan una bala por tipo (ab2BalaRed/ab2BalaTimeout) que re-dispara
+el MISMO proveedor/modelo con backoff exponencial + jitter acotado (600·2ⁿ, tope 2400, patrón
+VK-01 de SYNAPSE) y re-check de o.control.cancelado al despertar. La bala NO consume la
+escalera (el «intento X de Y» repite su X), la de timeout solo aplica al último eslabón (los
+intermedios rotan como siempre) y la redacción queda acotada: red caída de verdad = bala
+única y el fallo honesto de siempre. Nueva métrica ia.primera.ms (convenio RUM: la clave
+cuenta generaciones y .total suma los ms reales hasta la primera respuesta útil, desde _t0).
+Suite nueva suite_109_ab2_reintentos.js (10 casos) + ajuste de 2 guardas envejecidas
+(suite_81 P10·6 anclaba «el disparo vive dentro del conector» a un tope de 8000 chars que el
+bloque nuevo cruzó → ancla al final real de la función; suite_57 contaba 7 disparos en el
+timeout total → 8 con la bala del último, distinguida de la repetición ciega v17.6.81 por la
+telemetría ia.timeout.rota=6 + ia.timeout.reintenta=1). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrGeminiRedactar` — bala de red en onerror | Anular la bala (if (ab2BalaRed) → if (false)): el error de red vuelve a resolver el fallo de inmediato, sin re-disparar el slot | NO | suite_109 4 casos rojos: blip de red (esperaba 2 disparos al MISMO slot y llegó 1), red caída (esperaba la bala única), cancelar durante el backoff (el reintento ya no existe que retirar) y la guarda estructural del orden en onerror; EXIT 1. Restaurado 10 ok EXIT=0 |
+AB-3 (informe A/B): el rage click sobre la UI del host por fin dice DÓNDE, sin PHI. Antes
+solo se contaba (ux.rage.host); ahora la ráfaga de 3 clics en 600 ms (umbral intacto) sobre
+un elemento ajeno lleva una señal informativa SOLO para el host — la variante B jamás
+actúa por su cuenta: el médico decide — y dos coordenadas: el tag (universo cerrado
+HTML, p.ej. ux.rage.host.tag.td) viaja en la clave del panel, y el selector fino
+(_rageSelectorAnonimo: tag + hasta 3 clases sin el prefijo vgl- y saneadas por
+uxClaveLimpia — mueren las cédulas de 6+ dígitos — + nth-child entre hermanos; sin id,
+sin texto, sin atributos) va a la bitácora local (vglLog UX/RageHost) porque el
+transporte remoto solo acepta claves de catálogo con conteos: un selector ajeno no puede
+ser clave (inyección) ni etiqueta (PHI). El aviso azul («Everest no responde») tiene
+anti-spam de 30 s (_rageAvisoHostAt) y queda medido (ux.rage.aviso). Suite nueva
+suite_110_ab3_rage_host.js (11 casos: 5 del selector directo — incluidas las cédulas y
+las clases vgl- que se filtran, 5 de ráfagas — ráfaga nueva tras 650 ms reales contra el
+anti-spam, reset por cambio de target, la UI propia NO avisa — y 2 estructurales del
+enganche vivo). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_detectarRageClick` — puerta del aviso azul | Anular la puerta (if (ahora - _rageAvisoHostAt > 30000) → if (false && ...)): la ráfaga del host se cuenta y se registra pero el toast AZUL jamás sale (ni ux.rage.aviso) | NO | suite_110 4 casos rojos: ráfaga de 3 clics (esperaba ux.rage.aviso=1), el martilleo de 6 clics (el aviso no se repite, pero SÍ sale una vez), la ráfaga nueva tras 650 ms (esperaba el aviso de la primera ráfaga) y el reset por target distinto; EXIT 1. Restaurado 11 ok EXIT=0 |
+AB-8 + T0-4 (informe A/B): la flota se queda en versiones viejas pese a entender el
+aviso (el 97 %): AB-8 sostiene que no es desconocimiento sino falta de ACCIÓN, y esta
+entrega la mide sin tocar el tono del aviso (eso lo decide el médico). El aviso diario
+de actualización (mtrCheckActualizacionGist) queda MEDIDO por versión anunciada —
+aviso.upd.visible.vX, una vez por versión gracias a los anti-duplicados existentes
+(diario y por versión) — y el clic de «Actualizar ahora» del bloqueo por versión
+obsoleta (_avisoBloqueoPintar) es la ACCIÓN: aviso.upd.click.vX por versión exigida,
+CADA pulsación cuenta (es acción, no exposición: no se deduplica), con la evidencia
+fina en la bitácora local (vglLog VER/ClicActualizar, {local, exigida}) y el conteo
+ANTES de abrir la pestaña del gist (nada se pierde si la ventana no abre). El clic
+vive en un script en candado (state.killed): uxTrack sobrevive porque su timer de
+volcado es propio y el beforeunload vuelca. T0-4: el worker de REPLICA_TELEMETRIA
+expone ultimaFila (GET con el mismo token): MAX(recibido) de lotes — toda escritura
+pasa por ahí, ISO-8601 UTC, el MAX lexicográfico ES el máximo temporal — y el chequeo
+nocturno (.deepseek/run-nightly-checks.sh) añade el paso 5 de frescura: ROJO si la
+última fila lleva más de 48 h, si el pipeline no tiene ni una fila o si el worker no
+responde (fail-closed), con el token leído del propio worker.js (fuente única, jamás
+duplicado). Suite nueva suite_111_ab8_version.js (8 casos: la exposición por versión
+anunciada y sus anti-duplicados, el clic = ACCIÓN medida con bitácora, cada pulsación
+cuenta, 2 estructurales del enganche vivo en user.js + el estructural de T0-4 en
+worker.js y run-nightly-checks.sh). Mutación verificada:
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_avisoBloqueoPintar` — uxTrack del clic de «Actualizar ahora» | Anular la medición de la ACCIÓN (try { uxTrack("aviso.upd.click.v" + _avisoBloqueoVer) → if (false) …): el clic abre la pestaña del gist igual, pero ni el conteo del informe (aviso.upd.click.vX) sale | NO | suite_111 3 casos rojos: la ACCIÓN medida (esperaba aviso.upd.click.v99.0.0=1 y llegó undefined), cada pulsación cuenta (esperaba 2 con la v98.0.5) y la guarda estructural del orden (el try de uxTrack anclado en el código vivo, antes de abrir la pestaña); EXIT 1. Restaurado 8 ok EXIT=0 |
+
+## v18.11.0 — ORDEN #8 (UI/UX + sincronización con la base piloto): el RAC del Anexo 5 ahora es el valor de laboratorio real, nunca los puntos de la meta
+
+Rehecho tras un vaciado accidental del árbol de trabajo (el intento original, v18.8.11,
+nunca llegó a commitearse). Punto 2/3 de la ORDEN #8: sincronización del aviso del
+Anexo 5 contra las 38 columnas reales de la hoja «ANEXO 5 JULIO» de la base piloto —
+verificado con el parser ZIP+XML del libro real (`_base_piloto_sep.xlsx`, 2026-09-07).
+
+**Defecto encontrado**: el indexador (`makeAnexo5Indexer`) nunca leía la columna 33
+(«MICROALBU/CREATINURIA1», el valor de laboratorio real de la RAC en mg/g). El aviso
+(`a5AlertasDe`) rotulaba el tramo «RAC» con `m[4][0]` — los PUNTOS de cumplimiento de
+la meta `CUMPLE_MICROALBUMINURIA` (0-25) — como si fueran el resultado de laboratorio.
+Efecto real: un paciente con la meta CUMPLIDA (25 puntos) podía leerse en el aviso
+como «RAC 25 mg/g» (albuminuria franca, patológica) en vez de «meta lograda».
+
+**Fix**: nueva columna `cRac` en el indexador (mismo patrón `findIndex` que las demás),
+`v` pasa de 6 a 7 elementos (`v[6]` = RAC real); `a5AlertasDe` usa `v[6] || 0`, nunca
+`m[4][0]`. Sin valor real indexado → el tramo no se pinta (casilla vacía). Verificado
+que `pymAnexo5`/`a.v`/`a.m[4]` NO tienen un segundo consumidor en el archivo (grep
+completo): la corrección es única y completa. Con este fix, 33 de 38 columnas del
+libro quedan sincronizadas (quedan 5 sin mostrar por diseño: clasificación del
+programa, HDL/triglicéridos/IMC recientes y «Estudiado para ERC» — documentadas en
+el informe final para decisión del médico, no implementadas sin su visto bueno).
+
+Suite_92 ampliada (el indexador: `a.v[6] === 25` con la columna del libro poblada) y
+suite_91 ampliada (`a5AlertasDe` con valor real → `contexto.rac` = el valor; con meta
+cumplida de 25 puntos y SIN valor real → `contexto.rac` = 0, el caso que replica el
+defecto histórico exacto; `hcAnexo5Render` pinta «RAC 6.93» con valor real y NO pinta
+ningún tramo «RAC » con solo los puntos). Banco completo EXIT=0 antes y después.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` — lectura de la columna RAC | `cRac >= 0 ? num(row[cRac]) : 0` → `false ? num(row[cRac]) : 0` (el indexador nunca lee la columna, `v[6]` siempre 0) | NO | suite_92 caso «F1/Anexo 5: el core indexa la TERCERA hoja…»: mutante rojo («valores de contexto v7…: esperaba [138,84,102,7.2,112,98,25] y obtuvo [138,84,102,7.2,112,98,0]»); EXIT 1. Restaurado 39 ok EXIT=0 |
+| user.js `a5AlertasDe` — campo `rac` del contexto | `rac: v[6] \|\| 0` → `rac: (m[4] && m[4][0]) \|\| 0` (vuelve el defecto original: puntos de la meta rotulados como RAC) | NO | suite_91 caso «F2/a5AlertasDe: las CUATRO alertas…»: mutante rojo («con valor real indexado (v[6]=6.93) el contexto lleva 6.93 mg/g, no los puntos: esperaba 6.93 y obtuvo 0»); EXIT 1. Restaurado 28 ok EXIT=0 |
+
+## v18.11.1 — seguimiento ORDEN #8: filtro de plausibilidad del RAC (revisión de código sobre el fix v18.11.0)
+
+Una revisión de código sobre el fix v18.11.0 encontró que el nuevo valor real de la
+RAC (columna `MICROALBU/CREATINURIA1`) se mostraba en el aviso sin ningún chequeo de
+rango, pese a que la propia auditoría de la base piloto (`_audit_base_sep_raw.txt`
+línea 94) ya marcaba 22 filas REALES de esa exacta columna con «≥6 dígitos» como
+«¿PHI fuera de sitio?» (rango real documentado: 0.1–2797). Sin filtro, cualquiera de
+esos valores se habría mostrado en el aviso del Anexo 5 como si fuera un resultado de
+laboratorio real — violando «casilla vacía antes que dato inventado» y, en el peor
+caso, arriesgando mostrar en pantalla lo que la auditoría sospecha que es un
+identificador de paciente mal ubicado («Cero PHI»).
+
+**Fix**: nueva función `numRac` en `makeAnexo5Indexer` (además de `num`, que sigue
+sin tocarse para los demás campos): descarta como 0 (mismo contrato de «sin valor»
+que ya usa el resto del indexador) todo valor negativo o de 6 dígitos o más
+(`x >= 0 && x < 100000`), justo el criterio que la propia auditoría ya usaba para
+marcar las filas sospechosas. Los valores reales documentados (0.1–2797) pasan
+intactos. Único punto de lectura de la columna (`v[6]` en el `push` del indexador):
+sin segundo consumidor que rodee el filtro.
+
+Prueba nueva en suite_92 (`makeAnexo5Indexer` con headers mínimos
+`["Numero Documento", "MICROALBU/CREATINURIA1"]`, sin pasar por el pipeline XLSX
+completo): 5 casos — el máximo real documentado (2797) y un valor justo bajo el
+límite (99999) pasan intactos; 6 dígitos exactos (100000), 6 dígitos (123456) y un
+valor negativo (-6.93) se descartan a 0. Banco completo EXIT=0 antes y después.
+
+Housekeeping de versión al subir `@version`/`VERSION` a 18.11.1: `package.json`
+tiene su propia comprobación de sincronización cuádruple (suite de Kill-Switch,
+R5.1) y una fila de `tests/suite_75_disco.js` (M2, «la fila lleva versión, lote, día
+y el extra del evento») hardcodea la versión viva como literal — ambos se actualizan
+en cada bump, no son casos nuevos, son mantenimiento esperado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `makeAnexo5Indexer` — filtro `numRac` | `x >= 0 && x < 100000 ? x : 0` → `x` (el filtro de plausibilidad deja de aplicarse, vuelve el defecto: cualquier valor viaja intacto) | NO | suite_92 caso «makeAnexo5Indexer (seguimiento ORDEN #8)…»: mutante rojo («6 dígitos exactos…: esperaba 0 y obtuvo 100000»); EXIT 1 (39 ok, 1 falla). Restaurado 40 ok EXIT=0 |
+
+## v18.12.0 (Mesa de Expertos: primera tanda — código muerto confirmado por doble refutación adversarial)
+
+Auditoría integral con enjambre de subagentes (10 subsistemas × 4 roles: arqueóloga
+del código muerto, cartógrafa de flujos, simplificadora, UX clínica; 91 hallazgos
+crudos). Los 11 candidatos a "código muerto" pasaron por una segunda ronda de
+verificación: 2 refutadores independientes por candidato intentando encontrar
+cualquier invocación real (directa, indirecta, desde tests) antes de confirmarlo —
+14 candidatos adicionales SÍ tenían un consumidor real y quedaron descartados sin
+tocar (ver `docs/INFORME_MESA_EXPERTOS_20260908.md`, cesto de "muertas descartadas").
+
+Esta primera tanda aplica 8 de los 11 "muerta confirmada" de menor riesgo (más una
+mejora de UX de accesibilidad, mínimo táctil WCAG 2.5.8) con la disciplina completa
+del proyecto. Quedan documentados y sin tocar (cesto C, riesgo medio por tocar
+compuertas sensibles) `mtrCompuertaPerfil()` (arranque/consentimiento) y la variable
+`callar` de `colorAndAlert()` (alertas ROJO) — ver el informe para el detalle de por
+qué se prefirió no tocarlos en esta tanda.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `verificarIntegridadArranque` — firma sin `fuenteOpcional` (muerta #1) | `async function verificarIntegridadArranque() {` → `async function verificarIntegridadArranque(fuenteOpcional) {` (reintroduce el parámetro fantasma) | NO | suite_31 caso «verificarIntegridadArranque (v18.12.0): el parámetro fuenteOpcional ya no existe…»: mutante rojo («la firma quedó sin parámetros (obtuvo false)»); EXIT 1 (74 ok, 1 falla). Restaurado 75 ok EXIT=0 |
+| user.js `rcvPendientesTick(doc)` — `const d = doc \|\| document;` (muerta #5) | `const d = doc \|\| document;` → `const d = document;` (el parámetro `doc` vuelve a ser fantasma) | NO | suite_102 caso «fuente (F1, v18.12.0): rcvPendientesTick usa `doc` consistentemente…»: mutante rojo («el parámetro doc ya no es fantasma: se usa (obtuvo false)»); EXIT 1 (11 ok, 1 falla). Restaurado 12 ok EXIT=0 |
+| user.js CSS `.vgl-agm-c5`/`.vgl-agm-c7` (muerta #8) | Reintroduce `#vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}` (clase huérfana que ningún markup real usa) | NO | suite_112 caso «.vgl-agm-c5 y .vgl-agm-c7 ya no se definen…»: mutante rojo («sin .vgl-agm-c5 (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `_renderToast` — variable `tint` (muerta #9) | Reintroduce `tint = TINT[color] \|\| TINT.AZUL` (nunca se leía en el resto de la función) | NO | suite_112 caso «_renderToast ya no calcula `tint`…»: mutante rojo («sin la variable muerta \`tint\` (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `EQUIPO_ID_KEY` (muerta #10) | Reintroduce `const EQUIPO_ID_KEY = "vgl_equipo_id";` (huérfana desde la migración a `obsIdentidadEquipo`) | NO | suite_112 caso «EQUIPO_ID_KEY ya no se declara…»: mutante rojo («sin la constante muerta (obtuvo true)»); EXIT 1. Restaurado 3 ok EXIT=0 |
+| user.js `restartPolling` — variable `pollTimer` (muerta #11) | Reintroduce `let pollTimer = null;` y la rama `if (pollTimer) clearInterval(...)` (nunca recibía un id real desde v14.2.12) | NO | suite_09 caso «restartPolling (v18.12.0): la variable pollTimer y su rama muerta ya no existen…»: mutante rojo («pollTimer ya no se declara (obtuvo true)»); EXIT 1 (36 ok, 1 falla). Restaurado 37 ok EXIT=0 |
+| user.js CSS `#vgl-refresh` — 24px → 28px (UX #17) | `width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;` → los mismos 4 valores vueltos a `24px` | NO | suite_105 caso «fuente (UX v18.12.0): #vgl-refresh mide 28px…»: mutante rojo («width 28px (obtuvo false)»); EXIT 1 (13 ok, 1 falla). Restaurado 14 ok EXIT=0 |
+
+| tools/vgl-lock.js `normalizePath` (multi-IDE #1) | `.toLowerCase()` eliminado del retorno (deja de colapsar mayúsculas) | NO | suite_113 casos «la ruta se normaliza» y «lockId es estable»: mutante rojo (13 ok, 2 fallan; EXIT 1). Restaurado 15 ok EXIT=0 |
+| tools/vgl-lock.js `acquire` — atomicidad del lote (multi-IDE #2) | `if (conflicts.length) return …` → `if (false && conflicts.length) return …` (escribe el lote aunque haya conflicto ajeno) | NO | suite_113 caso «acquire es atómico — un archivo ajeno invalida TODO el lote»: mutante rojo («NO quedó candado a medias del archivo libre (obtuvo true)»); EXIT 1 (14 ok, 1 falla). Restaurado 15 ok EXIT=0 |
+| tools/vgl-lock.js `readLock` — fail-open (multi-IDE #3) | `catch (e) { return null; }` → `catch (e) { throw e; }` (un candado ilegible deja de ser fail-open) | NO | suite_113 caso «candado ilegible = fail-open (no bloquea a nadie)»: mutante rojo (la suite lanzó); EXIT 1 (14 ok, 1 falla). Restaurado 15 ok EXIT=0 |
+| tools/vgl-sync.js `parseRunnerOutput` (multi-IDE #4) | `/(\d+)\s*fallan/` → `/(\d+)\s*FALLAN/` (nunca casa con la salida real del runner) | NO | suite_113 caso «parseRunnerOutput extrae pasan/fallan…»: mutante rojo (esperaba {"pasan":3781,"fallan":2} y obtuvo {"pasan":3781,"fallan":0}); EXIT 1 (14 ok, 1 falla). Restaurado 15 ok EXIT=0 |
+| tools/compat-check.js `readVersionPoints` — header (multi-IDE #5) | `.exec(src)` → `.exec("")` (el `@version` de la cabecera nunca se lee) | NO | suite_113 casos «la versión está sincronizada en sus 4 puntos» y «run() declara el repo COMPATIBLE»: mutante rojo (13 ok, 2 fallan; EXIT 1). Restaurado 15 ok EXIT=0 |
+| tools/vgl-sync.js `stripAnsi` — cuenta del runner con ANSI (multi-IDE #6) | `String(s \|\| "").replace(/\x1b\[[0-9;]*m/g, "")` → `String(s \|\| "")` (deja de limpiar los códigos de color) | NO | suite_113 caso «parseRunnerOutput extrae pasan/fallan…»: mutante rojo (esperaba {"pasan":3785,"fallan":0} y obtuvo {"pasan":null,"fallan":0}); EXIT 1 (14 ok, 1 falla). Regresión REAL detectada por la propia compuerta (gate marcaba «el runner no imprimió su cuenta» con 3785 en verde). Restaurado 15 ok EXIT=0 |
+| user.js `_detectarRageClick` — dedup persistente del aviso del host (E-1, v18.12.1) | `if (ahora - _rageAvisoHostAt > 30000 && _avisoUnaVezPorNavegador("ragehost\|aviso")) {` → `if (ahora - _rageAvisoHostAt > 30000) {` (vuelve al freno solo en memoria de la pestaña: el aviso reaparece en cada recarga) | NO | suite_110 caso «E-1 (v18.12.1): el aviso del host NO reaparece al recargar — una vez por jornada» y su comprobación estructural: mutante rojo («pero el aviso no se repite…: esperaba 1 y obtuvo 2» + «pasa por el registro compartido del día (obtuvo false)»); EXIT 1 (10 ok, 2 fallan). Restaurado 12 ok EXIT=0 |
+| REPLICA_TELEMETRIA/worker.js `volumenDia` — validación de calendario (C1) | se quitó la comprobación de ida y vuelta ISO (`|| (() => {…})()`), dejando solo la regex de forma | NO | test_replica.mjs caso 14 «fecha inexistente → ok:false» y «dia malformado → ok:false»: mutante rojo (esperaba false, obtuvo true); EXIT 1 (59 ok, 3 mal). Restaurado 62 ok EXIT=0 |
+| vigilante_agenda.user.js `.vgl-agm-slots` del modal agendar (E-2, canvas de horarios) | `background:var(--bg2);border:1px solid var(--line)` → se quitaron (el canvas vuelve a depender de la regla base .vgl-agm-slots) | NO | suite_25 caso «v18.12.2 (E-2): los horarios de agendamiento jamás vuelven a texto/fondo del mismo color» (comprobación a): mutante rojo (obtuvo false); EXIT 1 (34 ok, 1 FALLAN). Restaurado 35 ok EXIT=0 |
+| vigilante_agenda.user.js `CABLEADO_CF` — compuerta de migración a Cloudflare (v18.12.3) | `const CABLEADO_CF = false;` → `true` (la flota pasa al worker sin desplegar/validar) | NO | suite_23 caso «CABLEADO CF: compuerta apagada en fábrica, worker en @connect y diagnóstico con los dos destinos»: mutante rojo (la compuerta ya no está en FALSE); EXIT 1 (127 pasan, 1 FALLAN). Restaurado 128 pasan EXIT=0 |
+
+
+## v18.13.0 (Mesa de Expertos: segunda tanda — accesibilidad de teclado/lector de pantalla, y un cierre irreversible que ganó su «Deshacer»)
+
+Continuación de la revisión integral (ver v18.12.0): esta tanda cierra cuatro hallazgos
+de accesibilidad (WCAG) sobre superficies que un médico usando solo teclado o un lector
+de pantalla no podía operar igual de bien que con mouse, más un refactor de
+simplificación (comparación de versiones delegada a `mtrVersionEsMasNueva`, cero cambio
+de comportamiento). El resto de cambios de esta entrega (foco visible en botones,
+mínimo táctil de 28px en varios controles más, trampa de Tab en el aviso de bloqueo de
+versión, enlace de repliegue si el navegador bloquea la ventana de actualización,
+animación de salida en el recorte de toasts por saturación) son CSS/DOM de refuerzo
+sobre un comportamiento ya cubierto por pruebas existentes (no abren una rama de
+comportamiento nueva que una mutación pueda cazar de forma distinta) y se verificaron
+con el banco completo antes/después, sin fila propia.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `actualizarRelojCabecera` — texto «· datos viejos» | `if (stale) c.textContent += " · datos viejos";` → `if (false && stale) c.textContent += " · datos viejos";` (la señal de desactualizado vuelve a depender solo del color) | NO | suite_13 caso «actualizarRelojCabecera (Mesa de Expertos): 'datos viejos' es texto visible…»: mutante rojo; EXIT 1 (64 ok, 1 falla). Restaurado 65 ok EXIT=0 |
+| user.js `checkVersionMinimum` — `needsUpdate` vía `mtrVersionEsMasNueva` | `const needsUpdate = mtrVersionEsMasNueva(minVer, VERSION);` → `const needsUpdate = false;` (el candado de versión mínima deja de dispararse) | NO | suite_30 caso «checkVersionMinimum (Mesa de Expertos): minVersion más nueva sigue disparando el candado…»: mutante rojo; EXIT 1 (12 ok, 1 falla). Restaurado 13 ok EXIT=0 |
+| user.js widget Próximos exámenes — guarda de clic dentro del panel abierto | `if (_cwAbierto && e.target.closest(".vgl-cw-panel")) return;` → `if (false && …) return;` (leer/seleccionar una fila del panel vuelve a cerrarlo de golpe) | NO | suite_71 caso «mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded…, y un clic DENTRO del panel abierto no lo cierra»: mutante rojo; EXIT 1 (90 ok, 1 falla). Restaurado 91 ok EXIT=0 |
+| user.js `hcAnexo5Render` / `a5Cerrar` — barra de Deshacer | Insertado `if (true) return;` justo antes de construir la barra `#vgl-a5-deshacer` (cerrar el aviso del Anexo 5 vuelve a ser irreversible al toque, sin recurso) | NO | suite_91 caso «F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso»: mutante rojo; EXIT 1 (28 ok, 1 falla). Restaurado 29 ok EXIT=0 |
+
+## v18.13.1 (BOLT — auditoría nocturna de rendimiento, quick win #1: memo por tick del mapa de toggles)
+
+Cartografía real (sección 2.3 del encargo): `togActiva()` lee `readJSON("vgl_tog_"+uid)`
+del almacén en CADA llamada; `hcAnexo5Render()` (que corre en cada vuelta de tick mientras
+la HC está abierta) llama `togActiva("tog_notif") || togActiva("tog_anexo5")`, y como
+`tog_anexo5` tiene `sub:"tog_notif"`, `togActiva` se reinvoca a sí mismo — hasta 3 lecturas
+síncronas de la MISMA clave de almacén por vuelta de tick, solo en esa línea. `avisoUniversal()`
+repite la lectura de `tog_notif` por su cuenta y queda cubierto "de rebote" por el mismo fix
+(no necesitó cambio propio).
+
+Fix: memo por tick calcado del patrón ya aceptado para `state._docTick`/`_vglDocDelTick()`
+(mismo criterio de riesgo). `state._enTickSync=true` se arma al entrar a `tick()` y se limpia
+en un `finally{}` (atraviesa cualquier `return` temprano), así que ningún llamador POSTERIOR a
+esa vuelta —clic, callback diferido, la vuelta siguiente con otro médico activo— puede leer un
+mapa de toggles cacheado de una vuelta anterior. `togActiva()` reutiliza `state._togMapTick`
+SOLO si `state._enTickSync` es true y el uid coincide; `togSet()` invalida la memo al escribir
+(único punto de escritura legítimo). Coherencia entre pestañas intacta: la memo nunca sobrevive
+fuera de la ventana síncrona de un solo `tick()`, así que un cambio de otra pestaña se ve en el
+siguiente tick como siempre.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `togActiva` — condición de la memo por tick | `if (state && state._enTickSync && state._togMapTickUid === uid && state._togMapTick) {` → `if (false && …) {` (la memo nunca se usa, togActiva vuelve a leer fresco siempre) | NO | suite_93 caso «togActiva (BOLT, rendimiento v18.13.1): memo por tick…»: mutante rojo; EXIT 1 (10 ok, 1 falla). Restaurado 11 ok EXIT=0 |
+
+Banco completo: EXIT=0, 3774 comprobaciones (baseline y resultado idénticos — el fix no
+cambia ningún resultado observable de `togActiva`/`togSet`, solo cuántas veces se lee el
+almacén dentro de una misma vuelta de tick; sin instrumentación de conteo de lecturas en el
+banco, la reducción de I/O queda documentada aquí, no medida con una aserción numérica).
+
+## v18.13.2 (PALETTE — auditoría nocturna UX/accesibilidad: dos modales sin captura de Tab)
+
+Revisión estática (Read/Grep) de los 10 call-sites conocidos de `_activarAccesibilidadModal`
+contra los ids de modal reales del script: 2 de los ~11 modales en vivo quedaron fuera de la
+lista, ambos hallazgo Alta (barrera total para navegación solo-teclado):
+
+- `#vgl-paquete-modal` (`openPaquetesModal`, "Ordenamiento de exámenes"): `role="dialog"`/
+  `aria-modal="true"` declarados pero CERO manejadores de teclado — ni Tab atrapado, ni
+  Escape, ni auto-foco, ni retorno de foco al disparador.
+- `#vgl-confirma-modal` (`_vglModalConfirmarDatos`, reconciliador de discrepancias): sí
+  cerraba con Escape (listener manual propio), pero sin captura de Tab.
+
+Fix: conectar ambos al gestor universal ya probado, mismo patrón que los otros 9 modales.
+En `#vgl-confirma-modal` esto exigió más cuidado que un cambio mecánico: el modal ya tenía
+su propio listener de Escape (`_luego`), y `_activarAccesibilidadModal` instala OTRO listener
+de `keydown` que también maneja Escape — sumar el nuevo sin quitar el viejo habría hecho que
+Escape disparara `_luego()` DOS veces (dos `alContinuar()`, dos `uxTrack`), justo lo que
+`tests/suite_68_v17_cola.js` ("una salida común para la ✕ y Escape") documenta como el
+contrato a proteger. Se reemplazó el listener manual por la llamada al gestor, pasando
+`_luego` como único `closeCallback` — un solo listener, mismo comportamiento observable.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `openPaquetesModal` — conexión a `_activarAccesibilidadModal` | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);` → `if (false && …) {…}` (el modal vuelve a no tener listener de teclado) | NO | suite_15 caso «PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal…»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
+| user.js `_vglModalConfirmarDatos` — conexión a `_activarAccesibilidadModal` (reemplaza el listener manual de Escape) | `if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, _luego);` → `if (false && …) {…}` (Escape deja de cerrar el modal: sin listener de teclado alguno) | NO | suite_63 caso «PALETTE (accesibilidad) — vgl-confirma-modal atrapa Tab…, Escape llama a alContinuar UNA sola vez»: mutante rojo (alContinuar quedó en 0, no 1); EXIT 1 (61 ok, 1 falla). Restaurado 62 ok EXIT=0 |
+
+Verificado además, sin mutación aparte (mismo caso ya lo demuestra): el conteo de
+`modal._listeners.keydown` en `#vgl-confirma-modal` es exactamente **1** tras el fix — antes
+del fix habría sido 2 si simplemente se hubiera AÑADIDO el gestor sin quitar el listener
+manual, lo que habría duplicado `alContinuar()` en cada Escape. No se auditó Chromium en
+esta sesión (bloqueo de entorno documentado en `.deepseek/logs/2026-09-09/palette-informe.md`)
+— ninguno de los dos cambios toca CSS, así que la verificación de la sección 4 (color contra
+Everest simulado) no aplica.
+
+## v18.14.0 (ORDEN #7 — cableado de la flota al worker Cloudflare)
+
+Los 4 puntos de código del cableado documentado en `REPLICA_TELEMETRIA/README.md` §4:
+`TABLERO.url` (telemetría POST), `versionCheckUrl` (candado de versión mínima GET),
+el regex de `repDiagnostico()` (acepta GAS o `*.workers.dev`) y `@connect workers.dev`.
+El GAS (`script.google.com`) queda vivo y sin tráfico como respaldo frío — un solo
+valor (`TABLERO.url`) revierte el cambio si hiciera falta. El worker ya estaba
+desplegado y probado en vivo (ORDEN #7, `f70c05c`); esta entrega es solo el cableado
+del cliente, decisión explícita del médico. El punto 5 del README (destino del
+tablero Google Sheets histórico) queda sin resolver — decisión pendiente, no bloquea
+el cableado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `TABLERO.url` | `"https://vigilante-telemetria.bpalencia27.workers.dev/"` → vuelto al GAS original (`AKfycbwaSyv2nWxoeGKW1v6EpSKnnDgVv…`) | NO | suite_11 caso «repUrl: sin URL personalizada devuelve la del tablero de fábrica» (y otros 2 de la misma suite que usan `URL_FABRICA`): mutante rojo; EXIT 1 (48 ok, 3 fallan). Restaurado 51 ok EXIT=0 |
+
+Suites tocadas sin cambio de comportamiento propio (solo el matcher del mock que
+identifica la URL del backend en las pruebas, de `script.google.com` a `workers.dev`,
+ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
+(3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
+caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
+
+## v18.14.1 (Solicitud F, paso F2 — menú de desarrollador restringido por rol)
+
+La "SECCIÓN TÉCNICA" de Ajustes (Ctrl+Shift+D: claves de IA, carpeta cifrada local,
+diagnóstico del embudo de telemetría, bitácora de eventos) dependía SOLO del atajo de
+teclado — cualquier médico que lo conociera la veía, y además el bloque se pintaba
+SIEMPRE en el HTML (solo oculto con la clase CSS `vgl-d-none`: inspeccionable con las
+herramientas del navegador). Ahora `isDevMode` exige ADEMÁS `mtrEsDesarrollador()`
+(nueva, envuelve `accesoCapExtra("desarrollador")` — misma familia que `pym_opcional`,
+solo el padrón remoto la concede) y el bloque entero (`grpTecnico`, antes inline) se
+OMITE del HTML — no solo se oculta — cuando falta la cap, igual que `grpToggles`/
+`grpPermisos`/`grpAthenea`. Fail-closed: sin padrón, sin entrada del médico, o sin la
+cap explícita → oculto. Semilla de producción (`TABLERO/Codigo.gs`, fila de siembra
+de Brandon Jesús Palencia Martínez) actualizada con la cap `desarrollador` — pero esa
+siembra SOLO corre si la hoja "acceso" no existe aún; en la hoja YA EXISTENTE de
+producción el dueño debe añadir `desarrollador` a mano en la 6ª columna de su propia
+fila, o perderá el acceso a la sección técnica hasta hacerlo.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderSettings()`, `const isDevMode` | `_vglProgOn && mtrEsDesarrollador()` → vuelto a `_vglProgOn` (sin exigir la cap) | NO | suite_15 caso «renderSettings: la sección técnica exige Ctrl+Shift+D Y la cap 'desarrollador' del padrón (F2, fail-closed)»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3795 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.1 en los 4 puntos.
+
+## v18.14.2 (Solicitud F, paso F3 — filtrado de médicos en Ajustes)
+
+«Permisos por médico (administración)» (`grpPermisos`) expone el nombre y el uid
+de TODOS los médicos del equipo (`permisosEntradasVisibles` recorre COMPLETO +
+LABORATORIOS enteros) y deja tocar los permisos de cualquiera de ellos: es
+información y una acción sobre TERCEROS, no sobre uno mismo — a diferencia de
+«Funcionalidades por médico» (`grpToggles`), que son decisiones personales del
+propio médico y no expone a nadie más. Antes ambos compartían la misma compuerta
+(`accesoCap("toggles_funcionalidades")`: cualquier perfil COMPLETO). Ahora
+`grpPermisos` exige ADEMÁS `mtrEsDesarrollador()` (F2): mismo criterio de
+"mostrar solo la información pertinente al perfil/permisos del usuario". Fixture
+de `suite_101_permisos.js` actualizado: su médico de sesión (uid 101, el
+dueño/desarrollador real del proyecto) ya trae la cap `desarrollador` en
+`LISTA_101`, porque esa suite prueba justamente la administración de permisos
+de terceros.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderSettings()`, `const grpPermisos` | `accesoCap("toggles_funcionalidades") && mtrEsDesarrollador()` → vuelto a solo `accesoCap("toggles_funcionalidades")` | NO | suite_101 caso «F3: "Permisos por médico" exige la cap 'desarrollador' — un COMPLETO sin ella no la ve (pero sí sus propios toggles); con ella sí»: mutante rojo; EXIT 1 (15 ok, 1 falla). Restaurado 16 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3796 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.2 en los 4 puntos.
+
+## v18.14.3 (Solicitud F, paso F5 — widget de laboratorios RCV no intrusivo)
+
+El panel «Próximos exámenes · Riesgo cardiovascular» (`#vgl-rcv-pendientes`) se
+auto-abría solo con entrar a la historia de un paciente con programa RCV
+identificado (aunque ya tenía minimizar/reapertura por pastilla desde v18.8.6,
+el estado de FÁBRICA era expandido). Ahora el estado de fábrica es MINIMIZADO:
+`let _rcvpMinimizado` nace en `true` (antes `false`), y el reinicio al perder
+el contexto (`!rcvPendientesDebeVerse`) también vuelve a `true` (antes `false`).
+El chequeo de minimizado se movió, dentro de `rcvPendientesTick()`, a DESPUÉS
+de confirmar que el paciente sí tiene programa RCV (`resumen`/`paquete`) —
+si no lo tiene, ahora también se retira cualquier pastilla huérfana
+(`_rcvpPillQuitar()` añadido a esos dos `return` tempranos) — así la pastilla
+nunca aparece sin nada real que mostrar, y minimizado no gasta la llamada de
+red de órdenes vigentes. Nueva función de prueba `_rcvpExpandirParaTest()`
+(mismo efecto que el clic real de la pastilla) para que las suites de
+CONTENIDO (88, 102) no tengan que repetir el gesto en cada caso — se inyecta
+envolviendo `cargar` una sola vez en cada suite; el caso dedicado a probar
+«nace minimizado» usa el `cargar` real (`cargarSinExpandir`).
+
+Suites ajustadas (sin cambio de intención, solo al nuevo estado de fábrica):
+- `suite_88_rcv_pendientes.js`: `cargar` envuelto para auto-expandir; un caso
+  (revocación granular) necesitó una segunda llamada a `_rcvpExpandirParaTest()`
+  porque el tick con la cap revocada pasa por el reinicio a minimizado.
+- `suite_102_widget_rcv.js`: mismo envoltorio; el caso "sin contexto el
+  minimizado se desarma" se reescribió — antes esperaba que el panel completo
+  reapareciera solo al volver el contexto, ahora espera que reaparezca la
+  PASTILLA (el panel nunca se auto-abre).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `let _rcvpMinimizado` | `true` → vuelto a `false` (estado de fábrica: expandido) | NO | suite_88 caso «F5: el panel nace MINIMIZADO — nunca se auto-abre...»: mutante rojo; EXIT 1 (24 ok, 1 falla). Restaurado 25 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3797 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.3 en los 4 puntos.
+
+## v18.14.4 (Solicitud F, paso F6 — fatiga visual: silenciar rutina y central de notificaciones)
+
+El agrupamiento de toasts (por paciente, y el colapso a "Alerta Múltiple" con
+más de 3 en un mismo flush) y el tope de visualización simultánea (máximo 4
+toasts vivos en pantalla) YA EXISTÍAN desde v17.6.9/v17.11.0 — F6 no los
+tocó. Lo que faltaba y se añadió:
+- **Preferencia de frecuencia/tipo**: `S.avisosRutinariosOff` (Ajustes →
+  "Avisos rutinarios silenciados"). Con ella activa, `_avisoRutinarioSilenciado(color)`
+  calla `showToast()`/`notify()` para AZUL/VERDE/FUCSIA — **ROJO/MORADO/AMBAR
+  (confirmación extemporánea, inasistencia, última llamada) JAMÁS se silencian**,
+  invariante de seguridad clínica que no depende de la preferencia del médico.
+  `avisoEsCritico(color)` se extrajo del `const critico = ...` que ya vivía
+  inline en `_renderToast` (evita una 5ª repetición del mismo literal
+  ROJO/MORADO/AMBAR, disciplina F4).
+- **Central de notificaciones**: bitácora mínima en memoria (`_avisoHistorial`,
+  anillo de 30) que anota SOLO `{ts, color}` de cada aviso que `_renderToast`
+  sí pintó — NUNCA título ni cuerpo (cero PHI). Vista de solo lectura en
+  Ajustes ("Últimos avisos de este turno", `avisoHistorialHtml`): un punto de
+  color por aviso, con la hora relativa al pasar el cursor. Se reinicia con
+  `diaNuevo()`.
+
+Nueva `tests/suite_114_fatiga_visual.js`. Nota de arnés (documentada en el
+propio caso): los toasts NO críticos se autocierran a los 9 s en producción,
+y el arnés capa TODO `setTimeout` a ~1 ms (`tests/harness.js:116`) — así que
+un no-crítico ya se autocerró para cuando una prueba pudiera inspeccionar el
+DOM tras esperar el flush; la central de notificaciones (que no se borra
+sola) es la prueba correcta de "sí se pintó" para esos casos. Lo crítico
+(ROJO) SÍ se comprueba en el DOM en vivo, porque nunca se autocierra.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `function _avisoRutinarioSilenciado` | `S.avisosRutinariosOff === true && !avisoEsCritico(color)` → vuelto a solo `S.avisosRutinariosOff === true` (silenciaría TAMBIÉN lo crítico) | NO | suite_114 casos «invariante de seguridad» y «con la preferencia encendida... un ROJO SÍ»: mutante rojo; EXIT 1 (6 ok, 2 fallan). Restaurado 8 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3805 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.4 en los 4 puntos.
+
+## v18.14.5 (revisión post-entrega — /code-review max sobre F2-F6, 10 hallazgos corregidos)
+
+Auditoría independiente (10 ángulos de revisión, verificados 1 a 1) sobre el
+trabajo F2-F6 de esta rama. Dos hallazgos eran bugs reales de seguridad/UX en
+producción; el resto, deuda menor. Los 10, corregidos:
+
+**1-2 (el mismo punto ciego): F6 no aplicaba a la vía real de los avisos de
+cita.** `_avisoRutinarioSilenciado()` solo se había cableado en `showToast()`/
+`notify()`, pero `colorAndAlert→maybeNotify→_dispararAvisoReal→
+_dispararAvisoAudible` — el camino REAL de confirmaciones/inasistencias —
+llama a `_notificarSistema()` directo cuando la pestaña está desatendida (el
+caso más común en consulta), sin pasar por ninguno de los dos. La preferencia
+"avisos rutinarios silenciados" no callaba NADA por ese camino. Fix: el mismo
+gate, cableado también en `_dispararAvisoAudible`.
+
+**3. La central de notificaciones no anotaba el canal del SO.** Mismo punto
+ciego: `_avisoHistorialAnotar` solo vivía en `_renderToast` (camino del
+toast). Fix: se anota también cuando `_notificarSistema()` tiene éxito.
+
+**4. `_rcvpCerrar()` reintroducía el auto-abrir que F5 acababa de eliminar.**
+Con el estado de fábrica ya invertido a minimizado, esta función (no tocada
+por F5) seguía poniendo `_rcvpMinimizado = false` al cerrar — cerrar una vez
+dejaba el panel completo auto-abriéndose para CUALQUIER paciente siguiente.
+Fix: cerrar vuelve al estado de fábrica real (`true`).
+
+**5. `rcvPendientesTick()` no re-revisaba el minimizado tras el `await` de
+red.** Si el médico minimizaba/cerraba mientras la consulta de órdenes
+vigentes seguía en vuelo, el repintado posterior lo reabría igual. Fix: los
+mismos guards de antes del `await` se re-aplican después.
+
+**6. `avisoEsCritico()` fail-open + 3 copias sin migrar.** Un color no
+reconocido caía del lado "rutinario" (silenciable) en vez de "crítico". Fix:
+se invirtió a fail-closed (se listan los 3 RUTINARIOS, no los 3 críticos) y
+las 3 copias inline restantes (Alerta Múltiple, `startFlash`, la tarjeta de
+avisos) ahora llaman a la función compartida.
+
+**7. `mtrEsDesarrollador()`/`accesoCap("toggles_funcionalidades")` se leían
+dos veces por `renderSettings()`.** Fix: una lectura, reusada por
+`isDevMode`/`grpToggles`/`grpPermisos`.
+
+**8. `cargar` duplicado en suite_88 y suite_102.** Fix: `cargarExpandidoRCV`
+compartida en `tests/harness.js`.
+
+**9. Bloque de limpieza repetido en `rcvPendientesTick()`.** Fix:
+`_rcvpSinPrograma()`.
+
+**10. `_avisoHistorialRelativo` reimplementaba `repUltOk`.** Fix:
+`mtrHaceTiempo(minutos)` extraída como fuente única; `repUltOk` y la central
+de notificaciones la comparten. Cambia el umbral de "hace un momento" de <1
+a <2 min (para igualar a `repUltOk`, que ya usaba <2) y añade el nivel de
+días que `_avisoHistorialRelativo` no tenía.
+
+**Sin cambio de código (documentación únicamente): hallazgo "no hay guarda
+compartida para secciones admin futuras"** — `mtrEsDesarrollador()` YA es esa
+guarda reusable (F3 ya la reutiliza); se añadió un comentario explícito
+invitando a cualquier sección admin futura a llamarla directo. Construir un
+registro declarativo de secciones para 2 casos actuales habría sido
+sobre-ingeniería para un requisito hipotético.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_dispararAvisoAudible`, gate nuevo | `if (_avisoRutinarioSilenciado(p.color)) return true;` → `if (false && ...)` | NO | suite_114 «el camino REAL de los avisos de cita»: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `_dispararAvisoAudible`, anotación en éxito del SO | `_avisoHistorialAnotar(p.color);` → comentada | NO | mismo caso de suite_114: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `_rcvpCerrar()` | `_rcvpMinimizado = true` → vuelto a `false` | NO | suite_102, 2 casos de cierre: mutante rojo (10 ok, 2 fallan). Restaurado 12 ok |
+| user.js `rcvPendientesTick()`, re-chequeo post-`await` | las 2 líneas de guard quitadas | NO (tras corregir el mock de red del propio caso — ver nota abajo) | suite_88 «si el médico minimiza... MIENTRAS la consulta... sigue en vuelo»: mutante rojo (25 ok, 1 falla). Restaurado 26 ok |
+| user.js `avisoEsCritico()` | fail-closed → vuelto a fail-open (`ROJO\|\|MORADO\|\|AMBAR` en vez de `!(VERDE\|\|AZUL\|\|FUCSIA)`) | NO | suite_114 caso de límites: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `mtrHaceTiempo()` | umbral `<2` → `<1` | NO | suite_114, 2 casos (avisoHistorialHtml + mtrHaceTiempo): mutante rojo (9 ok, 2 fallan). Restaurado 11 ok |
+
+Nota sobre el caso de suite_88 (re-chequeo post-`await`): la primera versión
+del caso usaba un mock de `fetch` que resolvía con un array crudo en vez de
+un objeto Response-like (`{ok, status, json(), text()}`) — `pageFetchJson`
+lo trataba como fallo y el flujo no llegaba nunca al repintado que la prueba
+quería ejercitar, así que la mutación NO se detectaba (falso verde). Corregido
+el mock al mismo contrato que ya usa `crearRed()` en el resto de la suite;
+verificado que ENTONCES sí detecta la mutación antes de restaurar.
+
+Banco completo tras el cambio: `node tests/runner.js` → 3809 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.5 en los 4 puntos.
 

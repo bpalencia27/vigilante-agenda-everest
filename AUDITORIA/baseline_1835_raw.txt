@@ -1,0 +1,167 @@
+
+════════════════════════════════════════════════════════════════
+  PRUEBAS DEL VIGILANTE DE AGENDA
+════════════════════════════════════════════════════════════════
+  funciones alcanzables: 1259 de 1380
+
+✓ Texto y datos del paciente                54 ok
+✓ Tiempo y fechas                           33 ok
+✓ Excel, caché y SharePoint                 33 ok
+✓ Colores y notificaciones de la agenda     106 ok
+✓ Llamadas a Everest y clínicas             35 ok
+✓ Panel, ajustes, modales                   11 ok
+✓ Lector de Excel (ZIP/XLSX)                14 ok
+✓ Laboratorios Crónicos (Suite 08)          148 ok
+✓ Ajustes y almacén local (Suite 09)        36 ok
+✓ Estadísticas, eventos y auditoría         30 ok
+✓ Cola de reportes al remoto (Suite 11)     29 ok
+✓ SharePoint y caché del piloto (Suite 12)  47 ok
+✓ Lectura directa del API de agenda         64 ok
+✓ Extracción del DOM de Everest (Suite 14)  31 ok
+✓ Interfaz: ventana, hojas y modales        269 ok
+✓ Lectura en flujo del Excel PyM            26 ok
+✓ Núcleo: bucles, latidos y utilidades GM   52 ok
+✓ Puente Athenea y credenciales (Suite 18)  93 ok
+✓ Identidad de API por médico y blindaje de cuota  29 ok
+✓ Correo de órdenes al paciente (Suite 20)  8 ok
+✓ Comparador de fuentes                     1 ok
+✓ v12.4: horas, panel PyM y tabla CUPS      48 ok
+✓ Utilidades Puras                          10 ok
+✓ Telemetría de uso del panel (v12.5)       109 ok
+✓ Motor de perfil (D3-bis)                  53 ok
+✓ Cascada CSS                               32 ok
+✓ El banco se ejecuta de verdad             10 ok
+✓ Función renal (R1)                        12 ok
+✓ Vigencias por estadio renal (R2, sombra)  63 ok
+✓ Estadio renal (R1b, plomería)             43 ok
+✓ Red de seguridad remota, Kill-Switch y Canario (R5.1, R5.3)  12 ok
+✓ Rangos oficiales de Everest (v14.1.8)     33 ok
+✓ Auto-Labs contra rangos oficiales (v14.1.8)  20 ok
+✓ Seguridad, PHI, XSS e Integridad (M1)     52 ok
+✓ Corrección Clínica, Frontera DOM y Límites (M2)  45 ok
+✓ Robustez, Concurrencia, Estado y Red (M3) 23 ok
+✓ Cobertura de Riesgo ALTO y Resistencia a Mutantes (M4)  16 ok
+✓ Interfaz y Accesibilidad Médica (M5)      24 ok
+✓ Entrega, Runbook y Detección Duplicada (M6/R5.8)  17 ok
+✓ Invariantes críticos (mutación olvidada)  25 ok
+✓ Motor portado: fechas y CERO VENCIDOS     37 ok
+✓ Seguridad de dosis renal (motor portado)  48 ok
+✓ Interacciones farmacológicas (motor portado)  21 ok
+✓ Vista de avisos farmacológicos            18 ok
+✓ Canales de aviso (los 28 que nadie probaba)  59 ok
+✓ Conformidad cruzada con el Copiloto       40 ok
+✓ El grounding no filtra PHI                6 ok
+✓ Riesgo CV (4 pasos) y función renal unificada  73 ok
+✓ Vigencias corregidas, FTL, sábados del médico y lectura del DOM  90 ok
+✓ Recuadro clínico (reemplazo del banner de PyM)  35 ok
+✓ Uroanálisis, foco clínico, educación y triglicéridos  56 ok
+✓ Falla terapéutica, recontrol, MTT y telemetría  48 ok
+✓ Puente entre modales (caché, fecha sugerida y prioridad PyM)  12 ok
+✓ Uroanálisis de Athenea y adición a Conducta  22 ok
+✓ Agendamiento sin terminar y sonda de anclaje del examen físico  17 ok
+✓ Aviso de actualización y permanencia del retiro (clic-en-Conducta)  7 ok
+✓ Motor farmacológico ampliado (RCV: pares mortales y graves)  29 ok
+✓ Framingham oficial predicho, FINDRISC, cobertura del motor y sonda  23 ok
+✓ Hoja de hechos desidentificada (barrera de PHI hacia la IA)  16 ok
+✓ Redacción IA: prompts, parser, conector y estilo  176 ok
+✓ Inserción de la nota IA en la historia (solo casilla vacía, por ancla)  5 ok
+✓ Burbujas de información (rediseño UX de los 4 módulos)  12 ok
+✓ Reloj de segundo plano (Web Worker, v14.2.12)  22 ok
+✓ v15.8.0 — vigencias×plazo, primer cupo, semáforo, SMS y letra  27 ok
+✓ v15.9.0 — cierre de cita (imprimir/correo/toma) y aviso de vencimiento  59 ok
+✓ v16.0.0 — módulo Riesgo y exámenes (clasificación, TFG y vigencias)  61 ok
+✓ v16.1.0 — botones por pestaña, Deshacer efímero y Regla E en los módulos  39 ok
+✓ Minimizar módulos sin perder lo llenado (v16.7.0)  26 ok
+✓ Relevo de pestaña: la vigilancia de fraude sobrevive (auditoría #7)  12 ok
+✓ Panel del paciente: la fusión de Ficha y Riesgo (v16.8.0)  47 ok
+✓ v17.0.0 — la cola completa: IRA, metas, duplicidades, productividad, carpeta, prellenado, llenado y dead-man  76 ok
+✓ Catálogo farmacológico RCV (interacciones y renales con fuente citada)  38 ok
+✓ v18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total  9 ok
+✓ Enjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles  8 ok
+✓ Suite 70 · v18.2.0 (P9): GLM-5.3 en z.ai con Gemini de respaldo + medición  18 ok
+✓ Widget de Conducta: exámenes a ordenar en el próximo control  85 ok
+✓ Tanda 0 — lint de pantalla (banderas y jerga)  25 ok
+✓ Suite 73 · Recorridos del modal Agendar   9 ok
+✓ Auditoría P1+P2+P3 (2026-09-03)           18 ok
+✓ Memoria en disco del médico (Suite 75)    50 ok
+✓ El disco hostil del consultorio (Suite 76)  15 ok
+✓ Falla con ventana del 50 % gastada: vigencias naturales; lectura fallida no es «nunca tomado»  7 ok
+✓ Acceso por médico (B1+B2): perfil, blocklist, gracia, capacidades, lista remota y envoltorios  35 ok
+✓ Aviso de paciente nuevo (B5): memoria por médico, bootstrap silencioso, 3 toasts/h, dedup doble, capa a  14 ok
+✓ Matriz de acceso 4×13×3 (B6): perfiles × capacidades × capas a/b/c + telemetría de denegación sin PHI  9 ok
+✓ Suite 81 · v18.2.1 (P10): barrera cero-identificables antes de la red  6 ok
+✓ Suite 82 · v18.2 (P11): compuerta de consentimiento antes de todo  22 ok
+✓ Suite 83 · v18.3 (P13): observabilidad de adopción (obs*)  12 ok
+✓ Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi)  5 ok
+
+────────────────────────────────────────────────────────────────
+  comprobaciones : 3400 pasan
+  funciones cubiertas: 971 / 1259 públicas  (77.1%)  ·  121 anidadas se prueban a través de sus dueñas
+
+  sin cubrir (288):
+    _frGenNueva, _atheneaCredsMigrarDeClaro, atheneaAvisoSilencioso, _conTope, _diaValidoParaMes, _esNumeroParaDesempate
+    _esLdlDirecto, _labsPrefetchCoincide, _labsConsolidadoGuardar, _labsConsolidadoDe, _preconLeerTodo, _preconGuardar
+    _preconDe, _preconPriorizar, _preconHidratar, _preconEstadoDe, _preconTick, _vglNodoEsDelVigilante
+    _vglInstalarVigilanciaDom, _vglMismaCedula, _vglBuscarPorDoc, _vglClaveDeDoc, _vglListaTieneDoc, _vglDetectarClavesDuplicadas
+    _vglRevisarClavesDuplicadas, _vglConfirmacionesLeer, _vglProgramasDesdeCabecera, mtrTfgConfirmaErc, mtrDiscrepanciasDeFuentes, mtrDebePreguntarUroSintomas
+    mtrPreguntaUroSintomas, _uroSintomasConfirmados, mtrExamenesParaPreguntaFueraMeta, mtrDebePreguntarFueraMeta, mtrPreguntaFueraMeta, mtrReconciliarAhora
+    _vglPestanaDeCampo, _vglContextoEstado, _vglTextoContextoFaltante, _vglFactoresArchivados, _cwoClic, _cwfProgramarRefresco
+    _cwfInstalarEscucha, _cwCoordX, _cwCoordY, _mtrLabsRecientes, _vglAbrirAyudanteFaltan, _vglDockRotulo
+    autoCalcularResumenSiNecesario, _etiquetaCercanaCasilla, _excluirMamasGenitoPorTexto, _emparejarNormalidadFija, _vglOfrecerDeshacer, _vglFeedbackBoton
+    _vglEspejoGuardar, _vglRestaurarDeEspejo, _procGuardar, _procEscrituraFallida, _enVueloClave, marcarEnVuelo
+    soltarEnVuelo, enVueloAjeno, ordenCreadaHoyParaCie10, _puedoEvaluarLaAgenda, _puedoLeerLaAgenda, _vglDocCanon
+    _accesoRefrescoFresco, _accesoAnotarOk, _accesoGracia, accesoEscribirUrl, cargarRespaldoParaConsulta, isPanelHiddenActivity
+    panelActivities, rectificarStat, _repFilaLimpia, _repVaciadoDeArranque, _vglFechaHace, _pymSueltoEnLaRaiz
+    _pymAnotarFallo, _apptNombreClave, _apptMapaLeer, _apptMapaEscribir, _apptMapaBorrar, stampSalto
+    _vglCerrarConClicFuera, _pendientesUniversales, _avisoUnaVezPorNavegador, _avisoUidDeTexto, _vglSinCedulas, _pymMejorFechaPorNombre
+    _legendMarcaUnaVez, _cssSeguro, _fetchConTope, _esRutaPaciente, _extractPatientId, _labMotivoUltimoFallo
+    apiPacienteDetalladoCacheado, _smsTextoDesenlace, _smsPintarDesenlace, _smsAnotarDesenlace, _anularUltimoMotivoLeer, _cancelValorSospechoso
+    _cancelPapelDeClave, _cancelPartirUrl, _cancelPlantillaDesde, _cancelPlantillaGuardar, _cancelPlantillaLeer, _cancelPlantillaBorrar
+    _cancelPeticionDesdePlantilla, _cancelEnganchar, _cancelVariantes, _cancelVarianteRecordada, _cancelVarianteRecordar, _cancelDiagnostico
+    _apiPostConDetalle, _anulacionMensaje, _anulacionConfirmada, _anulacionYaNoVigente, _anulacionMotivo, _anularCitaAsignadaReal
+    _anularCitaAsignada, _labReferenciaDe, mtrPaqueteProgramaHtml, openPaquetesModal, mtrCalcularResumenClinico, _triFactor
+    mtrFichaVivaFilas, mtrPanelResumenBentoDatos, mtrPanelResumenBentoHtml, mtrEstadoPuntoMedicamentos, _agmClaveDoc, _agmAgendarLabConCandado
+    _agmPrefLeer, _agmPrefGuardar, pymTituloClinico, pymTituloCorto, _conductaTablaOrdenamientos, _conductaCodigosEnTabla
+    _conductaEsperar, _conductaEsperarFilasNuevas, _conductaClicPaqueteHTA, _vglHcZoom, _vglAlternarAltoContraste, _prodEsSabadoDelMedico
+    _prodEsFestivoIso, _prodExtraPeriodo, exportarProductividadSemana, _vglCarpetaPodarControl, _vglHex, _vglBytesDeHex
+    _vglBytesAB64, _vglB64ABytes, _vglCarpetaClaveAes, _vglCarpetaNombresDeDoc, _vglCarpetaResolverNombre, _vglCarpetaEsSobreNuestro
+    _vglCarpetaLeerFusionado, _vglDiscoFechaCorta, _vglDiscoHoraCorta, _vglDiscoSanear, _vglDiscoValor, _vglDiscoCedula
+    _vglDiscoDir, _vglDiscoEscribirSerial, _vglDiscoDormir, _vglDiscoEscribirArchivo, _vglDiscoProgramar, _vglDiscoMemoriaEscribirAhora
+    _vglDiscoBannerEstilo, _vglCarpetaPurgarSiToca, _vglCarpetaMigrarYReportar, _ajustesSucio, _ajustesPonBorrador, _ajustesPintarBarra
+    _ajustesGuardar, _ajustesDescartar, _ajustesIntentarCerrar, _vglAlternarModoProg, _vglInstalarModoProg, _ajustesAthEstadoHtml
+    _ajustesPintarAthEstado, makeResizable, _vglGuardarAncho, countdownParts, _checklistCierreMsg, _noShowLeer
+    _noShowGuardar, _noShowPreviaEn, _noShowPrevia, _adhBadgeInfo, _reprogramarDeadline, _vglRetirarMonitorPorPerfil
+    _diagValorAtributoSeguro, _acompStoreLeer, _acompStoreGuardar, _acompMedId, _acompEstadoLeer, _acompEstadoGuardar
+    _acompActivo, _acompNotificarAccion, _acompSugerencia, _acompTick, _vglModoOcultoLeer, _vglModoOcultoAplicar
+    vglAlternarOculto, _vglInstalarModoOculto, _festivosTablaAgregarParaTest, _festivosMensajeDiscrepancia, _festivosAvisarSiVencida, mtrLoginDeSesion
+    mtrCompuertaPerfil, mtrConsentimientoConstancia, mtrConsentimientoAceptado, mtrTerminosRechazoFresco, mtrCompuertaSinIdentidad, mtrIdentificadorParaConstancia
+    _terminosBtnCss, _terminosCerrarPantalla, mtrTerminosPantallaRechazo, _instalarLatidosBase, mtrArrancarTodo, mtrCompuertaDiagnostico
+    _terminosAjustesTexto, mtrDiasParaSondearCupo, mtrBuscarCupoLaboratorio, mtrNotaDisponibilidadLab, mtrVerificarCupoLab, mtrLeerFrecuenciasMedicamento
+    mtrEnriquecerAvisosConFrecuencia, mtrFrecuenciaTexto, mtrMapaFrecuenciasPorCodigo, mtrMapaFrecuenciasPorNombre, mtrPedirHistoricoMedicamentos, mtrSexoCanonico
+    mtrSabadoSugerible, mtrKdigoNoRepiteLipidos, mtrRepeticionObligatoria, mtrPuedeAdelantarPorFueraDeMeta, _mtrTokenDeNombreTachable, _mtrPatronConTildes
+    mtrIaGenerando, _vglTextoLibreCombinado, _vglNotarTextoLibre, _vglVigilarTextoLibre, mtrRotuloDeModo, mtrTextoDeOtrasCasillas
+    mtrRelativizarFechaIso, _mtrTaDesdeTexto, _mtrTaNumeroDeTexto, _mtrTaValorCrudo, _mtrPrimerValorCrudo, _mtrTaDesdeCampos
+    _mtrTensionPorRotulo, _mtrTaEsCompleta, _mtrTaFamilia, mtrDetectarDesacuerdos, mtrAnotarDesacuerdos, _ajustesDesacuerdosTexto
+    _mtrRotuloDeCampo, _mtrResolverAntropometria, _vglCarpetaEscribirInstantaneaSiAplica, _mtrNombreDelPaquete, _mtrNombreEfectivo, mtrHcGuardar
+    mtrHcEnganchar, imprimirHojaEducativa, _mtrDosisDeCombo, mtrCacheResumenMarcarDesactualizado, mtrCacheResumenDesactualizado, mtrCacheResumenRefrescarDesdePantalla
+    obsGmLeer, obsGmGuardar, obsFnv1a, obsHuellaEquipo, obsConsultaCerrar, obsConsultaActiva
+    obsConsultaElegible, obsConsultaMarcarModulo, obsModuloLimpio, obsAvisoDesenlace, obsAvisoCumplido, obsPerdidosEstado
+    obsPerdidosSumar, obsPresupuestoLimite, obsPresupuestoConsumir, VGL_MODALES_CONSULTA, VGL_MODALES_ESCRITURA, VGL_ROTULOS
+
+  declaradas pero nunca nombradas (2):
+    _acompCerrar, _vglCarpetaCifrar
+
+  declaradas en cubre pero JAMÁS invocadas vía api.·(...) (12):
+    Interfaz: ventana, hojas y modales → _activarAccesibilidadModal
+    Interfaz: ventana, hojas y modales → _acompCerrar
+    v18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total → _vglCarpetaCifrar
+    v18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total → _vglCarpetaPareceSincronizada
+    Enjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → muteFor
+    Enjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → unmute
+    Falla con ventana del 50 % gastada: vigencias naturales; lectura fallida no es «nunca tomado» → mtrFueraDeMeta
+    Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → pymMotivoSinActividades
+    Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrClasificarRiesgoCv
+    Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrIaClickDelegado
+    Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrIrAPestanaPorNombre
+    Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → _mtrPrimerCampoNumerico
+────────────────────────────────────────────────────────────────

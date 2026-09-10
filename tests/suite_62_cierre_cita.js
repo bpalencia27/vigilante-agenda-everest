@@ -223,6 +223,19 @@ module.exports = {
       t.cierto(html.includes("&lt;img"), "…escapada, no borrada");
     });
 
+    // v18.4.2 — reducción uniforme al 85%: misma proporción, 15% menos en pantalla y papel.
+    t.caso("recordatorio de la toma (v18.4.2): todas las medidas quedaron al 85% de la escala anterior", () => {
+      const html = a._recordatorioLabHtml({ nombre: "X", fechaLegible: "jue 10 sep", hora: "07:00 AM" });
+      t.cierto(html.includes("width:578px"), "tarjeta: 680px → 578px (×0,85)");
+      t.falso(html.includes("width:680px"), "el ancho viejo desapareció por completo");
+      t.cierto(html.includes("font-size:19.6px"), "título: 23px → 19.6px");
+      t.cierto(html.includes("font-size:17.9px"), "fecha/hora (lo que el paciente lee de lejos): 21px → 17.9px");
+      t.cierto(html.includes("min-width:110.5px"), "columna de rótulos: 130px → 110.5px");
+      t.cierto(html.includes("width:13.6px"), "íconos: 16px → 13.6px");
+      t.cierto(html.includes(".rc-card{width:85%"), "impreso, la tarjeta ocupa el 85% del área imprimible (antes 100%)");
+      t.cierto(html.includes("Recordatorio de toma de laboratorio") && html.includes("jue 10 sep"), "y el contenido esencial sigue completo");
+    });
+
     await t.casoAsync("imprimir la toma: abre una pestaña, escribe el documento y manda a imprimir", async () => {
       const c2 = cargar({ silencioso: true });
       const abiertas = [];

@@ -435,6 +435,16 @@ module.exports = {
       t.igual(res.sha256, expectedHash);
     });
 
+    // v18.12.0 (Mesa de Expertos, muerta confirmada #1) — el parámetro `fuenteOpcional`
+    // era fantasma: la única llamada real (checkVersionMinimum) siempre invoca sin
+    // argumentos, y los tests inyectan la fuente vía GM_info.scriptSource, no como
+    // argumento. Se retiró el parámetro; la función sigue leyendo GM_info.scriptSource.
+    t.caso("verificarIntegridadArranque (v18.12.0): el parámetro fuenteOpcional ya no existe en la firma", () => {
+      const s = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(s.indexOf("async function verificarIntegridadArranque() {") >= 0, "la firma quedó sin parámetros");
+      t.falso(s.indexOf("async function verificarIntegridadArranque(fuenteOpcional)") >= 0, "sin restos del parámetro fantasma");
+    });
+
     // =================================================================
     //  v17.9.0 — LA BARRERA. Lo que Everest guarda entra; lo que identifica al paciente NO.
     //
@@ -1255,6 +1265,50 @@ module.exports = {
       c3.api._vglGuardarDeshacer("", [{ el: caja3, prev: "Y" }], "lote");
       t.cierto(c3.api._vglDeshacerDisponible(), "recién guardado, disponible");
       t.igual(c3.api._vglEjecutarDeshacer(), 1, "y se puede ejecutar");
+    });
+
+    // =================================================================
+    //  v18.3.6 (auditoría integral 2026-09-06) — CIERRE DE LOS DOS
+    //  ÚLTIMOS HUECOS DECLARADOS POR LAS PROPIAS INVARIANTES:
+    //   (1) _vglFeedbackBoton escribía el aviso del botón con innerHTML:
+    //       los 22 llamadores actuales pasan literales planos, pero un
+    //       llamador futuro que meta un dato externo en `texto` reabriría
+    //       un hueco XSS. Texto plano → textContent, de una vez.
+    //   (2) El botón Cerrar del modal de Laboratorios llevaba el ÚNICO
+    //       onclick= inline vivo del archivo (Invariante 3 de
+    //       AUDITORIA_XSS.md) — y además competía con el cable
+    //       addEventListener → closeMod: el atributo corría primero y
+    //       removía el modal sin su telemetría de abandono ni limpieza
+    //       de listeners. Un solo camino de cierre: closeMod.
+    // =================================================================
+    t.caso("v18.3.6 XSS — _vglFeedbackBoton escapa el aviso: un payload HTML se VE, no se ejecuta", () => {
+      const c = cargar({ silencioso: true });
+      const btn = { innerHTML: "🧪 Exámenes", textContent: "", style: {} };
+      const payload = '<img src=x onerror="globalThis.__vglXssFeedback=1"> ✓ 3 casillas escritas';
+      c.api._vglFeedbackBoton(btn, payload, "verde", "🧪 Exámenes");
+      t.falso(btn.innerHTML.indexOf("<img") >= 0,
+        "el payload llega ESCAPADO al sumidero HTML: no queda ni un < interpretable");
+      t.cierto(btn.innerHTML.indexOf("&lt;img") >= 0,
+        "se VE completo (escapado), que es lo que el médico necesita leer");
+      t.cierto(/c-verde/.test(String(btn.style.boxShadow)), "el realce verde del borde sigue aplicándose");
+      const btn2 = { innerHTML: "", textContent: "", style: {} };
+      c.api._vglFeedbackBoton(btn2, "❌ No se pudo leer el laboratorio", "ambar", "🧪 Exámenes");
+      t.cierto(/c-ambar/.test(String(btn2.style.boxShadow)), "y el tono ámbar también");
+      t.igual(btn2.innerHTML, "❌ No se pudo leer el laboratorio",
+        "el texto plano normal pasa por escapeHtml sin cambiar un carácter");
+    });
+
+    await t.casoAsync("v18.3.6 — el modal de Laboratorios cierra SOLO por closeMod: cero onclick inline", async () => {
+      const c = cargar({ silencioso: true });
+      await c.api.openLaboratoriosModal({ doc_id: "123456", nombre: "Paciente Prueba" });
+      const modal = c.env.doc.getElementById("vgl-labs-modal");
+      t.cierto(!!modal, "el modal se abrió");
+      const html = modal.innerHTML;
+      t.cierto(html.includes('id="vgl-labs-close"'), "el botón Cerrar existe — sin él esta prueba no mediría nada");
+      t.falso(/onclick=/.test(html), "ningún atributo onclick inline: el cierre es addEventListener → closeMod (telemetría y limpieza incluidas)");
+      const src = fs.readFileSync(RUTA_USERSCRIPT, "utf8");
+      t.cierto(/cancelBtn\.addEventListener\("click", closeMod\)/.test(src),
+        "y el cable addEventListener de closeMod sigue puesto: la ruta única no quedó huérfana");
     });
 
   }

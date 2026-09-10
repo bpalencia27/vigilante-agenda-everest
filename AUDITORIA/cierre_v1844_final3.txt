@@ -1,0 +1,211 @@
+
+[36m════════════════════════════════════════════════════════════════[0m
+[36m  PRUEBAS DEL VIGILANTE DE AGENDA[0m
+[36m════════════════════════════════════════════════════════════════[0m
+  funciones alcanzables: 1282 de 1407
+
+[32m✓[0m Texto y datos del paciente                [90m54 ok[0m
+[32m✓[0m Tiempo y fechas                           [90m33 ok[0m
+[32m✓[0m Excel, caché y SharePoint                 [90m33 ok[0m
+[32m✓[0m Colores y notificaciones de la agenda     [90m106 ok[0m
+[32m✓[0m Llamadas a Everest y clínicas             [90m35 ok[0m
+[32m✓[0m Panel, ajustes, modales                   [90m11 ok[0m
+[32m✓[0m Lector de Excel (ZIP/XLSX)                [90m14 ok[0m
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2023-01-02
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = 2023-01-01
+[Vigilante] diagnóstico fecha — TRIGLICERIDOS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultColesterolTotal", valor actual ""], resultDate = 2026-08-01
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultUroanalisis", valor actual ""], resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+[Vigilante] diagnóstico fecha — RAC: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[Vigilante] diagnóstico fecha — CREATININA: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[32m✓[0m Laboratorios Crónicos (Suite 08)          [90m148 ok[0m
+[32m✓[0m Ajustes y almacén local (Suite 09)        [90m36 ok[0m
+[32m✓[0m Estadísticas, eventos y auditoría         [90m30 ok[0m
+[32m✓[0m Cola de reportes al remoto (Suite 11)     [90m29 ok[0m
+[32m✓[0m SharePoint y caché del piloto (Suite 12)  [90m47 ok[0m
+[32m✓[0m Lectura directa del API de agenda         [90m64 ok[0m
+[32m✓[0m Extracción del DOM de Everest (Suite 14)  [90m31 ok[0m
+[32m✓[0m Interfaz: ventana, hojas y modales        [90m271 ok[0m
+[32m✓[0m Lectura en flujo del Excel PyM            [90m26 ok[0m
+[32m✓[0m Núcleo: bucles, latidos y utilidades GM   [90m58 ok[0m
+[32m✓[0m Puente Athenea y credenciales (Suite 18)  [90m93 ok[0m
+[32m✓[0m Identidad de API por médico y blindaje de cuota[90m29 ok[0m
+[32m✓[0m Correo de órdenes al paciente (Suite 20)  [90m8 ok[0m
+[32m✓[0m Comparador de fuentes                     [90m1 ok[0m
+[32m✓[0m v12.4: horas, panel PyM y tabla CUPS      [90m48 ok[0m
+[32m✓[0m Utilidades Puras                          [90m10 ok[0m
+[32m✓[0m Telemetría de uso del panel (v12.5)       [90m109 ok[0m
+[32m✓[0m Motor de perfil (D3-bis)                  [90m53 ok[0m
+[32m✓[0m Cascada CSS                               [90m33 ok[0m
+[32m✓[0m El banco se ejecuta de verdad             [90m10 ok[0m
+[32m✓[0m Función renal (R1)                        [90m12 ok[0m
+[32m✓[0m Vigencias por estadio renal (R2, sombra)  [90m63 ok[0m
+[32m✓[0m Estadio renal (R1b, plomería)             [90m43 ok[0m
+[32m✓[0m Red de seguridad remota, Kill-Switch y Canario (R5.1, R5.3)[90m12 ok[0m
+[32m✓[0m Rangos oficiales de Everest (v14.1.8)     [90m33 ok[0m
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2026-08-12
+[32m✓[0m Auto-Labs contra rangos oficiales (v14.1.8)[90m20 ok[0m
+[32m✓[0m Seguridad, PHI, XSS e Integridad (M1)     [90m54 ok[0m
+[32m✓[0m Corrección Clínica, Frontera DOM y Límites (M2)[90m45 ok[0m
+[32m✓[0m Robustez, Concurrencia, Estado y Red (M3) [90m23 ok[0m
+[32m✓[0m Cobertura de Riesgo ALTO y Resistencia a Mutantes (M4)[90m16 ok[0m
+[32m✓[0m Interfaz y Accesibilidad Médica (M5)      [90m24 ok[0m
+[32m✓[0m Entrega, Runbook y Detección Duplicada (M6/R5.8)[90m17 ok[0m
+[32m✓[0m Invariantes críticos (mutación olvidada)  [90m25 ok[0m
+[32m✓[0m Motor portado: fechas y CERO VENCIDOS     [90m37 ok[0m
+[32m✓[0m Seguridad de dosis renal (motor portado)  [90m48 ok[0m
+[32m✓[0m Interacciones farmacológicas (motor portado)[90m21 ok[0m
+[32m✓[0m Vista de avisos farmacológicos            [90m18 ok[0m
+[32m✓[0m Canales de aviso (los 28 que nadie probaba)[90m59 ok[0m
+[32m✓[0m Conformidad cruzada con el Copiloto       [90m40 ok[0m
+[32m✓[0m El grounding no filtra PHI                [90m6 ok[0m
+[32m✓[0m Riesgo CV (4 pasos) y función renal unificada[90m73 ok[0m
+[32m✓[0m Vigencias corregidas, FTL, sábados del médico y lectura del DOM[90m90 ok[0m
+[32m✓[0m Recuadro clínico (reemplazo del banner de PyM)[90m35 ok[0m
+[32m✓[0m Uroanálisis, foco clínico, educación y triglicéridos[90m56 ok[0m
+[32m✓[0m Falla terapéutica, recontrol, MTT y telemetría[90m48 ok[0m
+[32m✓[0m Puente entre modales (caché, fecha sugerida y prioridad PyM)[90m12 ok[0m
+[32m✓[0m Uroanálisis de Athenea y adición a Conducta[90m22 ok[0m
+[32m✓[0m Agendamiento sin terminar y sonda de anclaje del examen físico[90m17 ok[0m
+[32m✓[0m Aviso de actualización y permanencia del retiro (clic-en-Conducta)[90m7 ok[0m
+[32m✓[0m Motor farmacológico ampliado (RCV: pares mortales y graves)[90m29 ok[0m
+[32m✓[0m Framingham oficial predicho, FINDRISC, cobertura del motor y sonda[90m23 ok[0m
+[32m✓[0m Hoja de hechos desidentificada (barrera de PHI hacia la IA)[90m16 ok[0m
+[32m✓[0m Redacción IA: prompts, parser, conector y estilo[90m176 ok[0m
+[32m✓[0m Inserción de la nota IA en la historia (solo casilla vacía, por ancla)[90m5 ok[0m
+[32m✓[0m Burbujas de información (rediseño UX de los 4 módulos)[90m12 ok[0m
+[32m✓[0m Reloj de segundo plano (Web Worker, v14.2.12)[90m22 ok[0m
+[32m✓[0m v15.8.0 — vigencias×plazo, primer cupo, semáforo, SMS y letra[90m27 ok[0m
+[32m✓[0m v15.9.0 — cierre de cita (imprimir/correo/toma) y aviso de vencimiento[90m60 ok[0m
+[32m✓[0m v16.0.0 — módulo Riesgo y exámenes (clasificación, TFG y vigencias)[90m61 ok[0m
+[32m✓[0m v16.1.0 — botones por pestaña, Deshacer efímero y Regla E en los módulos[90m39 ok[0m
+[32m✓[0m Minimizar módulos sin perder lo llenado (v16.7.0)[90m26 ok[0m
+[32m✓[0m Relevo de pestaña: la vigilancia de fraude sobrevive (auditoría #7)[90m12 ok[0m
+[32m✓[0m Panel del paciente: la fusión de Ficha y Riesgo (v16.8.0)[90m47 ok[0m
+[32m✓[0m v17.0.0 — la cola completa: IRA, metas, duplicidades, productividad, carpeta, prellenado, llenado y dead-man[90m76 ok[0m
+[32m✓[0m Catálogo farmacológico RCV (interacciones y renales con fuente citada)[90m38 ok[0m
+[32m✓[0m v18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total[90m9 ok[0m
+[32m✓[0m Enjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles[90m8 ok[0m
+[32m✓[0m Suite 70 · v18.2.0 (P9): GLM-5.3 en z.ai con Gemini de respaldo + medición[90m18 ok[0m
+[32m✓[0m Widget de Conducta: exámenes a ordenar en el próximo control[90m85 ok[0m
+[32m✓[0m Tanda 0 — lint de pantalla (banderas y jerga)[90m25 ok[0m
+[32m✓[0m Suite 73 · Recorridos del modal Agendar   [90m9 ok[0m
+[32m✓[0m Auditoría P1+P2+P3 (2026-09-03)           [90m18 ok[0m
+[32m✓[0m Memoria en disco del médico (Suite 75)    [90m50 ok[0m
+[32m✓[0m El disco hostil del consultorio (Suite 76)[90m15 ok[0m
+[32m✓[0m Falla con ventana del 50 % gastada: vigencias naturales; lectura fallida no es «nunca tomado»[90m7 ok[0m
+[32m✓[0m Acceso por médico (B1+B2): perfil, blocklist, gracia, capacidades, lista remota y envoltorios[90m37 ok[0m
+[32m✓[0m Aviso de paciente nuevo (B5): memoria por médico, bootstrap silencioso, 3 toasts/h, dedup doble, capa a[90m14 ok[0m
+[32m✓[0m Matriz de acceso 4×13×3 (B6): perfiles × capacidades × capas a/b/c + telemetría de denegación sin PHI[90m9 ok[0m
+[32m✓[0m Suite 81 · v18.2.1 (P10): barrera cero-identificables antes de la red[90m6 ok[0m
+[32m✓[0m Suite 82 · v18.2 (P11): compuerta de consentimiento antes de todo[90m22 ok[0m
+[32m✓[0m Suite 83 · v18.3 (P13): observabilidad de adopción (obs*)[90m12 ok[0m
+[32m✓[0m Suite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi)[90m5 ok[0m
+[32m✓[0m Suite 85 · Simulación M1: R0 del médico   [90m1 ok[0m
+[32m✓[0m Telemetría v18.4: carril prioritario, muestreo y descartes[90m6 ok[0m
+[32m✓[0m Panel Próximos exámenes RCV (v18.4.2): permiso, contexto HC, fechas y refresco[90m19 ok[0m
+[32m✓[0m Cifrado en reposo de la memoria clínica (H5)[90m6 ok[0m
+[32m✓[0m Medidas del enjambre NT (M1-M22)          [90m21 ok[0m
+
+[36m────────────────────────────────────────────────────────────────[0m
+  comprobaciones : [32m3467 pasan[0m
+  funciones cubiertas: 985 / 1282 públicas  (76.8%)  ·  125 anidadas se prueban a través de sus dueñas
+
+[33m  sin cubrir (297):[0m
+    [90m_frGenNueva, _atheneaCredsMigrarDeClaro, atheneaAvisoSilencioso, _conTope, _diaValidoParaMes, _esNumeroParaDesempate[0m
+    [90m_esLdlDirecto, _labsPrefetchCoincide, _labsConsolidadoGuardar, _labsConsolidadoDe, _preconLeerTodo, _preconGuardar[0m
+    [90m_preconDe, _preconPriorizar, _preconHidratar, _preconEstadoDe, _preconTick, _vglCosechaHidratar[0m
+    [90m_vglCosechaPersistir, _vglNodoEsDelVigilante, _vglInstalarVigilanciaDom, _vglMismaCedula, _vglBuscarPorDoc, _vglClaveDeDoc[0m
+    [90m_vglListaTieneDoc, _vglDetectarClavesDuplicadas, _vglRevisarClavesDuplicadas, _vglConfirmacionesLeer, _vglProgramasDesdeCabecera, mtrTfgConfirmaErc[0m
+    [90mmtrDiscrepanciasDeFuentes, mtrDebePreguntarUroSintomas, mtrPreguntaUroSintomas, _uroSintomasConfirmados, mtrExamenesParaPreguntaFueraMeta, mtrDebePreguntarFueraMeta[0m
+    [90mmtrPreguntaFueraMeta, mtrReconciliarAhora, _vglPestanaDeCampo, _vglContextoEstado, _vglTextoContextoFaltante, _vglFactoresArchivados[0m
+    [90m_rcvpResetParaTest, _rcvpOcultar, _cwoClic, _cwfProgramarRefresco, _cwfInstalarEscucha, _cwCoordX[0m
+    [90m_cwCoordY, _mtrLabsRecientes, _vglAbrirAyudanteFaltan, _vglDockRotulo, autoCalcularResumenSiNecesario, _etiquetaCercanaCasilla[0m
+    [90m_excluirMamasGenitoPorTexto, _emparejarNormalidadFija, _vglOfrecerDeshacer, _vglFeedbackBoton, _vglEspejoGuardar, _vglRestaurarDeEspejo[0m
+    [90m_procGuardar, _procEscrituraFallida, _enVueloClave, marcarEnVuelo, soltarEnVuelo, enVueloAjeno[0m
+    [90mordenCreadaHoyParaCie10, _puedoEvaluarLaAgenda, _puedoLeerLaAgenda, _vglDocCanon, _accesoRefrescoFresco, _accesoAnotarOk[0m
+    [90m_accesoGracia, accesoCapExtra, accesoEscribirUrl, cargarRespaldoParaConsulta, isPanelHiddenActivity, panelActivities[0m
+    [90mrectificarStat, _repFilaLimpia, _repVaciadoDeArranque, _vglFechaHace, _pymSueltoEnLaRaiz, _pymAnotarFallo[0m
+    [90m_apptNombreClave, _apptMapaLeer, _apptMapaEscribir, _apptMapaBorrar, stampSalto, _vglCerrarConClicFuera[0m
+    [90m_pendientesUniversales, _avisoUnaVezPorNavegador, _avisoUidDeTexto, _vglEscribiendoHC, _avisoCartelCaducaMs, _vglSinCedulas[0m
+    [90m_pymMejorFechaPorNombre, _legendMarcaUnaVez, _cssSeguro, _fetchConTope, _esRutaPaciente, _extractPatientId[0m
+    [90m_labMotivoUltimoFallo, apiPacienteDetalladoCacheado, _smsTextoDesenlace, _smsPintarDesenlace, _smsAnotarDesenlace, _anularUltimoMotivoLeer[0m
+    [90m_cancelValorSospechoso, _cancelPapelDeClave, _cancelPartirUrl, _cancelPlantillaDesde, _cancelPlantillaGuardar, _cancelPlantillaLeer[0m
+    [90m_cancelPlantillaBorrar, _cancelPeticionDesdePlantilla, _cancelEnganchar, _cancelVariantes, _cancelVarianteRecordada, _cancelVarianteRecordar[0m
+    [90m_cancelDiagnostico, _apiPostConDetalle, _anulacionMensaje, _anulacionConfirmada, _anulacionYaNoVigente, _anulacionMotivo[0m
+    [90m_anularCitaAsignadaReal, _anularCitaAsignada, _labReferenciaDe, mtrPaqueteProgramaHtml, openPaquetesModal, mtrCalcularResumenClinico[0m
+    [90m_triFactor, mtrFichaVivaFilas, mtrPanelResumenBentoDatos, mtrPanelResumenBentoHtml, mtrEstadoPuntoMedicamentos, _agmClaveDoc[0m
+    [90m_agmAgendarLabConCandado, _agmPrefLeer, _agmPrefGuardar, pymTituloClinico, pymTituloCorto, _conductaTablaOrdenamientos[0m
+    [90m_conductaCodigosEnTabla, _conductaEsperar, _conductaEsperarFilasNuevas, _conductaClicPaqueteHTA, _vglHcZoom, _vglAlternarAltoContraste[0m
+    [90m_prodEsSabadoDelMedico, _prodEsFestivoIso, _prodExtraPeriodo, exportarProductividadSemana, _vglCarpetaPodarControl, _vglHex[0m
+    [90m_vglBytesDeHex, _vglBytesAB64, _vglB64ABytes, _vglCarpetaClaveAes, _vglCarpetaNombresDeDoc, _vglCarpetaResolverNombre[0m
+    [90m_vglCarpetaEsSobreNuestro, _vglCarpetaLeerFusionado, _vglDiscoFechaCorta, _vglDiscoHoraCorta, _vglDiscoSanear, _vglDiscoValor[0m
+    [90m_vglDiscoCedula, _vglDiscoDir, _vglDiscoEscribirSerial, _vglDiscoDormir, _vglDiscoEscribirArchivo, _vglDiscoProgramar[0m
+    [90m_vglDiscoMemoriaEscribirAhora, _vglDiscoBannerEstilo, _vglCarpetaPurgarSiToca, _vglCarpetaMigrarYReportar, _ajustesSucio, _ajustesPonBorrador[0m
+    [90m_ajustesPintarBarra, _ajustesGuardar, _ajustesDescartar, _ajustesIntentarCerrar, _vglAlternarModoProg, _vglInstalarModoProg[0m
+    [90m_ajustesAthEstadoHtml, _ajustesPintarAthEstado, makeResizable, _vglGuardarAncho, countdownParts, _checklistCierreMsg[0m
+    [90m_noShowHidratar, _noShowPreviaEn, _noShowPrevia, _adhBadgeInfo, _reprogramarDeadline, _vglRetirarMonitorPorPerfil[0m
+    [90m_diagValorAtributoSeguro, _mostrarAvisoBloqueoVersion, aplicarBloqueoVersionObsoleta, _vglCandadoVersionArranque, _acompStoreLeer, _acompStoreGuardar[0m
+    [90m_acompMedId, _acompEstadoLeer, _acompEstadoGuardar, _acompActivo, _acompNotificarAccion, _acompSugerencia[0m
+    [90m_acompTick, _vglModoOcultoLeer, _vglModoOcultoAplicar, _vglAlternarOculto, _vglInstalarModoOculto, _festivosTablaAgregarParaTest[0m
+    [90m_festivosMensajeDiscrepancia, _festivosAvisarSiVencida, mtrLoginDeSesion, mtrCompuertaPerfil, mtrConsentimientoConstancia, mtrConsentimientoAceptado[0m
+    [90mmtrTerminosRechazoFresco, mtrCompuertaSinIdentidad, mtrIdentificadorParaConstancia, _terminosBtnCss, _terminosCerrarPantalla, mtrTerminosPantallaRechazo[0m
+    [90m_instalarLatidosBase, mtrArrancarTodo, mtrCompuertaDiagnostico, _terminosAjustesTexto, mtrDiasParaSondearCupo, mtrBuscarCupoLaboratorio[0m
+    [90mmtrNotaDisponibilidadLab, mtrVerificarCupoLab, mtrLeerFrecuenciasMedicamento, mtrEnriquecerAvisosConFrecuencia, mtrFrecuenciaTexto, mtrMapaFrecuenciasPorCodigo[0m
+    [90mmtrMapaFrecuenciasPorNombre, mtrPedirHistoricoMedicamentos, mtrSexoCanonico, mtrSabadoSugerible, mtrKdigoNoRepiteLipidos, mtrRepeticionObligatoria[0m
+    [90mmtrPuedeAdelantarPorFueraDeMeta, _mtrTokenDeNombreTachable, _mtrPatronConTildes, mtrIaGenerando, _vglTextoLibreCombinado, _vglNotarTextoLibre[0m
+    [90m_vglVigilarTextoLibre, mtrRotuloDeModo, mtrTextoDeOtrasCasillas, mtrRelativizarFechaIso, _mtrTaDesdeTexto, _mtrTaNumeroDeTexto[0m
+    [90m_mtrTaValorCrudo, _mtrPrimerValorCrudo, _mtrTaDesdeCampos, _mtrTensionPorRotulo, _mtrTaEsCompleta, _mtrTaFamilia[0m
+    [90mmtrDetectarDesacuerdos, mtrAnotarDesacuerdos, _ajustesDesacuerdosTexto, _mtrRotuloDeCampo, _mtrResolverAntropometria, _vglCarpetaEscribirInstantaneaSiAplica[0m
+    [90m_mtrNombreDelPaquete, _mtrNombreEfectivo, mtrHcGuardar, mtrHcEnganchar, imprimirHojaEducativa, _mtrDosisDeCombo[0m
+    [90mmtrCacheResumenMarcarDesactualizado, mtrCacheResumenDesactualizado, mtrCacheResumenRefrescarDesdePantalla, obsGmLeer, obsGmGuardar, obsFnv1a[0m
+    [90mobsHuellaEquipo, obsConsultaCerrar, obsConsultaActiva, obsConsultaElegible, obsConsultaMarcarModulo, obsModuloLimpio[0m
+    [90mobsAvisoDesenlace, obsAvisoCumplido, obsPerdidosEstado, obsPerdidosSumar, obsPresupuestoLimite, obsPresupuestoConsumir[0m
+    [90mVGL_MODALES_CONSULTA, VGL_MODALES_ESCRITURA, VGL_ROTULOS[0m
+
+[33m  declaradas pero nunca nombradas (6):[0m
+    [90m_acompCerrar, _vglCarpetaCifrar, _vglSobreCifrar, _vglTopeHora, avisoOlvidar, obsPresupuestoReembolsar[0m
+
+[33m  declaradas en cubre pero JAMÁS invocadas vía api.·(...) (24):[0m
+    [90mInterfaz: ventana, hojas y modales → _activarAccesibilidadModal[0m
+    [90mInterfaz: ventana, hojas y modales → _acompCerrar[0m
+    [90mv18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total → _vglCarpetaCifrar[0m
+    [90mv18.0.144 — la carpeta local como caché cifrado: seudonimizado, AES-GCM, migración, purga y borrado total → _vglCarpetaPareceSincronizada[0m
+    [90mEnjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → muteFor[0m
+    [90mEnjambre pre-despliegue (31-ago): cortacircuitos, reloj v18.0.3 y cola de carteles → unmute[0m
+    [90mFalla con ventana del 50 % gastada: vigencias naturales; lectura fallida no es «nunca tomado» → mtrFueraDeMeta[0m
+    [90mSuite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → pymMotivoSinActividades[0m
+    [90mSuite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrClasificarRiesgoCv[0m
+    [90mSuite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrIaClickDelegado[0m
+    [90mSuite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → mtrIrAPestanaPorNombre[0m
+    [90mSuite 84 · v18.3 (P12): saneamiento (constantes muertas + cuarentena zombi) → _mtrPrimerCampoNumerico[0m
+    [90mTelemetría v18.4: carril prioritario, muestreo y descartes → repPost[0m
+    [90mTelemetría v18.4: carril prioritario, muestreo y descartes → reportarError[0m
+    [90mTelemetría v18.4: carril prioritario, muestreo y descartes → reportarFraude[0m
+    [90mTelemetría v18.4: carril prioritario, muestreo y descartes → uxTrack[0m
+    [90mTelemetría v18.4: carril prioritario, muestreo y descartes → repBeacon[0m
+    [90mCifrado en reposo de la memoria clínica (H5) → _vglCosechaTodo[0m
+    [90mCifrado en reposo de la memoria clínica (H5) → _vglSobreCifrar[0m
+    [90mCifrado en reposo de la memoria clínica (H5) → _vglSobreDescifrar[0m
+    [90mMedidas del enjambre NT (M1-M22) → obsPresupuestoReembolsar[0m
+    [90mMedidas del enjambre NT (M1-M22) → avisoOlvidar[0m
+    [90mMedidas del enjambre NT (M1-M22) → _notificarSistema[0m
+    [90mMedidas del enjambre NT (M1-M22) → _vglTopeHora[0m
+[36m────────────────────────────────────────────────────────────────[0m
+

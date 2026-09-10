@@ -678,15 +678,27 @@ module.exports = {
       t.cierto(lecturasProc <= 1, "y vgl_proc_today también se leyó a lo sumo una vez, no 30 (leído " + lecturasProc + ")");
     });
 
-    t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
+    t.caso("renderSettings: la sección técnica exige Ctrl+Shift+D Y la cap 'desarrollador' del padrón (F2, fail-closed)", () => {
       cv.api.closeSheet();
       cv.api.toggleSheet("ajustes");
-      t.cierto(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "sin modo programador, la sección técnica va oculta");
+      t.falso(hoja.innerHTML.includes("vgl-grp-tec"), "sin modo programador, la sección técnica no se pinta (F2: se omite, no solo se oculta con CSS)");
       cv.api._vglAlternarModoProg(); // Ctrl+Shift+D: no se persiste, vive solo en la pestaña
       cv.api.renderSettings();
-      t.falso(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "con el modo programador activo, la sección ya no va oculta");
+      // F2 — perfil COMPLETO SIN la cap "desarrollador" (el padrón de la suite no la trae
+      // para el uid 707): el atajo solo no basta, fail-closed, la sección sigue sin pintarse.
+      t.falso(hoja.innerHTML.includes("vgl-grp-tec"), "con el atajo activo pero SIN la cap 'desarrollador', la sección sigue sin pintarse (COMPLETO no es developer)");
+      t.falso(hoja.innerHTML.includes("Probar avisos"), "y los controles técnicos no se pintan");
+      // El padrón concede la cap "desarrollador" al médico en sesión: ahora sí se pinta.
+      const listaSinDev = cv.env.almacen.vgl_acceso_lista; // el padrón por defecto de esta suite, para restaurar después
+      const listaConDev = JSON.parse(listaSinDev);
+      listaConDev.perfiles.COMPLETO.find((e) => Number(e.uid) === 707).caps = ["desarrollador"];
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(listaConDev));
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes("vgl-grp-tec"), "con la cap 'desarrollador' concedida, la sección ahora sí se pinta");
       t.cierto(hoja.innerHTML.includes("Probar avisos"), "los controles técnicos están pintados");
-      cv.api._vglAlternarModoProg(); // se apaga para no contaminar el resto de la suite
+      // Se restaura el padrón sin la cap y se apaga el atajo, para no contaminar el resto.
+      cv.env.storage.setItem("vgl_acceso_lista", listaSinDev);
+      cv.api._vglAlternarModoProg();
       cv.api.closeSheet();
       t.igual(cv.api.__state.sheet, null);
     });
@@ -1780,6 +1792,22 @@ module.exports = {
       blocklist: [],
     };
     const almacenAcceso15 = () => ({ vgl_acceso_lista: JSON.stringify(LISTA_ACCESO_15) });
+    // v18.8.1 — FAIL-OPEN: la blocklist es el ÚNICO recorte que queda en pie. Esta lista
+    // es el mismo padrón de LISTA_ACCESO_15 con un médico BLOQUEADO añadido (uid 999
+    // «Prueba Bloqueada», sintético), para los casos que ejercitan el recorte nuevo.
+    const LISTA_BLOQUEO_15 = {
+      version: "test-15.bloqueo",
+      perfiles: {
+        COMPLETO: [
+          { uid: 707, nombre: "Brandon Jesús Palencia Martínez" },
+          { uid: 102, nombre: "Eliseth Estrada" },
+          { uid: 103, nombre: "María Edineth Pino" },
+        ],
+        LABORATORIOS: [],
+      },
+      blocklist: [{ uid: 999, nombre: "Prueba Bloqueada" }],
+    };
+    const almacenBloqueo15 = () => ({ vgl_acceso_lista: JSON.stringify(LISTA_BLOQUEO_15) });
     function mockPacienteDock(c, doc) {
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
       c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
@@ -1792,6 +1820,19 @@ module.exports = {
       c.api.__S.iaRedaccion = true;
       c.api.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
       c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
+    }
+    // v18.8.1 — mismo escenario del dock, pero con el sujeto BLOQUEADO (uid 999 en la
+    // blocklist): el único recorte que el fail-open dejó en pie.
+    function mockPacienteBloqueado(c, doc) {
+      mockPacienteDock(c, doc);
+      c.api.__state.activeDoctor = { id: 999, name: "Prueba Bloqueada" };
+      c.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_BLOQUEO_15));
+    }
+    // v18.8.1 — mismo escenario del dock, pero con un médico FUERA del padrón (uid 555):
+    // el fail-open lo resuelve COMPLETO, con todo visible.
+    function mockPacienteFueraPadron(c, doc) {
+      mockPacienteDock(c, doc);
+      c.api.__state.activeDoctor = { id: 555, name: "LUIS FERNANDO LOPEZ" };
     }
 
     t.caso("createAccionesDockUI: fuera del módulo HCHealth no crea el widget", () => {
@@ -1840,17 +1881,32 @@ module.exports = {
       t.igual(c.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro dock");
     });
 
-    t.caso("createAccionesDockUI: médico NO autorizado solo ve PyM y laboratorios (sin agendar cita, panel, redactor ni control)", () => {
+    t.caso("createAccionesDockUI: médico BLOQUEADO (blocklist) solo ve PyM y laboratorios (sin agendar cita, panel, redactor ni control)", () => {
+      // v18.8.1 — FAIL-OPEN: el perfil PÚBLICO ya no existe; el ÚNICO recorte que queda es
+      // la blocklist (uid o nombre EXACTO, nunca sub-cadena). Un BLOQUEADO ve el dock
+      // recortado a lo que la compuerta _autorizado (= perfil COMPLETO) deja pintar.
       const c = cargar({ silencioso: true });
-      mockPacienteDock(c, "555666777");
-      c.api.__state.activeDoctor = { id: 909, name: "ANA MARIA PEREZ" }; // no está en la lista autorizada
+      mockPacienteBloqueado(c, "555666777");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock SÍ se monta para un BLOQUEADO (la compuerta es por botón, no hay retorno temprano)");
+      const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
+      // Sin nada hecho, el bloqueado pierde el botón de agendar cita (solo le quedaría la
+      // toma de muestras si faltara el laboratorio); ficha, redactor y control quedan
+      // ocultos. PyM (ordenar) y laboratorios se conservan.
+      t.igual(accs, ["ordenar", "labs"]);
+    });
+
+    t.caso("createAccionesDockUI: un médico FUERA del padrón ve el dock COMPLETO (fail-open v18.8.1)", () => {
+      // v18.8.1 — quien no está en el padrón ya no resuelve PÚBLICO: resuelve COMPLETO con
+      // TODAS las funciones visibles. Fuera del padrón = mismo dock que un médico del padrón.
+      const c = cargar({ silencioso: true });
+      mockPacienteFueraPadron(c, "555666777");
       c.api.createAccionesDockUI();
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
-      // Sin nada hecho, el no autorizado pierde el botón de agendar cita (solo le quedaría
-      // la toma de muestras si faltara el laboratorio); ficha, atajos, redactor y control
-      // quedan ocultos. PyM (ordenar) y laboratorios se conservan.
-      t.igual(accs, ["ordenar", "labs"]);
+      t.igual(accs, ["agendar", "ordenar", "labs", "ficha-leyendo", "redactar", "control"],
+        "el dock es el COMPLETO de un médico autorizado: agendar, ficha (leyendo…), redactor y control incluidos");
     });
 
     t.caso("createAccionesDockUI: se autolimpia al salir del módulo HCHealth", () => {
@@ -2752,49 +2808,81 @@ module.exports = {
       t.cierto(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "explica por qué está bloqueado");
     });
 
-    // v18.1.0 (Misión B / B3) — RE-ESCRITURA del caso. Bajo el modelo de capacidades ya no
-    // existe «médico fuera de la lista RCV con el modal abierto»: `agendar_control` es de
-    // COMPLETO y COMPLETO ⇒ rcv, así que el checkbox de quien abre el modal siempre sale
-    // marcado y deshabilitado (caso anterior). Para un médico fuera del padrón (uid y
-    // nombre sin match) la apertura corta en seco (capa b): la elección real ya no está
-    // en el checkbox, está en el modal mismo. La aserción vieja («checked editable»)
-    // describía el comparador por nombre de v14.2.0, retirado en B1.
-    t.caso("openAgendamientoModal: para un médico fuera del padrón no hay checkbox que elegir — el modal ni se abre (capa b)", () => {
+    // v18.8.1 — RE-ESCRITURA del caso (fail-open). «Fuera del padrón» ya no es PÚBLICO:
+    // resuelve COMPLETO y COMPLETO ⇒ rcv, así que el modal SÍ abre y su checkbox siempre
+    // sale marcado y deshabilitado (caso anterior). La elección real no está en el
+    // checkbox sino en el modal mismo (tipo de cita / especialidad), y el guard de
+    // apertura solo corta por el toggle F3 (`tog_agendar`, capa a) o por BLOQUEADO
+    // (blocklist, capa b, en silencio).
+    t.caso("openAgendamientoModal: un médico fuera del padrón SÍ abre el modal (fail-open v18.8.1)", () => {
       const cNoRcv = cargar({ silencioso: true });
       enriquecerDom(cNoRcv);
-      cNoRcv.api.__state.activeDoctor.id = 999; // uid fuera del padrón sembrado por el wrapper
-      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ"; // el respaldo por nombre tampoco coincide
+      cNoRcv.api.__state.activeDoctor = { id: 555, name: "LUIS FERNANDO LOPEZ" }; // uid y nombre fuera del padrón sembrado por el wrapper
       cNoRcv.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
       const modal = cNoRcv.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
-      t.cierto(!modal, "el guard de apertura corta en seco: sin modal no hay checkbox «editable» que mentir");
+      t.cierto(!!modal, "el guard de apertura ya no corta por estar fuera del padrón: fail-open resuelve COMPLETO y el modal se monta");
+      t.cierto(
+        modal.innerHTML.includes('id="vgl-agm-pym-chk" checked disabled>'),
+        "y como COMPLETO ⇒ rcv, el checkbox sale marcado y deshabilitado (honesto, igual que para un médico del padrón)"
+      );
     });
 
-    // v18.1.0 (Misión B / B1) — esMedicoRCVActivo ya no compara contra tokens embebidos:
-    // es accesoCap("rcv") sobre el padrón remoto (`vgl_acceso_lista`). El respaldo por
-    // NOMBRE exige nombre COMPLETO normalizado (mayúsculas, sin tildes, espacios
-    // colapsados); un prefijo o un fragmento NO matchea.
-    t.caso("esMedicoRCVActivo: invocación directa — coincide por nombre COMPLETO del padrón, sin distinguir mayúsculas ni tildes", () => {
+    // v18.8.1 — del guard de apertura solo quedan dos cuchillos: el toggle F3 (capa a)
+    // y la blocklist (capa b). Ninguno tiene que ver con estar o no en el padrón.
+    t.caso("openAgendamientoModal: el guard corta solo por toggle F3 o por BLOQUEADO, nunca por estar fuera del padrón", () => {
+      // Toggle F3 apagado: corta aunque el médico sea COMPLETO.
+      const cTog = cargar({ silencioso: true });
+      enriquecerDom(cTog);
+      cTog.api.__state.activeDoctor = { id: 555, name: "LUIS FERNANDO LOPEZ" };
+      cTog.api.togSet("tog_agendar", false);
+      cTog.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
+      t.falso(!!cTog.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal"),
+        "con el toggle de agendamiento apagado el modal no se monta, padrón o no");
+      // BLOQUEADO (blocklist): corta en silencio — no es una revocación, es el apagado entero.
+      const cBloq = cargar({ silencioso: true, almacen: almacenBloqueo15() });
+      enriquecerDom(cBloq);
+      cBloq.api.__state.activeDoctor = { id: 999, name: "Prueba Bloqueada" };
+      cBloq.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
+      t.falso(!!cBloq.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal"),
+        "un médico BLOQUEADO sigue sin abrir el modal: sin modal no hay checkbox que elegir");
+    });
+
+    // v18.8.1 — RE-ESCRITURA del caso (fail-open). esMedicoRCVActivo es un envoltorio de
+    // accesoCap("rcv"): ya NO busca nombres en el padrón. Cualquier médico no bloqueado
+    // (esté o no en la lista) resuelve true; solo la blocklist lo apaga. La identidad,
+    // cuando hay lista, se resuelve por uid o nombre EXACTO normalizado (mayúsculas, sin
+    // tildes, espacios colapsados) — nunca por sub-cadena.
+    t.caso("esMedicoRCVActivo: invocación directa — todo médico no bloqueado resuelve true (fail-open: padrón o no), y BLOQUEADO false", () => {
       const cH = cargar({ silencioso: true, almacen: almacenAcceso15() });
-      cH.api.__state.activeDoctor.id = 0; // sin uid: el respaldo es por nombre completo
-      cH.api.__state.activeDoctor.name = "  eliSeth   esTRAda ";
-      t.cierto(cH.api.esMedicoRCVActivo(), "Eliseth Estrada está en el padrón COMPLETO, sin importar tilde/caja/espacios");
-      cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
-      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en el padrón");
+      cH.api.__state.activeDoctor = { id: 707, name: "BRANDON PALENCIA" };
+      t.cierto(cH.api.esMedicoRCVActivo(), "un médico del padrón COMPLETO (uid 707) tiene rcv activo");
+      cH.api.__state.activeDoctor = { id: 0, name: "  eliSeth   esTRAda " };
+      t.cierto(cH.api.esMedicoRCVActivo(), "y por nombre completo del padrón también (aunque el uid ya no se necesita para esto)");
+      cH.api.__state.activeDoctor = { id: 555, name: "LUIS FERNANDO LOPEZ" };
+      t.cierto(cH.api.esMedicoRCVActivo(), "fuera del padrón también: el fail-open no recorta a nadie que no esté bloqueado");
+      cH.api.__state.activeDoctor = { id: 0, name: "ANA MARIA PEREZ" };
+      t.cierto(cH.api.esMedicoRCVActivo(), "ni siquiera depende del nombre: sin uid y sin match en el padrón sigue activo");
+      const cB = cargar({ silencioso: true, almacen: almacenBloqueo15() });
+      cB.api.__state.activeDoctor = { id: 999, name: "Prueba Bloqueada" };
+      t.falso(cB.api.esMedicoRCVActivo(), "un médico BLOQUEADO (blocklist) sí queda sin rcv");
     });
 
-    // [auditoría 25-ago, hallazgo 1.2 — adaptado a B1] "PINO" es sub-cadena de "OSPINO" y
-    // de "ESPINOSA": con match por sub-cadena esos médicos, ajenos al padrón, quedaban
-    // forzados a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Desde B1 la
-    // comparación por nombre exige el nombre COMPLETO normalizado del padrón.
-    t.caso("esMedicoRCVActivo: un nombre que CONTIENE a un médico del padrón como sub-cadena no debe activar el forzado", () => {
-      const cSub = cargar({ silencioso: true, almacen: almacenAcceso15() });
-      cSub.api.__state.activeDoctor.id = 0;
-      cSub.api.__state.activeDoctor.name = "JORGE OSPINO";
-      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
-      cSub.api.__state.activeDoctor.name = "LAURA ESPINOSA";
-      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es el nombre completo de una médica del padrón");
-      cSub.api.__state.activeDoctor.name = "MARÍA EDINETH PINO";
-      t.cierto(cSub.api.esMedicoRCVActivo(), "María Edineth Pino como nombre COMPLETO del padrón (caja/tilde distintas) sí activa el forzado");
+    // v18.8.1 — RE-ESCRITURA de la intención (fail-open). La identidad se resuelve por uid
+    // o por nombre EXACTO normalizado — nunca por sub-cadena. Un nombre que CONTIENE al
+    // BLOQUEADO como sub-cadena no se bloquea (quien no está bloqueado queda activo);
+    // el nombre EXACTO (o el uid) de la blocklist sí apaga. El viejo matcher de nombres
+    // del padrón (que podía atrapar sub-cadenas tipo "OSPINO"/"ESPINOSA" alrededor de
+    // "PINO") ya no existe: esMedicoRCVActivo es accesoCap("rcv").
+    t.caso("esMedicoRCVActivo: un nombre que CONTIENE a un BLOQUEADO como sub-cadena no se bloquea — solo el nombre EXACTO o el uid corta", () => {
+      const cSub = cargar({ silencioso: true, almacen: almacenBloqueo15() });
+      cSub.api.__state.activeDoctor = { id: 0, name: "JORGE PRUEBA BLOQUEADA ORTIZ" };
+      t.cierto(cSub.api.esMedicoRCVActivo(), "«Prueba Bloqueada Ortiz» solo CONTIENE al bloqueado como sub-cadena: no se bloquea y el rcv sigue activo");
+      cSub.api.__state.activeDoctor = { id: 0, name: "LAURA PRUEBABLOQUEADA" };
+      t.cierto(cSub.api.esMedicoRCVActivo(), "ni un nombre sin espacio entre las palabras: la comparación es por el nombre COMPLETO, no por fragmentos");
+      cSub.api.__state.activeDoctor = { id: 0, name: "  prueba   bloqueada " };
+      t.falso(cSub.api.esMedicoRCVActivo(), "el nombre EXACTO del bloqueado (caja y espacios distintos, normalizados) sí corta");
+      cSub.api.__state.activeDoctor = { id: 999, name: "ANA MARIA PEREZ" };
+      t.falso(cSub.api.esMedicoRCVActivo(), "y el uid de la blocklist corta aunque el nombre en pantalla no coincida");
     });
 
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {
@@ -3263,6 +3351,59 @@ module.exports = {
       t.cierto(textos.includes("05:30 PM"), "la agenda de la tarde TAMBIÉN aparece (antes se perdía)");
       t.falso(textos.includes("09:00 AM"), "la agenda de otro profesional queda fuera");
       t.falso(textos.includes("No se identificó su agenda propia"), "con agendas propias no hay aviso de agenda ajena");
+    });
+
+    // v18.4.2 — BÚSQUEDA POR OTRO MÉDICO: el selector del paso 2 deja ver y elegir las
+    // citas de cualquier médico con agenda ese día (nombres tal cual los listó
+    // BuscarCitasDisponibles), sin perder el comportamiento propio por defecto.
+    await t.casoAsync("openAgendamientoModal (v18.4.2): el selector de médico permite buscar y elegir la agenda de OTRO médico", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cOtro = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const f = iso2fmt(iso);
+            return respuestaJson({ agendas: [
+              { agendaId: 63, medico: "OTRO PROFESIONAL", fechaAgenda: f, sede: "CMB" },
+              { agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: f, sede: "CMB" },
+            ] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) {
+            if (u.includes("agendaid=61")) return respuestaJson({ turnos: [{ id: 700, horaTexto: "07:00 AM", estado: "ACT" }] });
+            if (u.includes("agendaid=63")) return respuestaJson({ turnos: [{ id: 999, horaTexto: "09:00 AM", estado: "ACT" }] });
+            return respuestaJson({ turnos: [] });
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cOtro);
+      cOtro.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cOtro.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cOtro.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const medicoSel = modal.querySelector("#vgl-agm-medico");
+      t.cierto(!!medicoSel, "el selector de médico existe en el paso 2");
+      t.cierto(medicoSel.innerHTML.includes("OTRO PROFESIONAL"), "ofrece al OTRO médico con agenda ese día, por su nombre");
+      t.cierto(medicoSel.innerHTML.includes('__todos__'), "y también la opción «Todos los médicos»");
+      t.cierto(medicoSel.innerHTML.includes("Mi agenda"), "con la agenda propia como opción por defecto");
+      let textos = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ");
+      t.falso(textos.includes("09:00 AM"), "por defecto sigue mostrando SOLO la agenda propia (comportamiento intacto)");
+      medicoSel.value = "OTRO PROFESIONAL";
+      disparar(medicoSel, "change");
+      await esperar(80);
+      textos = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ");
+      t.cierto(textos.includes("09:00 AM"), "elegido en el selector, el turno del OTRO médico aparece y es seleccionable");
+      // La loseta del turno rotula CADA cupo con el nombre de su profesional (L29065):
+      // que el turno visible diga «OTRO PROFESIONAL» demuestra que el listado dejó de
+      // ser el de la agenda propia — más directo que medir la ausencia de la otra hora.
+      t.cierto(textos.includes("OTRO PROFESIONAL"), "y el cupo visible queda rotulado con el nombre del médico elegido");
     });
 
     await t.casoAsync("confirmar cita v12.4: el cupo se re-verifica en tiempo real — si ya no está ACT, NO se dispara AsignarTurno", async () => {
@@ -4217,48 +4358,47 @@ module.exports = {
       // pudo comprobar. El aviso es de "no sé", el botón no invita a nada, y los items
       // siguen en cero.
       cOrd.api.__state.pymFile = null;
-      cOrd.api.__state.pymDia = null;
       cOrd.api.__state.pymTodos = null;
       await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
       const modalSinLista = ultimoOrd();
-      t.cierto(modalSinLista.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
-        "sin lista, el modal lo dice: el hueco es del sistema, no del paciente");
-      t.cierto(modalSinLista.innerHTML.includes("No hay lista de prevención"),
+      t.cierto(modalSinLista.innerHTML.includes("No tengo cargada la base de prevención"),
+        "sin base, el modal lo dice: el hueco es del sistema, no del paciente");
+      t.cierto(modalSinLista.innerHTML.includes("No hay base de prevención"),
         "y el botón no invita a ordenar nada (antes decía 'Sin actividades', afirmando lo que no se sabía)");
       t.igual(modalSinLista.innerHTML.split("vgl-ord-item").length - 1, 0, "tampoco aquí se ofrece ningún ítem");
     });
 
-    await t.casoAsync("openOrdenamientoModal: RESPALDO ACTIVO — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139)", async () => {
-      // Pedido del médico (4-sep): con la base de respaldo activa, el modal decía «NO he
-      // podido mirar qué le corresponde a este paciente»... aunque el respaldo ES la base
-      // que getActivities() consulta cuando pymFallback está en true. Eso se leyó como
-      // que "se negó a mostrar" los pendientes. Ahora: quien figura en la base sin
-      // actividades dice que figura; quien no cruza en la base dice que no cruza. Y el
-      // botón deshabilitado acompaña a cada caso.
+    await t.casoAsync("openOrdenamientoModal: BASE ÚNICA ACTIVA — el aviso dice QUÉ se miró, no «no pude mirar» (v18.0.139 → v18.6.0)", async () => {
+      // Pedido original del médico (4-sep): con la base activa, el modal decía «NO he
+      // podido mirar qué le corresponde a este paciente»... aunque esa base ES la que
+      // getActivities() consulta. Eso se leyó como que "se negó a mostrar" los
+      // pendientes. La lección sobrevive a la migración: quien figura en la base sin
+      // actividades dice que figura; quien no cruza dice que no cruza. Y el botón
+      // deshabilitado acompaña a cada caso.
       const s = cOrd.api.__state;
       // Lección de la mutación M3 de esta misma versión: el framework aborta el caso
       // en la primera aserción fallida, así que un reset al final del cuerpo no corre
       // y la fuga de estado (pymFile="BASE PILOTO.xlsx") contamina casos posteriores.
       // try/finally garantiza la vuelta a fábrica pase lo que pase.
       try {
-        s.pymFile = "BASE PILOTO.xlsx"; s.pymFallback = true;
-        s.pymDia = cOrd.api.todayStamp(); s.pymTodos = new Set(["999"]);
+        s.pymFile = "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx"; s.pymOrigen = "base";
+        s.pymTodos = new Set(["999"]);
         await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
         let m = ultimoOrd();
-        t.cierto(m.innerHTML.includes("SÍ figura en la base de respaldo"),
+        t.cierto(m.innerHTML.includes("está en la base de prevención y no tiene actividades pendientes"),
           "el paciente está en la base activa y el aviso lo dice: no fue una negativa");
         t.falso(m.innerHTML.includes("NO he podido mirar"),
           "la frase que se leyó como «se negó a mostrarme» ya no sale para quien sí se miró");
         t.cierto(m.innerHTML.includes("Sin actividades para ordenar"),
-          "y el botón ya no dice «No hay lista» para quien sí está en la base activa");
+          "y el botón ya no dice «No hay base» para quien sí está en la base activa");
 
         s.pymTodos = new Set(["111"]);
         await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
         m = ultimoOrd();
-        t.cierto(m.innerHTML.includes("NO figura en la base de respaldo"),
-          "la ausencia sale con su dirección: no cruza en el respaldo");
-        t.cierto(m.innerHTML.includes("No hay lista de prevención"),
-          "y el botón remite a la lista, no a un «al día»");
+        t.cierto(m.innerHTML.includes("NO aparece en la base de prevención"),
+          "la ausencia sale con su dirección: no cruza en el libro de la sede");
+        t.cierto(m.innerHTML.includes("Paciente fuera de la base"),
+          "y el botón lo dice, no un «al día»");
       } finally {
         // Estado de fábrica de vuelta: nada de este caso debe filtrarse al resto.
         s.pymFile = ""; s.pymTodos = null; s.pymFallback = false; s.pymDia = "";
@@ -4328,7 +4468,7 @@ module.exports = {
       t.falso(modal.innerHTML.includes("PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS"), "el paquete RCV exprés ya no se ofrece en el módulo");
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "al ser el único match, no queda ninguna tarjeta por ofrecer");
       t.falso(modal.innerHTML.includes(" checked"), "sin tarjetas no hay nada premarcado");
-      t.cierto(modal.innerHTML.includes("no tiene pendientes") || modal.innerHTML.includes("No tengo cargada la lista"), "el modal avisa con honestidad por qué no hay nada que ordenar");
+      t.cierto(modal.innerHTML.includes("no tiene actividades pendientes") || modal.innerHTML.includes("No tengo cargada la base") || modal.innerHTML.includes("NO aparece en la base"), "el modal avisa con honestidad por qué no hay nada que ordenar");
     });
 
     await t.casoAsync("openOrdenamientoModal v14: un fallo de red al verificar vigentes NO bloquea el premarcado normal", async () => {
@@ -4731,6 +4871,28 @@ module.exports = {
       c.api.imprimirRecordatorioCita(undefined, "NUEVA EPS", "ALGUIEN");
       c.api.imprimirRecordatorioCita(0, "NUEVA EPS", "ALGUIEN");
       t.igual(llamadas.length, 0, "nunca imprime el recordatorio de una cita que no se confirmó");
+    });
+
+    // v18.4.2 — IMPRESIÓN AUTOMÁTICA: mismo comportamiento que el recordatorio de la toma
+    // de laboratorio. El clic abre la pestaña y, sin ningún paso intermedio, la ventana de
+    // impresión del navegador aparece sola sobre el PDF ya cargado.
+    await t.casoAsync("imprimirRecordatorioCita (v18.4.2): tras abrir la pestaña, print() se dispara SOLO — sin pasos intermedios", async () => {
+      const c = cargar();
+      let impresa = 0;
+      c.env.win.open = (url, target) => {
+        const pestana = { closed: false, print() { impresa++; } };
+        let href = "";
+        Object.defineProperty(pestana, "location", {
+          configurable: true,
+          get() { return { set href(v) { href = String(v); }, get href() { return href; } }; },
+        });
+        return pestana;
+      };
+      c.api.imprimirRecordatorioCita(7813686, "NUEVA EPS", "ALGUIEN");
+      t.igual(impresa, 0, "en el clic solo se abre la pestaña: el diálogo no se fuerza antes de cargar");
+      await esperar(1000);   // el PDF del visor necesita un instante antes del print() (900 ms)
+      t.igual(impresa, 1, "y a los ~0,9 s la ventana de impresión se abre sola sobre el PDF");
+      t.igual(impresa, 1, "exactamente una vez: no es un aviso repetido");
     });
 
     // v12.6.5 — La URL que manda es la que devuelve el servidor. Esta prueba es la que
@@ -5315,8 +5477,14 @@ module.exports = {
       const ustedes = [
         /Ya tiene la última versión/,
         /Lleva \$\{dias\} días/,
-        /Repórtelo\./,
-        /Ábralo una vez con su usuario/,
+        // v18.6.0 — «Repórtelo.» vivía en el mensaje de caché demasiado grande de
+        // savePymCache, retirada con el archivo diario. Su relevo en la misma familia:
+        // la descarga fallida de la base única remite al administrador, en usted.
+        /avise al administrador del asistente/,
+        // v18.6.0 — «Ábralo una vez con su usuario» vivía en el toast del captador de
+        // la pestaña SharePoint (bootSharepointLite), retirado con el archivo diario.
+        // Su relevo en la misma familia: el recordatorio de la base, en usted.
+        /pulse 📂 «Abrir PyM»/,
         /Navegador sin soporte \.xlsx; use \.csv/,
         /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Pruebe \.csv/,
         /Notificaciones BLOQUEADAS:.*recargue\./,
@@ -5499,8 +5667,8 @@ module.exports = {
       // afirmación sobre el paciente, y en este mismo vector no se ha cargado ninguna lista
       // de PyM: no se miró nada. La prueba fijaba el defecto, no la regla — la misma clase
       // de error que ya se documentó siete veces en INFORME_MUTACIONES.md.
-      t.cierto(modal.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
-        "sin lista cargada se dice ESO, no que el paciente no tenga nada");
+      t.cierto(modal.innerHTML.includes("No tengo cargada la base de prevención"),
+        "sin base cargada se dice ESO, no que el paciente no tenga nada");
       t.cierto(modal.innerHTML.includes("no lo sé"),
         "y se dice explícitamente que es ignorancia, no un hallazgo");
       t.falso(/pendientes[^<]{0,40}para este paciente/i.test(modal.innerHTML),
@@ -5509,14 +5677,14 @@ module.exports = {
       // v16.2.0 — orden del médico: sin coincidencia NO se ofrece el catálogo entero para
       // marcar a mano (era el riesgo de sobre-ordenar); no se pinta ni un ítem.
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "sin coincidencia no se ofrece ninguna actividad");
-      // v18.0.x — el rótulo real de esa rama es "No hay lista de prevención"
-      // (vigilante_agenda.user.js:25479, rama `_pymSinAct.motivo !== "sin_pendientes"`).
-      // Sigue diciendo lo mismo que exigía este caso: falta la LISTA, no las actividades
-      // — el rótulo de "Sin actividades para ordenar" está reservado a `sin_pendientes`.
-      t.cierto(modal.innerHTML.includes("No hay lista de prevención"),
-        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay lista");
+      // v18.6.0 — el rótulo de esa rama es "No hay base de prevención" (la lista de
+      // hoy ya no existe como concepto). Sigue diciendo lo mismo que exigía este caso:
+      // falta la BASE, no las actividades — el rótulo de "Sin actividades para ordenar"
+      // está reservado a `sin_pendientes`.
+      t.cierto(modal.innerHTML.includes("No hay base de prevención"),
+        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay base");
       t.falso(modal.innerHTML.includes("Sin actividades para ordenar"),
-        "y NO usa el rótulo del caso 'está en la lista y no tiene nada': eso afirmaría lo que no se miró");
+        "y NO usa el rótulo del caso 'está en la base y no tiene nada': eso afirmaría lo que no se miró");
     });
 
     await t.casoAsync("v17.16.0 — si no se pudo consultar Athenea, el modal lo DICE en vez de callarlo", async () => {
@@ -6339,8 +6507,10 @@ module.exports = {
       btns = dock.children.find((n) => n.className === "vgl-dock-btns");
       t.igual(btns.children.filter((b) => b.getAttribute("data-accion") === "ficha-leyendo").length, 0, "«leyendo» desaparece en cuanto hay resumen: el dock se repinta");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/_resumenListoParaGate \? "RS" : "rs"\]\.join\("\|"\)/.test(src),
-        "y ese estado entra en la firma del dock: sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
+      // v18.7.0 (M2) — la firma creció: después del estado del resumen vienen los
+      // segmentos de las pestañas de impresión/conducta (TI/ti, TC/tc) antes del join.
+      t.cierto(/_resumenListoParaGate \? "RS" : "rs",[\s\S]{0,400}_tabImp \? "TI" : "ti", _tabCond \? "TC" : "tc"\]\.join\("\|"\)/.test(src),
+        "y ese estado entra en la firma del dock (con los segmentos de pestañas de M2): sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
     });
 
     await t.casoAsync("v18.0.118 (UI/UX #6): sin resumen, «Próximo control» dice que está leyendo y «Reintentar ahora» lo resuelve en el sitio", async () => {
@@ -6356,6 +6526,22 @@ module.exports = {
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/await mtrCalcularResumenClinico\(apt, \(\) => !cerrado\);/.test(src), "el reintento calcula el resumen con la guarda de cerrado");
       t.cierto(/if \(ordenarBtn\) ordenarBtn\.style\.display = "";\s*\n\s*repintar\(\);/.test(src), "y al conseguirlo repinta y devuelve «Ordenar pendientes»");
+    });
+
+    // v18.14.x (PALETTE, accesibilidad — hallazgo Alta) — #vgl-paquete-modal era el
+    // único modal de "Ordenamiento de exámenes" que NO pasaba por el gestor universal:
+    // sin captura de Tab, sin auto-foco, sin retorno de foco al cerrar, y sin NINGÚN
+    // manejador de teclado — ni siquiera Escape. Mismo patrón que el hallazgo #43
+    // (_vglChooserModal) de arriba.
+    await t.casoAsync("PALETTE (accesibilidad) — vgl-paquete-modal ahora pasa por _activarAccesibilidadModal: atrapa Tab y cierra con Escape", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      await c.api.openPaquetesModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-paquete-modal");
+      t.cierto(!!(modal._listeners && modal._listeners.keydown && modal._listeners.keydown.length),
+        "el modal tiene un listener 'keydown' propio (lo instala _activarAccesibilidadModal) — antes no tenía ninguno");
+      t.cierto(!!(modal._listeners && modal._listeners.click && modal._listeners.click.length),
+        "y sigue conservando su canal de cierre de siempre (clic afuera)");
     });
 
     t.caso("v18.0.118 (UI/UX #10 + decisión de Ordenar): el «Siguiente» del paso 2 explica por qué está apagado; Ordenar abre el PDF detrás sin robar la pantalla", () => {
@@ -6468,6 +6654,89 @@ module.exports = {
       t.cierto(/el laboratorio no trajo ese resultado \(o llegó pendiente\)/.test(src), "y por qué está vacía");
       t.cierto(/El asistente no las inventa/.test(src), "recuerda que no se rellena sola (casilla vacía antes que dato inventado)");
       t.cierto(/escríbalo a mano en la casilla/.test(src), "y qué puede hacer el médico");
+    });
+
+    // =====================================================================
+    // v18.6.2 / v18.8.1 — UI ADMINISTRATIVA DE LOS TOGGLES F3: el grupo
+    // «Funcionalidades por médico» en Ajustes se pinta con accesoCap
+    // ("toggles_funcionalidades"). Cada interruptor aplica en caliente con
+    // togSet (persistencia por médico, vgl_tog_<uid>, sin pasar por el
+    // borrador de vgl_cfg); los sub-toggles se pintan solo con su padre
+    // activo y se ocultan/recuperan en vivo al moverlo. El memo del harness
+    // (mismo selector → mismo nodo) hace observable el efecto en vivo del
+    // listener sobre las filas de los sub-toggles.
+    // v18.8.1 — FAIL-OPEN: ya no hay perfil PÚBLICO, así que la compuerta
+    // accesoCap("toggles_funcionalidades") deja ver el grupo a TODO médico
+    // no bloqueado — esté o no en el padrón. Solo la blocklist lo apaga.
+    // =====================================================================
+    t.caso("v18.6.2/v18.8.1: el grupo «Funcionalidades por médico» se pinta para todo médico no bloqueado (fail-open); BLOQUEADO no lo ve", () => {
+      // Padrón de la suite de nuevo en el almacén de la instancia compartida.
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      // Se verifica por el id del div, no por el texto: el comentario HTML de la
+      // sección también nombra el grupo y se pinta SIEMPRE, con y sin permiso.
+      t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "el médico del padrón (COMPLETO) ve el grupo");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar"'), "con el interruptor del módulo de agendamiento");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-hc_chip"'), "y el del chip de la HC");
+      // Fuera del padrón: fail-open → COMPLETO → lo ve igual que un médico del padrón.
+      cv.api.__state.activeDoctor = { id: 555, name: "MEDICO NO REGISTRADO" };
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "un médico FUERA del padrón también ve el grupo (fail-open)");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar"'), "con sus interruptores: son decisiones personales de cada médico, no del padrón");
+      // BLOQUEADO (blocklist): la compuerta accesoCap corta al médico entero.
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_BLOQUEO_15));
+      cv.api.__state.activeDoctor = { id: 999, name: "Prueba Bloqueada" };
+      cv.api.renderSettings();
+      t.falso(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "un médico BLOQUEADO no ve el grupo");
+      t.falso(hoja.innerHTML.includes('id="c-tog-agendar"'), "ni sus interruptores");
+      // Se restaura el padrón y la identidad para los casos siguientes.
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "al volver el médico (y su padrón), el grupo reaparece");
+    });
+
+    t.caso("v18.6.2: el interruptor de un toggle aplica EN CALIENTE con togSet — persistencia por médico y borrador de Ajustes intacto", () => {
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      const chk = hoja.querySelector("#c-tog-agendar");
+      t.cierto(!!chk && !!chk._listeners && !!chk._listeners.change, "el interruptor quedó cableado");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar" checked'), "nace encendido (default fail-open)");
+      chk.checked = false;
+      disparar(chk, "change");
+      const mapa = cv.api.readJSON("vgl_tog_707") || {};
+      t.igual(mapa.tog_agendar, false, "la decisión queda persistida en la clave del médico (vgl_tog_<uid>)");
+      t.igual(cv.api.togActiva("tog_agendar"), false, "y aplica en caliente: la compuerta la respeta");
+      t.falso(cv.api._ajustesSucio(), "NO pasa por el borrador de Ajustes (no pide «Guardar cambios»)");
+      chk.checked = true;
+      disparar(chk, "change");
+      t.igual(cv.api.readJSON("vgl_tog_707").tog_agendar, true, "volver a encenderlo restaura el flujo");
+    });
+
+    t.caso("v18.6.2: los sub-toggles solo se pintan con su padre activo y se ocultan/recuperan en vivo al moverlo", () => {
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.togSet("tog_agendar", false);
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('<div class="vgl-fld vgl-d-none" id="vgl-togsub-tog_agendar_labs">'),
+        "con el padre apagado, el sub-toggle de solo-labs se pinta oculto");
+      t.falso(hoja.innerHTML.includes('id="c-tog-agendar_labs" checked'),
+        "y su interruptor va sin marca (la jerarquía manda en togActiva)");
+      t.cierto(hoja.innerHTML.includes('<div class="vgl-fld" id="vgl-togsub-tog_anexo5">'),
+        "el sub-toggle del Anexo 5 (padre notificaciones activo) se pinta visible");
+      // En vivo: encender al padre recupera la fila; apagarlo la oculta.
+      const chkPadre = hoja.querySelector("#c-tog-agendar");
+      chkPadre.checked = true;
+      disparar(chkPadre, "change");
+      t.falso(hoja.querySelector("#vgl-togsub-tog_agendar_labs").classList.contains("vgl-d-none"),
+        "al encender el padre, la fila del sub-toggle reaparece en el acto");
+      chkPadre.checked = false;
+      disparar(chkPadre, "change");
+      t.cierto(hoja.querySelector("#vgl-togsub-tog_agendar_labs").classList.contains("vgl-d-none"),
+        "y al apagarlo vuelve a ocultarse, sin esperar a otro repintado");
+      chkPadre.checked = true;
+      disparar(chkPadre, "change");
+      t.igual(cv.api.togActiva("tog_agendar"), true, "se deja al padre encendido al terminar");
     });
 
   },
