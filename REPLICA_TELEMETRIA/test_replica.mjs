@@ -257,6 +257,49 @@ const db = crearDb();
   igual(r.headers.get("Content-Type") || "", "text/plain; charset=utf-8", "13. Content-Type text/plain (el cliente no cuenta HTML como recibido)");
 }
 
+// 14. volumenDia (GET, C1): volumen por día con validación estricta.
+{
+  const getV = (dia) => {
+    const u = "https://telemetria.test/?accion=volumen&token=vgl-2026" + (dia ? "&dia=" + dia : "");
+    return worker.fetch(new Request(u), { DB: db });
+  };
+  const j = async (r) => JSON.parse(await r.text());
+
+  // Día con datos: l-1 (prueba) se insertó en el caso 1; el resto en días 2026-09-08.
+  const v1 = await j(await getV("2026-09-09"));
+  // Nota: el caso 1 corrió hoy con recibido real (ahora), así que no podemos
+  // asumir un conteo exacto: solo ok:true y forma consistente.
+  igual(v1.ok, true, "14. volumen con dia válido → ok:true");
+  t(/^\d{4}-\d{2}-\d{2}$/.test(v1.dia) && typeof v1.filas === "number", "14. devuelve dia (texto) y filas (número)");
+  t(v1.porEvento && typeof v1.porEvento === "object", "14. porEvento es un objeto evento→n");
+  const v2 = await j(await getV("9999-99-99"));
+  igual(v2.ok, false, "14. dia malformado → ok:false (no conteo ambiguo)");
+  t(/YYYY-MM-DD/.test(String(v2.error || "")), "14. el motivo de rechazo explica el formato");
+  const v3 = await j(await getV(""));
+  igual(v3.ok, false, "14. sin dia → ok:false (el día es obligatorio)");
+  const v4 = await j(await getV("2026-02-30"));
+  igual(v4.ok, false, "14. fecha inexistente → ok:false (validación de calendario)");
+}
+
+// 15. Token de GET por cabecera x-vgl-token (C2): el secreto no vive solo en la URL.
+{
+  const rH = await worker.fetch(new Request("https://telemetria.test/?accion=ultimaFila", {
+    headers: { "x-vgl-token": "vgl-2026" },
+  }), { DB: db });
+  const dH = JSON.parse(await rH.text());
+  igual(dH.ok, true, "15. ultimaFila con token en cabecera → ok:true");
+  const rQ = await worker.fetch(new Request("https://telemetria.test/?accion=ultimaFila&token=vgl-2026"), { DB: db });
+  igual((await rQ.text()).includes('"ok":true'), true, "15. el fallback por query sigue vivo (chequeo nocturno)");
+  const rM = await worker.fetch(new Request("https://telemetria.test/?accion=ultimaFila", {
+    headers: { "x-vgl-token": "clave-mala" },
+  }), { DB: db });
+  igual(await rM.text(), "no", "15. cabecera con token malo → 'no'");
+  const rV = await worker.fetch(new Request("https://telemetria.test/?accion=volumen&dia=2026-09-09", {
+    headers: { "x-vgl-token": "vgl-2026" },
+  }), { DB: db });
+  igual(JSON.parse(await rV.text()).ok, true, "15. volumen también acepta el token por cabecera");
+}
+
 // ════════════════════════ CIERRE ════════════════════════════════════════
 console.log(`réplica telemetría — ${ok} ok, ${mal} mal, EXIT ${mal ? 1 : 0}`);
 if (mal) {

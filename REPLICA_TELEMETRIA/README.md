@@ -56,6 +56,17 @@ GETs:
   mayúsculas, salta `#…`, manda a blocklist los estados `bloqueado`/`inactivo`,
   caps en minúsculas separadas por coma, y deriva uid sintético
   `900000000 + djb2(nombre) % 99999999` cuando la fila no trae uid.
+- `?accion=ultimaFila&token=…` → frescura del pipeline para el chequeo nocturno
+  T0-4: `{ok, ahora, ultima, filas, horas}` (horas desde la última fila).
+- `?accion=volumen&dia=YYYY-MM-DD` (con `token` por query **o** por cabecera
+  `x-vgl-token`) → volumen de un día UTC: `{ok, dia, filas, porEvento}`. El día
+  es obligatorio y se valida con forma estricta + calendario real ("2026-02-30"
+  responde `ok:false`, no un conteo ambiguo). Cierra la brecha de lectura por
+  ventana de T0-4: "cuándo" + "cuánto y de qué". Sin `dia` o malformado →
+  `{ok:false, error}`.
+- Los GET aceptan el token por cabecera `x-vgl-token` o por query `?token=…`:
+  la query queda como fallback del chequeo nocturno; la cabecera evita que el
+  secreto se fugue a logs/proxies cuando el URL se pega en un informe (C2).
 - `/vcheck` → réplica byte a byte del JSON de `VersionCheck.gs` (minVersion
   18.0.142, force, killSwitch, canary, expectedSha256). **Editar las
   constantes en `VCHECK` de worker.js** cuando haya que empujar una versión.

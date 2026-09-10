@@ -67,10 +67,16 @@ export default {
       }
 
       // Acciones de GET (texto plano con JSON dentro, mismo token):
-      //   listaAcceso → padrón de acceso; ultimaFila → frescura del pipeline (T0-4).
+      //   listaAcceso → padrón de acceso; ultimaFila → frescura del pipeline (T0-4);
+      //   volumen      → conteo del día en curso o de una fecha (T0-5, C1).
+      // El token se acepta por cabecera `x-vgl-token` O por query (?token=…):
+      // la query queda como fallback para el chequeo nocturno, la cabecera evita
+      // que el secreto se fugue a logs/proxies cuando el URL se pega en un informe.
       if (request.method === "GET") {
-        if (url.searchParams.get("token") !== TOKEN) return txt("no");
+        const okToken = url.searchParams.get("token") === TOKEN || request.headers.get("x-vgl-token") === TOKEN;
+        if (!okToken) return txt("no");
         if (url.searchParams.get("accion") === "ultimaFila") return txt(JSON.stringify(await ultimaFila(db)));
+        if (url.searchParams.get("accion") === "volumen") return txt(JSON.stringify(await volumenDia(db, url.searchParams.get("dia"))));
         if (url.searchParams.get("accion") !== "listaAcceso") return txt("no");
         return txt(JSON.stringify(await listaAcceso(db)));
       }
@@ -220,6 +226,37 @@ async function ultimaFila(db) {
     filas: Number(fila.filas) || 0,
     horas: horas === null ? null : Math.round(horas * 10) / 10,
   };
+}
+
+// ── volumenDia (GET, T0-5): cuánto reportó la flota en un día calendario ─────
+// Cierra la brecha de lectura por ventana: ultimaFila solo dice "cuándo", este
+// dice "cuánto y de qué" para un día concreto (UTC, ISO). `dia` es obligatorio
+// y se valida con forma estricta YYYY-MM-DD — un día malformado no devuelve un
+// conteo ambiguo, devuelve ok:false con el motivo. Solo cuenta `lotes`, la misma
+// fuente de verdad del dedup: toda fila legítima pasó primero por ahí.
+async function volumenDia(db, dia) {
+  const ahora = new Date().toISOString();
+  const d = String(dia == null ? "" : dia);
+  // Forma estricta + fecha real de calendario: JS normaliza "2026-02-30" a marzo
+  // sin dar NaN, así que se compara el ISO de ida y vuelta contra la entrada.
+  const invalido = !/^\d{4}-\d{2}-\d{2}$/.test(d)
+    || (() => {
+      const f = new Date(d + "T00:00:00Z");
+      return Number.isNaN(f.getTime()) || f.toISOString().slice(0, 10) !== d;
+    })();
+  if (invalido) {
+    return { ok: false, ahora, error: "dia debe ser YYYY-MM-DD válido (UTC)" };
+  }
+  const { results } = await db.prepare(
+    "SELECT evento, COUNT(*) AS n FROM lotes WHERE substr(recibido, 1, 10) = ? GROUP BY evento ORDER BY evento"
+  ).bind(d).all();
+  const porEvento = {};
+  let filas = 0;
+  for (const f of results || []) {
+    porEvento[String(f.evento || "?")] = Number(f.n) || 0;
+    filas += Number(f.n) || 0;
+  }
+  return { ok: true, ahora, dia: d, filas, porEvento };
 }
 
 // ── listaAcceso (GET): misma semántica que _hojaAcceso + _listaAccesoRespuesta ──
