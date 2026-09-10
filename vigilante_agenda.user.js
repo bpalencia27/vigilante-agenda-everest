@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.4
+// @version      18.14.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7456,9 +7456,15 @@
   // v18.8.2 — el cierre respeta al médico: oculta el panel para el paciente abierto
   // y no lo resucita mientras siga en ese paciente; al llegar otro, vuelve solo.
   // v18.8.6 — cerrar desarma el minimizado: cierre es cierre, sin pastilla de por medio.
+  // F5 (revisión post-entrega) — "desarmar" YA NO es volver a `false`. Bajo v18.8.6,
+  // `false` era el estado de fábrica (expandido), así que desarmar-hacia-false volvía
+  // a lo normal. F5 invirtió la fábrica a MINIMIZADO (`true`): dejar esta línea en
+  // `false` significaba que cerrar el panel una vez dejaba el panel completo
+  // auto-abriéndose de nuevo para CUALQUIER paciente siguiente — justo la intrusión
+  // que F5 existe para eliminar. Ahora cerrar vuelve al estado de fábrica real.
   function _rcvpCerrar() {
     _rcvpCerradoDoc = _rcvpDocPrevio || "";
-    _rcvpMinimizado = false;
+    _rcvpMinimizado = true;
     _rcvpPillQuitar();
     _rcvpOcultar();
   }
@@ -7472,6 +7478,11 @@
   function _rcvpPillQuitar() {
     try { const p = document.getElementById("vgl-rcv-pendientes-pill"); if (p && p.remove) p.remove(); } catch (e) {}
   }
+  // F5 (revisión post-entrega) — "no hay nada que mostrar para este paciente": ni panel
+  // ni pastilla. Los dos `if (!resumen)`/`if (!paquete)` de rcvPendientesTick repetían
+  // este mismo par de llamadas; unificado aquí para que un futuro cambio a "qué hacer
+  // sin programa RCV" se edite en un solo sitio.
+  function _rcvpSinPrograma() { _rcvpOcultar(); _rcvpPillQuitar(); }
   function _rcvpPillAsegurar() {
     try {
       if (document.getElementById("vgl-rcv-pendientes-pill")) return;
@@ -7576,9 +7587,9 @@
       _rcvpCerradoDoc = "";
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
-      if (!resumen) { _rcvpOcultar(); _rcvpPillQuitar(); return; }   // sin programa identificado no hay a qué alinear el panel
+      if (!resumen) { _rcvpSinPrograma(); return; }   // sin programa identificado no hay a qué alinear el panel
       const paquete = PYM_CATALOG.find((p) => p && p.cie10 === "I10X") || null;
-      if (!paquete) { _rcvpOcultar(); _rcvpPillQuitar(); return; }
+      if (!paquete) { _rcvpSinPrograma(); return; }
       // v18.8.6/F5 — minimizado (estado de FÁBRICA desde F5: nunca se auto-abre el
       // panel completo, solo esta pastilla — sin datos de paciente, ver su propio
       // comentario) — ningún tick resucita el panel (ni con datos nuevos ni al
@@ -7606,6 +7617,13 @@
         // médico cambió de paciente mientras salía la consulta, nada del
         // anterior se pinta en la historia del nuevo.
         if (extractPacienteAbierto() !== docId || seccionActiva() !== "historia") { _rcvpOcultar(); return; }
+        // F5 (revisión post-entrega) — el `await` de arriba es la ÚNICA ventana donde
+        // el médico puede pulsar «minimizar» o «cerrar» ANTES de que esta misma vuelta
+        // del tick termine de pintar: sin re-revisar aquí, el repintado de más abajo
+        // reabría el panel completo que el médico acababa de esconder. Mismos guards
+        // que ya corrían ANTES del await (líneas de arriba), re-aplicados DESPUÉS.
+        if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }
+        if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }
       }
       if (docId !== _rcvpDocPrevio) { _rcvpDocPrevio = docId; _rcvpFirma = ""; }
       const datos = rcvPendientesCalcular(paquete, ordenes, todayStamp());
@@ -11854,6 +11872,13 @@
   // de Ajustes (credenciales de Athenea, diagnóstico interno); el atajo sigue existiendo,
   // pero ahora la sección solo se pinta si además el padrón concede esta cap a quien está
   // en sesión.
+  // (revisión post-entrega) — F3 reutiliza esta MISMA función para "Permisos por
+  // médico (administración)": es la puerta única de "requiere capacidad de
+  // desarrollador" en todo el archivo. Cualquier sección de Ajustes nueva que
+  // administre a OTROS médicos o exponga configuración de instalación debe llamar
+  // a ESTA función directamente (no reinventar su propia comprobación) — así una
+  // sección futura hereda el fail-closed de accesoCapExtra sin tener que acordarse
+  // de nada más.
   function mtrEsDesarrollador() { return accesoCapExtra("desarrollador"); }
   // v18.1.0 — B4 CAPA c: re-comprobación JUSTO antes de escribir. La capa
   // b decide qué se puede ABRIR; esta decide qué puede SALIR a la red. El
@@ -17647,8 +17672,18 @@
   // silencian? Mismo criterio que ya usaba _renderToast en línea (ROJO/MORADO/AMBAR:
   // confirmación extemporánea, última llamada, inasistencia vencida) — ahora
   // extraído para que la preferencia "avisos rutinarios silenciados" (más abajo)
-  // consulte la MISMA regla, en vez de repetirla.
-  function avisoEsCritico(color) { return color === "ROJO" || color === "MORADO" || color === "AMBAR"; }
+  // Y los otros puntos que ya distinguían crítico de rutinario (Alerta Múltiple,
+  // startFlash, la tarjeta de "Últimos avisos") consulten la MISMA regla en vez
+  // de repetirla. ÚNICA fuente de verdad de "qué es crítico" en todo el archivo.
+  // FAIL-CLOSED (revisión post-entrega) a propósito: se listan los 3 RUTINARIOS
+  // (VERDE/AZUL/FUCSIA), no los 3 críticos — un color que esta función no reconoce
+  // cae del lado de "crítico" (nunca silenciable), no del lado de "rutinario". Hoy
+  // los 6 colores del catálogo están fijos en NOTIFY/TOAST_ICONO_SVG/COLORS y nadie
+  // crea uno dinámicamente, así que esto no cambia nada en producción — pero si el
+  // día de mañana alguien agrega un 7º color y olvida clasificarlo aquí, la
+  // consecuencia es que YA NO SE PUEDE apagar por error (fail-closed), no que se
+  // apague sin que nadie lo pidiera (que era el riesgo con la lista al revés).
+  function avisoEsCritico(color) { return !(color === "VERDE" || color === "AZUL" || color === "FUCSIA"); }
   // ¿Debe callarse este aviso por la preferencia del médico? Fail-open hacia lo
   // crítico: con la preferencia encendida, SOLO lo rutinario (AZUL/VERDE/FUCSIA)
   // se calla — jamás un color crítico, sea cual sea el valor de S.avisosRutinariosOff.
@@ -17668,11 +17703,23 @@
   }
   function _avisoHistorialLeer() { return _avisoHistorial.slice(); }
   function _avisoHistorialLimpiar() { _avisoHistorial = []; }
-  // PURA: "hace N min/h" a partir de un ts (mismo formato que ya usa Ajustes para
-  // "Último envío confirmado", ver repUltOk en renderSettings).
+  // PURA (revisión post-entrega) — "hace N min/h/días" a partir de minutos ya
+  // transcurridos. Antes esta regla vivía SOLO dentro de `repUltOk` (Ajustes,
+  // "Último envío confirmado"); F6 la reimplementó en línea con sus propios límites
+  // ligeramente distintos (sin nivel de días, "hace un momento" hasta 1 min en vez
+  // de 2). Ahora es la ÚNICA fuente: `repUltOk` (en renderSettings) y la central de
+  // notificaciones llaman a esta misma función, así que un ajuste al redondeo o a
+  // los límites se hace una sola vez y las dos vistas quedan consistentes.
+  function mtrHaceTiempo(minutos) {
+    const min = Math.max(0, minutos);
+    return min < 2 ? "hace un momento" : min < 60 ? "hace " + min + " min" : min < 1440 ? "hace " + Math.round(min / 60) + " h" : "hace " + Math.round(min / 1440) + " días";
+  }
+  // PURA: "hace N min/h/días" a partir de un ts (mismo formato que ya usa Ajustes para
+  // "Último envío confirmado", ver repUltOk en renderSettings — ambas llaman a
+  // mtrHaceTiempo).
   function _avisoHistorialRelativo(ts, ahora) {
-    const min = Math.max(0, Math.round(((ahora || Date.now()) - ts) / 60000));
-    return min < 1 ? "hace un momento" : min < 60 ? "hace " + min + " min" : "hace " + Math.round(min / 60) + " h";
+    const min = Math.round(((ahora || Date.now()) - ts) / 60000);
+    return mtrHaceTiempo(min);
   }
   // PURA: la "Central de notificaciones" — SOLO color y hora relativa, jamás
   // título ni cuerpo (cero PHI, la bitácora nunca los guardó). Del más reciente
@@ -17856,7 +17903,7 @@
         const agrupados = _agruparToasts(toastQueue);
         try { uxTrack("avisos.canal.hora", { c1: agrupados.length }); } catch (eT) {}   // [NT/M18] carga C1 por flush (línea base de fatiga)
         if (agrupados.length > 3) {
-          const criticos = agrupados.filter(t => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR").length;
+          const criticos = agrupados.filter(t => avisoEsCritico(t.color)).length;
           // v17.11.0 — mismo defecto que en _agruparToasts, y aquí afecta a MÁS avisos a la
           // vez: «Alerta Múltiple» salía en ÁMBAR fijo aunque dentro hubiera un ROJO.
           // v18.0.118 (UI/UX #8) — el cuerpo dice DE QUÉ son los avisos (mismo formato «• título»
@@ -18076,6 +18123,14 @@
   function _dispararAvisoAudible(p) {
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     if (!_avisoUnaVezPorNavegador("aviso|" + p.uid)) return false;   // v18.0.113 — y solo una vez en la jornada, sea cual sea la pestaña o el canal
+    // F6 (revisión post-entrega) — ESTA es la vía real de los avisos de cita
+    // (colorAndAlert→maybeNotify→_dispararAvisoReal→aquí); showToast()/notify() traen su
+    // propio gate de "avisos rutinarios silenciados", pero con la pestaña oculta o fuera
+    // de HCHealth (el caso más común durante una consulta) esta función llama a
+    // _notificarSistema() DIRECTO, sin pasar por ninguno de los dos — el gate de allá
+    // nunca se consultaba. avisoEsCritico() dentro del gate asegura que ROJO/MORADO/AMBAR
+    // jamás se callan, pase lo que pase con la preferencia.
+    if (_avisoRutinarioSilenciado(p.color)) return true;
     // [NT-109/Q2 — instrucción 07-sep, opción (a), pendiente de ratificación del médico]
     // El ROJO es edge UNA-SOLA-VEZ por cita: si su único tono caía dentro de un
     // «Silenciar 15 min», se perdía para siempre (NT-109b). El silencio temporal sigue
@@ -18110,9 +18165,16 @@
       // ÚNICO canal posible y el invariante v14.1.5 (el médico se entera AHORA, esté
       // donde esté) manda: callar el único canal restante sería perder el aviso.
       if (p.color === "VERDE" && !_pestanaSinAtencion()) return true;
-      if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid, p.soBody)) {
-        if (_enModuloHCHealth()) showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
-        if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
+      if (_notificarSistema(p.color, p.title, p.body, p.persist, p.uid, p.soBody)) {
+        // F6 (revisión post-entrega) — el canal del SO NUNCA pasa por _renderToast (que es
+        // donde vive la anotación de la central de notificaciones): sin esta línea, todo
+        // aviso entregado por este camino —el dominante con la pestaña desatendida—
+        // quedaba invisible en "Últimos avisos de este turno". Solo color + hora, cero PHI,
+        // mismo contrato que _avisoHistorialAnotar en _renderToast.
+        _avisoHistorialAnotar(p.color);
+      } else {
+        if (_enModuloHCHealth()) showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver (-> _renderToast ya anota)
+        if (avisoEsCritico(p.color)) startFlash(p.flashText, p.color);
       }
     } else if (!p.sinToastPorCartel) {
       // Pestaña visible EN HCHealth: el canal es el de la página. Si quien llama va a
@@ -36751,9 +36813,16 @@
     // (mtrEsDesarrollador). Fail-closed — sin esa cap, la sección técnica (y con ella
     // grpAthenea, que comparte esta misma compuerta) no se pinta aunque el atajo esté
     // encendido; lo clínico de Ajustes (arriba) sigue sin depender de esto.
-    const isDevMode = _vglProgOn && mtrEsDesarrollador();
+    // F2/F3 (revisión post-entrega) — mtrEsDesarrollador() y accesoCap("toggles_funcionalidades")
+    // se leían dos veces cada una por pintada (una vez para isDevMode/grpToggles, otra para
+    // grpPermisos), cada llamada releyendo y re-parseando vgl_acceso_lista de localStorage
+    // por su cuenta. Una sola lectura por pintada, reusada abajo — misma respuesta, sin el
+    // riesgo de que un tercer punto futuro llame a una y no a la otra y las dos diverjan.
+    const _esDesarrollador = mtrEsDesarrollador();
+    const _toggFuncional = accesoCap("toggles_funcionalidades");
+    const isDevMode = _vglProgOn && _esDesarrollador;
     const devStyle = isDevMode ? "" : 'class="vgl-d-none"';
-    const repUltOk = (() => { try { const t0 = localStorage.getItem("vgl_rep_last_ok"); if (!t0) return "nunca visto en este equipo"; const min = Math.round((Date.now() - new Date(t0).getTime()) / 60000); return min < 2 ? "hace un momento" : min < 60 ? "hace " + min + " min" : min < 1440 ? "hace " + Math.round(min / 60) + " h" : "hace " + Math.round(min / 1440) + " días"; } catch (e) { return "?"; } })();
+    const repUltOk = (() => { try { const t0 = localStorage.getItem("vgl_rep_last_ok"); if (!t0) return "nunca visto en este equipo"; const min = Math.round((Date.now() - new Date(t0).getTime()) / 60000); return mtrHaceTiempo(min); } catch (e) { return "?"; } })();
     let repColaN = 0; try { repQLoad(); repColaN = (repQ || []).length; } catch (e) {}
     let repUltErr = ""; try { const e0 = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e0 && e0.detalle) repUltErr = e0.detalle; } catch (e) {}
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
@@ -36768,7 +36837,7 @@
     // F3/Dock) — y el propio interruptor se guarda al cambiarlo, como la guía
     // paso a paso (c-acomp). Los sub-toggles se pintan SOLO con su padre activo
     // y se ocultan/recuperan en vivo al moverlo.
-    const grpToggles = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-toggles">
+    const grpToggles = !_toggFuncional ? "" : `<div class="vgl-grp" id="vgl-grp-toggles">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Funcionalidades por médico</div>
         <div class="vgl-fld"><span class="vgl-hint">Interruptores personales suyos: se guardan por médico (no por computador) y aplican de inmediato. Apagar un módulo oculta su botón; encenderlo lo devuelve al instante. Solo usted los ve.</span></div>
         ${VGL_TOGGLES.map((def) => {
@@ -36791,7 +36860,7 @@
     // existentes y nuevos. Cambios EN CALIENTE (sin borrador de vgl_cfg): la
     // revocación aplica en el acto y cada cambio se audita (local + evento remoto
     // «permiso_cambio»).
-    const grpPermisos = !(accesoCap("toggles_funcionalidades") && mtrEsDesarrollador()) ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
+    const grpPermisos = !(_toggFuncional && _esDesarrollador) ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Permisos por médico (administración)</div>
         <div class="vgl-fld"><span class="vgl-hint">Decida qué funciones puede EJECUTAR cada médico de este equipo. Todos siguen VIENDO los botones: al desactivar una función, el botón queda visible pero avisa que está desactivada y no abre. Por defecto todo queda encendido (ON). Escriba la cédula (uid) o el nombre completo del médico, pulse Añadir y desmarque lo que corresponda. Cada cambio queda anotado con quién lo hizo, cuándo, a qué médico y qué función (auditoría). No puede desactivarse funciones a sí mismo.</span></div>
         <div class="vgl-fld"><label>Médico (cédula o nombre completo)</label><div style="display:flex;gap:8px;align-items:center"><input type="text" id="c-perm-medico" autocomplete="off" spellcheck="false" placeholder="ej. 12345678 o PEPITO PEREZ"><button class="vgl-btn" id="c-perm-add">Añadir</button></div></div>
@@ -37884,7 +37953,7 @@
       const card = document.createElement("div");
       // v7.4: refuerzo de tarjeta completa para ROJO/MORADO/AMBAR (antes solo ROJO tenía
       // clase propia). Verde/azul se quedan sin tinte: son estados resueltos/informativos.
-      const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
+      const colorCls = avisoEsCritico(a.color) ? " " + a.color.toLowerCase() : "";
       const esPes = tieneAbandonoPES(a);
       const esAtendido = !!(a.estado && a.estado.toLowerCase().includes("atendido"));
       // v18.7.0 (M1) — solo «En sala» ofrece el acceso directo a HC: es el momento

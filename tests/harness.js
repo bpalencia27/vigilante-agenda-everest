@@ -611,6 +611,18 @@ function instalarDomEnriquecido(doc) {
   };
 }
 
+// F5 (revisión post-entrega) — suite_88 y suite_102 definían, cada una por su
+// cuenta, el mismo envoltorio de `cargar()` para simular que el médico ya pulsó
+// la pastilla de reapertura del panel RCV (_rcvpExpandirParaTest) antes de que
+// cada caso empiece — porque ambas suites prueban CONTENIDO/mecánica del panel
+// YA ABIERTO, no el estado de fábrica (minimizado) que introdujo F5. Una sola
+// copia aquí, en vez de dos copias byte a byte en cada archivo de prueba.
+function cargarExpandidoRCV(cargarBase, opciones) {
+  const c = cargarBase(opciones);
+  try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
+  return c;
+}
+
 // Dispara TODOS los listeners del tipo en COPIA de la lista (un
 // handler puede deregistrar a otro) y NO re-lanza sus errores: un
 // listener roto no debe enmascarar lo que la prueba está midiendo.
@@ -739,4 +751,4 @@ function cargar(opciones) {
   return { api, env: ent, ctx, totalDeclaradas: nombres.length, expuestas: Object.keys(api).filter(k => !k.startsWith("__")).length };
 }
 
-module.exports = { cargar, crearEntorno, RUTA, enriquecerDom, instalarDomEnriquecido, disparar };
+module.exports = { cargar, crearEntorno, RUTA, enriquecerDom, instalarDomEnriquecido, disparar, cargarExpandidoRCV };

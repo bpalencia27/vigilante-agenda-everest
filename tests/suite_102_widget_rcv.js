@@ -28,7 +28,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { instalarDomEnriquecido } = require("./harness.js");
+const { instalarDomEnriquecido, cargarExpandidoRCV } = require("./harness.js");
 
 const FUENTE = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
@@ -94,11 +94,10 @@ module.exports = {
     // vez, como si el médico ya hubiera pulsado la pastilla (_rcvpExpandirParaTest).
     // Los propios casos que prueban minimizar/reabrir siguen partiendo de "ya abierto"
     // y ejercitan el ciclo completo desde ahí, igual que antes de F5.
-    const cargar = (opciones) => {
-      const c = cargarSinExpandir(opciones);
-      try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
-      return c;
-    };
+    // (revisión post-entrega) — el envoltorio en sí vive en harness.js
+    // (cargarExpandidoRCV), compartido con suite_88: antes cada suite lo
+    // definía por su cuenta, byte a byte igual.
+    const cargar = (opciones) => cargarExpandidoRCV(cargarSinExpandir, opciones);
     function ctx102(extra) {
       const ex = extra || {};
       const red = {
@@ -195,12 +194,22 @@ module.exports = {
       cablear102(c, "5150077");
       try { c.api.mtrCacheResumenGuardar("5150077", { ...resumen102(), _docId: "5150077" }); } catch (e) {}
       await c.api.rcvPendientesTick();
+      // F5 (revisión post-entrega) — cerrar YA NO desarma el minimizado hacia "expandido":
+      // vuelve al estado de fábrica real (minimizado). Paciente nuevo: asoma la PASTILLA,
+      // nunca el panel completo directo (_rcvpCerrar ya no reintroduce el auto-abrir).
       w = widget102(c);
-      t.cierto(!!w, "el panel sigue montado con el paciente nuevo");
-      t.igual(w.style.display, "", "paciente nuevo: el panel vuelve a la vista");
+      t.cierto(!!w, "el nodo del panel sigue existiendo (oculto)");
+      t.igual(w.style.display, "none", "paciente nuevo: el panel NO se auto-abre");
+      let pill = c.env.doc.body.children.find((e) => e.id === "vgl-rcv-pendientes-pill");
+      t.cierto(!!pill, "en su lugar asoma la pastilla, por su cuenta");
+      // El médico la pulsa (simulado): recién ahí se abre, con los datos del paciente nuevo.
+      c.api._rcvpExpandirParaTest();
+      await c.api.rcvPendientesTick();
+      w = widget102(c);
+      t.igual(w.style.display, "", "al pulsar la pastilla, el panel del paciente nuevo se abre bajo demanda");
       // El cierre es por vista: al cerrar en el paciente nuevo y volver al anterior,
-      // el panel vuelve SOLO — incluso si el contenido del anterior no cambió (la
-      // firma se salta el repintado y el display debe restaurarse igual).
+      // vuelve la pastilla SOLA — incluso si el contenido del anterior no cambió (la
+      // firma se salta el repintado, pero el display debe restaurarse igual a "oculto").
       const btn2 = w.querySelector(".vgl-rcvp-cerrar");
       disparar102(c, w, "click", { target: btn2 });
       t.igual(w.style.display, "none", "el cierre en el paciente nuevo también aplica");
@@ -209,7 +218,9 @@ module.exports = {
       cablear102(c, "5150076");
       try { c.api.mtrCacheResumenGuardar("5150076", resumen102()); } catch (e) {}
       await c.api.rcvPendientesTick();
-      t.igual(widget102(c).style.display, "", "volver al paciente cerrado lo muestra otra vez (cierre por vista, no candado)");
+      t.igual(widget102(c).style.display, "none", "volver al paciente cerrado NO auto-abre el panel (cierre por vista, no candado — pero tampoco fábrica-expandido)");
+      pill = c.env.doc.body.children.find((e) => e.id === "vgl-rcv-pendientes-pill");
+      t.cierto(!!pill, "en su lugar, la pastilla vuelve a asomar por su cuenta");
     });
 
     // ==================== INTEGRACIÓN: ARRASTRE ====================
@@ -321,7 +332,7 @@ module.exports = {
       t.cierto(!!prog && prog.textContent.indexOf("Diabetes tipo 2") >= 0, "repinta con el programa del paciente actual");
     });
 
-    await t.casoAsync("cierre y minimizado conviven: cerrar desarma el minimizado y su pastilla", async () => {
+    await t.casoAsync("cierre y minimizado conviven: cerrar vuelve al estado de fábrica (minimizado), no lo desarma", async () => {
       const c = ctx102();
       await c.api.rcvPendientesTick();
       const w = widget102(c);
@@ -333,13 +344,15 @@ module.exports = {
       t.igual(widget102(c).style.display, "", "reabierto");
       disparar102(c, widget102(c), "click", { target: widget102(c).querySelector(".vgl-rcvp-cerrar") });
       t.igual(widget102(c).style.display, "none", "cerrado");
-      t.falso(!!pill102(c), "cerrar no deja pastilla");
-      // El minimizado quedó desarmado por el cierre: al cambiar de paciente el
-      // panel vuelve SOLO (cierre por vista), sin pastilla de por medio.
+      t.falso(!!pill102(c), "cerrar no deja pastilla para ESTE paciente");
+      // F5 (revisión post-entrega) — cerrar YA NO desarma el minimizado hacia "expandido":
+      // vuelve al estado de fábrica real (minimizado). Al cambiar de paciente asoma la
+      // PASTILLA por su cuenta, nunca el panel completo directo.
       cablear102(c, "5150077");
       try { c.api.mtrCacheResumenGuardar("5150077", { ...resumen102(), _docId: "5150077" }); } catch (e) {}
       await c.api.rcvPendientesTick();
-      t.igual(widget102(c).style.display, "", "al cambiar de paciente vuelve solo, sin pastilla");
+      t.igual(widget102(c).style.display, "none", "al cambiar de paciente el panel sigue sin auto-abrirse");
+      t.cierto(!!pill102(c), "en su lugar, la pastilla asoma por su cuenta para el paciente nuevo");
     });
 
     await t.casoAsync("sin contexto el minimizado se desarma: no queda pastilla huérfana, y al volver el contexto reaparece la PASTILLA (F5: nunca el panel directo)", async () => {

@@ -14337,3 +14337,82 @@ sola) es la prueba correcta de "sí se pintó" para esos casos. Lo crítico
 Banco completo tras el cambio: `node tests/runner.js` → 3805 pasan, EXIT 0.
 `node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.4 en los 4 puntos.
 
+## v18.14.5 (revisión post-entrega — /code-review max sobre F2-F6, 10 hallazgos corregidos)
+
+Auditoría independiente (10 ángulos de revisión, verificados 1 a 1) sobre el
+trabajo F2-F6 de esta rama. Dos hallazgos eran bugs reales de seguridad/UX en
+producción; el resto, deuda menor. Los 10, corregidos:
+
+**1-2 (el mismo punto ciego): F6 no aplicaba a la vía real de los avisos de
+cita.** `_avisoRutinarioSilenciado()` solo se había cableado en `showToast()`/
+`notify()`, pero `colorAndAlert→maybeNotify→_dispararAvisoReal→
+_dispararAvisoAudible` — el camino REAL de confirmaciones/inasistencias —
+llama a `_notificarSistema()` directo cuando la pestaña está desatendida (el
+caso más común en consulta), sin pasar por ninguno de los dos. La preferencia
+"avisos rutinarios silenciados" no callaba NADA por ese camino. Fix: el mismo
+gate, cableado también en `_dispararAvisoAudible`.
+
+**3. La central de notificaciones no anotaba el canal del SO.** Mismo punto
+ciego: `_avisoHistorialAnotar` solo vivía en `_renderToast` (camino del
+toast). Fix: se anota también cuando `_notificarSistema()` tiene éxito.
+
+**4. `_rcvpCerrar()` reintroducía el auto-abrir que F5 acababa de eliminar.**
+Con el estado de fábrica ya invertido a minimizado, esta función (no tocada
+por F5) seguía poniendo `_rcvpMinimizado = false` al cerrar — cerrar una vez
+dejaba el panel completo auto-abriéndose para CUALQUIER paciente siguiente.
+Fix: cerrar vuelve al estado de fábrica real (`true`).
+
+**5. `rcvPendientesTick()` no re-revisaba el minimizado tras el `await` de
+red.** Si el médico minimizaba/cerraba mientras la consulta de órdenes
+vigentes seguía en vuelo, el repintado posterior lo reabría igual. Fix: los
+mismos guards de antes del `await` se re-aplican después.
+
+**6. `avisoEsCritico()` fail-open + 3 copias sin migrar.** Un color no
+reconocido caía del lado "rutinario" (silenciable) en vez de "crítico". Fix:
+se invirtió a fail-closed (se listan los 3 RUTINARIOS, no los 3 críticos) y
+las 3 copias inline restantes (Alerta Múltiple, `startFlash`, la tarjeta de
+avisos) ahora llaman a la función compartida.
+
+**7. `mtrEsDesarrollador()`/`accesoCap("toggles_funcionalidades")` se leían
+dos veces por `renderSettings()`.** Fix: una lectura, reusada por
+`isDevMode`/`grpToggles`/`grpPermisos`.
+
+**8. `cargar` duplicado en suite_88 y suite_102.** Fix: `cargarExpandidoRCV`
+compartida en `tests/harness.js`.
+
+**9. Bloque de limpieza repetido en `rcvPendientesTick()`.** Fix:
+`_rcvpSinPrograma()`.
+
+**10. `_avisoHistorialRelativo` reimplementaba `repUltOk`.** Fix:
+`mtrHaceTiempo(minutos)` extraída como fuente única; `repUltOk` y la central
+de notificaciones la comparten. Cambia el umbral de "hace un momento" de <1
+a <2 min (para igualar a `repUltOk`, que ya usaba <2) y añade el nivel de
+días que `_avisoHistorialRelativo` no tenía.
+
+**Sin cambio de código (documentación únicamente): hallazgo "no hay guarda
+compartida para secciones admin futuras"** — `mtrEsDesarrollador()` YA es esa
+guarda reusable (F3 ya la reutiliza); se añadió un comentario explícito
+invitando a cualquier sección admin futura a llamarla directo. Construir un
+registro declarativo de secciones para 2 casos actuales habría sido
+sobre-ingeniería para un requisito hipotético.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_dispararAvisoAudible`, gate nuevo | `if (_avisoRutinarioSilenciado(p.color)) return true;` → `if (false && ...)` | NO | suite_114 «el camino REAL de los avisos de cita»: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `_dispararAvisoAudible`, anotación en éxito del SO | `_avisoHistorialAnotar(p.color);` → comentada | NO | mismo caso de suite_114: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `_rcvpCerrar()` | `_rcvpMinimizado = true` → vuelto a `false` | NO | suite_102, 2 casos de cierre: mutante rojo (10 ok, 2 fallan). Restaurado 12 ok |
+| user.js `rcvPendientesTick()`, re-chequeo post-`await` | las 2 líneas de guard quitadas | NO (tras corregir el mock de red del propio caso — ver nota abajo) | suite_88 «si el médico minimiza... MIENTRAS la consulta... sigue en vuelo»: mutante rojo (25 ok, 1 falla). Restaurado 26 ok |
+| user.js `avisoEsCritico()` | fail-closed → vuelto a fail-open (`ROJO\|\|MORADO\|\|AMBAR` en vez de `!(VERDE\|\|AZUL\|\|FUCSIA)`) | NO | suite_114 caso de límites: mutante rojo (10 ok, 1 falla). Restaurado 11 ok |
+| user.js `mtrHaceTiempo()` | umbral `<2` → `<1` | NO | suite_114, 2 casos (avisoHistorialHtml + mtrHaceTiempo): mutante rojo (9 ok, 2 fallan). Restaurado 11 ok |
+
+Nota sobre el caso de suite_88 (re-chequeo post-`await`): la primera versión
+del caso usaba un mock de `fetch` que resolvía con un array crudo en vez de
+un objeto Response-like (`{ok, status, json(), text()}`) — `pageFetchJson`
+lo trataba como fallo y el flujo no llegaba nunca al repintado que la prueba
+quería ejercitar, así que la mutación NO se detectaba (falso verde). Corregido
+el mock al mismo contrato que ya usa `crearRed()` en el resto de la suite;
+verificado que ENTONCES sí detecta la mutación antes de restaurar.
+
+Banco completo tras el cambio: `node tests/runner.js` → 3809 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.5 en los 4 puntos.
+

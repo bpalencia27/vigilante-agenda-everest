@@ -22,7 +22,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { disparar } = require("./harness.js");
+const { disparar, cargarExpandidoRCV } = require("./harness.js");
 
 const LISTA_RCV = {
   version: "2026-09-06.1",
@@ -78,11 +78,10 @@ module.exports = {
     // efecto que su listener de clic real). El caso dedicado a probar «nace
     // minimizado, sin auto-apertura, la pastilla no expone datos del paciente»
     // usa `cargarSinExpandir` (el `cargar` real, sin este paso) a propósito.
-    const cargar = (opciones) => {
-      const c = cargarSinExpandir(opciones);
-      try { if (c && c.api && typeof c.api._rcvpExpandirParaTest === "function") c.api._rcvpExpandirParaTest(); } catch (e) {}
-      return c;
-    };
+    // (revisión post-entrega) — el envoltorio en sí vive en harness.js
+    // (cargarExpandidoRCV), compartido con suite_102: antes cada suite lo
+    // definía por su cuenta, byte a byte igual.
+    const cargar = (opciones) => cargarExpandidoRCV(cargarSinExpandir, opciones);
     // ============================ PURAS ============================
     t.caso("calcular: vencido/próximo/al día/pendiente con Última y Vence correctos (vigencia 180)", () => {
       const ordenes = [
@@ -532,6 +531,62 @@ module.exports = {
       c.api._rcvpCerrar();
       t.igual(w.style.display, "none", "al cerrar, el panel se oculta");
       t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-rcv-pendientes-pill"), "y tampoco queda una pastilla huérfana");
+    });
+
+    // =====================================================================
+    // (revisión post-entrega) — rcvPendientesTick() revisaba _rcvpMinimizado
+    // ANTES de la única espera real de la función (la consulta de red de
+    // órdenes vigentes), pero no volvía a revisarlo DESPUÉS: si el médico
+    // pulsaba minimizar mientras esa consulta seguía en vuelo, el repintado de
+    // más abajo reabría el panel completo que el médico acababa de esconder.
+    // =====================================================================
+    await t.casoAsync("F5: si el médico minimiza el panel MIENTRAS la consulta de órdenes vigentes sigue en vuelo, el repintado posterior respeta el minimizado (no lo reabre)", async () => {
+      let resolverFetch = null;
+      // Mismo contrato Response-like que crearRed() (ok/status/headers/json/text) —
+      // resolver con un array crudo (sin .json()) hace que pageFetchJson lo trate
+      // como fallo y reintente, disparando OTRO fetch antes de que el test pueda
+      // controlar el momento exacto de la resolución.
+      const redControlada = {
+        fetches: 0,
+        fetch: (url) => {
+          redControlada.fetches++;
+          return new Promise((resolve) => {
+            resolverFetch = (cuerpo) => resolve({
+              ok: true, status: 200, headers: { get: () => "application/json" },
+              json: () => Promise.resolve(cuerpo),
+              text: () => Promise.resolve(JSON.stringify(cuerpo)),
+            });
+          });
+        },
+      };
+      const { c } = ctx88(101, "Brandon Jesús Palencia Martínez", { red: redControlada });
+      // Primer tick: expande el panel (la suite ya lo hace por defecto) y deja la
+      // primera consulta de red resuelta para tener un `_rcvpDiaUltimoRefresco`
+      // fijado — así el SEGUNDO tick, el que se mide aquí, sí vuelve a pedir red.
+      const primerTick = c.api.rcvPendientesTick();
+      t.cierto(!!resolverFetch, "la primera consulta de red quedó pendiente");
+      resolverFetch([]);
+      await primerTick;
+      t.cierto(montado88(c), "precondición: panel abierto tras el primer tick");
+      // Fuerza el cache-miss del TTL de 10 min (apiHcObtenerOrdenamientosVigentes):
+      // sin esto, el segundo tick devolvería la respuesta cacheada sin volver a
+      // llamar a fetch, y no habría ventana de "en vuelo" que ejercitar.
+      c.api._ordenesVigentesInvalidar();
+      // Segundo tick: arranca la consulta de red (queda en vuelo)...
+      const segundoTick = c.api.rcvPendientesTick();
+      t.igual(redControlada.fetches, 2, "el segundo tick sí volvió a pedir red (no cacheado)");
+      // ...y MIENTRAS sigue en vuelo, el médico pulsa minimizar.
+      c.api._rcvpMinimizar();
+      t.igual(widget88(c).style.display, "none", "minimizar oculta el panel de inmediato");
+      // Recién AHORA se resuelve la consulta que ya estaba en curso — con datos
+      // DISTINTOS a la primera respuesta (vacía): así la "firma barata" (que salta
+      // el repintado si nada cambió) NO puede enmascarar la mutación por su cuenta
+      // — el tick SÍ tiene contenido nuevo que pintaría, si no fuera por el guard.
+      resolverFetch([ordenDe("903815", desdeHoy(-200))]);
+      await segundoTick;
+      t.igual(widget88(c).style.display, "none", "el panel SIGUE oculto: el tick no reabrió lo que el médico acababa de minimizar");
+      const pill = c.env.doc.body.children.find((n) => n.id === "vgl-rcv-pendientes-pill");
+      t.cierto(!!pill, "y la pastilla está presente, coherente con el minimizado");
     });
 
     // ============================ CSS / REGISTROS ============================

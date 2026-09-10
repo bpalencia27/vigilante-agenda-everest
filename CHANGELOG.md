@@ -4,6 +4,21 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.5] — 2026-09-10 (Dos correcciones: "avisos rutinarios silenciados" ahora calla de verdad, y cerrar el panel de riesgo cardiovascular ya no lo vuelve a abrir solo)
+
+Una revisión independiente encontró que la preferencia "avisos rutinarios
+silenciados" (v18.14.4) no callaba nada cuando usted no estaba mirando la
+pestaña — que es precisamente cuando más se usa. Corregido: ahora calla en
+todos los casos, salvo lo crítico, que nunca se calla.
+
+También se encontró que cerrar el panel de "Próximos exámenes · Riesgo
+cardiovascular" (v18.14.3) volvía a dejarlo auto-abriéndose para el
+siguiente paciente. Corregido: cerrar ya no reintroduce esa intrusión.
+
+Verificación: banco de pruebas completo en verde (3809 comprobaciones).
+
+---
+
 ## [Versión 18.14.4] — 2026-09-09 (Menos avisos rutinarios si usted lo pide, y un vistazo a los últimos de su turno)
 
 Dos novedades contra la fatiga de tantos avisos:

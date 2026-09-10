@@ -26,11 +26,12 @@ const esperar114 = (ms) => new Promise((r) => setTimeout(r, ms));
 module.exports = {
   nombre: "F6 — fatiga visual: silenciar rutina y central de notificaciones",
   cubre: ["avisoEsCritico", "_avisoRutinarioSilenciado", "avisoHistorialHtml",
-    "_avisoHistorialLeer", "_avisoHistorialLimpiar", "showToast", "notify", "renderSettings"],
+    "_avisoHistorialLeer", "_avisoHistorialLimpiar", "showToast", "notify", "renderSettings",
+    "mtrHaceTiempo", "_dispararAvisoAudible"],
 
   async pruebas(t, api, env, cargar) {
     // ============================ PURAS ============================
-    t.caso("avisoEsCritico: ROJO/MORADO/AMBAR son críticos; VERDE/AZUL/FUCSIA no", () => {
+    t.caso("avisoEsCritico: ROJO/MORADO/AMBAR son críticos; VERDE/AZUL/FUCSIA no; cualquier otro color (incl. vacío/undefined) cae FAIL-CLOSED del lado crítico", () => {
       const c = cargar({ silencioso: true });
       t.cierto(c.api.avisoEsCritico("ROJO"));
       t.cierto(c.api.avisoEsCritico("MORADO"));
@@ -38,8 +39,12 @@ module.exports = {
       t.falso(c.api.avisoEsCritico("VERDE"));
       t.falso(c.api.avisoEsCritico("AZUL"));
       t.falso(c.api.avisoEsCritico("FUCSIA"));
-      t.falso(c.api.avisoEsCritico(""), "sin color, no crítico");
-      t.falso(c.api.avisoEsCritico(undefined), "undefined, no crítico");
+      // (revisión post-entrega) — fail-closed a propósito: un color que esta función
+      // no reconoce (vacío, undefined, o un 7º color futuro sin clasificar) NUNCA
+      // se silencia, en vez de silenciarse por defecto.
+      t.cierto(c.api.avisoEsCritico(""), "sin color: fail-closed, nunca silenciable");
+      t.cierto(c.api.avisoEsCritico(undefined), "undefined: fail-closed, nunca silenciable");
+      t.cierto(c.api.avisoEsCritico("COLOR_INVENTADO"), "un color futuro sin clasificar: fail-closed también");
     });
 
     t.caso("_avisoRutinarioSilenciado: con la preferencia APAGADA (fábrica), nada se silencia", () => {
@@ -67,17 +72,78 @@ module.exports = {
       t.cierto(vacio.indexOf("Sin avisos todavía") >= 0, "sin entradas, mensaje honesto");
       const ahora = 1_000_000_000;
       const historial = [
-        { ts: ahora - 60_000, color: "AZUL" },
+        { ts: ahora - 60_000, color: "AZUL" },   // 1 min: bajo el umbral de 2, "hace un momento" (mtrHaceTiempo)
         { ts: ahora - 5 * 60_000, color: "ROJO" },
       ];
       const html = c.api.avisoHistorialHtml(historial, ahora);
       t.cierto(html.indexOf("vgl-avh-chip") >= 0, "pinta chips");
       t.igual((html.match(/vgl-avh-chip/g) || []).length, 2, "un chip por entrada");
       t.cierto(html.indexOf("var(--c-azul)") >= 0 && html.indexOf("var(--c-rojo)") >= 0, "cada chip usa el color de su aviso");
-      t.cierto(html.indexOf("hace 1 min") >= 0 && html.indexOf("hace 5 min") >= 0, "hora relativa correcta");
+      // (revisión post-entrega) — mtrHaceTiempo (compartida con repUltOk en Ajustes)
+      // usa el mismo umbral de <2 min para "hace un momento" que ya usaba repUltOk.
+      t.cierto(html.indexOf("hace un momento") >= 0 && html.indexOf("hace 5 min") >= 0, "hora relativa correcta (misma regla que repUltOk)");
       // La bitácora NUNCA guarda título ni cuerpo — no hay forma de que aparezcan aquí,
       // pero se deja constancia explícita del contrato de datos.
       t.falso(html.indexOf("Programa") >= 0 || html.indexOf("paciente") >= 0, "ningún dato de paciente en el HTML de la central");
+    });
+
+    // (revisión post-entrega) — mtrHaceTiempo es ahora la ÚNICA fuente de "hace N
+    // min/h/días": esta prueba fija sus límites (antes solo verificados a través de
+    // repUltOk, un IIFE local en renderSettings que no se podía probar por separado).
+    t.caso("mtrHaceTiempo: los mismos límites que ya usaba repUltOk en Ajustes — ahora fuente única", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrHaceTiempo(0), "hace un momento");
+      t.igual(c.api.mtrHaceTiempo(1), "hace un momento", "bajo el umbral de 2 min");
+      t.igual(c.api.mtrHaceTiempo(2), "hace 2 min", "en el umbral, ya cuenta en minutos");
+      t.igual(c.api.mtrHaceTiempo(59), "hace 59 min");
+      t.igual(c.api.mtrHaceTiempo(60), "hace 1 h", "en el umbral de la hora");
+      t.igual(c.api.mtrHaceTiempo(1439), "hace 24 h", "un minuto antes del día, redondea a 24 h");
+      t.igual(c.api.mtrHaceTiempo(1440), "hace 1 días", "en el umbral del día");
+      t.igual(c.api.mtrHaceTiempo(2880), "hace 2 días");
+      t.igual(c.api.mtrHaceTiempo(-5), "hace un momento", "nunca negativo: un reloj desincronizado no dice \"hace -5 min\"");
+    });
+
+    // =====================================================================
+    // (revisión post-entrega) — EL HALLAZGO REAL: _avisoRutinarioSilenciado() se
+    // había añadido solo a showToast()/notify(), pero el camino REAL de los avisos
+    // de cita (colorAndAlert→maybeNotify→_dispararAvisoReal→_dispararAvisoAudible)
+    // llama a _notificarSistema() DIRECTO cuando la pestaña está desatendida — el
+    // caso más común durante una consulta — sin pasar por ninguno de los dos gates.
+    // La preferencia "avisos rutinarios silenciados" no callaba NADA en ese camino.
+    // Esta prueba ejercita _dispararAvisoAudible tal cual lo hace la producción.
+    // =====================================================================
+    t.caso("_dispararAvisoAudible: con la preferencia encendida y la pestaña desatendida (el camino REAL de los avisos de cita), un VERDE rutinario no sale por el sistema operativo; un ROJO SÍ, siempre", () => {
+      const c = cargar({ silencioso: true });
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.doc.hasFocus = () => false;   // pestaña desatendida: _pestanaSinAtencion() === true
+      c.api.__S.avisosRutinariosOff = true;
+
+      const res1 = c.api._dispararAvisoAudible({ uid: "f6-verde-1", color: "VERDE", title: "t", body: "b", flashText: "f", persist: false });
+      t.cierto(res1, "sigue devolviendo true (silenciado, no fallido)");
+      t.igual(os, 0, "el VERDE rutinario NO salió por Windows");
+      t.igual(c.api._avisoHistorialLeer().length, 0, "y tampoco quedó anotado en la central");
+
+      const res2 = c.api._dispararAvisoAudible({ uid: "f6-rojo-1", color: "ROJO", title: "t", body: "b", flashText: "f", persist: true });
+      t.cierto(res2, "se disparó");
+      t.igual(os, 1, "el ROJO crítico SÍ salió por Windows, con la preferencia encendida");
+      const hist = c.api._avisoHistorialLeer();
+      t.igual(hist.length, 1, "y quedó anotado en la central — el canal del SO también anota (antes no lo hacía)");
+      t.igual(hist[0].color, "ROJO");
+    });
+
+    t.caso("_dispararAvisoAudible: con la preferencia apagada (fábrica), el VERDE rutinario sale por el sistema operativo igual que siempre (comportamiento previo intacto)", () => {
+      const c = cargar({ silencioso: true });
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.doc.hasFocus = () => false;   // desatendida: la exención propia de VERDE (M13) NO aplica aquí
+      c.api.__S.avisosRutinariosOff = false;
+      c.api._dispararAvisoAudible({ uid: "f6-verde-2", color: "VERDE", title: "t", body: "b", flashText: "f", persist: false });
+      t.igual(os, 1, "sin la preferencia F6, el VERDE desatendido sigue saliendo por Windows como antes de este cambio");
     });
 
     // ============================ INTEGRACIÓN ============================
