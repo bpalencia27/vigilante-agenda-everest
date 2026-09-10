@@ -678,15 +678,27 @@ module.exports = {
       t.cierto(lecturasProc <= 1, "y vgl_proc_today también se leyó a lo sumo una vez, no 30 (leído " + lecturasProc + ")");
     });
 
-    t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
+    t.caso("renderSettings: la sección técnica exige Ctrl+Shift+D Y la cap 'desarrollador' del padrón (F2, fail-closed)", () => {
       cv.api.closeSheet();
       cv.api.toggleSheet("ajustes");
-      t.cierto(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "sin modo programador, la sección técnica va oculta");
+      t.falso(hoja.innerHTML.includes("vgl-grp-tec"), "sin modo programador, la sección técnica no se pinta (F2: se omite, no solo se oculta con CSS)");
       cv.api._vglAlternarModoProg(); // Ctrl+Shift+D: no se persiste, vive solo en la pestaña
       cv.api.renderSettings();
-      t.falso(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "con el modo programador activo, la sección ya no va oculta");
+      // F2 — perfil COMPLETO SIN la cap "desarrollador" (el padrón de la suite no la trae
+      // para el uid 707): el atajo solo no basta, fail-closed, la sección sigue sin pintarse.
+      t.falso(hoja.innerHTML.includes("vgl-grp-tec"), "con el atajo activo pero SIN la cap 'desarrollador', la sección sigue sin pintarse (COMPLETO no es developer)");
+      t.falso(hoja.innerHTML.includes("Probar avisos"), "y los controles técnicos no se pintan");
+      // El padrón concede la cap "desarrollador" al médico en sesión: ahora sí se pinta.
+      const listaSinDev = cv.env.almacen.vgl_acceso_lista; // el padrón por defecto de esta suite, para restaurar después
+      const listaConDev = JSON.parse(listaSinDev);
+      listaConDev.perfiles.COMPLETO.find((e) => Number(e.uid) === 707).caps = ["desarrollador"];
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(listaConDev));
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes("vgl-grp-tec"), "con la cap 'desarrollador' concedida, la sección ahora sí se pinta");
       t.cierto(hoja.innerHTML.includes("Probar avisos"), "los controles técnicos están pintados");
-      cv.api._vglAlternarModoProg(); // se apaga para no contaminar el resto de la suite
+      // Se restaura el padrón sin la cap y se apaga el atajo, para no contaminar el resto.
+      cv.env.storage.setItem("vgl_acceso_lista", listaSinDev);
+      cv.api._vglAlternarModoProg();
       cv.api.closeSheet();
       t.igual(cv.api.__state.sheet, null);
     });

@@ -14219,3 +14219,27 @@ ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
 (3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
 caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
 
+## v18.14.1 (Solicitud F, paso F2 — menú de desarrollador restringido por rol)
+
+La "SECCIÓN TÉCNICA" de Ajustes (Ctrl+Shift+D: claves de IA, carpeta cifrada local,
+diagnóstico del embudo de telemetría, bitácora de eventos) dependía SOLO del atajo de
+teclado — cualquier médico que lo conociera la veía, y además el bloque se pintaba
+SIEMPRE en el HTML (solo oculto con la clase CSS `vgl-d-none`: inspeccionable con las
+herramientas del navegador). Ahora `isDevMode` exige ADEMÁS `mtrEsDesarrollador()`
+(nueva, envuelve `accesoCapExtra("desarrollador")` — misma familia que `pym_opcional`,
+solo el padrón remoto la concede) y el bloque entero (`grpTecnico`, antes inline) se
+OMITE del HTML — no solo se oculta — cuando falta la cap, igual que `grpToggles`/
+`grpPermisos`/`grpAthenea`. Fail-closed: sin padrón, sin entrada del médico, o sin la
+cap explícita → oculto. Semilla de producción (`TABLERO/Codigo.gs`, fila de siembra
+de Brandon Jesús Palencia Martínez) actualizada con la cap `desarrollador` — pero esa
+siembra SOLO corre si la hoja "acceso" no existe aún; en la hoja YA EXISTENTE de
+producción el dueño debe añadir `desarrollador` a mano en la 6ª columna de su propia
+fila, o perderá el acceso a la sección técnica hasta hacerlo.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderSettings()`, `const isDevMode` | `_vglProgOn && mtrEsDesarrollador()` → vuelto a `_vglProgOn` (sin exigir la cap) | NO | suite_15 caso «renderSettings: la sección técnica exige Ctrl+Shift+D Y la cap 'desarrollador' del padrón (F2, fail-closed)»: mutante rojo; EXIT 1 (276 ok, 1 falla). Restaurado 277 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3795 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.1 en los 4 puntos.
+

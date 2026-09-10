@@ -4,6 +4,22 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.1] — 2026-09-09 (El menú de opciones de desarrollador ahora exige permiso, no solo el atajo de teclado)
+
+La sección técnica de Ajustes (claves de la IA, carpeta cifrada local, diagnóstico
+interno, bitácora de eventos) se abría con un atajo de teclado (Ctrl+Shift+D) que
+cualquier médico podía usar. Ahora, además del atajo, quien esté en sesión necesita
+un permiso de desarrollador concedido explícitamente en el padrón — sin él, la
+sección no aparece (y, a diferencia de antes, tampoco queda escondida en el código
+de la página: simplemente no se genera).
+
+Esto no cambia nada para el uso clínico normal: ningún control de los que usa a
+diario en consulta vive en esa sección.
+
+Verificación: banco de pruebas completo en verde (3795 comprobaciones).
+
+---
+
 ## [Versión 18.14.0] — 2026-09-09 (El envío de reportes queda listo para migrar a Cloudflare — la migración se activa por compuerta, no ha ocurrido sola)
 
 El servidor que recibe en silencio los reportes anónimos de uso (sin datos de

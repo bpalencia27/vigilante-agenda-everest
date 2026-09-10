@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.0
+// @version      18.14.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11821,6 +11821,15 @@
       return e.caps.some((c) => String(c || "").trim().toLowerCase() === String(cap || "").trim().toLowerCase());
     } catch (eX) { return false; }
   }
+  // F2 (Solicitud F) — capacidad de desarrollador, misma familia que accesoCapExtra: solo
+  // el padrón remoto la concede (cap "desarrollador" en la 6ª columna, igual que
+  // "pym_opcional"), nunca un toggle local. Fail-closed: sin lista, sin entrada del médico
+  // en sesión, o sin la cap explícita → false. Es la puerta de "Modo programador"
+  // (Ctrl+Shift+D): antes CUALQUIER médico que conociera el atajo veía la sección técnica
+  // de Ajustes (credenciales de Athenea, diagnóstico interno); el atajo sigue existiendo,
+  // pero ahora la sección solo se pinta si además el padrón concede esta cap a quien está
+  // en sesión.
+  function mtrEsDesarrollador() { return accesoCapExtra("desarrollador"); }
   // v18.1.0 — B4 CAPA c: re-comprobación JUSTO antes de escribir. La capa
   // b decide qué se puede ABRIR; esta decide qué puede SALIR a la red. El
   // mapa familia → capacidad vive en UNA sola tabla (URL de escritura →
@@ -36652,7 +36661,12 @@
     // y los dos controles operativos se sacaron a la parte siempre visible.
     // v15.6.0 — lo técnico ya no se abre con un interruptor visible: solo con el modo
     // programador (Ctrl+Shift+D), que no se persiste ni aparece para los médicos.
-    const isDevMode = _vglProgOn;
+    // F2 (Solicitud F) — el atajo por sí solo ya NO basta: además de tenerlo activado en
+    // esta pestaña, quien está en sesión debe tener la cap "desarrollador" del padrón
+    // (mtrEsDesarrollador). Fail-closed — sin esa cap, la sección técnica (y con ella
+    // grpAthenea, que comparte esta misma compuerta) no se pinta aunque el atajo esté
+    // encendido; lo clínico de Ajustes (arriba) sigue sin depender de esto.
+    const isDevMode = _vglProgOn && mtrEsDesarrollador();
     const devStyle = isDevMode ? "" : 'class="vgl-d-none"';
     const repUltOk = (() => { try { const t0 = localStorage.getItem("vgl_rep_last_ok"); if (!t0) return "nunca visto en este equipo"; const min = Math.round((Date.now() - new Date(t0).getTime()) / 60000); return min < 2 ? "hace un momento" : min < 60 ? "hace " + min + " min" : min < 1440 ? "hace " + Math.round(min / 60) + " h" : "hace " + Math.round(min / 1440) + " días"; } catch (e) { return "?"; } })();
     let repColaN = 0; try { repQLoad(); repColaN = (repQ || []).length; } catch (e) {}
@@ -36701,65 +36715,12 @@
       </div>`;
     // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
     // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
-    el.sheet.innerHTML = sheetHeader("Ajustes") + `
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-azul"><i></i>Apariencia</div>
-        <div class="vgl-fld"><label>Tema<span class="vgl-hint">"Automático" sigue el modo claro u oscuro del computador.</span></label>
-          <select id="c-tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option><option value="auto">Automático</option></select></div>
-        <div class="vgl-fld"><label>Tamaño de letra<span class="vgl-hint">Agranda todo el asistente: panel, botones y ventanas. Útil en monitores pequeños, con poca luz o si la letra se le hace chica.</span></label>
-          <select id="c-fz"><option value="normal">Normal</option><option value="grande">Grande</option><option value="muygrande">Muy grande</option></select></div>
-        <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Si este computador se siente lento, enciéndalo: la pantalla se ve más sencilla y todo responde más rápido.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
-      </div>
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
-        <div class="vgl-fld"><label>Sonido<span class="vgl-hint">Encendido, los avisos urgentes suenan. Apagado, todo llega en silencio.</span></label>${sw("c-snd", S.sonido)}</div>
-        <div class="vgl-fld"><label>Volumen</label><input type="range" id="c-vol" min="2" max="60" value="${Math.round(S.volumen * 100)}"></div>
-        <!-- v14.2.0 — Los canales del aviso de ingreso extemporáneo (repique del sonido,
-             ventana modal y pestaña parpadeando) los maneja el sistema automáticamente; se retiran
-             de Ajustes para no recargar el menú. v15.4.0: un aviso = un canal visible; la
-             ventana emergente se eliminó por duplicada. -->
-      </div>
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
-        <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Permite crear la cita de control desde el botón 📅 Agendar de cada paciente, sin salir de la historia.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
-        <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, el paciente recibe en su celular el recordatorio de Everest. Solo se envía si la cita quedó creada.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
-        <div class="vgl-fld"><label>Guía paso a paso<span class="vgl-hint">Le muestra, con una burbuja a la vez, el siguiente paso con cada paciente. Ideal si está empezando; cuando ya no le haga falta, se retira sola.</span></label>${sw("c-acomp", (typeof _acompActivo === "function") ? _acompActivo() : false)}</div>
-        <!-- v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta
-             GENERAL de los diabéticos se configura aquí (7,0 de fábrica); la meta
-             INDIVIDUAL de un paciente (botón ✏️ en su Panel) gana sobre este valor. -->
-        <div class="vgl-fld"><label>Meta general de HbA1c<span class="vgl-hint">La meta de hemoglobina glicosilada para TODOS los diabéticos (7,0 % de fábrica). La meta individual de un paciente, fijada con el ✏️ en su Panel, gana sobre este valor.</span></label><input type="number" id="c-hba1c-meta" min="5" max="12" step="0.1" value="${escapeHtml(String((typeof mtrMetaHba1cGeneral === "function") ? mtrMetaHba1cGeneral() : 7.0))}"></div>
-      </div>
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Privacidad y mejora del servicio</div>
-        <!-- v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): la telemetría es el precio de usar el
-             script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
-             y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
-        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activa en este equipo</span></div>
-        <!-- v18.2 (P11) — versión vigente de los términos siempre visible en Ajustes
-             (requisito de la PARTE 2 §7 del propio documento). Solo lectura. -->
-        <div class="vgl-fld"><label>Términos de uso y privacidad<span class="vgl-hint">Versión del aviso que usted aceptó para usar el asistente, con su fecha. Si el texto cambia, se le pedirá autorización de nuevo antes de continuar.</span></label><b id="c-terminos" style="font-size:var(--t-micro)">${escapeHtml(_terminosAjustesTexto())}</b></div>
-      </div>
-      <!-- v18.6.2 — Funcionalidades por médico: solo se pinta para el perfil
-           COMPLETO (compuerta accesoCap("toggles_funcionalidades") en grpToggles). -->
-      ${grpToggles}
-      <!-- v18.8.1 — Permisos por médico (administración): revocación granular
-           con auditoría. Misma compuerta visual que los toggles F3. -->
-      ${grpPermisos}
-      <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
-           compartida por la sede (confirmado: Athenea no tiene login por médico). -->
-      ${grpAthenea}
-      <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
-        <!-- v18.0.1 — «Nombre del consultorio / puesto» sale de la sección técnica (solo
-             modo programador) a la parte SIEMPRE visible: sin él, el tablero de telemetría
-             mostraba filas anónimas porque nadie lo configuraba. El administrador lo fija
-             una vez por equipo y cada fila viaja con ese nombre. -->
-        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3"). Viaja con cada envío al panel de seguimiento para saber qué puesto lo reportó. Sin nombre, las filas llegan con un identificador anónimo (no personal).</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
-        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
-      </div>
-      <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
-      <div class="vgl-grp vgl-grp-tec ${isDevMode ? '' : 'vgl-d-none'}">
+    // F2 (Solicitud F) — SECCION TECNICA: antes solo dependia de isDevMode (el atajo
+    // Ctrl+Shift+D); ahora isDevMode YA exige ademas la cap "desarrollador" del padron
+    // (mtrEsDesarrollador), y el bloque entero se OMITE del HTML si no aplica (mismo
+    // patron de grpToggles/grpPermisos/grpAthenea) en vez de solo ocultarse con CSS:
+    // fail-closed de verdad, no solo visualmente oculto.
+    const grpTecnico = !isDevMode ? "" : `      <div class="vgl-grp vgl-grp-tec">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Modo programador (Ctrl+Shift+D)</div>
         <!-- v18.0.0 — poda a "mínimo clínico": los controles avanzados (clínicos o de
              instalación) salen del menú visible y viven aquí, tras el modo programador. -->
@@ -36817,7 +36778,66 @@
         <div class="vgl-fld"><label>🔒 Reporte de atención consolidado — siempre activo<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento. Anónimo (conteos y resúmenes agregados, sin datos de pacientes) y obligatorio: es parte del precio de usar el script gratis.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activo en este equipo</span></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
+      </div>`;
+    el.sheet.innerHTML = sheetHeader("Ajustes") + `
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-azul"><i></i>Apariencia</div>
+        <div class="vgl-fld"><label>Tema<span class="vgl-hint">"Automático" sigue el modo claro u oscuro del computador.</span></label>
+          <select id="c-tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option><option value="auto">Automático</option></select></div>
+        <div class="vgl-fld"><label>Tamaño de letra<span class="vgl-hint">Agranda todo el asistente: panel, botones y ventanas. Útil en monitores pequeños, con poca luz o si la letra se le hace chica.</span></label>
+          <select id="c-fz"><option value="normal">Normal</option><option value="grande">Grande</option><option value="muygrande">Muy grande</option></select></div>
+        <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Si este computador se siente lento, enciéndalo: la pantalla se ve más sencilla y todo responde más rápido.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
       </div>
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
+        <div class="vgl-fld"><label>Sonido<span class="vgl-hint">Encendido, los avisos urgentes suenan. Apagado, todo llega en silencio.</span></label>${sw("c-snd", S.sonido)}</div>
+        <div class="vgl-fld"><label>Volumen</label><input type="range" id="c-vol" min="2" max="60" value="${Math.round(S.volumen * 100)}"></div>
+        <!-- v14.2.0 — Los canales del aviso de ingreso extemporáneo (repique del sonido,
+             ventana modal y pestaña parpadeando) los maneja el sistema automáticamente; se retiran
+             de Ajustes para no recargar el menú. v15.4.0: un aviso = un canal visible; la
+             ventana emergente se eliminó por duplicada. -->
+      </div>
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
+        <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Permite crear la cita de control desde el botón 📅 Agendar de cada paciente, sin salir de la historia.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
+        <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, el paciente recibe en su celular el recordatorio de Everest. Solo se envía si la cita quedó creada.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
+        <div class="vgl-fld"><label>Guía paso a paso<span class="vgl-hint">Le muestra, con una burbuja a la vez, el siguiente paso con cada paciente. Ideal si está empezando; cuando ya no le haga falta, se retira sola.</span></label>${sw("c-acomp", (typeof _acompActivo === "function") ? _acompActivo() : false)}</div>
+        <!-- v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta
+             GENERAL de los diabéticos se configura aquí (7,0 de fábrica); la meta
+             INDIVIDUAL de un paciente (botón ✏️ en su Panel) gana sobre este valor. -->
+        <div class="vgl-fld"><label>Meta general de HbA1c<span class="vgl-hint">La meta de hemoglobina glicosilada para TODOS los diabéticos (7,0 % de fábrica). La meta individual de un paciente, fijada con el ✏️ en su Panel, gana sobre este valor.</span></label><input type="number" id="c-hba1c-meta" min="5" max="12" step="0.1" value="${escapeHtml(String((typeof mtrMetaHba1cGeneral === "function") ? mtrMetaHba1cGeneral() : 7.0))}"></div>
+      </div>
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Privacidad y mejora del servicio</div>
+        <!-- v17.58.2 — POLÍTICA DEL DUEÑO (29-ago): la telemetría es el precio de usar el
+             script gratis. Nace encendida y NO se puede desactivar: se retiró el interruptor
+             y el estado se muestra fijo. Sigue siendo anónima por construcción (cero PHI). -->
+        <div class="vgl-fld"><label>🔒 Ayudar a mejorar el Vigilante — siempre activa<span class="vgl-hint">Envía <b>estadísticas de uso anónimas</b> para mejorar la herramienta para todos: qué funciones se usan, errores y rendimiento. <b>Nunca</b> se envían datos de pacientes — ni nombres, ni cédulas, ni el texto de los borradores; solo conteos y nombres de acción de un catálogo fijo. Es el precio de usar el script gratis: no tiene interruptor.</span></label><span class="vgl-hint vgl-hint-ok">✓ Activa en este equipo</span></div>
+        <!-- v18.2 (P11) — versión vigente de los términos siempre visible en Ajustes
+             (requisito de la PARTE 2 §7 del propio documento). Solo lectura. -->
+        <div class="vgl-fld"><label>Términos de uso y privacidad<span class="vgl-hint">Versión del aviso que usted aceptó para usar el asistente, con su fecha. Si el texto cambia, se le pedirá autorización de nuevo antes de continuar.</span></label><b id="c-terminos" style="font-size:var(--t-micro)">${escapeHtml(_terminosAjustesTexto())}</b></div>
+      </div>
+      <!-- v18.6.2 — Funcionalidades por médico: solo se pinta para el perfil
+           COMPLETO (compuerta accesoCap("toggles_funcionalidades") en grpToggles). -->
+      ${grpToggles}
+      <!-- v18.8.1 — Permisos por médico (administración): revocación granular
+           con auditoría. Misma compuerta visual que los toggles F3. -->
+      ${grpPermisos}
+      <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
+           compartida por la sede (confirmado: Athenea no tiene login por médico). -->
+      ${grpAthenea}
+      <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
+        <!-- v18.0.1 — «Nombre del consultorio / puesto» sale de la sección técnica (solo
+             modo programador) a la parte SIEMPRE visible: sin él, el tablero de telemetría
+             mostraba filas anónimas porque nadie lo configuraba. El administrador lo fija
+             una vez por equipo y cada fila viaja con ese nombre. -->
+        <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3"). Viaja con cada envío al panel de seguimiento para saber qué puesto lo reportó. Sin nombre, las filas llegan con un identificador anónimo (no personal).</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
+        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
+      </div>
+      <!-- SECCIÓN TÉCNICA (oculta salvo que la cap 'desarrollador' del padrón lo permita) -->
+      ${grpTecnico}
       <div id="vgl-set-bar" class="vgl-d-none">
         <span class="vgl-set-bar-t">Tiene cambios sin guardar</span>
         <button class="vgl-btn off" id="c-descartar">Descartar</button>
