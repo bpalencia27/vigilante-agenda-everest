@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.6
+// @version      18.14.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8512,6 +8512,43 @@
     } catch (e) {}
   }
 
+  // =====================================================================
+  //  v18.14.7 — ACCESO GRANULAR A LAS PESTAÑAS EN DESARROLLO
+  //  ------------------------------------------------------------------
+  //  Las dos pestañas de la HC que aún NO están terminadas —«Impresión Diagnóstica» y
+  //  «Conducta»— no se le muestran a ningún médico en producción. Aparecen solo cuando se
+  //  cumplen DOS condiciones a la vez, y ninguna de las dos es «estar en el padrón»:
+  //
+  //    1. MODO PROGRAMADOR encendido en ESTA pestaña (Ctrl+Shift+D, `_vglProgOn`, que no se
+  //       persiste a propósito: al recargar vuelve a quedar oculto). Es la misma compuerta
+  //       que ya gobierna el resto de lo técnico, así que no se inventa un segundo «modo».
+  //    2. IDENTIDAD: el único perfil autorizado a verlas mientras están a medio hacer.
+  //
+  //  Por qué las dos y no solo la identidad: el modo programador es un atajo de teclado que
+  //  cualquiera puede teclear, y la identidad sola dejaría los botones a la vista de ese
+  //  perfil en su jornada normal — que es justo lo que se pidió evitar. Y por qué no solo el
+  //  modo: sin la segunda condición, cualquier compañero que descubriera el atajo vería dos
+  //  botones que no debe usar.
+  //
+  //  El nombre se compara por PALABRAS (BRANDON + PALENCIA) sobre el nombre sin tildes y en
+  //  mayúsculas, no por uid: el uid del perfil no está confirmado en el repo, y un uid
+  //  equivocado habría dejado esto abierto o cerrado para siempre sin que nada lo delatara.
+  //  `state.activeDoctor` lo llena el propio Everest (captureDoctorInfo), nunca un literal.
+  const VGL_DEV_TABS_NOMBRES = ["BRANDON", "PALENCIA"];
+  function _vglEsPerfilDeDesarrollo() {
+    try {
+      const d = (state && state.activeDoctor) || null;
+      if (!d) return false;
+      const bruto = String(d.name || "") + " " + String(d.nombre || "");
+      if (!bruto.trim()) return false;
+      const plano = (typeof stripAccents === "function" ? stripAccents(bruto) : bruto).toUpperCase();
+      return VGL_DEV_TABS_NOMBRES.every((pal) => new RegExp("\\b" + pal + "\\b").test(plano));
+    } catch (e) { return false; }
+  }
+  function _vglPestanasEnDesarrolloVisibles() {
+    return !!(typeof _vglProgOn !== "undefined" && _vglProgOn) && _vglEsPerfilDeDesarrollo();
+  }
+
   function createAccionesDockUI() {
     // v17.6.71 — se lee y se comprueba el cruce de pacientes ANTES de cualquier retorno
     // temprano (módulo distinto, o historia cerrada): son EXACTAMENTE los dos casos
@@ -8587,6 +8624,10 @@
     // coste que el resto de lecturas del tick, suite_94 lo vigila).
     const _tabImp = _vglClicablePestana("impresion diagnostica");
     const _tabCond = _vglClicablePestana("conducta");
+    // v18.14.7 — las dos pestañas están a medio hacer: se OCULTAN por completo en producción
+    // y solo existen con Modo programador + el perfil de desarrollo (ver el bloque de
+    // _vglPestanasEnDesarrolloVisibles, arriba). Se lee UNA vez y la firma usa el mismo valor.
+    const _devTabs = _vglPestanasEnDesarrolloVisibles();
 
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
@@ -8621,7 +8662,10 @@
       _resumenListoParaGate ? "RS" : "rs",
       // v18.7.0 (M2) — presencia de las dos pestañas de impresión en la firma:
       // sin esto los botones no aparecerían hasta que otra pieza repintara.
-      _tabImp ? "TI" : "ti", _tabCond ? "TC" : "tc"].join("|");   // v18.0.112 (C7, C12)
+      // v18.14.7 — y la firma lleva la compuerta COMPLETA (pestaña presente × acceso), no
+      // solo la presencia: encender o apagar el Modo programador tiene que repintar el dock
+      // en el acto, no en el siguiente tick.
+      (_tabImp && _devTabs) ? "TI" : "ti", (_tabCond && _devTabs) ? "TC" : "tc"].join("|");   // v18.0.112 (C7, C12)
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -8853,7 +8897,11 @@
         try {
           const _p = _pendientesUniversales(docId);
           const _nom = (apt && (apt.nombre || apt.name)) || "";
-          avisoUniversal(_nom, { abandono: _p.abandono, pym: _p.pym, labs: _p.labs, adelantar: _p.adelantar, prioridadRcv: _p.prioridadRcv, anexo5: _p.anexo5, rcv: _p.rcv });
+          // v18.14.7 — el 5º argumento dice «esto lo pidió el médico»: el cuadro se pinta
+          // aunque el cupo diario de interrupciones esté agotado, y no lo consume. Antes
+          // este clic se moría en silencio justo cuando el cupo se acababa (ver el comentario
+          // largo en avisoUniversal). Es el mismo contrato que ya declaraba este bloque.
+          avisoUniversal(_nom, { abandono: _p.abandono, pym: _p.pym, labs: _p.labs, adelantar: _p.adelantar, prioridadRcv: _p.prioridadRcv, anexo5: _p.anexo5, rcv: _p.rcv }, false, null, true);
         } catch (e3) {}
       });
       btns.appendChild(bPend);
@@ -8914,7 +8962,7 @@
       } catch (e) {}
       return nodo;
     };
-    if (_tabImp) {
+    if (_tabImp && _devTabs) {
       const bImp = document.createElement("button");
       bImp.className = "vgl-dock-btn";
       bImp.setAttribute("data-accion", "pestana-impresion");
@@ -8948,7 +8996,7 @@
       });
       btns.appendChild(bImp);
     }
-    if (_tabCond) {
+    if (_tabCond && _devTabs) {
       const bCond = document.createElement("button");
       bCond.className = "vgl-dock-btn";
       bCond.setAttribute("data-accion", "pestana-conducta");
@@ -16980,7 +17028,7 @@
     _avisoUnivSinResumen.clear(); _avisoUnivFirmaLabs.clear();
   }
 
-  function avisoUniversal(nombre, datos, esPrueba, uidAviso) {
+  function avisoUniversal(nombre, datos, esPrueba, uidAviso, porPeticionDelMedico) {
     if (!togActiva("tog_notif")) return false;          // v18.6.1 (F3): compuerta de toggle
     let _consumidoPresupuesto = false;   // [NT-102/M2] visible también en el catch, para reembolsar el cupo si no se pintó
     try {
@@ -17010,7 +17058,22 @@
       // quedan EXENTOS (axioma §1.1 — el nivel 3 está reservado a ellos). Lo que el
       // tope traga, ahora se mide por sección (aviso.universal.suprimido).
       const exentoR3 = !!(abandono || prioridadRcv);
-      if (!esPrueba && !exentoR3) {
+      // v18.14.7 — UNA ACCIÓN EXPLÍCITA DEL MÉDICO NO ES UNA INTERRUPCIÓN. Bug reportado:
+      // «el botón PENDIENTES del widget lateral no hace nada al hacer clic». El presupuesto
+      // existe para acotar los avisos que el asistente lanza SOLO al abrir la historia; el
+      // botón «🩺 Pendientes (N)» del dock es el médico pidiendo VOLVER A VER ese mismo
+      // cuadro — el contrato ya estaba escrito junto al botón («es él quien lo pide, así que
+      // no consume el aviso automático de la jornada») y el código lo incumplía: la llamada
+      // no eximía del cupo, así que en cuanto el tope del día (6/equipo/día) se agotaba —cosa
+      // que pasa en una jornada normal, porque cada paciente consume cupo al abrir su
+      // historia— el clic moría en silencio, sin error y sin cuadro. Medido con el driver del
+      // arnés: con el cupo agotado el clic SÍ llegaba al manejador y `avisoUniversal`
+      // retornaba false sin pintar nada.
+      // NO consume cupo (no es un aviso de más), pero SÍ se mide: la telemetría del aviso y
+      // el registro de «ya visto» quedan intactos — a diferencia de `esPrueba`, que apaga
+      // ambos porque su caso es el banco de pruebas.
+      const exentoPresupuesto = exentoR3 || !!porPeticionDelMedico;
+      if (!esPrueba && !exentoPresupuesto) {
         if (!obsPresupuestoConsumir()) {
           try { uxTrack("aviso.universal.suprimido", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length, ad: adelantar.length, pr: prioridadRcv ? 1 : 0 }); } catch (eT) {}
           return false;
@@ -36529,6 +36592,10 @@
         else renderSettings();
       }
     } catch (e) {}
+    // v18.14.7 — el dock lleva en su FIRMA si las pestañas en desarrollo se ven, así que
+    // encender o apagar el modo tiene que repintarlo ya: si no, los dos botones aparecerían
+    // (o se quedarían) hasta el siguiente tick.
+    try { createAccionesDockUI(); } catch (eDock) {}
     try { uxTrack(_vglProgOn ? "prog.on" : "prog.off"); } catch (e) {}
     return _vglProgOn;
   }

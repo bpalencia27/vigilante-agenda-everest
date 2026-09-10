@@ -41,6 +41,15 @@ module.exports = {
       return c;
     }
     const identidad = (c, id) => { c.api.__state.activeDoctor.id = id; c.api.__state.activeDoctor.name = "MEDICO " + id; };
+    // v18.14.7 — Las dos pestañas están a medio hacer: se OCULTAN por completo en producción
+    // y solo existen con Modo programador encendido + el perfil de desarrollo autorizado.
+    // Los casos del gesto (nacimiento, firma, clic, fail-closed) siguen midiendo el MISMO
+    // contrato de v18.7.0: para llegar a los botones hay que abrir esa compuerta primero.
+    const identidadDesarrollo = (c) => {
+      c.api.__state.activeDoctor.id = 707;
+      c.api.__state.activeDoctor.name = "BRANDON JESUS PALENCIA MARTINEZ";
+      c.api._vglAlternarModoProg();   // contexto nuevo: arranca apagado, así que esto lo enciende
+    };
     const modalEn = (c, id) => c.env.doc.body.children.find((n) => n.id === id) || null;
     // Historia clínica mínima (patrón suite_93): gate de extractPacienteAbierto
     // (getElementById anamesis) + cédula sintética vía .text-muted.
@@ -94,7 +103,7 @@ module.exports = {
       const c = montar({ almacen: almacenAcceso98() });
       mockHistoria(c);
       montarPestanas(c);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = modalEn(c, "vgl-acciones-dock");
       t.cierto(!!dock, "el dock existe");
@@ -110,18 +119,62 @@ module.exports = {
     t.caso("sin pestañas montadas (módulo distinto del editor): los botones no nacen", () => {
       const c = montar({ almacen: almacenAcceso98() });
       mockHistoria(c);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = modalEn(c, "vgl-acciones-dock");
       t.cierto(!!dock, "el dock existe igual");
-      t.igual(botonDe(dock, "pestana-impresion"), null, "sin pestaña de impresión, sin botón");
-      t.igual(botonDe(dock, "pestana-conducta"), null, "sin pestaña de conducta, sin botón");
+      t.igual(!!botonDe(dock, "pestana-impresion"), false, "sin pestaña de impresión, sin botón");
+      t.igual(!!botonDe(dock, "pestana-conducta"), false, "sin pestaña de conducta, sin botón");
+    });
+
+    // ---- v18.14.7: la compuerta de visibilidad (producción vs desarrollo) ----
+    t.caso("v18.14.7: SIN Modo programador los dos botones NO existen, aunque sea el perfil de desarrollo", () => {
+      const c = montar({ almacen: almacenAcceso98() });
+      mockHistoria(c);
+      montarPestanas(c);
+      c.api.__state.activeDoctor.id = 707;
+      c.api.__state.activeDoctor.name = "BRANDON JESUS PALENCIA MARTINEZ";
+      t.noLanza(() => c.api.createAccionesDockUI());
+      const dock = modalEn(c, "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock existe igual");
+      t.igual(!!botonDe(dock, "pestana-impresion"), false, "sin Modo programador no se ve «Impresión Diagnóstica»");
+      t.igual(!!botonDe(dock, "pestana-conducta"), false, "ni «Conducta»");
+    });
+
+    t.caso("v18.14.7: con Modo programador pero OTRO perfil, los dos botones tampoco existen", () => {
+      const c = montar({ almacen: almacenAcceso98() });
+      mockHistoria(c);
+      montarPestanas(c);
+      identidad(c, "102");            // el padrón autorizado, pero NO el perfil de desarrollo
+      c.api._vglAlternarModoProg();
+      t.noLanza(() => c.api.createAccionesDockUI());
+      const dock = modalEn(c, "vgl-acciones-dock");
+      t.igual(!!botonDe(dock, "pestana-impresion"), false, "el atajo de teclado por sí solo no abre el acceso");
+      t.igual(!!botonDe(dock, "pestana-conducta"), false, "hacen falta LAS DOS condiciones");
+    });
+
+    t.caso("v18.14.7: encender el Modo programador repinta el dock y los botones nacen sin esperar al tick", () => {
+      const c = montar({ almacen: almacenAcceso98() });
+      mockHistoria(c);
+      montarPestanas(c);
+      c.api.__state.activeDoctor.id = 707;
+      c.api.__state.activeDoctor.name = "BRANDON JESUS PALENCIA MARTINEZ";
+      t.noLanza(() => c.api.createAccionesDockUI());
+      t.igual(!!botonDe(modalEn(c, "vgl-acciones-dock"), "pestana-impresion"), false, "primero, sin modo: no hay botón");
+      c.api._vglAlternarModoProg();   // el atajo Ctrl+Shift+D
+      const dock = modalEn(c, "vgl-acciones-dock");
+      t.cierto(!!botonDe(dock, "pestana-impresion"), "al encenderlo, el dock se repinta solo y el botón nace");
+      t.cierto(!!botonDe(dock, "pestana-conducta"), "los dos");
+      c.api._vglAlternarModoProg();   // apagarlo
+      const dock2 = modalEn(c, "vgl-acciones-dock");
+      t.igual(!!botonDe(dock2, "pestana-impresion"), false, "y al apagarlo desaparecen otra vez");
+      t.igual(!!botonDe(dock2, "pestana-conducta"), false, "los dos");
     });
 
     t.caso("firma del dock: al MONTARSE la pestaña después, el botón aparece sin cambiar nada más", () => {
       const c = montar({ almacen: almacenAcceso98() });
       mockHistoria(c);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       t.igual(botonDe(modalEn(c, "vgl-acciones-dock"), "pestana-impresion"), null, "primero no hay pestaña: sin botón");
       montarPestanas(c);   // el editor termina de montar la nota
@@ -134,7 +187,7 @@ module.exports = {
       const c = montar({ almacen: almacenAcceso98() });
       mockHistoria(c);
       const { tImp, tCond } = montarPestanas(c);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = modalEn(c, "vgl-acciones-dock");
       let clicsImp = 0, clicsCond = 0;
@@ -156,7 +209,7 @@ module.exports = {
       const c = montar({ almacen: almacenAcceso98() });
       mockHistoria(c);
       const { barra, tImp } = montarPestanas(c);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       const bandeja = bandejaToasts(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = modalEn(c, "vgl-acciones-dock");
@@ -192,7 +245,7 @@ module.exports = {
       li.appendChild(a); barra.appendChild(li);
       barra.querySelectorAll = () => [li, a];          // orden de documento real
       c.env.doc.body.appendChild(barra);
-      identidad(c, "707");
+      identidadDesarrollo(c);
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = modalEn(c, "vgl-acciones-dock");
       let clicsLi = 0, clicsA = 0;

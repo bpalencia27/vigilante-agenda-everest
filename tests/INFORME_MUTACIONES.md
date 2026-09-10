@@ -14359,3 +14359,54 @@ sincronizada en los 4 puntos). Las 4 mutaciones de arriba, rojas y restauradas.
 devolviendo 180 para el LDL y la RAC en G4 — es el testigo, y las correcciones viven declaradas
 en `MTR_CORRECCIONES_NORMA`. Si algún día se «limpia» el port, hay que borrar la corrección en
 el mismo movimiento o el número se aplicará dos veces.
+
+---
+
+## v18.14.7 — El botón «Pendientes» del dock ya no muere con el cupo agotado, y las dos pestañas a medio hacer se cierran bajo compuerta
+
+Orden del médico (10-sep-2026), dos tareas: (1) diagnosticar y corregir el botón «PENDIENTES» del
+widget lateral, que al hacer clic no ejecutaba ninguna acción; (2) que «Impresión Diagnóstica» y
+«Conducta» no se le muestren a ningún usuario final en producción, con acceso granular solo para
+el perfil de desarrollo.
+
+**(1) Causa raíz MEDIDA, no inferida (sesión TRAE-debugger).** El clic SÍ llegaba al manejador y
+el botón no estaba `disabled`: lo que lo mataba era el **presupuesto diario de interrupciones**
+(`obsPresupuestoConsumir`, 6/equipo/día). Con el cupo agotado (`permite:false, usados:6,
+limite:6`) `avisoUniversal` retornaba `false` sin pintar nada — ni error, ni cuadro. Se descartaron
+por medición las otras cuatro hipótesis (toggle apagado, clic tapado, botón no creado, cuadro
+reemplazado). El propio bloque del botón ya declaraba el contrato contrario («es él quien lo pide,
+así que no consume el aviso automático de la jornada»). Corrección: 5º parámetro
+`porPeticionDelMedico` → `exentoPresupuesto = exentoR3 || !!porPeticionDelMedico`. La acción
+explícita del médico **no consume cupo pero sí se mide** (a diferencia de `esPrueba`, que apaga
+telemetría y «ya visto»).
+
+**(2) Compuerta de las pestañas en desarrollo.** Se reutiliza la compuerta que ya existía en vez
+de inventar un «modo» nuevo: `_vglPestanasEnDesarrolloVisibles()` = Modo programador encendido en
+ESTA pestaña (`_vglProgOn`, Ctrl+Shift+D, no persistido) **Y** identidad por palabras
+(`VGL_DEV_TABS_NOMBRES = ["BRANDON","PALENCIA"]`, sobre `state.activeDoctor` sin tildes). La
+compuerta entra también en la FIRMA del dock (`_sigDock`) para que encender/apagar el modo repinte
+en el acto, y `_vglAlternarModoProg` llama a `createAccionesDockUI()`.
+
+**(3) Pruebas.** +2 casos en `tests/suite_15_interfaz_avanzada.js` (280 ok; el de comportamiento
+agota el cupo por la vía real con 6 llamadas no exentas y comprueba que el clic pinta el cuadro y
+NO consume cupo) y +3 en `tests/suite_98_hc_pestanas.js` (10 ok; fijan la doble condición).
+Además se **actualizó una aserción preexistente de `tests/suite_83_observabilidad.js`**: su regex
+exigía el literal `if (!esPrueba && !exentoR3)`, que dejó de existir al derivar la exención; ahora
+fija el valor derivado y añade la exención nueva, sin perder la de R=3.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js llamada del botón Pendientes L8904 — el 5º argumento | `… }, false, null, true);` → `… }, false, null);` (el botón vuelve a quedar sujeto al cupo: es el defecto reportado) | NO | Lo cazan DOS aserciones independientes, la primera de COMPORTAMIENTO: suite_15 «REGRESIÓN — el clic en «🩺 Pendientes» pinta el cuadro aunque el cupo del día esté AGOTADO (y no lo consume)» (el cuadro no se pinta) y «v18.14.7 (fuente): el botón de Pendientes del dock pide la exención del cupo…». EXIT 1 (278 ok, 2 fallan). Restaurado 280 ok EXIT=0 |
+| user.js `avisoUniversal` L17075 — el valor derivado de la exención | `const exentoPresupuesto = exentoR3 \|\| !!porPeticionDelMedico;` → `const exentoPresupuesto = exentoR3;` (la exención existe pero nadie la alimenta: la puerta vuelve a velar el clic) | NO | Lo cazan TRES aserciones: las DOS de suite_15 del renglón anterior (el valor derivado es lo que hace pasar el clic) y la de FUENTE de suite_83 «el presupuesto vela la puerta del aviso universal, exime a las pruebas, a —M1/NT-101— lo R=3… y (v18.14.7) a la acción explícita del médico». EXIT 1 (278 ok, 2 fallan) + (11 ok, 1 falla). Restaurado 280 ok / 12 ok EXIT=0 |
+| user.js `_vglEsPerfilDeDesarrollo` L8545 — la identidad autorizada | `return VGL_DEV_TABS_NOMBRES.every(…)` → `return true;` (cualquier perfil pasa la compuerta: los dos botones se le abren a todo el que descubra Ctrl+Shift+D) | NO | suite_98 caso «v18.14.7: con Modo programador pero OTRO perfil, las dos pestañas siguen sin existir»: EXIT 1 (9 ok, 1 fallan). Restaurado 10 ok EXIT=0 |
+| user.js `_vglPestanasEnDesarrolloVisibles` L8549 — la compuerta del modo | `… && _vglEsPerfilDeDesarrollo()` → `_vglEsPerfilDeDesarrollo()` (basta la identidad: los botones quedarían a la vista en la jornada normal del perfil, que es justo lo que se pidió evitar) | NO | suite_98 casos «v18.14.7: sin Modo programador los dos botones no existen aunque sea el perfil de desarrollo» y el de encender/apagar. EXIT 1 (8 ok, 2 fallan). Restaurado 10 ok EXIT=0 |
+| user.js firma del dock L8668 — la compuerta entra en `_sigDock` | `(_tabImp && _devTabs) ? "TI" : "ti", …` → `_tabImp ? "TI" : "ti", …` (la firma deja de cambiar con el modo: encenderlo no repinta y los botones no nacen hasta el siguiente tick) | NO | Lo cazan DOS: suite_15 (guarda de FUENTE de la firma) y suite_98 (el caso de encender/apagar el modo, de comportamiento). EXIT 1 (279 ok, 1 falla) + (9 ok, 1 fallan). Restaurado 280 ok / 10 ok EXIT=0 |
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.831 pasan, EXIT 0** (sube de 3.826 a
+3.831: +2 de suite_15, +3 de suite_98); `node tools/compat-check.js` → **COMPATIBLE**
+(`@version` 18.14.7 sincronizada en los 4 puntos). Las 5 mutaciones de arriba, rojas y restauradas.
+
+**Nota de proceso:** al restaurar la mutación 3, el `SearchReplace` casó el `return true;` de
+`atheneaCredsSet` (L2501) por no ser único el contexto; se detectó de inmediato y se restauraron
+AMBOS sitios antes de seguir. El banco volvió a verde (3.831) entre mutación y mutación.
+

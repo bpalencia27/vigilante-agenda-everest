@@ -53,6 +53,18 @@ function disparar(nodo, tipo, evento) {
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Busca un botón del dock por su data-accion, bajando por el árbol del arnés.
+function buscarAccionDock(raiz, accion) {
+  const cola = [raiz];
+  while (cola.length) {
+    const n = cola.shift();
+    if (!n) continue;
+    if (typeof n.getAttribute === "function" && n.getAttribute("data-accion") === accion) return n;
+    for (const h of (n.children || [])) cola.push(h);
+  }
+  return null;
+}
+
 // Respuesta con forma de fetch real para los mocks por URL.
 function respuestaJson(data) {
   return {
@@ -2101,6 +2113,48 @@ module.exports = {
       t.noLanza(() => c.api.createAccionesDockUI());
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       t.cierto(!!dock, "el widget igual se crea: apt.doc_id es lo único que exigen los open*Modal");
+    });
+
+    // v18.14.7 — REGRESIÓN REPORTADA: «el botón PENDIENTES del widget lateral no hace nada al
+    // hacer clic». El clic SÍ llegaba al manejador; lo que lo mataba era el presupuesto diario
+    // de interrupciones: `avisoUniversal` retornaba false en silencio en cuanto el cupo del día
+    // (6/equipo/día) se agotaba, y eso pasa en una jornada normal porque cada paciente consume
+    // cupo al abrir su historia. El propio bloque del botón ya declaraba el contrato contrario
+    // («es él quien lo pide, así que no consume el aviso automático de la jornada»).
+    t.caso("v18.14.7 REGRESIÓN — el clic en «🩺 Pendientes» pinta el cuadro aunque el cupo del día esté AGOTADO (y no lo consume)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "555111");
+      c.api.__state.pym.set("555111", ["VIH", "SOMF"]);   // pendiente NO exento del cupo
+      // El cupo se agota por la vía real: seis avisos no exentos (el tope por defecto).
+      for (let i = 0; i < 6; i++) c.api.avisoUniversal("PRUEBA", { pym: ["VIH"] }, false);
+      const antes = c.api.obsPresupuestoEstado();
+      t.falso(antes.permite, "el cupo del día quedó agotado: " + JSON.stringify(antes));
+      // Se retira el cuadro que dejó el último aviso, para que el que se busque sea el del clic.
+      for (let i = c.env.doc.body.children.length - 1; i >= 0; i--) {
+        if (c.env.doc.body.children[i] && c.env.doc.body.children[i].id === "vgl-pym-modal") c.env.doc.body.children.splice(i, 1);
+      }
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock se creó");
+      const btn = buscarAccionDock(dock, "pendientes");
+      t.cierto(!!btn, "y el botón de Pendientes existe");
+      disparar(btn, "click", { stopPropagation() {} });
+      t.cierto(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-modal"),
+        "el cuadro se pinta: una petición explícita del médico no es una interrupción que el tope pueda tragarse");
+      const despues = c.api.obsPresupuestoEstado();
+      t.igual(despues.usados, antes.usados, "y el clic del médico NO consume cupo: no es un aviso de más");
+    });
+
+    t.caso("v18.14.7 (fuente): el botón de Pendientes del dock pide la exención del cupo, y el tope sigue siendo el mismo para los avisos automáticos", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/avisoUniversal\(_nom, \{ abandono: _p\.abandono[\s\S]{0,220}\}, false, null, true\);/.test(src),
+        "el clic del dock se identifica como petición del médico (5º argumento)");
+      // La exención del nivel 3 NO se toca: el presupuesto sigue sin tragarse el abandono RCV.
+      t.cierto(/const exentoR3 = !!\(abandono \|\| prioridadRcv\);/.test(src),
+        "la exención del nivel 3 sigue siendo exactamente abandono RCV + prioridadRcv");
+      t.cierto(/const exentoPresupuesto = exentoR3 \|\| !!porPeticionDelMedico;/.test(src),
+        "y la nueva excepción es SOLO la petición explícita del médico");
+      t.falso(/if \(!esPrueba && !exentoR3\) \{/.test(src), "el tope ya no es la única compuerta");
     });
 
     // ================= createExamenFisicoInjectorUI (plantilla por posición) =================
@@ -4189,8 +4243,13 @@ module.exports = {
       // La firma del dock incluye el número: sin esto se congela en el conteo del primer tick.
       t.cierto(/"PN" \+ _nPendientesDock,/.test(src), "el número entra en la firma del dock");
       // Reabre el mismo cuadro, sin consumir el aviso automático de la jornada.
-      const i = src.indexOf('uxTrack("widget.pendientes.abrir"');
-      const bloque = src.slice(i, i + 500);
+      // v18.14.7 — el anclaje apunta a la LLAMADA, no a una distancia fija: la versión
+      // anterior medía 500 caracteres desde la telemetría y el comentario que documenta la
+      // exención del cupo empujó la llamada fuera de la ventana (misma trampa que ya mordió
+      // en suite_28). Lo que esta aserción mide son los ARGUMENTOS de la llamada.
+      const i = src.indexOf("avisoUniversal(_nom, { abandono: _p.abandono");
+      t.cierto(i > 0, "se localiza la llamada del botón de Pendientes");
+      const bloque = src.slice(i, i + 400);
       t.cierto(/avisoUniversal\(_nom, \{ abandono: _p\.abandono, pym: _p\.pym, labs: _p\.labs, adelantar: _p\.adelantar/.test(bloque),
         "pinta el mismo cuadro con los mismos datos");
       t.falso(/avisoMarcarVisto/.test(bloque), "y NO marca nada como visto: lo pidió él, no consume el aviso del día");
@@ -6572,7 +6631,9 @@ module.exports = {
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       // v18.7.0 (M2) — la firma creció: después del estado del resumen vienen los
       // segmentos de las pestañas de impresión/conducta (TI/ti, TC/tc) antes del join.
-      t.cierto(/_resumenListoParaGate \? "RS" : "rs",[\s\S]{0,400}_tabImp \? "TI" : "ti", _tabCond \? "TC" : "tc"\]\.join\("\|"\)/.test(src),
+      // v18.14.7 — y esos segmentos llevan la compuerta COMPLETA (pestaña presente × acceso),
+      // no solo la presencia: encender el Modo programador tiene que repintar el dock.
+      t.cierto(/_resumenListoParaGate \? "RS" : "rs",[\s\S]{0,600}\(_tabImp && _devTabs\) \? "TI" : "ti", \(_tabCond && _devTabs\) \? "TC" : "tc"\]\.join\("\|"\)/.test(src),
         "y ese estado entra en la firma del dock (con los segmentos de pestañas de M2): sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
     });
 

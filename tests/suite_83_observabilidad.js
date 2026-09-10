@@ -212,7 +212,11 @@ module.exports = {
       t.cierto(c.api.obsCatch("codigo raro!!", new Error("mensaje con PHI del paciente")) === true, "obsCatch sanea el código y nunca deja pasar el mensaje");
       t.cierto(typeof api.obsConsultaCerrar === "function" && typeof api.obsConsultaElegible === "function" && typeof api.obsAvisoDesenlace === "function" && typeof api.obsAvisoCumplido === "function" && typeof api.obsConsultaMarcarModulo === "function" && typeof api.obsPerdidosSumar === "function" && typeof api.obsPresupuestoConsumir === "function" && typeof api.obsHuellaEquipo === "function" && typeof api.obsModuloLimpio === "function" && typeof api.obsGmLeer === "function" && typeof api.obsGmGuardar === "function" && typeof api.obsConsultaActiva === "function", "el resto del módulo obs está expuesto y es invocable");
       t.cierto(FUENTE.indexOf("obsConsultaAbrir(docId)") >= 0, "el denominador cuelga del auto-fetch del paciente abierto (autoFetchAtheneaLabs)");
-      t.cierto(FUENTE.indexOf("const exentoR3 = !!(abandono || prioridadRcv);") >= 0 && /if \(!esPrueba && !exentoR3\) \{[\s\S]{0,120}if \(!obsPresupuestoConsumir\(\)\)/.test(FUENTE), "el presupuesto vela la puerta del aviso universal, exime a las pruebas y —M1/NT-101— a lo R=3 (abandono RCV / prioridadRcv)");
+      // v18.14.7 — la puerta sigue velada por el presupuesto y sigue eximiendo a las pruebas
+      // y a lo R=3; lo que cambió es que la exención ahora es un valor DERIVADO
+      // (`exentoPresupuesto`), porque una ACCIÓN EXPLÍCITA DEL MÉDICO (el botón «Pendientes»
+      // del dock, 5º argumento `porPeticionDelMedico`) tampoco es una interrupción.
+      t.cierto(FUENTE.indexOf("const exentoR3 = !!(abandono || prioridadRcv);") >= 0 && FUENTE.indexOf("const exentoPresupuesto = exentoR3 || !!porPeticionDelMedico;") >= 0 && /if \(!esPrueba && !exentoPresupuesto\) \{[\s\S]{0,120}if \(!obsPresupuestoConsumir\(\)\)/.test(FUENTE), "el presupuesto vela la puerta del aviso universal, exime a las pruebas, a —M1/NT-101— lo R=3 (abandono RCV / prioridadRcv) y (v18.14.7) a la acción explícita del médico");
       t.cierto(FUENTE.indexOf('obsAvisoDesenlace(avisoObsId, "accion")') >= 0 && FUENTE.indexOf("obsAvisoMostrar({ ab:") >= 0, "el aviso universal emite mostrado y desenlace");
       t.cierto(/function _equipoId\(\) \{[\s\S]{0,600}obsIdentidadEquipo\(\)/.test(FUENTE), "_equipoId delega en obsIdentidadEquipo (misma identidad en telemetría v15 y obs)");
       t.cierto(FUENTE.indexOf("obs_perdidos") >= 0, "el entorno diario reporta el contador de perdidos");

@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.7] — 2026-09-10 (El botón «Pendientes» vuelve a responder, y las dos pestañas a medio hacer se cierran con llave)
+
+**El botón «🩺 Pendientes» del widget lateral ya no se queda mudo.** Al pulsarlo, el asistente
+debe volver a mostrarle el cuadro con lo que quedó pendiente de esa historia. No lo hacía: el
+clic llegaba, pero el asistente tiene un **tope de interrupciones al día** (6 por equipo, para no
+llenarle la consulta de cuadros) y, una vez agotado —cosa que ocurre en cualquier jornada
+normal, porque cada paciente consume uno al abrir su historia—, el cuadro se descartaba **en
+silencio**: sin error, sin aviso, sin nada. Ahora una acción que **usted pide a propósito** no
+gasta ese tope: el cuadro de Pendientes se abre siempre que usted lo pulse, aunque el cupo del
+día esté agotado. Sigue contándose en la telemetría, para poder medirlo, pero no le quita cupo a
+los avisos automáticos de la jornada.
+
+**«Impresión Diagnóstica» y «Conducta» dejan de estar a la vista.** Las dos pestañas del dock de
+la historia clínica que todavía no están terminadas ya no se le muestran a ningún médico en su
+jornada normal. Para que aparezcan tienen que cumplirse **dos condiciones a la vez**: que el
+**Modo programador** esté encendido en esa pestaña (Ctrl+Shift+D, que no se guarda: al recargar
+vuelve a quedar oculto) **y** que el perfil sea el de desarrollo autorizado. Ninguna de las dos
+por separado basta: el atajo de teclado lo puede teclear cualquiera, y la identidad sola habría
+dejado los botones a la vista de ese perfil en su consulta de todos los días. Al encender o
+apagar el modo, el widget se repinta en el acto.
+
+Verificación: banco de pruebas completo en verde (3.831 comprobaciones), con las mutaciones de
+control documentadas en `tests/INFORME_MUTACIONES.md` (sección «v18.14.7»).
+
+---
+
 ## [Versión 18.14.6] — 2026-09-10 (Una sola vara para la creatinina cuando el riñón se está moviendo)
 
 **La creatinina de un paciente con caída reciente de la función renal se reclama antes, igual
