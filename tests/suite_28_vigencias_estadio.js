@@ -19,7 +19,7 @@
 module.exports = {
   nombre: "Vigencias por estadio renal (R2, sombra)",
   cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv", "_vigenciaDiasParaAnalito",
-    "mtrVigenciaDiasNorma", "mtrColapsarVigencia", "_analitosRcvVencidos",
+    "mtrVigenciaDiasNorma", "mtrColapsarVigencia", "mtrProgramaRector", "_analitosRcvVencidos",
     "pymRcvCubiertoPorAthenea", "mtrCacheResumenGuardar",
     "pymPaqueteCubiertoPorAthenea", "pymPaqueteHechoEnAthenea"],
 
@@ -378,6 +378,168 @@ module.exports = {
         }
       }
       t.igual(bloqueables, [], "si esto deja de estar vacío hay que decidir qué hace el aviso con un examen bloqueado");
+    });
+
+    // =================================================================
+    // v18.14.6 — LA MATRIZ COMPLETA CONTRA LA FUENTE (PROMPTWARE.md §S3 «VIGENCIAS»).
+    //
+    // Las pruebas de arriba fijan CELDA por celda, pero ninguna recorre la tabla
+    // entera de una sola vez: una celda que no tuviera su caso propio —fósforo en
+    // G3b, por ejemplo— podía cambiar y el banco seguía verde. Esta matriz es la
+    // transcripción literal de la fuente, analito por analito y estadio por
+    // estadio, por los TRES programas, y se mide sobre la vía EFECTIVA
+    // (`mtrVigenciaDiasNorma` + `mtrColapsarVigencia`), que es la que usan el
+    // motor, el Panel, Agendar y Ordenar — no sobre `MTR_ERC`, que es el port del
+    // Python que queda como testigo.
+    //
+    // Fuente: PROMPTWARE.md línea 26 (SYS_MOTOR_RCV S3, la misma que cita el
+    // archivo), con las cuatro correcciones ya declaradas en MTR_CORRECCIONES_NORMA
+    // aplicadas. La creatinina va con el extremo SUPERIOR del rango (función renal
+    // estable), que es la regla de la fuente; el inferior se fija aparte.
+    // =================================================================
+    const ESTADIOS_ERC = ["G1", "G2", "G3a", "G3b", "G4"];
+    const MATRIZ_ERC = {
+      //                       G1     G2     G3a    G3b    G4
+      creatinina:            [180,   180,   121,   121,    93],
+      glicemia:              [180,   180,   180,   180,    60],
+      parcial_orina:         [180,   180,   180,   180,   120],
+      hemoglobina:           [365,   365,   365,   365,   180],
+      pth:                   ["BLOQ", "BLOQ", 365,  365,   180],
+      albumina:              ["BLOQ", "BLOQ", "BLOQ", 365,  365],
+      fosforo:               ["BLOQ", "BLOQ", "BLOQ", 365,  365],
+      colesterol_total:      [180,   180,   180,   180,   120],
+      trigliceridos:         [180,   180,   180,   180,   120],
+      ldl:                   [180,   180,   180,   180,   120],
+      hdl:                   [180,   180,   180,   180,   180],
+      rac:                   [180,   180,   180,   180,   120],
+      hba1c:                 [180,   180,   180,   180,   120],
+    };
+
+    t.caso("v18.14.6: MATRIZ ERC — los 13 analitos × los 5 estadios, celda por celda contra la tabla de la fuente", () => {
+      const fallos = [];
+      for (const analito of Object.keys(MATRIZ_ERC)) {
+        ESTADIOS_ERC.forEach((est, i) => {
+          const esperado = MATRIZ_ERC[analito][i];
+          const crudo = api.mtrVigenciaDiasNorma("ERC", analito, est, true, 60, null);
+          const obtenido = api.mtrColapsarVigencia(crudo, false);
+          if (obtenido !== esperado) {
+            fallos.push(analito + "/" + est + ": esperaba " + esperado + " y obtuvo " + obtenido);
+          }
+        });
+      }
+      t.igual(fallos, [], "ninguna celda de la tabla ERC puede apartarse de la fuente sin que esta prueba lo diga");
+    });
+
+    t.caso("v18.14.6: G5 hereda la columna G4 en los 13 analitos (el paciente más grave no puede tener la vigencia más larga)", () => {
+      const fallos = [];
+      for (const analito of Object.keys(MATRIZ_ERC)) {
+        const g4 = api.mtrColapsarVigencia(api.mtrVigenciaDiasNorma("ERC", analito, "G4", true, 60, null), false);
+        const g5 = api.mtrColapsarVigencia(api.mtrVigenciaDiasNorma("ERC", analito, "G5", true, 60, null), false);
+        if (g5 !== g4) fallos.push(analito + ": G5=" + g5 + " y G4=" + g4);
+      }
+      t.igual(fallos, [], "G5 hereda G4 (D-4, decisión del médico del 4-ago-2026)");
+    });
+
+    t.caso("v18.14.6: las PARTICULARIDADES del G4, una por una — la columna no es «todo 180» ni «todo 120»", () => {
+      // El caso que el médico pidió vigilar. Cada aserción es una celda donde G4 se
+      // separa de G3b; si alguien «unifica» la columna, esta prueba lo delata.
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "glicemia", "G4", true, 60, null), 60, "glicemia: 60, la más corta de la tabla");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "parcial_orina", "G4", true, 60, null), 120, "uroanálisis: 120");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "creatinina", "G4", true, 60, null), [60, 93], "creatinina: el RANGO [60,93], sin colapsar");
+      t.igual(api.mtrColapsarVigencia([60, 93], false), 93, "…colapsado al SUPERIOR con la función renal estable");
+      t.igual(api.mtrColapsarVigencia([60, 93], true), 60, "…y al INFERIOR cuando se está moviendo (IRA)");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "ldl", "G4", true, 60, null), 120, "LDL: 120 — la corrección contra la Tabla 50, no los 180 del port");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "rac", "G4", true, 60, null), 120, "RAC: 120");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "hemoglobina", "G4", true, 60, null), 180, "hemoglobina: 180");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "hdl", "G4", true, 60, null), 180, "HDL: sigue en 180 — no se acorta lo que la fuente no acorta");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "albumina", "G4", true, 60, null), 365, "albúmina: 365, igual que en G3b");
+    });
+
+    t.caso("v18.14.6: la HbA1c en ERC la gobierna SOLO la diabetes — BLOQ sin DM2 en los cinco estadios", () => {
+      for (const est of ESTADIOS_ERC) {
+        t.igual(api.mtrVigenciaDiasNorma("ERC", "hba1c", est, false, 60, null), "BLOQ",
+          "sin DM2 la HbA1c no se pide, y el estadio no cambia eso: " + est);
+      }
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "hba1c", "G3b", true, 60, null), 180, "con DM2 en G3b: 180");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "hba1c", "G4", true, 60, null), 120, "con DM2 en G4: 120");
+    });
+
+    t.caso("v18.14.6: MATRIZ DM2 y HTA — todo 180 salvo el ECG (365, y solo desde los 45 años)", () => {
+      // La HbA1c va SOLO en DM2: es un examen de diabetes y el programa HTA no la
+      // contempla (la fuente pide, en HTA, glicemia — no HbA1c). Va aparte a
+      // propósito para que la diferencia quede escrita y no se «unifique» por
+      // parecido de nombre.
+      const planos = ["glicemia", "creatinina", "rac", "parcial_orina",
+        "colesterol_total", "ldl", "hdl", "trigliceridos"];
+      const fallos = [];
+      for (const analito of planos) {
+        for (const prog of ["DM2", "HTA"]) {
+          for (const est of [null, "G1", "G2", "G3a", "G3b", "G4", "G5"]) {
+            const v = api.mtrVigenciaDiasNorma(prog, analito, est, true, 60, null);
+            if (v !== 180) fallos.push(prog + "/" + analito + "/" + est + "=" + v);
+          }
+        }
+      }
+      t.igual(fallos, [], "DM2 y HTA sin ERC activa: la vigencia plana de 180 días en los ocho analitos compartidos");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "hba1c", null, true, 60, null), 180, "la HbA1c en DM2: 180");
+      t.igual(api.mtrVigenciaDiasNorma("HTA", "hba1c", null, true, 60, null), null,
+        "y en HTA no se contempla: null, no un 180 inventado por parecido de nombre");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "ecg", null, true, 44, null), null, "ECG con 44 años: no se pide");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "ecg", null, true, 45, null), 365, "ECG desde los 45 años: anual");
+      t.igual(api.mtrVigenciaDiasNorma("HTA", "acido_urico", "G4", true, 60, null), "BLOQ", "ácido úrico: bloqueado en HTA, sin importar el estadio");
+      t.igual(api.mtrVigenciaDiasNorma("HTA", "pth", null, true, 60, null), null, "HTA no exige PTH: la tabla no la contempla");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "fosforo", null, true, 60, null), null, "DM2 tampoco exige fósforo");
+    });
+
+    t.caso("v18.14.6: el override de RAC≥30 es un plazo PLANO de 90 días, nunca por encima de la base", () => {
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "rac", "G1", true, 60, 350), 90, "G1 con albuminuria: 90");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "rac", "G4", true, 60, 350), 90, "G4 con albuminuria: 90, no la mitad de 120");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "rac", "G4", true, 60, 10), 120, "sin albuminuria manda la tabla");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "rac", null, true, 60, 30), 90, "en DM2 el override también aplica desde 30 exactos");
+      t.igual(api.mtrVigenciaDiasNorma("DM2", "rac", null, true, 60, 29), 180, "y por debajo de 30 no toca la vigencia");
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "glicemia", "G4", true, 60, 350), 60, "el override es de la RAC y de nadie más");
+    });
+
+    t.caso("v18.14.6: el rango de la creatinina usa el INFERIOR con sospecha de IRA — la MISMA vara en el aviso y en el motor", () => {
+      // Decisión del médico (10-sep-2026): la regla del rango tiene que llegar igual a los
+      // dos caminos. Antes, el motor del Panel bajaba a 60 en G4 y el aviso de entrada se
+      // quedaba en 93 sobre el MISMO paciente con sospecha de IRA.
+      const estable = { programa: "ERC", estadio: "G4", esDM2: true, edad: 60 };
+      const inestable = { programa: "ERC", estadio: "G4", esDM2: true, edad: 60, funcionRenalInestable: true };
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", null, estable), 93, "función renal estable: el extremo SUPERIOR del rango 60-93");
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", null, inestable), 60, "con sospecha de IRA: el INFERIOR");
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", null,
+        { programa: "ERC", estadio: "G3a", esDM2: true, edad: 60, funcionRenalInestable: true }), 90,
+        "y en G3a baja de 121 a 90");
+      t.igual(api._vigenciaDiasParaAnalito("GLUCOSA", null, inestable), 60,
+        "la regla es del RANGO de la creatinina: la glicemia no se toca");
+      t.igual(api.mtrColapsarVigencia(api.mtrVigenciaDiasNorma("ERC", "creatinina", "G4", true, 60, null), true), 60,
+        "y el motor del Panel, que ya lo hacía, sigue diciendo lo mismo");
+    });
+
+    t.caso("v18.14.6 (fuente): los DOS caminos del aviso le pasan la sospecha de IRA al colapsador", () => {
+      // El defecto no era de cálculo sino de cableado: `_vigenciaDiasParaAnalito` leía la
+      // opción y ningún llamador se la pasaba. Esta guarda obliga a que los dos —el aviso
+      // de entrada y el antiduplicado del paquete PyM— la sigan mandando.
+      //
+      // Anclada a INICIO DE LÍNEA de código (`^\s+funcionRenalInestable:`) a propósito: la
+      // primera versión contaba apariciones de la cadena en todo el archivo y se contaba a
+      // SÍ MISMA —el comentario largo de `checkAvisoUniversal` cita la línea textualmente—,
+      // dando 3 donde hay 2. Una guarda que cuenta su propia documentación mide mal.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/^\s+funcionRenalInestable: !!\(_resAviso\.erc && _resAviso\.erc\.sospechaIra\),\s*$/m.test(src),
+        "el aviso rojo de entrada manda la sospecha de IRA");
+      t.cierto(/^\s+funcionRenalInestable: !!\(_resPym\.erc && _resPym\.erc\.sospechaIra\),\s*$/m.test(src),
+        "y el antiduplicado del paquete PyM también");
+    });
+
+    t.caso("v18.14.6: el PROGRAMA RECTOR — ERC manda desde G3a; en G1/G2 mandan DM2 y HTA", () => {
+      t.igual(api.mtrProgramaRector(true, "G4", true, true), "ERC", "ERC G4 manda sobre DM2 y HTA");
+      t.igual(api.mtrProgramaRector(true, "G3a", false, true), "ERC", "ERC desde G3a es rectora");
+      t.igual(api.mtrProgramaRector(true, "G1", true, true), "DM2", "ERC en G1 no es rectora: manda DM2");
+      t.igual(api.mtrProgramaRector(true, "G2", false, true), "HTA", "ERC en G2 y sin DM2: manda HTA");
+      t.igual(api.mtrProgramaRector(true, null, false, false), "ERC", "ERC sin estadio calculable sigue siendo ERC");
+      t.igual(api.mtrProgramaRector(false, null, false, false), null, "sin programa: null, no se adivina");
     });
 
     // =================================================================

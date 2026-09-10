@@ -14316,3 +14316,46 @@ el contador de esa suite pasó de 275 a 278, exactamente +3. Además se corrigi�
 del caso preexistente «REGRESIÓN — el afinado de cargarHoras…»: su ventana fija de 2.600
 caracteres dejó de alcanzar el bloque al crecer la función, y ahora se delimita por el
 inicio de la función siguiente (no depende de una distancia escrita a mano).
+
+## v18.14.6 — Vigencias por programa: la matriz completa, y UNA sola vara para el rango de la creatinina
+
+Orden del médico (10-sep-2026): confirmar el estado de implementación de las vigencias
+diferenciadas por programa —con el caso del G4 de ERC—, implementar validaciones automáticas
+por configuración, y unificar la regla del rango.
+
+**(1) Estado verificado: ya estaba implementado y cableado.** La tabla de `PROMPTWARE.md` §S3
+«VIGENCIAS» vive en `MTR_ERC` (transcripción literal del port del Python, que queda como
+testigo) y sus particularidades del G4 se aplican en `mtrVigenciaDiasNorma` (LDL 120 y RAC 120
+sobre los 180 del port), con las cuatro correcciones declaradas y su fuente en
+`MTR_CORRECCIONES_NORMA`. La vía efectiva es `mtrVigenciaDiasNorma` + `mtrColapsarVigencia`, y
+de ahí beben el motor del Panel, Agendar, Ordenar y el aviso de entrada
+(`_vigenciaDiasParaAnalito`).
+
+**(2) Lo que faltaba era la cobertura.** Las pruebas fijaban celda por celda, pero ninguna
+recorría la tabla entera, así que una celda sin caso propio podía cambiar sin que el banco
+dijera nada. Se añaden **9 casos** a `tests/suite_28_vigencias_estadio.js` (la suite pasa de
+63 a 72 casos, +9 exactos) con la matriz literal de la fuente medida sobre la vía efectiva.
+
+**(3) Un defecto real de cableado, corregido con el visto bueno del médico.** La regla del
+rango («superior si está estable, inferior si se mueve») llegaba a UN solo camino: el motor
+del Panel ya recibía `funcionRenalInestable: erc.sospechaIra` (L50881), pero
+`_vigenciaDiasParaAnalito` leía la opción y **ningún llamador se la pasaba**. Medido: sobre el
+mismo paciente con sospecha de IRA, el Panel decía 60 días en G4 y el aviso de entrada 93.
+Ahora los dos llamadores del aviso (`checkAvisoUniversal` y `pymRcvCubiertoPorAthenea`) la
+mandan desde `_resAviso.erc.sospechaIra` / `_resPym.erc.sospechaIra`.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrVigenciaDiasNorma` L46654 — la corrección del LDL en G4 | `if (ana === "ldl") v = 120;` → `v = 180` (se revierte la corrección contra la Tabla 50: el LDL de G4 vuelve a los 180 del port) | NO | Lo cazan TRES aserciones independientes: la matriz nueva («ninguna celda de la tabla ERC puede apartarse de la fuente…: obtuvo ["ldl/G4: esperaba 120 y obtuvo 180"]»), las particularidades del G4 («LDL: 120 — la corrección contra la Tabla 50, no los 180 del port») y la preexistente de G5 («LDL en G5: esperaba 120 y obtuvo 180»). EXIT 1 (67 ok, 3 fallan). Restaurado 72 ok EXIT=0 |
+| user.js `MTR_ERC.fosforo` L42167 — una celda SIN caso propio (fósforo en G3b) | `[BLOQ, BLOQ, BLOQ, 365, 365]` → `[BLOQ, BLOQ, BLOQ, 180, 365]` (una celda que ninguna prueba anterior miraba) | NO | **La caza SOLO la matriz nueva**: «obtuvo ["fosforo/G3b: esperaba 365 y obtuvo 180"]» — ninguna otra aserción del banco la detectaba, que es exactamente el hueco que esta tarea vino a cerrar. EXIT 1 (69 ok, 1 falla). Restaurado 72 ok EXIT=0 |
+| user.js `_opts` del aviso L17226 — el cableado de la sospecha de IRA | retirado el `funcionRenalInestable: !!(_resAviso.erc && _resAviso.erc.sospechaIra)` de `checkAvisoUniversal` (el aviso de entrada vuelve a ignorar la IRA: el defecto original) | NO | suite_28 caso «v18.14.6 (fuente): los DOS caminos del aviso le pasan la sospecha de IRA al colapsador» («el aviso rojo de entrada manda la sospecha de IRA (obtuvo false)»): EXIT 1 (71 ok, 1 falla). Restaurado 72 ok EXIT=0. NOTA: la guarda se ancla a INICIO DE LÍNEA de código (`^\s+funcionRenalInestable:`), no a la cadena suelta: su primera versión se contaba a SÍ MISMA —el comentario largo del archivo cita la línea textualmente— y daba 3 donde hay 2 |
+| user.js `_vigenciaDiasParaAnalito` L4402 — la lectura de la opción | `mtrColapsarVigencia(v, !!opts.funcionRenalInestable)` → `mtrColapsarVigencia(v, false)` (el colapsador ignora la IRA aunque el llamador la mande) | NO | suite_28 caso «v18.14.6: el rango de la creatinina usa el INFERIOR con sospecha de IRA…» («con sospecha de IRA: el INFERIOR: esperaba 60 y obtuvo 93»): EXIT 1 (71 ok, 1 falla). Restaurado 72 ok EXIT=0 |
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.826 pasan, EXIT 0** (sube de 3.817 a
+3.826: los 9 casos nuevos); `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.6
+sincronizada en los 4 puntos). Las 4 mutaciones de arriba, rojas y restauradas.
+
+**Hallazgo NO tocado:** `mtrVigenciaDias` (el port del Python, con 822 vectores dorados) sigue
+devolviendo 180 para el LDL y la RAC en G4 — es el testigo, y las correcciones viven declaradas
+en `MTR_CORRECCIONES_NORMA`. Si algún día se «limpia» el port, hay que borrar la corrección en
+el mismo movimiento o el número se aplicará dos veces.

@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.6] — 2026-09-10 (Una sola vara para la creatinina cuando el riñón se está moviendo)
+
+**La creatinina de un paciente con caída reciente de la función renal se reclama antes, igual
+en el aviso que en el Panel.** La norma da a la creatinina un plazo en **rango** (por ejemplo
+60–93 días en el estadio 4): se usa el extremo largo mientras el riñón está estable, y el
+corto cuando está cayendo. Esa regla ya funcionaba en el Panel, pero el aviso rojo de entrada
+se quedaba siempre en el extremo largo: sobre el mismo paciente, el Panel decía «vence en 60
+días» y el aviso seguía contando 93. Ahora los dos dicen lo mismo. En la práctica: si su
+paciente tiene una caída importante de la función renal frente a la creatinina anterior, el
+asistente le reclama la creatinina en el plazo corto también en el aviso de entrada, que es
+donde usted lo ve primero.
+
+**Verificación de las vigencias por programa, celda por celda.** Se añadió una comprobación
+automática que recorre **las 13 filas de la tabla del programa renal (ERC) por los 5 estadios**,
+más los programas de diabetes y de hipertensión, y confirma cada celda contra la tabla de
+origen — incluida la columna del estadio 4, donde la glicemia baja a 60 días, el uroanálisis y
+los lípidos a 120, la hemoglobina y la PTH a 180, y el HDL se queda en 180. Si alguien mueve
+un solo número de esa tabla sin querer, el banco de pruebas lo dice con el nombre exacto de la
+celda. Nada de lo que usted ve cambió por esto: es una red que impide que un número se
+desajuste en silencio.
+
+Verificación: banco de pruebas completo en verde (3.826 comprobaciones), con las mutaciones
+de control documentadas en `tests/INFORME_MUTACIONES.md` (sección «v18.14.6»).
+
+---
+
 ## [Versión 18.14.5] — 2026-09-10 (La fecha del control vuelve a moverse con el plan de laboratorio)
 
 **La tarjeta «🧪 Agendar también la Toma de Muestras» ya no se queda con la fecha vieja.**

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.5
+// @version      18.14.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4392,12 +4392,16 @@
               // El override de RAC>=30 se aplica mas abajo, con `resultValCrudo`, que es el
               // valor que este camino SI tiene; por eso aqui va `null` y no se pide dos veces.
               const v = mtrVigenciaDiasNorma(programa, analito, opts.estadio, esDm2, opts.edad, null);
-              // `funcionRenalInestable` se LEE aunque hoy nadie lo mande: los dos llamadores
-              // no lo pasan, asi que vale false y el rango se colapsa a su extremo SUPERIOR,
-              // que es exactamente lo que hacia la linea vieja (`v.max`). Se deja leido, y no
-              // cableado a `false` a pelo, para que quede claro que es una DECISION y no un
-              // descuido: encenderlo baja la creatinina de 121 a 90 en G3a/G3b y de 93 a 60 en
-              // G4/G5 (medido), y eso es un cambio clinico que el medico no ha pedido aqui.
+              // `funcionRenalInestable` se LEE y, desde v18.14.6, los dos llamadores SÍ lo
+              // mandan (`funcionRenalInestable: !!(_resAviso.erc && _resAviso.erc.sospechaIra)`
+              // en checkAvisoUniversal, y su equivalente en pymRcvCubiertoPorAthenea).
+              // Hasta v18.14.5 valía false en este camino —ningún llamador lo pasaba— y el
+              // rango se colapsaba SIEMPRE a su extremo SUPERIOR, mientras el motor del Panel
+              // sí bajaba al inferior con sospecha de IRA: sobre el MISMO paciente, el Panel
+              // decía 60 días en G4 y el aviso de entrada 93. El médico zanjó esa doble vara
+              // el 10-sep-2026: la regla del rango es UNA, y es la de la fuente («usa el
+              // superior; si la función renal se está moviendo, el inferior»). Encenderlo baja
+              // la creatinina de 121 a 90 en G3a/G3b y de 93 a 60 en G4/G5 (medido).
               const colapsada = (typeof mtrColapsarVigencia === "function")
                 ? mtrColapsarVigencia(v, !!opts.funcionRenalInestable) : v;
               if (typeof colapsada === "number" && Number.isFinite(colapsada)) base = colapsada;
@@ -17217,6 +17221,14 @@
         esDm2: !!(_resAviso.factores && _resAviso.factores.diabetes),
         categoriaRiesgo: _resAviso.riesgo && _resAviso.riesgo.categoria || null,
         egfrCkdEpi: (_resAviso.erc && _resAviso.erc.egfr !== undefined) ? _resAviso.erc.egfr : null,
+        // v18.14.6 — UNA SOLA VARA PARA EL RANGO DE CREATININA (decisión del médico, 10-sep).
+        // `mtrColapsarVigencia` toma el extremo SUPERIOR del rango [min,max] de la creatinina
+        // salvo que la función renal se esté moviendo (IRA), y entonces toma el INFERIOR.
+        // El motor del Panel ya lo recibía (`funcionRenalInestable: erc.sospechaIra`), pero
+        // este camino —el aviso rojo de entrada— leía la opción y ningún llamador se la
+        // pasaba: sobre el MISMO paciente con sospecha de IRA, el Panel decía 60 días en G4 y
+        // el aviso 93. Dos varas para la misma regla es peor que una equivocada.
+        funcionRenalInestable: !!(_resAviso.erc && _resAviso.erc.sospechaIra),
         aplicar50: _autorizado,
         repetirFueraMeta: _repetirFueraMeta,
       } : undefined;
@@ -18118,6 +18130,9 @@
         esDm2: _esDm2Pym,
         categoriaRiesgo: _resPym.riesgo && _resPym.riesgo.categoria || null,
         egfrCkdEpi: (_resPym.erc && _resPym.erc.egfr !== undefined) ? _resPym.erc.egfr : null,   // v18.0.7 — D11 (KDIGO)
+        // v18.14.6 — misma vara que el aviso de entrada: con sospecha de IRA el rango de la
+        // creatinina se colapsa al extremo INFERIOR (ver el comentario largo en checkAvisoUniversal).
+        funcionRenalInestable: !!(_resPym.erc && _resPym.erc.sospechaIra),
         aplicar50: true,
         clavesExtra: _esDm2Pym ? ["HBA1C"] : [],
       } : undefined;
