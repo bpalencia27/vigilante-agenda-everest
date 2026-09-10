@@ -4,6 +4,19 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.2] — 2026-09-09 (Administrar los permisos de otros médicos ahora exige permiso de desarrollador)
+
+«Permisos por médico (administración)», el bloque de Ajustes donde se decide qué
+función puede ejecutar cada médico del equipo, se veía con cualquier perfil
+COMPLETO. Como muestra el nombre y la cédula de TODOS los médicos y permite
+tocar sus permisos, ahora requiere el mismo permiso de desarrollador de la
+versión anterior. Sus propios interruptores personales («Funcionalidades por
+médico») siguen viéndose igual que siempre: eso es solo suyo.
+
+Verificación: banco de pruebas completo en verde (3796 comprobaciones).
+
+---
+
 ## [Versión 18.14.1] — 2026-09-09 (El menú de opciones de desarrollador ahora exige permiso, no solo el atajo de teclado)
 
 La sección técnica de Ajustes (claves de la IA, carpeta cifrada local, diagnóstico

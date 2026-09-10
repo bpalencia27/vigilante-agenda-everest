@@ -37,7 +37,12 @@ const LISTA_101 = {
   version: "2026-09-08.1",
   emitida: "2026-09-08T08:00:00",
   perfiles: {
-    COMPLETO: [{ uid: 101, nombre: NOMBRE_101 }],
+    // F3 (Solicitud F) — la cap "desarrollador" es necesaria para VER y administrar
+    // el bloque "Permisos por médico" (grpPermisos exige mtrEsDesarrollador() además
+    // de accesoCap("toggles_funcionalidades")): esta suite prueba justo esa
+    // administración, así que su médico de sesión (uid 101, el mismo dueño/desarrollador
+    // real del proyecto) la necesita para que el menú se pinte.
+    COMPLETO: [{ uid: 101, nombre: NOMBRE_101, caps: ["desarrollador"] }],
     LABORATORIOS: [{ uid: 201, nombre: NOMBRE_201, off: ["rcv", "redactor_ia"] }],
   },
   blocklist: [{ uid: 999, nombre: "Prueba Bloqueada Uno", motivo: "banco" }],
@@ -505,6 +510,42 @@ module.exports = {
       t.falso(c.api.permisosLocalesLeer().some((e) => e.uid === 55555), "la fila por cédula se retiró");
       t.cierto(c.api.permisosAuditLeer().some((f) => f.medico === "uid:55555" && f.estado === "entrada-eliminada"),
         "el retiro quedó auditado");
+    });
+
+    // =====================================================================
+    // F3 (Solicitud F) — «Permisos por médico (administración)» expone el nombre y
+    // el uid de TODOS los médicos del equipo y deja tocar sus permisos: es
+    // información y una acción sobre TERCEROS, no sobre uno mismo. Debe verse
+    // SOLO con la cap "desarrollador" (mtrEsDesarrollador) — un COMPLETO normal,
+    // sin esa cap, no debe verla, aunque siga viendo su PROPIO grupo de
+    // «Funcionalidades por médico» (grpToggles, que no expone a nadie más).
+    // =====================================================================
+    t.caso("F3: «Permisos por médico» exige la cap 'desarrollador' — un COMPLETO sin ella no la ve (pero sí sus propios toggles); con ella sí", () => {
+      // Perfil 1 — COMPLETO normal (uid 301), SIN la cap "desarrollador".
+      const listaSinDev = JSON.parse(JSON.stringify(LISTA_101));
+      listaSinDev.perfiles.COMPLETO.push({ uid: 301, nombre: "Médico Sin Admin" });
+      const c1 = cargar({ silencioso: true, almacen: { vgl_acceso_lista: JSON.stringify(listaSinDev) } });
+      conDoctor(c1.api, 301, "Médico Sin Admin");
+      enriquecerDom101(c1);
+      c1.api.buildOverlay();
+      const raiz1 = c1.env.doc.body.children.find((n) => n.id === "vgl-root");
+      c1.api.toggleSheet("ajustes");
+      const hoja1 = raiz1.querySelector("#vgl-sheet");
+      t.falso(String(hoja1.innerHTML).indexOf('id="vgl-grp-permisos"') > 0,
+        "COMPLETO sin la cap 'desarrollador' NO ve la administración de permisos de otros médicos");
+      t.cierto(String(hoja1.innerHTML).indexOf('id="vgl-grp-toggles"') > 0,
+        "pero sí ve su propio grupo de funcionalidades (no expone a terceros)");
+
+      // Perfil 2 — COMPLETO con la cap "desarrollador" (uid 101, ya sembrada en LISTA_101).
+      const c2 = cargar({ silencioso: true, almacen: alm101() });
+      conDoctor(c2.api, 101, NOMBRE_101);
+      enriquecerDom101(c2);
+      c2.api.buildOverlay();
+      const raiz2 = c2.env.doc.body.children.find((n) => n.id === "vgl-root");
+      c2.api.toggleSheet("ajustes");
+      const hoja2 = raiz2.querySelector("#vgl-sheet");
+      t.cierto(String(hoja2.innerHTML).indexOf('id="vgl-grp-permisos"') > 0,
+        "COMPLETO CON la cap 'desarrollador' sí ve la administración de permisos de otros médicos");
     });
 
     // ================= regresión de fuente (patrón P11·10 de suite_82) =================

@@ -14243,3 +14243,26 @@ fila, o perderá el acceso a la sección técnica hasta hacerlo.
 Banco completo tras el cambio: `node tests/runner.js` → 3795 pasan, EXIT 0.
 `node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.1 en los 4 puntos.
 
+## v18.14.2 (Solicitud F, paso F3 — filtrado de médicos en Ajustes)
+
+«Permisos por médico (administración)» (`grpPermisos`) expone el nombre y el uid
+de TODOS los médicos del equipo (`permisosEntradasVisibles` recorre COMPLETO +
+LABORATORIOS enteros) y deja tocar los permisos de cualquiera de ellos: es
+información y una acción sobre TERCEROS, no sobre uno mismo — a diferencia de
+«Funcionalidades por médico» (`grpToggles`), que son decisiones personales del
+propio médico y no expone a nadie más. Antes ambos compartían la misma compuerta
+(`accesoCap("toggles_funcionalidades")`: cualquier perfil COMPLETO). Ahora
+`grpPermisos` exige ADEMÁS `mtrEsDesarrollador()` (F2): mismo criterio de
+"mostrar solo la información pertinente al perfil/permisos del usuario". Fixture
+de `suite_101_permisos.js` actualizado: su médico de sesión (uid 101, el
+dueño/desarrollador real del proyecto) ya trae la cap `desarrollador` en
+`LISTA_101`, porque esa suite prueba justamente la administración de permisos
+de terceros.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderSettings()`, `const grpPermisos` | `accesoCap("toggles_funcionalidades") && mtrEsDesarrollador()` → vuelto a solo `accesoCap("toggles_funcionalidades")` | NO | suite_101 caso «F3: "Permisos por médico" exige la cap 'desarrollador' — un COMPLETO sin ella no la ve (pero sí sus propios toggles); con ella sí»: mutante rojo; EXIT 1 (15 ok, 1 falla). Restaurado 16 ok EXIT=0 |
+
+Banco completo tras el cambio: `node tests/runner.js` → 3796 pasan, EXIT 0.
+`node tools/compat-check.js` → COMPATIBLE, version_sync 18.14.2 en los 4 puntos.
+

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.1
+// @version      18.14.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -36692,12 +36692,21 @@
           return `<div class="vgl-fld${esHijo && !togActiva(def.sub) ? " vgl-d-none" : ""}"${esHijo ? ` id="vgl-togsub-${def.k}"` : ""}><label>${def.label}<span class="vgl-hint">${def.desc}${esHijo ? " Solo se muestra con «" + padreLabel + "» encendido." : ""}</span></label>${sw("c-tog-" + def.k.replace(/^tog_/, ""), togActiva(def.k))}</div>`;
         }).join("")}
       </div>`;
-    // v18.8.1 — PERMISOS POR MÉDICO (administración). Misma compuerta visual que
-    // los toggles F3 (solo el perfil COMPLETO lo ve). Default ON: cada casilla
-    // nace marcada (= nada revocado) para médicos existentes y nuevos. Cambios
-    // EN CALIENTE (sin borrador de vgl_cfg): la revocación aplica en el acto y
-    // cada cambio se audita (local + evento remoto «permiso_cambio»).
-    const grpPermisos = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
+    // v18.8.1 — PERMISOS POR MÉDICO (administración).
+    // F3 (Solicitud F) — este bloque expone el NOMBRE y el UID de TODOS los médicos
+    // del equipo (permisosEntradasVisibles recorre COMPLETO+LABORATORIOS enteros) y
+    // deja tocar los permisos de cualquiera de ellos: es información y una acción
+    // sobre TERCEROS, no sobre uno mismo. La compuerta visual de los toggles F3
+    // (accesoCap("toggles_funcionalidades"), que solo filtra por perfil COMPLETO)
+    // alcanza para ver los INTERRUPTORES PROPIOS (grpToggles, arriba — nadie más
+    // que el propio médico aparece ahí); para administrar a OTROS médicos hace
+    // falta además la cap "desarrollador" (mtrEsDesarrollador, F2) — mismo criterio
+    // de "mostrar solo la información pertinente al perfil/permisos del usuario".
+    // Default ON: cada casilla nace marcada (= nada revocado) para médicos
+    // existentes y nuevos. Cambios EN CALIENTE (sin borrador de vgl_cfg): la
+    // revocación aplica en el acto y cada cambio se audita (local + evento remoto
+    // «permiso_cambio»).
+    const grpPermisos = !(accesoCap("toggles_funcionalidades") && mtrEsDesarrollador()) ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Permisos por médico (administración)</div>
         <div class="vgl-fld"><span class="vgl-hint">Decida qué funciones puede EJECUTAR cada médico de este equipo. Todos siguen VIENDO los botones: al desactivar una función, el botón queda visible pero avisa que está desactivada y no abre. Por defecto todo queda encendido (ON). Escriba la cédula (uid) o el nombre completo del médico, pulse Añadir y desmarque lo que corresponda. Cada cambio queda anotado con quién lo hizo, cuándo, a qué médico y qué función (auditoría). No puede desactivarse funciones a sí mismo.</span></div>
         <div class="vgl-fld"><label>Médico (cédula o nombre completo)</label><div style="display:flex;gap:8px;align-items:center"><input type="text" id="c-perm-medico" autocomplete="off" spellcheck="false" placeholder="ej. 12345678 o PEPITO PEREZ"><button class="vgl-btn" id="c-perm-add">Añadir</button></div></div>
