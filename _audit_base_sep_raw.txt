@@ -1,0 +1,270 @@
+======= AUDITORÍA ESTRUCTURAL · C:/Users/brand/AppData/Local/Temp/_base_piloto_sep.xlsx · 22.5 MB =======
+
+--- ENTRADAS DEL ZIP (top 12 por tamaño descomprimido) ---
+  xl/worksheets/sheet3.xml              97.6 MB descomprimido · método 8
+  xl/worksheets/sheet2.xml              25.3 MB descomprimido · método 8
+  xl/worksheets/sheet1.xml              20.9 MB descomprimido · método 8
+  xl/calcChain.xml                      20.7 MB descomprimido · método 8
+  xl/worksheets/sheet5.xml               1.8 MB descomprimido · método 8
+  xl/media/image10.png                   0.9 MB descomprimido · método 0
+  xl/media/image4.png                    0.8 MB descomprimido · método 0
+  xl/media/image9.png                    0.7 MB descomprimido · método 0
+  xl/media/image7.png                    0.6 MB descomprimido · método 0
+  xl/worksheets/sheet4.xml               0.5 MB descomprimido · método 8
+  xl/media/image1.png                    0.2 MB descomprimido · método 0
+  xl/media/image2.png                    0.2 MB descomprimido · método 0
+entradas totales: 57
+sharedStrings: count 1543061 · unique 8973 · parseadas: 8973
+hojas declaradas: ANEXO 5 JULIO | PROCEXDTAGOSTO | CITASDIA AGOSTO | citas dia regional | EKG 2025 | CONSULTA | CONSULTA 2 | CONSULTA 3 | CONSULTA 4 | COHORTE VIH | INDICADORES METAS TERAPEUTICAS | CUPS PARA ACTIVIDADES SUSCEPTIB
+
+■ Hoja «ANEXO 5 JULIO» (0.1 s)
+   filas con contenido: 20248
+   encabezado en la fila 1 · columnas: 38
+      col  1: Numero Documento   [φ PHI: valores omitidos]
+      col  2: Programa Actual
+      col  3: Fecha Ultimo Control (Médico)
+      col  4: CUMPLE_GLICEMIA
+      col  5: CUMPLE_COLESTEROL_LDL
+      col  6: CUMPLE_COLESTEROL_HDL
+      col  7: CUMPLE_TRIGLICERIDOS
+      col  8: CUMPLE_TENSION_ARTERIAL
+      col  9: CUMPLE_MICROALBUMINURIA
+      col 10: CUMPLE_INDICE_DE_MASA_CORPORAL
+      col 11: CUMPLE_CIRCUNFERENCIA_ABDOMINAL
+      col 12: CUMPLE_HEMOGLOBINA_GLICOSILADA
+      col 13: SUMA_METAS
+      col 14: TFG_DEL_ULTIMO_CONTROL
+      col 15: ESTADIO_ACTUAL_DE_NEFROPROTECCION
+      col 16: PLANI?
+      col 17: NUTRICION
+      col 18: PISCOLOGIA
+      col 19: ODONTOLOGIA
+      col 20: EKG
+      col 21: clasificacion
+      col 22: GLICEMIA1
+      col 23: FECHA_DE_TOMA_GLICEMIA
+      col 24: HEMOBLOBINA_GLICOSILADA
+      col 25: FECHA_DE_TOMA_GLICOSILADA
+      col 26: COLESTEROL_LDL1
+      col 27: FECHA_DE_TOMA_COLESTEROL_LDL
+      col 28: COLESTEROL_HDL1
+      col 29: FECHA_DE_TOMA_COLESTEROL_HDL
+      col 30: TRIGLICERIDOS1
+      col 31: FECHA_DE_TOMA_DE_TRIGLICERIDOS1
+      col 32: MICROALBU/CREATINURIA1
+      col 33: FECHA_MICROALBU/CREATINURIA1
+      col 34: TENSION_ARTERIAL_SISTOLICA1
+      col 35: TENSION_ARTERIAL_DIASTOLICA1
+      col 36: INDICE_DE_MASA_CORPORAL1
+      col 37: CIRCUNFERENCIA_ABDOMINAL1
+      col 38: Estudiado para ERC
+   columna de identificación: «Numero Documento» col 1 (EXACTA con makeIndexer ✔)
+   filas de datos muestreadas: 20247 · con documento: 10652 · sin documento: 9595
+   documento: duplicados 0 · con punto separador 0 · con letras 0 · largos: 8d×8045, 7d×2078, 10d×355, 6d×173, 5d×1
+      · Numero Documento                      :  10652 llenas · núm 95678–2000000201
+      · Programa Actual                       :  10629 llenas
+      · Fecha Ultimo Control (Médico)         :  10390 llenas · núm 1–46249
+      · CUMPLE_GLICEMIA                       :  10652 llenas · núm 0–30
+      · CUMPLE_COLESTEROL_LDL                 :  10652 llenas · núm 0–25
+      · CUMPLE_COLESTEROL_HDL                 :  10652 llenas · núm 0–10
+      · CUMPLE_TRIGLICERIDOS                  :  10652 llenas · núm 0–10
+      · CUMPLE_TENSION_ARTERIAL               :  10652 llenas · núm 0–40
+      · CUMPLE_MICROALBUMINURIA               :  10652 llenas · núm 0–25
+      · CUMPLE_INDICE_DE_MASA_CORPORAL        :  10652 llenas · núm 0–10
+      · CUMPLE_CIRCUNFERENCIA_ABDOMINAL       :  10652 llenas · núm 0–10
+      · CUMPLE_HEMOGLOBINA_GLICOSILADA        :  10652 llenas · núm 0–30
+      · SUMA_METAS                            :  10652 llenas · núm 0–135
+      · TFG_DEL_ULTIMO_CONTROL                :   6941 llenas · núm 0–380.3
+      · ESTADIO_ACTUAL_DE_NEFROPROTECCION     :   6917 llenas · núm 1–5
+      · NUTRICION                             :  10652 llenas · valores: REMITIR×9638
+      · PISCOLOGIA                            :  10652 llenas · valores: REMITIR×9741
+      · ODONTOLOGIA                           :  10652 llenas · valores: REMITIR×8692
+      · EKG                                   :   1347 llenas · núm 46144–46256
+      · clasificacion                         :  10652 llenas · valores: Cumple Metas×1163
+      · GLICEMIA1                             :   5848 llenas · núm 38–531
+      · FECHA_DE_TOMA_GLICEMIA                :   5851 llenas · núm 42671–46224
+      · HEMOBLOBINA_GLICOSILADA               :   2447 llenas · núm 4–17.6
+      · FECHA_DE_TOMA_GLICOSILADA             :   2445 llenas · núm 43628–46224
+      · COLESTEROL_LDL1                       :   6191 llenas · núm 8–762.9
+      · FECHA_DE_TOMA_COLESTEROL_LDL          :   6188 llenas · núm 42444–46225
+      · COLESTEROL_HDL1                       :   6228 llenas · núm 5–192.5
+      · FECHA_DE_TOMA_COLESTEROL_HDL          :   6225 llenas · núm 42444–46225
+      · TRIGLICERIDOS1                        :   6292 llenas · núm 11–991
+      · FECHA_DE_TOMA_DE_TRIGLICERIDOS1       :   6307 llenas · núm 42671–46225
+      · MICROALBU/CREATINURIA1                :   4614 llenas · núm 0.1–2797 · ⚠ 22 con ≥6 dígitos (¿PHI fuera de sitio?)
+      · FECHA_MICROALBU/CREATINURIA1          :   5852 llenas · núm 42671–46224
+      · TENSION_ARTERIAL_SISTOLICA1           :  10368 llenas · núm 66–242
+      · TENSION_ARTERIAL_DIASTOLICA1          :  10368 llenas · núm 20–153
+      · INDICE_DE_MASA_CORPORAL1              :  10355 llenas · núm 0–387.5
+      · CIRCUNFERENCIA_ABDOMINAL1             :  10234 llenas · núm 34–196
+      · Estudiado para ERC                    :  10652 llenas · valores: No estudiado×10463, No aplica×187, Estudiado×2
+
+■ Hoja «PROCEXDTAGOSTO» (0.1 s)
+   filas con contenido: 95589
+   encabezado en la fila 1 · columnas: 6
+      col  1: NRO IDENTIFICACION   [φ PHI: valores omitidos]
+      col  2: CERVIX
+      col  3: MAMA
+      col  4: PSA
+      col  5: SOMF
+      col  6: Cruce anexo 5
+   columna de identificación: «NRO IDENTIFICACION» (solo fallback blando ⚠)
+
+■ Hoja «CITASDIA AGOSTO» (0.2 s)
+   filas con contenido: 85566
+   encabezado en la fila 1 · columnas: 49
+      col  1: NOMBRE_IPS   [φ PHI: valores omitidos]
+      col  2: TIPO_DOCUMENTO   [φ PHI: valores omitidos]
+      col  3: NRO_IDENTIFICACION   [φ PHI: valores omitidos]
+      col  4: Ciclo_vital
+      col  5: SEXO
+      col  6: EDAD
+      col  7: PES
+      col  8: Valoración_Integral_2025
+      col  9: Última tamización CMB
+      col 10: Último control PF 2025
+      col 11: Último control AV 2025
+      col 12: Última prueba cervix
+      col 13: examen
+      col 14: resultado_cervix
+      col 15: tipo_ruta
+      col 16: fecha_siguiente_estudio
+      col 17: Fecha último PSA
+      col 18: resultado_PSA
+      col 19: Última mamografía
+      col 20: Resultado_BIRADS
+      col 21: Última SOMF
+      col 22: resultado_SOMF
+      col 23: Último HVC
+      col 24: Resultado_HVC
+      col 25: Último VDRL
+      col 26: Resultado_VDRL
+      col 27: Último VIH
+      col 28: Resultado_VIH
+      col 29: Último AgsHB
+      col 30: Último HB
+      col 31: Resultado_Hb
+      col 32: Último HTO
+      col 33: Resultado_HTO
+      col 34: EPOC
+      col 35: CANCER
+      col 36: SALUD_MENTAL
+      col 37: PUNTA_PIRAMIDE
+      col 38: RELACIONADO_PROCEX
+      col 39: NOMBRE_IPS   [φ PHI: valores omitidos]
+      col 40: COHORTE VIH
+      col 41: Relacionado_Procex
+      col 42: Anexo5
+      col 43: Cuenta_Alto_costo
+      col 44: Criterio_CAC
+      col 45: Abandonados_PES
+      col 46: Valoracion_integral
+      col 47: Tamizacion_CMB
+      col 48: Mes_tamizacion
+      col 49: anexo 5
+   columna de identificación: «TIPO_DOCUMENTO» (solo fallback blando ⚠)
+
+■ Hoja «citas dia regional» (0.0 s)
+   filas con contenido: 1269
+   encabezado en la fila 1 · columnas: 10
+      col  1: Identificacion   [φ PHI: valores omitidos]
+      col  2: Relacionado_Procex
+      col  3: Anexo5
+      col  4: Cuenta_Alto_costo
+      col  5: Criterio_CAC
+      col  6: Abandonados_PES
+      col  7: Valoracion_integral
+      col  8: Tamizacion_CMB
+      col  9: Mes_tamizacion
+      col 10: Fecha_Cita
+   columna de identificación: «Identificacion» col 1 (EXACTA con makeIndexer ✔)
+   filas de datos muestreadas: 1268 · con documento: 1268 · sin documento: 0
+   documento: duplicados 39 · con punto separador 0 · con letras 1 · largos: 8d×725, 10d×375, 7d×151, 6d×16, 14d×1
+      · Identificacion                        :   1268 llenas · núm 178356–1247050931
+      · Relacionado_Procex                    :   1268 llenas · valores: Si×1207, No×60, Relacionado_Procex×1
+      · Anexo5                                :   1268 llenas · valores: No×649, Si×618
+      · Cuenta_Alto_costo                     :   1268 llenas · valores: No×1060, Si×207, Cuenta_Alto_costo×1
+      · Criterio_CAC                          :   1268 llenas · valores: No Aplica×1060, Requiere glicemia×15, Requiere MAPA×6, Requiere creatinina×4, Criterio_CAC×1
+      · Abandonados_PES                       :   1268 llenas · valores: No×1227, Si×40, Abandonados_PES×1
+      · Valoracion_integral                   :   1268 llenas · valores: No aplica×618, Realizada×473, Susceptible×176, Valoracion_integral×1
+      · Tamizacion_CMB                        :   1268 llenas · valores: No aplica×706, Susceptible×306, Tamizado×255, Tamizacion_CMB×1
+      · Mes_tamizacion                        :   1268 llenas · núm 202312–202608 · valores: NULL×998, Mes_tamizacion×1 · ⚠ 269 con ≥6 dígitos (¿PHI fuera de sitio?)
+      · Fecha_Cita                            :   1268 llenas · núm 46269–46272 · valores: Fecha_Cita×1
+
+■ Hoja «EKG 2025» (0.0 s)
+   filas con contenido: 17516
+   (sin encabezado en las primeras 15 filas — ¿portada?)
+
+■ Hoja «CONSULTA» (0.0 s)
+   filas con contenido: 26
+   encabezado en la fila 6 · columnas: 3
+      col  3: 0
+      col  7: Estado de paciente en anexo 5   [φ PHI: valores omitidos]
+      col  8: En Control Activo Fuera de Metas
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+■ Hoja «CONSULTA 2» (0.0 s)
+   filas con contenido: 26
+   encabezado en la fila 6 · columnas: 3
+      col  3: 0
+      col  7: Estado de paciente en anexo 5   [φ PHI: valores omitidos]
+      col  8: En Control Activo Fuera de Metas
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+■ Hoja «CONSULTA 3» (0.0 s)
+   filas con contenido: 26
+   encabezado en la fila 6 · columnas: 3
+      col  3: 0
+      col  7: Estado de paciente en anexo 5   [φ PHI: valores omitidos]
+      col  8: No registra en cohorte
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+■ Hoja «CONSULTA 4» (0.0 s)
+   filas con contenido: 26
+   encabezado en la fila 6 · columnas: 3
+      col  3: PRIORIZAR CONSULTA DE RIESGO CARDIOVASCULAR
+      col  7: Estado de paciente en anexo 5   [φ PHI: valores omitidos]
+      col  8: Paciente en abandono (mas de 6 meses sin con   [φ PHI: valores omitidos]
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+■ Hoja «COHORTE VIH» (0.0 s)
+   filas con contenido: 266
+   encabezado en la fila 1 · columnas: 16
+      col  1: AfiNumeroDocumento   [φ PHI: valores omitidos]
+      col  2: AfiPatologia
+      col  3: AfiTipoDocumento   [φ PHI: valores omitidos]
+      col  4: AfiNumeroDocumento   [φ PHI: valores omitidos]
+      col  5: afiEstadoAfiliacion   [φ PHI: valores omitidos]
+      col  6: AfiIpsPrimRazonSocial
+      col  7: AfiRegional
+      col  8: AfiZonal
+      col  9: AfiMunicipio
+      col 10: AfiRegimen
+      col 11: IpsSedIpsAtencion
+      col 12: EstadoCaso   [φ PHI: valores omitidos]
+      col 13: Novedad
+      col 14: CRITERIO
+      col 15: FECHA REPORTE IPS
+      col 16: SEDE
+   columna de identificación: «AfiNumeroDocumento» (solo fallback blando ⚠)
+
+■ Hoja «INDICADORES METAS TERAPEUTICAS» (0.0 s)
+   filas con contenido: 3
+   encabezado en la fila 2 · columnas: 5
+      col  6: Mes 1
+      col  7: mes 4
+      col  8: mes 6
+      col  9: mes 8
+      col 10: mes 12
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+■ Hoja «CUPS PARA ACTIVIDADES SUSCEPTIB» (0.0 s)
+   filas con contenido: 19
+   encabezado en la fila 1 · columnas: 4
+      col  1: ACTIVIDAD SUSCEPTIBLE
+      col  3: CUPS
+      col  4: NOMBRE DEL CUPS   [φ PHI: valores omitidos]
+      col  5: DIAGNOSTICO
+   columna de identificación: NO ENCONTRADA ✘ — el Vigilante RECHAZARÍA la hoja
+
+======= FIN (informe estructural, sin PHI) =======

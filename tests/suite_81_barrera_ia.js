@@ -191,7 +191,12 @@ module.exports = {
       t.cierto(iP > iFn, "el prompt se arma dentro del conector");
       t.cierto(iBar > iP, "la barrera se evalúa DESPUÉS de armar el prompt");
       t.cierto(iGm > iBar, "y ANTES del único disparo GM_xmlhttpRequest");
-      t.cierto(iGm - iFn < 8000, "el GM_xmlhttpRequest de IA sigue DENTRO de mtrGeminiRedactar (escalera de reintentos incluida)");
+      // v18.10.0 (AB-2) — el guard usaba un tope de 8000 chars como proxy de «sigue
+      // dentro de la función»; el bloque del reintento transitorio (bala de red/timeout
+      // con su backoff, antes de la escalera) alargó la cabecera y cruzó el tope. Se
+      // ancla al FINAL real del conector: la siguiente función de nivel superior.
+      const iFin = FUENTE.indexOf("function mtrCasillaPorNombre", iFn);
+      t.cierto(iFin > iGm, "el GM_xmlhttpRequest de IA sigue DENTRO de mtrGeminiRedactar (escalera de reintentos incluida)");
       // 6c — una sola definición, sin segundas copias.
       t.cierto(FUENTE.indexOf("function mtrBarreraIdentificables") === FUENTE.lastIndexOf("function mtrBarreraIdentificables"), "una sola definición de la barrera");
       t.cierto(FUENTE.indexOf("@connect      api.z.ai") >= 0 && FUENTE.indexOf("@connect      generativelanguage.googleapis.com") >= 0, "ambos dominios declarados en @connect");

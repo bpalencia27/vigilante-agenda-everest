@@ -553,8 +553,18 @@ module.exports = {
       const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
       t.cierto(/_fetchConTope\(FETCH0 \|\| window\.fetch, smsUrl,/.test(src), "el SMS automático tras AsignarTurno lleva tope");
       t.cierto(/const resp = await _fetchConTope\(f, url, \{ credentials: "same-origin" \}\);/.test(src), "imprimirRecordatorioCita lleva tope: la pestaña en blanco no espera para siempre");
-      t.igual((src.match(/_fetchConTope\(fetch, /g) || []).length, 3, "y los tres fetch de SharePoint (listado, descarga, respaldo)");
-      t.falso(/\bawait fetch\(spListUrl\(\)/.test(src) || /await fetch\(spDownloadUrl/.test(src), "sin fetch a pelo en bootSharepointLite");
+      // v18.6.0 — la base única por GUID (CONFIG.SP.base) jubiló al captador de la pestaña
+      // de SharePoint: bootSharepointLite dejó de existir y con él sus tres
+      // `_fetchConTope(fetch, ...)` de listado, descarga y respaldo por RUTA. La descarga
+      // de la base ya no va por fetch: va por GM_xmlhttpRequest (gmGet con T_DESCARGA), y
+      // los `_fetchConTope` que quedan pasan siempre una referencia capturada (`f`,
+      // `FETCH0 || window.fetch`) — esos ya están cubiertos arriba. Por eso la cifra
+      // exacta que sigue viva es CERO, no uno: ningún call site le pasa ya el `fetch`
+      // global a pelo, y si alguien reintroduce uno, esta cuenta lo delata.
+      t.igual((src.match(/function bootSharepointLite\b/g) || []).length, 0, "v18.6.0: bootSharepointLite no existe como función viva (solo su mención histórica en comentarios)");
+      t.falso(src.includes("_api/web/GetFolderByServerRelativeUrl") || src.includes("GetFileByServerRelativeUrl"), "las URLs de listado/descarga por RUTA murieron con el archivo diario — sin carpetas ni nombres, solo GUID");
+      t.cierto(src.includes("GetFileById"), "lo único que queda de SharePoint REST es GetFileById por GUID (spFallbackUrls + pilotoMeta)");
+      t.igual((src.match(/_fetchConTope\(fetch, /g) || []).length, 0, "cero llamadas con el `fetch` global a pelo: la base descarga por gmGet (T_DESCARGA), no por _fetchConTope");
     });
 
     await t.casoAsync("_pageFetchJsonCore: un 401 (sesión caducada) SÍ cuenta como fallo; un 404 no", async () => {

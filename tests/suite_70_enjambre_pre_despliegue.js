@@ -158,21 +158,22 @@ module.exports = {
     });
 
     // =================================================================
-    // 3. FLUSH DE CARTELES CON SILENCIO TEMPORAL (v18.0.4)
+    // 3. FLUSH DE CARTELES CON SILENCIO TEMPORAL (v18.0.4 → Q2, 07-sep)
     // =================================================================
-    t.caso("cola de carteles: con silencio temporal activo, el ROJO NO se consume sin pintarse — espera", () => {
+    // [Q2 — instrucción del 07-sep, opción (a), pendiente de ratificación del médico]
+    // El ROJO quedó EXENTO del silencio temporal: su tono y su cartel son edge ÚNICO
+    // por cita — posponerlos «hasta que pase el silencio» equivalía a perderlos. La
+    // política v18.0.4 (esperar en cola) queda sustituida; MORADO/AMBAR siguen
+    // respetando el mute en su tono.
+    t.caso("cola de carteles [Q2]: con silencio temporal activo, el ROJO SÍ se pinta — su única oportunidad no se pospone", () => {
       const c = cargar();
       c.api.__S.cartel = true;                 // el canal del cartel activo
       c.env.win.location.pathname = "/viva/HCHealth/";
       c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "x|ROJO", flashText: "t", ts: Date.now() });
       c.api.__state.muteUntil = Date.now() + 15 * 60000;   // «Silenciar 15 min» activo
       c.api._flushAvisosPendientes();
-      const cola1 = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola1.length, 1, "con muted() el cartel se queda en cola (antes se consumía en silencio)");
-      c.api.__state.muteUntil = 0;             // termina el silencio
-      c.api._flushAvisosPendientes();
-      const cola2 = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola2.length, 0, "terminado el silencio, el flush sí lo pinta y vacía la cola");
+      t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "el cartel del ROJO se pinta DENTRO del silencio (Q2: el ROJO queda exento del mute)");
+      t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "y la cola se consume: pintar no puede dejar el hecho esperando otra vez");
     });
   },
 };

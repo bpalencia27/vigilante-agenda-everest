@@ -1,0 +1,3 @@
+# Los hooks se ejecutan con sh: si git les pone CRLF (core.autocrlf=true en
+# Windows) el shebang se rompe con un \r final y el hook no arranca.
+.githooks/** text eol=lf

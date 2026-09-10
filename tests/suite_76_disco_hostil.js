@@ -36,6 +36,17 @@ module.exports = {
   async pruebas(t, api, env, cargar) {
     const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
+    // v18.4.3 (H5): vgl_cosecha se persiste ASYNC y en sobre cifrado ("VGLC1:")
+    // — sondeo a que el sobre aterrice en el almacén (patrón de las suites 32/75).
+    const esperarSobre = (c, clave) => (async () => {
+      for (let i = 0; i < 200; i++) {
+        const raw = c.env.storage.getItem(clave) || "";
+        if (raw.indexOf("VGLC1:") === 0) return raw;
+        await dormir(20);
+      }
+      return c.env.storage.getItem(clave) || "";
+    })();
+
     // Dos pacientes del consultorio.
     const CED = "1093800";
     const CED2 = "9876543";
@@ -116,6 +127,13 @@ module.exports = {
       const idb = idbFake({ handles: {} });
       const a = cargar({ silencioso: true, almacen });
       const b = cargar({ silencioso: true, almacen });
+      // v18.4.3 (H5): disco cifrado/async — la clave de equipo vive en GM_setValue
+      // y el arnés da un almacén GM POR vm; en un navegador real dos pestañas del
+      // MISMO navegador comparten esa clave. Se fija la misma en ambas para que el
+      // sobre "VGLC1:" de una pestaña sea descifrable por la otra (patrón suite_89).
+      const CLAVE_EQUIPO = "ab".repeat(32);
+      a.api.__vglCarpetaResetClaveParaTest(CLAVE_EQUIPO);
+      b.api.__vglCarpetaResetClaveParaTest(CLAVE_EQUIPO);
       const cajaA = congelarFecha(a, op.iso || "2026-03-05T10:15:00");
       const cajaB = congelarFecha(b, op.iso || "2026-03-05T10:15:00");
       [a, b].forEach((c) => {
@@ -345,6 +363,11 @@ module.exports = {
     await t.casoAsync("A1: pacientes distintos en dos pestañas — ambos .md y una sola Memoria", async () => {
       const p = dosPestanas({});
       p.a.api._vglCosechaGuardar(CED, { confirmaciones: { pestanaUno: { v: true } } });
+      // v18.4.3 (H5): disco cifrado/async — dejar aterrizar el sobre de A y que la
+      // pestaña B lo hidrate ANTES de guardar: su fusión debe nacer viendo al otro
+      // paciente (en producción el memo ya está hidratado cuando la 2ª pestaña actúa).
+      await esperarSobre(p.a, "vgl_cosecha");
+      await p.b.api._vglCosechaHidratarKick();
       p.b.api._vglCosechaGuardar(CED2, { confirmaciones: { pestanaDos: { v: true } } });
       p.b.api.vglDiscoMemoriaProgramar(); // cobertura: espejo programado desde la otra pestaña
       await dormir(4300); // ambos debounces (4 s) disparan sobre la MISMA carpeta
@@ -357,6 +380,9 @@ module.exports = {
       const memo = memoriaDisco(p.raiz);
       t.cierto(!!(memo && memo.cosecha && memo.cosecha[CED] && memo.cosecha[CED2]),
         "la Memoria del disco junta a los dos pacientes");
+      // v18.4.3 (H5): el memo de A quedó atrás del sobre que B escribió —
+      // hidratarlo es la vía real de producción para ver la cosecha completa.
+      await p.a.api._vglCosechaHidratarKick();
       const todo = p.a.api._vglCosechaTodo();
       t.cierto(!!(todo && todo[CED] && todo[CED2]),
         "el navegador de la pestaña A también ve la cosecha completa");
@@ -366,6 +392,10 @@ module.exports = {
       const p = dosPestanas({});
       p.a.api._vglCosechaGuardar(CED, { confirmaciones: { pestanaA: { v: true, ts: MS_FIJA } } });
       await dormir(4300); // la pestaña A dispara sola primero
+      // v18.4.3 (H5): disco cifrado/async — B hidrata el sobre que A dejó ANTES de
+      // confirmar; sin eso su fusión nacería ciega y su persistencia pisaría a pestanaA.
+      await esperarSobre(p.b, "vgl_cosecha");
+      await p.b.api._vglCosechaHidratarKick();
       // La segunda confirmación va por la vía REAL de producción: el contrato
       // de _vglCosechaGuardar es fusión PLANA (quien llama fusiona a mano, ver
       // su comentario en el userscript), así que entregarle un mapa parcial de
@@ -519,7 +549,16 @@ module.exports = {
       t.igual(contenidoDe(e.raiz,
         ["Vigilante de Agenda", "Memoria", { archivo: "vgl_cosecha.json" }]), memoAntes,
         "la Memoria intacta");
-      const enNavegador = JSON.parse(e.c.env.almacen["vgl_cosecha"] || "{}");
+      // v18.4.3 (H5): disco cifrado/async — el navegador guarda un sobre "VGLC1:":
+      // esperar a que aterrice y afirmar sobre el texto DESCIFRADO, nunca el crudo.
+      let rawC3 = e.c.env.storage.getItem("vgl_cosecha") || "";
+      for (let i = 0; i < 200 && rawC3.indexOf("VGLC1:") !== 0; i++) {
+        await dormir(20);
+        rawC3 = e.c.env.storage.getItem("vgl_cosecha") || "";
+      }
+      const planoC3 = rawC3.indexOf("VGLC1:") === 0
+        ? await e.c.api._vglSobreDescifrar(rawC3) : rawC3;
+      const enNavegador = JSON.parse(planoC3 || "{}");
       t.cierto(!!(enNavegador[CED] && enNavegador[CED].confirmaciones &&
         enNavegador[CED].confirmaciones.c3dos),
         "lo nuevo vive en el navegador: la consulta NO se pierde mientras la carpeta no vuelva");
@@ -549,7 +588,16 @@ module.exports = {
       await dormir(4300); // el disparo llega, fracasa todo, y el proceso SIGUE VIVO
       t.igual(contenidoDe(e.raiz, RUTA_MD(CED, FECHA)), "",
         "el archivo EXISTE vacío (tocarMd lo creó): no es null ni basura parcial");
-      const enNavegador = JSON.parse(e.c.env.almacen["vgl_cosecha"] || "{}");
+      // v18.4.3 (H5): disco cifrado/async — el navegador guarda un sobre "VGLC1:":
+      // esperar a que aterrice y afirmar sobre el texto DESCIFRADO, nunca el crudo.
+      let rawD2 = e.c.env.storage.getItem("vgl_cosecha") || "";
+      for (let i = 0; i < 200 && rawD2.indexOf("VGLC1:") !== 0; i++) {
+        await dormir(20);
+        rawD2 = e.c.env.storage.getItem("vgl_cosecha") || "";
+      }
+      const planoD2 = rawD2.indexOf("VGLC1:") === 0
+        ? await e.c.api._vglSobreDescifrar(rawD2) : rawD2;
+      const enNavegador = JSON.parse(planoD2 || "{}");
       t.cierto(!!(enNavegador[CED] && enNavegador[CED].confirmaciones &&
         enNavegador[CED].confirmaciones.d2a),
         "mientras tanto el navegador guardó la consulta completa");

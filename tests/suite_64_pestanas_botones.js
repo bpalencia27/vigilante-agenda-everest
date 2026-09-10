@@ -508,6 +508,14 @@ module.exports = {
       perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
       blocklist: [],
     }) };
+    // v18.8.1 (fail-open) — gemelo del padrón con la entrada de BLOQUEADO (uid 999):
+    // accesoPerfil() ya nunca devuelve PÚBLICO, así que el único sujeto cuyo perfil el
+    // contrato nuevo recorta es uno en la blocklist del padrón.
+    const ALMACEN_ACCESO_64_BLOQUEADO = { vgl_acceso_lista: JSON.stringify({
+      version: "test-64.2",
+      perfiles: { COMPLETO: [{ uid: 707, nombre: "Brandon Jesús Palencia Martínez" }], LABORATORIOS: [] },
+      blocklist: [{ uid: 999, nombre: "Prueba Bloqueada", motivo: "banco" }],
+    }) };
     t.caso("createIaInjectorUI: médico autorizado con redacción activada pinta los dos inyectores cuando las casillas están en pantalla", () => {
       const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64 });
       const a = c.api;
@@ -520,15 +528,35 @@ module.exports = {
         "con permiso completo se pintan los dos botones por casilla");
     });
 
-    t.caso("createIaInjectorUI: médico NO autorizado no pinta los inyectores aunque las casillas estén en pantalla", () => {
-      const c = cargar({ silencioso: true });
+    // v18.8.1 — FAIL-OPEN: el análogo moderno del «médico NO autorizado» ya no es el que
+    // está fuera del padrón (ese ahora resuelve COMPLETO y SÍ pintaría los inyectores),
+    // sino el BLOQUEADO por la blocklist. El recorte por bloqueo corta caps y UI: ni con
+    // redacción activada, ni con clave Gemini, ni con las casillas en pantalla se pinta
+    // un inyector.
+    t.caso("createIaInjectorUI v18.8.1: médico BLOQUEADO no pinta los inyectores aunque las casillas estén en pantalla", () => {
+      const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64_BLOQUEADO });
       const a = c.api;
-      a.__state.activeDoctor = { id: 909, name: "ANA MARIA PEREZ" }; // no está en la lista autorizada
+      a.__state.activeDoctor = { id: 999, name: "Prueba Bloqueada" }; // en la blocklist del padrón
       a.__S.iaRedaccion = true;
       a.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
       const creados = mockCasillasInyectores(c);
       a.createIaInjectorUI();
-      t.igual(creados.length, 0, "sin autorización no se pinta nada, con casilla presente o sin ella");
+      t.igual(creados.length, 0, "BLOQUEADO: no se pinta nada, con casilla presente o sin ella");
+    });
+
+    // v18.8.1 (fail-open) — la cara nueva del contrato: un médico FUERA del padrón (uid
+    // 555, sin entrada en ALMACEN_ACCESO_64 y sin blocklist) resuelve COMPLETO, así que
+    // con la redacción activada pinta los dos inyectores, igual que el 707 del padrón.
+    t.caso("createIaInjectorUI v18.8.1 (fail-open): médico fuera del padrón con redacción activada SÍ pinta los dos inyectores", () => {
+      const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64 });
+      const a = c.api;
+      a.__state.activeDoctor = { id: 555, name: "MEDICO SIN PADRON" }; // fuera del padrón: fail-open -> COMPLETO
+      a.__S.iaRedaccion = true;
+      a.mtrGuardarClaveGemini("CLAVE-DE-PRUEBA");
+      const creados = mockCasillasInyectores(c);
+      a.createIaInjectorUI();
+      t.igual(creados.map((n) => n.id).sort(), ["vgl-ia-inj-an", "vgl-ia-inj-ea"],
+        "fuera del padrón -> COMPLETO (fail-open): se pintan los dos botones por casilla");
     });
 
     t.caso("createIaInjectorUI: médico autorizado sin clave Gemini no pinta los inyectores", () => {

@@ -1,0 +1,92 @@
+Vigilante de Agenda (Centinela) — 18.8.2
+========================================
+
+Instalacion: pegar gistfile1.txt como userscript nuevo en Tampermonkey
+(reemplaza la version anterior). Requiere Tampermonkey con acceso a
+medicosviva1a.atheneasoluciones.com.
+
+Novedades 18.8.2 (8-sep-2026):
+- Widget "Proximos examenes" ahora se cierra y se mueve: boton de
+  cierre visible en la esquina superior derecha, operable con teclado
+  y lectores de pantalla. El cierre recuerda al paciente abierto: no
+  reaparece para el mismo paciente y vuelve solo al atender a otro.
+- Arrastre libre: la barra superior del widget es la unica zona de
+  agarre; la posicion queda guardada para la sesion y entre sesiones,
+  y nunca puede quedar fuera de la pantalla (siempre quedan al menos
+  96 px visibles).
+- Blindaje contra el CSS de Everest: los colores del widget fueron
+  verificados en Chromium contra una hoja de estilos ajena agresiva.
+
+Novedades 18.8.1 (8-sep-2026):
+- Adios a las restricciones de inicio: el unico requisito para arrancar
+  es aceptar los terminos y condiciones. Ya no importa si el medico esta
+  o no en el padron: entra con todas las funciones (perfil COMPLETO).
+  La lista de bloqueo se mantiene como unica medida que apaga a un
+  medico entero.
+- Permisos por medico x funcion desde Ajustes: todos los medicos VEN
+  todas las funciones; se puede desactivar el USO de cada una por
+  medico, por cedula o por nombre completo. Por defecto todo nace
+  encendido (ON) para medicos viejos y nuevos. Quien tiene una funcion
+  desactivada la sigue viendo, pero al intentarla recibe un aviso y no
+  abre ni escribe nada.
+- Auditoria de permisos: cada cambio queda anotado con quien lo hizo,
+  cuando, a que medico y que funcion, y viaja al tablero como evento
+  permiso_cambio.
+- Guardas: nadie puede desactivarse funciones a si mismo, y centinela
+  no se puede desactivar para nadie.
+
+Novedades 18.8.0 (8-sep-2026):
+- Redactor con IA sobre deepseek-v4-flash (API oficial de DeepSeek):
+  nuevo proveedor principal cuando hay clave deepseek, con z.ai y
+  Gemini como respaldo. Los textos afinados (fuente de verdad, cero
+  inferencia, cifras verificables, sello de trazabilidad) viajan
+  intactos.
+
+Novedades 18.7.0 (8-sep-2026):
+- Acceso directo a Historias Clinicas desde el panel del Centinela:
+  las tarjetas "En sala" muestran un boton violeta "Historias Clinicas"
+  que abre la historia del paciente con un clic.
+- Seguro por diseno: replica el clic del boton NATIVO de Citas del dia
+  (nada de botones "Atender" propios), empareja por cedula exacta (o
+  hora+estado si la tarjeta no trae cedula) y si hay cero o varias
+  filas candidatas NO clica nada: avisa en ambar como hacerlo a mano.
+- Solo aparece en "En sala" — el momento operativo de atender — y solo
+  si la tarjeta trae con que emparejar (cedula u hora legible).
+- Telemetria anonima del atajo (clic, fuera de agenda, sin fila, sin
+  boton, apertura lograda) para pulirlo en las proximas rondas.
+- Pestanas de Impresion Diagnostica y Conducta a un clic desde el dock
+  de la historia clinica: dos accesos directos que saltan a las pestanas
+  que se imprimen al cerrar la consulta.
+  · Solo aparecen si la pestana ya esta montada en pantalla (el dock
+    puede nacer antes que el editor de la nota); al montarse, el dock
+    se repinta solo y el acceso aparece.
+  · Cada boton clica el enlace REAL de su pestana de Everest (sin red
+    ni escritura propias); si la pestana ya no esta, aviso ambar y
+    nada mas — jamas se inventa una pestana.
+
+Novedades 18.6.2 (8-sep-2026):
+- Ajustes: grupo "Funcionalidades por medico" con toggles por medico
+  (persistencia vgl_tog_<uid>), solo para el perfil COMPLETO.
+- Rendimiento en la apertura de historia clinica (F-P1/F-P2):
+  la ruta de respaldo que producia 400 queda retirada (peor caso 2→1
+  peticiones), lectura unica por tick de la cedula (4 barridos→1),
+  chip "ultima HC" con 1 consulta por paciente (cache 10 min).
+- Caché de catalogos pesados de Everest (ParDiagnosticos 2,6 MB y
+  ParCiudades) DETRAS de un toggle APAGADO por defecto en Ajustes
+  (tog_perf_cache): la red de Everest no se toca hasta encenderlo.
+- Redactor con IA: sello de trazabilidad en el prompt (hora local de
+  generacion y antiguedad de la lectura), saneador de preambulos del
+  modelo ("Claro, aqui tiene...") y telemetria anonima del verificador
+  de afirmaciones.
+- Panel Proximos examenes RCV: suite a prueba de calendario (el reloj
+  de prueba se congela en el fixture para no depender de la fecha real).
+
+Banco de pruebas: verde completo (3644/0) al cierre de v18.8.2.
+
+Novedades 18.7.0-M5 (8-sep-2026):
+- PROBAR_CENTINELA.js: script de prueba para la consola F12. Prueba A
+  (solo lectura: panel, dock, atajos M1/M2 y pestañas) y prueba B con
+  rollback automático (simula las pestañas de la nota por un instante,
+  verifica que los accesos del dock aparecen y deja la pantalla como
+  estaba). Reporte JSON redactado: cero datos de paciente.
+  Uso: F12 → Consola → pegar el script → esperar ~15 s.

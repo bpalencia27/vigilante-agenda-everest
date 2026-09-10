@@ -26,6 +26,10 @@ const esperar57 = (ms) => new Promise((r) => setTimeout(r, ms));   // v18.0.112
 function respGemini(texto) {
   return JSON.stringify({ candidates: [{ content: { parts: [{ text: texto }] }, finishReason: "STOP" }] });
 }
+// La ventana ux vive en memoria y vuelca en tandas de 2 s: quien la lea debe volcar primero.
+const accionesUX = (c) => {
+  try { c.api._uxVolcarBuffer(); return (JSON.parse(c.env.storage.getItem("vgl_ux") || "null") || {}).acciones || {}; } catch (e) { return {}; }
+};
 
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
@@ -1168,16 +1172,23 @@ module.exports = {
       t.cierto(/tiempo agotado/i.test(r.motivo), "el motivo explica que fue timeout");
       // v17.6.81 — desde que las notas largas también entran a la rotación de cuota (ya no
       // arrancan siempre en el modelo potente), el primer intento puede caer en cualquier
-      // punto de la lista. Lo que importa es que SÍ rotó en cada paso (nunca repitió el
-      // modelo del intento INMEDIATAMENTE anterior) y que agotó los `maxIntentos`
-      // disponibles antes de rendirse — no una repetición ciega del primero.
-      for (let i = 1; i < modelos.length; i++) {
+      // punto de la lista. Lo que importa es que SÍ rotó en cada paso y que agotó los
+      // `maxIntentos` disponibles antes de rendirse — no una repetición ciega del primero.
+      // v18.10.0 (AB-2) — el ÚLTIMO eslabón gasta su bala transitoria antes de rendirse:
+      // el octavo disparo repite el modelo final A PROPÓSITO (backoff del reintento), y la
+      // telemetría lo distingue de la repetición ciega: la bala es UNA (ia.timeout.reintenta
+      // = 1, contra la rotación completa ia.timeout.rota = 6).
+      for (let i = 1; i < modelos.length - 1; i++) {
         t.cierto(modelos[i] !== modelos[i - 1], "el intento " + i + " no repite el modelo del intento inmediatamente anterior");
       }
       // 7 modelos en MTR_GEMINI_MODELOS (ver "la rotación avanza..." arriba, ya hardcodeado
       // igual en esa prueba): maxIntentos = MTR_GEMINI_MODELOS.length.
-      t.igual(modelos.length, 7, "se agotaron TODOS los modelos de la rotación antes de rendirse");
+      t.igual(modelos.length, 8, "los 7 modelos de la rotación + la bala del último antes de rendirse");
+      t.igual(modelos[7], modelos[6], "y la única repetición es la bala sobre el último eslabón agotado");
       t.cierto(modelos.length >= 2, "agotó más de un modelo antes de rendirse");
+      const acc = accionesUX(c);
+      t.igual(acc["ia.timeout.rota"], 6, "rotó en los 6 primeros eslabones…");
+      t.igual(acc["ia.timeout.reintenta"], 1, "…y la bala se gastó UNA vez en el último: no es una repetición ciega");
     });
 
     // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "los resultados a veces aparecen

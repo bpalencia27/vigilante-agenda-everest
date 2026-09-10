@@ -1,213 +1,427 @@
+// =====================================================================
+//  SUITE 03 — Excel PyM: base única v18.6.0
+//
+//  REESCRITA COMPLETA para la base única «BASE PILOTO DE CONSULTA
+//  BELLO SEPTIEMBRE1.xlsx»: el flujo del archivo diario («Agenda Día»,
+//  todayTokens/normName/esNombreDeHoy/pickTodaysFile/xlsViejoDeHoy/
+//  savePymCache/loadPymFromCache…) fue RETIRADO del userscript y esta
+//  suite ya no puede (ni debe) probarlo. Hoy cubre las piezas nuevas y
+//  las que sobrevivieron:
+//    · findDocIdx / esAplicaPendiente / makeProcexIndexer — la lectura
+//      de la hoja PROCEXDT de tamizaciones (CERVIX/MAMA/PSA/SOMF).
+//    · spFallbackUrls — las DOS vías por GUID, ni una más.
+//    · bogotaAhora / baseVentanaRefresco — el reloj UTC-5 fijo de los
+//      refrescos de las 06:00 y las 12:00.
+//    · baseLog — el anillo de 60 filas del log de mantenimiento.
+//    · _vglPurgarCacheDiariaLegacy — la limpieza de las claves viejas
+//      del archivo diario en el almacén de Tampermonkey.
+//    · packPym/unpackPym, esLibroValido/esXlsxCifrado y
+//      mtrLibroNoParecePym — sobrevivieron a la migración tal cual.
+// =====================================================================
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+
+const SP_BASE = "https://viva1aips-my.sharepoint.com/personal/director_bello_viva1a_com_co";
+const GUID_BASE = "6594b356-f608-4c56-bb6f-6a90f2125a3f";
+
+// Congela el reloj del sandbox en un instante EXACTO (epoch UTC). El
+// runner fija TZ=America/Bogota para el proceso, pero ninguna de estas
+// pruebas depende de eso: los instantes se construyen con Date.UTC y las
+// esperas se calculan por aritmética pura, así la suite dice lo mismo en
+// cualquier huso del banco.
+function congelar(c, epoch) {
+  c.env.win.Date = class extends Date {
+    static now() { return epoch; }
+    constructor(...a) { if (a.length === 0) super(epoch); else super(...a); }
+  };
+  c.ctx.Date = c.env.win.Date;
+}
+
 module.exports = {
-  nombre: "Excel, caché y SharePoint",
-  cubre: ["applyPymIdx", "packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy", "mtrLibroNoParecePym"],
+  nombre: "Excel, caché y base única",
+  cubre: [
+    "findDocIdx", "esAplicaPendiente", "makeProcexIndexer", "spFallbackUrls",
+    "bogotaAhora", "baseVentanaRefresco", "baseLog", "_vglPurgarCacheDiariaLegacy",
+    "packPym", "unpackPym", "esLibroValido", "esXlsxCifrado", "mtrLibroNoParecePym",
+  ],
+
   async pruebas(t, api, env, cargar) {
 
-    // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
-    t.caso("todayTokens retorna tokens de fecha con formatos numericos y mes en letras", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const toks = c.api.todayTokens();
-      t.cierto(Array.isArray(toks), "retorna arreglo");
-      t.cierto(toks.includes("20260810"), "incluye formato YYYYMMDD");
-      t.cierto(toks.includes("10082026"), "incluye formato DDMMYYYY");
-      t.cierto(toks.some(t => t.includes("agosto")), "incluye mes en letras");
+    // =====================================================================
+    //  findDocIdx — la columna del documento, con las lecciones de la
+    //  auditoría de la base SEPTIEMBRE1 (2026-09-07).
+    // =====================================================================
+
+    // H3 de la auditoría: la hoja PROCEXDT trae «NRO IDENTIFICACION» — con
+    // espacio, así, como lo escribe quien armó el libro. Antes de v18.6.0 ese
+    // encabezado no estaba en DOC_EXACT y el fallback blando se quedaba con la
+    // PRIMERA columna que contuviera «DOCUMENTO»… que era TIPO_DOCUMENTO (el
+    // TIPO: "CC", "TI"), no el número. El índice salía con claves basura y el
+    // cruce con la agenda fallaba en silencio.
+    t.caso("findDocIdx: «NRO IDENTIFICACION» con espacio calza EXACTO por la normalización (\\s+ → _)", () => {
+      t.igual(api.findDocIdx(["NOMBRE", "NRO IDENTIFICACION"]), 1,
+        "el espacio se normaliza a «_» antes de comparar contra NRO_IDENTIFICACION");
+      t.igual(api.findDocIdx(["NRO  IDENTIFICACION", "NOMBRE"]), 0,
+        "y con doble espacio también: colapsar espacios repetidos es parte del arreglo");
     });
 
-    t.caso("normName normaliza el nombre del archivo", () => {
-      t.igual(api.normName("Agenda_Dia_CMB_20260810.xlsx"), "agendadiacmb20260810xlsx");
-      t.igual(api.normName(" 2026-08-10.xls "), "20260810xls");
+    t.caso("findDocIdx: con TIPO_DOCUMENTO ANTES que NRO IDENTIFICACION, gana NRO — nunca la columna del TIPO", () => {
+      // El orden real de «CITASDIA AGOSTO»: el TIPO de documento aparece primero
+      // en la hoja. La coincidencia exacta por DOC_EXACT mira el CONTENIDO, no
+      // la posición, así que NRO_IDENTIFICACION (index 1) gana aunque TIPO_DOCUMENTO
+      // (index 0) también contenga la palabra DOCUMENTO.
+      t.igual(api.findDocIdx(["TIPO_DOCUMENTO", "NRO IDENTIFICACION"]), 1,
+        "elige el número, no el tipo");
+      t.igual(api.findDocIdx(["TIPO DOCUMENTO", "NRO IDENTIFICACION", "NOMBRE"]), 1,
+        "con espacio o con guion bajo, el TIPO nunca es la columna del documento");
     });
 
-    t.caso("nameHasToken verifica si un token está dentro del nombre evitando colas numéricas", () => {
-      t.cierto(api.nameHasToken("agenda6deagosto", "6deagosto"));
-      t.falso(api.nameHasToken("agenda26deagosto", "6deagosto"));
-      t.cierto(api.nameHasToken("agenda06deagosto", "06deagosto"));
+    // v18.0.45 — hallazgo del enjambre (01-sep): esta función NO quitaba tildes
+    // y «CÉDULA» —la ortografía correcta en español, y la que cualquiera
+    // escribiría— fallaba las dos vías. Un médico con esa columna en su base
+    // quedaba SIN módulo de Actividades Preventivas la jornada entera.
+    t.caso("findDocIdx: «CÉDULA» con tilde sigue funcionando (v18.0.45)", () => {
+      t.igual(api.findDocIdx(["CÉDULA", "NOMBRE"]), 0);
+      t.igual(api.findDocIdx(["NOMBRE", "Cédula"]), 1, "y en minúsculas también: la comparación es tras UPPER");
     });
 
-    t.caso("esNombreDeHoy identifica archivos correspondientes a la fecha", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      t.cierto(c.api.esNombreDeHoy("Agenda_Dia_CMB_20260810.xlsx"));
-      t.cierto(c.api.esNombreDeHoy("Citas 10-08-2026.xlsx"));
-      t.cierto(c.api.esNombreDeHoy("10 de agosto.xlsx"));
-      t.falso(c.api.esNombreDeHoy("Agenda_Dia_CMB_20260809.xlsx"));
+    t.caso("findDocIdx: IDENTIFICACION_PACIENTE calza exacto (espacios internos colapsados)", () => {
+      t.igual(api.findDocIdx(["IDENTIFICACION PACIENTE", "NOMBRE"]), 0);
+      t.igual(api.findDocIdx(["NOMBRE", "IDENTIFICACION_PACIENTE"]), 1, "y escrito con guion bajo, idéntico");
     });
 
-    t.caso("pickTodaysFile selecciona el archivo correcto basado en el nombre", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        { Name: "Agenda_20260809.xlsx" },
-        { Name: "Agenda_20260810.xlsx" }
-      ];
-      const selected = c.api.pickTodaysFile(files);
-      t.cierto(selected !== null);
-      t.igual(selected.Name, "Agenda_20260810.xlsx");
+    t.caso("findDocIdx: el orden de DOC_EXACT manda cuando hay varios candidatos exactos", () => {
+      // CEDULA aparece ANTES que NRO_IDENTIFICACION en DOC_EXACT, así que con
+      // ambas columnas presentes gana la cédula aunque esté más a la derecha.
+      // Es deliberado (orden documentado del contrato), no un empate al azar.
+      t.igual(api.findDocIdx(["NRO IDENTIFICACION", "CEDULA"]), 1,
+        "gana CEDULA: indexOf por orden de DOC_EXACT, no la primera columna de la hoja");
     });
 
-    t.caso("pickTodaysFile selecciona basado en fecha de modificación si no hay nombre obvio", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      // v18.0.7 — ahora la 2ª regla exige que el archivo esté SUELTO EN LA CARPETA
-      // PRINCIPAL (ver el blindaje en pickTodaysFile), así que la ruta forma parte del caso.
-      const RAIZ = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
-      const files = [
-        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z", ServerRelativeUrl: RAIZ + "/ArchivoRandom.xlsx" }
-      ];
-      const selected = c.api.pickTodaysFile(files);
-      t.cierto(selected !== null);
-      t.igual(selected.Name, "ArchivoRandom.xlsx");
+    t.caso("findDocIdx: el fallback blando ignora las columnas que EMPIEZAN por TIPO_", () => {
+      // El espejo del hallazgo H3 sin la vía exacta disponible: si la hoja solo
+      // tiene el TIPO del documento, es mejor NO encontrar columna (y que el
+      // indexador lance su error clásico) que indexar "CC"/"TI" como si fueran
+      // cédulas — eso cruza mal y en silencio.
+      t.igual(api.findDocIdx(["TIPO DOCUMENTO", "NOMBRE"]), -1,
+        "una hoja cuyo único «documento» es el TIPO no tiene columna de documento");
+      // Y el fallback blando de siempre sigue vivo para el resto:
+      t.igual(api.findDocIdx(["NOMBRE", "NO. DOCUMENTO PACIENTE"]), 1,
+        "una columna de documento con otro nombre se reconoce por contenido");
     });
 
     // =====================================================================
-    //  v18.0.7 — EL LIBRO EQUIVOCADO NO PUEDE VOLVER A PRESENTARSE COMO EL PyM DEL DÍA
-    //
-    //  REPORTE EN VIVO (31-ago): a varios médicos dejó de salirles el aviso de PyM y de
-    //  abandono de RCV al abrir la historia. El diagnóstico del equipo del médico:
-    //      Archivo: ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx (PyM de hoy) (auto)
-    //      Pacientes con pendientes: 0 · Documentos totales en la hoja: 1396
-    //  El listado no es de UNA carpeta: fetchSpFilesMultiFolder junta las tres de
-    //  CONFIG.SP.folders, y una es «…/ESTRATEGIAS POR SEDE 2026/SEDE BELLO». Ese libro de
-    //  productividad no lleva fecha en el nombre y alguien lo edita a diario, así que la 2ª
-    //  regla lo tomaba por «el PyM de hoy».
-    //
-    //  Y el daño era doble: además de dejar el índice vacío (y con él, mudos los dos
-    //  avisos), al dar por encontrado el de hoy NUNCA se caía al respaldo de la base
-    //  piloto ni se seguía buscando el CMB real — desactivando la regla que el médico dejó
-    //  escrita: «mientras no esté subido el CMB del día se usa la base piloto, y cada X
-    //  minutos se rectifica si ya subieron el oficial».
+    //  esAplicaPendiente — el idioma de la hoja de tamizaciones.
     // =====================================================================
-    const RAIZ_PYM = "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM";
 
-    t.caso("v18.0.7: un libro de una SUBCARPETA no puede pasar por «el PyM de hoy»", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
-          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
-      ];
-      t.igual(c.api.pickTodaysFile(files), null,
-        "sin candidato válido se devuelve null, que es lo que hace caer al respaldo de la base piloto y seguir buscando el CMB");
+    // v18.6.0 (opción B confirmada por el médico): en la hoja PROCEX,
+    // «Aplica Cobertura/Fenix …» = el paciente REQUIERE la tamización;
+    // «Con Tamizacion vigente» o «No Aplica» = nada que hacer. Es el
+    // equivalente del «Susceptible» del extinto archivo diario, en otro
+    // idioma — confundirlos significaría sugerir exámenes que no corresponden.
+    t.caso("esAplicaPendiente: «Aplica …» SÍ; vigente o «No Aplica» NO", () => {
+      t.cierto(api.esAplicaPendiente("Aplica Cobertura VPH"), "el vocabulario de cobertura: pendiente");
+      t.cierto(api.esAplicaPendiente("  APLICA FENIX VPH  "), "mayúsculas, espacios y tilde no salvan al valor");
+      t.falso(api.esAplicaPendiente("Con Tamizacion vigente"), "ya la tiene: nada que ordenar");
+      t.falso(api.esAplicaPendiente("No Aplica"), "no le corresponde");
+      t.falso(api.esAplicaPendiente(null), "null jamás es pendiente");
+      t.falso(api.esAplicaPendiente(undefined), "undefined tampoco");
+      t.falso(api.esAplicaPendiente(""), "celda vacía tampoco");
     });
 
-    t.caso("v18.0.7: entre el libro de la subcarpeta y el suelto en la raíz, gana el de la raíz", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        { Name: "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", TimeLastModified: "2026-08-10T08:00:00Z",
-          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx" },
-        { Name: "Agenda del dia.xlsx", TimeLastModified: "2026-08-10T09:00:00Z",
-          ServerRelativeUrl: RAIZ_PYM + "/Agenda del dia.xlsx" },
-      ];
-      const sel = c.api.pickTodaysFile(files);
-      t.cierto(!!sel && sel.Name === "Agenda del dia.xlsx", "se elige el suelto en la raíz");
+    t.caso("esAplicaPendiente: el borde de 40 caracteres y el espacio tras «aplica»", () => {
+      // >40 chars: una celda que diga tanto no es un estado de tamización, es
+      // un párrafo (observación clínica, nota del digitador…). Cortar ahí
+      // evita que cualquier texto que empiece por «aplica » se tome por orden.
+      t.cierto(api.esAplicaPendiente("aplica " + "x".repeat(33)), "exactamente 40 caracteres: aún vale");
+      t.falso(api.esAplicaPendiente("aplica " + "x".repeat(34)), "41 caracteres: ya no");
+      t.falso(api.esAplicaPendiente("aplica"), "sin el espacio tras «aplica» no calza («aplicar», «aplicante»…)");
+      t.falso(api.esAplicaPendiente("reaplica cobertura"), "y solo vale como PREFIJO, no embebido");
     });
 
     // =====================================================================
-    // v18.0.71 — HALLAZGO DEL ENJAMBRE DE FUNCIONES #16, gravedad alta, 2 de 3 refutadores
-    // no lo tumbaron. La guarda «no cola de otro número» (nameHasToken) SOLO se aplicaba a
-    // los tokens con mes en LETRAS; los numéricos usaban `n.includes(t)` a pelo, sin
-    // ninguna protección de borde. Un consecutivo/factura de 6-8 dígitos que por
-    // casualidad trae la fecha de hoy EMPOTRADA, en CUALQUIER subcarpeta que
-    // fetchSpFilesMultiFolder junte, se tomaba como el PyM de hoy. Hoy 1-sep (día y mes de
-    // un solo dígito) es el peor caso: el token corto ("192026", 6 dígitos) es el que más
-    // fácil se empotra.
+    //  makeProcexIndexer — encabezados sintéticos de la hoja de tamizaciones.
     // =====================================================================
-    t.caso("v18.0.71: fuera de la raíz, un consecutivo que trae la fecha EMPOTRADA con un dígito PEGADO se rechaza", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      // Los dos casos REALMENTE peligrosos de la reproducción del hallazgo: el token
-      // "192026" vive con OTRO DÍGITO pegado justo antes ("45" / "00") — es la cola de
-      // otro número que la guarda existe para evitar, sea cual sea su tipo de token.
-      const casos = ["Reporte_45192026_Final.xlsx", "Factura_00192026.xlsx"];
-      for (const nombre of casos) {
-        const files = [{ Name: nombre, TimeLastModified: "2026-08-20T08:00:00Z",
-          ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/" + nombre }];
-        t.igual(c.api.pickTodaysFile(files), null,
-          "«" + nombre + "» en una subcarpeta ajena ya no se toma como el PyM de hoy");
-      }
+
+    t.caso("makeProcexIndexer: traduce el vocabulario «Aplica …» a las etiquetas de siempre", () => {
+      const idx = api.makeProcexIndexer(["NRO IDENTIFICACION", "CERVIX", "MAMA", "PSA", "SOMF"]);
+      // Cédulas sintéticas (regla del proyecto: cero datos reales).
+      idx.push(["5150076", "Aplica Fenix VPH", "", "", ""]);
+      idx.push(["99887766", "Aplica Cobertura CCU", "Aplica Cobertura", "Aplica Cobertura", "Aplica Cobertura"]);
+      idx.push(["11223344", "Con Tamizacion vigente", "No Aplica", "Con Tamizacion vigente", "No Aplica"]);
+
+      // CERVIX refina el tipo de prueba reutilizando detalleTipoCervix (VPH
+      // vs citología), igual que la fusión de PRUEBA_CERVIX de siempre.
+      t.igual(idx.map.get("5150076"), ["Cáncer de cuello uterino — VPH"]);
+      t.igual(idx.map.get("99887766"),
+        ["Cáncer de cuello uterino — citología cervicouterina", "Mamografía", "PSA (antígeno de próstata)", "SOMF (sangre oculta en materia fecal)"],
+        "las etiquetas son las del diccionario FRIENDLY, con el orden de las columnas");
+
+      // «Con Tamizacion vigente» / «No Aplica» NO generan actividad: la regla
+      // de oro del proyecto (casilla vacía antes que dato inventado) también
+      // corre al revés — nada pendiente no se rellena con nada.
+      t.falso(idx.map.has("11223344"), "sin «Aplica» no hay bucket");
+      t.cierto(idx.todos.has("11223344"), "pero el documento SÍ queda en el universo de la hoja");
+
+      // Sin documento no hay paciente: ni bucket ni universo.
+      idx.push(["", "Aplica Fenix VPH", "Aplica Cobertura", "Aplica Cobertura", "Aplica Cobertura"]);
+      t.falso([...idx.todos].includes(""), "una fila sin identificación no entra ni a «todos»");
     });
 
-    t.caso("v18.0.71: y la contrapartida — un token con LETRAS a los dos lados sigue aceptándose, fuera de la raíz o no", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      // "Consolidado_192026_v2.xlsx": el "2" de "v2" viene DESPUÉS del token, pero
-      // separado por una LETRA ("v"), no pegado. Mismo patrón de confianza que el caso
-      // real ya conocido "Agenda_v2_20260806.xlsx" (letra antes de la fecha) — el código
-      // no puede distinguir "antes" de "después" de forma justa, así que trata los dos
-      // igual: letras a ambos lados = token aislado de verdad, se acepta.
-      const files = [{ Name: "Consolidado_192026_v2.xlsx", TimeLastModified: "2026-08-20T08:00:00Z",
-        ServerRelativeUrl: RAIZ_PYM + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Consolidado_192026_v2.xlsx" }];
-      const sel = c.api.pickTodaysFile(files);
-      t.igual(sel && sel.Name, "Consolidado_192026_v2.xlsx",
-        "sigue aceptándose: no es cola de otro número, solo comparte vecindario con una letra");
+    t.caso("makeProcexIndexer: una columna que NO es de tamización no genera nada, aunque su texto diga «Aplica»", () => {
+      const idx = api.makeProcexIndexer(["NRO IDENTIFICACION", "NOMBRE COMPLETO", "MAMA"]);
+      idx.push(["5150076", "Aplica Cobertura", "No Aplica"]);
+      t.igual(idx.map.size, 0,
+        "solo CERVIX/MAMA/PSA/SOMF (y sus alias) se leen: un «Aplica» en el nombre es texto, no una orden");
     });
 
-    t.caso("v18.0.71: el caso real YA conocido sigue intacto — Agenda_v2_20260806.xlsx en la raíz", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-06T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-06T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      // Dentro de la raíz, el dígito pegado a la izquierda (la "2" de "v2") sigue
-      // aceptándose: es el caso real que el comentario de nameHasToken documenta, y esta
-      // versión no puede romperlo.
-      const files = [{ Name: "Agenda_v2_20260806.xlsx", TimeLastModified: "2026-08-06T08:00:00Z",
-        ServerRelativeUrl: RAIZ_PYM + "/Agenda_v2_20260806.xlsx" }];
-      const sel = c.api.pickTodaysFile(files);
-      t.igual(sel && sel.Name, "Agenda_v2_20260806.xlsx", "sigue eligiéndose: la raíz conserva la coincidencia simple de siempre");
+    t.caso("makeProcexIndexer: reconoce los alias TAMIZACION_CERVIX/MAMA/PROSTATA/COLON y SANGRE_OCULTA", () => {
+      // La hoja real puede traer los encabezados largos del formato viejo: el
+      // indexador los colapsa a los cuatro tipos, con espacio o con guion bajo.
+      const idx = api.makeProcexIndexer(["NRO IDENTIFICACION", "TAMIZACION CERVIX", "TAMIZACION_MAMA", "TAMIZACION PROSTATA", "SANGRE OCULTA"]);
+      idx.push(["99887766", "Aplica Fenix VPH", "Aplica Cobertura", "Aplica Cobertura", "Aplica Cobertura"]);
+      t.igual(idx.map.get("99887766"),
+        ["Cáncer de cuello uterino — VPH", "Mamografía", "PSA (antígeno de próstata)", "SOMF (sangre oculta en materia fecal)"]);
     });
 
-    t.caso("v18.0.71: nameHasToken con el borde completo exige que NO haya dígito ni antes ni después", () => {
-      t.cierto(api.nameHasToken("reporte45192026final", "192026", true) === false,
-        "192026 con 45 antes: se rechaza con el borde completo");
-      t.cierto(api.nameHasToken("consolidado192026v2", "192026", true) === true,
-        "192026 con v2 después: la letra 'v' separa, el dígito no está PEGADO — sigue aceptándose");
-      t.cierto(api.nameHasToken("consolidado1920264", "192026", true) === false,
-        "pero 192026 seguido DIRECTO por otro dígito (prefijo de un número más largo) sí se rechaza — el espejo del caso de la izquierda");
-      t.cierto(api.nameHasToken("agendadiacmb20260810xlsx", "20260810", true) === true,
-        "un token real con letras a los dos lados SÍ pasa el borde completo");
-      // El comportamiento SIN el tercer argumento no cambia ni un bit: solo mira la
-      // izquierda, como siempre.
-      t.igual(api.nameHasToken("agenda6deagosto", "6deagosto"), true);
-      t.igual(api.nameHasToken("agenda26deagosto", "6deagosto"), false);
+    t.caso("makeProcexIndexer: buckets con DEDUP — dos columnas o dos filas no duplican la etiqueta", () => {
+      // La fusión (unión de hojas con buckets dedup) es la que evita que un
+      // paciente aparezca con «Mamografía» dos veces en el aviso solo porque
+      // el libro la repite en CERVIX y TAMIZACION_CERVIX. Aquí se prueba el
+      // dedup del bucket en su origen: el propio indexer.
+      const idx = api.makeProcexIndexer(["NRO IDENTIFICACION", "CERVIX", "TAMIZACION CERVIX"]);
+      idx.push(["5150076", "Aplica Fenix VPH", "Aplica Fenix VPH 2026"]);
+      t.igual(idx.map.get("5150076"), ["Cáncer de cuello uterino — VPH"],
+        "dos valores que refinan al MISMO tipo de prueba dejan UNA sola etiqueta");
+      idx.push(["5150076", "Aplica Fenix VPH", ""]);
+      t.igual(idx.map.get("5150076").length, 1, "y re-push de la misma paciente tampoco duplica");
     });
 
-    t.caso("v18.0.71: esNombreDeHoy con fueraDeLaRaiz — mismo nombre, veredicto distinto según de dónde venga", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx"), "sin el argumento (comportamiento de siempre): sigue aceptando — es el bug que se cierra, pero solo fuera de la raíz");
-      t.cierto(c.api.esNombreDeHoy("Factura_00192026.xlsx", false), "fueraDeLaRaiz=false (archivo en la raíz): igual, sigue aceptando");
-      t.falso(c.api.esNombreDeHoy("Factura_00192026.xlsx", true), "fueraDeLaRaiz=true: ahora sí lo rechaza — el dígito pegado a la izquierda lo delata");
-      t.cierto(c.api.esNombreDeHoy("Consolidado_192026_v2.xlsx", true), "pero un token con letras a los dos lados sigue aceptándose, aunque sea fuera de la raíz");
-      // Y un token con mes en LETRAS no cambia con ninguno de los dos: ya estaba protegido.
-      t.cierto(c.api.esNombreDeHoy("Informe del 1 de septiembre.xlsx", true));
-      t.falso(c.api.esNombreDeHoy("Informe del 21 de septiembre.xlsx", true));
+    t.caso("makeProcexIndexer: sin columna de identificación lanza el error clásico", () => {
+      t.lanza(() => api.makeProcexIndexer(["NOMBRE", "EDAD", "CERVIX"]),
+        "sin columna de documento el indexador no puede construir claves");
+      let msg = "";
+      try { api.makeProcexIndexer(["TIPO DOCUMENTO", "CERVIX"]); } catch (e) { msg = e.message; }
+      t.cierto(/No se encontró la columna con la identificaci[oó]n del paciente/i.test(msg),
+        "el mensaje es el de siempre, el que el médico ya sabe leer · " + msg);
     });
 
-    t.caso("v18.0.7: el nombre CON la fecha de hoy sigue mandando sobre todo lo demás", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        { Name: "OtroCualquiera.xlsx", TimeLastModified: "2026-08-10T11:00:00Z", ServerRelativeUrl: RAIZ_PYM + "/OtroCualquiera.xlsx" },
-        { Name: "Agenda_Dia_CMB_20260810.xlsx", TimeLastModified: "2026-08-09T06:00:00Z",
-          ServerRelativeUrl: RAIZ_PYM + "/CITAS DIA EBS/Agenda_Dia_CMB_20260810.xlsx" },
-      ];
-      const sel = c.api.pickTodaysFile(files);
-      t.igual(sel.Name, "Agenda_Dia_CMB_20260810.xlsx",
-        "la 1ª regla (fecha en el nombre) no se toca: vale aunque esté en una subcarpeta");
+    // =====================================================================
+    //  spFallbackUrls — exactamente DOS vías por GUID.
+    // =====================================================================
+
+    // v18.0.5 añadió una TERCERA vía por shareId; v18.6.0 la RETIRA: el
+    // shareId configurado apuntaba a la base de MAYO y, con la base única de
+    // septiembre, una tercera vía viva podría entregar el libro de un mes
+    // pasado cuando las dos por GUID fallaran — datos viejos presentados como
+    // actuales, lo peor que puede pasar en consulta. Esta prueba fija que la
+    // tercera vía NO existe, aunque alguien vuelva a configurar un shareId.
+    t.caso("spFallbackUrls: EXACTAMENTE 2 URLs, GUID normalizado en minúsculas y sin llaves", () => {
+      const urls = api.spFallbackUrls("{6594B356-F608-4C56-BB6F-6A90F2125A3F}");
+      t.igual(urls.length, 2, "dos vías y ni una más");
+      t.igual(urls[0], SP_BASE + "/_api/web/GetFileById('" + GUID_BASE + "')/$value");
+      t.igual(urls[1], SP_BASE + "/_layouts/15/download.aspx?UniqueId=" + GUID_BASE);
+      t.falso(urls.some((u) => /shareid|GetFileByServerRelativeUrl|GetFolderByServerRelativeUrl/i.test(u)),
+        "ningún mecanismo de listado ni de shareId sobrevive en las URLs");
     });
 
-    t.caso("v18.0.7: mtrLibroNoParecePym — muchos documentos y CERO pendientes es OTRO libro", () => {
+    t.caso("spFallbackUrls: ni un shareId configurado resucita la tercera vía (v18.6.0)", () => {
+      const c = cargar({ silencioso: true });
+      // Se inyecta a propósito el shareId VIEJO (el de la base de mayo): si la
+      // tercera vía volviera a existir, esta configuración la encendería.
+      c.api.__CONFIG.SP.base.shareId = "{2BD8F42A-F8F5-46E0-B2E1-B1D2E5FA5D4F}";
+      const urls = c.api.spFallbackUrls(GUID_BASE);
+      t.igual(urls.length, 2, "la función ya no lee shareId: la base se direcciona por GUID, punto");
+      t.falso(urls.some((u) => u.indexOf("2bd8f42a") >= 0), "el GUID de mayo no aparece por ningún lado");
+    });
+
+    // =====================================================================
+    //  bogotaAhora + baseVentanaRefresco — el reloj UTC-5 fijo.
+    // =====================================================================
+
+    // Mandato del médico (07-sep): refrescos a las 06:00 y a las 12:00 de
+    // BOGOTÁ. Bogotá es UTC-5 fijo (Colombia no tiene horario de verano), así
+    // que el reloj se calcula desde UTC y NO depende del huso del equipo: un
+    // portátil en otra zona no puede adelantar ni saltarse el refresco. Se
+    // congela Date para recorrer el día minuto a minuto.
+    t.caso("ventana de refresco: 05:59 aún no abre — sello «|pre» y toca:false", () => {
+      const c = cargar({ silencioso: true });
+      congelar(c, Date.UTC(2026, 8, 7, 10, 59, 0));       // 05:59 Bogotá
+      t.igual(c.api.bogotaAhora(), { dia: "2026-09-07", hora: 5 + 59 / 60 });
+      t.igual(c.api.baseVentanaRefresco(), { sello: "2026-09-07|pre", toca: false },
+        "antes de las 06:00 manda la copia guardada, sin tocar la red");
+    });
+
+    t.caso("ventana de refresco: 06:00 en punto abre la mañana — sello «dia|0», toca:true", () => {
+      const c = cargar({ silencioso: true });
+      congelar(c, Date.UTC(2026, 8, 7, 11, 0, 0));        // 06:00 Bogotá
+      t.igual(c.api.bogotaAhora(), { dia: "2026-09-07", hora: 6 });
+      t.igual(c.api.baseVentanaRefresco(), { sello: "2026-09-07|0", toca: true });
+    });
+
+    t.caso("ventana de refresco: 11:59 sigue en la MISMA ventana de la mañana (sin re-sellar)", () => {
+      const c = cargar({ silencioso: true });
+      congelar(c, Date.UTC(2026, 8, 7, 11, 0, 0));
+      const sello0600 = c.api.baseVentanaRefresco().sello;
+      congelar(c, Date.UTC(2026, 8, 7, 16, 59, 0));       // 11:59 Bogotá
+      const v = c.api.baseVentanaRefresco();
+      t.igual(v, { sello: "2026-09-07|0", toca: true });
+      t.igual(v.sello, sello0600,
+        "el sello de las 06:00 sigue siendo el vigente a las 11:59: mientras el stamp de GM coincida, el minutero NO vuelve a pagar la meta de 1 KB");
+    });
+
+    t.caso("ventana de refresco: 12:00 abre la tarde — sello «dia|1» — y 23:59 sigue en ella", () => {
+      const c = cargar({ silencioso: true });
+      congelar(c, Date.UTC(2026, 8, 7, 17, 0, 0));        // 12:00 Bogotá
+      t.igual(c.api.bogotaAhora(), { dia: "2026-09-07", hora: 12 });
+      t.igual(c.api.baseVentanaRefresco(), { sello: "2026-09-07|1", toca: true });
+      congelar(c, Date.UTC(2026, 8, 8, 4, 59, 0));        // 23:59 Bogotá del MISMO día (UTC ya rodó)
+      t.igual(c.api.bogotaAhora(), { dia: "2026-09-07", hora: 23 + 59 / 60 },
+        "la fecha es la de Bogotá, no la de UTC: a las 23:59 locales UTC ya es mañana");
+      t.igual(c.api.baseVentanaRefresco(), { sello: "2026-09-07|1", toca: true },
+        "la ventana de la tarde es la última del día");
+    });
+
+    t.caso("ventana de refresco: la medianoche rueda el día y vuelve a «pre»", () => {
+      const c = cargar({ silencioso: true });
+      congelar(c, Date.UTC(2026, 8, 8, 5, 0, 0));         // 00:00 Bogotá del 08-sep
+      t.igual(c.api.baseVentanaRefresco(), { sello: "2026-09-08|pre", toca: false },
+        "día nuevo, ventana cerrada: el sello del día anterior no puede colarse");
+    });
+
+    t.caso("ventana de refresco: el índice del sello es el del arreglo ORDENADO, no el de configuración", () => {
+      const c = cargar({ silencioso: true });
+      // Si alguien escribe [12, 6] desordenado en la configuración, el índice
+      // (0=mañana, 1=tarde) no puede voltearse: el sello vive para compararse
+      // contra el stamp guardado, y cambiar de significado lo invalidaría.
+      c.api.__CONFIG.SP.base.horasRefresco = [12, 6];
+      congelar(c, Date.UTC(2026, 8, 7, 11, 30, 0));       // 06:30 Bogotá
+      t.igual(c.api.baseVentanaRefresco().sello, "2026-09-07|0", "06:30 = índice 0 aunque 6 venga después en el arreglo");
+      congelar(c, Date.UTC(2026, 8, 7, 17, 30, 0));       // 12:30 Bogotá
+      t.igual(c.api.baseVentanaRefresco().sello, "2026-09-07|1");
+    });
+
+    t.caso("bogotaAhora NO depende del huso del equipo: con el host en Tokio (UTC+9) sigue diciendo la hora de Bogotá", () => {
+      // El runner fija TZ=America/Bogota, así que aquí no se puede simular un
+      // host en otra zona dentro del propio proceso: se levanta un proceso
+      // hijo con TZ=Asia/Tokyo que carga el userscript fresco, congela el
+      // MISMO instante (11:00Z = 06:00 Bogotá = 20:00 Tokio) y reporta.
+      // El canary local del hijo (getHours) demuestra que el huso del host
+      // SÍ quedó en Tokio: sin él, un TZ ignorado en silencio haría pasar
+      // esta prueba mintiendo (hora local = hora Bogotá por el runner).
+      const rutaHarness = path.join(__dirname, "harness.js");
+      const E = Date.UTC(2026, 8, 7, 11, 0, 0);
+      const guion = [
+        "const { cargar } = require(" + JSON.stringify(rutaHarness) + ");",
+        "const c = cargar({ silencioso: true });",
+        "const E = " + E + ";",
+        "c.env.win.Date = class extends Date { static now() { return E; } constructor(...a) { if (a.length === 0) super(E); else super(...a); } };",
+        "c.ctx.Date = c.env.win.Date;",
+        "console.log(JSON.stringify({ ahora: c.api.bogotaAhora(), ventana: c.api.baseVentanaRefresco(), canaryLocal: new Date(E).getHours() }));",
+      ].join("\n");
+      const out = execFileSync(process.execPath, ["-e", guion],
+        { env: Object.assign({}, process.env, { TZ: "Asia/Tokyo" }), encoding: "utf8", timeout: 60000 });
+      const r = JSON.parse(String(out).trim());
+      t.igual(r.canaryLocal, 20, "control del escenario: el host del hijo SÍ está en Tokio (20:00 local)");
+      t.igual(r.ahora, { dia: "2026-09-07", hora: 6 },
+        "un reloj de equipo en otra zona no adelanta ni atrasa la ventana de Bogotá");
+      t.igual(r.ventana, { sello: "2026-09-07|0", toca: true });
+    });
+
+    // =====================================================================
+    //  baseLog — el anillo de mantenimiento del médico.
+    // =====================================================================
+
+    // Requisito de mantenimiento (v18.6.0): cada intento de la base deja UNA
+    // fila con fase/duración/resultado. Anillo FIFO de 60 filas, recortado en
+    // cada escritura: por muchos reintentos que haya en un mal día de red, el
+    // almacén de Tampermonkey no crece sin cota.
+    t.caso("baseLog: anillo FIFO — 65 entradas dejan las últimas 60, las 5 primeras se caen", () => {
+      const c = cargar({ silencioso: true });
+      for (let i = 0; i < 65; i++) c.api.baseLog({ fase: "f" + i, ok: true });
+      const arr = JSON.parse(c.env.gm["vgl_base_log"]);
+      t.igual(arr.length, 60, "el anillo se recorta a 60 en cada escritura");
+      t.igual(arr[0].fase, "f5", "la más vieja sobreviviente es la sexta: FIFO");
+      t.igual(arr[59].fase, "f64", "y la última siempre está");
+      t.cierto(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(arr[0].t), "cada fila lleva su marca de tiempo ISO");
+      t.cierto(!isNaN(new Date(arr[0].t).getTime()), "y es una fecha de verdad, no solo un parecido");
+    });
+
+    t.caso("baseLog: la fila lleva EXACTAMENTE lo que le pasan más «t» — SIN PHI por construcción", () => {
+      const c = cargar({ silencioso: true });
+      c.api.baseLog({ fase: "meta", ok: true, ms: 12 });
+      const arr = JSON.parse(c.env.gm["vgl_base_log"]);
+      t.igual(Object.keys(arr[0]).sort(), ["fase", "ms", "ok", "t"],
+        "ni el paciente ni la cédula caben aquí: la función no añade nada que no le manden");
+    });
+
+    t.caso("baseLog: JSON roto o que no es arreglo arranca de [] en vez de morir", () => {
+      // El almacén de Tampermonkey es un agujero negro conocido: si un día
+      // queda media escritura (PC apagada a mitad de GM_setValue), el log no
+      // puede dejar de funcionar para siempre por eso.
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_base_log"] = '{"v":3 ESTO NO ES JSON';
+      c.api.baseLog({ fase: "descarga", ok: false, err: "x" });
+      let arr = JSON.parse(c.env.gm["vgl_base_log"]);
+      t.igual(arr.length, 1, "JSON roto: arranca de [] y la fila nueva queda");
+      c.env.gm["vgl_base_log"] = '{"v":3}';                // JSON válido pero no es arreglo
+      c.api.baseLog({ fase: "meta", ok: true });
+      arr = JSON.parse(c.env.gm["vgl_base_log"]);
+      t.igual(arr.length, 1, "un objeto suelto donde iba el arreglo: también se reinicia");
+    });
+
+    // =====================================================================
+    //  _vglPurgarCacheDiariaLegacy — devolverle el espacio a Tampermonkey.
+    // =====================================================================
+
+    // v18.6.0: las claves del archivo diario (vgl_pym de hasta 12 MB, su
+    // marca de día y su bandera de fallback) ya no se escriben ni se leen.
+    // Se borran UNA vez al arrancar para que ningún pedazo de dato de
+    // jornadas pasadas sobre viva en el almacén.
+    t.caso("_vglPurgarCacheDiariaLegacy: borra las 3 claves GM viejas y el localStorage vgl_pym_dia", () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_pym"] = "x".repeat(500);
+      c.env.gm["vgl_pym_dia"] = "2026-09-06";
+      c.env.gm["vgl_pym_esfallback"] = "1";
+      c.env.storage.setItem("vgl_pym_dia", "2026-09-06");
+      // La clave de la base NUEVA tiene que salir intacta: la purga es de lo
+      // viejo, no una escoba general.
+      c.env.gm["vgl_piloto"] = "PAQUETE_V3";
+      c.api._vglPurgarCacheDiariaLegacy();
+      t.falso("vgl_pym" in c.env.gm, "GM_deleteValue se llevó vgl_pym");
+      t.falso("vgl_pym_dia" in c.env.gm, "y vgl_pym_dia");
+      t.falso("vgl_pym_esfallback" in c.env.gm, "y vgl_pym_esfallback");
+      t.igual(c.env.storage.getItem("vgl_pym_dia"), null, "el localStorage también queda limpio");
+      t.igual(c.env.gm["vgl_piloto"], "PAQUETE_V3", "el caché vgl_piloto de la base única NO se toca");
+    });
+
+    t.caso("_vglPurgarCacheDiariaLegacy: sin GM_deleteValue cae a GM_setValue(\"\") — mismo efecto visible", () => {
+      // Navegador sin GM_deleteValue (o permiso no concedido): la vía de
+      // respaldo vacía las claves en vez de borrarlas, para que ninguna
+      // lectura posterior las encuentre con contenido.
+      const c = cargar({ silencioso: true });
+      delete c.env.win.GM_deleteValue;
+      c.env.gm["vgl_pym"] = "x";
+      c.env.gm["vgl_pym_dia"] = "2026-09-06";
+      c.env.gm["vgl_pym_esfallback"] = "1";
+      c.api._vglPurgarCacheDiariaLegacy();
+      t.igual(c.env.gm["vgl_pym"], "", "vacía, no borrada");
+      t.igual(c.env.gm["vgl_pym_dia"], "");
+      t.igual(c.env.gm["vgl_pym_esfallback"], "");
+    });
+
+    // =====================================================================
+    //  mtrLibroNoParecePym — la guarda del libro equivocado (sobrevivió).
+    // =====================================================================
+
+    // REPORTE EN VIVO (31-ago): «ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx»
+    // se leyó completo (1.396 documentos, columna de documento encontrada)
+    // pero con CERO actividades pendientes — era OTRO libro, y el aviso mudo
+    // era indistinguible de «este paciente no tiene nada pendiente». La
+    // guarda sigue viva en v18.6.0 (applyPymIdx la consulta): un libro con
+    // muchos documentos y cero pendientes no se instala.
+    t.caso("mtrLibroNoParecePym: muchos documentos y CERO pendientes es OTRO libro", () => {
       const mapa = (n) => { const m = new Map(); for (let i = 0; i < n; i++) m.set("d" + i, ["x"]); return m; };
       const docs = (n) => { const s2 = new Set(); for (let i = 0; i < n; i++) s2.add("d" + i); return s2; };
       t.cierto(api.mtrLibroNoParecePym({ todos: docs(1396), map: new Map() }),
@@ -219,311 +433,53 @@ module.exports = {
       t.falso(api.mtrLibroNoParecePym(null), "sin índice no se afirma nada");
     });
 
-    t.caso("pickTodaysFile descarta archivos temporales", () => {
-      const files = [
-        { Name: "~$Agenda_20260810.xlsx" }
-      ];
-      t.igual(api.pickTodaysFile(files), null);
+    // ---------- esLibroValido / esXlsxCifrado (sobrevivieron) ----------
+    t.caso("esLibroValido verifica cabecera ZIP (PK) y deja pasar el CSV", () => {
+      t.cierto(api.esLibroValido(new Uint8Array([0x50, 0x4B, 0x03, 0x04, 0x00]).buffer, "base.xlsx"));
+      t.falso(api.esLibroValido(new Uint8Array([0x00, 0x00, 0x00]).buffer, "base.xlsx"),
+        "SharePoint devolviendo su página de login con 200 se cae la careta aquí");
+      t.cierto(api.esLibroValido(new Uint8Array([0x3F]).buffer, "lista.csv"), "un CSV no es ZIP: siempre válido");
     });
 
-    // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): TimeLastModified llega en
-    // UTC; comparar su string crudo (startsWith) contra la fecha LOCAL rompía en
-    // Colombia (UTC-5): un archivo modificado entre las 19:00 y las 24:00 hora local ya
-    // cae en el día UTC SIGUIENTE, así que al día siguiente (hora local) ese archivo
-    // pasaba el startsWith y se tomaba como "el de hoy", apagando la re-búsqueda del
-    // archivo real durante toda esa jornada.
-    t.caso("v17.6.39: un archivo modificado anoche (hora local, tarde) NO se confunde con el de hoy, aunque su UTC ya sea de hoy", () => {
-      const c = cargar();
-      // "Ahora": 25-ago-2026, 09:00 hora local (Colombia, UTC-5).
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-25T09:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-25T09:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        // Modificado a las 19:30 hora local del 24-ago (AYER) — en UTC eso ya es
-        // 25-ago 00:30, el día de "ahora". El código viejo comparaba ese string UTC
-        // crudo contra "2026-08-25" (hoy) y coincidía por error.
-        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-25T00:30:00Z" },
-      ];
-      t.igual(c.api.pickTodaysFile(files), null, "el archivo es de AYER en hora local: no debe tomarse como el de hoy");
+    t.caso("esXlsxCifrado verifica cabecera OLE (D0 CF 11 E0) del libro con contraseña", () => {
+      // Un .xlsx protegido no es un ZIP: es un contenedor OLE cifrado. Se
+      // distingue para que el aviso diga la verdad (quitar la contraseña) en
+      // vez de mandar a reabrir sesión sin motivo.
+      t.cierto(api.esXlsxCifrado(new Uint8Array([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]).buffer));
+      t.falso(api.esXlsxCifrado(new Uint8Array([0x50, 0x4B, 0x03, 0x04]).buffer), "un ZIP normal no es cifrado");
+      t.falso(api.esXlsxCifrado(new Uint8Array([0xD0, 0xCF]).buffer), "menos de 8 bytes no alcanzan ni para la firma");
     });
 
-    t.caso("xlsViejoDeHoy identifica un .xls antiguo de hoy", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const files = [
-        { Name: "Agenda_20260810.xls" }
-      ];
-      t.cierto(c.api.xlsViejoDeHoy(files) !== null);
-    });
-
-    // 02-sep — CIERRE ADVERSARIAL (fila 27): pickTodaysFile recibió en v18.0.71 la guarda de
-    // borde completo fuera de la raíz, pero su gemelo xlsViejoDeHoy seguía llamando a
-    // esNombreDeHoy sin el flag sobre las MISMAS filas: un .xls ajeno en una subcarpeta con la
-    // fecha de hoy empotrada en un consecutivo se tomaba por «el PyM de hoy en formato
-    // antiguo» y disparaba el aviso AMBAR una vez al día.
-    t.caso("02-sep: xlsViejoDeHoy aplica la misma guarda que pickTodaysFile fuera de la raíz", () => {
-      const c = cargar();
-      c.env.win.Date = class extends Date { static now() { return new Date("2026-09-01T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-09-01T12:00:00"); else super(...args); } };
-      c.ctx.Date = c.env.win.Date;
-      const raiz = c.api.__CONFIG.SP.folder;
-      const ajeno = { Name: "Reporte_45192026_Final.xls", ServerRelativeUrl: raiz + "/ESTRATEGIAS POR SEDE 2026/SEDE BELLO/Reporte_45192026_Final.xls" };
-      t.igual(c.api.pickTodaysFile([Object.assign({}, ajeno, { Name: "Reporte_45192026_Final.xlsx", ServerRelativeUrl: ajeno.ServerRelativeUrl + "x" })]), null, "control: la regla 1 ya lo rechaza para el .xlsx");
-      t.igual(c.api.xlsViejoDeHoy([ajeno]), null, "y el .xls con el MISMO nombre en la subcarpeta tampoco es «el PyM de hoy en formato antiguo»");
-      const real = { Name: "Agenda_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_20260901.xls" };
-      t.cierto(c.api.xlsViejoDeHoy([ajeno, real]) === real, "el .xls de verdad, suelto en la raíz con la fecha de hoy, sí se detecta");
-      // v18.0.106 — refutador de v18.0.100 (fila 27, prueba hueca): la mitad «en la raíz se
-      // conserva la coincidencia laxa» no la fijaba nadie — un mutante «siempre estricto»
-      // pasaba en verde y dejaba de ver el caso real Agenda_v2_<hoy>.xls.
-      const v2 = { Name: "Agenda_v2_20260901.xls", ServerRelativeUrl: raiz + "/Agenda_v2_20260901.xls" };
-      t.cierto(c.api.xlsViejoDeHoy([v2]) === v2, "en la raíz, «Agenda_v2_<hoy>.xls» sigue siendo el PyM de hoy en formato antiguo (mutante siempre estricto: null)");
-    });
-
-    // ---------- esLibroValido / esXlsxCifrado ----------
-    t.caso("esLibroValido verifica cabecera ZIP (PK)", () => {
-      // Valid ZIP has PK\x03\x04
-      const valid = new Uint8Array([0x50, 0x4B, 0x03, 0x04, 0x00]);
-      t.cierto(api.esLibroValido(valid, "test.xlsx"));
-
-      const invalid = new Uint8Array([0x00, 0x00, 0x00]);
-      t.falso(api.esLibroValido(invalid, "test.xlsx"));
-    });
-
-
-    t.caso("esXlsxCifrado verifica cabecera OLE (D0 CF 11 E0)", () => {
-      // OLE header for encrypted XLSX or old XLS
-      const ole = new Uint8Array([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
-      t.cierto(api.esXlsxCifrado(ole));
-
-      const zip = new Uint8Array([0x50, 0x4B, 0x03, 0x04]);
-      t.falso(api.esXlsxCifrado(zip));
-    });
-
-    // ---------- packPym / unpackPym ----------
-    await t.casoAsync("packPym comprime y unpackPym expande los mapas de PyM", async () => {
+    // ---------- packPym / unpackPym: el formato del caché (v4 desde 18.6.1; v3 se acepta) ----------
+    await t.casoAsync("packPym comprime y unpackPym expande los mapas de PyM (ida y vuelta v4 con Anexo 5)", async () => {
       const map = new Map();
-      map.set("123", ["ActA", "ActB"]);
-      map.set("456", ["ActA", "ActC"]);
-      const todos = new Set(["123", "456", "789"]);
-      const abandono = new Set(["123"]);
-      const meta = { date: api.todayStamp(), name: "test.xlsx" };
+      map.set("5150076", ["Mamografía", "PSA (antígeno de próstata)"]);
+      map.set("99887766", ["Mamografía"]);
+      const todos = new Set(["5150076", "99887766", "777"]);
+      const abandono = new Set(["777"]);
+      const meta = { date: "2026-09-07", name: "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx", mtime: "2026-09-07T06:00:00Z", id: GUID_BASE };
 
       const packed = await api.packPym(map, todos, abandono, meta);
       t.cierto(typeof packed === "string");
-      t.cierto(packed.includes('"v":3')); // Must have version 3
+      t.cierto(packed.lastIndexOf('{"v":4', 0) === 0, "v18.6.1: el paquete v4 empieza por su prefijo: lo primero que mira pilotoDesdeCache");
+      t.cierto(JSON.parse(packed).a5 === "", "sin Anexo 5 el campo viaja vacío, no ausente");
 
-      const unpacked = await api.unpackPym(packed);
-      t.cierto(unpacked !== null);
-
-      // Check map
-      t.igual(unpacked.map.size, 2);
-      t.igual(unpacked.map.get("123"), ["ActA", "ActB"]);
-      t.igual(unpacked.map.get("456"), ["ActA", "ActC"]);
-
-      // Check todos
-      t.cierto(unpacked.todos.has("789"));
-      t.igual(unpacked.todos.size, 3);
-
-      // Check abandono
-      t.cierto(unpacked.abandono.has("123"));
-
-      // Check meta
-      t.igual(unpacked.meta.date, api.todayStamp());
-      t.igual(unpacked.meta.name, "test.xlsx");
+      const u = await api.unpackPym(packed);
+      t.cierto(u !== null);
+      t.igual(u.map.size, 2);
+      t.igual(u.map.get("5150076"), ["Mamografía", "PSA (antígeno de próstata)"]);
+      t.igual(u.map.get("99887766"), ["Mamografía"]);
+      t.cierto(u.todos.has("777"));
+      t.igual(u.todos.size, 3);
+      t.cierto(u.abandono.has("777"));
+      t.igual(u.meta.date, "2026-09-07");
+      t.igual(u.meta.mtime, "2026-09-07T06:00:00Z");
+      t.igual(u.meta.id, GUID_BASE, "el id viaja: si cambia el GUID configurado, la caché vieja se purga sola");
     });
 
     await t.casoAsync("unpackPym descarta paquetes con formato antiguo (no v3)", async () => {
-      const oldFmt = JSON.stringify({ v: 2, data: "old" });
-      const unpacked = await api.unpackPym(oldFmt);
-      t.igual(unpacked, null);
-    });
-
-    // ---------- savePymCache / loadPymFromCache ----------
-    await t.casoAsync("savePymCache escribe a GM_setValue y loadPymFromCache lo lee", async () => {
-      const c = cargar(); // Fresh env
-
-      // Set some state inside the mock api to test packing
-      c.api.__state.pym = new Map();
-      c.api.__state.pym.set("123", ["Act1"]);
-      c.api.__state.pymTodos = new Set(["123"]);
-      c.api.__state.pymAbandono = new Set(["123"]);
-
-      // Mock GM_setValue and GM_getValue
-
-      // Replace in vm context because the script might use its internal GM_setValue binding
-      // Actually harness already binds GM_setValue and GM_getValue to `env.gm`!
-
-      await c.api.savePymCache("test.xlsx");
-
-      t.cierto(c.env.gm["vgl_pym"] !== undefined);
-      t.cierto(c.env.gm["vgl_pym"].includes('"v":3'));
-      t.igual(c.env.gm["vgl_pym_dia"], c.api.todayStamp());
-
-      const loaded = await c.api.loadPymFromCache();
-      t.cierto(loaded);
-
-      // Because loadPymFromCache unpacks into state.pym
-      t.cierto(c.api.__state.pym.has("123"));
-      t.cierto(c.api.__state.pymTodos.has("123"));
-      t.cierto(c.api.__state.pymAbandono.has("123"));
-    });
-
-    await t.casoAsync("loadPymFromCache descarta caché vieja y la borra", async () => {
-      const c = cargar();
-
-      // Put old date string inside cache
-      const map = new Map();
-      const todos = new Set();
-      const abandono = new Set();
-      const meta = { date: "2020-01-01", name: "viejo.xlsx" };
-
-      const packed = await c.api.packPym(map, todos, abandono, meta);
-
-      c.env.gm["vgl_pym"] = packed;
-      c.env.gm["vgl_pym_dia"] = "2020-01-01";
-
-      // We also need to mock GM_setValue and GM_getValue correctly because loadPymFromCache uses it directly.
-      // But actually, harness binds them to c.env.gm for us! Let's just call it.
-
-      const loaded = await c.api.loadPymFromCache();
-      t.falso(loaded);
-
-      // Verification of purge
-      t.igual(c.env.gm["vgl_pym"], "");
-      t.igual(c.env.gm["vgl_pym_dia"], "");
-    });
-
-    // ---------- fetchSpFilesMultiFolder ----------
-
-    // ---------- loadPymDiario ----------
-    await t.casoAsync("loadPymDiario devuelve false silenciosamente si ya hay uno en curso o sin GM_xmlhttpRequest", async () => {
-      const c = cargar();
-      // Sin GM_xmlhttpRequest:
-      delete c.env.win.GM_xmlhttpRequest;
-      t.falso(await c.api.loadPymDiario(true));
-
-      // Con GM_xmlhttpRequest, pero simulando que ya está en curso (el userscript usa un flag interno)
-      // Como no podemos setear `diarioEnCurso` fácilmente, saltaremos esta parte o podemos mockear primeShareAccess
-      // y ver si falla.
-    });
-
-    await t.casoAsync("loadPymDiario falla tras reintentar", async () => {
-      const c = cargar();
-      let fetchCalls = [];
-      c.env.win.GM_xmlhttpRequest = (opts) => {
-        fetchCalls.push(opts.url);
-        // fallar
-        opts.onload({ status: 401, responseText: "{}" });
-      };
-
-      // Configurar
-      c.api.__CONFIG.SP.folders = ["/fld1"];
-
-      // Para poder probarlo bien deberiamos poder inyectar respuestas al fetch para primeShareAccess.
-      // primeShareAccess usa `fetch`.
-      c.env.win.fetch = async () => ({ ok: true, text: async () => "" });
-
-      await c.api.loadPymDiario(true);
-
-      // Debería intentar 2 veces: intento normal, fallo, primeShareAccess(true), reintento.
-      // Pero como SP.folders tiene un solo item, y primeShareAccess hace algo, al final falla.
-      // Si todo funcionó, `fetchCalls.length` será 2 (un intento original + un reintento).
-      t.cierto(fetchCalls.length >= 2, "debería reintentar y hacer al menos 2 llamadas");
-    });
-
-    // ===== v16.7.0, auditoría #11: no poder mirar la carpeta NO es «hoy no hay lista» =====
-    t.caso("pymDiarioMensajeFallo: distingue «no pude mirar» de «miré y no está»", () => {
-      const c = cargar();
-      const caido = c.api.pymDiarioMensajeFallo(true, true);
-      t.falso(/Aún no aparece la lista de prevención/.test(caido),
-        "ESTE era el bug: con la carpeta ilegible se afirmaba que el archivo de hoy no estaba subido");
-      t.cierto(/No pude revisar la carpeta/.test(caido), "dice lo único que se sabe");
-      t.cierto(/NO sé si la lista de hoy ya está subida/.test(caido), "y lo dice sin rodeos");
-      t.cierto(/puede no ser lo último/.test(caido),
-        "con la piloto cargada avisa de que lo que el médico está viendo puede estar viejo");
-      t.cierto(/Abrir PyM/.test(c.api.pymDiarioMensajeFallo(true, false)),
-        "y sin nada cargado le da la salida manual");
-
-      const listado = c.api.pymDiarioMensajeFallo(false, true);
-      t.cierto(/Aún no aparece la lista de prevención/.test(listado),
-        "cuando SÍ se pudo listar, el hecho sigue siendo un hecho");
-      t.falso(/conexión con SharePoint falló/.test(listado), "y no se culpa a la red de lo que no fue la red");
-      t.cierto(/base piloto/.test(c.api.pymDiarioMensajeFallo(false, false)), "sin nada cargado, sigue prometiendo la piloto");
-    });
-
-    await t.casoAsync("fetchSpFilesMultiFolder lista múltiples carpetas hasta hallar el de hoy", async () => {
-      const c = cargar();
-      let fetchCalls = [];
-      c.env.win.GM_xmlhttpRequest = (opts) => {
-        fetchCalls.push(opts.url);
-        opts.onload({
-          status: 200,
-          responseText: JSON.stringify({ d: { results: [{ Name: "Agenda_Dia_CMB_" + c.api.todayStamp().replace(/-/g, "") + ".xlsx" }] } })
-        });
-      };
-
-      c.api.__CONFIG.SP.folders = ["/fld1", "/fld2"];
-      const res = await c.api.fetchSpFilesMultiFolder();
-      t.cierto(res.length > 0);
-      t.igual(fetchCalls.length, 1, "Debería parar en la primera carpeta porque halló el archivo de hoy");
-    });
-
-
-    // =====================================================================
-    //  v18.0.11 — LA GUARDA EN applyPymIdx, Y EL «NO SÉ POR QUÉ» DEL MÉDICO
-    //
-    //  (1) La v18.0.7 puso la guarda del libro equivocado en la descarga automática y en el
-    //      captador de SharePoint. Pero a `applyPymIdx` se llega TAMBIÉN desde la base
-    //      piloto y desde el selector manual de archivo — y es ahí donde se hace el daño de
-    //      verdad: `afterPymLoaded` sella el día, con lo que `debeBuscarPymDiario()` pasa a
-    //      decir «ya está» y el reloj de 10 minutos DEJA DE BUSCAR la lista real hasta
-    //      medianoche; y `savePymCache` persiste el índice malo, que se readmite en cada
-    //      recarga. Un libro equivocado por cualquiera de esas dos puertas apagaba el aviso
-    //      la jornada entera.
-    //
-    //  (2) Los tres mensajes que explicaban el fallo vivían dentro de `if (!silent)` y las
-    //      TRES llamadas de producción pasan `silent = true`: el diagnóstico se calculaba y
-    //      se tiraba en cada vuelta, y al médico le quedaba un «PyM sin cargar» mudo. Sus
-    //      palabras: «no sé por qué». Ahora la razón se guarda y se enseña donde él ya mira.
-    // =====================================================================
-    t.caso("v18.0.11: applyPymIdx RECHAZA un libro que no parece PyM — venga por donde venga", () => {
-      const c = cargar({ silencioso: true });
-      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
-      const antesFile = c.api.__state.pymFile;
-      const ok = c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() },
-        "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", "", "ESTRATEGIA DE PRODUCTIVIDAD SEDE BELLO.xlsx", true);
-      t.igual(ok, false, "no se instala");
-      t.igual(c.api.__state.pymFile, antesFile, "y NO sella el día: el reloj de 10 min sigue buscando la lista real");
-      t.cierto(!c.env.storage.getItem("vgl_pym_dia"), "ni deja la marca de «ya tengo la de hoy»");
-    });
-
-    t.caso("v18.0.11: un libro que SÍ es PyM se instala igual que siempre", () => {
-      const c = cargar({ silencioso: true });
-      const todos = new Set(); for (let i = 0; i < 1396; i++) todos.add("d" + i);
-      const map = new Map([["5150076", ["Citología"]]]);
-      t.igual(c.api.applyPymIdx({ map, todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true), true,
-        "con actividades pendientes se instala");
-      t.igual(c.api.__state.pym.size, 1, "y la lista queda cargada");
-      t.igual(c.env.storage.getItem("vgl_pym_dia"), c.api.todayStamp(), "sellando el día, como siempre");
-    });
-
-    t.caso("v18.0.11: el motivo del fallo queda GUARDADO y deja de perderse en cada vuelta", () => {
-      const c = cargar({ silencioso: true });
-      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
-      t.igual(c.api.__state.pymUltimoFallo, "", "al arrancar no hay motivo que contar");
-      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
-      const motivo = c.api.__state.pymUltimoFallo;
-      t.cierto(/OTRO\.xlsx/.test(motivo), "el motivo nombra el archivo · " + motivo);
-      t.cierto(/200 documentos/.test(motivo), "y da la cifra que lo delata");
-      t.cierto(/ninguna actividad/.test(motivo), "dicho en lo que significa, no en jerga");
-    });
-
-    t.caso("v18.0.11: al cargar bien, el motivo anterior se OLVIDA — no se queda colgado del día", () => {
-      const c = cargar({ silencioso: true });
-      const todos = new Set(); for (let i = 0; i < 200; i++) todos.add("d" + i);
-      c.api.applyPymIdx({ map: new Map(), todos: todos, abandono: new Set() }, "OTRO.xlsx", "", "OTRO.xlsx", true);
-      t.cierto(!!c.api.__state.pymUltimoFallo, "hay motivo (control del caso)");
-      c.api.applyPymIdx({ map: new Map([["5150076", ["Citología"]]]), todos, abandono: new Set() }, "Agenda_Dia_CMB.xlsx", "", "Agenda_Dia_CMB.xlsx", true);
-      t.igual(c.api.__state.pymUltimoFallo, "", "cargó bien: enseñar un motivo viejo sería mentir sobre el estado actual");
+      t.igual(await api.unpackPym(JSON.stringify({ v: 2, data: "old" })), null,
+        "la caché de una versión anterior no se readmite: se descarta sin interpretar");
     });
   }
 };

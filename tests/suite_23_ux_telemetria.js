@@ -145,6 +145,31 @@ module.exports = {
       t.cierto(/1 fila/.test(cola.detalle), "la fila encolada se ve en el diagnóstico");
     });
 
+    // v18.12.3 (CF) — CABLEADO DE LA FLOTA a Cloudflare. El worker de REPLICA_TELEMETRIA
+    // replica el contrato del GAS y es el destino de la migración del dueño, pero la
+    // compuerta CABLEADO_CF vive en FALSE de fábrica: nada migra solo antes de desplegar
+    // y validar el worker. Esta prueba congela las tres invariantes: el @connect del
+    // worker declarado (sin él Tampermonkey bloquea el envío en silencio), la compuerta
+    // apagada por defecto, y el diagnóstico del embudo con la puerta de dirección ABIERTA
+    // para ambos destinos (fábrica GAS y worker) — para que «Probar y diagnosticar» diga
+    // la verdad el día que la migración se active.
+    t.caso("CABLEADO CF: compuerta apagada en fábrica, worker en @connect y diagnóstico con los dos destinos", () => {
+      const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/@connect\s+vigilante-telemetria\.bpalencia27\.workers\.dev/.test(code),
+        "el @connect del worker Cloudflare está declarado en la cabecera (sin él Tampermonkey bloquea el envío en silencio)");
+      t.cierto(/const\s+CABLEADO_CF\s*=\s*false;/.test(code),
+        "la compuerta CABLEADO_CF está en FALSE de fábrica — la flota NO migra al worker sola: primero se despliega y valida (P1)");
+      t.cierto(/const\s+VGL_CF_TELEMETRIA\s*=\s*"https:\/\/vigilante-telemetria\.bpalencia27\.workers\.dev";/.test(code),
+        "el destino del worker está declarado y cableado a repUrl");
+      const c = cargar(cfgRed);
+      const dir = c.api.repDiagnostico().find((x) => x.paso.includes("Dirección del panel"));
+      t.cierto(dir && dir.ok, "con el destino de fábrica (GAS) la puerta de dirección abre");
+      c.api.__S.reporteUrl = "https://vigilante-telemetria.bpalencia27.workers.dev";
+      const dir2 = c.api.repDiagnostico().find((x) => x.paso.includes("Dirección del panel"));
+      t.cierto(dir2 && dir2.ok && /worker Cloudflare/.test(dir2.detalle),
+        "apuntando S.reporteUrl al worker, la puerta abre y el diagnóstico lo dice (migración CF)");
+    });
+
     await t.casoAsync("_repSello vía repPost: el éxito sella vgl_rep_last_ok y el fracaso sella vgl_rep_last_err con causa legible", async () => {
       const cOk = cargar({ silencioso: true, gmxhr: (o) => setTimeout(() => o.onload({ status: 200, finalUrl: "https://script.google.com/x", responseText: '{"ok":true}' }), 0) });
       await cOk.api.repPost({ token: "t", evento: "prueba" });

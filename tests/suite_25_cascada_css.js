@@ -823,7 +823,39 @@ module.exports = {
       // complejidad en su estado inicial (.vgl-complex-pill, VGL_UX_CSS: +1 abajo). El censo
       // sintético anterior no los veía por tres puntos ciegos, ya cerrados en
       // tools/auditar_color_todo_chromium.js y vigilados por la Regla S de más abajo.
-      t.cierto(importantTotal === 656, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección y los 2 del REFACTOR S+ del aviso universal (esperado 653: 644 del blindaje completo de color de la v18.0.14 + 1 de .vgl-uro-arrow en la v18.0.42 + 4 del chip y la línea del respaldo en la v18.0.43 + 2 del blindaje de color de la v18.0.64 + 1 del aviso de disponibilidad de laboratorio de la v18.0.69 + 1 del ícono del menú de elección blindado en la v18.0.96 + 2 del número de tecla del menú de elección (C20) en la v18.0.112 + 1 del chip «como la última vez» de Agendar (C17) en la v18.0.115 - 1 que la v18.0.124 (UI/UX UI#12) QUITA: .vgl-tl dejó de apagar el anillo de foco con la marca de prioridad, que era lo único que impedía ver el foco de teclado en los tres semáforos + 1 que la v18.0.125 (fila 30) AÑADE: la chapa .vgl-labs-srcoff, que dice en ámbar que el portal del laboratorio no respondió y vive en un modal pegado a document.body; salió ${importantTotal})`);
+      // v18.4.1 (auditoría 06-sep) — 656 -> 654: la deduplicación de la regla @media
+      // prefers-reduced-motion copiada dos veces desde la fusión de hojas de la v12.3.13
+      // retiró 2 !important que el navegador ya ignoraba (la segunda copia era idéntica).
+      // v18.6.0 — 668 -> 664: RETIRADAS las 4 reglas del chip/línea del respaldo
+      // (v18.0.43: .vgl-chip-resp y .vgl-none.resp con sus gemelas oscuras, 1 !important
+      // cada una). Sus únicos emisores murieron con la consulta al respaldo del extinto
+      // archivo diario: la base única no pinta chips "Del respaldo". Residuo puro.
+      // v18.4.2 — 654 -> 668: el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes,
+      // flotante de la historia clínica pegado a document.body) trae sus 13 reglas de
+      // color con !important (CLAUDE.md, fuera de #vgl-root) + 1 mención de la palabra
+      // en su propio comentario de cabecera (el censo cuenta texto crudo).
+      // v18.7.0 (M1) — 664 -> 665: la regla .vgl-hc-directo (acceso directo a HC en la
+      // tarjeta «En sala») trae su color con !important — dentro de #vgl-root, misma
+      // política de siempre: TODO color la lleva. Sin mención en prosa (ver la nota en
+      // el comentario de la hoja).
+      // v18.8.2 — 665 -> 668: el cierre y el arrastre del widget RCV añaden 2 reglas de
+      // color con !important (.vgl-rcvp-cerrar base y su :hover — flotante de la
+      // historia clínica pegado a document.body, misma política del panel) + 1 mención
+      // de la palabra en el comentario de cabecera del bloque (el censo cuenta texto
+      // crudo).
+      // v18.8.3 — 668 -> 669: la desc técnica .vgl-rcvp-desc (segunda línea de cada fila
+      // del widget, bajo el rótulo amable) trae su color con !important — regla de color
+      // nueva en un flotante pegado a document.body, la Regla E lo exige sin excepción.
+      // v18.8.6 — 670 -> 676: el minimizar del widget RCV añade 5 declaraciones de color
+      // con !important (botón «—» base y su :hover; pastilla de reapertura base —fondo y
+      // texto— y su :hover) + 1 mención de la palabra en el comentario de cabecera del
+      // bloque (el censo cuenta texto crudo). Ambos cuelgan de document.body: Regla E.
+      // v18.8.9 — 676 -> 701: el botón de actualización de la cabecera del panel (ORDEN #9,
+      // #vgl-refresh) añade 24 declaraciones con !important (17 del bloque base, 3 del
+      // :hover, 3 del svg interno y 1 del giro [aria-busy]) + 1 mención de la palabra en
+      // el comentario del bloque. Vive bajo #vgl-root, en la zona de la cabecera que el
+      // CSS hostil de Everest más ha agredido (v17.6.3): misma política que #vgl-head.
+      t.cierto(importantTotal === 701, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal, los 14 del panel RCV de la v18.4.2, los 3 del cierre/arrastre del widget RCV de la v18.8.2 (2 reglas de color del botón + 1 mención en su comentario), la 1 de la desc técnica .vgl-rcvp-desc de la v18.8.3, la 1 del blindaje tipográfico agrupado de los 9 modales pegados a body de la v18.8.4 (T1), las 6 de la v18.8.6 (minimizar del widget RCV: 5 declaraciones de color + 1 mención en su comentario) y los 25 del botón de actualización de la cabecera de la v18.8.9 (ORDEN #9: 24 declaraciones de #vgl-refresh + 1 mención en su comentario) (esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664, más la 1 del acceso directo a HC de la v18.7.0 = 665, más las 3 de la v18.8.2 = 668, más la 1 de la v18.8.3 = 669, más la 1 de la v18.8.4 = 670, más las 6 de la v18.8.6 = 676, más los 25 de la v18.8.9 = 701; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
@@ -995,7 +1027,9 @@ module.exports = {
       // v17.6.83+ — la línea de producción suma 3 sitios más en la misma capa: los
       // sugeridores de la Ficha del paciente (#vgl-cw-examenes, #vgl-cw-farmaco) y el
       // botón/panel de ordenamiento de la consulta: 3 -> 6.
-      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y los sugeridores de la Ficha (6 sitios). Salieron ${zWidget.length}.`);
+      // v18.4.2 — el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes, flotante de la
+      // historia clínica) se une a la misma capa de widget: 6 -> 7.
+      t.cierto(zWidget.length === 7, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, los sugeridores de la Ficha y #vgl-rcv-pendientes (7 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);
@@ -1192,6 +1226,75 @@ module.exports = {
       const rFg2 = ratio(fg2Compuesto, fondoDockClaro);
       t.cierto(rClaro < rFg2,
         `--fg3 (${rClaro.toFixed(2)}:1) quedó igual o MÁS contrastado que --fg2 (${rFg2.toFixed(2)}:1): se invirtió la jerarquía de énfasis del panel`);
+    });
+
+    // v18.12.2 (E-2) — el médico reportó la sección de horarios del agendamiento en
+    // «blanco sobre blanco» (texto y fondo del mismo color, horas ilegibles). La causa
+    // raíz posible —revisada a mano— es la familia documentada arriba (v12.6.6): un modal
+    // sin tokens hereda NADA y cada var(--X) queda inválida; el color salta al blanco del
+    // tema claro de Everest y el texto heredado se pierde contra el mismo fondo. En HEAD el
+    // CSS estaba sano; esta guarda lo CONGELA: exige que el canvas de horarios del modal
+    // declare fondo propio, que la loseta y su tema claro lleven color !important, que
+    // #vgl-agendar-modal siga en las dos listas de tokens (oscuro y claro), y que el texto
+    // de las horas cumpla AA (>=4.5:1) contra el fondo opaco del sistema en AMBOS temas.
+    // ratio(fg, --bg-solid) es el piso real del contraste: en oscuro los velos aclaran el
+    // fondo (mejor para el texto claro) y en claro lo oscurecen (mejor para el texto
+    // oscuro); sin velos es donde el ratio es MÍNIMO.
+    t.caso("v18.12.2 (E-2) - los horarios de agendamiento jamás vuelven a texto/fondo del mismo color", () => {
+      const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const la = lum(a), lb = lum(b); const hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); };
+      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      const bloqueDe = (selector) => {
+        const ini = cssClean.indexOf(selector);
+        if (ini < 0) return null;
+        return cssClean.slice(ini, cssClean.indexOf("}", ini) + 1);
+      };
+
+      // (a) El canvas de horarios del modal declara fondo y borde propios (refuerzo E-2).
+      const canvas = bloqueDe("#vgl-agendar-modal .vgl-agm-slots{");
+      t.cierto(!!canvas && /background:var\(--bg2\)/.test(canvas) && /border:1px solid var\(--line\)/.test(canvas),
+        `el canvas #vgl-agendar-modal .vgl-agm-slots declara background:var(--bg2) y border propio (si falla, el refuerzo E-2 se perdió y el fondo vuelve a depender de la regla base)${canvas ? "" : " — no se halló la regla"}`);
+
+      // (b) La loseta y su tema claro traen color con !important (nunca texto heredado).
+      const loseta = bloqueDe(".vgl-agm-sbtn{");
+      const losetaLight = bloqueDe("#vgl-agendar-modal.light .vgl-agm-sbtn,");
+      t.cierto(!!loseta && /color:var\(--fg\)\s*!important/.test(loseta) && /background:var\(--bg2\)/.test(loseta),
+        `la loseta base .vgl-agm-sbtn declara color:var(--fg) !important y fondo propio`);
+      t.cierto(!!losetaLight && /color:var\(--fg\)\s*!important/.test(losetaLight),
+        `el tema claro de la loseta (#vgl-agendar-modal.light .vgl-agm-sbtn) también fuerza color:var(--fg) !important — es la pieza que en v12.10.9 perdió contra el CSS del host`);
+
+      // (c) #vgl-agendar-modal sigue en las DOS listas de contenedores con tokens.
+      const REclaroLista = /#vgl-root\.light[^{]*\{[\s\S]*?\}/;
+      const REoscuroLista = /(^|\n)\s*#vgl-root,#vgl-lab-injector[^{]*\{[\s\S]*?\}/;
+      const bloqueClaro = REclaroLista.exec(cssClean);
+      const bloqueOscuro = REoscuroLista.exec(cssClean);
+      t.cierto(!!bloqueClaro && bloqueClaro[0].includes("#vgl-agendar-modal.light"),
+        "el modal de agendamiento sigue en la lista de contenedores con tokens del tema CLARO (sin él, cada var(--X) es inválida y el texto salta al blanco del host)");
+      t.cierto(!!bloqueOscuro && bloqueOscuro[0].includes("#vgl-agendar-modal"),
+        "el modal de agendamiento sigue en la lista de contenedores con tokens del tema OSCURO");
+
+      // (d) Contraste AA del texto de las horas contra el fondo opaco del sistema, ambos temas.
+      const leerToken = (bloque, token) => {
+        if (!bloque) return null;
+        const m = new RegExp(`--${token}\\s*:\\s*([^;]+);`).exec(bloque[0]);
+        return m ? m[1].trim() : null;
+      };
+      const fgClaro = leerToken(bloqueClaro, "fg");
+      const bgSolidClaro = leerToken(bloqueClaro, "bg-solid");
+      t.cierto(!!fgClaro && /^#[0-9a-fA-F]{6}$/.test(bgSolidClaro || ""),
+        `se leyeron --fg/--bg-solid del bloque claro (fg=${fgClaro} bgSolid=${bgSolidClaro}) — si falla, el bloque cambió de forma y hay que revisar el contraste a mano`);
+      const rClaro = ratio(hex(fgClaro), hex(bgSolidClaro));
+      t.cierto(rClaro >= 4.5,
+        `tema CLARO: el texto de los horarios (${fgClaro}) sobre el fondo del sistema (${bgSolidClaro}) da ${rClaro.toFixed(2)}:1, bajo el mínimo AA de 4.5:1 — exactamente la familia del «blanco sobre blanco»`);
+
+      const fgOscuro = leerToken(bloqueOscuro, "fg");
+      const bgSolidOscuro = leerToken(bloqueOscuro, "bg-solid");
+      t.cierto(!!fgOscuro && /^#[0-9a-fA-F]{6}$/.test(bgSolidOscuro || ""),
+        `se leyeron --fg/--bg-solid del bloque oscuro (fg=${fgOscuro} bgSolid=${bgSolidOscuro}) — si falla, revise el contraste a mano, no borre la prueba`);
+      const rOscuro = ratio(hex(fgOscuro), hex(bgSolidOscuro));
+      t.cierto(rOscuro >= 4.5,
+        `tema OSCURO: el texto de los horarios (${fgOscuro}) sobre el fondo del sistema (${bgSolidOscuro}) da ${rOscuro.toFixed(2)}:1, bajo el mínimo AA de 4.5:1`);
     });
 
     // v17.6.41 — AUDITORÍA S+ (barrido total, 24-ago-2026): .vgl-toast-rail se crea en JS
@@ -1529,6 +1632,37 @@ module.exports = {
 
       t.igual(sitios.length, 0,
         `un color en línea sin !important lo pisa cualquier regla nuestra de la hoja (todas llevan !important desde la v18.0.14). O lleva !important, o el elemento lleva clase propia y su color vive en la hoja. Sitios: ${sitios.slice(0, 6).join(" | ")}`);
+    });
+
+    t.caso("v18.3.6 — la fusión de hojas de v12.3.13 no dejó reglas duplicadas exactas", () => {
+      // Auditoría del 06-sep: Resumen y Ajustes traían cada uno su propio bloque de estilos
+      // antes de consolidarse en una hoja única, y tres reglas quedaron copiadas DOS veces
+      // (idénticas al carácter). La segunda copia es peso muerto que el navegador parsea
+      // igual — inofensiva hoy, pero un lugar donde un cambio futuro puede editarse "la que
+      // no aplica" y creer que no pasó nada. Se fija UNA copia de cada una.
+      const REGLAS = [
+        "#vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}",
+        "#vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}",
+        "@media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}",
+      ];
+      for (const r of REGLAS) {
+        const n = code.split(r).length - 1;
+        t.igual(n, 1, "la regla aparece UNA sola vez (hay " + n + "): " + r.slice(0, 64) + "…");
+      }
+    });
+
+    t.caso("v18.8.4 (T1) — blindaje tipográfico de los 9 modales/avisos pegados a body", () => {
+      // CLAUDE.md: el texto suelto sin clase propia de un modal pegado a document.body
+      // hereda el color del modal y queda inmune a las reglas genéricas de Everest.
+      // Una regla agrupada con :where (especificidad CERO) que no compite con ninguna
+      // clase ni inline nuestro — el Anexo 5 no está: vive DENTRO de #vgl-root.
+      const nueve = ["vgl-pym-modal", "vgl-pes-modal", "vgl-labs-modal", "vgl-labsv-modal",
+        "vgl-postcita-panel", "vgl-agendar-modal", "vgl-ordenar-modal", "vgl-toasts", "vgl-pausa-clinica"];
+      const regla = css.split("\n").find(l => l.includes("#vgl-pym-modal :where") && l.includes("color:inherit !important"));
+      t.cierto(!!regla, "existe la regla agrupada del blindaje, con color:inherit !important");
+      for (const id of nueve) {
+        t.cierto(regla.indexOf("#" + id + " :where(:not([class]))") >= 0, "el modal " + id + " tiene su blindaje en la regla");
+      }
     });
 
   }

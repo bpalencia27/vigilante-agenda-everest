@@ -1,0 +1,74 @@
+
+[36m════════════════════════════════════════════════════════════════[0m
+[36m  PRUEBAS DEL VIGILANTE DE AGENDA[0m
+[36m════════════════════════════════════════════════════════════════[0m
+  funciones alcanzables: 1282 de 1407
+
+[32m✓[0m Texto y datos del paciente                [90m54 ok[0m
+[32m✓[0m Tiempo y fechas                           [90m33 ok[0m
+[32m✓[0m Excel, caché y SharePoint                 [90m33 ok[0m
+[32m✓[0m Colores y notificaciones de la agenda     [90m106 ok[0m
+[32m✓[0m Llamadas a Everest y clínicas             [90m35 ok[0m
+[32m✓[0m Panel, ajustes, modales                   [90m11 ok[0m
+[32m✓[0m Lector de Excel (ZIP/XLSX)                [90m14 ok[0m
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2023-01-02
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = 2023-01-01
+[Vigilante] diagnóstico fecha — TRIGLICERIDOS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultColesterolTotal", valor actual ""], resultDate = 2026-08-01
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] uroanálisis: casilla de resultado revisada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultUroanalisis", valor actual ""], resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+[Vigilante] diagnóstico fecha — RAC: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[Vigilante] diagnóstico fecha — CREATININA: dateInput NO encontrado [vía id-por-convención, elemento "-", valor actual ""], resultDate = null
+[32m✓[0m Laboratorios Crónicos (Suite 08)          [90m148 ok[0m
+[32m✓[0m Ajustes y almacén local (Suite 09)        [90m36 ok[0m
+[32m✓[0m Estadísticas, eventos y auditoría         [90m30 ok[0m
+[32m✓[0m Cola de reportes al remoto (Suite 11)     [90m29 ok[0m
+[32m✓[0m SharePoint y caché del piloto (Suite 12)  [90m47 ok[0m
+[32m✓[0m Lectura directa del API de agenda         [90m64 ok[0m
+[32m✓[0m Extracción del DOM de Everest (Suite 14)  [90m31 ok[0m
+[32m✓[0m Interfaz: ventana, hojas y modales        [90m271 ok[0m
+[32m✓[0m Lectura en flujo del Excel PyM            [90m26 ok[0m
+[32m✓[0m Núcleo: bucles, latidos y utilidades GM   [90m58 ok[0m
+[32m✓[0m Puente Athenea y credenciales (Suite 18)  [90m93 ok[0m
+[32m✓[0m Identidad de API por médico y blindaje de cuota[90m29 ok[0m
+[32m✓[0m Correo de órdenes al paciente (Suite 20)  [90m8 ok[0m
+[32m✓[0m Comparador de fuentes                     [90m1 ok[0m
+[32m✓[0m v12.4: horas, panel PyM y tabla CUPS      [90m48 ok[0m
+[32m✓[0m Utilidades Puras                          [90m10 ok[0m
+[32m✓[0m Telemetría de uso del panel (v12.5)       [90m109 ok[0m
+[32m✓[0m Motor de perfil (D3-bis)                  [90m53 ok[0m
+[32m✓[0m Cascada CSS                               [90m33 ok[0m
+[32m✓[0m El banco se ejecuta de verdad             [90m10 ok[0m
+[32m✓[0m Función renal (R1)                        [90m12 ok[0m
+[32m✓[0m Vigencias por estadio renal (R2, sombra)  [90m63 ok[0m
+[32m✓[0m Estadio renal (R1b, plomería)             [90m43 ok[0m
+[32m✓[0m Red de seguridad remota, Kill-Switch y Canario (R5.1, R5.3)[90m12 ok[0m
+[32m✓[0m Rangos oficiales de Everest (v14.1.8)     [90m33 ok[0m
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] diagnóstico fecha — CREATININA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultCreatinina", valor actual ""], resultDate = 2026-08-12
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado [vía id-por-convención, elemento "fechaResultGlicemia", valor actual ""], resultDate = 2026-08-12
+[32m✓[0m Auto-Labs contra rangos oficiales (v14.1.8)[90m20 ok[0m
+[32m✓[0m Seguridad, PHI, XSS e Integridad (M1)     [90m54 ok[0m
+[32m✓[0m Corrección Clínica, Frontera DOM y Límites (M2)[90m45 ok[0m
+[32m✓[0m Robustez, Concurrencia, Estado y Red (M3) [90m23 ok[0m
+[32m✓[0m Cobertura de Riesgo ALTO y Resistencia a Mutantes (M4)[90m16 ok[0m
+[32m✓[0m Interfaz y Accesibilidad Médica (M5)      [90m24 ok[0m
+[32m✓[0m Entrega, Runbook y Detección Duplicada (M6/R5.8)[90m17 ok[0m
+[32m✓[0m Invariantes críticos (mutación olvidada)  [90m25 ok[0m
+[32m✓[0m Motor portado: fechas y CERO VENCIDOS     [90m37 ok[0m
+[32m✓[0m Seguridad de dosis renal (motor portado)  [90m48 ok[0m
+[32m✓[0m Interacciones farmacológicas (motor portado)[90m21 ok[0m
+[32m✓[0m Vista de avisos farmacológicos            [90m18 ok[0m

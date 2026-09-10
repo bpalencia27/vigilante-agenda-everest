@@ -519,16 +519,32 @@ module.exports = {
         "estando en la agenda no se declara ciego: el scrape del DOM es la fuente, y decir lo contrario sería un falso aviso");
     });
 
-    t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
+    // [Q3 — 07-sep, opción (b), pendiente de ratificación del médico] — la caducidad
+    // del cartel en cola pasó de 10 a 30 min SOLO para el ROJO: la atención
+    // extemporánea sigue siendo un hecho vigente a los 11 minutos (NT-120: el aviso
+    // que se pierde no es el ruido, es el fraude). MORADO/AMBAR conservan los 10 min.
+    t.caso("_flushAvisosPendientes v14.1.5: un cartel ROJO rancio (más de 30 minutos) ya no se pinta — el aviso se dio en su momento", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
       c.api.__S.cartel = true;
-      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 660000 });
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 1860000 });
 
       c.api._flushAvisosPendientes();
 
-      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 11 minutos NO se pinta: haría atender una llegada que ya pasó");
+      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 31 minutos NO se pinta: haría atender una llegada que ya pasó");
       t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "la cola queda vacía en cualquier caso");
+    });
+
+    t.caso("[Q3] un cartel ROJO de 11 minutos SÍ se pinta: caduca a los 30, no a los 10", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      c.api.__S.cartel = true;
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "reciente", body: "b", persist: true, uid: "oncin|ROJO", flashText: "t", ts: Date.now() - 660000 });
+
+      c.api._flushAvisosPendientes();
+
+      t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un ROJO de 11 minutos sigue siendo un hecho vigente y se pinta");
+      t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "y la cola queda vacía tras pintarlo");
     });
 
     // ---------- downloadDiagnostic ----------
@@ -692,12 +708,14 @@ module.exports = {
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], undefined, "antes de la hora no se marca nada");
       t.igual(capturas.length, 0);
-      // 08:00 > 07:30 y sin PyM cargado: avisa y deja la marca del día
+      // 08:00 > 07:30 y sin base cargada: avisa y deja la marca del día
       mockIso = "2026-08-10T08:00:00";
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], "2026-08-10");
       t.igual(capturas.length, 1);
-      t.cierto(capturas[0].title.includes("Falta el PyM de hoy"));
+      // v18.6.0 — el título habla de la BASE única (antes «Falta el PyM de hoy»)
+      t.cierto(capturas[0].title.includes("Falta la base de prevención"));
+      t.cierto(capturas[0].body.includes("reintento es automático"), "el texto remite al reintento automático, no solo al botón manual");
       // segunda pasada del mismo día: silencio
       c.api.pymReminderCheck();
       t.igual(capturas.length, 1, "una sola vez al día");
@@ -706,11 +724,11 @@ module.exports = {
       c.api.__S.recordatorio = "";
       c.api.pymReminderCheck();
       t.igual(c.env.almacen["vgl_rem"], undefined, "recordatorio '' = nunca");
-      // con el PyM ya cargado tampoco
+      // con la base ya cargada tampoco
       c.api.__S.recordatorio = "07:30";
-      c.api.__state.pymFile = "PyM_del_dia.xlsx";
+      c.api.__state.pymFile = "BASE PILOTO DE CONSULTA  BELLO SEPTIEMBRE1.xlsx";
       c.api.pymReminderCheck();
-      t.igual(c.env.almacen["vgl_rem"], undefined, "si ya hay PyM no hay nada que recordar");
+      t.igual(c.env.almacen["vgl_rem"], undefined, "si ya hay base no hay nada que recordar");
     });
 
     // ---------- avisarSiActualizado ----------
@@ -766,32 +784,38 @@ module.exports = {
     });
 
     // ---------- checkVersionMinimum ----------
-    t.caso("checkVersionMinimum: versión vieja => marca de sesión, limpia SOLO vgl_pym_dia y respeta el candado 5 min", () => {
+    t.caso("checkVersionMinimum: versión vieja => marca de sesión, abre la ventana de refresco de la base y respeta el candado 5 min", () => {
       const llamadas = [];
       const c = cargar({
         silencioso: true,
         gmxhr: (o) => {
-          if (!String(o.url).includes("script.google.com")) return;
+          // v18.4.1 — solo el chequeo de versión es GET; el POST de telemetría del
+          // propio bloqueo (verlock) también va al GAS (script.google.com, canal de versiones) y NO
+          // debe servirse aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
+          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
           llamadas.push(o.url);
           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
         },
       });
-      c.env.almacen["vgl_pym_dia"] = "2026-01-01";
+      // v18.6.0 — la invalidación de la recarga forzada ya no toca vgl_pym_dia (clave
+      // del extinto diario): abre la VENTANA DE REFRESCO de la base única para que la
+      // versión nueva revise frescura apenas arranque.
+      c.env.gm["vgl_piloto_chk"] = "2026-01-01|0";
       c.env.almacen["vgl_ev_20260101"] = "[]";   // bitácora de auditoría: NO debe tocarse
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 1);
       t.igual(c.env.win.sessionStorage._d["vgl_upd|99.0.0"], "1", "marca anti-bucle de recarga en sessionStorage");
-      t.igual(c.env.almacen["vgl_pym_dia"], undefined, "solo se limpia la marca del PyM del día");
+      t.igual(c.env.gm["vgl_piloto_chk"], "", "la ventana de refresco queda ABIERTA para la versión nueva");
       t.igual(c.env.almacen["vgl_ev_20260101"], "[]", "la bitácora de auditoría queda intacta");
       // candado: dentro de los 5 minutos no vuelve a consultar
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 1, "máximo una consulta cada 5 minutos");
       // segunda vuelta REAL con la marca ya puesta: no vuelve a limpiar ni a recargar
       c.api.__state.lastVersionCheck = 0;
-      c.env.almacen["vgl_pym_dia"] = "otra-vez";
+      c.env.gm["vgl_piloto_chk"] = "2026-01-01|1";
       c.api.checkVersionMinimum();
       t.igual(llamadas.length, 2);
-      t.igual(c.env.almacen["vgl_pym_dia"], "otra-vez", "con la marca de sesión puesta ya no toca nada");
+      t.igual(c.env.gm["vgl_piloto_chk"], "2026-01-01|1", "con la marca de sesión puesta ya no toca nada");
     });
 
     t.caso("checkVersionMinimum: al día no hace nada, y con historia clínica abierta NUNCA recarga", () => {
@@ -818,6 +842,182 @@ module.exports = {
       t.igual(llamadas.length, 2);
       t.igual(Object.keys(c.env.win.sessionStorage._d).length, 0, "en historia clínica se pospone: ni marca ni recarga");
       t.igual(c.env.almacen["vgl_pym_dia"], "intacto", "y no se limpia nada");
+    });
+
+    // ---------- v18.4.1: bloqueo irreversible por versión obsoleta ----------
+    t.caso("checkVersionMinimum: tras recarga sin efecto, la versión vieja se BLOQUEA (regla de actualización obligatoria)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          // solo GET del chequeo de versión: el POST "verlock" debe quedarse en la cola
+          if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
+          o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+        },
+      });
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "primer aviso: recarga programada, aún sin bloqueo");
+      // segunda vuelta REAL (marca de sesión puesta): la recarga no alcanzó a actualizar
+      c.api.__state.lastVersionCheck = 0;
+      c.env.almacen["vgl_pym_dia"] = "intacto";
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === true, "equipo aún viejo tras recargar: bloqueo");
+      t.igual(c.env.gm["vgl_version_lock"], "99.0.0", "candado persistente propio");
+      t.cierto(c.env.gm["vgl_kill_active"] !== true, "no contamina el candado del kill-switch remoto");
+      const modal = c.env.doc.getElementById("vgl-bloqueo-version");
+      t.cierto(!!modal, "modal de bloqueo presente");
+      const botones = (modal.children[0] || { children: [] }).children.filter((n) => n.tagName === "BUTTON");
+      t.igual(botones.length, 1, "la única acción del modal es el botón de actualizar");
+      t.cierto(String(botones[0].textContent).includes("Actualizar"), "…y el botón dice actualizar");
+      t.cierto(String(c.env.gm["vgl_repq"] || "").includes('"verlock"'), "el caso queda registrado en la cola de telemetría (GM vgl_repq)");
+      t.igual(c.env.almacen["vgl_pym_dia"], "intacto", "el bloqueo no toca más almacenamiento del día");
+      // tercera vuelta: con state.killed el chequeo ya no corre ni desbloquea nada
+      c.api.__state.lastVersionCheck = 0;
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === true, "el bloqueo sobrevive a ciclos posteriores");
+    });
+
+    t.caso("checkVersionMinimum: con historia clínica abierta el bloqueo se DIFIERE (nunca interrumpe la consulta)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          if (!String(o.url).includes("script.google.com")) return;
+          o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
+        },
+      });
+      // simular "ya recargó y sigue viejo": marca de sesión pre-puesta
+      c.env.win.sessionStorage._d["vgl_upd|99.0.0"] = "1";
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "en consulta activa no se bloquea");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "sin candado mientras la historia está abierta");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal mientras la historia está abierta");
+    });
+
+    t.caso("checkVersionMinimum: fallo de red => fail-open, ni marcas ni bloqueo (sin falsos bloqueos)", () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          if (!String(o.url).includes("script.google.com")) return;
+          o.onerror({});
+        },
+      });
+      c.api.checkVersionMinimum();
+      t.cierto(c.api.__state.killed === false, "error de red NO es versión obsoleta: sin bloqueo");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "sin candado");
+      t.igual(Object.keys(c.env.win.sessionStorage._d).length, 0, "sin marcas de sesión");
+    });
+
+    t.caso("_vglCandadoVersionArranque: candado vigente aborta el arranque y deja solo la opción de actualizar", () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_version_lock"] = "99.0.0";
+      t.cierto(c.api._vglCandadoVersionArranque() === true, "versión local menor que la exigida: arranque abortado");
+      t.cierto(c.api.__state.killed === true, "state.killed al arrancar");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "modal de actualización al arrancar");
+      t.igual(c.env.gm["vgl_version_lock"], "99.0.0", "el candado NO se limpia: sigue vigente para la próxima recarga");
+    });
+
+    t.caso("_vglCandadoVersionArranque: con la versión ya instalada el candado se limpia solo y arranca normal", () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_version_lock"] = "0.0.1";
+      t.cierto(c.api._vglCandadoVersionArranque() === false, "versión al día: sin bloqueo (sin falsos positivos)");
+      t.cierto(c.api.__state.killed === false, "el arranque continúa");
+      t.igual(c.env.gm["vgl_version_lock"], undefined, "candado limpio automáticamente");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal");
+    });
+
+    // ---------- v18.8.3: mini guía del aviso de actualización obligatoria ----------
+    // Pedido del médico del 08-sep-2026: «Actualizar ahora» abre el archivo raw del
+    // gist en el navegador en lugar de iniciar la actualización desde Tampermonkey.
+    // La mini guía numerada explica qué hacer en ese caso, va ANTES de los pasos
+    // originales (complemento, no reemplazo) y el card pasa al par fijo AAA
+    // #991b1b/#ffffff para ser legible en cualquier tema.
+    t.caso("_mostrarAvisoBloqueoVersion: la mini guía explica el raw del gist y va ANTES de los pasos originales", () => {
+      const c = cargar({ silencioso: true });
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const modal = c.env.doc.getElementById("vgl-bloqueo-version");
+      t.cierto(!!modal, "modal de bloqueo presente");
+      const card = modal.children[0];
+      const hijos = card.children.map((n) => String(n.textContent || ""));
+      const iGuia = hijos.findIndex((txt) => txt.indexOf("texto de programación") >= 0);
+      t.cierto(iGuia >= 0, "existe el bloque de la mini guía");
+      const iBtn = hijos.findIndex((txt) => txt.indexOf("Actualizar ahora") >= 0);
+      const iPasos = hijos.findIndex((txt) => txt.indexOf("Pulse «Actualizar ahora»") >= 0);
+      t.cierto(iBtn >= 0 && iGuia > iBtn && iPasos > iGuia, "orden del card: botón → mini guía → pasos originales (la guía está ANTES de los pasos existentes)");
+      const g = hijos[iGuia];
+      for (const paso of ["1.", "2.", "3.", "4.", "5."]) t.cierto(g.indexOf(paso + " ") >= 0, "la guía numera el paso " + paso.slice(0, 1));
+      t.cierto(g.indexOf("Ctrl+A") >= 0 && g.indexOf("Ctrl+V") >= 0 && g.indexOf("Ctrl+S") >= 0, "los atajos de copiar/pegar/guardar están explicados");
+      t.cierto(g.indexOf("«Panel»") >= 0 && g.indexOf("«Utilidades»") >= 0, "nombra el panel y las utilidades de Tampermonkey");
+      t.cierto(g.indexOf("desaparece solo") >= 0, "explica que el aviso desaparece al instalar la versión exigida");
+      t.cierto(hijos[iPasos].indexOf("Recargue Everest (F5)") >= 0 && hijos[iPasos].indexOf("Everest sigue funcionando") >= 0, "los pasos originales quedaron intactos (complemento, no reemplazo)");
+      t.cierto(card.style.cssText.indexOf("background:#991b1b") >= 0 && card.style.cssText.indexOf("color:#ffffff !important") >= 0, "el card usa el par fijo AAA #991b1b/#ffffff (legible en cualquier tema)");
+    });
+
+    // ---------- v18.8.5: el aviso sale SOLO en HCHealth y en UNA sola pestaña ----------
+    // Pedido del médico del 08-sep-2026: «LA ACTUALIZACIÓN OBLIGATORIA DEL SCRIPT
+    // DEBE SALIR SOLAMENTE AQUI https://neps.everestintelligent.com/viva/HCHealth/
+    // Y UNA SOLA VENTANA/PESTAÑA NO SE DEBE REPETIR ESE AVISO EN LAS OTRAS INSTANCIAS».
+    t.caso("_mostrarAvisoBloqueoVersion: fuera de HCHealth no sale (y no reclama el arriendo)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/EverHealth/Acceso";
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c.env.doc.getElementById("vgl-bloqueo-version"), "sin modal fuera del módulo clínico");
+      t.cierto(!("vgl_aviso_bloqueo_claim" in c.env.almacen), "y sin reclamar el arriendo: la dueña debe ser una pestaña de HCHealth");
+      // dentro de HCHealth sí sale
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "en HCHealth el aviso sí sale");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: UNA sola pestaña lo muestra — las demás instancias se callan", () => {
+      const c1 = cargar({ silencioso: true });
+      const c2 = cargar({ silencioso: true, almacen: c1.env.almacen });
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c1.env.doc.getElementById("vgl-bloqueo-version"), "la primera pestaña de HCHealth lo muestra");
+      const claim = JSON.parse(c1.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.cierto(!!claim && !!claim.id, "y deja el arriendo escrito con su linaje");
+      c2.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c2.env.doc.getElementById("vgl-bloqueo-version"), "la segunda pestaña NO repite el aviso");
+      t.igual(c2.env.almacen["vgl_aviso_bloqueo_claim"], JSON.stringify(claim), "y no pisa el arriendo de la dueña");
+      // la dueña muere (arriendo vencido) → la segunda toma el relevo, y SOLO ella
+      c2.env.almacen["vgl_aviso_bloqueo_claim"] = JSON.stringify({ id: claim.id, t: Date.now() - 200000, v: "99.0.0" });
+      c2.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c2.env.doc.getElementById("vgl-bloqueo-version"), "vencido el arriendo, OTRA pestaña lo muestra");
+      const claim2 = JSON.parse(c2.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.cierto(claim2.id !== claim.id, "y el nuevo arriendo es de la segunda pestaña");
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!c1.env.doc.getElementById("vgl-bloqueo-version"), "la dueña vieja retira su modal cuando otra gana el arriendo");
+      t.cierto(!!c2.env.doc.getElementById("vgl-bloqueo-version"), "y la nueva dueña conserva el suyo");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: el linaje sobrevive al F5 — recargar la dueña no la vuelve «otra instancia»", () => {
+      const c1 = cargar({ silencioso: true });
+      c1.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const linaje1 = c1.env.win.sessionStorage._d["vgl_aviso_bloqueo_linaje"];
+      t.cierto(!!linaje1, "la pestaña deja su linaje en sessionStorage");
+      // "recarga" de la MISMA pestaña: mismo sessionStorage (sobrevive al F5), nuevo TABID
+      const c1b = cargar({ silencioso: true, almacen: c1.env.almacen });
+      c1b.env.win.sessionStorage._d["vgl_aviso_bloqueo_linaje"] = linaje1;
+      c1b.api._mostrarAvisoBloqueoVersion("99.0.0");
+      t.cierto(!!c1b.env.doc.getElementById("vgl-bloqueo-version"), "recargada, la MISMA pestaña recupera su arriendo al instante (no espera el TTL)");
+      const claim = JSON.parse(c1b.env.almacen["vgl_aviso_bloqueo_claim"]);
+      t.igual(claim.id, linaje1, "y el arriendo sigue a nombre de su linaje");
+    });
+
+    t.caso("_mostrarAvisoBloqueoVersion: el reloj del arriendo se arma UNA vez y renueva el claim en cada vuelta", () => {
+      const c = cargar({ silencioso: true });
+      const vivosBase = new Set([...c.env.intervalos.entries()].filter(([, r]) => r.vivo).map(([id]) => id));
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const nuevos = [...c.env.intervalos.entries()].filter(([id, r]) => r.vivo && !vivosBase.has(id));
+      t.igual(nuevos.length, 1, "un solo reloj del arriendo");
+      t.igual(nuevos[0][1].ms, 10000, "…con periodo corto: renueva antes de que el TTL de 2 min venza");
+      const antes = JSON.parse(c.env.almacen["vgl_aviso_bloqueo_claim"]).t;
+      nuevos[0][1].f();
+      const despues = JSON.parse(c.env.almacen["vgl_aviso_bloqueo_claim"]).t;
+      t.cierto(despues >= antes, "cada vuelta del reloj renueva el arriendo (t fresco)");
+      t.cierto(!!c.env.doc.getElementById("vgl-bloqueo-version"), "y la dueña conserva su modal");
+      c.api._mostrarAvisoBloqueoVersion("99.0.0");
+      const nuevos2 = [...c.env.intervalos.entries()].filter(([id, r]) => r.vivo && !vivosBase.has(id));
+      t.igual(nuevos2.length, 1, "llamar de nuevo no apila relojes (el viejo se apaga y se reemplaza)");
     });
 
     // ---------- resolverMedicoPorPerfil ----------
@@ -896,7 +1096,7 @@ module.exports = {
         : []);
       await c.api.autoFetchAtheneaLabsForActivePatient();
       // v18.3 (P13) — el nacimiento del id de equipo emite «obs.equipo.nuevo»
-      // diferido un tick hacia el TABLERO (script.google.com). Esta prueba mide
+      // diferido un tick hacia el TABLERO (worker Cloudflare, v18.14.0). Esta prueba mide
       // las llamadas a ATENEA: contar solo las del dominio de Everest.
       const llamadasAthenea = llamadas.filter((u) => String(u).includes("atheneasoluciones"));
       t.igual(llamadasAthenea.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
@@ -943,7 +1143,7 @@ module.exports = {
 
       await c.api.autoFetchAtheneaLabsForActivePatient();
       // v18.3 (P13) — ídem: el aviso «obs.equipo.nuevo» del primer arranque viaja
-      // a script.google.com y no cuenta como llamada a Athenea.
+      // al worker (v18.14.0) y no cuenta como llamada a Athenea.
       t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
 
       // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min

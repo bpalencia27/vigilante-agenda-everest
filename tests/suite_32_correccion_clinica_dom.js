@@ -54,6 +54,18 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
+    // v18.4.3 (H5): vgl_cosecha se persiste ASYNC y en sobre cifrado ("VGLC1:").
+    // Sondeo robusto a que el disco cambie (el cifrado vuela; un sueño fijo corto
+    // puede no alcanzar con el banco a plena carga). Patrón de suite_89.
+    const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+    const esperarDisco = (c, clave, distintoDe) => (async () => {
+      for (let i = 0; i < 200; i++) {
+        const raw = c.env.storage.getItem(clave) || "";
+        if (raw && raw !== distintoDe) return raw;
+        await dormir(20);
+      }
+      return c.env.storage.getItem(clave) || "";
+    })();
 
     // =================================================================
     // 1. R2.1: Matriz de 13 Laboratorios de Crónicos y Normalización
@@ -736,7 +748,9 @@ module.exports = {
       // cualquier clave parecida». Sin registro previo, se crea con la cédula de hoy.
       const c = cargar({ silencioso: true });
       c.api._vglCosechaGuardar("222222", { factores: { hta: { v: true, ts: 1 } } });
-      const todo = JSON.parse(c.env.storage.getItem("vgl_cosecha"));
+      // v18.4.3 (H5): el disco ya no guarda JSON en claro sino el sobre cifrado y
+      // además llega ASYNC — el contenido vivo se lee del memo vía _vglCosechaTodo().
+      const todo = c.api._vglCosechaTodo();
       t.igual(Object.keys(todo), ["222222"], "clave canónica, tal cual llegó");
     });
 
@@ -749,18 +763,25 @@ module.exports = {
     // ya reportó en campo por otra causa (v16.4.0).
     // El script YA tenía la defensa: `safeWriteJSON` purga por cuota y reintenta. Esta
     // ruta simplemente no la usaba, siendo la que guarda la memoria clínica del paciente.
-    t.caso("v17.46.0 — la cosecha no se pierde en silencio si el almacén está lleno: purga y reintenta", () => {
+    // v18.4.3 (H5): este caso pasó a ASYNC: la persistencia reintenta internamente
+    // DESPUÉS de que el cifrado vuela, así que el desenlace del disco se espera por
+    // sondeo, no en la misma vuelta síncrona.
+    await t.casoAsync("v17.46.0 — la cosecha no se pierde en silencio si el almacén está lleno: purga y reintenta", async () => {
       const c = cargar({ silencioso: true });
       const docId = "1098765432";
       // Primera escritura normal, para tener algo que perder.
       c.api._vglCosechaGuardar(docId, { factores: { hta: { v: true, ts: 1 } } });
       t.cierto(!!c.api._vglCosechaLeer(docId), "el paciente quedó archivado");
+      // v18.4.3 (H5): dejar aterrizar el sobre de la PRIMERA escritura antes de
+      // armar la cuota, para que el mock solo muerda el setItem de la segunda.
+      const semilla = await esperarDisco(c, "vgl_cosecha", "");
 
       // Ahora el almacén se llena: el PRIMER setItem falla, el segundo (tras la purga)
       // funciona. Es exactamente el contrato de safeWriteJSON.
       const real = c.env.win.localStorage.setItem;
       let intentos = 0;
       c.env.win.localStorage.setItem = function (k, v) {
+        if (k !== "vgl_cosecha") return real.call(this, k, v);
         intentos++;
         if (intentos === 1) { const e = new Error("QuotaExceededError"); e.name = "QuotaExceededError"; throw e; }
         return real.call(this, k, v);
@@ -774,9 +795,13 @@ module.exports = {
       const r = c.api._vglCosechaGuardar(docId, {
         factores: { hta: { v: true, ts: 1 }, diabetes: { v: true, ts: 2 } },
       });
+      // v18.4.3 (H5): el reintento vive DENTRO de la persistencia async — esperar por
+      // sondeo a que el disco cambie y comprobar que quedó el sobre (el reintento pasó).
+      const raw = await esperarDisco(c, "vgl_cosecha", semilla);
       c.env.win.localStorage.setItem = real;
 
       t.cierto(intentos >= 2, "tras el fallo de cuota debe REINTENTAR, no rendirse en silencio");
+      t.cierto(raw.indexOf("VGLC1:") === 0, "y el reintento dejó el sobre cifrado en disco");
       t.cierto(!!r, "y devolver el registro fusionado, no null");
       const leido = c.api._vglCosechaLeer(docId);
       t.cierto(leido && leido.factores && leido.factores.diabetes && leido.factores.diabetes.v === true,
@@ -840,7 +865,7 @@ module.exports = {
       };
     };
 
-    t.caso("v18.0.18: quedarse parado en una pestaña ya anotada no reescribe el almacén", () => {
+    await t.casoAsync("v18.0.18: quedarse parado en una pestaña ya anotada no reescribe el almacén", async () => {
       const c = cargar();
       const ID = "5150076";
       barraDeEverest(c, "antecedente", "Antecedentes");
@@ -851,11 +876,18 @@ module.exports = {
       c.env.storage.setItem = (k, v) => { if (k === "vgl_cosecha") escrituras++; return orig(k, v); };
 
       c.api._vglCosecharDePantalla(ID);        // primera vuelta: anota la pestaña, escribe
-      const trasPrimera = escrituras;
-      t.cierto(trasPrimera >= 1, "la primera vuelta sí escribe: hay algo nuevo que archivar");
+      // v18.4.3 (H5): la escritura del disco vuela async (sobre cifrado) — esperar a
+      // que la PRIMERA aterrice ANTES de afirmar que escribió, y guardar su texto.
+      const semilla = await esperarDisco(c, "vgl_cosecha", "");
+      t.cierto(escrituras >= 1, "la primera vuelta sí escribe: hay algo nuevo que archivar");
+      t.cierto(semilla.indexOf("VGLC1:") === 0, "y el disco quedó con el sobre cifrado");
 
       for (let i = 0; i < 5; i++) c.api._vglCosecharDePantalla(ID);   // el médico no toca nada
-      t.igual(escrituras - trasPrimera, 0,
+      await dormir(150);   // margen: si algo fuera a escribir, el cifrado ya habría volado
+      // Con el sobre cifrado la comparación es MÁS estricta que antes: cada escritura
+      // lleva IV nuevo, así que un re-write redundante cambiaría el texto aunque el
+      // contenido fuera idéntico.
+      t.igual(c.env.storage.getItem("vgl_cosecha"), semilla,
         "cinco vueltas más del reloj sin un solo cambio real no pueden reescribir el almacén entero (~1 MB con 80 pacientes)");
     });
 

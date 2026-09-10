@@ -177,3 +177,101 @@ const get=q=>doGet({parameter:q}).t;
   if(fallos.length){console.error("FALLA B2/B6 servidor:",fallos.join(" | "));process.exitCode=1;}
   else console.log("B2/B6 servidor: TODO OK");
 })();
+
+// =====================================================================
+// v18.4.0 — ALERTAS DEL TABLERO. revisarAlertas()/calcularAlertas() contra
+// el .gs REAL: un equipo enfermo (canal mudo + tormenta + api degradada), un
+// equipo con salto súbito tras historia tranquila (z-score), un equipo sano
+// que no dispara nada, el reenvío del MISMO lote que no infla conteos, y el
+// dedup de la hoja "alertas" al repetir la revisión.
+// =====================================================================
+(function pruebaAlertas(){
+  const fallos=[];
+  // Sembrar por NOMBRE de columna: el orden del encabezado de "uso" ya migró
+  // (v12.10.13) y escribir posiciones a ciegas es justo el defecto que esa
+  // migración cerró.
+  const hdUso=hojas["uso"].d[0];
+  const filaUso=(vals)=>{const r=[];for(let i=0;i<hdUso.length;i++)r.push(vals[hdUso[i]]!==undefined?vals[hdUso[i]]:"");hojas["uso"].appendRow(r);};
+  const ventana=(eq,dia,lote,acc)=>filaUso({equipo:eq,deDia:dia,lote:lote,acciones:JSON.stringify(acc)});
+
+  // 1) equipo ENFERMO, un solo día, todo lo que hubo el 27-ago en miniatura:
+  //    errores detectados sin entrega (canal mudo), 18 huellas (tormenta) y un
+  //    endpoint con 83 % de fallos (api-degradada).
+  const D="2026-09-05";
+  ventana("eq-alerta1",D,"AL1",{"error.js":30,"error.api":2,"error.promesa":1,
+    "error.distintos":18,"api.buscarpaciente.err":25,"api.buscarpaciente.ok":5,"rum.page.inp.poor":9});
+  // reenvío del MISMO lote: no puede duplicar los conteos (lección del export real)
+  ventana("eq-alerta1",D,"AL1",{"error.js":30,"error.api":2,"error.promesa":1,
+    "error.distintos":18,"api.buscarpaciente.err":25,"api.buscarpaciente.ok":5,"rum.page.inp.poor":9});
+
+  // 2) equipo con HISTORIA tranquila (7 días, 2..4 errores) y salto súbito hoy.
+  //    entregados=20 y api sano: SOLO debe disparar la anomalía por z-score.
+  const iso=(dt)=>dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+  [2,3,2,4,3,2,3].forEach((n,i)=>{
+    const dt=new Date(2026,8,5); dt.setDate(dt.getDate()-(7-i));   // 2026-08-29 .. 2026-09-04
+    ventana("eq-alerta2",iso(dt),"ALZ"+i,{"error.js":n,"error.entregado":n,"error.distintos":n,"api.buscarpaciente.ok":50});
+  });
+  ventana("eq-alerta2",D,"ALZ9",{"error.js":20,"error.entregado":20,"error.distintos":4,"api.buscarpaciente.ok":50});
+
+  // 3) equipo SANO: errores que se detectan y se entregan, api sana. Cero filas.
+  ventana("eq-sano",D,"ALS1",{"error.js":2,"error.entregado":2,"error.distintos":2,
+    "api.buscarpaciente.ok":100,"api.buscarpaciente.err":1});
+
+  revisarAlertas();
+  const hA=hojas["alertas"];
+  const filasA=hA?hA.d.slice(1):[];
+  const tiposDe=(eq)=>filasA.filter(r=>r[2]===eq).map(r=>r[3]);
+  console.log("\n-- alertas ("+filasA.length+" filas):");
+  filasA.forEach(r=>console.log("   "+r[1]+" | "+r[2]+" | "+r[3]+" | "+r[4]+" | "+r[5]));
+
+  const t1=tiposDe("eq-alerta1"), t2=tiposDe("eq-alerta2"), t3=tiposDe("eq-sano");
+  if(t1.indexOf("canal-mudo")<0)fallos.push("canal-mudo no disparó");
+  else{
+    const cm=filasA.find(r=>r[2]==="eq-alerta1"&&r[3]==="canal-mudo");
+    if(!/33 errores/.test(String(cm[5])))fallos.push("canal-mudo contó "+cm[5]+" (33 esperados: ¿dedup por lote roto?)");
+  }
+  if(t1.indexOf("tormenta")<0)fallos.push("tormenta no disparó");
+  if(t1.indexOf("api-degradada")<0)fallos.push("api-degradada no disparó");
+  if(t2.indexOf("anomalia")<0)fallos.push("anomalia (z-score) no disparó");
+  if(t2.indexOf("canal-mudo")>=0||t2.indexOf("tormenta")>=0)fallos.push("equipo con entrega sana disparó canal-mudo/tormenta");
+  if(t3.length)fallos.push("equipo sano disparó: "+t3.join(","));
+
+  // 4) dedup: repetir la revisión NO reescribe las mismas alertas.
+  revisarAlertas();
+  const filasB=hojas["alertas"].d.slice(1);
+  if(filasB.length!==filasA.length)fallos.push("re-visión duplicó filas: "+filasA.length+" -> "+filasB.length);
+
+  if(fallos.length){console.error("FALLA alertas:",fallos.join(" | "));process.exitCode=1;}
+  else console.log("alertas v18.4: TODO OK");
+})();
+
+// =====================================================================
+// v18.4.6 — DEDUP POR LOTE en armarResumen. El export real del 07-sep trajo
+// 10.042 filas de reenvío en "uso" (54 %): sin dedup, «Reportes» y «Acciones
+// de uso (ux, acum.)» del tablero de flota salían inflados ~2,2×. Aquí se
+// siembra un equipo con un lote repetido y uno único, y se comprueba la fila
+// del resumen de flota contra el .gs REAL.
+// =====================================================================
+(function pruebaResumenDedup(){
+  const fallos=[];
+  const hdUso2=hojas["uso"].d[0];
+  const filaUso2=(vals)=>{const r=[];for(let i=0;i<hdUso2.length;i++)r.push(vals[hdUso2[i]]!==undefined?vals[hdUso2[i]]:"");hojas["uso"].appendRow(r);};
+  const ventana2=(lote,n)=>filaUso2({equipo:"eq-dedup",ver:"18.4.6",lote:lote,deDia:"2026-09-07",n:n,acciones:"{}"});
+  ventana2("DX1",100);
+  ventana2("DX1",100);   // reenvío del MISMO lote (lo que el export real mostró)
+  ventana2("DX2",7);
+
+  armarResumen();
+  const rf=hojas["resumen_flota"].d;
+  const hd=rf[1];
+  const filaEq=rf.find(r=>r[0]==="eq-dedup");
+  const col=(n)=>hd.indexOf(n);
+  const acum=Number(filaEq[col("Acciones de uso (ux, acum.)")]);
+  const reportes=Number(filaEq[col("Reportes")]);
+  console.log("\n-- dedup armarResumen: acum="+acum+" (debe ser 107) · reportes="+reportes+" (debe ser 2)");
+  if(acum!==107)fallos.push("ux acum con dup: obtuvo "+acum+" (107 esperados: el reenvío del lote DX1 no debe contar)");
+  if(reportes!==2)fallos.push("reportes con dup: obtuvo "+reportes+" (2 esperados)");
+
+  if(fallos.length){console.error("FALLA dedup resumen:",fallos.join(" | "));process.exitCode=1;}
+  else console.log("dedup armarResumen v18.4.6: TODO OK");
+})();

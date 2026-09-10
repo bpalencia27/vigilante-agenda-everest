@@ -194,7 +194,11 @@ module.exports = {
     // quedan más de 500, las más viejas. Las claves de prueba son
     // alfabéticas a propósito: no colapsan entre sí por cédula.
     // ---------------------------------------------------------------
-    t.caso("M4: el historial de inasistencias se poda al registrar", () => {
+    await t.casoAsync("M4: el historial de inasistencias se poda al registrar", async () => {
+      // v18.4.3 (H5): el historial descansa cifrado en disco y se escribe ASYNC —
+      // el caso pasó a async para leer el memo (_noShowLeer) y esperar el desenlace
+      // del disco ANTES del finally, que así no deja basura en el entorno compartido.
+      const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
       try {
         const semilla = {};
         semilla["viejitoPodado"] = { total: 3, ultima: api._vglFechaHace(200) };
@@ -204,13 +208,17 @@ module.exports = {
           semilla[clave] = { total: 1, ultima: api._vglFechaHace(10) };
         }
         env.almacen["vgl_nosh_hist"] = JSON.stringify(semilla);
+        const semillaRaw = env.almacen["vgl_nosh_hist"];
         const total = api._noShowRegistrar("nuevoPodado");
-        const hist = JSON.parse(env.almacen["vgl_nosh_hist"]);
+        const hist = api._noShowLeer();
         t.igual(total, 1, "M4: primera inasistencia del paciente nuevo");
         t.falso("viejitoPodado" in hist, "M4: la entrada de hace 200 días salió");
         t.cierto("fresquitoVivo" in hist, "M4: la entrada de hoy sobrevive");
         t.cierto(hist["nuevoPodado"] && hist["nuevoPodado"].ultima === api.todayStamp(), "M4: la nueva entrada quedó fechada hoy");
         t.cierto(Object.keys(hist).length <= 500, "M4: el historial quedó acotado a 500");
+        // Dejar aterrizar la escritura async del sobre antes de borrar la clave:
+        // si el finally corriera antes, el vuelco la re-creararía después.
+        for (let i = 0; i < 200 && env.almacen["vgl_nosh_hist"] === semillaRaw; i++) await dormir(20);
       } finally {
         delete env.almacen["vgl_nosh_hist"];
       }

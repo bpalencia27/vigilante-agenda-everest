@@ -27,6 +27,16 @@ module.exports = {
 
   async pruebas(t, api, env, cargar) {
     const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
+    // v18.4.3 (H5): vgl_cosecha se persiste ASYNC y en sobre cifrado ("VGLC1:") —
+    // sondeo robusto a que el disco cambie (patrón de suite_89).
+    const esperarDisco = (c, clave, distintoDe) => (async () => {
+      for (let i = 0; i < 200; i++) {
+        const raw = c.env.storage.getItem(clave) || "";
+        if (raw && raw !== distintoDe) return raw;
+        await dormir(20);
+      }
+      return c.env.storage.getItem(clave) || "";
+    })();
 
     // Instante congelado para los sellos: 5 de marzo de 2026, 10:15 local.
     const MS_FIJA = Date.parse("2026-03-05T10:15:00-05:00");
@@ -254,12 +264,21 @@ module.exports = {
     });
 
     // ============ BLOQUE C — cosecha blindada contra la cuota llena ============
-    await t.casoAsync("C1: cuota llena SIN carpeta — guardar devuelve null y no deja basura", async () => {
+    // v18.4.3 (H5) — CONTRATO NUEVO de _vglCosechaGuardar: devuelve SIEMPRE la
+    // fusión (la memoria viva queda servida por el memo); el fallo del disco se
+    // avisa por toast/rescate de carpeta, ya NO devuelve null.
+    await t.casoAsync("C1: cuota llena SIN carpeta — la fusión queda viva y el disco no miente", async () => {
       const e = escenario({});
       forzarCuota(e.c, "vgl_cosecha");
       const r = e.c.api._vglCosechaGuardar("1093800", { confirmaciones: { ok: { v: true } } });
-      t.igual(r, null, "sin carpeta no hay a dónde rescatar");
-      t.igual(e.c.env.almacen["vgl_cosecha"], undefined, "el almacén no cambió");
+      t.cierto(r && typeof r === "object" && r.confirmaciones && r.confirmaciones.ok.v === true,
+        "sin carpeta igual devuelve la FUSIÓN: la consulta vive en memoria de inmediato");
+      await dormir(150);   // deja volar el cifrado: el navegador RECHAZA el disco (cuota)
+      t.igual(e.c.env.almacen["vgl_cosecha"], undefined,
+        "y el disco no miente: sigue sin poder guardar (antes prometía null, ahora avisa por toast)");
+      const vivo = e.c.api._vglCosechaLeer("1093800");
+      t.cierto(!!(vivo && vivo.confirmaciones && vivo.confirmaciones.ok),
+        "la memoria viva sirve lo aprendido aunque el navegador lo haya rechazado");
       t.falso(tieneDir(e.raiz, ["Vigilante de Agenda", "Historias"]), "nada en el disco");
     });
 
@@ -439,11 +458,16 @@ module.exports = {
     await t.casoAsync("G2: el disco más fresco que el navegador gana y se persiste", async () => {
       const almacen = {};
       almacen["vgl_cosecha"] = JSON.stringify({ "1093800": { ts: 100, otros: { nota: "vieja" } } });
+      const semilla = almacen["vgl_cosecha"];
       const e = escenario({ almacen });
       e.c.api.__setCarpetaHandleParaTest(handleDe(e.raiz));
       sembrarMemoria(e.raiz, { "1093800": { ts: MS_FIJA, confirmaciones: { ok: { v: true } } } }, MS_FIJA);
       t.cierto(await e.c.api._vglDiscoMemoriaRestaurar(), "restauró");
-      const guardado = JSON.parse(e.c.env.almacen["vgl_cosecha"]);
+      // v18.4.3 (H5): la persistencia es async y en sobre cifrado — no más
+      // JSON.parse directo del almacén: se sondea el disco y se descifra el sobre.
+      const sobre = await esperarDisco(e.c, "vgl_cosecha", semilla);
+      t.cierto(sobre.indexOf("VGLC1:") === 0, "el navegador persistió la adopción como sobre cifrado");
+      const guardado = JSON.parse(await e.c.api._vglSobreDescifrar(sobre));
       t.igual(guardado["1093800"].ts, MS_FIJA, "el navegador adoptó la versión del disco");
       t.igual(e.c.api._vglCosechaTodo()["1093800"].ts, MS_FIJA, "la caché viva también");
     });
@@ -897,7 +921,7 @@ module.exports = {
       const fila = red.cuerpos().find((p) => p.evento === "prueba");
       t.igual(fila.evento, "prueba");
       t.igual(fila.dia, FECHA, "día del reloj congelado");
-      t.igual(fila.ver, "18.3.6", "versión viva");
+      t.igual(fila.ver, "18.14.0", "versión viva");
       t.igual(fila.cosa, 1, "extra mergeado");
       t.cierto(typeof fila.token === "string" && fila.token.length > 0, "token del tablero");
       t.cierto(/-/.test(String(fila.lote)), "lote trazable");

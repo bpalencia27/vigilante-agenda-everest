@@ -99,19 +99,22 @@ module.exports = {
       t.igual(os, 1, "al levantar el silencio, la siguiente sí sale por Windows");
     });
 
-    t.caso("v17.19.0: el silencio temporal también calla el cartel dentro de la página", () => {
+    // [Q2 — 07-sep, NT-109b] POLÍTICA ACTUALIZADA por instrucción del encargo: el ROJO
+    // (fraude; edge una-sola-vez por cita) queda EXENTO del silencio temporal en tono Y
+    // en cartel — su única oportunidad no puede caer dentro de un «Silenciar 15 min».
+    // El mute sigue callando todo lo demás (el caso AMBAR de arriba lo fija). Esta
+    // prueba fija el contrato NUEVO para que no cambie en silencio.
+    t.caso("Q2 (NT-109b): el silencio temporal ya NO calla el cartel del ROJO (evidencia que no repite)", () => {
       const c = cargar({ silencioso: true });
       conAudio(c);
       c.api.__S.cartel = true;
       c.api.__state.muteUntil = Date.now() + 60000;
-      let pintado = 0;
-      const nodosAntes = c.env.win.document._nodos.length;
-      c.api._dispararAvisoCartel({ uid: "cartel-mute-1", color: "ROJO", title: "t", body: "b" });
-      t.igual(c.env.win.document._nodos.filter(n => n.id === "vgl-modal").length, 0, "silenciado: el cartel no debe montarse");
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-rojo", color: "ROJO", title: "t", body: "b" });
+      t.cierto(c.env.win.document._nodos.some(n => n.id === "vgl-modal"), "con el silencio activo, el cartel del ROJO SÍ se monta");
 
       c.api.__state.muteUntil = 0;
-      c.api._dispararAvisoCartel({ uid: "cartel-mute-2", color: "ROJO", title: "t", body: "b" });
-      t.cierto(c.env.win.document._nodos.some(n => n.id === "vgl-modal"), "al levantar el silencio, el cartel sí se monta");
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-rojo-2", color: "ROJO", title: "t", body: "b" });
+      t.cierto(c.env.win.document._nodos.filter(n => n.id === "vgl-modal").length >= 1, "y sin silencio, igual: siempre");
     });
 
     t.caso("playTone emite DOS tonos, y cada color tiene los suyos", () => {
@@ -754,8 +757,8 @@ module.exports = {
       const path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
-      const i = src.indexOf('"vgl-sin-datos-agenda"');
-      t.cierto(i > 0, "sigue existiendo el aviso de ceguera con su identificador de una-vez-al-día");
+      const i = src.indexOf('"vgl-sin-datos-agenda|"');
+      t.cierto(i > 0, "sigue existiendo el aviso de ceguera, ahora con uid POR EPISODIO (NT-111/M6: cada 30 min de ceguera continua re-abre el aviso)");
 
       // La condición que lo dispara está justo encima de la llamada a osNotify.
       const bloque = src.slice(Math.max(0, i - 1400), i);
