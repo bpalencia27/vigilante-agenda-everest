@@ -6175,7 +6175,13 @@ module.exports = {
       await esperar(30);   // el toast se pinta en el flush de la cola
       const llenar = c.env.doc.body.children.find((n) => n.id === "vgl-llenar-modal");
       const aviso = toasts.find((n) => n.querySelector && /Faltan antecedentes/.test(n.querySelector(".vgl-toast-title").textContent) && /Hipertensión/.test(n.querySelector(".vgl-toast-b").textContent));
-      t.cierto(!!llenar || !!aviso, "el clic abre el ayudante de llenado o, si esas casillas no se pueden llenar desde aquí, lo dice con la pestaña (toasts: " + toasts.length + ")");
+      // v18.14.8 — este es el caso que reportó el médico: las casillas NO están en esta
+      // pantalla (el mock no monta radios), así que antes solo quedaba un aviso ámbar que se
+      // desvanecía y decía «vaya a la pestaña indicada» sin ofrecer ninguna forma de ir. Ahora
+      // el clic abre el CUADRO del ayudante, con su diálogo y su fila por pestaña.
+      t.cierto(!!llenar, "el clic abre el CUADRO del ayudante (antes: un aviso que se desvanecía)");
+      t.igual(llenar.getAttribute("role"), "dialog", "y es un diálogo, no un cartel suelto");
+      t.igual(!!aviso, false, "ya no se conforma con el aviso efímero");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/else if \(_autorizado && _resumenListoParaGate && _factoresParaGate && _pendientesPanel\.length > 0\)/.test(src), "solo con resumen y factores leídos: nunca se inventa un faltante mientras carga");
     });

@@ -4,6 +4,36 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.8] — 2026-09-10 (El aviso de «Faltan antecedentes» ahora dice dónde y lleva hasta allí)
+
+**Pulsar «📝 Faltan antecedentes» ya no deja un mensaje que se borra solo.** Ese botón aparece
+cuando al Panel del paciente le falta lo mínimo para tener sentido: saber si el paciente es
+hipertenso, si es diabético y si fuma. Esas tres casillas no están en la pantalla donde usted
+está —Everest solo tiene montada la pestaña que está abierta—, y hasta ahora el asistente se
+limitaba a un aviso de tres líneas que se desvanecía: nombraba los factores, decía «vaya a la
+pestaña indicada» y usted tenía que acordarse de cuál era y navegar a mano.
+
+Ahora se abre un cuadro que **no se desvanece**, con una fila por pestaña y su botón:
+
+- **Hipertensión y Diabetes** → **Ir a Antecedentes**
+- **Tabaquismo** → **Ir a Hábitos y Gestión de Riesgo**
+
+El botón lo lleva de verdad a esa pestaña (es el mismo salto que hacen los accesos directos del
+widget). Y el cuadro explica en una frase **por qué** esas casillas no se pueden marcar desde
+donde está: *«Everest solo monta la pestaña que tiene abierta, así que estas casillas no existen
+en esta pantalla y el asistente no puede marcarlas desde aquí. Están en las pestañas de abajo.»*
+Si la pestaña no estuviera disponible en ese momento, el asistente lo dice en ámbar en vez de
+fingir que navegó — y si el clic no llega a mover la pestaña (Everest lo ignora), también lo dice.
+El cuadro se cierra con ✕, con «Ahora no» o con Escape, y se puede recorrer entero con el
+tabulador.
+
+Verificación: banco de pruebas completo en verde (3.837 comprobaciones), color y tipografía
+medidos en Chromium contra el CSS real en tema claro y oscuro y en cuatro anchos de pantalla
+(hasta 360 px), y las mutaciones de control documentadas en `tests/INFORME_MUTACIONES.md`
+(sección «v18.14.8»).
+
+---
+
 ## [Versión 18.14.7] — 2026-09-10 (El botón «Pendientes» vuelve a responder, y las dos pestañas a medio hacer se cierran con llave)
 
 **El botón «🩺 Pendientes» del widget lateral ya no se queda mudo.** Al pulsarlo, el asistente

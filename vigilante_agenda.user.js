@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.7
+// @version      18.14.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8446,6 +8446,172 @@
     control: "Próximo control",
     faltan: "Faltan antecedentes",
   });
+  // v18.14.8 — el nodo NAVEGABLE real de una pestaña de Everest. Vivía dentro de
+  // createAccionesDockUI (v18.14.1) y se sube aquí porque ahora lo usan tres sitios: los dos
+  // botones de pestaña del dock y el botón «Ir a …» del cuadro de «Faltan antecedentes».
+  // Por qué existe: _vglClicablePestana barre `a, li, button, [role=tab]…` en orden de
+  // documento, así que el <li> que ENVUELVE la pestaña (padre del <a>, misma cadena de texto)
+  // gana por coincidencia exacta antes de llegar a su <a>. Clicar el <li> no navega en Everest
+  // (el manejador vive en el ancla) y, como el nodo sí existe, el aviso ámbar tampoco salía: el
+  // botón parecía muerto, sin acción y sin rastro. Se resuelve SIEMPRE el nodo navegable real;
+  // si no hay ninguno mejor, se devuelve el candidato tal cual (nunca se empeora lo previo).
+  function _vglNodoNavegable(nodo) {
+    if (!nodo) return null;
+    try {
+      const esAncla = (n) => !!n && (n.tagName === "A" || n.tagName === "BUTTON" || (typeof n.getAttribute === "function" && n.getAttribute("role") === "tab"));
+      if (esAncla(nodo)) return nodo;
+      // Selectores SIMPLES, uno por uno: el motor de selectores del arnés no parsea listas
+      // con comas, y en el navegador el resultado es idéntico (el primero que aparezca).
+      if (typeof nodo.querySelector === "function") {
+        const dentro = nodo.querySelector("a") || nodo.querySelector("button") || nodo.querySelector('[role="tab"]');
+        if (dentro) return dentro;
+      }
+      if (typeof nodo.closest === "function") {
+        const arriba = nodo.closest("a") || nodo.closest("button") || nodo.closest('[role="tab"]');
+        if (arriba) return arriba;
+      }
+    } catch (e) {}
+    return nodo;
+  }
+
+  // v18.14.8 — «Ir a la pestaña» de un clic, para el cuadro de «Faltan antecedentes».
+  // Es el MISMO gesto de los botones de pestaña del dock (v18.7.0): clic sobre el enlace real
+  // de Everest, sin red ni escritura propias. Fail-closed: si la pestaña no está montada, avisa
+  // en ámbar y no inventa nada — jamás se simula una navegación que no ocurrió.
+  // Y, como los botones del dock, VERIFICA a los 300 ms que el clic movió de verdad la pestaña
+  // activa: si Everest ignoró el clic, el médico no puede quedarse sin saberlo. La comparación
+  // es por VALOR (id + texto) y no por identidad de objeto: _vglPestanaActiva() devuelve un
+  // objeto NUEVO en cada llamada, así que comparar referencias nunca daría «igual» y el aviso
+  // no saldría nunca (defecto latente del mismo chequeo en los botones del dock — anotado como
+  // hallazgo NO tocado, no se arregla aquí). Fail-open: sin pestaña activa legible, no se
+  // inventa un aviso.
+  const _vglClavePestana = (p) => (p ? String(p.id || "") + "|" + String(p.texto || "") : "");
+  function _vglIrAPestanaDirecta(nombrePestania, tituloAviso) {
+    try {
+      const tab = _vglNodoNavegable(_vglClicablePestana(nombrePestania));
+      if (!tab || typeof tab.click !== "function") {
+        try { uxTrack("hc.pestana.faltan.sin_pestana"); } catch (e0) {}
+        showToast("AMBAR", tituloAviso || VGL_ROTULOS.faltan, "La pestaña «" + nombrePestania + "» no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
+        return false;
+      }
+      const antes = (() => { try { return _vglClavePestana(_vglPestanaActiva()); } catch (e) { return ""; } })();
+      tab.click();
+      try { uxTrack("hc.pestana.faltan.ir"); } catch (e1) {}
+      try {
+        if (antes) setTimeout(() => {
+          try {
+            const desp = _vglClavePestana(_vglPestanaActiva());
+            if (desp && desp === antes) {
+              try { uxTrack("hc.pestana.faltan.no_abrio"); } catch (e5) {}
+              showToast("AMBAR", tituloAviso || VGL_ROTULOS.faltan, "El asistente no logró abrir «" + nombrePestania + "»: ábrala desde el editor de la nota.");
+            }
+          } catch (e3) {}
+        }, 300);
+      } catch (e4) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // v18.14.8 — EL CUADRO DE «FALTAN ANTECEDENTES» CUANDO LAS CASILLAS NO ESTÁN AQUÍ.
+  //
+  // Qué había antes (medido con el arnés el 10-sep-2026, bitácora
+  // `debug-faltan-antecedentes-ux.md`): un aviso ámbar de tres líneas —
+  // «Para abrir el Panel del paciente documente: Hipertensión y Diabetes (Antecedentes);
+  // Tabaquismo (Hábitos y Gestión de Riesgo). Esas casillas no se pueden llenar desde aquí:
+  // vaya a la pestaña indicada.» — que se desvanecía solo. Tras el clic el body quedaba con
+  // CERO nodos nuevos y ningún control enfocable: el médico tenía que memorizar la frase,
+  // navegar a mano y, de paso, la última oración remitía a «la pestaña indicada» en singular
+  // cuando eran DOS. Y afirmaba que no se pueden llenar aquí sin decir por qué.
+  //
+  // Qué hace ahora: el mismo hecho, en un cuadro que NO se desvanece, con una fila por pestaña
+  // y su botón «Ir a …». Los datos NO son nuevos — `mtrFactoresPendientesNavegables` (L46005)
+  // ya devuelve `{pestania, nombres, etiqueta}` agrupado por pestaña, con la correspondencia
+  // declarada en `MTR_FACTORES_NAVEGABLES` (Hipertensión y Diabetes → Antecedentes; Tabaquismo
+  // → Hábitos y Gestión de Riesgo).
+  //
+  // Reutiliza el MISMO id y las MISMAS clases que el cuadro de llenado: es el mismo ayudante en
+  // su otra mitad (o se llenan desde aquí, o hay que ir a la pestaña), así que hereda su
+  // tratamiento de tokens, su posición fija y su blindaje de color sin una sola regla CSS
+  // nueva. Las dos mitades nunca coexisten: cada una retira la anterior antes de pintarse.
+  function vglModalFaltanIrAPestania(apt, pendientes) {
+    try {
+      const lista = (Array.isArray(pendientes) ? pendientes : []).filter((p) => p && p.pestania);
+      if (!lista.length) return false;
+      const previo = document.getElementById("vgl-llenar-modal");
+      if (previo) previo.remove();
+      const modal = document.createElement("div");
+      modal.id = "vgl-llenar-modal";
+      modal.className = isLight() ? "light" : "";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "vgl-faltan-t");
+      modal.setAttribute("aria-describedby", "vgl-faltan-d");
+      // Un hecho por elemento, sin repetir lo que ya dice otro (regla del médico, 01-sep):
+      // el título dice QUÉ falta, el subtítulo POR QUÉ no está aquí, cada fila DÓNDE vive y
+      // el pie que el asistente no marca nada solo. La pestaña no se repite en la fila porque
+      // el botón ya la nombra.
+      modal.innerHTML = '<div class="vgl-agm-card" style="max-width:620px">'
+        + '<div class="vgl-agm-head"><div style="min-width:0">'
+        + '<div class="vgl-agm-title vgl-agm-kicker" id="vgl-faltan-t">📝 Faltan antecedentes por documentar</div>'
+        + '<div class="vgl-agm-patient">' + escapeHtml(apt && (apt.nombre || apt.name) || "Paciente") + '</div>'
+        + '<div class="vgl-agm-sub" id="vgl-faltan-d">Everest solo monta la pestaña que tiene abierta, así que estas casillas no existen en esta pantalla y el asistente no puede marcarlas desde aquí. Están en las pestañas de abajo.</div>'
+        + '</div><button class="vgl-agm-close" id="vgl-faltan-x" aria-label="Cerrar">✕</button></div>'
+        + '<div class="vgl-agm-sec" id="vgl-faltan-filas"></div>'
+        + '<div class="vgl-agm-foot" style="margin-top:12px">'
+        + '<span class="vgl-agm-dinfo" style="margin:0">El asistente no marca nada por su cuenta: la casilla la marca usted.</span>'
+        + '<button type="button" class="vgl-agm-btn sec" id="vgl-faltan-no">Ahora no</button>'
+        + '</div></div>';
+      document.body.appendChild(modal);
+
+      let _limpiarA11y = null;
+      let _cerrado = false;
+      const cerrar = () => {
+        if (_cerrado) return;
+        _cerrado = true;
+        try { if (_limpiarA11y) _limpiarA11y(); } catch (e0) {}
+        try { modal.innerHTML = ""; modal.remove(); } catch (e1) {}
+      };
+      const x = modal.querySelector("#vgl-faltan-x");
+      if (x) x.addEventListener("click", () => { try { uxTrack("fn.faltan.cerrar"); } catch (e2) {} cerrar(); });
+      const no = modal.querySelector("#vgl-faltan-no");
+      if (no) no.addEventListener("click", () => { try { uxTrack("fn.faltan.ahora_no"); } catch (e3) {} cerrar(); });
+
+      // Las filas se construyen como NODOS REALES (no con innerHTML): así el botón lleva su
+      // listener de verdad y la prueba puede disparar el clic, no solo leer el HTML.
+      const cont = modal.querySelector("#vgl-faltan-filas");
+      lista.forEach((p) => {
+        const nombres = (Array.isArray(p.nombres) ? p.nombres : []).filter(Boolean).join(" y ") || String(p.pestania);
+        const fila = document.createElement("div");
+        fila.className = "vgl-llenar-fila";
+        fila.setAttribute("data-pestania", String(p.pestania));
+        const rot = document.createElement("span");
+        rot.className = "vgl-llenar-rot";
+        rot.textContent = nombres;
+        const caja = document.createElement("span");
+        caja.className = "vgl-llenar-btns";
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "vgl-agm-btn sec";
+        b.setAttribute("data-ir", String(p.pestania));
+        // El nombre accesible dice el destino Y para qué: un lector de pantalla que salta de
+        // botón en botón no tiene el rótulo de la izquierda a la vista.
+        b.setAttribute("aria-label", "Ir a la pestaña " + p.pestania + " para documentar " + nombres);
+        b.textContent = "Ir a " + p.pestania;
+        b.addEventListener("click", () => { cerrar(); _vglIrAPestanaDirecta(p.pestania, VGL_ROTULOS.faltan); });
+        caja.appendChild(b);
+        fila.appendChild(rot);
+        fila.appendChild(caja);
+        if (cont) cont.appendChild(fila);
+      });
+
+      try { uxTrack("fn.faltan.mostrado", { n: lista.length }); } catch (e4) {}
+      if (typeof _activarAccesibilidadModal === "function") {
+        _limpiarA11y = _activarAccesibilidadModal(modal, cerrar);
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
   // v18.0.112 (C12) — abre el ayudante de llenado con lo que falta; si esas casillas no se
   // pueden llenar desde aquí, lo dice y a qué pestaña ir. Nunca abre el Panel a medias.
   function _vglAbrirAyudanteFaltan(apt, pendientes) {
@@ -8458,6 +8624,11 @@
       });
       return true;
     }
+    // v18.14.8 — las casillas no están en esta pantalla: cuadro con «Ir a …» por pestaña.
+    // El aviso ámbar queda SOLO como último recurso, para cuando no hay ni una pestaña que
+    // nombrar (hoy inalcanzable desde el dock, que únicamente pinta el botón con pendientes):
+    // decir «vaya a la pestaña indicada» sin poder indicar ninguna sería peor que callar.
+    if (vglModalFaltanIrAPestania(apt, pendientes)) return true;
     try {
       showToast("AMBAR", VGL_ROTULOS.faltan, "Para abrir el Panel del paciente documente: " + etq + ". Esas casillas no se pueden llenar desde aquí: vaya a la pestaña indicada.", true, "faltan|" + String(apt && apt.doc_id));
     } catch (e) {}
@@ -8937,31 +9108,10 @@
     // consulta. El gesto es el clic del propio enlace de pestaña de Everest
     // (anclas reales de VGL_PESTANAS) — ni red ni escritura propias; si la
     // pestaña ya no está (pantalla distinta), aviso ámbar y nada más.
-    // v18.14.1 — El gesto caía en el CONTENEDOR, no en el enlace. _vglClicablePestana barre
-    // `a, li, button, [role=tab]…` en orden de documento, así que el <li> que ENVUELVE la
-    // pestaña (padre del <a>, misma cadena de texto) gana por coincidencia exacta antes de
-    // llegar a su <a>. Clicar el <li> no navega en Everest (el manejador vive en el ancla) y,
-    // como el nodo sí existe, el aviso ámbar tampoco salía: el botón parecía muerto, sin
-    // acción y sin rastro. Se resuelve SIEMPRE el nodo navegable real; si no hay ninguno
-    // mejor, se devuelve el candidato tal cual (nunca se empeora el comportamiento previo).
-    const _vglNodoNavegable = (nodo) => {
-      if (!nodo) return null;
-      try {
-        const esAncla = (n) => !!n && (n.tagName === "A" || n.tagName === "BUTTON" || (typeof n.getAttribute === "function" && n.getAttribute("role") === "tab"));
-        if (esAncla(nodo)) return nodo;
-        // Selectores SIMPLES, uno por uno: el motor de selectores del arnés no parsea listas
-        // con comas, y en el navegador el resultado es idéntico (el primero que aparezca).
-        if (typeof nodo.querySelector === "function") {
-          const dentro = nodo.querySelector("a") || nodo.querySelector("button") || nodo.querySelector('[role="tab"]');
-          if (dentro) return dentro;
-        }
-        if (typeof nodo.closest === "function") {
-          const arriba = nodo.closest("a") || nodo.closest("button") || nodo.closest('[role="tab"]');
-          if (arriba) return arriba;
-        }
-      } catch (e) {}
-      return nodo;
-    };
+    // v18.14.1 — El gesto caía en el CONTENEDOR, no en el enlace. El resolutor del nodo
+    // navegable real (_vglNodoNavegable) se subió a nivel de módulo en v18.14.8: ahora lo
+    // comparten estos dos botones y el «Ir a …» del cuadro de «Faltan antecedentes». Su
+    // comentario largo vive allí, junto a la función.
     if (_tabImp && _devTabs) {
       const bImp = document.createElement("button");
       bImp.className = "vgl-dock-btn";

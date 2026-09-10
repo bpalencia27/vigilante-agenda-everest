@@ -14410,3 +14410,60 @@ fija el valor derivado y añade la exención nueva, sin perder la de R=3.
 `atheneaCredsSet` (L2501) por no ser único el contexto; se detectó de inmediato y se restauraron
 AMBOS sitios antes de seguir. El banco volvió a verde (3.831) entre mutación y mutación.
 
+---
+
+## v18.14.8 — El aviso de «Faltan antecedentes» pasa a cuadro accionable con «Ir a …» por pestaña
+
+Orden del médico (10-sep-2026): elevar el mensaje a S+, decir con precisión qué factor vive en
+qué pestaña y **por qué** no se puede completar desde la pantalla actual, y añadir un botón de
+acceso directo. Sesión TRAE-debugger, bitácora `debug-faltan-antecedentes-ux.md`.
+
+**Causa medida (6 hipótesis, todas confirmadas por el driver del arnés).** Con las casillas fuera
+de pantalla (`mtrCamposLlenables` = 0), el clic llegaba al manejador y terminaba en un
+`showToast("AMBAR", …)` efímero. Tras el clic el body quedaba con **CERO nodos nuevos**, ningún
+`data-ir`, `role=dialog` ausente y ningún control enfocable: el médico tenía que memorizar la
+frase y navegar a mano, y la última oración remitía a «la pestaña indicada» en **singular**
+cuando eran DOS. El aviso afirmaba que no se pueden llenar aquí sin decir la causa.
+
+**Corrección.** `vglModalFaltanIrAPestania(apt, pendientes)` — un cuadro que **reutiliza el id y
+las clases ya blindados** del cuadro de llenado (mismo ayudante, su otra mitad: hereda tokens,
+posición fija y blindaje de color **sin una sola regla CSS nueva**, por eso el censo de
+`suite_25` no se mueve). Una fila por pestaña con su botón «Ir a …», que hace el clic real del
+ancla de Everest vía `_vglIrAPestanaDirecta` + `_vglNodoNavegable` (resolutor que se subió a
+nivel de módulo: ahora lo comparten los dos botones de pestaña del dock y este cuadro). Los datos
+NO son nuevos: `mtrFactoresPendientesNavegables` ya devolvía `{pestania, nombres, etiqueta}`.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_vglAbrirAyudanteFaltan` — la llamada al cuadro | `if (vglModalFaltanIrAPestania(apt, pendientes)) return true;` → comentada (la rama vuelve al aviso ámbar efímero: es el defecto reportado) | NO | Lo cazan SEIS aserciones: suite_15 «v18.0.112 (C12)…» («el clic abre el CUADRO del ayudante (antes: un aviso que se desvanecía)») y CINCO casos de suite_98 (el cuadro no existe; sin filas; sin botones; sin navegación; sin el porqué). EXIT 1 (279 ok, 1 falla) + (10 ok, 5 fallan). Restaurado 280 ok / 15 ok EXIT=0 |
+| user.js `vglModalFaltanIrAPestania` — el rótulo de la fila | `rot.textContent = nombres;` → `rot.textContent = p.etiqueta \|\| nombres;` (el rótulo vuelve a repetir la pestaña entre paréntesis: «Hipertensión y Diabetes (Antecedentes)», justo lo que el médico pidió no repetir) | NO | suite_98 «v18.14.8: el clic abre un CUADRO…» («el rótulo no repite la pestaña: el botón ya la dice» → obtuvo true): EXIT 1 (14 ok, 1 fallan). Restaurado 15 ok EXIT=0. NOTA: sin esa aserción la mutación HABRÍA SOBREVIVIDO (el texto mutado sigue conteniendo «Hipertensión y Diabetes»); se añadió precisamente al medir este hueco |
+| user.js `vglModalFaltanIrAPestania` — el gesto del botón | `b.addEventListener("click", () => { cerrar(); _vglIrAPestanaDirecta(…) });` → `b.addEventListener("click", () => { cerrar(); });` (el botón cierra el cuadro y no navega: un botón que promete un salto y no lo da) | NO | Lo cazan DOS casos de suite_98, los dos de COMPORTAMIENTO: «v18.14.8: «Ir a …» clica el ANCLA REAL…» (0 clics al ancla) y el fail-closed. EXIT 1 (13 ok, 2 fallan). Restaurado 15 ok EXIT=0 |
+| user.js `_vglIrAPestanaDirecta` — la guarda fail-closed | retirado el `if (!tab \|\| typeof tab.click !== "function") { …ámbar…; return false; }` (se clica sin comprobar que la pestaña exista) | NO | suite_98 «v18.14.8 fail-closed…» (sin pestaña montada no hay telemetría `hc.pestana.faltan.sin_pestana` ni aviso ámbar). EXIT 1 (14 ok, 1 fallan). Restaurado 15 ok EXIT=0. OBSERVACIÓN: en las DOS mediciones de esta mutación también enrojeció una prueba asíncrona de `suite_109` (AB-2, reintentos de la redacción IA) que no menciona el código tocado; apareció y desapareció en bloque con la mutación, así que se anota como observación y NO como guardián de este cambio |
+| user.js `_vglClavePestana` — la comparación de la pestaña activa a los 300 ms | `(p) => (p ? String(p.id \|\| "") + "\|" + String(p.texto \|\| "") : "")` → `(p) => (p \|\| "")` (se compara por IDENTIDAD de objeto: `_vglPestanaActiva()` devuelve uno nuevo en cada llamada, así que la comprobación no dispara NUNCA y el aviso se pierde en silencio) | NO | suite_98 «v18.14.8: si el clic NO mueve la pestaña, el asistente lo dice — mismo contrato que los botones del dock» («y la verificación notó que la pestaña no cambió» → obtuvo 0). EXIT 1 (15 ok, 1 fallan). Restaurado 16 ok EXIT=0 |
+
+**Verificación adicional (no de banco):** medición en **Chromium real** contra el CSS real del
+script (`buildOverlay`) y el HTML real que produce el código, con un «Everest» agresivo
+(`div,span,p,b,small,label,li,td,th,button,a{color:#111827 !important}`). Los 7 elementos con
+texto del cuadro (título, paciente, porqué, rótulo de fila, botón, pie y ✕) conservan su token
+(`--fg` / `--fg2`) en tema oscuro y claro, y el cuadro no desborda a 1366, 1024, 768 y 360 px.
+**Hallazgo del propio instrumento:** el serializador del arnés no vuelca los nodos creados con
+`appendChild` (solo lo que vino del setter de `innerHTML`), así que la primera medición dio
+«.vgl-llenar-rot no existe» — y el forzado de la clase de tema cayó primero en un hijo, con lo
+que el «tema claro» medía el oscuro y daba un OK falso. Las dos cosas se corrigieron en el
+instrumento (serializar el árbol real y forzar la clase en la raíz) antes de dar la medición por
+buena.
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.837 pasan, EXIT 0** (sube de 3.831 a
+3.837: +6 casos en `suite_98`; `suite_15` conserva 280 casos y refuerza una aserción);
+`node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.8 sincronizada en los 4 puntos).
+Las 5 mutaciones de arriba, rojas y restauradas.
+
+**HALLAZGO NO TOCADO (reportado, no arreglado por no ser de esta tarea):** la misma verificación
+de los 300 ms que traen los botones de pestaña del dock desde v18.7.0 (`bImp`/`bCond`) compara
+`desp === antesImp` **por identidad de objeto**, y `_vglPestanaActiva()` devuelve un objeto nuevo
+en cada llamada: esa rama NUNCA puede dispararse, así que el aviso ámbar «no logré abrir la
+pestaña» del dock es hoy inalcanzable (el botón navega y, si Everest ignora el clic, no lo dice).
+La corrección aquí (v18.14.8) compara por VALOR y sí dispara — está probada por la mutación M5.
+El defecto del dock queda anotado para que lo decida el médico.
+
+
