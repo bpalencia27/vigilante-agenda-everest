@@ -230,6 +230,28 @@ module.exports = {
       t.igual(el.style.top, topEsperado + "px", "en una segunda fila, debajo de donde iría 'Ordenar pendientes'");
     });
 
+    // v18.13.0 (Mesa de Expertos, UX): el badge era mudo para lector de pantalla (sin
+    // role/aria-expanded) y el alternador de apertura no distinguía un clic en el
+    // badge de un clic DENTRO del panel ya abierto — leer/seleccionar una fila lo
+    // cerraba de golpe.
+    t.caso("mtrWidgetConductaTick (Mesa de Expertos): role/aria-expanded en el badge, y un clic DENTRO del panel abierto no lo cierra", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
+      c.api.mtrWidgetConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-examenes");
+      t.cierto(el.innerHTML.indexOf('role="button"') >= 0, "el badge es un botón real para lectores de pantalla");
+      t.cierto(el.innerHTML.indexOf('aria-expanded="false"') >= 0, "arranca cerrado: aria-expanded=false");
+      t.cierto(!!el._listeners.click && el._listeners.click.length === 1, "un solo listener de clic en el widget");
+      el._listeners.click[0]({ target: { closest: () => null }, stopPropagation() {} });
+      t.cierto(el.classList.contains("vgl-cw-abierto"), "el primer clic (badge, fuera del panel) abre el panel");
+      el._listeners.click[0]({ target: { closest: (sel) => (sel === ".vgl-cw-panel" ? {} : null) }, stopPropagation() {} });
+      t.cierto(el.classList.contains("vgl-cw-abierto"), "un clic DENTRO del panel ya abierto NO lo cierra (antes sí)");
+      el._listeners.click[0]({ target: { closest: () => null }, stopPropagation() {} });
+      t.falso(el.classList.contains("vgl-cw-abierto"), "un clic en el badge (fuera del panel) SÍ cierra");
+    });
+
     t.caso("mtrWidgetConductaTick: sin botón 'Paquetes' visible (otra sub-pantalla de Conducta), el widget se oculta", () => {
       const c = cargar({ silencioso: true });
       cablearHistoriaConducta(c.env, "1098765432", []);   // Conducta activa, pero sin el botón

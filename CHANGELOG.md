@@ -4,6 +4,92 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.0] — 2026-09-09 (El envío de reportes queda listo para migrar a Cloudflare — la migración se activa por compuerta, no ha ocurrido sola)
+
+El servidor que recibe en silencio los reportes anónimos de uso (sin datos de
+pacientes) tiene desde hoy una réplica propia en Cloudflare Workers + D1,
+desplegada y probada en vivo. Es un cambio interno de infraestructura: el aviso,
+el botón «Probar conexión» y todo lo que usted ve se comportan exactamente igual
+que antes.
+
+**La flota sigue enviando al servidor de Google.** La migración a Cloudflare se
+activa deliberadamente (compuerta `CABLEADO_CF` o la URL de un equipo en Ajustes)
+y nunca por accidente: primero se valida en un puesto piloto. El servidor de
+Google sigue siendo el destino de fábrica y el canal de actualizaciones de
+versión permanece independiente en Google.
+
+Verificación: banco de pruebas completo en verde (3788 comprobaciones); el worker
+replica el contrato byte a byte con validación en vivo 9/9 (acuses, `listaAcceso`,
+volumen por día y token por cabecera).
+
+---
+
+## [Versión 18.13.2] — 2026-09-09 (Dos cuadros más que ya se manejan por completo con teclado)
+
+Una revisión de accesibilidad encontró dos cuadros que se habían quedado fuera de la
+mejora de la versión anterior: el de «Ordenamiento de exámenes» y el que confirma datos
+antes de calcular el riesgo. En ambos, la tecla Tab podía sacar el foco del cuadro hacia
+el fondo de Everest mientras el cuadro seguía tapando la pantalla — ya no.
+
+Verificación: banco de pruebas completo en verde antes y después; dos mutaciones
+deliberadas (una por cuadro) pusieron rojas sus pruebas específicas y fueron
+restauradas — confirmando que el arreglo funciona sin cambiar nada más.
+
+---
+
+## [Versión 18.13.1] — 2026-09-09 (Ajuste de rendimiento interno: menos lecturas repetidas del almacén en cada repaso)
+
+Una revisión nocturna de rendimiento encontró que, cada vez que el asistente repasa la
+pantalla mientras usted tiene una historia clínica abierta, algunos avisos internos
+consultaban la misma preferencia guardada varias veces seguidas sin necesidad. Ahora esa
+lectura se comparte dentro de un mismo repaso — sin cambiar ningún resultado, ninguna
+alerta ni ningún comportamiento visible.
+
+Verificación: banco de pruebas completo en verde antes y después (3774 comprobaciones);
+mutación deliberada (desactivar el ahorro) puso roja la prueba específica y fue
+restaurada — confirmando que el ahorro funciona sin alterar nada más.
+
+---
+
+## [Versión 18.13.0] — 2026-09-09 (Segunda tanda de la mesa de expertos: el asistente se puede operar por completo con solo teclado o lector de pantalla)
+
+Continuación de la revisión integral de código de la versión anterior. Esta entrega
+se concentra en accesibilidad: cuatro puntos donde usar el asistente solo con teclado,
+o con un lector de pantalla, se comportaba distinto — o peor — que usándolo con mouse.
+
+### ⌨️ El widget de "Próximos exámenes" ya se opera con teclado
+El recuadro flotante de exámenes pendientes y fármacos RCV ahora anuncia su estado
+("Próximos exámenes: 2 pendientes") a un lector de pantalla, responde a Enter y
+Espacio igual que a un clic, y — corrección de un defecto real — leer o seleccionar
+una fila dentro del panel ya abierto ya no lo cierra de golpe.
+
+### 🕐 El reloj de cabecera avisa de "datos viejos" también con texto, no solo con color
+Cuando la última lectura de la agenda pasa de 30 segundos, el reloj se ponía en ámbar;
+quien no distingue ese color no tenía ninguna otra señal. Ahora el propio texto del
+reloj lo dice ("datos viejos"), y una región de anuncio para lectores de pantalla
+avisa una sola vez, justo en el momento en que los datos pasan de frescos a viejos
+(o viceversa) — nunca en cada segundo del reloj, para no convertirse en ruido.
+
+### ↩️ Cerrar el aviso del Anexo 5 (abandono del programa) ya no es un callejón sin salida
+El botón para cerrar por este turno el aviso de abandono del programa de crónicos
+seguía cerrando de inmediato, pero ahora deja aparte una barra de "Deshacer" (20
+segundos, mismo patrón ya usado en otras partes del asistente) que reconstruye el
+aviso si el clic fue accidental — sensible especialmente en una alerta sobre un
+paciente que puede estar abandonando su tratamiento.
+
+### 🔍 Revisión de seguridad sin hallazgos nuevos
+Se simplificó la comparación de versiones del candado de actualización obligatoria
+para que reutilice la misma función que ya usa el resto del asistente, sin cambiar
+su comportamiento. De paso: foco visible en varios botones pequeños, mínimo táctil
+de 28px en más controles, trampa de teclado (Tab) también en el aviso de bloqueo de
+versión, y un enlace de repliegue si el navegador bloquea la ventana de actualización.
+
+Verificación: banco de pruebas completo en verde antes y después; 4 mutaciones
+deliberadas (romper cada guardia a propósito) pusieron rojas sus pruebas específicas
+y fueron restauradas — confirmando que el blindaje funciona.
+
+---
+
 ## [Versión 18.12.1] — 2026-09-09 (El aviso de «Everest no responde» deja de repetirse)
 
 El asistente le avisa cuando usted hace tres clics seguidos sobre la misma zona

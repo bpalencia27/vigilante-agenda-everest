@@ -1,4 +1,4 @@
-node --check vigilante_agenda.user.js|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.deepseek/logs/2026-09-09/01_sintaxis_userscript.log
-sintaxis de tests/*.js|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.deepseek/logs/2026-09-09/02_sintaxis_suites.log
-node tests/runner.js (banco completo)|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.deepseek/logs/2026-09-09/03_banco_completo.log
-frescura de la telemetría (T0-4)|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.deepseek/logs/2026-09-09/04_frescura_telemetria.log
+node --check vigilante_agenda.user.js|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.claude/worktrees/wt-nocturno-bolt/.deepseek/logs/2026-09-09/01_sintaxis_userscript.log
+sintaxis de tests/*.js|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.claude/worktrees/wt-nocturno-bolt/.deepseek/logs/2026-09-09/02_sintaxis_suites.log
+node tests/runner.js (banco completo)|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.claude/worktrees/wt-nocturno-bolt/.deepseek/logs/2026-09-09/03_banco_completo.log
+frescura de la telemetría (T0-4)|0|/e/CENTINELA/vigilante-agenda-everest-restaurado/.claude/worktrees/wt-nocturno-bolt/.deepseek/logs/2026-09-09/04_frescura_telemetria.log

@@ -790,8 +790,8 @@ module.exports = {
         silencioso: true,
         gmxhr: (o) => {
           // v18.4.1 — solo el chequeo de versión es GET; el POST de telemetría del
-          // propio bloqueo (verlock) también va a script.google.com y NO debe servirse
-          // aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
+          // propio bloqueo (verlock) también va al GAS (script.google.com, canal de versiones) y NO
+          // debe servirse aquí (contestarle "éxito" vaciaría la cola que este banco quiere leer).
           if (o.method !== "GET" || !String(o.url).includes("script.google.com")) return;
           llamadas.push(o.url);
           o.onload({ responseText: JSON.stringify({ minVersion: "99.0.0" }) });
@@ -1096,7 +1096,7 @@ module.exports = {
         : []);
       await c.api.autoFetchAtheneaLabsForActivePatient();
       // v18.3 (P13) — el nacimiento del id de equipo emite «obs.equipo.nuevo»
-      // diferido un tick hacia el TABLERO (script.google.com). Esta prueba mide
+      // diferido un tick hacia el TABLERO (worker Cloudflare, v18.14.0). Esta prueba mide
       // las llamadas a ATENEA: contar solo las del dominio de Everest.
       const llamadasAthenea = llamadas.filter((u) => String(u).includes("atheneasoluciones"));
       t.igual(llamadasAthenea.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
@@ -1143,7 +1143,7 @@ module.exports = {
 
       await c.api.autoFetchAtheneaLabsForActivePatient();
       // v18.3 (P13) — ídem: el aviso «obs.equipo.nuevo» del primer arranque viaja
-      // a script.google.com y no cuenta como llamada a Athenea.
+      // al worker (v18.14.0) y no cuenta como llamada a Athenea.
       t.igual(llamadas.filter((u) => String(u).includes("atheneasoluciones")).length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
 
       // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min

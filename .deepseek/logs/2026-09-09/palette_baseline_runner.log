@@ -89,7 +89,7 @@
 [32m✓[0m v12.4: horas, panel PyM y tabla CUPS      [90m45 ok[0m
 [Vigilante Athenea] latido de sesión falló: Error: NetErr
     at Object.onerror (vigilante_agenda.user.js:2042:96)
-    at Timeout._onTimeout [90m(E:\CENTINELA\vigilante-agenda-everest-restaurado\.claude\worktrees\wt-nocturno-bolt\[39mtests\harness.js:212:66[90m)[39m
+    at Timeout._onTimeout [90m(E:\CENTINELA\vigilante-agenda-everest-restaurado\.claude\worktrees\wt-nocturno-palette\[39mtests\harness.js:212:66[90m)[39m
 [90m    at listOnTimeout (node:internal/timers:605:17)[39m
 [90m    at process.processTimers (node:internal/timers:541:7)[39m
 [32m✓[0m Utilidades Puras                          [90m10 ok[0m
@@ -174,11 +174,11 @@
 [32m✓[0m VGL-HC: lanzador asistido de Historia Clínica[90m29 ok[0m
 [32m✓[0m Staging de la base única v18.6.0 (Suite 92)[90m40 ok[0m
 [32m✓[0m v18.6.1 (F3) — toggles de funcionalidad: registro, persistencia por médico y compuertas[90m10 ok[0m
-[PERF-94] A/togActiva        p50=0.7 µs  p95=1.0 µs
-[PERF-94] A/mtrNormalizar   p50=1.1 µs  p95=1.2 µs
-[PERF-94] A/readJSON         p50=0.5 µs  p95=0.6 µs
-[PERF-94] A/extractPaciente  p50=4.9 µs  p95=10.6 µs
-[PERF-94] A/accesoCap        p50=7.1 µs  p95=14.3 µs
+[PERF-94] A/togActiva        p50=0.8 µs  p95=1.2 µs
+[PERF-94] A/mtrNormalizar   p50=1.3 µs  p95=2.4 µs
+[PERF-94] A/readJSON         p50=0.6 µs  p95=0.7 µs
+[PERF-94] A/extractPaciente  p50=5.4 µs  p95=12.1 µs
+[PERF-94] A/accesoCap        p50=8.3 µs  p95=10.7 µs
 [PERF-94] B/cascada peor caso: 1 peticiones
 [PERF-94] B/acierto 1ª ruta: 1 petición + caché
 [PERF-94] B/cadena HC: 2 peticiones

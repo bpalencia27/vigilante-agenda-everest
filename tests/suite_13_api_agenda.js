@@ -453,6 +453,43 @@ module.exports = {
       t.cierto(clock.title.indexOf("cada 5 s") >= 0, "en la ventana crítica, el tooltip refleja los 5 s reales — no el mismo texto de antes");
     });
 
+    // v18.13.0 (Mesa de Expertos, UX): la señal de "desactualizado" era solo de color
+    // (vgl-stale) — ahora también hay texto visible y un aria-live que anuncia SOLO en
+    // la transición (el reloj tiene su propio tic de 1 s; anunciar en cada vuelta sería
+    // ruido constante para quien usa lector de pantalla).
+    t.caso("actualizarRelojCabecera (Mesa de Expertos): 'datos viejos' es texto visible, y el aria-live solo anuncia en la transición", () => {
+      const c = cargar({ silencioso: true });
+      const clock = c.env.doc.createElement("span");
+      clock.id = "vgl-clock";
+      c.env.doc.body.appendChild(clock);
+
+      // Arranque (sin ultimaLectura): nunca se afirma "al día" ni se alarma de más.
+      c.api.__state.ultimaLectura = 0;
+      c.api.actualizarRelojCabecera();
+      t.falso(clock.textContent.indexOf("datos viejos") >= 0, "sin lectura todavía, no se dice 'datos viejos'");
+      t.falso(clock.classList.contains("vgl-stale"), "ni se pinta en alarma al arrancar");
+
+      // Datos viejos (más de 30 s): texto visible, no solo color.
+      c.api.__state.ultimaLectura = Date.now() - 40000;
+      c.api.actualizarRelojCabecera();
+      t.cierto(clock.textContent.indexOf("datos viejos") >= 0, "desactualizado: el texto lo dice, no solo el color");
+      const live = c.env.doc.getElementById("vgl-clock-live");
+      t.cierto(!!live && live.getAttribute("aria-live") === "polite", "existe la región aria-live propia del reloj");
+      t.cierto(live.textContent.indexOf("desactualizados") >= 0, "primera transición (null -> stale): anuncia");
+
+      // Segunda vuelta con el MISMO estado (sigue viejo): no debe volver a tocar el
+      // aria-live — se marca el texto con un centinela para comprobar que no lo pisa.
+      live.textContent = "__centinela__";
+      c.api.actualizarRelojCabecera();
+      t.igual(live.textContent, "__centinela__", "sin transición real, el aria-live no se vuelve a escribir (nada de ruido cada 1 s)");
+
+      // Datos frescos de nuevo: SÍ hay transición -> sí se anuncia, y el texto visible se retira.
+      c.api.__state.ultimaLectura = Date.now();
+      c.api.actualizarRelojCabecera();
+      t.falso(clock.textContent.indexOf("datos viejos") >= 0, "al refrescar, el texto 'datos viejos' se retira");
+      t.cierto(live.textContent !== "__centinela__", "transición real (stale -> fresco): sí anuncia");
+    });
+
     // ---------- tickApi ----------
     await t.casoAsync("tickApi: sin URL aprendida no dispara ninguna consulta", async () => {
       const e = entornoApi();

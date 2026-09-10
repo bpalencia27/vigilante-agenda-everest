@@ -174,11 +174,11 @@
 [32m✓[0m VGL-HC: lanzador asistido de Historia Clínica[90m29 ok[0m
 [32m✓[0m Staging de la base única v18.6.0 (Suite 92)[90m40 ok[0m
 [32m✓[0m v18.6.1 (F3) — toggles de funcionalidad: registro, persistencia por médico y compuertas[90m10 ok[0m
-[PERF-94] A/togActiva        p50=0.7 µs  p95=1.0 µs
-[PERF-94] A/mtrNormalizar   p50=1.1 µs  p95=1.2 µs
-[PERF-94] A/readJSON         p50=0.5 µs  p95=0.6 µs
-[PERF-94] A/extractPaciente  p50=4.9 µs  p95=10.6 µs
-[PERF-94] A/accesoCap        p50=7.1 µs  p95=14.3 µs
+[PERF-94] A/togActiva        p50=0.8 µs  p95=1.5 µs
+[PERF-94] A/mtrNormalizar   p50=2.7 µs  p95=2.9 µs
+[PERF-94] A/readJSON         p50=0.6 µs  p95=0.7 µs
+[PERF-94] A/extractPaciente  p50=10.1 µs  p95=17.6 µs
+[PERF-94] A/accesoCap        p50=8.4 µs  p95=16.1 µs
 [PERF-94] B/cascada peor caso: 1 peticiones
 [PERF-94] B/acierto 1ª ruta: 1 petición + caché
 [PERF-94] B/cadena HC: 2 peticiones
@@ -314,3 +314,4 @@
     [90mM2: pestañas Impresión Diagnóstica y Conducta en el dock de la HC (v18.7.0) → showToast[0m
 [36m────────────────────────────────────────────────────────────────[0m
 
+EXIT=0

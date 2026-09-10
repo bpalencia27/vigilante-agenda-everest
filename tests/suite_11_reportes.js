@@ -20,7 +20,10 @@ module.exports = {
   ],
 
   async pruebas(t, api, env, cargar) {
-    const URL_FABRICA = /^https:\/\/script\.google\.com\/macros\//;
+    // 09-sep-2026 (Piloto) — la fábrica es el Apps Script de Google; el worker
+    // Cloudflare (REPLICA_TELEMETRIA/) es el destino de la migración y solo se usa
+    // por compuerta CABLEADO_CF o por S.reporteUrl (ver suite_23, caso CABLEADO CF).
+    const URL_FABRICA = /^https:\/\/script\.google\.com\//;
     const tick = (ms) => new Promise((r) => setTimeout(r, ms === undefined ? 15 : ms));
 
     // Red simulada: registra cada GM_xmlhttpRequest y contesta según "modo".
