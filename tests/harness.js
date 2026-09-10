@@ -715,7 +715,14 @@ function cargar(opciones) {
     // podría comprobar que emergencyTeardown las suelta: en el arnés MutationObserver.disconnect
     // y document.removeEventListener son no-ops, así que lo único observable es el ciclo de vida
     // de la referencia misma.
-    "\n;try{ globalThis.__VGL__.__vglDomVigilanciaParaTest = function(){ return { obs: _vglDomObs, alTocar: _vglDomAlTocar, instalado: _vglDomObsInstalado }; }; }catch(e){}\n";   // v18.0.110 (C21) + v18.0.134 (M8) + v18.2 (P11) + v18.3.4 (T4)
+    "\n;try{ globalThis.__VGL__.__vglDomVigilanciaParaTest = function(){ return { obs: _vglDomObs, alTocar: _vglDomAlTocar, instalado: _vglDomObsInstalado }; }; }catch(e){}\n" +   // v18.0.110 (C21) + v18.0.134 (M8) + v18.2 (P11) + v18.3.4 (T4)
+    // v18.14.1 (frente 4) — la BÓVEDA DE CREDENCIALES guarda el claro de las claves de IA en
+    // un memo de módulo (`_vglSecretosMem`) y marca la hidratación con dos banderas. Sin este
+    // accessor no se puede probar ni la MIGRACIÓN (legado ofuscado → sobre AES-GCM) ni el
+    // arranque en frío (memo vacío + disco cifrado): cada carga del userscript hidrata una
+    // sola vez y el memo quedaría servido para siempre. Mismo patrón que
+    // __vglCarpetaResetClaveParaTest, que ya resuelve el mismo problema para la carpeta.
+    "\n;try{ globalThis.__VGL__.__vglSecretosResetParaTest = function(){ try{ for (const k in _vglSecretosMem) delete _vglSecretosMem[k]; }catch(e){} _vglSecretosHidratado = false; _vglSecretosHidratando = false; _vglSecretosCola = Promise.resolve(); }; }catch(e){}\n";
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");

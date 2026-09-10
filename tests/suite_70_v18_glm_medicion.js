@@ -155,6 +155,10 @@ module.exports = {
         }, 0);
       } });
       c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      // v18.14.1 (frente 4) — por «auto» (default del sistema) Gemini tiene prioridad
+      // sobre z.ai; para medir la escalera z.ai→Gemini hay que elegir z.ai a mano, que
+      // es su vía legítima desde la política de modelos del proyecto.
+      c.api.mtrGuardarIaPreferencia("zai");
       const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
       t.igual(urls.length, 2, "exactamente dos disparos: zai y UN respaldo");
       t.cierto(urls[0].indexOf("api.z.ai") >= 0, "el primero es z.ai");
@@ -174,6 +178,7 @@ module.exports = {
         else o.onload({ status: 500, responseText: "{}" });   // gemini NO debería recibir nada
       }, 0) });
       c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      c.api.mtrGuardarIaPreferencia("zai");   // v18.14.1 (frente 4) — z.ai ya no entra por «auto»
       const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
       t.cierto(r.ok && r.texto === "Borrador de GLM sin cifras.", "choices[0].message.content debe leerse como éxito");
       t.igual(r.finishReason, "STOP", "finish_reason stop mapea a STOP interno");

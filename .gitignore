@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 build/
 .env
@@ -7,3 +7,5 @@ build/
 .vscode/
 .idea/
 __pycache__/
+.aider*
+.wrangler/

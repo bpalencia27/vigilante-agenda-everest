@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.0
+// @version      18.14.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7356,7 +7356,13 @@
   // PURA: el HTML del panel. Solo presentación de lo que rcvPendientesCalcular
   // armó — ninguna decisión nueva aquí. El par Última→Vence va SIEMPRE visible
   // en cada fila (requisito del encargo), con chip de estado por color.
-  function rcvPendientesHtml(datos, programaRotulo, estampa) {
+  // v18.14.2 (frente RCV) — LAS FILAS DE «PRÓXIMOS EXÁMENES», PURAS Y EN UN SOLO SITIO.
+  // Antes vivían dentro del panel flotante que el encargo pide retirar («dejar de mostrarse
+  // de forma desestructurada»): ahora son la sección exclusiva del módulo Pendientes del
+  // widget lateral. Se conserva el marcado fila a fila —chip de estado, rótulo amable y
+  // desc técnica del CUPS, fechas y pie de frescura— para no cambiar lo que el médico ya
+  // sabe leer.
+  function rcvPendientesFilasHtml(datos, programaRotulo, estampa) {
     const d = datos || { filas: [], nPendientes: 0, vigenciaDias: null, sinDatosOrdenes: true };
     const chips = { vencido: "VENCIDO", proximo: "PRÓXIMO", pendiente: "PENDIENTE", aldia: "AL DÍA" };
     const filasHtml = (d.filas || []).map((f) => {
@@ -7386,22 +7392,20 @@
     const pie = "Vigencia RCV: " + (d.vigenciaDias || 0) + " días · "
       + (estampa ? ("leído de Everest " + escapeHtml(estampa)) : "se actualiza solo")
       + " · el médico decide";
-    return '<div class="vgl-rcvp-head" title="Arrastrar para mover el panel">'
-      + '<button type="button" class="vgl-rcvp-cerrar" aria-label="Cerrar el panel de próximos exámenes">✕</button>'
-      + '<button type="button" class="vgl-rcvp-min" aria-label="Minimizar el panel de próximos exámenes" title="Minimizar: el panel baja a una pastilla y vuelve tal cual al pulsarla">—</button>'
-      + '<div class="vgl-rcvp-tit">Próximos exámenes · Riesgo cardiovascular</div>'
-      + (rotulo ? '<div class="vgl-rcvp-prog">Programa: ' + escapeHtml(rotulo) + '</div>' : "")
-      + '<div class="vgl-rcvp-cont">' + (d.nPendientes || 0) + ' por asignar</div>'
-      + '</div>'
+    return (rotulo ? '<div class="vgl-rcvp-prog">Programa: ' + escapeHtml(rotulo) + '</div>' : "")
       + filasHtml
       + nota
       + '<div class="vgl-rcvp-pie">' + pie + '</div>';
   }
 
-  let _rcvpDocPrevio = "", _rcvpFirma = "", _rcvpEnVuelo = false;
-  const RCV_POS_KEY = "vgl_rcvp_pos";   // v18.8.2 — sesión: {x, y} px de left/top tras arrastrar
-  let _rcvpArrastre = null, _rcvpCerradoDoc = "";
-  let _rcvpMinimizado = false;   // v18.8.6 — minimizar: el panel baja a una pastilla y no resucita hasta que el médico la pulse
+  let _rcvpEnVuelo = false;
+  // v18.14.2 (frente RCV) — EL PANEL FLOTANTE SE RETIRÓ ENTERO. Con él se fueron el
+  // arrastre, el minimizado, la pastilla de reapertura, el cierre por paciente y la posición
+  // de sesión: nada de eso tiene sentido ahora que los próximos exámenes son una SECCIÓN
+  // EXCLUSIVA dentro del módulo «Pendientes» del widget lateral (misma organización uniforme
+  // que el resto de los elementos del sistema). Lo que queda es el resultado del último
+  // cálculo del tick, que es lo que lee esa sección.
+  let _rcvUltimo = null;   // { docId, firma, n, html, estampa } o null
   // v18.8.3 — SELLO DIARIO (actualización automática cada 24 h): día calendario del
   // último refresco forzado del caché de órdenes vigentes. El TTL de 10 min ya
   // garantiza frescura mientras el tick vive; este sello cubre el hueco restante
@@ -7410,121 +7414,9 @@
   // listado de exámenes del día — nunca un dato arrastrado de ayer.
   let _rcvpDiaUltimoRefresco = "";
   function _rcvpResetParaTest() {
-    _rcvpDocPrevio = ""; _rcvpFirma = ""; _rcvpEnVuelo = false;
-    _rcvpCerradoDoc = ""; _rcvpArrastre = null;   // v18.8.2
+    _rcvpEnVuelo = false;
     _rcvpDiaUltimoRefresco = "";   // v18.8.3
-    _rcvpMinimizado = false;   // v18.8.6
-  }
-  function _rcvpOcultar() {
-    try { const el = document.getElementById("vgl-rcv-pendientes"); if (el) el.style.display = "none"; } catch (e) {}
-  }
-
-  // v18.8.2 — PURA: clampa la posición del panel para que nunca quede fuera del
-  // alcance del médico (mínimo 96 px visibles en cada eje, cualquier pantalla).
-  function rcvPendientesClamparPos(x, y, vw, vh, ancho) {
-    const vis = 96;
-    const an = Math.max(ancho || 330, 1);
-    const maxX = Math.max(vw - vis, 8);
-    const maxY = Math.max(vh - 48, 0);
-    return {
-      x: Math.min(Math.max(x, 8 - an + vis), maxX),
-      y: Math.min(Math.max(y, 0), maxY),
-    };
-  }
-  function _rcvpPosGuardar(x, y) {
-    try { if (typeof GM_setValue !== "undefined") GM_setValue(RCV_POS_KEY, { x: Math.round(x), y: Math.round(y) }); } catch (e) {}
-  }
-  function _rcvpPosLeer() {
-    try {
-      const p = (typeof GM_getValue !== "undefined") ? GM_getValue(RCV_POS_KEY, null) : null;
-      if (p && typeof p === "object" && isFinite(p.x) && isFinite(p.y)) return { x: p.x, y: p.y };
-    } catch (e) {}
-    return null;
-  }
-
-  // v18.8.2 — el cierre respeta al médico: oculta el panel para el paciente abierto
-  // y no lo resucita mientras siga en ese paciente; al llegar otro, vuelve solo.
-  // v18.8.6 — cerrar desarma el minimizado: cierre es cierre, sin pastilla de por medio.
-  function _rcvpCerrar() {
-    _rcvpCerradoDoc = _rcvpDocPrevio || "";
-    _rcvpMinimizado = false;
-    _rcvpPillQuitar();
-    _rcvpOcultar();
-  }
-
-  // v18.8.6 — PASTILLA DE REAPERTURA: mientras el panel está minimizado, una
-  // pastilla pequeña ofrece volver a abrirlo. Lleva solo el rótulo del widget —
-  // jamás datos de paciente (nada de PHI de un paciente minimizado en pantalla).
-  // Al pulsarla se desarma el minimizado y se limpia la firma: el próximo tick
-  // repinta con los datos del paciente ABIERTO ahora mismo, nunca con los de un
-  // paciente anterior (el mismo guard anti-cruce del resto del widget).
-  function _rcvpPillQuitar() {
-    try { const p = document.getElementById("vgl-rcv-pendientes-pill"); if (p && p.remove) p.remove(); } catch (e) {}
-  }
-  function _rcvpPillAsegurar() {
-    try {
-      if (document.getElementById("vgl-rcv-pendientes-pill")) return;
-      const b = document.createElement("button");
-      b.type = "button";
-      b.id = "vgl-rcv-pendientes-pill";
-      if (isLight()) b.className = "light";
-      b.setAttribute("aria-label", "Volver a abrir el panel de próximos exámenes");
-      b.title = "Volver a abrir el panel de próximos exámenes tal como estaba.";
-      b.textContent = "▣ Próximos exámenes";
-      b.addEventListener("click", (e) => {
-        try { e.preventDefault(); e.stopPropagation(); } catch (er) {}
-        _rcvpMinimizado = false;
-        _rcvpFirma = "";   // fuerzas: el siguiente tick repinta con el paciente actual
-        _rcvpPillQuitar();
-        try { uxTrack("widget.proximosExamenes.reabierto"); } catch (er) {}
-      });
-      document.body.appendChild(b);
-    } catch (e) {}
-  }
-  function _rcvpMinimizar() {
-    _rcvpMinimizado = true;
-    _rcvpOcultar();
-    _rcvpPillAsegurar();
-    try { uxTrack("widget.proximosExamenes.minimizado"); } catch (e) {}
-  }
-
-  // v18.8.2 — arrastre libre: la zona de agarre es SOLO la barra superior
-  // (.vgl-rcvp-head); el clic del botón de cierre jamás inicia arrastre. Al
-  // primer arrastre el panel pasa de left/bottom a left/top, y la posición
-  // final se guarda en la sesión (GM vgl_rcvp_pos) para restaurarla al volver.
-  function _rcvpArrastrarInicio(e) {
-    const w = document.getElementById("vgl-rcv-pendientes");
-    if (!w || !e || !e.target) return;
-    if (e.target.closest && e.target.closest(".vgl-rcvp-cerrar, .vgl-rcvp-min")) return;
-    if (!(e.target.closest && e.target.closest(".vgl-rcvp-head"))) return;
-    const r = w.getBoundingClientRect();
-    _rcvpArrastre = { px: e.clientX || 0, py: e.clientY || 0, x: r.left || 0, y: r.top || 0, an: r.width || 330 };
-    w.classList.add("vgl-rcvp-arrastrando");
-    w.style.bottom = "auto";
-    w.style.left = Math.round(_rcvpArrastre.x) + "px";
-    w.style.top = Math.round(_rcvpArrastre.y) + "px";
-    if (typeof w.setPointerCapture === "function" && e.pointerId !== undefined && e.pointerId !== null) {
-      try { w.setPointerCapture(e.pointerId); } catch (err) {}
-    }
-  }
-  function _rcvpArrastrarMover(e) {
-    if (!_rcvpArrastre || !e) return;
-    const nx = _rcvpArrastre.x + ((e.clientX || 0) - _rcvpArrastre.px);
-    const ny = _rcvpArrastre.y + ((e.clientY || 0) - _rcvpArrastre.py);
-    const p = rcvPendientesClamparPos(nx, ny, window.innerWidth || 1024, window.innerHeight || 768, _rcvpArrastre.an);
-    const w = document.getElementById("vgl-rcv-pendientes");
-    if (w) { w.style.left = Math.round(p.x) + "px"; w.style.top = Math.round(p.y) + "px"; }
-  }
-  function _rcvpArrastrarFin() {
-    if (!_rcvpArrastre) return;
-    const w = document.getElementById("vgl-rcv-pendientes");
-    if (w) {
-      w.classList.remove("vgl-rcvp-arrastrando");
-      const x = parseInt(w.style.left, 10);
-      const y = parseInt(w.style.top, 10);
-      if (isFinite(x) && isFinite(y)) _rcvpPosGuardar(x, y);
-    }
-    _rcvpArrastre = null;
+    _rcvUltimo = null;             // v18.14.2 — la sección vive del último cálculo
   }
 
   // El tick del panel. Asíncrono solo por la consulta de órdenes vigentes
@@ -7546,35 +7438,19 @@
       // foto (_vglDocDelTick); la re-verificación POST-AWAIT de más abajo sigue fresca.
       const docId = _vglDocDelTick();
       if (!rcvPendientesDebeVerse({ autorizado: esMedicoRCVActivo(), enHCHealth: _enModuloHCHealth(), seccion: secc, docId: docId })) {
-        _rcvpOcultar();
-        _rcvpDocPrevio = ""; _rcvpFirma = "";   // nunca arrastrar el panel de un paciente al siguiente
-        // v18.8.6 — sin contexto (sin paciente o fuera de la historia) el minimizado
-        // se desarma: no queda pastilla huérfana ni estado colgado.
-        _rcvpMinimizado = false;
-        _rcvpPillQuitar();
+        _rcvUltimo = null;
         return;
       }
-      // v18.8.2 — cierre por paciente: si el médico cerró el panel para el paciente
-      // abierto, no se resucita en el mismo paciente; al llegar otro, vuelve solo
-      // (el repintado del tick de ese otro paciente ya lo devuelve a la vista: la
-      // firma cambia con el docId, no hay forma de que el display quede en none).
-      if (_rcvpCerradoDoc && docId === _rcvpCerradoDoc) { _rcvpOcultar(); return; }
-      _rcvpCerradoDoc = "";
-      // v18.8.6 — minimizado: ningún tick resucita el panel (ni con datos nuevos ni
-      // al cambiar de paciente) mientras el médico no pulse la pastilla; solo se
-      // mantiene la pastilla presente. Al reabrir, la firma limpia fuerza el
-      // repintado con el paciente actual.
-      if (_rcvpMinimizado) { _rcvpOcultar(); _rcvpPillAsegurar(); return; }
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
-      if (!resumen) { _rcvpOcultar(); return; }   // sin programa identificado no hay a qué alinear el panel
+      if (!resumen) { _rcvUltimo = null; return; }   // sin programa identificado no hay a qué alinear la sección
       const paquete = PYM_CATALOG.find((p) => p && p.cie10 === "I10X") || null;
-      if (!paquete) { _rcvpOcultar(); return; }
+      if (!paquete) { _rcvUltimo = null; return; }
       let ordenes = null;
       const pid = (resumen && resumen._pacienteIdLabs) || null;
       if (pid) {
         if (_rcvpEnVuelo) return;                 // un solo vuelo de red por vez
-        // v18.8.3 — sello diario: la primera evaluación del panel en cada día
+        // v18.8.3 — sello diario: la primera evaluación en cada día
         // calendario invalida el caché de órdenes UNA vez (garantía de refresco
         // automático cada 24 h; el resto del día lo mantiene fresco el TTL de 10 min).
         const diaHoy = todayStamp();
@@ -7585,52 +7461,16 @@
         finally { _rcvpEnVuelo = false; }
         // Guarda anti-cruce (misma regla que el botón de Conducta): si el
         // médico cambió de paciente mientras salía la consulta, nada del
-        // anterior se pinta en la historia del nuevo.
-        if (extractPacienteAbierto() !== docId || seccionActiva() !== "historia") { _rcvpOcultar(); return; }
+        // anterior se le atribuye al nuevo.
+        if (extractPacienteAbierto() !== docId || seccionActiva() !== "historia") { _rcvUltimo = null; return; }
       }
-      if (docId !== _rcvpDocPrevio) { _rcvpDocPrevio = docId; _rcvpFirma = ""; }
       const datos = rcvPendientesCalcular(paquete, ordenes, todayStamp());
-      const html = rcvPendientesHtml(datos, rcvPendientesRotuloPrograma(resumen), _ordenesVigentesEstampa());
-      // Firma barata: si nada cambió, no se toca el DOM (sin parpadeo).
+      const estampa = _ordenesVigentesEstampa();
+      const html = rcvPendientesFilasHtml(datos, rcvPendientesRotuloPrograma(resumen), estampa);
+      // Firma barata: si nada cambió, no se rehace la sección (sin parpadeo).
       const firma = docId + "|" + datos.nPendientes + "|" + html.length;
-      if (firma === _rcvpFirma) return;
-      _rcvpFirma = firma;
-      let widget = d.getElementById("vgl-rcv-pendientes");
-      if (!widget) {
-        widget = d.createElement("div");
-        widget.id = "vgl-rcv-pendientes";
-        widget.setAttribute("role", "region");
-        widget.setAttribute("aria-label", "Próximos exámenes");
-        // v18.8.2 — posición recordada de la sesión (arrastre previo), clampada a la
-        // ventana actual: rotaciones y monitores distintos no dejan el panel huérfano.
-        const pos = _rcvpPosLeer();
-        if (pos) {
-          const p = rcvPendientesClamparPos(pos.x, pos.y, window.innerWidth || 1024, window.innerHeight || 768, 330);
-          widget.style.left = p.x + "px";
-          widget.style.top = p.y + "px";
-          widget.style.bottom = "auto";
-        }
-        // Escuchas DELEGADAS en la raíz (sobreviven al repintado del innerHTML):
-        // la barra superior arrastra, el botón de cierre cierra, nunca a la vez.
-        widget.addEventListener("pointerdown", _rcvpArrastrarInicio);
-        widget.addEventListener("pointermove", _rcvpArrastrarMover);
-        widget.addEventListener("pointerup", _rcvpArrastrarFin);
-        widget.addEventListener("pointercancel", _rcvpArrastrarFin);
-        widget.addEventListener("click", (e) => {
-          if (e && e.target && e.target.closest) {
-            if (e.target.closest(".vgl-rcvp-min")) {
-              _rcvpMinimizar();   // v18.8.6
-            } else if (e.target.closest(".vgl-rcvp-cerrar")) {
-              _rcvpCerrar();
-              uxTrack("widget.proximosExamenes.cerrado");
-            }
-          }
-        });
-        d.body.appendChild(widget);
-      }
-      widget.className = isLight() ? "light" : "";
-      widget.style.display = "";
-      widget.innerHTML = html;
+      if (_rcvUltimo && _rcvUltimo.docId === docId && _rcvUltimo.firma === firma) return;
+      _rcvUltimo = { docId: docId, firma: firma, n: (datos.nPendientes || 0), html: html, estampa: estampa };
     } catch (e) {}
   }
 
@@ -8824,6 +8664,10 @@
       // el conteo del primer tick y se queda ahí toda la consulta, aunque el médico ordene los
       // exámenes o Athenea termine de responder.
       "PN" + _nPendientesDock,
+      // v18.14.2 (frente A5) — presencia del Anexo 5 en la firma: la pastilla nace y
+      // desaparece según el índice del libro (se carga a mano y puede llegar después), y sin
+      // esto se quedaría con el estado del primer tick toda la consulta.
+      (_pendDock && _pendDock.anexo5) ? "A5" : "a5",
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
@@ -9062,10 +8906,35 @@
         try {
           const _p = _pendientesUniversales(docId);
           const _nom = (apt && (apt.nombre || apt.name)) || "";
-          avisoUniversal(_nom, { abandono: _p.abandono, pym: _p.pym, labs: _p.labs, adelantar: _p.adelantar, prioridadRcv: _p.prioridadRcv });
+          avisoUniversal(_nom, { abandono: _p.abandono, pym: _p.pym, labs: _p.labs, adelantar: _p.adelantar, prioridadRcv: _p.prioridadRcv, anexo5: _p.anexo5, rcv: _p.rcv });
         } catch (e3) {}
       });
       btns.appendChild(bPend);
+    }
+
+    // v18.14.2 (frente A5) — pastilla «📋 Anexo 5». Mismo contrato EXACTO que la de
+    // Pendientes: solo aparece si de verdad hay Anexo 5 para este paciente (el dato sale de
+    // la MISMA vara, _pendientesUniversales → a5AlertasDe), y abre el modal DIFERENCIADO con
+    // el detalle completo — el repositorio secundario del anexo, hermano del aviso central.
+    // No toca el registro de «ya visto»: es el médico quien lo pide, así que no consume el
+    // aviso automático de la jornada.
+    const _a5Dock = (_pendDock && _pendDock.anexo5) || null;
+    if (_a5Dock) {
+      const bA5 = document.createElement("button");
+      bA5.className = "vgl-dock-btn";
+      bA5.setAttribute("data-accion", "anexo5");
+      bA5.setAttribute("aria-label", "Ver el Anexo 5 de este paciente");
+      bA5.title = "📋 Anexo 5 del programa de riesgo cardiovascular: puntaje de metas, estudios pendientes y consultas por remitir de este paciente.";
+      _vglDockRotulo(bA5, "📋", "Anexo 5");
+      bA5.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try { uxTrack("widget.anexo5.abrir"); } catch (e2) {}
+        try {
+          const _p5 = _pendientesUniversales(docId);
+          if (_p5 && _p5.anexo5) abrirAnexo5Modal(_p5.anexo5);
+        } catch (e3) {}
+      });
+      btns.appendChild(bA5);
     }
 
     // v18.7.0 (M2) — «pestañas de impresión diagnóstica y conducta» (pedido del
@@ -9073,6 +8942,31 @@
     // consulta. El gesto es el clic del propio enlace de pestaña de Everest
     // (anclas reales de VGL_PESTANAS) — ni red ni escritura propias; si la
     // pestaña ya no está (pantalla distinta), aviso ámbar y nada más.
+    // v18.14.1 — El gesto caía en el CONTENEDOR, no en el enlace. _vglClicablePestana barre
+    // `a, li, button, [role=tab]…` en orden de documento, así que el <li> que ENVUELVE la
+    // pestaña (padre del <a>, misma cadena de texto) gana por coincidencia exacta antes de
+    // llegar a su <a>. Clicar el <li> no navega en Everest (el manejador vive en el ancla) y,
+    // como el nodo sí existe, el aviso ámbar tampoco salía: el botón parecía muerto, sin
+    // acción y sin rastro. Se resuelve SIEMPRE el nodo navegable real; si no hay ninguno
+    // mejor, se devuelve el candidato tal cual (nunca se empeora el comportamiento previo).
+    const _vglNodoNavegable = (nodo) => {
+      if (!nodo) return null;
+      try {
+        const esAncla = (n) => !!n && (n.tagName === "A" || n.tagName === "BUTTON" || (typeof n.getAttribute === "function" && n.getAttribute("role") === "tab"));
+        if (esAncla(nodo)) return nodo;
+        // Selectores SIMPLES, uno por uno: el motor de selectores del arnés no parsea listas
+        // con comas, y en el navegador el resultado es idéntico (el primero que aparezca).
+        if (typeof nodo.querySelector === "function") {
+          const dentro = nodo.querySelector("a") || nodo.querySelector("button") || nodo.querySelector('[role="tab"]');
+          if (dentro) return dentro;
+        }
+        if (typeof nodo.closest === "function") {
+          const arriba = nodo.closest("a") || nodo.closest("button") || nodo.closest('[role="tab"]');
+          if (arriba) return arriba;
+        }
+      } catch (e) {}
+      return nodo;
+    };
     if (_tabImp) {
       const bImp = document.createElement("button");
       bImp.className = "vgl-dock-btn";
@@ -9083,13 +8977,27 @@
       bImp.addEventListener("click", (e) => {
         e.stopPropagation();
         uxTrack("hc.pestana.impresion.clic");
-        const tab = _vglClicablePestana("impresion diagnostica");
+        const tab = _vglNodoNavegable(_vglClicablePestana("impresion diagnostica"));
         if (!tab || typeof tab.click !== "function") {
           uxTrack("hc.pestana.impresion.sin_pestana");
           showToast("AMBAR", "🖨 Impresión Diagnóstica", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
           return;
         }
+        const antesImp = (() => { try { return _vglPestanaActiva() || null; } catch (e) { return null; } })();
         try { tab.click(); uxTrack("hc.pestana.impresion.ok"); } catch (e2) {}
+        // Si el clic no movió la pestaña activa, el médico no puede quedarse sin saberlo.
+        // Fail-open: si no hay forma de leer la pestaña activa, no se inventa un aviso.
+        try {
+          if (antesImp) setTimeout(() => {
+            try {
+              const desp = _vglPestanaActiva() || null;
+              if (desp && desp === antesImp) {
+                uxTrack("hc.pestana.impresion.sin_pestana");
+                showToast("AMBAR", "🖨 Impresión Diagnóstica", "El asistente no logró abrir la pestaña: ábrala desde el editor de la nota.");
+              }
+            } catch (e3) {}
+          }, 300);
+        } catch (e4) {}
       });
       btns.appendChild(bImp);
     }
@@ -9103,13 +9011,25 @@
       bCond.addEventListener("click", (e) => {
         e.stopPropagation();
         uxTrack("hc.pestana.conducta.clic");
-        const tab = _vglClicablePestana("conducta");
+        const tab = _vglNodoNavegable(_vglClicablePestana("conducta"));
         if (!tab || typeof tab.click !== "function") {
           uxTrack("hc.pestana.conducta.sin_pestana");
           showToast("AMBAR", "📋 Conducta", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
           return;
         }
+        const antesCond = (() => { try { return _vglPestanaActiva() || null; } catch (e) { return null; } })();
         try { tab.click(); uxTrack("hc.pestana.conducta.ok"); } catch (e2) {}
+        try {
+          if (antesCond) setTimeout(() => {
+            try {
+              const desp = _vglPestanaActiva() || null;
+              if (desp && desp === antesCond) {
+                uxTrack("hc.pestana.conducta.sin_pestana");
+                showToast("AMBAR", "📋 Conducta", "El asistente no logró abrir la pestaña: ábrala desde el editor de la nota.");
+              }
+            } catch (e3) {}
+          }, 300);
+        } catch (e4) {}
       });
       btns.appendChild(bCond);
     }
@@ -9642,7 +9562,11 @@
       // para médico autorizado CON la redacción activada y su clave Gemini configurada.
       // Si no toca, se esconde lo que ya estuviera pintado (el permiso puede cambiar entre
       // ticks, p. ej. al cambiar de médico) y no se crea nada.
-      const permitido = mtrEsMedicoAutorizado() && typeof S !== "undefined" && S.iaRedaccion === true && mtrLeerClaveGemini();
+      // v18.14.1 (frente 4) — el gate pregunta por CUALQUIER clave que la escalera
+      // pueda usar (mtrHayClaveIA), no por la de Gemini: con deepseek-v4-flash como
+      // modelo por defecto del sistema, exigir la clave de Gemini dejaba a un médico
+      // con solo su clave de DeepSeek sin inyectores de redacción.
+      const permitido = mtrEsMedicoAutorizado() && typeof S !== "undefined" && S.iaRedaccion === true && mtrHayClaveIA();
       if (!permitido) {
         VGL_IA_INJECTORES.forEach((def) => {
           const ya = document.getElementById(def.id);
@@ -10196,11 +10120,11 @@
     { k: "tog_pacientes", label: "Panel del paciente", desc: "Ficha clínica, resumen y riesgo cardiovascular del paciente (botón del dock)." },
     { k: "tog_laboratorios", label: "Laboratorios", desc: "Panel de administración de laboratorios (botón 🧪 del dock)." },
     { k: "tog_notif", label: "Notificaciones", desc: "Sistema de avisos universales del asistente (prevención, abandono, laboratorios)." },
-    { k: "tog_anexo5", label: "Aviso del Anexo 5", desc: "Panel de estado del programa RCV al abrir la historia clínica.", sub: "tog_notif" },
+    { k: "tog_anexo5", label: "Aviso del Anexo 5", desc: "Estado del programa RCV del paciente: la sección del Anexo 5 en el aviso de la jornada y su repositorio 📋 en el panel lateral.", sub: "tog_notif" },
     { k: "tog_hc_chip", label: "Chip de contexto de la HC", desc: "Chip con cédula enmascarada y origen del contexto al abrir la historia clínica." },
-    { k: "tog_perf_cache", label: "Caché de catálogos de Everest", desc: "EXPERIMENTAL: sirve ParDiagnosticos y ParCiudades (≈2,9 MB por apertura de HC) desde caché local tras demostrar dos lecturas idénticas en vivo. Solo catálogos globales de la IPS: jamás toca peticiones por paciente o por cita. Apagarlo restaura la red original al instante.", defecto: false },
-    { k: "tog_perf_informe", label: "Métricas del caché de catálogos", desc: "Conteos anónimos de la caché de catálogos (servidas, bytes ahorrados, confirmaciones) en la telemetría interna. Solo lectura: no altera la red.", sub: "tog_perf_cache" },
-    { k: "tog_ab1_diferir", label: "Barridos diferidos (A/B)", desc: "EXPERIMENTAL (informe A/B, AB-1): la cosecha de la HC y los widgets de conducta/ordenar/fármaco/RCV corren en el hueco de inactividad del navegador en vez de en línea en cada vuelta. El procesado de la agenda, el pintado del panel y los avisos jamás se difieren. Apagado = comportamiento original.", defecto: false },
+    { k: "tog_perf_cache", label: "Caché de catálogos de Everest", desc: "EXPERIMENTAL: sirve ParDiagnosticos y ParCiudades (≈2,9 MB por apertura de HC) desde caché local tras demostrar dos lecturas idénticas en vivo. Solo catálogos globales de la IPS: jamás toca peticiones por paciente o por cita. Apagarlo restaura la red original al instante.", defecto: false, dev: true },
+    { k: "tog_perf_informe", label: "Métricas del caché de catálogos", desc: "Conteos anónimos de la caché de catálogos (servidas, bytes ahorrados, confirmaciones) en la telemetría interna. Solo lectura: no altera la red.", sub: "tog_perf_cache", dev: true },
+    { k: "tog_ab1_diferir", label: "Barridos diferidos (A/B)", desc: "EXPERIMENTAL (informe A/B, AB-1): la cosecha de la HC y los widgets de conducta/ordenar/fármaco/RCV corren en el hueco de inactividad del navegador en vez de en línea en cada vuelta. El procesado de la agenda, el pintado del panel y los avisos jamás se difieren. Apagado = comportamiento original.", defecto: false, dev: true },
   ];
   function _togUid() {
     try { return String((state && state.activeDoctor && state.activeDoctor.id) || "") || ""; } catch (e) { return ""; }
@@ -10689,7 +10613,7 @@
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn", "#vgl-rcv-pendientes",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -15493,8 +15417,8 @@
   function hcPacienteContexto() {
     try {
       if (typeof seccionActiva === "function" && seccionActiva() === "historia") {
-        // v18.6.2 (F-P2): los tres llamadores de esta función viven SOLO en el tick
-        // (hcRenderChip, hcTickVigia, hcAnexo5Render), así que consume la foto del tick;
+        // v18.6.2 (F-P2): los dos llamadores de esta función viven SOLO en el tick
+        // (hcRenderChip, hcTickVigia), así que consume la foto del tick;
         // sin foto (pruebas) cae a la lectura fresca.
         const dom = _vglDocDelTick();
         if (dom) return { docId: String(dom), origen: "dom" };
@@ -15734,10 +15658,9 @@
     } catch (e) { return false; }
   }
   // =====================================================================
-  //  v18.6.1 (F2, delegación v2 §O2.3) — AVISO DEL ANEXO 5 AL ABRIR LA HC
+  //  v18.6.1 (F2, delegación v2 §O2.3) — EL ANEXO 5 DEL PACIENTE ABIERTO
   //  ------------------------------------------------------------------
-  //  Con la HC abierta (origen "dom" del contexto, FICHA 5) y el paciente
-  //  presente en state.pymAnexo5, un panel DENTRO de #vgl-root resume el
+  //  Con el paciente presente en state.pymAnexo5, el sistema resuelve el
   //  estado del programa con las CUATRO alertas exigidas: (a) abandono
   //  (>183 días sin control —regla del propio libro— MÁS Abandonados_PES de
   //  la hoja regional), (b) estudios pendientes de ordenar (EKG sin fecha +
@@ -15746,8 +15669,13 @@
   //  (d) puntaje total de metas contra el mínimo 75 (afirmación del
   //  propietario; SUPUESTO ACTIVO en docs/REGISTRO_DECISIONES.md por lo de
   //  TA/IMC/circunferencia). Reglas del proyecto: informativo, cero
-  //  escritura; cédula enmascarada ···+4 en pantalla y AUSENTE del aria-live
-  //  (la sala escucha los lectores); cierre manual que respeta el turno.
+  //  escritura; cédula enmascarada ···+4 en pantalla.
+  //
+  //  v18.14.3 (Fase 2 del comité, decisión 4.1 OPCIÓN B) — este bloque nació
+  //  pintando un PANEL dentro de #vgl-root al abrir la historia. Ese panel se
+  //  retiró: era la tercera superficie del mismo dato. Hoy el anexo llega por
+  //  dos caminos, y los dos salen de aquí: la sección del aviso de la jornada
+  //  (una línea, decisión 4.2) y el repositorio `📋 Anexo 5` → #vgl-a5-modal.
   // =====================================================================
   function vglSerialAFecha(serial) {
     const n = Number(serial);
@@ -15801,127 +15729,117 @@
       },
     };
   }
-  let _vglA5Cerrados = new Set();    // docs cuyo panel cerró el médico (respeta el turno)
-  let _vglA5Anunciado = "";          // último doc anunciado por aria-live (1×/paciente)
-  // Render por tick (idempotente, como el chip): solo con HC abierta por DOM y dato del Anexo 5.
-  function hcAnexo5Render() {
+  // v18.14.3 (opción B del comité) — aquí vivían `_vglA5Cerrados` (pacientes cuyo panel de
+  // la HC el médico había cerrado) y `_vglA5Anunciado` (último doc anunciado por aria-live).
+  // Se retiraron CON el panel: ya no hay panel que cerrar ni región aria-live propia.
+  // v18.14.2 (frente A5) — LAS FILAS DEL ANEXO 5, EN UN SOLO SITIO. El aviso centralizado y
+  // el repositorio secundario (#vgl-a5-modal) tienen que decir LO MISMO del mismo paciente:
+  // dos constructores separados serían la segunda vara que este proyecto lleva versiones
+  // eliminando. PURA (solo presentación de `datos` de a5AlertasDe) y con los `!important`
+  // LITERALES en la misma cadena que exige la Regla R de la suite_25 — la variante
+  // concatenada (`color:' + (cond?…) + ' !important`) es invisible para su censo.
+  function a5FilasHtml(datos) {
+    if (!datos) return "";
+    const c = datos.contexto || {};
+    const filas = [];
+    if (datos.abandono) {
+      const por = [];
+      if (datos.abandono.sinControl) por.push("más de 6 meses sin control (último: " + (vglSerialAFecha(datos.abandono.ultimo) || "sin fecha") + ")");
+      if (datos.abandono.pes) por.push("marcado como abandonado en la base de citas");
+      filas.push('<div style="margin:4px 0;color:var(--c-rojo) !important;font-weight:600;">&#9888; ABANDONO DEL PROGRAMA — ' + por.join(" · ") + "</div>");
+    }
+    if (datos.pendientes.length) {
+      filas.push('<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#128270; Estudios pendientes de ordenar: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.pendientes.join(" · ") + "</span></div>");
+    }
+    if (datos.remitir.length) {
+      filas.push('<div style="margin:4px 0;color:var(--c-azul) !important;font-weight:600;">&#128221; Consultas por remitir: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.remitir.join(" · ") + "</span></div>");
+    }
+    filas.push(datos.cumpleSuma
+      ? '<div style="margin:4px 0;color:var(--c-verde) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — cumple</div>"
+      : '<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — por debajo del mínimo</div>");
+    const ctxLinea = [
+      c.fechaControl ? "último control " + vglSerialAFecha(c.fechaControl) : "",
+      c.tfg ? "TFG " + c.tfg : "",
+      c.estadio ? "estadio " + c.estadio : "",
+      c.ta ? "TA " + c.ta : "",
+      c.circ ? "circunf. " + c.circ + " cm" : "",
+      c.a1c ? "HbA1c " + c.a1c + "%" : "",
+      c.ldl ? "LDL " + c.ldl : "",
+      c.glu ? "glicemia " + c.glu : "",
+      c.rac ? "RAC " + c.rac + (c.racFecha ? " (" + vglSerialAFecha(c.racFecha) + ")" : "") : "",
+    ].filter(Boolean).join(" · ");
+    return filas.join("") +
+      (ctxLinea ? '<div style="margin-top:4px;color:var(--fg3) !important;">' + escapeHtml(ctxLinea) + "</div>" : "");
+  }
+  // v18.14.3 (Fase 3, decisión 4.2 del comité) — LA LÍNEA DEL ANEXO 5 EN EL AVISO DE LA
+  // JORNADA. El aviso de entrada es una INTERRUPCIÓN: llevaba las filas completas del anexo
+  // (abandono + estudios + remisiones + puntaje + contexto clínico) y pesaba lo mismo que los
+  // pendientes que sí exigen acción inmediata. Ahora dice el hecho en UNA línea y remite al
+  // repositorio, que es una consulta deliberada del médico. PURA y sin decisiones nuevas:
+  // solo cuenta lo que a5AlertasDe ya resolvió. Devuelve texto YA escapado.
+  function a5ResumenLinea(datos) {
+    if (!datos) return "";
+    const partes = [];
+    if (datos.abandono) partes.push("abandono del programa");
+    partes.push("puntaje de metas " + (Number(datos.suma) || 0) + "/" + A5_MIN_SUMA
+      + (datos.cumpleSuma ? " — cumple" : " — por debajo del mínimo"));
+    const nEst = (datos.pendientes || []).length;
+    if (nEst) partes.push(nEst + (nEst === 1 ? " estudio pendiente de ordenar" : " estudios pendientes de ordenar"));
+    const nRem = (datos.remitir || []).length;
+    if (nRem) partes.push(nRem + (nRem === 1 ? " consulta por remitir" : " consultas por remitir"));
+    return escapeHtml(partes.join(" · "));
+  }
+  // v18.14.2 (frente A5) — EL REPOSITORIO SECUNDARIO DEL ANEXO 5. Réplica del archivado de
+  // las actividades de PyM en el módulo «Pendientes» del widget lateral: una pastilla que
+  // solo aparece si de verdad hay Anexo 5 para este paciente y que reabre el detalle
+  // completo cuando él lo pide. Es un modal DIFERENCIADO (id propio, acento rojo del anexo,
+  // contenido propio): no es el aviso central de entrada, y por eso no compite con él ni
+  // consume su «ya visto» de la jornada. Solo lectura: el Vigilante no escribe nada.
+  function abrirAnexo5Modal(datos) {
     try {
-      const root = document.getElementById("vgl-root");
-      if (!root) return false;
-      // v18.6.1 (F3): sub-toggle del sistema de notificaciones (el padre manda).
-      if (!togActiva("tog_notif") || !togActiva("tog_anexo5")) { const ap = document.getElementById("vgl-a5-panel"); if (ap) ap.remove(); return false; }
-      const ctx = hcPacienteContexto();
-      if (!ctx || ctx.origen !== "dom") { const viejo = document.getElementById("vgl-a5-panel"); if (viejo) viejo.remove(); return false; }
-      const datos = a5AlertasDe(ctx.docId, state);
-      if (!datos || _vglA5Cerrados.has(datos.docKey)) {
-        const viejo = document.getElementById("vgl-a5-panel");
-        if (viejo) viejo.remove();
-        return false;
-      }
-      let panel = document.getElementById("vgl-a5-panel");
-      if (!panel) {
-        panel = document.createElement("div");
-        panel.id = "vgl-a5-panel";
-        panel.setAttribute("role", "note");
-        root.appendChild(panel);
-      }
-      const c = datos.contexto;
-      const filas = [];
-      if (datos.abandono) {
-        const por = [];
-        if (datos.abandono.sinControl) por.push("más de 6 meses sin control (último: " + (vglSerialAFecha(datos.abandono.ultimo) || "sin fecha") + ")");
-        if (datos.abandono.pes) por.push("marcado como abandonado en la base de citas");
-        filas.push('<div style="margin:4px 0;color:var(--c-rojo) !important;font-weight:600;">&#9888; ABANDONO DEL PROGRAMA — ' + por.join(" · ") + "</div>");
-      }
-      if (datos.pendientes.length) {
-        filas.push('<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#128270; Estudios pendientes de ordenar: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.pendientes.join(" · ") + "</span></div>");
-      }
-      if (datos.remitir.length) {
-        filas.push('<div style="margin:4px 0;color:var(--c-azul) !important;font-weight:600;">&#128221; Consultas por remitir: <span style="font-weight:400;color:var(--fg2) !important;">' + datos.remitir.join(" · ") + "</span></div>");
-      }
-      // Regla R: cada color inline lleva su !important LITERAL en la misma cadena —
-      // la alternative concatenada (color:' + (cond?...) + ' !important) es invisible
-      // para el censo de la suite 25 y además frágil.
-      // v18.8.4 (T1): los colores duros pasan a variables de tema (--fg/--fg2/--fg3,
-      // --c-*/--surface-2/--line/--t-small) para que el panel se lea también en tema
-      // oscuro; los !important literales se conservan exactamente donde estaban.
-      filas.push(datos.cumpleSuma
-        ? '<div style="margin:4px 0;color:var(--c-verde) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — cumple</div>"
-        : '<div style="margin:4px 0;color:var(--c-ambar) !important;font-weight:600;">&#127919; Puntaje de metas: ' + datos.suma + "/" + A5_MIN_SUMA + " — por debajo del mínimo</div>");
-      const ctxLinea = [
-        c.fechaControl ? "último control " + vglSerialAFecha(c.fechaControl) : "",
-        c.tfg ? "TFG " + c.tfg : "",
-        c.estadio ? "estadio " + c.estadio : "",
-        c.ta ? "TA " + c.ta : "",
-        c.circ ? "circunf. " + c.circ + " cm" : "",
-        c.a1c ? "HbA1c " + c.a1c + "%" : "",
-        c.ldl ? "LDL " + c.ldl : "",
-        c.glu ? "glicemia " + c.glu : "",
-        c.rac ? "RAC " + c.rac + (c.racFecha ? " (" + vglSerialAFecha(c.racFecha) + ")" : "") : "",
-      ].filter(Boolean).join(" · ");
-      panel.innerHTML =
-        '<div style="margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--c-rojo);border-radius:8px;background:var(--surface-2);font-size:var(--t-small);line-height:1.45;color:var(--fg2) !important;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-        '<span style="font-weight:700;color:var(--fg) !important;">&#129656; Anexo 5 · ' + escapeHtml(datos.prog) + " — paciente " + _vglHcMascara(ctx.docId) + "</span>" +
-        '<span data-a5-cerrar role="button" tabindex="0" aria-label="Cerrar el aviso del Anexo 5 por este turno" title="Cerrar por este turno" style="cursor:pointer;color:var(--fg3) !important;font-weight:700;padding:0 4px;">×</span></div>' +
-        filas.join("") +
-        '<div style="margin-top:4px;color:var(--fg3) !important;">' + escapeHtml(ctxLinea) + "</div>" +
+      if (!datos) return false;
+      let ov = document.getElementById("vgl-a5-modal");
+      if (ov) ov.remove();
+      ov = document.createElement("div");
+      ov.id = "vgl-a5-modal";
+      ov.setAttribute("role", "dialog");
+      ov.setAttribute("aria-modal", "true");
+      ov.setAttribute("aria-label", "Anexo 5 del programa de riesgo cardiovascular");
+      if (isLight()) ov.classList.add("light");
+      ov.innerHTML = '<div class="vgl-pym-card">' +
+        '<div class="vgl-pym-head">' +
+          '<div class="vgl-pym-ic">&#129656;</div>' +
+          '<div class="vgl-pym-headtxt">' +
+            '<div class="vgl-pym-t">Anexo 5 · ' + escapeHtml(datos.prog) + '</div>' +
+            '<div class="vgl-pym-n">Paciente ' + _vglHcMascara(datos.docKey) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="vgl-pym-body">' +
+          a5FilasHtml(datos) +
+          '<div class="vgl-pym-sec-b">Este es el archivo en reposo del Anexo 5 de este paciente: el mismo detalle que viaja en el aviso de entrada, disponible cuando usted lo pida.</div>' +
+        '</div>' +
+        '<div class="vgl-pym-foot">Solo lectura: el Vigilante no escribe nada en la historia.</div>' +
+        '<button class="vgl-pym-ok">Cerrar</button>' +
         "</div>";
-      const btn = panel.querySelector("[data-a5-cerrar]");
-      // v18.13.0 (Mesa de Expertos): cerrar ya no es irreversible al toque — el panel SE
-      // QUITA de verdad y de inmediato (suite_91 lo exige así: "cerrar quita el panel"),
-      // pero queda aparte una barra de "Deshacer" nueva (VGL_DESHACER_VISIBLE_MS, mismo
-      // patrón ya validado del proyecto) que reconstruye el aviso si el clic fue
-      // accidental — sensible sobre todo en una alerta de ABANDONO DEL PROGRAMA.
-      const a5Cerrar = () => {
-        _vglA5Cerrados.add(datos.docKey);
-        try { panel.remove(); } catch (e0) {}
-        try {
-          let d = document.getElementById("vgl-a5-deshacer");
-          if (d) d.remove();
-          d = document.createElement("div");
-          d.id = "vgl-a5-deshacer";
-          d.style.cssText = "margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:var(--t-small);color:var(--fg2) !important;display:flex;justify-content:space-between;align-items:center;gap:10px;";
-          d.innerHTML = "<span>Aviso del Anexo 5 cerrado por este turno.</span>" +
-            '<button type="button" data-a5-deshacer style="background:none;border:none;color:var(--c-azul) !important;text-decoration:underline;cursor:pointer;font-weight:700;padding:4px;">&#8617; Deshacer</button>';
-          root.appendChild(d);
-          const btnDeshacer = d.querySelector("[data-a5-deshacer]");
-          const quitarBarra = () => { try { d.remove(); } catch (e1) {} };
-          const tId = setTimeout(quitarBarra, VGL_DESHACER_VISIBLE_MS);
-          if (btnDeshacer) btnDeshacer.addEventListener("click", () => {
-            clearTimeout(tId);
-            quitarBarra();
-            _vglA5Cerrados.delete(datos.docKey);
-            try { hcAnexo5Render(); } catch (e2) {}
-          });
-        } catch (e3) {}
-      };
-      if (btn) {
-        btn.addEventListener("click", a5Cerrar);
-        btn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); a5Cerrar(); } });
-      }
-      // Aria-live: UNA vez por paciente, SIN cédula (PHI acústico — misma regla del
-      // aviso de fraude de la FICHA 8).
-      let live = document.getElementById("vgl-a5-live");
-      if (!live) {
-        live = document.createElement("div");
-        live.id = "vgl-a5-live";
-        live.setAttribute("aria-live", "polite");
-        live.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);";
-        root.appendChild(live);
-      }
-      const corto = "Anexo 5 abierto: " +
-        (datos.abandono ? "abandono del programa. " : "") +
-        (datos.pendientes.length ? datos.pendientes.length + " estudios pendientes. " : "") +
-        (datos.remitir.length ? "remitir a " + datos.remitir.join(", ") + ". " : "") +
-        "puntaje de metas " + datos.suma + " de " + A5_MIN_SUMA + ".";
-      if (_vglA5Anunciado !== datos.docKey) {
-        _vglA5Anunciado = datos.docKey;
-        live.textContent = corto;
-      }
+      document.body.appendChild(ov);
+      const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
+      const closeMod = () => { try { ov.remove(); } catch (e0) {} };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      _vglCerrarConClicFuera(ov, closeMod);
+      _activarAccesibilidadModal(ov, closeMod);
+      try { uxTrack("a5.modal.abrir"); } catch (e2) {}
       return true;
     } catch (e) { return false; }
   }
+  // v18.14.3 (Fase 2 del comité, opción B) — EL PANEL DEL ANEXO 5 DENTRO DE LA HC SE RETIRÓ.
+  // Vivía colgado de #vgl-root (`#vgl-a5-panel`) y decía lo mismo que la sección del aviso
+  // central: dos superficies para el mismo dato, con su propia barra de «Deshacer» y su
+  // propia región aria-live. El comité eligió UN solo punto de entrada automático (el aviso
+  // de la jornada, que ya reúne PyM, abandono y laboratorios) más el repositorio secundario
+  // a un clic (`📋 Anexo 5` → #vgl-a5-modal). Con el panel se fueron `_vglA5Cerrados`,
+  // `_vglA5Anunciado` y su aria-live: la accesibilidad del anexo la da ahora el propio
+  // cuadro del aviso (`_activarAccesibilidadModal`), y el detalle completo lo pide el médico.
+  // Las filas siguen saliendo del constructor ÚNICO `a5FilasHtml`, que no cambió.
   // Sembrado/limpieza del hint para el banco de pruebas (fuera de producción).
   function _vglHcSetHintParaTest(docId, haceMs) {
     _vglHcHint = docId ? { docId: String(docId), ts: Date.now() - (haceMs || 0) } : null;
@@ -16602,7 +16520,7 @@
   // CONSULTA cierran con clic fuera; los de ESCRITURA (algo escrito o una petición en vuelo)
   // nunca. Las dos listas son explícitas para que una prueba compare con todos los ids que el
   // script crea: un cuadro nuevo tiene que entrar en una de las dos.
-  const VGL_MODALES_CONSULTA = ["vgl-chooser-modal", "vgl-paquete-modal", "vgl-labs-modal", "vgl-pym-modal", "vgl-modal"];
+  const VGL_MODALES_CONSULTA = ["vgl-chooser-modal", "vgl-paquete-modal", "vgl-labs-modal", "vgl-pym-modal", "vgl-a5-modal", "vgl-modal"];
   const VGL_MODALES_ESCRITURA = ["vgl-agendar-modal", "vgl-ordenar-modal", "vgl-panel-modal", "vgl-ia-modal", "vgl-llenar-modal", "vgl-confirma-modal", "vgl-postcita-panel"];
   function _vglCerrarConClicFuera(modalEl, cerrar) {
     try {
@@ -17129,7 +17047,15 @@
       // la señal que a ese perfil le importa: "este paciente necesita atención de riesgo
       // cardiovascular", no el detalle de cuáles exámenes pedir (eso es del autorizado).
       const prioridadRcv = !!datos.prioridadRcv;
-      if (!abandono && !pym.length && !labs.length && !adelantar.length) return false; // nada que mostrar
+      // v18.14.2 (frente A5) — el Anexo 5 de este paciente, calculado por la MISMA vara que
+      // el resto (_pendientesUniversales → a5AlertasDe). null = no aplica o no hay índice:
+      // la sección no existe y el aviso no lo menciona.
+      const anexo5 = datos.anexo5 || null;
+      // v18.14.2 (frente RCV) — los próximos exámenes de RCV son una SECCIÓN del mismo
+      // módulo, no un panel flotante aparte. `rcv` trae el HTML ya armado por la única
+      // función que consulta las órdenes vigentes (rcvPendientesTick → rcvPendientesFilasHtml).
+      const rcv = datos.rcv || null;
+      if (!abandono && !pym.length && !labs.length && !adelantar.length && !anexo5 && !(rcv && rcv.html)) return false; // nada que mostrar
       // v18.3 (P13·4.4) — PRESUPUESTO de interrupciones por equipo y día: medido
       // ≈4.020 en 14 días (≈72/equipo/día, prompt 07). `esPrueba` queda exento y un
       // fallo de almacenaje NO tapa el aviso (fall-open en obsPresupuestoConsumir).
@@ -17206,6 +17132,30 @@
           '<div class="vgl-pym-list">' + adelantar.map(chipAdel).join("") + "</div>" +
         '</div>');
       }
+      // v18.14.2 (frente A5) — SECCIÓN DEL ANEXO 5 EN EL MISMO AVISO CENTRAL. Solo aparece
+      // cuando el paciente cumple los criterios de aplicación del anexo (lo decide
+      // a5AlertasDe: estar en el índice del libro con su puntaje, su abandono y sus
+      // remisiones). Las filas salen del constructor ÚNICO (a5FilasHtml), el mismo que usa
+      // el panel de la HC: no hay dos formas de contar lo mismo. Va al final y con el
+      // detalle completo a un clic — el aviso de entrada es un recordatorio, no un informe.
+      if (anexo5) {
+        secciones.push('<div class="vgl-pym-sec">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">&#129656;</span><span class="vgl-pym-sec-t">Anexo 5 · ' + escapeHtml(anexo5.prog) + '</span></div>' +
+          '<div class="vgl-pym-sec-b">' + a5ResumenLinea(anexo5) + '. Detalle completo en la pastilla &#129656; Anexo 5 del panel lateral.</div>' +
+        '</div>');
+      }
+      // v18.14.2 (frente RCV) — SECCIÓN EXCLUSIVA DE PRÓXIMOS EXÁMENES DE RCV. Antes vivían
+      // en una ventana flotante que el médico tenía que arrastrar, minimizar y cerrar, fuera
+      // de cualquier módulo. Ahora son una sección más de «Pendientes», con el mismo lenguaje
+      // visual que las actividades de PyM, el abandono y los laboratorios: la organización
+      // uniforme que el encargo pide. Las filas las arma la MISMA función que antes pintaba
+      // el panel (rcvPendientesFilasHtml) — no hay dos formas de contar los mismos exámenes.
+      if (rcv && rcv.html) {
+        secciones.push('<div class="vgl-pym-sec">' +
+          '<div class="vgl-pym-sec-hd"><span class="vgl-pym-sec-ic">&#129514;</span><span class="vgl-pym-sec-t">Próximos exámenes · Riesgo cardiovascular (' + (rcv.n || 0) + ' por asignar)</span></div>' +
+          rcv.html +
+        '</div>');
+      }
       ov.innerHTML = '<div class="vgl-pym-card">' +
         '<div class="vgl-pym-head">' +
           '<div class="vgl-pym-ic">' + ico + '</div>' +
@@ -17264,7 +17214,7 @@
   //  · v18.0.120 — su respuesta a «¿repetir antes los exámenes fuera de meta?», y el reparto
   //    entre lo VENCIDO y lo que solo conviene adelantar.
   function _pendientesUniversales(doc) {
-    const vacio = { key: "", abandono: false, pym: [], labs: [], adelantar: [], prioridadRcv: false, labsListos: false, sinResumen: true, n: 0 };
+    const vacio = { key: "", abandono: false, pym: [], labs: [], adelantar: [], prioridadRcv: false, labsListos: false, sinResumen: true, anexo5: null, rcv: null, n: 0 };
     try {
       if (!doc) return vacio;
       const key = normalizeKey(doc); if (!key) return vacio;
@@ -17331,6 +17281,18 @@
       if (!_autorizado && !(_resAviso && _resAviso.programa)) faltantes = [];
       const adelantar = faltantes.filter((f) => f && f.vencido === false);
       faltantes = faltantes.filter((f) => !(f && f.vencido === false));
+      // v18.14.2 (frente A5) — el Anexo 5 de ESTE paciente, con su propio interruptor. Se
+      // pregunta por el toggle igual que el panel de la HC (tog_anexo5 es hijo de tog_notif):
+      // apagado, la sección no existe ni aquí ni allá.
+      let anexo5 = null;
+      try { if (togActiva("tog_anexo5")) anexo5 = a5AlertasDe(key, state); } catch (eA5) { anexo5 = null; }
+      // v18.14.2 (frente RCV) — los PRÓXIMOS EXÁMENES de riesgo cardiovascular entran aquí
+      // como una sección más del mismo módulo. El dato sale del último cálculo del tick
+      // (_rcvUltimo, que es quien consulta las órdenes vigentes de Everest): una sola
+      // consulta y una sola vara para el aviso y para la pastilla del dock. Si el tick aún
+      // no ha calculado para ESTE paciente, la sección simplemente no existe — nunca se
+      // inventa ni se arrastra el dato del paciente anterior.
+      const rcv = (_rcvUltimo && _rcvUltimo.docId === key) ? _rcvUltimo : null;
       return {
         key: key, abandono: abandono, pym: pym, labs: faltantes, adelantar: adelantar,
         prioridadRcv: !_autorizado && faltantes.length > 0,
@@ -17338,7 +17300,16 @@
         // A12 (S+, 02-sep) — sin resumen en caché la vara es la plana (180 días), no la tabla
         // de la norma; quien muestre el aviso lo anota para re-evaluar cuando el resumen llegue.
         sinResumen: !_resAviso,
-        n: (abandono ? 1 : 0) + pym.length + faltantes.length + adelantar.length,
+        // v18.14.2 (frente A5) — EL ANEXO 5 ENTRA EN LA MISMA VARA. El aviso central de
+        // entrada y la pastilla «🩺 Pendientes» del dock se alimentan de ESTA función; el
+        // Anexo 5 vivía en un panel aparte, así que no podía viajar en el aviso ni
+        // archivarse en Pendientes. Se calcula con el criterio de aplicación que ya tenía
+        // (a5AlertasDe: puntaje de metas, abandono por control, remisiones) y bajo su
+        // propio interruptor (tog_anexo5, hijo de tog_notif). Sin índice del libro
+        // (state.pymAnexo5) devuelve null y el aviso no lo menciona: nunca se inventa.
+        anexo5: anexo5,
+        rcv: rcv,
+        n: (abandono ? 1 : 0) + pym.length + faltantes.length + adelantar.length + (anexo5 ? 1 : 0) + (rcv ? 1 : 0),
       };
     } catch (e) { return vacio; }
   }
@@ -17381,6 +17352,10 @@
       // a pacientes en Ruta Crónicos con vigencia original) se comunican como mensaje de
       // prioridad cardiovascular, no como lista de analitos a pedir.
       const prioridadRcv = _pend.prioridadRcv;
+      // v18.14.2 (frente A5/RCV) — el Anexo 5 y la sección de próximos exámenes viajan por
+      // la misma vara que el resto.
+      const anexo5 = _pend.anexo5;
+      const rcv = _pend.rcv;
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
       const uid = "avisouniv|" + key;
 
@@ -17437,13 +17412,13 @@
         // primero y se marca después: una falla de render deja el aviso pendiente y el
         // siguiente tick lo reintenta.
         // [NT-102/M2] — avisoUniversal ahora REPORTA si pintó: solo entonces se marca.
-        if (avisoUniversal(nombreDe(), { abandono, pym, labs: [] }, false, uid)) avisoMarcarVisto(uid);
+        if (avisoUniversal(nombreDe(), { abandono, pym, labs: [], anexo5: anexo5, rcv: rcv }, false, uid)) avisoMarcarVisto(uid);
         return;
       }
       _avisoUnivEspera.delete(key); // labs ya resueltos: ya no hay nada que esperar para esta key
 
       // Labs resueltos: aviso completo si hay algo.
-      if (!abandono && !pym.length && !faltantes.length && !adelantar.length) return;
+      if (!abandono && !pym.length && !faltantes.length && !adelantar.length && !anexo5 && !(rcv && rcv.html)) return;
       // A12 (S+, 02-sep) — se anota CÓMO salió este aviso para poder re-evaluarlo cuando
       // llegue el resumen: si la vara fue la plana (sin resumen) y qué claves listó (la
       // firma evita repetir las mismas en el re-aviso corregido).
@@ -17456,7 +17431,7 @@
       // convertiría un hallazgo clínico en un toast pasajero (ver desviaciones del cierre).
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
       // [NT-102/M2] — solo se marca si de verdad se pintó.
-      if (avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv }, false, uid)) avisoMarcarVisto(uid);
+      if (avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, adelantar: adelantar, prioridadRcv: prioridadRcv, anexo5: anexo5, rcv: rcv }, false, uid)) avisoMarcarVisto(uid);
     } catch (e) {}
   }
 
@@ -19468,7 +19443,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal,#vgl-rcv-pendientes,#vgl-rcv-pendientes-pill{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco,#vgl-paquete-modal,#vgl-chooser-modal,#vgl-a5-modal{
         /* Vidrio frost sobre negro OLED */
         /* S+ v1 (visual): base oscura un punto más profunda y sobria, velos más finos. */
         /* v18.0.123 (UI/UX UI#4) — el vidrio se calibró «sobre OLED» y en la vida real vive
@@ -19575,7 +19550,7 @@
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light,#vgl-rcv-pendientes.light,#vgl-rcv-pendientes-pill.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light,#vgl-paquete-modal.light,#vgl-chooser-modal.light,#vgl-a5-modal.light{
         --bg:rgba(249,250,252,.90);
         --bg-sidebar:rgba(243,246,250,.84);
         --bg2:rgba(15,23,42,.040);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.11);
@@ -19830,10 +19805,11 @@
       body.vgl-modo-oculto #vgl-labs-modal,body.vgl-modo-oculto #vgl-labsv-modal,body.vgl-modo-oculto #vgl-ia-modal,
       body.vgl-modo-oculto #vgl-riesgo-modal,body.vgl-modo-oculto #vgl-ficha-modal,body.vgl-modo-oculto #vgl-tablero-modal,body.vgl-modo-oculto #vgl-acomp-burbuja,body.vgl-modo-oculto #vgl-pes-modal,body.vgl-modo-oculto #vgl-panel-modal,
       body.vgl-modo-oculto #vgl-pym-modal,
+      body.vgl-modo-oculto #vgl-a5-modal,
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
       body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
-      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn,body.vgl-modo-oculto #vgl-rcv-pendientes{display:none !important}
+      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:calc(var(--z-toast) - 1);
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
@@ -20128,8 +20104,8 @@
          del título), por eso los !important, como en #vgl-head y sus vecinos.
          El giro del ícono ([aria-busy]) es el único feedback en vuelo. */
       /* v18.12.0 (Mesa de Expertos, UX #17) -- 24px -> 28px: mínimo táctil WCAG 2.5.8,
-         el mismo estándar que el proyecto ya adoptó en el panel RCV vecino
-         (.vgl-rcvp-cerrar/.vgl-rcvp-min) tras un reporte de campo de toques fallidos. */
+         el mismo estándar que el proyecto ya adoptó en los botones de cierre de sus
+         cuadros, tras un reporte de campo de toques fallidos. */
       #vgl-refresh{
         width:28px !important;height:28px !important;min-width:28px !important;min-height:28px !important;
         flex:0 0 auto !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;
@@ -20211,98 +20187,38 @@
       #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-examenes :where(:not([class])){color:inherit !important}   /* v18.0.14 — id fuera del :where(): ver la nota del blindaje general */
-      /* v18.4.2 — panel «Próximos exámenes RCV» (v18.4.2). Vive en document.body,
-         FUERA de #vgl-root: cada color de clase lleva !important sin excepción
-         (CLAUDE.md — el CSS de Everest es una caja negra que puede ganarle a una
-         regla sin marca). Anti-fatiga: CERO animaciones — nada que parpadee en la
-         periferia durante la consulta; esquina inferior izquierda, lejos del panel
-         Centinela (inferior derecha) y del dock de acciones (superior izquierda). */
-      #vgl-rcv-pendientes{
-        position:fixed;left:16px;bottom:16px;z-index:var(--z-widget);
-        width:330px;max-width:calc(100vw - 32px);max-height:64vh;overflow-y:auto;
-        font-family:var(--font-stack);background:var(--bg-solid);
-        border:1px solid var(--edge);border-radius:var(--r-card);
-        box-shadow:var(--shadow-float);padding:12px 14px;color:var(--fg) !important;
-        /* v18.8.3 (auditoría del widget, responsividad) — sin border-box, el
-           max-width:calc(100vw - 32px) limitaba SOLO el contenido: en pantallas
-           angostas la caja real sumaba padding+borde (358 px en un móvil de 360) y el
-           borde derecho quedaba cortado e inalcanzable. Medido en Chromium/Firefox/
-           WebKit (360×640): con border-box la caja total respeta el tope y sobra
-           margen. En escritorio no cambia nada (330 px ya cabía). */
-        box-sizing:border-box
-      }
-      #vgl-rcv-pendientes .vgl-rcvp-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
-      #vgl-rcv-pendientes .vgl-rcvp-tit{font-size:var(--t-small);font-weight:800;color:var(--fg) !important}
-      #vgl-rcv-pendientes .vgl-rcvp-prog{font-size:var(--t-micro);color:var(--fg2) !important}
-      #vgl-rcv-pendientes .vgl-rcvp-cont{font-size:var(--t-micro);font-weight:700;color:var(--c-panel) !important}
-      #vgl-rcv-pendientes .vgl-rcvp-fila{border-top:1px solid var(--line);padding:7px 0 6px;display:flex;flex-direction:column;gap:2px}
-      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-vencido{border-left:3px solid var(--c-rojo);padding-left:8px}
-      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-proximo{border-left:3px solid var(--c-ambar);padding-left:8px}
-      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-pendiente{border-left:3px solid var(--c-azul);padding-left:8px}
-      #vgl-rcv-pendientes .vgl-rcvp-fila.vgl-rcvp-f-aldia{border-left:3px solid var(--c-verde);padding-left:8px}
-      #vgl-rcv-pendientes .vgl-rcvp-nom{font-size:var(--t-mini);font-weight:700;color:var(--fg) !important;line-height:1.35}
+      /* v18.14.2 (frente RCV) — SECCIÓN «Próximos exámenes» DENTRO del módulo Pendientes.
+         La v18.4.2 los trajo como panel flotante propio; el encargo del 10-sep pide que los
+         próximos exámenes dejen de mostrarse «de forma desestructurada» y pasen a ser una
+         sección exclusiva de uno de los módulos del widget lateral, con la organización
+         uniforme del resto. Con el panel se fueron el arrastre, el minimizado, la pastilla
+         de reapertura, el cierre por paciente y la posición de sesión: nada de eso tiene
+         sentido dentro de un cuadro de consulta. Las filas se pintan ahora dentro de
+         #vgl-pym-modal (el cuadro de «Pendientes» del aviso central y del dock), junto a las
+         actividades de PyM, el abandono y los laboratorios, con el MISMO lenguaje visual.
+         Ese cuadro vive en document.body, FUERA de #vgl-root: cada color de clase lleva
+         !important sin excepción (CLAUDE.md — el CSS de Everest es una caja negra que puede
+         ganarle a una regla sin marca). */
+      #vgl-pym-modal .vgl-rcvp-prog{font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-pym-modal .vgl-rcvp-fila{border-top:1px solid var(--line);padding:7px 0 6px;display:flex;flex-direction:column;gap:2px}
+      #vgl-pym-modal .vgl-rcvp-fila.vgl-rcvp-f-vencido{border-left:3px solid var(--c-rojo);padding-left:8px}
+      #vgl-pym-modal .vgl-rcvp-fila.vgl-rcvp-f-proximo{border-left:3px solid var(--c-ambar);padding-left:8px}
+      #vgl-pym-modal .vgl-rcvp-fila.vgl-rcvp-f-pendiente{border-left:3px solid var(--c-azul);padding-left:8px}
+      #vgl-pym-modal .vgl-rcvp-fila.vgl-rcvp-f-aldia{border-left:3px solid var(--c-verde);padding-left:8px}
+      #vgl-pym-modal .vgl-rcvp-nom{font-size:var(--t-mini);font-weight:700;color:var(--fg) !important;line-height:1.35}
       /* v18.8.3 — desc técnica del CUPS debajo del rótulo amable: fuente de verdad, en un tono aparte */
-      #vgl-rcv-pendientes .vgl-rcvp-desc{font-size:var(--t-nano);color:var(--fg3) !important;line-height:1.3}
-      #vgl-rcv-pendientes .vgl-rcvp-fechas{font-size:var(--t-micro);color:var(--fg2) !important;font-variant-numeric:tabular-nums}
-      #vgl-rcv-pendientes .vgl-rcvp-chip{
+      #vgl-pym-modal .vgl-rcvp-desc{font-size:var(--t-nano);color:var(--fg3) !important;line-height:1.3}
+      #vgl-pym-modal .vgl-rcvp-fechas{font-size:var(--t-micro);color:var(--fg2) !important;font-variant-numeric:tabular-nums}
+      #vgl-pym-modal .vgl-rcvp-chip{
         display:inline-block;align-self:flex-start;font-size:var(--t-nano);font-weight:800;letter-spacing:.6px;
         padding:2px 8px;border-radius:var(--r-pill)
       }
-      #vgl-rcv-pendientes .vgl-rcvp-chip-vencido{background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.38)}
-      #vgl-rcv-pendientes .vgl-rcvp-chip-proximo{background:rgba(var(--rgb-ambar),.16);color:var(--c-ambar) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.38)}
-      #vgl-rcv-pendientes .vgl-rcvp-chip-pendiente{background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38)}
-      #vgl-rcv-pendientes .vgl-rcvp-chip-aldia{background:rgba(var(--rgb-verde),.14);color:var(--c-verde) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.34)}
-      #vgl-rcv-pendientes .vgl-rcvp-nota{margin-top:8px;font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
-      #vgl-rcv-pendientes .vgl-rcvp-pie{margin-top:8px;font-size:var(--t-nano);color:var(--fg3) !important}
-      #vgl-rcv-pendientes :where(:not([class])){color:inherit !important}
-      /* v18.8.2 — cierre accesible y arrastre libre del panel. El panel vive en
-         document.body, fuera de #vgl-root: cada color de clase lleva !important sin
-         excepción (CLAUDE.md). La barra superior (.vgl-rcvp-head) es la única zona
-         de agarre; el botón de cierre queda fuera del flujo (esquina superior
-         derecha) para que el título nunca se le monte encima. */
-      #vgl-rcv-pendientes .vgl-rcvp-head{position:relative;cursor:grab;padding-right:60px;touch-action:none}
-      #vgl-rcv-pendientes .vgl-rcvp-head.vgl-rcvp-arrastrando{cursor:grabbing}
-      /* v18.8.3 — 28×28 px: por encima del mínimo táctil (WCAG 2.5.8: 24 px); el
-         22×22 anterior era difícil de tocar en pantalla táctil durante la consulta */
-      #vgl-rcv-pendientes .vgl-rcvp-cerrar{
-        position:absolute;top:2px;right:2px;width:28px;height:28px;
-        display:flex;align-items:center;justify-content:center;padding:0;
-        border:1px solid transparent;border-radius:var(--r-pill);
-        background:transparent;color:var(--fg2) !important;
-        font-size:var(--t-small);line-height:1;cursor:pointer
-      }
-      #vgl-rcv-pendientes .vgl-rcvp-cerrar:hover{
-        background:rgba(var(--rgb-rojo),.14);border-color:rgba(var(--rgb-rojo),.38);color:var(--c-rojo) !important
-      }
-      #vgl-rcv-pendientes .vgl-rcvp-cerrar:focus-visible{outline:2px solid var(--c-azul);outline-offset:1px}
-      /* v18.8.6 — minimizar: botón «—» gemelo del cierre (28×28, WCAG 2.5.8), a su
-         izquierda. Hover AZUL, no rojo: minimizar no destruye. La pastilla de
-         reapertura vive abajo a la izquierda, ENCIMA de la barra de módulos
-         minimizados (que baja a left:14 al ocultar el panel principal). Ambos
-         cuelgan de document.body: Regla E, colores con !important sin excepción. */
-      #vgl-rcv-pendientes .vgl-rcvp-min{
-        position:absolute;top:2px;right:32px;width:28px;height:28px;
-        display:flex;align-items:center;justify-content:center;padding:0;
-        border:1px solid transparent;border-radius:var(--r-pill);
-        background:transparent;color:var(--fg2) !important;
-        font-size:var(--t-small);line-height:1;cursor:pointer
-      }
-      #vgl-rcv-pendientes .vgl-rcvp-min:hover{
-        background:rgba(var(--rgb-azul),.14);border-color:rgba(var(--rgb-azul),.38);color:var(--c-azul) !important
-      }
-      #vgl-rcv-pendientes .vgl-rcvp-min:focus-visible{outline:2px solid var(--c-azul);outline-offset:1px}
-      #vgl-rcv-pendientes-pill{
-        position:fixed;left:14px;bottom:58px;
-        z-index:calc(var(--z-modal) + 1);
-        display:flex;align-items:center;gap:6px;
-        padding:9px 14px;
-        background:var(--bg-solid) !important;border:1px solid var(--edge);
-        border-radius:var(--r-pill);box-shadow:var(--shadow-panel);
-        font-family:var(--font-stack);font-size:var(--t-micro);font-weight:700;
-        color:var(--fg) !important;cursor:pointer
-      }
-      #vgl-rcv-pendientes-pill:hover{color:var(--c-azul) !important;border-color:var(--c-azul)}
-      #vgl-rcv-pendientes-pill:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
+      #vgl-pym-modal .vgl-rcvp-chip-vencido{background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.38)}
+      #vgl-pym-modal .vgl-rcvp-chip-proximo{background:rgba(var(--rgb-ambar),.16);color:var(--c-ambar) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.38)}
+      #vgl-pym-modal .vgl-rcvp-chip-pendiente{background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38)}
+      #vgl-pym-modal .vgl-rcvp-chip-aldia{background:rgba(var(--rgb-verde),.14);color:var(--c-verde) !important;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.34)}
+      #vgl-pym-modal .vgl-rcvp-nota{margin-top:8px;font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
+      #vgl-pym-modal .vgl-rcvp-pie{margin-top:8px;font-size:var(--t-nano);color:var(--fg3) !important}
       /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
          ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
          Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
@@ -20385,7 +20301,7 @@
          compite con una clase o un inline nuestro (quien lleva color propio lleva clase
          propia — v18.0.16 — y la Regla R garantiza que todo color inline se declara con
          prioridad). El panel del Anexo 5 no está: vive DENTRO de #vgl-root. */
-      #vgl-pym-modal :where(:not([class])),#vgl-pes-modal :where(:not([class])),#vgl-labs-modal :where(:not([class])),#vgl-labsv-modal :where(:not([class])),#vgl-postcita-panel :where(:not([class])),#vgl-agendar-modal :where(:not([class])),#vgl-ordenar-modal :where(:not([class])),#vgl-toasts :where(:not([class])),#vgl-pausa-clinica :where(:not([class])){color:inherit !important}
+      #vgl-pym-modal :where(:not([class])),#vgl-a5-modal :where(:not([class])),#vgl-pes-modal :where(:not([class])),#vgl-labs-modal :where(:not([class])),#vgl-labsv-modal :where(:not([class])),#vgl-postcita-panel :where(:not([class])),#vgl-agendar-modal :where(:not([class])),#vgl-ordenar-modal :where(:not([class])),#vgl-toasts :where(:not([class])),#vgl-pausa-clinica :where(:not([class])){color:inherit !important}
 
       /* =====================================================================
          v18.0.16 — REGRESIÓN DE MI PROPIO BLINDAJE (v18.0.14), medida en Chromium.
@@ -21383,6 +21299,22 @@
         display:flex;align-items:center;justify-content:center;
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
+      /* v18.14.2 (frente A5) — MODAL DIFERENCIADO DEL ANEXO 5 (el repositorio secundario de
+         su información). Reutiliza a propósito la tarjeta del aviso central (.vgl-pym-card):
+         la casa tiene UN lenguaje de modal y este no inventa otro; lo que cambia es el
+         acento —el rojo del anexo— y el contenido, que es el detalle completo. */
+      #vgl-a5-modal{
+        position:fixed;inset:0;z-index:var(--z-alerta);
+        display:flex;align-items:center;justify-content:center;
+        background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
+      }
+      #vgl-a5-modal .vgl-pym-card{
+        background:linear-gradient(170deg,rgba(var(--rgb-rojo),.13),rgba(0,0,0,0) 46%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-rojo),.42);
+        box-shadow:var(--shadow-float),0 0 42px rgba(var(--rgb-rojo),.10),inset 0 1px 0 rgba(255,255,255,.10)
+      }
+      #vgl-a5-modal .vgl-pym-head{border-bottom:1px solid rgba(var(--rgb-rojo),.16)}
+      #vgl-a5-modal .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)}
       .vgl-pym-card{
         background:linear-gradient(170deg,rgba(var(--rgb-recordatorio),.13),rgba(0,0,0,0) 46%),var(--bg-solid);
         border:1px solid rgba(var(--rgb-recordatorio),.42);
@@ -29584,19 +29516,29 @@
           }
           if (_firmaMeds === "") _firmaMeds = _firmaMedsN;
         } catch (eM) {}
-        const ahora = _tableroFirmaDom(apt.doc_id);
-        if (!ahora || ahora === _firma) return;
-        const cambios = _tableroQueCambio(_firma, ahora);
-        _firma = ahora;
         // v18.0.33 — el tick ya estaba protegido de rebote (_tableroFirmaDom devuelve ""
-        // cuando hay otro paciente en pantalla, y unas líneas arriba se sale por
+        // cuando hay otro paciente en pantalla, y la línea de abajo se sale por
         // `if (!ahora || ahora === _firma) return`), pero esa protección era un efecto
         // colateral, no una guarda. Se hace explícita: si mañana la firma cambia de forma,
         // esto no vuelve a ser el mismo defecto.
+        const ahora = _tableroFirmaDom(apt.doc_id);
+        if (!ahora || ahora === _firma) return;
+        const cambios = _tableroQueCambio(_firma, ahora);
+        // v18.14.1 (frente 2) — LA FIRMA SE CONSUME AL RECONCILIAR, NO AL LEERLA. Antes se
+        // avanzaba aquí, ANTES de los dos `return` de abajo: si la pantalla no se podía
+        // cerrar en ese instante (la cabecera de Everest re-renderizando, que es justo
+        // cuando dispara el flush de la escritura) o el resumen cacheado no traía con qué
+        // recalcular, el cambio quedaba marcado como «ya visto» SIN haberse reconciliado —
+        // y la vuelta siguiente salía por `ahora === _firma`. El Panel se quedaba con la
+        // clasificación vieja el resto de la consulta, en silencio y sin ningún repintado
+        // posterior que lo corrigiera: una actualización de estado PERDIDA. Ahora la firma
+        // solo avanza cuando el repintado ocurrió de verdad; si no, el tick siguiente (o el
+        // flush de la próxima tecla) lo reintenta. Reintentar es puro y sin red: no cuesta.
         const factores = mtrPanelFactoresDePantalla(apt.doc_id, document);
-        if (!factores) return;
+        if (!factores) return;                     // la firma NO se mueve: el cambio sigue pendiente
         const nuevo = mtrRecalcularConFactores(_resumen, factores, todayStamp());
-        if (!nuevo) return;
+        if (!nuevo) return;                        // idem: sin recálculo no se marca como visto
+        _firma = ahora;
         // Lo que el médico acaba de escribir puede abrir la compuerta: se
         // reevalúa aquí para que la categoría aparezca sin cerrar el panel.
         try { const ctx2 = _vglContextoEstado(apt.doc_id, document); _ctxIncompleto = ctx2.ok ? null : ctx2; } catch (e2) {}
@@ -36653,7 +36595,6 @@
     // v15.6.0 — lo técnico ya no se abre con un interruptor visible: solo con el modo
     // programador (Ctrl+Shift+D), que no se persiste ni aparece para los médicos.
     const isDevMode = _vglProgOn;
-    const devStyle = isDevMode ? "" : 'class="vgl-d-none"';
     const repUltOk = (() => { try { const t0 = localStorage.getItem("vgl_rep_last_ok"); if (!t0) return "nunca visto en este equipo"; const min = Math.round((Date.now() - new Date(t0).getTime()) / 60000); return min < 2 ? "hace un momento" : min < 60 ? "hace " + min + " min" : min < 1440 ? "hace " + Math.round(min / 60) + " h" : "hace " + Math.round(min / 1440) + " días"; } catch (e) { return "?"; } })();
     let repColaN = 0; try { repQLoad(); repColaN = (repQ || []).length; } catch (e) {}
     let repUltErr = ""; try { const e0 = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e0 && e0.detalle) repUltErr = e0.detalle; } catch (e) {}
@@ -36670,9 +36611,9 @@
     // paso a paso (c-acomp). Los sub-toggles se pintan SOLO con su padre activo
     // y se ocultan/recuperan en vivo al moverlo.
     const grpToggles = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-toggles">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Funcionalidades por médico</div>
-        <div class="vgl-fld"><span class="vgl-hint">Interruptores personales suyos: se guardan por médico (no por computador) y aplican de inmediato. Apagar un módulo oculta su botón; encenderlo lo devuelve al instante. Solo usted los ve.</span></div>
-        ${VGL_TOGGLES.map((def) => {
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Módulos visibles en mi dock</div>
+        <div class="vgl-fld"><span class="vgl-hint">Interruptores personales suyos: se guardan por médico (no por computador) y aplican de inmediato. Apagar un módulo oculta su botón; encenderlo lo devuelve al instante. Solo usted los ve. Los interruptores marcados como experimentales solo aparecen en modo programador (Ctrl+Shift+D).</span></div>
+        ${VGL_TOGGLES.filter((def) => isDevMode || !def.dev).map((def) => {
           const esHijo = !!def.sub;
           const padreLabel = esHijo ? (VGL_TOGGLES.find((x) => x.k === def.sub) || {}).label : "";
           return `<div class="vgl-fld${esHijo && !togActiva(def.sub) ? " vgl-d-none" : ""}"${esHijo ? ` id="vgl-togsub-${def.k}"` : ""}><label>${def.label}<span class="vgl-hint">${def.desc}${esHijo ? " Solo se muestra con «" + padreLabel + "» encendido." : ""}</span></label>${sw("c-tog-" + def.k.replace(/^tog_/, ""), togActiva(def.k))}</div>`;
@@ -36684,7 +36625,7 @@
     // EN CALIENTE (sin borrador de vgl_cfg): la revocación aplica en el acto y
     // cada cambio se audita (local + evento remoto «permiso_cambio»).
     const grpPermisos = !accesoCap("toggles_funcionalidades") ? "" : `<div class="vgl-grp" id="vgl-grp-permisos">
-        <div class="vgl-set-cap vgl-cap-morado"><i></i>Permisos por médico (administración)</div>
+        <div class="vgl-set-cap vgl-cap-morado"><i></i>Permisos de uso por médico (solo administrador)</div>
         <div class="vgl-fld"><span class="vgl-hint">Decida qué funciones puede EJECUTAR cada médico de este equipo. Todos siguen VIENDO los botones: al desactivar una función, el botón queda visible pero avisa que está desactivada y no abre. Por defecto todo queda encendido (ON). Escriba la cédula (uid) o el nombre completo del médico, pulse Añadir y desmarque lo que corresponda. Cada cambio queda anotado con quién lo hizo, cuándo, a qué médico y qué función (auditoría). No puede desactivarse funciones a sí mismo.</span></div>
         <div class="vgl-fld"><label>Médico (cédula o nombre completo)</label><div style="display:flex;gap:8px;align-items:center"><input type="text" id="c-perm-medico" autocomplete="off" spellcheck="false" placeholder="ej. 12345678 o PEPITO PEREZ"><button class="vgl-btn" id="c-perm-add">Añadir</button></div></div>
         <div id="c-perm-lista">${permisosListaHtml()}</div>
@@ -36721,7 +36662,7 @@
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
-        <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Permite crear la cita de control desde el botón 📅 Agendar de cada paciente, sin salir de la historia.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
+        <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Permite crear la cita de control desde el botón 📅 Agendar de cada paciente, sin salir de la historia. Distinto del interruptor «Módulo de agendamiento» (sección «Módulos visibles en mi dock»): aquel solo muestra u oculta el botón; este decide si la cita se puede crear.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, el paciente recibe en su celular el recordatorio de Everest. Solo se envía si la cita quedó creada.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
         <div class="vgl-fld"><label>Guía paso a paso<span class="vgl-hint">Le muestra, con una burbuja a la vez, el siguiente paso con cada paciente. Ideal si está empezando; cuando ya no le haga falta, se retira sola.</span></label>${sw("c-acomp", (typeof _acompActivo === "function") ? _acompActivo() : false)}</div>
         <!-- v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta
@@ -36777,15 +36718,20 @@
         <div class="vgl-fld"><label>Aviso del paciente al abrir la historia<span class="vgl-hint">Referencia: un único aviso por paciente reúne, al abrir su historia, las actividades de prevención (PyM) pendientes, el abandono del Programa de Riesgo Cardiovascular y los laboratorios RCV sin resultado vigente (últimos 180 días). Siempre activo, sin interruptores separados.</span></label><span class="vgl-hint" style="opacity:.85">Siempre activo</span></div>
         <!-- v18.2 — dos proveedores: z.ai (GLM-5.3) principal y Gemini de respaldo.
              v18.8.0 — tres: deepseek-v4-flash (principal si hay clave), z.ai (solo si no
-             hay clave deepseek) y Gemini (respaldo de ambos). -->
-        <div class="vgl-fld"><label>Clave de la IA (DeepSeek — principal)<span class="vgl-hint">Clave de la API de DeepSeek (api.deepseek.com). El redactor usa deepseek-v4-flash con esta clave; si falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-deepseek-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
-        <div class="vgl-fld"><label>Clave de la IA (z.ai — alternativo)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). Solo se usa si NO hay clave de DeepSeek; si GLM-5.3 falla, intenta Gemini una sola vez. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
-        <div class="vgl-fld"><label>Clave de la IA (Gemini — respaldo)<span class="vgl-hint">Se usa sola si no hay clave de DeepSeek ni de z.ai, o como único reintento cuando el principal falla. Se guarda solo en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+             hay clave deepseek) y Gemini (respaldo de ambos).
+             v18.14.1 (frente 4) — política de modelos del proyecto: deepseek-v4-flash es
+             el modelo por DEFECTO de todo el sistema; la única excepción automática es
+             Gemini y solo con su API válida; z.ai queda como último recurso y como
+             elección explícita en «Motor de IA preferido». -->
+        <div class="vgl-fld"><label>Clave de la IA (DeepSeek — principal)<span class="vgl-hint">Clave de la API de DeepSeek (api.deepseek.com). Es el modelo por defecto del sistema: el redactor usa deepseek-v4-flash con esta clave; si falla, intenta Gemini una sola vez. Se guarda CIFRADA en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-deepseek-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Clave de la IA (z.ai — último recurso)<span class="vgl-hint">Clave de la API GENERAL de z.ai (api.z.ai). Ya NO entra por «Automático»: se usa solo como último recurso si no hay ninguna otra clave, o si usted elige z.ai como motor preferido. Se guarda CIFRADA en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-zai-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
+        <div class="vgl-fld"><label>Clave de la IA (Gemini — excepción) <button class="vgl-btn" id="c-ia-verify" type="button">Verificar</button><span class="vgl-hint">Gemini solo entra si su API está configurada de forma <b>válida</b>: pulse «Verificar» después de pegar la clave y se comprobará contra la API real (una sola llamada; el resultado se guarda atado a la clave, nunca la clave). Se usa sola si no hay clave de DeepSeek y como único reintento cuando el principal falla. Se guarda <b>cifrada</b> en este navegador y nunca se muestra completa.</span></label><input type="password" id="c-ia-key" autocomplete="off" placeholder="pegue aquí la clave" value=""></div>
         <!-- v18.8.8 FASE C (C.1) — MOTOR DE IA PREFERIDO: cuál proveedor intenta
              primero el redactor. "auto" = DeepSeek V4 Flash si hay clave (default del
-             sistema), si no z.ai; Gemini entra solo con su clave. Sin la clave del
-             preferido, la escalera cae al orden natural. Se guarda aparte, sin PHI. -->
-        <div class="vgl-fld"><label>Motor de IA preferido<span class="vgl-hint">Cuál proveedor intenta primero el redactor. «Automático» = DeepSeek V4 Flash si hay clave de DeepSeek (default del sistema) y, si no, z.ai; Gemini solo entra con su propia clave. Si el preferido no tiene clave configurada, se usa el siguiente disponible.</span></label><select id="c-ia-pref"><option value="auto">Automático — DeepSeek V4 Flash si hay clave</option><option value="deepseek">DeepSeek V4 Flash</option><option value="zai">z.ai (GLM-5.3)</option><option value="gemini">Google Gemini</option></select></div>
+             sistema) y, si no, Gemini con API válida; z.ai solo entra si se elige aquí.
+             Sin la clave del preferido, la escalera cae al orden natural. Se guarda
+             aparte, sin PHI. -->
+        <div class="vgl-fld"><label>Motor de IA preferido<span class="vgl-hint">Cuál proveedor intenta primero el redactor. «Automático» = DeepSeek V4 Flash si hay clave de DeepSeek (default del sistema) y, si no, Gemini (solo con su API válida); z.ai no entra por «Automático», solo si usted lo elige aquí. Si el preferido no tiene clave configurada, se usa el siguiente disponible.</span></label><select id="c-ia-pref"><option value="auto">Automático — DeepSeek V4 Flash si hay clave</option><option value="deepseek">DeepSeek V4 Flash</option><option value="zai">z.ai (GLM-5.3)</option><option value="gemini">Google Gemini</option></select></div>
         <div class="vgl-fld"><label>Redacción con IA en texto libre<span class="vgl-hint">Interruptor general del redactor de casillas de texto libre (requiere alguna de las claves de arriba).</span></label>${sw("c-ia", S.iaRedaccion)}</div>
         <!-- v17.0.0 — CARPETA LOCAL DEL MÉDICO; v18.0.144 — ya NO guarda historias clínicas
              identificadas: es un CACHÉ mínimo, cifrado y seudonimizado (sin cédulas dentro
@@ -37031,6 +36977,20 @@
         v = v.replace(/[•]/g, "").trim();                // si escribió pegado a la máscara, quita los bullets
         mtrGuardarClaveGemini(v);                        // v vacío la borra (comportamiento buscado)
         iaKey.value = v ? "••••••••" : "";
+        // v18.14.1 (frente 4) — una clave recién pegada se verifica SOLA. El médico no
+        // tiene que acordarse de pulsar «Verificar»: la condición que él puso («Gemini
+        // solo si su API es válida») queda comprobada sin pedirle un paso extra, y el
+        // botón pasa a mostrar el veredicto. Si no hay red, el veredicto no cambia.
+        if (v) {
+          const b = q("#c-ia-verify");
+          if (b) { b.disabled = true; b.textContent = "Verificando…"; }
+          mtrVerificarClaveGemini((r) => {
+            const bb = q("#c-ia-verify");
+            if (!bb) return;
+            bb.disabled = false;
+            bb.textContent = (r === "ok") ? "Verificada ✓" : (r === "http_400" || r === "http_401" || r === "http_403") ? "No válida" : "Verificar";
+          });
+        }
       });
     }
     // v18.8.0 — clave de DeepSeek (deepseek-v4-flash, principal si hay clave):
@@ -37068,6 +37028,22 @@
         try { mtrGuardarIaPreferencia(iaPrefEl.value); } catch (e) {}
       });
     }
+    // v18.14.1 (frente 4) — «Verificar» de la clave de Gemini: dispara UNA llamada real
+    // (el mismo camino del proveedor) y guarda el veredicto atado a la clave. Es lo que
+    // convierte «hay una clave» en «hay una API VÁLIDA», que es la condición que el
+    // médico puso para que Gemini pueda usarse. Nunca bloquea la UI ni rompe Ajustes.
+    const iaVerify = q("#c-ia-verify");
+    if (iaVerify) iaVerify.addEventListener("click", () => {
+      const btn = q("#c-ia-verify");
+      if (btn) { btn.disabled = true; btn.textContent = "Verificando…"; }
+      const repintar = (txt) => { const b = q("#c-ia-verify"); if (b) { b.disabled = false; b.textContent = txt; } };
+      mtrVerificarClaveGemini((r) => {
+        if (r === "ok") { showToast("VERDE", "Gemini verificado", "La clave de Gemini responde: ya puede usarse como excepción al modelo por defecto."); repintar("Verificada ✓"); }
+        else if (r === "sin_clave") { showToast("AMBAR", "Sin clave de Gemini", "Pegue primero la clave y vuelva a pulsar «Verificar»."); repintar("Verificar"); }
+        else if (r === "http_400" || r === "http_401" || r === "http_403") { showToast("AMBAR", "Gemini rechazó la clave", "La API no acepta esta credencial: el redactor seguirá usando DeepSeek V4 Flash."); repintar("No válida"); }
+        else { showToast("AMBAR", "No se pudo verificar", "No hubo respuesta de la API (red o servicio). La clave queda como estaba."); repintar("Verificar"); }
+      });
+    });
     // v14.2.0 — El modelo ya no se edita a mano: es automático con rotación por cuota.
     bind("#c-base", "baseAuto", (n) => n.checked);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
@@ -38340,8 +38316,9 @@
       // v18.13.1 (BOLT, rendimiento) — MEMO POR TICK DEL MAPA DE TOGGLES: mismo
       // patrón ya establecido para state._docTick (F-P2). togActiva() lee
       // "vgl_tog_<uid>" del almacén; dentro de una sola vuelta de tick() se leía
-      // hasta 3 veces la MISMA clave (p. ej. hcAnexo5Render: togActiva("tog_notif")
-      // + togActiva("tog_anexo5") cuyo `sub` vuelve a togActiva("tog_notif")).
+      // hasta 3 veces la MISMA clave (p. ej. checkAvisoUniversal: togActiva("tog_notif")
+      // y _pendientesUniversales: togActiva("tog_anexo5"), cuyo `sub` vuelve a
+      // togActiva("tog_notif")).
       // state._enTickSync delimita la ventana: SOLO mientras es true, togActiva()
       // reutiliza state._togMapTick/_togMapTickUid; togSet() la invalida al
       // escribir; cualquier llamador fuera de esta vuelta (clics, Ajustes,
@@ -38548,7 +38525,10 @@
       // idempotente, cero red, solo dentro de #vgl-root. Se llama en CADA tick
       // porque además instala su listener de captura la primera vez.
       try { hcRenderChip(); } catch (e) {}
-      try { hcAnexo5Render(); } catch (e2) {}   // v18.6.1 (F2): aviso del Anexo 5 con la HC abierta
+      // v18.14.3 (opción B del comité) — aquí colgaba `hcAnexo5Render()` (v18.6.1 F2): el
+      // panel del Anexo 5 dentro de #vgl-root. Se retiró con el panel. El anexo sigue
+      // llegando a la consulta por la vara única de `_pendientesUniversales` (sección del
+      // aviso de la jornada) y por su repositorio `📋 Anexo 5` a un clic.
 
       // v16.1.0 — REPORTE DE CAMPO: «Auto-Labs» aparecía hasta en Citas del día. Causa:
       // los botones inyectados se crean dentro de la historia y, como Everest no recarga
@@ -38570,9 +38550,16 @@
         // colgados de document.body y Everest no recarga la página al navegar, así que sin
         // esto se quedarían flotando sobre la lista de Citas del día. Es exactamente el
         // reporte de campo que la v16.1.0 tuvo que arreglar con Auto-Labs.
-        ["vgl-lab-injector", "vgl-examen-normalidad", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an", "vgl-rcv-pendientes"].forEach((id) => {
+        ["vgl-lab-injector", "vgl-examen-normalidad", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
           try { const n = document.getElementById(id); if (n) n.remove(); } catch (e) {}
         });
+        // v18.14.2 (frente RCV) — la sección de próximos exámenes dejó de ser un panel que se
+        // podía retirar del DOM (el encargo la quiso dentro del módulo «Pendientes»): su
+        // equivalente es soltar el último cálculo. Sin esto, al volver a Citas del día la
+        // sección seguiría disponible para el mismo paciente — un dato de la consulta anterior
+        // colgando sobre la agenda. Se suelta aquí, en el MISMO barrido que retira los
+        // inyectados que Everest no recarga al navegar.
+        _rcvUltimo = null;
         // v17.0.3 — REPORTE DE CAMPO (pantallazo): la burbuja de la guía paso a paso
         // sufría exactamente el mismo problema que Auto-Labs arriba (v16.1.0) — como
         // Everest no recarga la página al navegar, se quedaba colgada del body con su
@@ -39988,6 +39975,11 @@
     // v18.4.3 (H5) — hidratar la memoria clínica y el historial de inasistencias cifrados
     // lo antes posible: el primer tick del reloj (2-5 s) ya encontrará el memo servido.
     try { _vglCosechaHidratarKick(); } catch (e) {}
+    // v18.14.1 (frente 4) — la bóveda de credenciales se hidrata también en el arranque:
+    // las claves de IA viven cifradas en el disco y el memo en RAM es lo que permite
+    // leerlas en síncrono desde los gates y la escalera. Antes de que el médico abra
+    // Ajustes o pulse Generar, ya está servida.
+    try { _vglSecretosHidratarKick(); } catch (e) {}
     try { _noShowHidratarKick(); } catch (e) {}
     // v17.9.0 — la escucha de la historia clínica, lo antes posible: si el médico guarda
     // antes de que el widget termine de montarse, ese guardado no se pierde. Va en su
@@ -48244,10 +48236,115 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     return L.join("\n");
   }
 
+  // =====================================================================
+  //  v18.14.1 (frente 4) — BÓVEDA DE CREDENCIALES.
+  //  Las claves de IA se guardaban OFUSCADAS con XOR+base64: eso NO es
+  //  cifrado — cualquiera con acceso al almacén del navegador las
+  //  recuperaba en un segundo. Ahora viven en un sobre AES-GCM 256 con la
+  //  clave de EQUIPO (HKDF de _vglCarpetaClaveEquipo, la misma que ya
+  //  protege la carpeta y la memoria clínica): sin ese almacén no hay forma
+  //  de descifrarlas, y el almacén solo muestra un sobre opaco. Se reutiliza
+  //  el MISMO sobre de vgl_cosecha (VGLC1:) — no se inventa formato nuevo.
+  //
+  //  LECTURA SÍNCRONA: los gates, los títulos y la escalera de proveedores
+  //  preguntan la clave en medio de código síncrono, así que el claro vive en
+  //  un memo en RAM hidratado en el arranque (boot) y el disco solo recibe el
+  //  sobre. Mientras el memo esté frío y el disco ya esté cifrado, una lectura
+  //  devuelve vacío y dispara la hidratación: nunca se descifra a medias.
+  //
+  //  COMPATIBILIDAD: un valor ofuscado legado se adopta, se lee igual y se
+  //  re-cifra en el primer arranque con crypto — no se pierde una clave ya
+  //  configurada. Sin WebCrypto se degrada a la ofuscación de siempre (jamás
+  //  en claro): la alternativa sería impedirle al médico guardar su clave.
+  // =====================================================================
+  const _vglSecretosMem = Object.create(null);
+  let _vglSecretosHidratado = false;
+  let _vglSecretosHidratando = false;
+  let _vglSecretosCola = Promise.resolve();
+  function _vglNombresSecretos() { return [MTR_DEEPSEEK_KEY, MTR_GEMINI_KEY, MTR_ZAI_KEY]; }
+  async function _vglSecretoPersistir(nombre, claro) {
+    try {
+      if (typeof GM_setValue === "undefined") return;
+      if (!claro) { GM_setValue(nombre, null); return; }
+      const sobre = await _vglSobreCifrar(claro);
+      GM_setValue(nombre, sobre || _vglOfusca(claro));
+    } catch (e) {}
+  }
+  function _vglSecretoGuardar(nombre, valor) {
+    try {
+      const claro = String(valor == null ? "" : valor).trim();
+      // El memo manda desde este instante y la marca de «conocido» es el propio
+      // nombre: así un guardado no bloquea la hidratación de las OTRAS claves.
+      _vglSecretosMem[nombre] = claro;
+      if (typeof GM_setValue === "undefined") return !!claro;
+      // Serializado: pegar una clave y borrarla enseguida no puede aterrizar en
+      // el disco en orden inverso.
+      _vglSecretosCola = _vglSecretosCola.then(() => _vglSecretoPersistir(nombre, claro)).catch(() => {});
+      return true;
+    } catch (e) { return false; }
+  }
+  function _vglSecretoLeer(nombre) {
+    try {
+      if (Object.prototype.hasOwnProperty.call(_vglSecretosMem, nombre)) return _vglSecretosMem[nombre];
+      if (_vglSecretosHidratado || typeof GM_getValue === "undefined") return "";
+      const v = GM_getValue(nombre, "");
+      if (!v) return "";
+      if (String(v).slice(0, VGL_CIFRA_PREFIJO.length) === VGL_CIFRA_PREFIJO) {
+        _vglSecretosHidratarKick();
+        return "";
+      }
+      const claro = _vglDesofusca(v);          // legado ofuscado: se resuelve en síncrono
+      _vglSecretosMem[nombre] = claro;
+      return claro;
+    } catch (e) { return ""; }
+  }
+  async function _vglSecretosHidratar() {
+    if (_vglSecretosHidratado || _vglSecretosHidratando) return;
+    _vglSecretosHidratando = true;
+    const migrar = [];
+    try {
+      if (typeof GM_getValue === "undefined") return;
+      for (const nombre of _vglNombresSecretos()) {
+        let v = "";
+        try { v = GM_getValue(nombre, "") || ""; } catch (e) { v = ""; }
+        if (!v) continue;
+        const esSobre = String(v).slice(0, VGL_CIFRA_PREFIJO.length) === VGL_CIFRA_PREFIJO;
+        if (esSobre) {
+          if (Object.prototype.hasOwnProperty.call(_vglSecretosMem, nombre)) continue;   // el memo fresco gana
+          // null = clave de otro equipo o sobre corrupto: se pierde, como la carpeta
+          // cifrada — pero no se pisa nada con basura.
+          const claro = await _vglSobreDescifrar(v);
+          if (claro) _vglSecretosMem[nombre] = claro;
+        } else {
+          // Legado ofuscado: se adopta si el memo aún no lo tiene (si lo tiene, manda el
+          // memo, que es más fresco) y SIEMPRE se re-cifra — aunque una lectura síncrona
+          // ya lo hubiera memoizado, que es justo el caso de una pestaña que leyó antes
+          // de que el arranque hidratara.
+          if (!Object.prototype.hasOwnProperty.call(_vglSecretosMem, nombre)) {
+            const claro = _vglDesofusca(v);
+            if (!claro) continue;
+            _vglSecretosMem[nombre] = claro;
+          }
+          migrar.push(nombre);
+        }
+      }
+      // Migración al cifrado real, por la MISMA cola serializada de los guardados: así el
+      // sobre que se escribe nunca puede aterrizar después de una escritura más nueva.
+      for (const nombre of migrar) {
+        const claro = _vglSecretosMem[nombre];
+        _vglSecretosCola = _vglSecretosCola.then(() => _vglSecretoPersistir(nombre, claro)).catch(() => {});
+      }
+      await _vglSecretosCola;
+    } catch (e) {} finally { _vglSecretosHidratando = false; _vglSecretosHidratado = true; }
+  }
+  function _vglSecretosHidratarKick() {
+    try { if (!_vglSecretosHidratado && !_vglSecretosHidratando) _vglSecretosHidratar(); } catch (e) {}
+  }
+
   // ---------- CLAVE Y MODELO DE GEMINI (config del médico, en su equipo) ----------
-  // La clave la fija el médico en Ajustes; se guarda OFUSCADA (como las de Athenea),
-  // nunca en claro ni en logs. El modelo es configurable con un valor por defecto del
-  // nivel gratuito. La ofuscación NO es cifrado real (igual aviso que las de Athenea).
+  // La clave la fija el médico en Ajustes; se guarda CIFRADA en reposo (AES-GCM 256
+  // con la clave de equipo, ver la bóveda de arriba) y nunca en claro ni en logs. El
+  // modelo es configurable con un valor por defecto del nivel gratuito.
   const MTR_GEMINI_KEY = "vgl_gemini_key";
   // v14.2.0 — ROTACIÓN AUTOMÁTICA DE MODELO (pedido 17-08 tras ver los límites reales de la
   // consola). El modelo NO se edita a mano. Lista de mayor a menor CAPACIDAD DIARIA del nivel
@@ -48277,38 +48374,91 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   // presencia en el panel no prueba que el modelo responda.
   const MTR_GEMINI_MODELOS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash", "gemini-3.7-flash"];
   const MTR_GEMINI_IDX_KEY = "vgl_gemini_idx";
-  function mtrGuardarClaveGemini(clave) {
-    try { if (typeof GM_setValue === "undefined") return false; const c = String(clave || "").trim(); if (!c) { GM_setValue(MTR_GEMINI_KEY, null); return true; } GM_setValue(MTR_GEMINI_KEY, _vglOfusca(c)); return true; } catch (e) { return false; }
+  function mtrGuardarClaveGemini(clave) { return _vglSecretoGuardar(MTR_GEMINI_KEY, clave); }
+  function mtrLeerClaveGemini() { return _vglSecretoLeer(MTR_GEMINI_KEY); }
+  // v18.14.1 (frente 4) — ¿la API de Gemini está configurada DE FORMA VÁLIDA?
+  // El pedido del médico es que Gemini solo entre si su API es válida: una clave
+  // presente pero RECHAZADA por Google no puede seguir decidiendo la escalera.
+  // La validez se aprende de la única fuente que no se puede simular — la propia
+  // API — con el botón «Verificar» de Ajustes, que guarda el veredicto atado a la
+  // HUELLA de la clave (nunca la clave). Sin verificación previa se asume válida
+  // (fail-open): no se le quita a nadie un proveedor que venía funcionando solo
+  // porque no ha pulsado un botón, y un fallo de red JAMÁS marca inválida una clave.
+  const MTR_GEMINI_OK_KEY = "vgl_gemini_ok";
+  function _vglHuellaClave(s) {
+    try {
+      const t = String(s || "");
+      let h = 5381;
+      for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+      return h.toString(16);
+    } catch (e) { return ""; }
   }
-  function mtrLeerClaveGemini() {
-    try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_GEMINI_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
+  function mtrGeminiValida() {
+    const k = mtrLeerClaveGemini();
+    if (!k) return false;
+    try {
+      if (typeof GM_getValue === "undefined") return true;
+      const r = GM_getValue(MTR_GEMINI_OK_KEY, null);
+      if (!r || typeof r !== "object") return true;                  // sin verificar: se asume válida
+      if (r.huella !== _vglHuellaClave(k)) return true;              // la clave cambió: el veredicto viejo no aplica
+      return r.ok === true;
+    } catch (e) { return true; }
+  }
+  function mtrGuardarVeredictoGemini(clave, ok) {
+    try {
+      if (typeof GM_setValue === "undefined") return;
+      GM_setValue(MTR_GEMINI_OK_KEY, { huella: _vglHuellaClave(clave), ok: !!ok, dia: todayStamp() });
+    } catch (e) {}
+  }
+  // Verificación EN VIVO con el MISMO camino que usa el redactor (proveedor gemini):
+  // así no se añade una URL de IA nueva al archivo ni se duplica el contrato.
+  function mtrVerificarClaveGemini(alTerminar) {
+    const fin = (r) => { try { if (typeof alTerminar === "function") alTerminar(r); } catch (e) {} };
+    try {
+      const k = mtrLeerClaveGemini();
+      if (!k) { fin("sin_clave"); return; }
+      const prov = mtrProveedorIA("gemini");
+      if (!prov || typeof GM_xmlhttpRequest === "undefined") { fin("sin_http"); return; }
+      const modelo = mtrModeloGemini();
+      GM_xmlhttpRequest({
+        method: "POST",
+        url: prov.url(modelo),
+        headers: prov.headers(k),
+        data: prov.cuerpo(modelo, "Responde únicamente con la palabra OK.", "Confirma que la clave responde."),
+        timeout: 15000,
+        onload: (r) => {
+          const ok = !!r && r.status === 200 && !!prov.parsear(r.responseText).ok;
+          // Solo un RECHAZO explícito de la credencial marca la clave como inválida;
+          // un 429 o un 5xx es el servicio, no la clave, y no debe apagar un proveedor
+          // que funciona. El resto de fallos dejan el veredicto como estaba.
+          if (ok) mtrGuardarVeredictoGemini(k, true);
+          else if (r && (r.status === 400 || r.status === 401 || r.status === 403)) mtrGuardarVeredictoGemini(k, false);
+          fin(ok ? "ok" : "http_" + (r && r.status));
+        },
+        onerror: () => fin("red"),
+        ontimeout: () => fin("timeout"),
+      });
+    } catch (e) { fin("error"); }
   }
   // v18.2.0 (P9) — CLAVE DE Z.AI (proveedor PRINCIPAL; Gemini queda de respaldo).
   // API GENERAL de z.ai (api.z.ai), no el Coding Plan. Mismo patrón ofuscado que la
   // de Gemini: la fija el médico en Ajustes, nunca en claro ni en logs.
   const MTR_ZAI_KEY = "vgl_zai_key";
-  function mtrGuardarClaveZai(clave) {
-    try { if (typeof GM_setValue === "undefined") return false; const c = String(clave || "").trim(); if (!c) { GM_setValue(MTR_ZAI_KEY, null); return true; } GM_setValue(MTR_ZAI_KEY, _vglOfusca(c)); return true; } catch (e) { return false; }
-  }
-  function mtrLeerClaveZai() {
-    try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_ZAI_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
-  }
+  function mtrGuardarClaveZai(clave) { return _vglSecretoGuardar(MTR_ZAI_KEY, clave); }
+  function mtrLeerClaveZai() { return _vglSecretoLeer(MTR_ZAI_KEY); }
   // v18.8.0 — CLAVE DE DEEPSEEK (deepseek-v4-flash, API oficial api.deepseek.com).
   // Mismo patrón ofuscado que z.ai/Gemini: la fija el médico en Ajustes, nunca en
   // claro ni en logs. Si está presente, es el PRIMARIO de la escalera (por delante
   // de z.ai); Gemini sigue siendo el respaldo de siempre.
   const MTR_DEEPSEEK_KEY = "vgl_deepseek_key";
-  function mtrGuardarClaveDeepseek(clave) {
-    try { if (typeof GM_setValue === "undefined") return false; const c = String(clave || "").trim(); if (!c) { GM_setValue(MTR_DEEPSEEK_KEY, null); return true; } GM_setValue(MTR_DEEPSEEK_KEY, _vglOfusca(c)); return true; } catch (e) { return false; }
-  }
-  function mtrLeerClaveDeepseek() {
-    try { if (typeof GM_getValue === "undefined") return ""; const v = GM_getValue(MTR_DEEPSEEK_KEY, ""); return v ? _vglDesofusca(v) : ""; } catch (e) { return ""; }
-  }
+  function mtrGuardarClaveDeepseek(clave) { return _vglSecretoGuardar(MTR_DEEPSEEK_KEY, clave); }
+  function mtrLeerClaveDeepseek() { return _vglSecretoLeer(MTR_DEEPSEEK_KEY); }
   // v18.8.8 FASE C (C.1) — MOTOR DE IA PREFERIDO. El médico elige en Ajustes →
   // modo programador → «Motor de IA preferido» (vgl_ia_pref: auto | deepseek |
-  // zai | gemini). "auto" es el DEFAULT DEL SISTEMA y significa DeepSeek V4 Flash
-  // si hay clave deepseek y, si no, z.ai: exactamente el orden histórico de la
-  // escalera. Cualquier valor ausente o inválido cae a "auto" (fail-open).
+  // zai | gemini). "auto" es el DEFAULT DEL SISTEMA: DeepSeek V4 Flash si hay su
+  // clave y, si no, Gemini — la ÚNICA excepción que admite la política de modelos
+  // del proyecto. z.ai ya no entra por «auto»: solo si el médico lo elige a mano.
+  // Cualquier valor ausente o inválido cae a "auto" (fail-open).
   const MTR_IA_PREF_KEY = "vgl_ia_pref";
   function mtrIaPreferencia() {
     try {
@@ -48326,11 +48476,30 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
       return val;
     } catch (e) { return "auto"; }
   }
-  // ¿Hay ALGUNA clave de IA configurada (deepseek, z.ai o Gemini)? Los gates de
-  // entrada al redactor (dock, inyectores, panel, Generar) preguntan esto, no por
-  // un proveedor concreto; la escalera (y la preferencia C.1) decide por cuál.
+  // ¿Hay ALGUNA clave de IA que la escalera pueda usar? Los gates de entrada al
+  // redactor (dock, inyectores, panel, Generar) preguntan esto, no por un proveedor
+  // concreto; la escalera (y la preferencia C.1) decide por cuál.
   function mtrHayClaveIA() {
-    try { return !!(mtrLeerClaveDeepseek() || mtrLeerClaveZai() || mtrLeerClaveGemini()); } catch (e) { return false; }
+    try { return !!mtrPrimarioIa(); } catch (e) { return false; }
+  }
+  // v18.14.1 (frente 4) — RESOLUCIÓN DEL PRIMARIO, EN UN SOLO SITIO. La usan el gate
+  // de entrada (mtrHayClaveIA) y el disparo real (mtrGeminiRedactar): así no pueden
+  // desincronizarse — antes el gate abría con cualquier clave y la escalera podía
+  // resolverse en «sin_clave». Política de modelos del proyecto: deepseek-v4-flash es
+  // el modelo por defecto de todo el sistema y la ÚNICA excepción automática es
+  // Gemini, y solo si su API está configurada de forma VÁLIDA (mtrGeminiValida). z.ai
+  // sobrevive como último recurso — para no dejar sin redactor a quien solo tenga esa
+  // clave — y como elección explícita del médico en «Motor de IA preferido».
+  function mtrPrimarioIa() {
+    try {
+      const pref = mtrIaPreferencia();
+      const ds = mtrLeerClaveDeepseek();
+      const zai = mtrLeerClaveZai();
+      const gem = mtrGeminiValida() ? mtrLeerClaveGemini() : "";
+      if (pref === "gemini") return gem ? "gemini" : ds ? "deepseek" : zai ? "zai" : "";
+      if (pref === "zai") return zai ? "zai" : ds ? "deepseek" : "";
+      return ds ? "deepseek" : gem ? "gemini" : zai ? "zai" : "";   // "auto" (default) y "deepseek"
+    } catch (e) { return ""; }
   }
   function _mtrModeloIdx() {
     try {
@@ -49719,22 +49888,22 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         // de hoy; si el primario está y falla por algo que merezca rotar, Gemini entra
         // UNA vez con el modelo del modo.
         // v18.8.0 — con clave deepseek, el primario pasa a ser deepseek-v4-flash
-        // (un intento) y z.ai queda inactivo: prioridad deepseek > z.ai > Gemini.
+        // (un intento) y z.ai queda inactivo: prioridad deepseek > Gemini > z.ai.
         // v18.8.8 FASE C (C.1) — el MOTOR DE IA PREFERIDO (vgl_ia_pref, Ajustes →
         // modo programador) decide quién es el primario: el proveedor preferido SI
         // tiene clave; "auto" (default del sistema) = DeepSeek V4 Flash si hay clave
-        // y, si no, z.ai. Sin la clave del preferido, la escalera cae al orden
-        // natural. Con Gemini preferido, Gemini corre su rotación completa de
+        // y, si no, Gemini con API válida; z.ai solo como último recurso o si el
+        // médico lo eligió a mano. Sin la clave del preferido, la escalera cae al
+        // orden natural. Con Gemini preferido, Gemini corre su rotación completa de
         // modelos (la misma de hoy cuando es el único configurado) y no hay respaldo.
+        // v18.14.1 (frente 4) — la resolución vive en mtrPrimarioIa(), compartida con
+        // el gate de entrada; aquí solo se lee.
         const claveDs = mtrLeerClaveDeepseek();
         const claveZai = mtrLeerClaveZai();
-        const claveGem = mtrLeerClaveGemini();
-        const _pref = mtrIaPreferencia();
-        const _primario = (_pref === "gemini")
-          ? (claveGem ? "gemini" : claveDs ? "deepseek" : claveZai ? "zai" : "")
-          : (_pref === "zai")
-            ? (claveZai ? "zai" : claveDs ? "deepseek" : "")
-            : (claveDs ? "deepseek" : claveZai ? "zai" : "");   // "auto" y "deepseek"
+        // Gemini solo cuenta si su API es válida: una clave ya rechazada por Google
+        // no debe seguir decidiendo la escalera (ver mtrGeminiValida).
+        const claveGem = mtrGeminiValida() ? mtrLeerClaveGemini() : "";
+        const _primario = mtrPrimarioIa();
         const _clavePrim = _primario === "gemini" ? claveGem : _primario === "zai" ? claveZai : _primario === "deepseek" ? claveDs : "";
         if (!_clavePrim && !claveGem) { resolve({ ok: false, texto: "", motivo: "sin_clave" }); return; }
         if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, texto: "", motivo: "sin GM_xmlhttpRequest" }); return; }
@@ -51655,7 +51824,13 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         // y ocupa el único renglón que sí tenía que informarle. El dato no se pierde —sirve para
         // diagnosticar— pero se va al `title`, donde no estorba.
         btnGen.disabled = true; estado.textContent = "Redactando la nota…"; salida.value = "";
-        const _modeloInicial = mtrLeerClaveDeepseek() ? "deepseek-v4-flash" : (mtrLeerClaveZai() ? "glm-5.3" : mtrModeloGemini(modoGen));   // v18.8.0 — deepseek > z.ai > Gemini
+        // v18.14.1 (frente 4) — el título anuncia el modelo que la escalera usará DE
+        // VERDAD: sale de la misma resolución del primario (mtrPrimarioIa), así que no
+        // puede desincronizarse de quién responde. z.ai ya no se anuncia por «auto».
+        const _primarioTitulo = mtrPrimarioIa();
+        const _modeloInicial = _primarioTitulo === "deepseek" ? "deepseek-v4-flash"
+          : _primarioTitulo === "zai" ? "glm-5.3"
+          : mtrModeloGemini(modoGen);
         try { estado.title = "Modelo: " + _modeloInicial; } catch (e) {}
         _ultimoModelo = _modeloInicial;
         try { uxTrack("fn.ia.gen"); } catch (e) {}
@@ -53718,13 +53893,20 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   //  · SE GUARDA POR PACIENTE, con la misma poda por edad y cantidad que el resto de la
   //    cosecha (_vglCosechaGuardar).
   //
-  //  LO QUE ESTO NO RESUELVE, y hay que decirlo: Everest manda este paquete cuando el médico
-  //  pulsa GUARDAR, que normalmente es al FINAL de la consulta — después de redactar. Así
-  //  que lo capturado sirve de grounding para la consulta SIGUIENTE, y para la actual solo
-  //  si él guarda a mitad. Que sirva también para la actual exige leer lo que Everest CARGA
-  //  al abrir el paciente, y ese endpoint todavía no está capturado. Por eso la detección
-  //  es por forma: el día que se capture una carga, este mismo código la reconocerá sin
-  //  tocar una línea.
+  //  LO QUE ESTA ESCUCHA NO RESUELVE POR SÍ SOLA — y cómo se cerró: Everest manda este
+  //  paquete cuando el médico pulsa GUARDAR, que normalmente es al FINAL de la consulta.
+  //  Ese paquete, por sí solo, serviría de grounding para la consulta SIGUIENTE. Los dos
+  //  huecos que quedaban están cerrados y conviene no volver a declararlos abiertos:
+  //   · lo que Everest CARGA al abrir al paciente (v17.12.0) — la respuesta del servidor se
+  //     escucha por el mismo detector por forma (`mtrEsPayloadHcEverest`) y se archiva con
+  //     la guarda de cruce de paciente de v18.0.48/02-sep, así que la MISMA visita ya tiene
+  //     grounding desde que se abre la historia, sin esperar a un guardado a mitad;
+  //   · lo que el médico DIGITA sin guardar todavía (v17.10.0) — la cosecha de pantalla
+  //     (`mtrHcAcumularDelDom`, llamada desde `_vglCosecharDePantalla` en cada vuelta del
+  //     reloj mientras la HC está abierta) lee las casillas vivas y las fusiona sin perder
+  //     lo anterior. La suite_115 fija esa cadena completa hasta el prompt del redactor.
+  //  Lo que sigue SIN hacerse aquí es adivinar: si el paquete no se reconoce por forma, no
+  //  se guarda nada — nunca se supone un campo.
   // =====================================================================
   const VGL_HC_CLAVE = "hcEverest";
   let _vglHcEnganchado = false;

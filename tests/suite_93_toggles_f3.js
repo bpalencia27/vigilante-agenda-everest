@@ -39,7 +39,7 @@ module.exports = {
   cubre: [
     "togActiva", "togSet", "openAgendamientoModal", "openLabSoloModal",
     "openLaboratoriosModal", "openPanelPacienteModal", "avisoUniversal",
-    "hcRenderChip", "hcAnexo5Render", "createAccionesDockUI",
+    "hcRenderChip", "_pendientesUniversales", "createAccionesDockUI",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -193,19 +193,24 @@ module.exports = {
       t.igual(chip.innerHTML, "", "el chip viejo se vacía, no queda basura de otro turno");
     });
 
-    t.caso("aviso del Anexo 5: con notificaciones apagadas se retira el panel y no vuelve", () => {
+    t.caso("aviso del Anexo 5: con notificaciones apagadas el anexo no viaja en la vara (y con el sub-interruptor tampoco)", () => {
+      // v18.14.3 (opción B del comité): el panel del anexo dentro de la HC se retiró. Lo
+      // que el interruptor gobierna ahora es la sección del aviso de la jornada y su
+      // repositorio 📋; la compuerta real vive en `_pendientesUniversales` (la vara única).
       const c = montar();
-      const root = c.env.doc.createElement("div");
-      root.id = "vgl-root";
-      c.env.doc.body.appendChild(root);
-      const panel = c.env.doc.createElement("div");
-      panel.id = "vgl-a5-panel";
-      root.appendChild(panel);
       verSelectores(c);
       identidad(c, "DOC-8");
+      c.api.__state.pymAnexo5 = new Map([["1018888777", {
+        prog: "HTA", ctrl: 46070, suma: 58, ekg: 0, m: [], v: [], rem: [],
+      }]]);
+      t.cierto(!!c.api._pendientesUniversales("1018888777").anexo5, "precondición: con los dos interruptores encendidos el anexo está en la vara");
       c.api.togSet("tog_notif", false);
-      t.igual(c.api.hcAnexo5Render(), false, "la compuerta corta");
-      t.falso(!!c.env.doc.getElementById("vgl-a5-panel"), "el panel quedó retirado");
+      t.igual(c.api._pendientesUniversales("1018888777").anexo5, null, "el padre manda: sin notificaciones no hay anexo");
+      c.api.togSet("tog_notif", true);
+      c.api.togSet("tog_anexo5", false);
+      t.igual(c.api._pendientesUniversales("1018888777").anexo5, null, "y con el sub-interruptor apagado tampoco");
+      c.api.togSet("tog_anexo5", true);
+      t.cierto(!!c.api._pendientesUniversales("1018888777").anexo5, "encendidos los dos, el anexo vuelve a la vara");
     });
 
     t.caso("capa b del dock: con el módulo apagado el botón Agendar ni se crea; al volver, reaparece", () => {

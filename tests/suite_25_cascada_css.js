@@ -855,7 +855,16 @@ module.exports = {
       // :hover, 3 del svg interno y 1 del giro [aria-busy]) + 1 mención de la palabra en
       // el comentario del bloque. Vive bajo #vgl-root, en la zona de la cabecera que el
       // CSS hostil de Everest más ha agredido (v17.6.3): misma política que #vgl-head.
-      t.cierto(importantTotal === 701, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal, los 14 del panel RCV de la v18.4.2, los 3 del cierre/arrastre del widget RCV de la v18.8.2 (2 reglas de color del botón + 1 mención en su comentario), la 1 de la desc técnica .vgl-rcvp-desc de la v18.8.3, la 1 del blindaje tipográfico agrupado de los 9 modales pegados a body de la v18.8.4 (T1), las 6 de la v18.8.6 (minimizar del widget RCV: 5 declaraciones de color + 1 mención en su comentario) y los 25 del botón de actualización de la cabecera de la v18.8.9 (ORDEN #9: 24 declaraciones de #vgl-refresh + 1 mención en su comentario) (esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664, más la 1 del acceso directo a HC de la v18.7.0 = 665, más las 3 de la v18.8.2 = 668, más la 1 de la v18.8.3 = 669, más la 1 de la v18.8.4 = 670, más las 6 de la v18.8.6 = 676, más los 25 de la v18.8.9 = 701; salió ${importantTotal})`);
+      // v18.14.2 (frente RCV) — 701 -> 688: el panel flotante de próximos exámenes se
+      // RETIRÓ (el encargo del 10-sep lo quiso como sección exclusiva del módulo
+      // «Pendientes»). Se van con él 10 declaraciones con !important de reglas que ya no
+      // aplican a nada (#vgl-rcv-pendientes raíz, .vgl-rcvp-tit, .vgl-rcvp-cont, su
+      // :where(:not([class])), .vgl-rcvp-cerrar base y :hover, .vgl-rcvp-min base y
+      // :hover, #vgl-rcv-pendientes-pill base y :hover) + 3 menciones de la palabra en
+      // los comentarios que también se retiraron (el censo cuenta texto crudo). Las filas
+      // que SÍ siguen vivas (.vgl-rcvp-fila, chips, fechas, nota y pie) solo cambiaron de
+      // ámbito: de #vgl-rcv-pendientes a #vgl-pym-modal, sin tocar su blindaje.
+      t.cierto(importantTotal === 688, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), los 88 de la línea v17.6.83–v17.56.0, los 8 del REFACTOR S+ del Panel, los 4 del REFACTOR S+ de Laboratorios, los 16 del REFACTOR S+ de Ordenamiento/Control, los 8 del REFACTOR S+ del menú de elección, los 2 del REFACTOR S+ del aviso universal, los 14 del panel RCV de la v18.4.2, los 3 del cierre/arrastre del widget RCV de la v18.8.2 (2 reglas de color del botón + 1 mención en su comentario), la 1 de la desc técnica .vgl-rcvp-desc de la v18.8.3, la 1 del blindaje tipográfico agrupado de los 9 modales pegados a body de la v18.8.4 (T1), las 6 de la v18.8.6 (minimizar del widget RCV: 5 declaraciones de color + 1 mención en su comentario) y los 25 del botón de actualización de la cabecera de la v18.8.9 (ORDEN #9: 24 declaraciones de #vgl-refresh + 1 mención en su comentario), MENOS los 13 que se retiraron con el panel flotante RCV en la v18.14.2 (esperado 654 base + 14 = 668, menos las 4 del respaldo retiradas en v18.6.0 = 664, más la 1 del acceso directo a HC de la v18.7.0 = 665, más las 3 de la v18.8.2 = 668, más la 1 de la v18.8.3 = 669, más la 1 de la v18.8.4 = 670, más las 6 de la v18.8.6 = 676, más los 25 de la v18.8.9 = 701, menos los 13 del panel retirado en v18.14.2 = 688; salió ${importantTotal})`);
 
       // v18.0.42 — CENSO DE LAS HOJAS SPLICEADAS. Antes de esta versión ninguna regla de
       // esta suite las miraba: por ese hueco pasó el comentario de MTR_RCV_CSS que cerraba
@@ -1028,12 +1037,17 @@ module.exports = {
       // sugeridores de la Ficha del paciente (#vgl-cw-examenes, #vgl-cw-farmaco) y el
       // botón/panel de ordenamiento de la consulta: 3 -> 6.
       // v18.4.2 — el panel «Próximos exámenes RCV» (#vgl-rcv-pendientes, flotante de la
-      // historia clínica) se une a la misma capa de widget: 6 -> 7.
-      t.cierto(zWidget.length === 7, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, los sugeridores de la Ficha y #vgl-rcv-pendientes (7 sitios). Salieron ${zWidget.length}.`);
+      // historia clínica) se unió a la misma capa de widget: 6 -> 7.
+      // v18.14.2 (frente RCV) — el panel flotante se RETIRÓ (encargo del 10-sep: los
+      // próximos exámenes son una sección exclusiva del módulo «Pendientes»): 7 -> 6.
+      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y los sugeridores de la Ficha (6 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);
-      t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
+      // v18.14.2 (frente A5) — el modal diferenciado del Anexo 5 (#vgl-a5-modal) es el
+      // repositorio secundario del anexo y vive en la MISMA capa de alerta que el aviso
+      // central: es un cuadro de consulta que interrumpe igual: 4 -> 5.
+      t.cierto(zAlerta.length === 5, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal, #vgl-labsv-modal y #vgl-a5-modal (5 sitios). Salieron ${zAlerta.length}.`);
       // v14.0.0 (T7) — el banner PyM superior ya tiene consumidor real.
       t.cierto(zBanner.length === 1, `var(--z-banner) debe usarse en #vgl-pym-banner (1 sitio, T7). Salieron ${zBanner.length}.`);
 

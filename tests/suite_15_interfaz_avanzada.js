@@ -6685,6 +6685,27 @@ module.exports = {
       t.cierto(hoja.innerHTML.includes('id="vgl-grp-toggles"'), "al volver el médico (y su padrón), el grupo reaparece");
     });
 
+    // 09-sep-2026 — REFORMA DE AJUSTES: separación estricta usuario/desarrollador. Los
+    // interruptores experimentales (caché de catálogos, sus métricas y los barridos
+    // diferidos A/B) no son opciones de usuario final: sin modo programador no deben
+    // existir en el menú. La compuerta es la marca `dev:true` del registro VGL_TOGGLES,
+    // filtrada por isDevMode (_vglProgOn, Ctrl+Shift+D).
+    t.caso("09-sep-2026: los interruptores experimentales solo existen en modo programador", () => {
+      cv.env.storage.setItem("vgl_acceso_lista", JSON.stringify(LISTA_ACCESO_15));
+      cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      cv.api.renderSettings();
+      t.falso(hoja.innerHTML.includes('id="c-tog-perf_cache"'), "sin modo programador NO se ofrece la caché de catálogos (experimental)");
+      t.falso(hoja.innerHTML.includes('id="c-tog-ab1_diferir"'), "ni los barridos diferidos A/B (experimental)");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-agendar"'), "las funciones normales del médico sí siguen visibles");
+      cv.api._vglAlternarModoProg(); // Ctrl+Shift+D: no se persiste, vive solo en la pestaña
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes('id="c-tog-perf_cache"'), "en modo programador reaparece la caché de catálogos");
+      t.cierto(hoja.innerHTML.includes('id="c-tog-ab1_diferir"'), "y los barridos diferidos");
+      cv.api._vglAlternarModoProg();
+      cv.api.renderSettings();
+      t.falso(hoja.innerHTML.includes('id="c-tog-perf_cache"'), "al salir del modo programador vuelven a ocultarse");
+    });
+
     t.caso("v18.6.2: el interruptor de un toggle aplica EN CALIENTE con togSet — persistencia por médico y borrador de Ajustes intacto", () => {
       cv.api.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
       cv.api.renderSettings();

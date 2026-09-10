@@ -570,6 +570,21 @@ module.exports = {
       t.igual(creados.length, 0, "el Redactor IA no se muestra sin la clave configurada");
     });
 
+    // v18.14.1 (frente 4) — el gate del inyector pregunta por la clave USABLE, no por la de
+    // Gemini. Con deepseek-v4-flash como modelo por defecto del sistema, un médico que solo
+    // tenga su clave de DeepSeek se quedaba SIN Redactor IA (el gate exigía la de Gemini).
+    t.caso("createIaInjectorUI v18.14.1: con SOLO la clave de DeepSeek los inyectores SÍ se pintan", () => {
+      const c = cargar({ silencioso: true, almacen: ALMACEN_ACCESO_64 });
+      const a = c.api;
+      a.__state.activeDoctor = { id: 707, name: "BRANDON JESUS PALENCIA MARTINEZ" };
+      a.__S.iaRedaccion = true;
+      a.mtrGuardarClaveDeepseek("CLAVE-DE-PRUEBA");   // ninguna clave de Gemini
+      const creados = mockCasillasInyectores(c);
+      a.createIaInjectorUI();
+      t.igual(creados.map((n) => n.id).sort(), ["vgl-ia-inj-an", "vgl-ia-inj-ea"],
+        "deepseek es el modelo por defecto: su clave sola basta para tener Redactor IA");
+    });
+
     // =====================================================================
     // v17.6.2 — DESENGANCHE DEL AGENDAMIENTO (reporte del 22-ago con pantallazo):
     // el aviso decía «falta documentar Hipertensión y Diabetes; Tabaquismo» cuando el

@@ -173,6 +173,38 @@ module.exports = {
       t.cierto(String(bandeja.children[0].innerHTML).indexOf("Impresión Diagnóstica") !== -1, "y nombra la pestaña que falta");
     });
 
+    // v18.14.1 — El DOM REAL de Everest envuelve cada pestaña en un <li> (capturado en el
+    // mapa de grounding del 14-ago: `{ id: "conducta", etiqueta: "Conducta*" }`). Como
+    // _vglClicablePestana barre `a, li, button…` en orden de documento, el <li> gana por
+    // texto exacto ANTES que su <a>, y clicar el contenedor no navega: el botón parecía
+    // muerto, sin acción y sin aviso. Esta prueba monta esa forma real y exige que el clic
+    // caiga en el ANCLA. Los nodos falsos se acotan a mano (querySelectorAll/querySelector)
+    // para que la prueba mida el gesto y no el motor de selectores del arnés.
+    t.caso("v18.14.1: el clic cae en el ANCLA de la pestaña, no en el <li> que la envuelve", () => {
+      const c = montar({ almacen: almacenAcceso98() });
+      mockHistoria(c);
+      const barra = c.env.doc.createElement("div");
+      barra.setAttribute("role", "tablist");
+      const li = c.env.doc.createElement("li");
+      const a = c.env.doc.createElement("a");
+      a.id = "impDiagnostica"; a.textContent = "";
+      li.textContent = "Impresión Diagnóstica";   // el texto vive en el <li>: es el ÚNICO candidato que casa
+      li.appendChild(a); barra.appendChild(li);
+      barra.querySelectorAll = () => [li, a];          // orden de documento real
+      c.env.doc.body.appendChild(barra);
+      identidad(c, "707");
+      t.noLanza(() => c.api.createAccionesDockUI());
+      const dock = modalEn(c, "vgl-acciones-dock");
+      let clicsLi = 0, clicsA = 0;
+      li.click = () => { clicsLi++; };
+      a.click = () => { clicsA++; };
+      armarClicReal(botonDe(dock, "pestana-impresion"));
+      botonDe(dock, "pestana-impresion").click();
+      t.igual(clicsA, 1, "el <a> de la pestaña recibió el clic");
+      t.igual(clicsLi, 0, "el <li> contenedor NO recibió el clic (era el defecto)");
+      t.igual(accionUx(c, "hc.pestana.impresion.ok"), 1, "y la apertura se registró como lograda");
+    });
+
     t.caso("estructura: el bloque M2 no toca la red y solo clica enlaces ya anclados en VGL_PESTANAS", () => {
       // Ancla en el atributo del botón (ÚNICO en el fuente; el comentario del bloque
       // se repite también arriba, junto a la firma del dock): la ventana cubre desde

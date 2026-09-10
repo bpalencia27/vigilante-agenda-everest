@@ -9,11 +9,17 @@
 // user), deepseek lee el system en su ROLE propio. La respuesta es la misma
 // forma que ya parsea mtrRespuestaZai: se reutiliza como parseador.
 // La suite 70 sigue protegiendo byte a byte a zai y gemini: esta suite NUNCA
-// los toca, solo añade el tercer proveedor y la prioridad deepseek > zai > Gemini.
+// los toca, solo añade el tercer proveedor.
+// v18.14.1 (frente 4) — POLÍTICA DE MODELOS: deepseek-v4-flash es el modelo por
+// defecto de todo el sistema; la ÚNICA excepción automática es Gemini, y solo con
+// su API VÁLIDA; z.ai queda como último recurso y como elección explícita.
+// Además, las claves de IA se guardan CIFRADAS (sobre AES-GCM de la bóveda).
 // ══════════════════════════════════════════════════════════════════════
 const fs = require("fs");
 const path = require("path");
 const FUENTE = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+// Clave de equipo sintética para las pruebas de la bóveda (mismo patrón que suite_89).
+const HEX_BOVEDA = "3c".repeat(32);
 
 // Respuesta típica de deepseek (forma OpenAI — idéntica a la de z.ai).
 const respDs = (texto, finish) => JSON.stringify({ choices: [{ message: { content: texto }, finish_reason: finish || "stop" }] });
@@ -32,7 +38,8 @@ const accionesUX = (c) => {
 
 module.exports = {
   nombre: "Suite 99 · v18.8.0 deepseek primario + v18.8.8 FASE C: motor de IA preferido (default auto)",
-  cubre: ["mtrProveedorIA", "mtrRespuestaZai", "mtrGeminiRedactar", "mtrGuardarClaveDeepseek", "mtrLeerClaveDeepseek", "mtrHayClaveIA", "mtrEsCuotaAgotada", "mtrEsModeloNoDisponible", "mtrIaPreferencia", "mtrGuardarIaPreferencia"],
+  cubre: ["mtrProveedorIA", "mtrRespuestaZai", "mtrGeminiRedactar", "mtrGuardarClaveDeepseek", "mtrLeerClaveDeepseek", "mtrHayClaveIA", "mtrEsCuotaAgotada", "mtrEsModeloNoDisponible", "mtrIaPreferencia", "mtrGuardarIaPreferencia",
+          "mtrPrimarioIa", "mtrGeminiValida", "mtrVerificarClaveGemini", "mtrGuardarVeredictoGemini", "_vglSecretosHidratar"],
   async pruebas(t, api, env, cargar) {
 
     t.caso("DS·1 — contrato del proveedor deepseek: URL, headers y cuerpo OpenAI con el system en ROLE propio", () => {
@@ -167,7 +174,29 @@ module.exports = {
       t.cierto(String(r.motivo).indexOf("tiempo agotado") === 0, "el motivo interno del timeout es único entre proveedores");
     });
 
-    await t.casoAsync("DS·4e — SIN clave deepseek, z.ai conserva su puesto de primario (prioridad deepseek > z.ai > Gemini)", async () => {
+    await t.casoAsync("DS·4e — SIN clave deepseek, Gemini es el primario por «auto» (la única excepción automática)", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => {
+          if (o.url.indexOf("generativelanguage") >= 0) o.onload({ status: 200, responseText: respGem("Borrador Gemini sin cifras.") });
+          else o.onload({ status: 500, responseText: "{}" });
+        }, 0);
+      } });
+      // v18.14.1 (frente 4) — política de modelos: deepseek-v4-flash es el default y
+      // Gemini la ÚNICA excepción automática; z.ai ya no desplaza a Gemini en «auto».
+      c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 1, "sin deepseek, Gemini responde a la primera y nadie más recibe nada");
+      t.cierto(urls[0].indexOf("generativelanguage") >= 0, "el disparo fue a Gemini");
+      t.cierto(r.ok && r.texto === "Borrador Gemini sin cifras.");
+      const acc = accionesUX(c);
+      t.igual(acc["ia.prov.gemini"], 1, "queda registrado que respondió Gemini");
+      t.cierto(acc["ia.prov.deepseek"] === undefined, "deepseek ni se asoma sin su clave");
+      t.cierto(acc["ia.prov.zai"] === undefined, "z.ai NO desplaza a Gemini en «auto»");
+    });
+
+    await t.casoAsync("DS·4f — z.ai sigue disponible, pero SOLO con la preferencia explícita (nunca por «auto»)", async () => {
       const urls = [];
       const c = cargar({ silencioso: true, gmxhr: (o) => {
         urls.push(o.url);
@@ -177,13 +206,30 @@ module.exports = {
         }, 0);
       } });
       c.api.mtrGuardarClaveZai("Z"); c.api.mtrGuardarClaveGemini("G");
+      c.api.mtrGuardarIaPreferencia("zai");
       const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
-      t.igual(urls.length, 1, "sin deepseek, z.ai responde a la primera y nadie más recibe nada");
+      t.igual(urls.length, 1, "con z.ai elegido a mano, responde z.ai y nadie más recibe nada");
       t.cierto(urls[0].indexOf("api.z.ai") >= 0, "el disparo fue a z.ai");
       t.cierto(r.ok && r.texto === "Borrador de GLM sin cifras.");
       const acc = accionesUX(c);
       t.igual(acc["ia.prov.zai"], 1, "queda registrado que respondió z.ai");
-      t.cierto(acc["ia.prov.deepseek"] === undefined, "deepseek ni se asoma sin su clave");
+    });
+
+    await t.casoAsync("DS·4g — z.ai es el ÚLTIMO recurso: sin deepseek ni Gemini, el redactor no queda mudo", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => {
+        urls.push(o.url);
+        setTimeout(() => {
+          if (o.url.indexOf("api.z.ai") >= 0) o.onload({ status: 200, responseText: respDs("Último recurso.") });
+          else o.onload({ status: 500, responseText: "{}" });
+        }, 0);
+      } });
+      c.api.mtrGuardarClaveZai("Z");
+      t.cierto(c.api.mtrHayClaveIA(), "con solo z.ai el gate de entrada sigue abierto (nadie se queda sin redactor)");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "motivo_consulta", {});
+      t.igual(urls.length, 1, "una sola llamada, a z.ai");
+      t.cierto(urls[0].indexOf("api.z.ai") >= 0, "el disparo fue a z.ai");
+      t.cierto(r.ok && r.texto === "Último recurso.");
     });
 
     t.caso("DS·5 — textos y piezas de UI de deepseek en el fuente (Ajustes, T-16, pie del modal, modelo inicial)", () => {
@@ -191,12 +237,12 @@ module.exports = {
       t.cierto(FUENTE.indexOf('id="c-deepseek-key"') >= 0, "campo de clave deepseek en Ajustes");
       t.cierto(FUENTE.indexOf("mtrGuardarClaveDeepseek(v)") >= 0, "el cambio del campo guarda la clave deepseek");
       t.cierto(FUENTE.indexOf("Clave de la IA (DeepSeek — principal)") >= 0, "el rótulo dice que deepseek es el principal");
-      t.cierto(FUENTE.indexOf("z.ai — alternativo") >= 0, "z.ai pasa a rótulo de alternativo");
+      t.cierto(FUENTE.indexOf("z.ai — último recurso") >= 0, "z.ai pasa a rótulo de último recurso (ya no entra por «auto»)");
       t.cierto(FUENTE.indexOf("deepseek (deepseek-v4-flash)") >= 0 || FUENTE.indexOf("DeepSeek") >= 0, "el consentimiento T-16 menciona a DeepSeek");
       t.cierto(FUENTE.indexOf("DeepSeek, z.ai o Gemini, según la clave configurada") >= 0, "el pie del modal nombra a los tres proveedores");
-      t.cierto(FUENTE.indexOf('mtrLeerClaveDeepseek() ? "deepseek-v4-flash"') >= 0, "el modelo inicial del título es deepseek-v4-flash si hay su clave");
+      t.cierto(FUENTE.indexOf('_primarioTitulo === "deepseek" ? "deepseek-v4-flash"') >= 0, "el modelo inicial del título sale de la resolución única del primario");
       t.cierto(FUENTE.indexOf('if (_primario === "deepseek")') >= 0, "la escalera da el intento 0 al primario (deepseek cuando hay su clave)");
-      t.cierto(FUENTE.indexOf("prioridad deepseek > z.ai > Gemini") >= 0, "la prioridad queda documentada en el comentario");
+      t.cierto(FUENTE.indexOf("prioridad deepseek > Gemini > z.ai") >= 0, "la prioridad queda documentada en el comentario");
     });
 
     t.caso("DS·6 — el contrato de zai y gemini queda INTACTO (no-regresión cruzada con suite 70)", () => {
@@ -302,6 +348,126 @@ module.exports = {
       t.cierto(FUENTE.indexOf("JSON DEL MOTOR RCV (v68) — fuente de verdad, no recalcules") >= 0, "el prompt ordena no recalcular: recibe el bloque ya armado");
       t.cierto(FUENTE.indexOf("if (modo === \"analisis_plan\" && o.jsonV68)") >= 0, "el JSON viaja por o.jsonV68: lo trae el llamador, la función no lo reúne de nuevo");
       t.cierto(FUENTE.indexOf("o.selloContexto") >= 0, "el sello de contexto viaja por la misma vía (recibido, no recalculado)");
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    //  v18.14.1 (frente 4) — BÓVEDA DE CREDENCIALES (AES-GCM en reposo)
+    // ══════════════════════════════════════════════════════════════════
+    const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+    const esperarA = async (fn, veces) => {
+      for (let i = 0; i < (veces || 100); i++) { const v = fn(); if (v) return v; await dormir(20); }
+      return fn();
+    };
+
+    await t.casoAsync("BÓVEDA — la clave se guarda CIFRADA en el almacén y el claro solo vive en RAM", async () => {
+      const c = cargar({ silencioso: true });
+      c.api.mtrGuardarClaveDeepseek("dsk-secreto-123");
+      t.igual(c.api.mtrLeerClaveDeepseek(), "dsk-secreto-123", "round-trip inmediato desde el memo en RAM");
+      const crudo = await esperarA(() => {
+        const v = String(c.env.gm["vgl_deepseek_key"] || "");
+        return v.indexOf("VGLC1:") === 0 ? v : "";
+      });
+      t.cierto(crudo.length > 0, "montaje: el valor llegó al almacén (si no, la prueba no mediría nada)");
+      t.falso(crudo.indexOf("dsk-secreto-123") >= 0, "la clave NO está en claro en el almacén");
+      t.cierto(crudo.indexOf("VGLC1:") === 0, "el almacén guarda un sobre AES-GCM, no la ofuscación XOR de antes");
+      t.igual(await c.api._vglSobreDescifrar(crudo), "dsk-secreto-123", "y el sobre descifra con la clave de equipo: la credencial no se perdió");
+    });
+
+    await t.casoAsync("BÓVEDA — arranque en frío: memo vacío + disco cifrado se hidrata solo (la lectura síncrona no inventa)", async () => {
+      const cA = cargar({ silencioso: true });
+      cA.api.__vglCarpetaResetClaveParaTest(HEX_BOVEDA);
+      cA.api.mtrGuardarClaveGemini("gem-secreto-456");
+      const sobre = await esperarA(() => {
+        const v = String(cA.env.gm["vgl_gemini_key"] || "");
+        return v.indexOf("VGLC1:") === 0 ? v : "";
+      });
+      t.cierto(sobre.indexOf("VGLC1:") === 0, "montaje: el almacén de A quedó cifrado");
+
+      const cB = cargar({ silencioso: true });
+      cB.api.__vglCarpetaResetClaveParaTest(HEX_BOVEDA);   // mismo computador
+      cB.env.gm["vgl_gemini_key"] = sobre;                 // hereda el disco de A
+      t.igual(cB.api.mtrLeerClaveGemini(), "", "sin memo y con disco cifrado, la lectura síncrona devuelve vacío (nunca texto a medias)");
+      const vuelto = await esperarA(() => cB.api.mtrLeerClaveGemini());
+      t.igual(vuelto, "gem-secreto-456", "tras la hidratación la clave vuelve íntegra: la redonda pasa por crypto de verdad");
+      cB.api.__vglCarpetaResetClaveParaTest(null);
+    });
+
+    await t.casoAsync("BÓVEDA — MIGRACIÓN: una clave guardada con la ofuscación vieja se adopta y se re-cifra sin perderla", async () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_deepseek_key"] = c.api._vglOfusca("dsk-legado-789");   // formato anterior
+      c.api.__vglSecretosResetParaTest();
+      t.igual(c.api.mtrLeerClaveDeepseek(), "dsk-legado-789", "el legado ofuscado se sigue leyendo: nadie pierde su clave al actualizar");
+      await c.api._vglSecretosHidratar();
+      const crudo = await esperarA(() => {
+        const v = String(c.env.gm["vgl_deepseek_key"] || "");
+        return v.indexOf("VGLC1:") === 0 ? v : "";
+      });
+      t.cierto(crudo.indexOf("VGLC1:") === 0, "y quedó re-cifrado en el almacén");
+      t.falso(crudo.indexOf("dsk-legado-789") >= 0, "sin rastro de la clave en claro");
+      t.igual(await c.api._vglSobreDescifrar(crudo), "dsk-legado-789", "el sobre nuevo descifra la MISMA clave: la migración no pierde nada");
+    });
+
+    await t.casoAsync("BÓVEDA — borrar la clave la borra de verdad del almacén", async () => {
+      const c = cargar({ silencioso: true });
+      c.api.mtrGuardarClaveZai("zk-999");
+      await esperarA(() => (String(c.env.gm["vgl_zai_key"] || "").indexOf("VGLC1:") === 0 ? "si" : ""));
+      t.cierto(String(c.env.gm["vgl_zai_key"] || "").indexOf("VGLC1:") === 0, "montaje: había un sobre guardado");
+      c.api.mtrGuardarClaveZai("");
+      await esperarA(() => (c.env.gm["vgl_zai_key"] === null ? "si" : ""));
+      t.igual(c.api.mtrLeerClaveZai(), "", "vaciar la clave la borra del memo");
+      t.igual(c.env.gm["vgl_zai_key"], null, "y del almacén (null, no un sobre de texto vacío)");
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    //  v18.14.1 (frente 4) — GATE DE VALIDEZ DE GEMINI («API válida»)
+    // ══════════════════════════════════════════════════════════════════
+    await t.casoAsync("VALIDEZ — «Verificar» marca la clave con un veredicto atado a su HUELLA, nunca a su texto", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => setTimeout(() => o.onload({ status: 200, responseText: respGem("OK") }), 0) });
+      c.api.mtrGuardarClaveGemini("gem-buena");
+      t.cierto(c.api.mtrGeminiValida(), "sin verificación previa se asume válida (fail-open: no se apaga un proveedor que ya funcionaba)");
+      let res = null;
+      c.api.mtrVerificarClaveGemini((r) => { res = r; });
+      await esperarA(() => res);
+      t.igual(res, "ok", "la API respondió y la verificación cierra en ok");
+      t.cierto(c.api.mtrGeminiValida(), "la clave queda marcada como válida");
+      t.igual(c.env.gm["vgl_gemini_ok"].huella, c.api._vglHuellaClave("gem-buena"), "el veredicto guarda la HUELLA, no la clave");
+      t.falso(JSON.stringify(c.env.gm["vgl_gemini_ok"]).indexOf("gem-buena") >= 0, "la credencial no aparece por ningún lado del veredicto");
+      c.api.mtrGuardarClaveGemini("gem-otra");
+      t.cierto(c.api.mtrGeminiValida(), "una clave nueva no hereda el veredicto de la vieja (huella distinta → sin verificar → válida)");
+      c.api.mtrGuardarVeredictoGemini("gem-otra", false);
+      t.falso(c.api.mtrGeminiValida(), "pero un veredicto NEGATIVO de la clave vigente sí la descalifica");
+    });
+
+    await t.casoAsync("VALIDEZ — una clave RECHAZADA por Google deja de decidir la escalera; un fallo de RED no", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => setTimeout(() => o.onload({ status: 403, responseText: '{"error":{"code":403,"message":"API key not valid"}}' }), 0) });
+      c.api.mtrGuardarClaveGemini("gem-mala");
+      c.api.mtrGuardarClaveZai("Z");
+      let res = null;
+      c.api.mtrVerificarClaveGemini((r) => { res = r; });
+      await esperarA(() => res);
+      t.igual(res, "http_403", "un 403 es un RECHAZO explícito de la credencial");
+      t.falso(c.api.mtrGeminiValida(), "y la clave queda marcada como NO válida");
+      t.igual(c.api.mtrPrimarioIa(), "zai", "la escalera ya no la usa: cae a z.ai en vez de disparar contra una API inválida");
+
+      const c2 = cargar({ silencioso: true, gmxhr: (o) => setTimeout(() => o.onerror(new Error("red caída")), 0) });
+      c2.api.mtrGuardarClaveGemini("gem-ok");
+      let res2 = null;
+      c2.api.mtrVerificarClaveGemini((r) => { res2 = r; });
+      await esperarA(() => res2);
+      t.igual(res2, "red", "la verificación no obtuvo respuesta");
+      t.cierto(c2.api.mtrGeminiValida(), "y la clave sigue considerándose válida: la red no es la credencial");
+    });
+
+    t.caso("VALIDEZ — el gate de los inyectores pregunta por la clave usable, no por la de Gemini (fuente)", () => {
+      t.cierto(FUENTE.indexOf('const permitido = mtrEsMedicoAutorizado() && typeof S !== "undefined" && S.iaRedaccion === true && mtrHayClaveIA();') >= 0, "createIaInjectorUI usa el gate combinado: con solo DeepSeek ya hay inyectores");
+      t.cierto(FUENTE.indexOf('id="c-ia-verify"') >= 0, "y Ajustes ofrece el botón «Verificar» de la clave de Gemini");
+      t.cierto(FUENTE.indexOf("mtrVerificarClaveGemini((r) => {") >= 0, "el botón dispara la verificación real contra la API");
+      // Una clave recién pegada se verifica SOLA: la condición «Gemini solo si su API es
+      // válida» no puede depender de que el médico se acuerde de pulsar un botón. El ancla
+      // es la GUARDA real (`if (v) {` pegada al manejo del botón), no el simple orden de las
+      // llamadas: quitar la guarda tiene que poner esto rojo.
+      t.cierto(/if \(v\) \{\s*\n\s*const b = q\("#c-ia-verify"\);[\s\S]{0,600}?mtrVerificarClaveGemini\(\(r\) => \{/.test(FUENTE),
+        "al guardar una clave nueva en Ajustes, la verificación sale sin que él la pida");
     });
 
   },

@@ -29,7 +29,8 @@ module.exports = {
   cubre: [
     "_vglEsBotonHC", "_vglHcCapturarClick", "hcPacienteContexto", "_vglHcFraude",
     "hcRenderChip", "hcTickVigia", "_vglHcSetHintParaTest", "hcPrefetch",
-    "vglSerialAFecha", "vglSerialHoy", "a5AlertasDe", "hcAnexo5Render",
+    "vglSerialAFecha", "vglSerialHoy", "a5AlertasDe", "a5FilasHtml", "a5ResumenLinea",
+    "abrirAnexo5Modal", "avisoUniversal", "_pendientesUniversales",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -330,126 +331,117 @@ module.exports = {
       t.igual(api.a5AlertasDe("999", EST_A5(), HOY_S), null);
     });
 
-    t.caso("F2/hcAnexo5Render: panel DENTRO de #vgl-root con las 4 alertas, cédula enmascarada y cierre que respeta el turno", () => {
+    // =====================================================================
+    //  v18.14.3 (Fase 2 del comité, decisión 4.1 OPCIÓN B) — EL PANEL DEL ANEXO 5
+    //  DENTRO DE LA HC SE RETIRÓ. Estos casos protegían ese panel (`#vgl-a5-panel`,
+    //  su cierre por turno y su barra de Deshacer). Se re-apuntan a lo que SÍ vive:
+    //  el aviso de la jornada (con la línea de la decisión 4.2) y el repositorio
+    //  `#vgl-a5-modal`, que es donde el detalle completo se consulta ahora.
+    // =====================================================================
+
+    t.caso("F2 (v18.14.3, opción B): el panel del anexo dentro de la HC se retiró, y el anexo sigue llegando por el aviso y el repositorio", () => {
+      // El censo mira CÓDIGO, no prosa: las notas de la retirada nombran a propósito lo
+      // que se fue (el censo de texto crudo las contaría como si siguieran vivas).
+      const codigo = FUENTE.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      for (const muerto of ["hcAnexo5Render", "vgl-a5-panel", "vgl-a5-deshacer", "vgl-a5-live", "_vglA5Cerrados", "_vglA5Anunciado"]) {
+        t.falso(codigo.indexOf(muerto) >= 0, "sin rastro en el código del panel retirado: " + muerto);
+      }
+      t.falso(codigo.indexOf("try { hcAnexo5Render(); }") >= 0, "el tick ya no llama al panel del anexo");
+      // La retirada NO se llevó el dato: el anexo sigue resolviéndose y sigue llegando.
       const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
         + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
       c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
       c.api.__state.pymAbandono = EST_A5().pymAbandono;
-      t.cierto(c.api.hcAnexo5Render() === true, "con la HC abierta por DOM y dato del Anexo 5, el panel se pinta");
-      const panel = c.env.doc.getElementById("vgl-a5-panel");
-      t.cierto(!!panel && panel._parent && panel._parent.id === "vgl-root", "vive dentro de #vgl-root");
-      t.cierto(panel.innerHTML.indexOf("Anexo 5 · HTA+DM") >= 0, "título con el programa");
-      t.cierto(panel.innerHTML.indexOf("···8777") >= 0, "cédula enmascarada ···+4");
-      t.falso(panel.innerHTML.indexOf("1.018.888.777") >= 0 && panel.innerHTML.indexOf("C.C.") < 0, "la cédula completa jamás");
-      t.cierto(panel.innerHTML.indexOf("ABANDONO DEL PROGRAMA") >= 0, "alerta (a)");
-      t.cierto(panel.innerHTML.indexOf("Estudios pendientes de ordenar") >= 0, "alerta (b)");
-      t.cierto(panel.innerHTML.indexOf("Consultas por remitir") >= 0, "alerta (c)");
-      t.cierto(panel.innerHTML.indexOf("Puntaje de metas: 58/75") >= 0, "alerta (d)");
-      t.cierto(panel.innerHTML.indexOf("más de 6 meses sin control (último: " + api.vglSerialAFecha(HOY_S - 200) + ")") >= 0, "la fecha de control en dd/mm/aaaa");
-      const live = c.env.doc.getElementById("vgl-a5-live");
-      t.cierto(!!live && live.getAttribute("aria-live") === "polite", "región aria-live propia");
-      t.cierto(live.textContent.indexOf("Anexo 5 abierto") === 0, "el anuncio nombra las alertas");
-      t.falso(live.textContent.indexOf("8777") >= 0, "y NUNCA la cédula (PHI acústico)");
-      const antes = live.textContent;
-      c.api.hcAnexo5Render();                                   // segunda vuelta del tick
-      t.igual(live.textContent, antes, "una sola vez por paciente: el lector no repite");
-      // Cierre manual: el médico manda.
-      const btn = panel.querySelector("[data-a5-cerrar]");
-      t.cierto(!!btn && btn._listeners && btn._listeners.click && btn._listeners.click.length === 1, "el botón de cierre escucha el clic");
-      btn._listeners.click[0]();
-      t.cierto(!c.env.doc.getElementById("vgl-a5-panel"), "cerrar quita el panel");
-      t.cierto(c.api.hcAnexo5Render() === false, "y no vuelve a aparecer para ese paciente en este turno");
+      const d = c.api.a5AlertasDe("1.018.888.777", c.api.__state, HOY_S);
+      t.cierto(!!d, "el anexo del paciente sigue resolviéndose igual que antes");
+      // El punto de entrada automático es ahora el aviso de la jornada, con su accesibilidad.
+      const pintó = c.api.avisoUniversal("PACIENTE DE PRUEBA", { anexo5: d }, true);
+      t.cierto(pintó, "el aviso de la jornada se pintó con la sección del anexo");
+      const ov = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!ov && ov.getAttribute("role") === "alertdialog", "el anexo viaja en un cuadro anunciable (su accesibilidad ya no es una región propia)");
+      t.cierto(ov.innerHTML.indexOf("Anexo 5 · HTA+DM") >= 0, "con el programa del paciente");
+      // El detalle completo, a un clic, en el repositorio — con la cédula enmascarada.
+      t.cierto(c.api.abrirAnexo5Modal(d) === true, "el repositorio se abre");
+      const modal = c.env.doc.getElementById("vgl-a5-modal");
+      t.cierto(!!modal && modal.innerHTML.indexOf("···8777") >= 0, "la cédula va enmascarada ···+4");
+      t.falso(!!modal && modal.innerHTML.indexOf("1.018.888.777") >= 0, "la cédula completa jamás");
+      t.cierto(!!modal && modal.innerHTML.indexOf("ABANDONO DEL PROGRAMA") >= 0, "y el detalle completo sí está ahí (alerta (a))");
     });
 
-    // v18.13.0 (Mesa de Expertos, UX): cerrar una alerta de ABANDONO DEL PROGRAMA de un
-    // solo toque, sin recurso, era el hallazgo — ahora queda una barra de "Deshacer"
-    // (VGL_DESHACER_VISIBLE_MS) aparte del panel, que lo reconstruye si el clic fue
-    // accidental. El panel SIGUE desapareciendo de inmediato (no se relaja esa garantía).
-    t.caso("F2/hcAnexo5Render (Mesa de Expertos): cerrar ofrece Deshacer, y Deshacer reconstruye el aviso", () => {
-      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
-        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
-      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
-      c.api.__state.pymAbandono = EST_A5().pymAbandono;
-      t.cierto(c.api.hcAnexo5Render() === true, "el panel se pinta");
-      const panel = c.env.doc.getElementById("vgl-a5-panel");
-      const btn = panel.querySelector("[data-a5-cerrar]");
-      btn._listeners.click[0]();
-      t.cierto(!c.env.doc.getElementById("vgl-a5-panel"), "cerrar quita el panel de verdad e inmediato");
-      const barra = c.env.doc.getElementById("vgl-a5-deshacer");
-      t.cierto(!!barra, "queda una barra de Deshacer aparte");
-      t.cierto(barra.innerHTML.indexOf("cerrado por este turno") >= 0, "explica lo que pasó");
-      const btnDeshacer = barra.querySelector("[data-a5-deshacer]");
-      t.cierto(!!btnDeshacer && btnDeshacer._listeners.click.length === 1, "el botón de Deshacer escucha el clic");
-      btnDeshacer._listeners.click[0]();
-      t.cierto(!c.env.doc.getElementById("vgl-a5-deshacer"), "Deshacer retira su propia barra");
-      t.cierto(!!c.env.doc.getElementById("vgl-a5-panel"), "y el clic de Deshacer, por sí solo, reconstruye el panel");
-    });
-
-    t.caso("F2/hcAnexo5Render (v18.8.4 T1): el panel se pinta con variables de tema, sin colores duros", () => {
-      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
-        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
-      c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
-      c.api.__state.pymAbandono = EST_A5().pymAbandono;
-      t.cierto(c.api.hcAnexo5Render() === true, "el panel se pinta con las 4 alertas");
-      const html = c.env.doc.getElementById("vgl-a5-panel").innerHTML;
+    t.caso("F2/a5FilasHtml (v18.8.4 T1): las filas del anexo usan variables de tema, sin colores duros", () => {
+      const html = api.a5FilasHtml(api.a5AlertasDe("1.018.888.777", EST_A5(), HOY_S));
       // Colores duros de la v18.8.3: en tema oscuro quedaban ilegibles (T1 los migra).
       const duros = ["#0F172A", "#B45309", "#1D4ED8", "#15803D", "#334155", "#64748B",
         "rgba(15,23,42,.03)", "rgba(15,23,42,.15)", "font-size:12px"];
       for (const h of duros) {
-        t.falso(html.indexOf(h) >= 0, "sin el color duro " + h + " en el panel");
+        t.falso(html.indexOf(h) >= 0, "sin el color duro " + h + " en las filas");
       }
       const vars = ["var(--c-rojo)", "var(--c-ambar)", "var(--c-azul)",
-        "var(--fg)", "var(--fg2)", "var(--fg3)", "var(--surface-2)", "var(--line)", "var(--t-small)"];
+        "var(--fg2)", "var(--fg3)"];
       for (const v of vars) {
-        t.cierto(html.indexOf(v) >= 0, "el panel consume " + v);
+        t.cierto(html.indexOf(v) >= 0, "las filas consumen " + v);
       }
       // La rama VERDE solo sale con metas cumplidas (58/75 no cumple): se fuerza con otro
       // registro del MISMO paciente y se comprueba que también consume su token.
       const recCumple = Object.assign({}, REC_A5, { ctrl: HOY_S - 10, suma: 80 });
-      c.api.__state.pymAnexo5 = EST_A5(recCumple).pymAnexo5;
-      t.cierto(c.api.hcAnexo5Render() === true, "re-render con metas cumplidas");
-      const html2 = c.env.doc.getElementById("vgl-a5-panel").innerHTML;
+      const html2 = api.a5FilasHtml(api.a5AlertasDe("1018888777", EST_A5(recCumple), HOY_S));
       t.cierto(html2.indexOf("var(--c-verde)") >= 0, "la rama de metas cumplidas consume var(--c-verde)");
       t.falso(html2.indexOf("#15803D") >= 0, "y ya no pinta el verde duro");
-      // Regla R: los !important literales inline se conservan exactamente (10, contados).
-      t.igual((html.match(/!important/g) || []).length, 10, "los 10 !important inline siguen literales");
+      // Regla R: los !important literales inline se conservan exactamente. Son 7 para este
+      // registro: abandono 1 + estudios 2 (contenedor + su <span>) + remisiones 2 + puntaje
+      // 1 + línea de contexto 1. (El panel retirado sumaba 3 más de su propio envoltorio.)
+      t.igual((html.match(/!important/g) || []).length, 7, "los 7 !important inline siguen literales");
     });
 
-    t.caso("F2/hcAnexo5Render (v18.11.0 ORDEN #8): el tramo RAC es el valor real en mg/g — nunca los puntos de la meta", () => {
-      const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
-        + '<app-index><div class="text-muted">C.C. 1.018.888.777</div></app-index>');
+    t.caso("F2/a5FilasHtml (v18.11.0 ORDEN #8): el tramo RAC es el valor real en mg/g — nunca los puntos de la meta", () => {
       const recRacReal = Object.assign({}, REC_A5, { v: REC_A5.v.concat(6.93) });
-      c.api.__state.pymAnexo5 = EST_A5(recRacReal).pymAnexo5;
-      c.api.__state.pymAbandono = EST_A5(recRacReal).pymAbandono;
-      t.cierto(c.api.hcAnexo5Render() === true, "panel con el valor real indexado");
-      t.cierto(c.env.doc.getElementById("vgl-a5-panel").innerHTML.indexOf("RAC 6.93") >= 0,
+      const html = api.a5FilasHtml(api.a5AlertasDe("1018888777", EST_A5(recRacReal), HOY_S));
+      t.cierto(html.indexOf("RAC 6.93") >= 0,
         "la línea de contexto muestra el RAC real de la columna del libro (6.93 mg/g)");
       // Meta cumplida (25 puntos) pero SIN valor real: el tramo se calla. Rotular «RAC 25»
       // era el defecto v18.6.1 — un cumplimiento de 25 puntos se leía como 25 mg/g.
       const recRacPuntos = Object.assign({}, REC_A5, { m: REC_A5.m.map((p) => p.slice()), v: REC_A5.v.slice() });
       recRacPuntos.m[4] = [25, HOY_S - 10];
-      c.api.__state.pymAnexo5 = EST_A5(recRacPuntos).pymAnexo5;
-      t.cierto(c.api.hcAnexo5Render() === true, "re-render con meta cumplida y sin valor");
-      t.falso(c.env.doc.getElementById("vgl-a5-panel").innerHTML.indexOf("RAC ") >= 0,
+      const html2 = api.a5FilasHtml(api.a5AlertasDe("1018888777", EST_A5(recRacPuntos), HOY_S));
+      t.falso(html2.indexOf("RAC ") >= 0,
         "sin valor real indexado no aparece «RAC 25» ni tramo alguno: casilla vacía");
     });
 
-    t.caso("F2/hcAnexo5Render: sin HC abierta por DOM, o sin dato del Anexo 5, no hay panel", () => {
+    t.caso("F2/a5ResumenLinea (v18.14.3, decisión 4.2): el aviso dice el hecho en UNA línea, con singular y plural correctos", () => {
+      const d = api.a5AlertasDe("1.018.888.777", EST_A5(), HOY_S);
+      const linea = api.a5ResumenLinea(d);
+      t.cierto(linea.indexOf("abandono del programa") >= 0, "nombra el abandono");
+      t.cierto(linea.indexOf("puntaje de metas 58/75 — por debajo del mínimo") >= 0, "y el puntaje contra el mínimo");
+      t.cierto(linea.indexOf("3 estudios pendientes de ordenar") >= 0, "y los estudios pendientes en plural (son 3)");
+      t.cierto(linea.indexOf("2 consultas por remitir") >= 0, "y las remisiones en plural (son 2)");
+      t.falso(linea.indexOf("1018888777") >= 0, "cero PHI en la línea");
+      t.falso(/[<>]/.test(linea), "texto escapado: ni un ángulo crudo");
+      // Singular: una sola remisión y un solo estudio pendiente (el EKG sin hacer).
+      const unico = Object.assign({}, REC_A5, {
+        ctrl: HOY_S - 10, suma: 80,
+        rem: ["Nutrición"],
+        m: REC_A5.m.map((p) => p.slice()),
+      });
+      unico.m[0] = [10, HOY_S - 10];   // glicemia cumplida
+      unico.m[5] = [10, HOY_S - 10];   // HbA1c cumplida
+      const l2 = api.a5ResumenLinea(api.a5AlertasDe("1018888777", EST_A5(unico), HOY_S));
+      t.falso(l2.indexOf("abandono") >= 0, "control reciente: sin abandono en la línea");
+      t.cierto(l2.indexOf("— cumple") >= 0, "80/75 se rotula «cumple»");
+      t.cierto(l2.indexOf("1 consulta por remitir") >= 0, "una remisión se dice en singular");
+      t.cierto(l2.indexOf("1 estudio pendiente de ordenar") >= 0, "y un estudio, en singular");
+      // Sin datos no hay línea (casilla vacía antes que dato inventado).
+      t.igual(api.a5ResumenLinea(null), "");
+    });
+
+    t.caso("F2: sin paciente abierto no hay anexo — la compuerta que sobrevive a la retirada del panel", () => {
       const c = montar('<div id="vgl-root"></div><div id="anamesis"></div>'
         + '<app-index><div class="text-muted">C.C. 98.765.432.109</div></app-index>');
       c.api.__state.pymAnexo5 = EST_A5().pymAnexo5;             // el dato es de OTRO paciente
-      t.cierto(c.api.hcAnexo5Render() === false, "paciente sin registro en el Anexo 5: sin panel, sin mentira");
-      const c2 = montar(AGENDA);                                 // origen hint (clic), HC aún no abierta
-      c2.api._vglHcSetHintParaTest("1018888777");
-      c2.api.__state.pymAnexo5 = EST_A5().pymAnexo5;
-      t.cierto(c2.api.hcAnexo5Render() === false, "el aviso exige la historia ABIERTA (origen dom), no el clic");
-    });
-
-    t.caso("F2: el tick llama al aviso junto al chip (el hook no se pierde por carreras de edición)", () => {
-      const i = FUENTE.indexOf("try { hcRenderChip(); } catch");
-      t.cierto(i > 0, "el hook del chip existe");
-      t.cierto(FUENTE.indexOf("try { hcAnexo5Render(); } catch", i) > 0 && FUENTE.indexOf("try { hcAnexo5Render(); } catch", i) < i + 120,
-        "el aviso del Anexo 5 cuelga del MISMO tick, inmediatamente después del chip");
+      t.igual(c.api.a5AlertasDe("98765432109", c.api.__state, HOY_S), null,
+        "paciente sin registro en el Anexo 5: sin anexo, sin mentira");
+      t.igual(c.api._pendientesUniversales("").anexo5, null, "sin paciente abierto la vara no trae anexo");
+      t.igual(c.api._pendientesUniversales("1018888777").anexo5 !== null, true,
+        "y con el paciente del índice SÍ lo trae (la retirada del panel no se llevó el dato)");
     });
   },
 };

@@ -4,6 +4,113 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.3] — 2026-09-10 (El Anexo 5 queda en un solo lugar, y su aviso dice el hecho en una línea)
+
+**El Anexo 5 ya no aparece tres veces.** Al abrir la historia clínica salía un panel con el
+estado del programa, y además el mismo resumen en el aviso de la jornada y en su pastilla
+del panel lateral. Ahora hay **un solo aviso automático** (el de la jornada, junto a la
+prevención, el abandono y los laboratorios) y **un repositorio a un clic** (la pastilla
+**«📋 Anexo 5»**), que es donde está el detalle completo. El panel suelto dentro de la
+historia se retiró.
+
+**El aviso ya no le entrega un informe: le entrega el hecho en una línea.**
+En vez de las cuatro filas del anexo, el aviso de entrada ahora dice, por ejemplo:
+«abandono del programa · puntaje de metas 60/75 — por debajo del mínimo · 7 estudios
+pendientes de ordenar · 1 consulta por remitir», y le indica que el detalle completo está en
+su pastilla. El aviso de entrada interrumpe la consulta; el informe se consulta cuando usted
+quiere.
+
+**El Anexo 5 se actualiza en las mismas dos ventanas del día, 06:00 y 12:00 (hora de Bogotá).**
+El índice del anexo es una hoja del mismo libro de prevención que ya se refrescaba en esas
+dos ventanas, así que no hay ninguna descarga adicional ni a otra hora: si el libro no
+cambió, no se baja nada. Cargar el libro a mano desde Ajustes sigue funcionando igual, cuando
+usted lo pida.
+
+**El aviso del Anexo 5 no se salta el límite de interrupciones del día.**
+El asistente tiene un tope diario de avisos que interrumpen la consulta, y el del Anexo 5
+cuenta dentro de ese tope igual que el resto: si el cupo del día se agotó, no lo verá al
+abrir la historia — pero sigue disponible cuando usted quiera, en la pastilla **«📋 Anexo 5»**.
+Solo dos hallazgos no se callan nunca y no gastan cupo: el **abandono del programa** y la
+**prioridad cardiovascular**. Así quedó aprobado.
+
+---
+
+## [Versión 18.14.2] — 2026-09-10 (El Anexo 5 entra en el aviso de entrada, y los exámenes por ordenar dejan de flotar sobre la consulta)
+
+**El Anexo 5 ahora aparece en el mismo aviso que sus otros pendientes.**
+Al abrir la historia clínica, el aviso central ya reunía las actividades de prevención, el
+abandono del programa y los laboratorios vencidos. Ahora el Anexo 5 del programa de riesgo
+cardiovascular viaja por la MISMA lista y sale ahí como una sección propia —con su puntaje de
+metas contra el mínimo, los estudios pendientes de ordenar, las consultas por remitir y el
+abandono— **solo para el paciente que de verdad cumple los criterios del anexo**. Si el
+paciente no está en el libro, la sección no existe: no se inventa nada. El interruptor
+«Aviso del Anexo 5» de Ajustes sigue mandando igual que antes.
+
+**El detalle completo del Anexo 5 quedó archivado en su propia pastilla del panel lateral.**
+Igual que las actividades de prevención se guardan en «🩺 Pendientes», el Anexo 5 tiene ahora
+su pastilla **«📋 Anexo 5»**, que solo aparece si hay algo que mostrar y abre un cuadro
+aparte, de solo lectura, con el detalle completo. Pedirlo a mano no gasta el aviso de la
+jornada: puede consultarlo las veces que quiera durante la consulta.
+
+**Los próximos exámenes de riesgo cardiovascular dejaron de flotar sobre la historia.**
+Antes salían en una ventana suelta que había que arrastrar, minimizar y cerrar, fuera de
+cualquier módulo. Ahora son una **sección más del cuadro de «Pendientes»**, junto a las
+actividades de prevención, el abandono y los laboratorios: el mismo cuadro, el mismo formato,
+el mismo lenguaje. Se lee con «Última: … · Vence: …» y su chip de estado (VENCIDO / PRÓXIMO /
+PENDIENTE / AL DÍA) en cada examen, y al pie le dice de cuándo es el dato que está leyendo.
+La ventana flotante, su arrastre y su pastilla de reapertura se retiraron por completo.
+
+---
+
+## [Versión 18.14.1] — 2026-09-09 (Botones del panel que no respondían, y su clave de IA ahora se guarda cifrada)
+
+**Los botones «Impresión Diagnóstica» y «Conducta» del panel lateral ya abren su pestaña.**
+Al pulsarlos no ocurría nada —ni pantalla, ni aviso— porque el asistente hacía el clic
+sobre el recuadro que ENVUELVE la pestaña en vez de sobre la pestaña misma, y ese recuadro
+no navega en Everest. Ahora el clic cae siempre en el enlace real; y si por cualquier
+motivo la pestaña no llegara a abrirse, usted lo ve en pantalla con un aviso claro en vez
+de quedarse sin respuesta.
+
+**DeepSeek V4 Flash es el modelo de trabajo por defecto de todo el sistema.** Gemini solo
+entra si su API está configurada **de forma válida**: al pegar su clave en Ajustes se
+comprueba sola contra la API real (y hay un botón «Verificar» para repetirlo cuando quiera).
+Una clave rechazada deja de usarse sola y el redactor sigue con DeepSeek. z.ai deja de entrar
+por sí solo: solo si usted lo elige a mano como motor preferido. Se corrigió además un caso
+que dejaba sin Redactor IA a quien tuviera únicamente su clave de DeepSeek.
+
+**Su clave de IA ahora se guarda CIFRADA en este computador.** Antes se guardaba apenas
+revuelta, y cualquiera con acceso al navegador podía recuperarla. Ahora se guarda con
+cifrado real (AES-GCM 256, la misma protección de la carpeta y la memoria clínica), atado
+a este equipo: en el almacén solo se ve un bloque ilegible. Las claves que ya tenía
+guardadas se adoptan y se vuelven a cifrar solas, sin perderlas y sin que usted tenga que
+hacer nada.
+
+**El Panel del Paciente ya no se queda con la clasificación vieja.** Se encontró y corrigió
+un fallo silencioso: cuando el asistente leía la pantalla justo mientras Everest la estaba
+repintando (el instante exacto en que usted acaba de escribir), daba el cambio por «ya visto»
+sin haberlo aplicado — y no volvía a intentarlo, así que el Panel se quedaba desactualizado
+el resto de la consulta. Ahora el cambio queda pendiente hasta que de verdad se aplica.
+
+**Lo que usted escribe a mano en la historia queda registrado y no se pierde.** Se verificó
+de punta a punta la cadena completa: lo que digita o edita en las casillas de Everest se
+lee de la pantalla en cada vuelta del reloj, se fusiona **sin borrar** lo ya cosechado en
+otras pestañas, se guarda **cifrado** en este computador y llega al redactor rotulado como
+«lo registrado en la historia clínica». Queda una prueba que fija esa cadena completa.
+
+**El motor clínico (PROMPTWARE.md, Motor RCV v68) sigue siendo la única fuente de verdad.**
+Una prueba nueva lee el contrato del propio documento y exige que el sistema entregue todos
+sus campos, que la prosa la escriba el modelo (nunca el sistema por su cuenta) y que el
+redactor reciba sus reglas duras palabra por palabra — si el motor sube de versión y añade
+un campo, la prueba lo dice en vez de desincronizarse en silencio.
+
+Verificación: banco de pruebas completo en verde (3819 comprobaciones), con nueve mutaciones
+de control documentadas (guardado cifrado de la clave, lectura con la memoria fría,
+migración del formato viejo, veredicto de validez de Gemini, prioridad del modelo por
+defecto, gate del Redactor IA, contrato PASO3 del motor, fusión acumulativa de la cosecha
+de la historia y consumo de la firma del Panel).
+
+---
+
 ## [Versión 18.14.0] — 2026-09-09 (El envío de reportes queda listo para migrar a Cloudflare — la migración se activa por compuerta, no ha ocurrido sola)
 
 El servidor que recibe en silencio los reportes anónimos de uso (sin datos de

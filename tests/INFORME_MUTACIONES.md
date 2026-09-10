@@ -14120,3 +14120,139 @@ ya que el `versionCheckUrl` real cambió de dominio): `tests/suite_17_nucleo.js`
 (3 casos de `checkVersionMinimum`). Verificado que sin el ajuste esos 3 casos también
 caen (mismo mecanismo que la fila de arriba, no se repite la tabla).
 
+| vigilante_agenda.user.js `grpToggles` — compuerta dev de los toggles experimentales (reforma de Ajustes, 09-sep-2026) | `VGL_TOGGLES.filter((def) => isDevMode || !def.dev)` → `VGL_TOGGLES.filter(() => true)` (los interruptores experimentales vuelven al menú del médico) | NO | suite_15 caso «09-sep-2026: los interruptores experimentales solo existen en modo programador»: mutante rojo («sin modo programador NO se ofrece la caché de catálogos (obtuvo true)»); EXIT 1 (304 pasan, 1 fallan). Restaurado 305 pasan EXIT=0 |
+| vigilante_agenda.user.js `_vglNodoNavegable` — el clic del dock cae en el ancla, no en el <li> (v18.14.1) | `_vglNodoNavegable(_vglClicablePestana("impresion diagnostica"))` → `_vglClicablePestana("impresion diagnostica")` (vuelve a clicar el contenedor) | NO | suite_98 caso «v18.14.1: el clic cae en el ANCLA de la pestaña, no en el <li> que la envuelve»: mutante rojo («el <a> de la pestaña recibió el clic: esperaba 1 y obtuvo 0»); EXIT 1 (6 ok, 1 FALLAN). Restaurado 7 ok EXIT=0. Nota: la primera versión de la prueba NO discriminaba (el <li> falso no ganaba la búsqueda); se corrigió montando el texto en el <li> y el ancla sin texto propio, y probando selectores simples en el resolutor |
+
+## v18.14.1 (frente 4 — bóveda de credenciales AES-GCM, DeepSeek V4 Flash como modelo por defecto, gate de validez de Gemini)
+
+Las claves de IA (deepseek/Gemini/z.ai) se guardaban OFUSCADAS con XOR+base64 — eso no es
+cifrado. Ahora viven en un sobre AES-GCM 256 con la clave de EQUIPO (HKDF de
+`_vglCarpetaClaveEquipo`, la misma de la carpeta y de la memoria clínica), el claro solo
+vive en un memo en RAM hidratado en `boot()`, y una lectura síncrona con el memo frío
+devuelve vacío y dispara la hidratación (jamás descifra a medias). El legado ofuscado se
+adopta y se re-cifra en el primer arranque con crypto. Además: `mtrPrimarioIa()` resuelve
+el primario en UN solo sitio (lo comparten el gate de entrada y la escalera) con la
+política del médico — deepseek-v4-flash es el modelo por defecto del sistema, la única
+excepción automática es Gemini (y solo con su API VÁLIDA), y z.ai queda como último
+recurso y como elección explícita en «Motor de IA preferido»; y `mtrGeminiValida()` +
+botón «Verificar» convierten «hay una clave» en «hay una API válida» (veredicto atado a
+la HUELLA de la clave, nunca a su texto; un fallo de red no marca inválida una clave).
+Se corrigió además `createIaInjectorUI`, que exigía la clave de Gemini y dejaba sin
+Redactor IA a un médico con solo su clave de DeepSeek.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_vglSecretoPersistir` — escritura de la bóveda | `GM_setValue(nombre, sobre \|\| _vglOfusca(claro))` → `GM_setValue(nombre, _vglOfusca(claro))` (la clave vuelve a guardarse solo ofuscada, sin sobre AES-GCM) | NO | suite_99 casos «BÓVEDA — la clave se guarda CIFRADA…», «arranque en frío…», «MIGRACIÓN…» y «borrar la clave…»: mutante rojo 4 casos («montaje: el valor llegó al almacén (si no, la prueba no mediría nada) (obtuvo false)»); EXIT 1 (22 ok, 4 fallan). Restaurado 26 ok EXIT=0 |
+| user.js `_vglSecretoLeer` — lectura síncrona con el memo frío | `return "";` → `return String(v);` (devuelve el sobre cifrado como si fuera la clave) | NO | suite_99 caso «BÓVEDA — arranque en frío…»: mutante rojo («esperaba "" y obtuvo "VGLC1:{\"v\":1,\"iv\":…}"»); EXIT 1 (25 ok, 1 falla). Restaurado 26 ok EXIT=0 |
+| user.js `_vglSecretosHidratar` — migración del legado ofuscado | `migrar.push(nombre);` → comentado (el legado se adopta pero nunca se re-cifra) | NO | suite_99 caso «BÓVEDA — MIGRACIÓN…»: mutante rojo («y quedó re-cifrado en el almacén (obtuvo false)»); EXIT 1 (25 ok, 1 falla). Restaurado 26 ok EXIT=0 |
+| user.js `mtrGeminiValida` — veredicto de validez de Gemini | `return r.ok === true;` → `return true;` (ignora el veredicto negativo guardado) | NO | suite_99 casos «VALIDEZ — «Verificar» marca la clave…» y «VALIDEZ — una clave RECHAZADA por Google…»: mutante rojo («pero un veredicto NEGATIVO de la clave vigente sí la descalifica (obtuvo true)» y «y la clave queda marcada como NO válida (obtuvo true)»); EXIT 1 (24 ok, 2 fallan). Restaurado 26 ok EXIT=0 |
+| user.js `mtrPrimarioIa` — rama «auto» (default del sistema) | `return ds ? "deepseek" : gem ? "gemini" : zai ? "zai" : "";` → `return ds ? "deepseek" : zai ? "zai" : gem ? "gemini" : "";` (z.ai vuelve a desplazar a Gemini en «auto») | NO | suite_99 caso «DS·4e — SIN clave deepseek, Gemini es el primario por «auto»…»: mutante rojo («esperaba 1 y obtuvo 2»); EXIT 1 (25 ok, 1 falla). Restaurado 26 ok EXIT=0 |
+| user.js `createIaInjectorUI` — gate de entrada del inyector | `… && mtrHayClaveIA();` → `… && mtrLeerClaveGemini();` (vuelve a exigir la clave de Gemini) | NO | suite_64 caso «createIaInjectorUI v18.14.1: con SOLO la clave de DeepSeek los inyectores SÍ se pintan» («esperaba ["vgl-ia-inj-an","vgl-ia-inj-ea"] y obtuvo []») y suite_99 caso «VALIDEZ — el gate de los inyectores pregunta por la clave usable…» (obtuvo false); EXIT 1 (3805 pasan, 2 fallan). Restaurado 3807 pasan EXIT=0 |
+
+## v18.14.1 (frente 5 — compuerta viva de cumplimiento de PROMPTWARE.md)
+
+PROMPTWARE.md es el prompt del MOTOR RCV (v68): el userscript no lo ejecuta, lo CONSUME
+—recibe su JSON, lo entrega al redactor como bloque «fuente de verdad, no recalcules» y
+nunca lo recalcula ni lo completa a mano. La suite nueva `suite_114_promptware.js` convierte
+esa frontera en compuerta: parsea el contrato PASO3 del PROPIO documento (no una copia
+escrita en el test) y exige que el JSON que emite `mtrJsonV68DesdeResumen` tenga TODOS sus
+campos, que la prosa (`nota_clinica`/`technical_justification`) viaje VACÍA —la redacta el
+modelo— y que el prompt del redactor lleve literales las reglas duras del motor (fuente de
+verdad acotada a ESTE paciente, prohibición de datos de otros pacientes, «NO recalcules»,
+«CERO INFERENCIA»). Si el prompt sube de versión y añade un campo, la suite lo dice en vez
+de que motor y redactor se desincronicen en silencio.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrJsonV68DesdeResumen` — clave `denied_list` del contrato PASO3 | `denied_list: claves(plan.bloqueados),` → `denied_list_borrado: claves(plan.bloqueados),` (se renombra la clave: el campo del contrato desaparece del JSON) | NO | suite_114 caso «PROMPTWARE.md — el JSON del sistema cumple TODO el contrato PASO3, campo por campo»: mutante rojo («ningún campo del contrato falta en el JSON emitido: ["denied_list"]: esperaba 0 y obtuvo 1»); EXIT 1 (4 ok, 1 falla). Restaurado 5 ok EXIT=0 |
+
+## v18.14.1 (frente 3 — integridad de la conexión redactor ↔ HC de Everest: lo digitado a mano)
+
+Verificación pedida por el médico: confirmar que lo que él **digita o edita a mano** en las
+casillas de Everest llega al redactor, se registra de forma **persistente** y **no se
+pierde**. La cadena (cosecha de pantalla → fusión acumulativa → disco CIFRADO → hoja de
+hechos → prompt) ya existía y está instrumentada en `_vglCosecharDePantalla` (cada vuelta
+del reloj con la HC abierta) más la escucha de red de `mtrHcEnganchar` (lo que Everest
+envía al guardar y lo que CARGA al abrir al paciente, v17.12.0). Lo que faltaba era una
+prueba de punta a punta: la nueva `suite_115_hc_manual.js` (5 casos) la fija — incluida la
+propiedad que el encargo nombra explícitamente, que la fusión sea **aditiva** (cosechar
+otra pestaña no borra lo cosechado antes), que el disco no vea el texto en claro y que el
+dato llegue rotulado al prompt del redactor. También se corrigió el comentario de cabecera
+de `mtrHcEnganchar`, que declaraba ABIERTO el hueco del endpoint de carga que v17.12.0 ya
+había cerrado (documentación que contradecía al código).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `mtrHcAcumularDelDom` — fusión de la cosecha acumulada | `Object.assign({}, previo, ahora)` → `Object.assign({}, ahora)` (la fusión deja de ser aditiva: cosechar otra pestaña BORRA lo cosechado antes) | NO | suite_115 caso «HC·1 — lo digitado a mano se cosecha, se acumula y NO se pierde al cosechar otra pestaña» («lo cosechado antes SIGUE ahí: esperaba "HTA diagnosticada a los 50 años" y obtuvo undefined»), suite_31 (2 fallas) y suite_109 (1 falla); EXIT 1 (3813 pasan, 4 fallan). Restaurado 3817 pasan EXIT=0 |
+
+## v18.14.1 (frente 2 — Panel del Paciente ↔ grounding: la firma del DOM se consume al reconciliar)
+
+DEFECTO REAL ENCONTRADO Y CORREGIDO. El vigilante del Panel del Paciente comparaba la firma
+de lo que hay en pantalla + archivo (`_tableroFirmaDom`) y guardaba esa firma en `_firma`
+**antes** de reconciliar. Si la reconciliación no se podía cerrar en ese instante —la
+cabecera de Everest a medio re-renderizar, que es JUSTO el momento en que dispara el flush
+de la escritura del médico (v18.8.8 FASE A), o un resumen cacheado sin `factores`/`erc` con
+qué recalcular— el cambio quedaba marcado como «ya visto» sin haberse aplicado, y la vuelta
+siguiente salía por `ahora === _firma`. El Panel se quedaba con la clasificación vieja el
+resto de la consulta, en silencio, sin ningún repintado posterior que lo corrigiera: una
+actualización de estado PERDIDA — la «desincronía en la actualización de estados» que el
+encargo pide corregir. Ahora la firma solo avanza cuando el repintado ocurrió de verdad; si
+no, el tick siguiente (o el flush de la próxima tecla) lo reintenta, que es puro y sin red.
+Suite nueva `suite_116_panel_grounding.js` (2 casos): el cambio no reconciliable se
+reintenta y SÍ repinta, y tras repintar la vigilancia se detiene (reintentar no se vuelve un
+bucle de repintados).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_vigilarPanel` — consumo de la firma del DOM | `_firma = ahora;` devuelto a su posición original, ANTES de `mtrPanelFactoresDePantalla`/`mtrRecalcularConFactores` (la firma se vuelve a consumir al leerla) | NO | suite_116 ambos casos rojos: «el cambio se reconcilia en la vuelta siguiente: la firma se consumió al repintar, no al leerla: esperaba 1 y obtuvo undefined» y «el reintento repinta UNA vez: esperaba 1 y obtuvo undefined»; EXIT 1 (0 pasan, 2 fallan). Restaurado 2 ok EXIT=0 |
+| user.js Ajustes — verificación automática de la clave de Gemini recién pegada | `if (v) {` (guarda del bloque de auto-verificación) → `if (false && v) {` (la clave se guarda pero nadie la comprueba hasta que el médico pulse «Verificar») | NO | suite_99 caso «VALIDEZ — el gate de los inyectores pregunta por la clave usable, no por la de Gemini (fuente)»: mutante rojo («al guardar una clave nueva en Ajustes, la verificación sale sin que él la pida (obtuvo false)»); EXIT 1 (25 ok, 1 falla). Restaurado 26 ok EXIT=0. Nota: la primera versión del ancla NO discriminaba (un `[\s\S]{0,900}` entre dos llamadas sigue casando con la guarda anulada); se ancló a la guarda real |
+
+## v18.14.2 — Anexo 5 en el aviso central y los próximos exámenes RCV como sección del módulo «Pendientes»
+
+Encargo del 10-sep-2026 (4 puntos). Lo que se cableó: (1) el Anexo 5 viaja en la MISMA vara
+que el resto de los pendientes (`_pendientesUniversales` → `a5AlertasDe`) y sale como sección
+propia del aviso centralizado, solo para el paciente que cumple sus criterios de aplicación;
+(2) el Anexo 5 tiene su REPOSITORIO SECUNDARIO en un modal DIFERENCIADO (`#vgl-a5-modal`) con
+la pastilla «📋 Anexo 5» del dock, réplica del archivado de PyM en «🩺 Pendientes», sin
+consumir el «ya visto» de la jornada; (3) los próximos exámenes de riesgo cardiovascular
+dejaron de vivir en un panel flotante propio (`rcvPendientesTick` ya no pinta nada: solo deja
+`_rcvUltimo`) y son una SECCIÓN EXCLUSIVA del cuadro de «Pendientes», junto a PyM, el
+abandono y los laboratorios; (4) con el panel se retiraron su CSS, su arrastre, su minimizado,
+su pastilla de reapertura y su posición de sesión, y las filas se re-scoparon de
+`#vgl-rcv-pendientes` a `#vgl-pym-modal` (sin ese re-scope las filas quedaban sin estilo y
+heredaban el azul de Everest).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `avisoUniversal` L17196 — sección del Anexo 5 en el aviso central | `if (anexo5) {` → `if (false && anexo5) {` (el anexo deja de pintarse en el aviso) | NO | suite_102 casos «aviso central: el Anexo 5 entra como sección propia…» y «repositorio en reposo: #vgl-a5-modal…»: mutante rojo; EXIT 1 (6 ok, 2 fallan). Restaurado 8 ok EXIT=0 |
+| user.js `avisoUniversal` L17209 — sección de próximos exámenes RCV | `if (rcv && rcv.html) {` → `if (false && rcv && rcv.html) {` | NO | suite_102 casos «sección RCV: los próximos exámenes entran en el MISMO cuadro…» y «fuente (F1)…»: mutante rojo; EXIT 1 (6 ok, 2 fallan). Restaurado 8 ok EXIT=0 |
+| user.js `_pendientesUniversales` L17366 — el anexo viaja en la vara única | `anexo5: anexo5,` → `anexo5: null,` | NO | suite_102 4 casos rojos (aviso central, interruptor, repositorio y sección RCV): EXIT 1 (4 ok, 4 fallan). Restaurado 8 ok EXIT=0 |
+| user.js `_pendientesUniversales` L17367 — la sección RCV viaja en la vara única | `rcv: rcv,` → `rcv: null,` | NO | suite_88 «permiso: el equipo RCV…», «D4 en vivo», «refresco en vivo», «sin parpadeo», «navegación dinámica» y «fuente (F1, v18.14.2)» rojos: EXIT 1 (15 ok, 10 fallan); suite_102 3 casos rojos (5 ok, 3 fallan). Restaurado 25 ok / 8 ok EXIT=0 |
+| user.js `abrirAnexo5Modal` L15801 — el repositorio secundario se monta | `document.body.appendChild(ov);` eliminada (el modal se construye y nunca se monta) | NO | suite_102 «repositorio en reposo: #vgl-a5-modal…» rojo: EXIT 1 (5 ok, 3 fallan). Restaurado 8 ok EXIT=0 |
+| user.js CSS L20258 — ámbito de las filas de próximos exámenes | `#vgl-pym-modal .vgl-rcvp-prog{` → `#vgl-rcv-pendientes .vgl-rcvp-prog{` (las filas vuelven al ámbito del panel retirado: quedan sin estilo dentro del cuadro de Pendientes) | NO | suite_88 casos «fuente (F1, v18.14.2)…» («sin rastro de #vgl-rcv-pendientes» → obtuvo true) y «CSS: la sección está registrada…» («existe la primera regla de la sección» → obtuvo false): EXIT 1 (23 ok, 2 fallan). Restaurado 25 ok EXIT=0 |
+| user.js barrido de navegación L38615 — al salir de la historia se suelta el último cálculo | `_rcvUltimo = null;` → `_rcvUltimo = _rcvUltimo;` | NO | suite_88 «navegación dinámica: al volver a Citas del día, tick() RETIRA la sección» rojo («no queda colgando sobre Citas del día» → obtuvo true): EXIT 1 (22 ok, 3 fallan). Restaurado 25 ok EXIT=0 |
+| user.js pastilla «🩺 Pendientes» del dock L8909 — reabre el cuadro con la sección RCV | `anexo5: _p.anexo5, rcv: _p.rcv` → `anexo5: _p.anexo5, rcv: null` | NO | suite_88 «fuente (F1, v18.14.2)…» y suite_102 «fuente (F1)…» rojos (ancla `anexo5: _p.anexo5, rcv: _p.rcv` → obtuvo false): EXIT 1 (23 ok, 2 fallan) y (6 ok, 2 fallan). Restaurado 25 ok / 8 ok EXIT=0 |
+| user.js `a5AlertasDe` L15698 — umbral de abandono del anexo | `(hoy - a.ctrl) > A5_DIAS_ABANDONO` → `(hoy - a.ctrl) >= A5_DIAS_ABANDONO` (183 días exactos pasarían a contar como abandono) | NO | suite_102 «a5AlertasDe: abandono por control…» rojo («183 días exactos no superan el umbral (>183)» → obtuvo true): EXIT 1 (5 ok, 3 fallan). Restaurado 8 ok EXIT=0 |
+| user.js `a5FilasHtml` L15752 — puntaje contra el mínimo del programa | `filas.push(datos.cumpleSuma` → `filas.push(!datos.cumpleSuma` (60/75 se rotularía «cumple») | NO | suite_102 casos «a5FilasHtml…» y «repositorio en reposo…» rojos: EXIT 1 (5 ok, 3 fallan). Restaurado 8 ok EXIT=0 |
+| user.js `_pendientesUniversales` L17344 — interruptor propio del anexo (tog_anexo5) | `if (togActiva("tog_anexo5"))` → `if (true \|\| togActiva("tog_anexo5"))` (el anexo saldría aunque el médico lo tenga apagado) | NO | suite_102 «aviso central: sin Anexo 5 (o con el interruptor apagado) la sección no existe» rojo («apagado, la vara ya no trae el anexo»): EXIT 1 (5 ok, 3 fallan). Restaurado 8 ok EXIT=0 |
+| user.js CSS L20266 — selector huérfano de una fila de próximos exámenes | `#vgl-pym-modal .vgl-rcvp-fechas{` → `#vgl-rcv-pendientes .vgl-rcvp-fechas{` (la regla sobrevive al panel retirado pero ya no casa con ningún elemento: la fila se queda sin color propio y lo hereda de Everest) | NO | suite_88 caso «CSS: la sección está registrada en tokens oscuro+claro…», aserción nueva (f): mutante rojo («toda regla de .vgl-rcvp-* cuelga de #vgl-pym-modal … esperaba "" y obtuvo "#vgl-rcv-pendientes .vgl-rcvp-fechas"») + caso «fuente (F1, v18.14.2)…» («sin rastro de #vgl-rcv-pendientes» → obtuvo true): EXIT 1 (23 ok, 2 fallan). Restaurado 25 ok EXIT=0. Nota: sin la aserción (f), un selector huérfano NO se ve como error — el navegador simplemente no aplica la regla; ese es exactamente el agujero que la aserción cierra |
+
+## v18.14.3 — Fases 1 a 3 del comité: el panel del Anexo 5 en la HC se retira (4.1 opción B), el aviso lleva una línea (4.2) y la ventana del refresco se canda (4.5)
+
+Acta de las 5 decisiones en `docs/REGISTRO_DECISIONES.md` (filas del 2026-09-10) y hoja de
+ruta en `docs/HOJA_DE_RUTA_ANEXO5.md`. Lo que cambió en código: (1) se retiró
+`hcAnexo5Render` con su nodo `#vgl-a5-panel`, su barra de Deshacer y su aria-live, más el
+estado `_vglA5Cerrados`/`_vglA5Anunciado` y el hook del tick — el anexo queda con UN punto de
+entrada automático (la sección del aviso de la jornada) y el repositorio `📋 Anexo 5`;
+(2) nueva función pura `a5ResumenLinea` y el aviso central deja de pintar las filas del anexo;
+(3) la ventana exclusiva 06:00/12:00 de Bogotá se documenta y se canda con pruebas (el
+comportamiento NO cambió: el índice del anexo es la hoja `ANEXO` del libro que ya refrescaba
+en esas dos ventanas).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js tick L38531 — el hook del panel retirado | reinsertada la llamada `try { hcAnexo5Render(); } catch (e2) {}` justo después del comentario de la retirada (alguien vuelve a enganchar el panel) | NO | suite_91 caso «F2 (v18.14.3, opción B): el panel del anexo dentro de la HC se retiró…» («el tick ya no llama al panel del anexo» → obtuvo true): EXIT 1 (27 ok, 1 falla). Restaurado 28 ok EXIT=0 |
+| user.js `avisoUniversal` L17144 — la sección del anexo en el aviso | la línea resumen (`a5ResumenLinea(anexo5)`) devuelta a las filas completas (`a5FilasHtml(anexo5)`): el aviso vuelve a interrumpir con el informe entero | NO | suite_102 caso «aviso central (decisión 4.2)…» («el detalle de filas ya no interrumpe: se pide a un clic» → obtuvo true): EXIT 1 (8 ok, 1 falla). Restaurado 9 ok EXIT=0 |
+| user.js `a5ResumenLinea` L15787 — singular/plural de la línea | el ternario del singular por el plural fijo (`nEst + " estudios pendientes de ordenar"`) | NO | suite_91 caso «F2/a5ResumenLinea (v18.14.3, decisión 4.2)…» («y un estudio, en singular» → obtuvo false): EXIT 1 (27 ok, 1 falla). Restaurado 28 ok EXIT=0 |
+| user.js `CONFIG.SP.base.horasRefresco` L10689 — ventana exclusiva del refresco (decisión 4.5) | `[6, 12]` → `[6, 12, 18]` (una tercera ventana que el comité NO aprobó: el anexo se actualizaría también a las 18:00) | NO | suite_102 caso «ventana de refresco (decisión 4.5)…» («solo dos ventanas: 06:00 y 12:00: esperaba "6,12" y obtuvo "6,12,18"») + suite_92 (2 casos de ventana rojos): EXIT 1 (8 ok, 1 falla) y (38 ok, 2 fallan). Restaurado 9 ok / 40 ok EXIT=0 |
+| user.js `avisoUniversal` L17065 — el anexo NO se exime del presupuesto (decisión 4.4, APROBADA) | `const exentoR3 = !!(abandono \|\| prioridadRcv);` → `!!(abandono \|\| prioridadRcv \|\| anexo5)` (el anexo saltaría el tope diario de interrupciones, que es justo lo que el comité aprobó NO hacer) | NO | suite_102 caso «presupuesto (decisión 4.4, aprobada): el Anexo 5 sigue SUJETO al tope diario…»: mutante rojo. Lo cazan DOS aserciones independientes: la de fuente («la exención del nivel 3 sigue siendo exactamente abandono RCV + prioridadRcv» → obtuvo false, la que reporta el runner por orden) y la de comportamiento («con el cupo agotado, un aviso que SOLO trae el anexo queda suprimido» → el aviso se pintaría y devolvería true). EXIT 1 (9 ok, 1 falla). Restaurado 10 ok EXIT=0 |
