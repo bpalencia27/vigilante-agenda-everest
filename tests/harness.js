@@ -702,6 +702,11 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.VGL_MODALES_CONSULTA = VGL_MODALES_CONSULTA; globalThis.__VGL__.VGL_MODALES_ESCRITURA = VGL_MODALES_ESCRITURA; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.VGL_ROTULOS = VGL_ROTULOS; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__setLabsPrefetchParaTest = function(docId, labs, ts){ _labsPrefetch = { docId: String(docId), labs: labs, ts: ts }; }; }catch(e){}" +
+    // v18.14.9 — `API` es un objeto `const` de módulo (latencia de la última lectura de
+    // agenda) y el autodescubrimiento no lo publica. Sin este accessor no se puede probar
+    // la señal «agenda lenta» del aviso «Everest no responde» sin simular una lectura real
+    // de 6 s contra un fetch falso.
+    "\n;try{ globalThis.__VGL__.__rageApiMsParaTest = function(ms){ API.ms = Number(ms) || 0; }; }catch(e){}" +
     // v18.0.134 (M8) — `_vglLimpiarSesionDia` vacía tres estructuras de sesión que solo
     // son alcanzables dentro del IIFE (dos Set y un Map declarados con let). Sin este
     // accessor el banco no puede llenarlas para demostrar que la limpieza funciona.

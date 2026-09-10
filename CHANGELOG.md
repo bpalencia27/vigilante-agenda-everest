@@ -4,6 +4,37 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.9] — 2026-09-10 (El aviso «Everest no responde» deja de salir cuando no hay motivo)
+
+**El aviso azul que decía «Everest no responde — lleva tres o más clics seguidos…» aparecía
+demasiadas veces y resultaba molesto.** La revisión encontró por qué, midiendo cinco gestos reales
+de consultorio: de los tres que hacían saltar el aviso, **dos eran gestos suyos, no fallos del
+sistema** — el triple clic dentro de un campo de texto para seleccionar un párrafo, y el doble clic
+sobre una fila de la agenda seguido de un tercero. El asistente contaba clics, pero no comprobaba
+en ningún momento si Everest estaba respondiendo o no.
+
+Ahora el aviso solo aparece cuando hay **una razón comprobada**:
+
+- el servicio de Everest lleva tres fallos seguidos y el asistente ya suspendió sus consultas por
+  adelantado;
+- o la última lectura de la agenda tardó 6 segundos o más (de un máximo de 9);
+- o la página todavía está cargando.
+
+Además, **un campo de texto ya no cuenta**: seleccionar un párrafo con tres clics es una acción
+suya, no un bloqueo. Y el aviso **se retira solo a los 9 segundos** en vez de quedarse pegado en
+pantalla hasta que usted lo cierre, que era la otra mitad del problema.
+
+No se perdió nada de lo que había: el asistente sigue midiendo todas las ráfagas y sigue anotando
+dónde ocurrieron (para el informe de causas), y solo deja de interrumpir. La frecuencia del aviso
+tampoco se relajó: sigue saliendo como mucho una vez por jornada y navegador.
+
+Verificación: banco de pruebas completo en verde (3.843 comprobaciones), con seis comprobaciones
+nuevas que fijan el comportamiento en los dos sentidos (avisa cuando hay evidencia, calla cuando
+no la hay), y las mutaciones de control documentadas en `tests/INFORME_MUTACIONES.md`
+(sección «v18.14.9»).
+
+---
+
 ## [Versión 18.14.8] — 2026-09-10 (El aviso de «Faltan antecedentes» ahora dice dónde y lleva hasta allí)
 
 **Pulsar «📝 Faltan antecedentes» ya no deja un mensaje que se borra solo.** Ese botón aparece

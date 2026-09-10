@@ -10,6 +10,18 @@
 // atributos. El umbral de siempre (3 clics en 600 ms) queda intacto y las
 // ráfagas sobre la UI propia (etiquetas del catálogo) no avisan: no es
 // nuestro botón el que no responde, es el sistema.
+//
+// v18.14.9 — MEDICIÓN QUE ORIGINÓ EL CAMBIO: de 5 gestos reales de
+// consultorio, 3 pintaban el aviso y 2 de esos 3 eran gestos LEGÍTIMOS (el
+// triple clic dentro de un textarea para seleccionar un párrafo, y el doble
+// clic sobre una fila de la agenda más un tercero). La causa no era el umbral:
+// el detector contaba clics y NO medía bloqueo — no tenía ni una señal de que
+// Everest no respondiera. Ahora el aviso exige (a) que el elemento NO sea un
+// campo de texto y (b) evidencia real de bloqueo: cortacircuitos del API
+// abierto, agenda medida como lenta (≥6 s) o página todavía cargando. Sin
+// evidencia la ráfaga se sigue contando y su coordenada se sigue registrando:
+// se deja de molestar, no de medir. El aviso además deja de ser `persist`: se
+// retira solo, que era el otro motivo de que resultara insoportable.
 // ══════════════════════════════════════════════════════════════════════
 const fs = require("fs");
 const path = require("path");
@@ -182,6 +194,91 @@ module.exports = {
       t.igual(filasRageHost(c).length, 1, "con su coordenada en la bitácora");
     });
 
+    // ============ v18.14.9 — el aviso deja de ser «3 clics y ya» ============
+    // Medido antes del cambio: de 5 gestos reales de consultorio, 3 pintaban el aviso y 2 de
+    // esos 3 eran gestos LEGÍTIMOS (el triple clic para seleccionar un párrafo y el doble clic
+    // sobre una fila de la agenda). El detector contaba clics, no medía bloqueo.
+    t.caso("v18.14.9: el triple clic dentro de un CAMPO DE TEXTO de Everest NO avisa (es seleccionar un párrafo)", () => {
+      const c = base();
+      const campo = { tagName: "TEXTAREA", id: "txt-observacion", getAttribute: () => null, className: "", closest: () => null };
+      const ev = { target: campo };
+      c.api._detectarRageClick(ev); c.api._detectarRageClick(ev); c.api._detectarRageClick(ev);
+      const acc = accionesUX(c);
+      t.igual(acc["ux.rage.host"], 1, "la ráfaga se sigue midiendo: se deja de molestar, no de medir");
+      t.igual(acc["ux.rage.host.texto"], 1, "y queda marcada como gesto de texto, para poder auditar el falso positivo");
+      t.cierto(acc["ux.rage.aviso"] === undefined, "pero el centinela NO avisa: seleccionar un párrafo no es un bloqueo");
+      t.igual(filasRageHost(c).length, 1, "la coordenada anónima sigue quedando en la bitácora local");
+    });
+
+    t.caso("v18.14.9: son campos de texto el textarea, el input, el select y el contenteditable — y no lo es una celda", () => {
+      const c = base();
+      t.cierto(c.api._rageEsCampoTexto({ tagName: "TEXTAREA" }), "textarea");
+      t.cierto(c.api._rageEsCampoTexto({ tagName: "INPUT" }), "input");
+      t.cierto(c.api._rageEsCampoTexto({ tagName: "SELECT" }), "select");
+      t.cierto(c.api._rageEsCampoTexto({ tagName: "DIV", isContentEditable: true }), "contenteditable por propiedad");
+      t.cierto(c.api._rageEsCampoTexto({ tagName: "DIV", getAttribute: (a) => (a === "contenteditable" ? "true" : null) }), "contenteditable por atributo");
+      t.falso(c.api._rageEsCampoTexto(celdaHost("fila-paciente")), "una celda de la agenda NO es un campo de texto: ahí el martilleo sí es señal");
+      t.falso(c.api._rageEsCampoTexto(null), "sin elemento, no hay campo de texto");
+    });
+
+    t.caso("v18.14.9: sin EVIDENCIA de bloqueo la ráfaga se mide, pero el aviso NO sale", () => {
+      const c = base();
+      c.env.doc.readyState = "complete";   // la página ya cargó
+      c.api._apiCorteResetParaTest();      // el API no ha fallado
+      c.api.__rageApiMsParaTest(1200);     // y la agenda no viene lenta
+      const el = celdaHost("fila-paciente celda-hora");
+      const ev = { target: el };
+      c.api._detectarRageClick(ev); c.api._detectarRageClick(ev); c.api._detectarRageClick(ev);
+      const acc = accionesUX(c);
+      t.igual(acc["ux.rage.host"], 1, "la ráfaga se cuenta igual (la métrica no miente)");
+      t.igual(acc["ux.rage.host.tag.td"], 1, "y su coordenada gruesa también viaja");
+      t.cierto(acc["ux.rage.aviso"] === undefined, "pero sin evidencia el centinela calla: no afirma lo que no puede probar");
+      t.igual(filasRageHost(c).length, 1, "la bitácora local sigue recogiendo el diagnóstico");
+    });
+
+    t.caso("v18.14.9: con el cortacircuitos del API abierto el aviso SÍ sale — y queda medido el motivo", () => {
+      const c = base();
+      c.env.doc.readyState = "complete";
+      c.api._apiCorteResetParaTest();
+      c.api._apiMarcarResultado(false); c.api._apiMarcarResultado(false); c.api._apiMarcarResultado(false);
+      t.cierto(c.api._apiCorteAbierto(), "premisa: 3 fallos seguidos abren el freno del API");
+      const el = celdaHost("fila-paciente celda-hora");
+      const ev = { target: el };
+      c.api._detectarRageClick(ev); c.api._detectarRageClick(ev); c.api._detectarRageClick(ev);
+      const acc = accionesUX(c);
+      t.igual(acc["ux.rage.aviso"], 1, "el caso legítimo del aviso sigue vivo: el sistema SÍ está fallando");
+      t.igual(acc["ux.rage.aviso.motivo.api_caido"], 1, "y el motivo que lo justificó queda en la telemetría");
+      c.api._apiCorteResetParaTest();
+    });
+
+    t.caso("v18.14.9: una agenda medida como lenta (≥6 s) también es evidencia — motivo api_lento", () => {
+      const c = base();
+      c.env.doc.readyState = "complete";
+      c.api._apiCorteResetParaTest();
+      c.api.__rageApiMsParaTest(6500);
+      const el = celdaHost("fila-paciente celda-hora");
+      const ev = { target: el };
+      c.api._detectarRageClick(ev); c.api._detectarRageClick(ev); c.api._detectarRageClick(ev);
+      const acc = accionesUX(c);
+      t.igual(acc["ux.rage.aviso"], 1, "6,5 s de lectura es Everest lento de verdad: el aviso se justifica");
+      t.igual(acc["ux.rage.aviso.motivo.api_lento"], 1, "con su motivo propio");
+      c.api.__rageApiMsParaTest(0);
+    });
+
+    t.caso("v18.14.9: el umbral y el cooldown no se movieron — ráfaga de 3 clics y un aviso por jornada", () => {
+      const c = base();
+      c.env.doc.readyState = "complete";
+      c.api._apiCorteResetParaTest();
+      c.api.__rageApiMsParaTest(500);
+      const el = celdaHost("fila-paciente celda-hora");
+      const ev = { target: el };
+      c.api._detectarRageClick(ev); c.api._detectarRageClick(ev);
+      t.cierto(accionesUX(c)["ux.rage.host"] === undefined, "dos clics siguen sin ser ráfaga");
+      c.api._detectarRageClick(ev);
+      t.igual(accionesUX(c)["ux.rage.host"], 1, "y el tercero la cierra: el umbral de siempre, intacto");
+      t.cierto(accionesUX(c)["ux.rage.aviso"] === undefined, "aunque sin evidencia no avise");
+    });
+
     // ============ el enganche real en el código vivo ============
     t.caso("estructura: el helper existe, el aviso es SOLO informativo y el anti-spam está acotado", () => {
       const s = fs.readFileSync(USERJS, "utf8");
@@ -194,6 +291,10 @@ module.exports = {
       t.cierto(s.indexOf("> 30000") > s.indexOf("_rageAvisoHostAt"), "el anti-spam del aviso es de 30 s");
       t.cierto(s.indexOf('_avisoUnaVezPorNavegador("ragehost|aviso")') > 0, "v18.12.1: además pasa por el registro compartido del día (una vez por jornada)");
       t.cierto(s.indexOf('uxTrack("ux.rage.aviso")') >= 0, "la señal queda medida (se sabe cuándo se mostró)");
+      t.cierto(s.indexOf("function _rageEsCampoTexto(t)") > 0, "v18.14.9: el detector reconoce los campos de texto (el triple clic ahí es seleccionar, no martillar)");
+      t.cierto(s.indexOf("function _rageEvidenciaDeBloqueo()") > 0, "v18.14.9: el aviso exige EVIDENCIA real de bloqueo antes de molestar");
+      t.cierto(s.indexOf('const motivo = esTexto ? "" : _rageEvidenciaDeBloqueo();') > 0, "y la ráfaga sin evidencia no llega al médico");
+      t.cierto(s.indexOf("if (motivo && ahora - _rageAvisoHostAt > 30000") > 0, "el cooldown de 30 s sigue en pie, ahora junto a la evidencia");
     });
 
     t.caso("estructura: el texto del aviso es informativo — el centinela solo avisa, jamás actúa", () => {
@@ -205,6 +306,8 @@ module.exports = {
       t.cierto(s.indexOf("ux.rage.host.tag.") >= 0, "la coordenada de tag existe en el código vivo");
       t.cierto(s.indexOf("_rageClickCount === 3") >= 0, "el umbral de la ráfaga (3 clics) quedó intacto");
       t.cierto(s.indexOf("now - _lastClickTime) < 600") >= 0, "y la ventana de 600 ms también");
+      const iPersist = s.indexOf("false);", iToast);
+      t.cierto(iPersist > iToast && iPersist - iToast < 900, "v18.14.9: el aviso se pinta con persist=false — se retira solo, ya no se queda pegado en pantalla");
     });
   },
 };

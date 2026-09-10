@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.8
+// @version      18.14.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14287,6 +14287,38 @@
     } catch (e) { return ""; }
   }
 
+  // v18.14.9 — ¿El elemento pulsado es un campo de texto? El triple clic dentro de un
+  // textarea o de un contenteditable es SELECCIONAR UN PÁRRAFO (gesto estándar del
+  // navegador), no martillar un sistema bloqueado. Llega tres veces al MISMO elemento
+  // dentro de la ventana de 600 ms y el detector lo contaba como ráfaga: medido en el
+  // banco, era el falso positivo más frecuente del aviso «Everest no responde».
+  function _rageEsCampoTexto(t) {
+    try {
+      if (!t) return false;
+      const tag = typeof t.tagName === "string" ? String(t.tagName).toLowerCase() : "";
+      if (tag === "textarea" || tag === "input" || tag === "select") return true;
+      if (t.isContentEditable === true) return true;
+      if (typeof t.getAttribute === "function" && t.getAttribute("contenteditable") != null) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  // v18.14.9 — EVIDENCIA REAL de que Everest no responde. El aviso lo afirmaba con solo
+  // contar clics; ahora exige una de estas tres señales, todas medidas por el propio
+  // script y ninguna supuesta:
+  //   · el cortacircuitos del API está abierto (3 fallos seguidos, ventana de 5 min);
+  //   · la última lectura de la agenda tardó 6 s o más (esa lectura se corta a los 9 s);
+  //   · la página todavía está cargando.
+  // Devuelve el motivo (va a la telemetría) o "" si no hay ninguno: sin motivo, el
+  // centinela calla — «casilla vacía antes que dato inventado».
+  const RAGE_LENTO_MS = 6000;
+  function _rageEvidenciaDeBloqueo() {
+    try { if (typeof _apiCorteAbierto === "function" && _apiCorteAbierto()) return "api_caido"; } catch (e) {}
+    try { if (API && (API.ms || 0) >= RAGE_LENTO_MS) return "api_lento"; } catch (e) {}
+    try { if (typeof document !== "undefined" && document.readyState === "loading") return "cargando"; } catch (e) {}
+    return "";
+  }
+
   let _lastClickTarget = null, _lastClickTime = 0, _rageClickCount = 0;
   let _rageAvisoHostAt = 0;   // v18.10.0 (AB-3): anti-spam del aviso azul (uno por ráfaga y como mucho cada 30 s)
   function _detectarRageClick(e) {
@@ -14322,18 +14354,36 @@
               // por jornada y navegador, salga por la pestaña que salga. La métrica
               // ux.rage.host sigue contando TODAS las ráfagas: se deja de molestar, no de
               // medir. El umbral (3 clics/600 ms) y el freno de 30 s quedan intactos.
-              if (ahora - _rageAvisoHostAt > 30000 && _avisoUnaVezPorNavegador("ragehost|aviso")) {
+              //
+              // v18.14.9 — DOS COMPUERTAS NUEVAS antes de molestar al médico. Medido en el
+              // banco con 5 gestos reales de consultorio: 3 pintaban el aviso y 2 de esos 3
+              // eran gestos LEGÍTIMOS (el triple clic para seleccionar un párrafo y el doble
+              // clic sobre una fila de la agenda). La causa: el detector contaba clics, no
+              // medía bloqueo — no tenía ni una sola señal de que Everest no respondiera.
+              //   1. Un CAMPO DE TEXTO no se martilla: el triple clic ahí es seleccionar.
+              //   2. Sin EVIDENCIA de bloqueo (cortacircuitos, lentitud medida o carga en
+              //      curso) el centinela calla: no afirma lo que no puede probar.
+              // La ráfaga se sigue contando y su coordenada se sigue registrando.
+              const esTexto = _rageEsCampoTexto(t);
+              if (esTexto) uxTrack("ux.rage.host.texto");
+              const motivo = esTexto ? "" : _rageEvidenciaDeBloqueo();
+              if (motivo && ahora - _rageAvisoHostAt > 30000 && _avisoUnaVezPorNavegador("ragehost|aviso")) {
                 _rageAvisoHostAt = ahora;
                 uxTrack("ux.rage.aviso");
+                uxTrack("ux.rage.aviso.motivo." + motivo);
                 try {
                   // v18.13.0 (Mesa de Expertos): persist=true — salía en 9 s como cualquier
                   // aviso rutinario, justo cuando el sistema puede estar lento y el médico
                   // ansioso ya no está mirando la bandeja. Se cierra con clic/Escape, igual
                   // que cualquier otro toast persistente; nunca se acumula (30 s de cadencia
                   // propia arriba, apptKey ausente = sin reemplazo automático).
+                  // v18.14.9 — SE REVIERTE, con la razón medida: un AZUL que NO se retira
+                  // solo y que salía en gestos legítimos es, literalmente, el aviso que el
+                  // médico reportó como insoportable. Ya no hace falta que insista: solo
+                  // aparece con evidencia real de bloqueo, y entonces 9 s bastan para leerlo.
                   showToast("AZUL", "Everest no responde",
                     "Lleva tres o más clics seguidos en el mismo punto sin reacción del sistema. Puede estar cargando o bloqueado: espere unos segundos y, si sigue igual, recargue la consulta. El centinela solo le avisa: usted decide.",
-                    true);
+                    false);
                 } catch (e) {}
               }
             } catch (e) {}

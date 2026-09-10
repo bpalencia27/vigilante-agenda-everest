@@ -14466,4 +14466,56 @@ pestaña» del dock es hoy inalcanzable (el botón navega y, si Everest ignora e
 La corrección aquí (v18.14.8) compara por VALOR y sí dispara — está probada por la mutación M5.
 El defecto del dock queda anotado para que lo decida el médico.
 
+---
+
+## v18.14.9 — El aviso «Everest no responde» deja de salir por contar clics y exige evidencia de bloqueo
+
+Orden del médico (10-sep-2026): el aviso azul «Everest no responde — Lleva tres o más clics
+seguidos en el mismo punto…» aparecía de forma excesiva y resultaba molesto. Sesión TRAE-debugger,
+bitácora `debug-rage-host-falsos-positivos.md`.
+
+**Causa medida (driver del arnés, 5 gestos reales de consultorio, evidencia pre-fix).** Tres de los
+cinco escenarios pintaban el aviso, y **dos de esos tres eran gestos LEGÍTIMOS**:
+
+| Escenario (gesto real) | Pre-fix | Por qué |
+|---|---|---|
+| S1 — triple clic en un `textarea` de Everest para seleccionar un párrafo | AVISA | el gesto llega 3 veces al mismo elemento dentro de los 600 ms |
+| S2 — doble clic en una fila de la agenda + un tercer clic | AVISA | lo mismo, con un gesto deliberado |
+| S3 — tres clics en la misma celda porque Everest va lento | AVISA | es el caso que el aviso busca |
+| S4 — tres clics en tres botones DISTINTOS de la barra | callado | el target cambia y el contador se reinicia |
+| S5 — dos clics en la misma celda | callado | no llega al umbral |
+
+El detector **contaba clics y no medía bloqueo**: no consultaba ni el cortacircuitos del API, ni la
+latencia medida, ni el `readyState`. Y el aviso era `persist=true`, así que una sola aparición no se
+retiraba sola: el aviso quedaba pegado en pantalla durante el resto de la consulta.
+
+**Corrección (tres piezas, ninguna toca el umbral).**
+1. `_rageEsCampoTexto(t)` — un campo de texto (`input`/`textarea`/`select`/`contenteditable`) no se
+   martilla: el triple clic ahí es seleccionar un párrafo. La ráfaga se sigue midiendo
+   (`ux.rage.host` + `ux.rage.host.texto`) pero **no avisa**.
+2. `_rageEvidenciaDeBloqueo()` — el aviso exige una señal REAL, medida por el propio script:
+   cortacircuitos del API abierto (`api_caido`), última lectura de agenda ≥ 6 s de un tope de 9 s
+   (`api_lento`) o página todavía cargando (`cargando`). Sin ninguna, la ráfaga se cuenta y su
+   coordenada se registra, pero el centinela calla. El motivo queda en `ux.rage.aviso.motivo.*`.
+3. El toast pasa de `persist=true` a `persist=false`: se retira solo a los 9 s.
+
+El umbral (3 clics / 600 ms), el freno de 30 s en memoria y el registro del día
+(`_avisoUnaVezPorNavegador("ragehost|aviso")`) quedan intactos: el cooldown no se relajó.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_detectarRageClick` — la compuerta de campo de texto en el flujo | `const motivo = esTexto ? "" : _rageEvidenciaDeBloqueo();` → `const motivo = _rageEvidenciaDeBloqueo();` (un textarea vuelve a poder disparar el aviso) | NO | suite_110 «v18.14.9: el triple clic dentro de un CAMPO DE TEXTO…» («pero el centinela NO avisa» → obtuvo `ux.rage.aviso`=1). EXIT 1 (16 ok, 2 fallan). Restaurado 18 ok EXIT=0 |
+| user.js `_detectarRageClick` — la exigencia de evidencia en el `if` | `if (motivo && ahora - _rageAvisoHostAt > 30000 …)` → `if (ahora - _rageAvisoHostAt > 30000 …)` (vuelve a bastar con 3 clics) | NO | Lo cazan DOS casos de suite_110: «sin EVIDENCIA de bloqueo…» («pero sin evidencia el centinela calla» → obtuvo false) y «el umbral y el cooldown no se movieron…» (2 aserciones). EXIT 1 (14 ok, 4 fallan). Restaurado 18 ok EXIT=0 |
+| user.js `_rageEsCampoTexto` — el reconocimiento del campo | `return false;` como primera línea del `try` (el detector deja de reconocer campos de texto) | NO | Lo cazan los DOS casos de la compuerta: el de comportamiento (el textarea avisa) y el unitario («son campos de texto el textarea, el input, el select…»). EXIT 1 (16 ok, 2 fallan). Restaurado 18 ok EXIT=0 |
+| user.js `_detectarRageClick` — la persistencia del toast | `false);` → `true);` en el `showToast("AZUL", "Everest no responde", …)` (el aviso vuelve a quedarse pegado en pantalla) | NO | suite_110 «estructura: el texto del aviso…» («v18.14.9: el aviso se pinta con persist=false» → obtuvo false). EXIT 1 (17 ok, 1 fallan). Restaurado 18 ok EXIT=0 |
+| user.js `_rageEvidenciaDeBloqueo` — la señal de lentitud medida | `if (API && (API.ms \|\| 0) >= RAGE_LENTO_MS)` → `if (false && API && …)` (la agenda medida como lenta deja de contar como evidencia) | NO | suite_110 «v18.14.9: una agenda medida como lenta (≥6 s) también es evidencia — motivo api_lento» (no hay aviso ni motivo). EXIT 1 (17 ok, 1 fallan). Restaurado 18 ok EXIT=0 |
+
+**Instrumento nuevo del banco:** `tests/harness.js` publica `__rageApiMsParaTest(ms)`. `API` es un
+objeto `const` de módulo y el autodescubrimiento no lo expone; sin ese accessor la señal «agenda
+lenta» solo se podría probar simulando una lectura real de 6 s contra un `fetch` falso.
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.843 pasan, EXIT 0** (sube de 3.837 a
+3.843: +6 casos en `suite_110`); `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.9
+sincronizada en los 4 puntos). Las 5 mutaciones de arriba, rojas y restauradas.
+
 
