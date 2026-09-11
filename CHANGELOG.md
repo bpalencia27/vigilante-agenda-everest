@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.13] — 2026-09-11 (La casilla de programa RCV/PyM y el aviso de vencimiento, en Agendar)
+
+**Dos arreglos pequeños y honestos en el módulo de Agendar.**
+
+**1. La casilla «¿Es cita para actividades del programa RCV / Prevención?».** Al agendar para
+**Psicología** u **Odontología**, esa casilla salía marcada de fábrica — y esas dos profesiones no son
+actividades del programa RCV/Prevención: una remisión al especialista quedaba registrada como
+actividad de PyM. Ahora, al elegir esas dos especialidades, la casilla se **desmarca y se bloquea**,
+con una nota que dice por qué; al volver a Medicina General se le devuelve tal como usted la tenía
+—si la había desmarcado a mano, sigue desmarcada: el asistente no la vuelve a marcar por su cuenta—.
+Para los médicos con la capacidad RCV activa nada cambia: su casilla ya venía marcada y bloqueada con
+su propio aviso.
+
+**2. El aviso de vencimiento al mover la toma con el calendario.** Cuando usted escribía la fecha de
+la toma en el **calendario manual** («📅 Otra fecha para la toma…»), el recuadro «⚠ Esta fecha deja
+vencer un examen» se quedaba con el veredicto de la fecha **anterior** hasta que pulsara Confirmar.
+El clic en un chip de toma sí lo repintaba, pero el calendario manual no. Corregido: ahora el recuadro
+se reevalúa en el momento, igual que con el chip.
+
+Verificación: banco de pruebas completo en verde (3.841 comprobaciones), con un caso nuevo que fija el
+comportamiento de la casilla —incluido que se respeta lo que usted había marcado— y una aserción nueva
+en la prueba del aviso de vencimiento, más las mutaciones de control documentadas en
+`tests/INFORME_MUTACIONES.md` (sección «v18.14.13»).
+
+---
+
 ## [Versión 18.14.12] — 2026-09-10 (Retirados los dos botones «Impresión Diagnóstica» y «Conducta» del dock)
 
 **Se eliminan definitivamente los dos accesos directos** del widget lateral de la historia clínica que

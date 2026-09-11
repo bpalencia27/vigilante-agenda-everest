@@ -5488,14 +5488,16 @@ module.exports = {
       t.cierto(notaSms.textContent.includes("no se pudo verificar"), "la nota dice qué pasó");
     });
 
-    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 5 estados que mutan y aria-current en el stepper", () => {
+    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 6 estados que mutan y aria-current en el stepper", () => {
       const { c } = _mockAgendaComun();
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const vivas = (modal.innerHTML.match(/aria-live="polite"/g) || []).length;
       // v18.14.11 — el 5.º es #vgl-agm-esp-nota: la nota que aparece en el paso 1 cuando la
       // especialidad elegida (Psicología/Odontología) no tiene tipos de cita que ofrecer.
       // Es un estado que muta con un clic, así que se anuncia igual que los otros cuatro.
-      t.igual(vivas, 5, "pc-est, sugerida, vencaviso, date-info y la nota del filtro por especialidad anuncian sus cambios");
+      // v18.14.13 — el 6.º es #vgl-agm-pym-nota: la nota que explica por qué la casilla PyM
+      // queda desmarcada y deshabilitada con esas dos especialidades.
+      t.igual(vivas, 6, "pc-est, sugerida, vencaviso, date-info, la nota del filtro por especialidad y la de la casilla PyM anuncian sus cambios");
       t.cierto(modal.innerHTML.includes('id="vgl-step-ind-1" role="listitem" aria-current="step"'), "el paso 1 arranca marcado como paso en curso");
       const ind2 = modal.querySelector("#vgl-step-ind-2");
       t.noLanza(() => disparar(modal.querySelector("#vgl-step-1-next"), "click"));
@@ -6456,6 +6458,76 @@ module.exports = {
     });
 
     // =====================================================================
+    // v18.14.13 — LA CASILLA PyM EN PSICOLOGÍA Y ODONTOLOGÍA. Esas dos profesiones no son
+    // actividades del programa RCV / Prevención: con la casilla «¿Es cita para actividades
+    // del programa RCV / Prevención?» marcada por defecto, una REMISIÓN al especialista se
+    // registraba como actividad de PyM. Se desmarca y se deshabilita mientras dure la
+    // especialidad, con una nota que lo dice, y al volver a Medicina General se le devuelve
+    // al médico LO QUE ÉL TENÍA marcado: si la había desmarcado a mano, sigue desmarcada —
+    // la casilla del médico es sagrada y el asistente no la remarca por su cuenta.
+    // =====================================================================
+    await t.casoAsync("v18.14.13: la casilla PyM se desmarca y se deshabilita en Psicología y Odontología, y se devuelve como estaba al volver", async () => {
+      const { instalarDomEnriquecido } = require("./harness");
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        const u = String(url);
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+        if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+        return respuestaJson({ agendas: [] });
+      } });
+      instalarDomEnriquecido(c.env.doc);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      // v18.14.13 — el checkbox PyM solo es una elección REAL para un médico SIN la
+      // capacidad `rcv`: para los demás sale marcado y deshabilitado (v14.2.0) y este
+      // filtro no lo toca. Se le revoca `rcv` a este médico (v18.8.1, vgl_permisos_locales):
+      // sigue siendo COMPLETO y el modal abre igual — es el caso en el que el médico
+      // decide de verdad.
+      const _revocaRcv = [{ uid: 707, off: ["rcv"] }];
+      c.api.permisosLocalesEscribir(_revocaRcv);
+      c.api.openAgendamientoModal({ doc_id: "424244", nombre: "PACIENTE PRUEBA" });
+      await esperar(40);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!modal, "el modal quedó montado");
+      if (!modal) return;
+      const chk = modal.querySelector("#vgl-agm-pym-chk");
+      const nota = modal.querySelector("#vgl-agm-pym-nota");
+      t.cierto(!!(chk && nota), "el paso 3 trae la casilla PyM y su nota");
+      if (!(chk && nota)) return;
+      const pbtn = (esp) => modal.querySelector('#vgl-esp-presets .vgl-agm-pbtn[data-esp="' + esp + '"]');
+
+      t.igual(chk.checked, true, "con Medicina General la casilla viene marcada (como siempre)");
+      t.falso(chk.disabled, "y habilitada para el médico");
+      t.cierto(nota.classList.contains("vgl-d-none"), "sin nota: no hay nada que explicar");
+
+      disparar(pbtn(46), "click");
+      await esperar(60);
+      t.igual(chk.checked, false, "Psicología desmarca la casilla: no es actividad de PyM");
+      t.igual(chk.disabled, true, "y la deshabilita");
+      t.falso(nota.classList.contains("vgl-d-none"), "con una nota que lo explica");
+      t.cierto((nota.innerHTML || "").includes("RCV"), "la nota nombra el programa: " + nota.innerHTML);
+
+      disparar(pbtn(14), "click");
+      await esperar(60);
+      t.igual(chk.checked, false, "Odontología también la deja desmarcada");
+      t.igual(chk.disabled, true, "y deshabilitada");
+
+      disparar(pbtn(12), "click");
+      await esperar(60);
+      t.igual(chk.disabled, false, "al volver a Med. General se rehabilita");
+      t.igual(chk.checked, true, "y se le devuelve marcada, como estaba");
+      t.cierto(nota.classList.contains("vgl-d-none"), "la nota desaparece");
+
+      // La casilla es del médico: si ÉL la desmarcó en Med. General, volver de Psicología
+      // no se la vuelve a marcar por su cuenta.
+      chk.checked = false;
+      disparar(pbtn(46), "click");
+      await esperar(60);
+      disparar(pbtn(12), "click");
+      await esperar(60);
+      t.igual(chk.checked, false, "v18.14.13: lo que el médico había desmarcado se respeta al volver (no se le remarca solo)");
+      t.igual(chk.disabled, false, "y la casilla queda otra vez en sus manos");
+    });
+
+    // =====================================================================
     // v18.0.131 (barrido por recorridos, hallazgo 1) — REPORTE DEL BARRIDO: en modo «control +
     // laboratorios», `isLabChecked`/`selectedLabTime` se congelaban ANTES del `await
     // apiAccesoAsignarTurno`, pero la FECHA de la toma se leía DESPUÉS, en vivo, de
@@ -6698,6 +6770,14 @@ module.exports = {
       labManual.value = sumarDias(45);
       disparar(labManual, "change");
       await esperar(80);
+      // v18.14.13 — HALLAZGO NO TOCADO de v18.14.10, cerrado. El chip de toma repintaba el
+      // recuadro de vencimiento (la toma es su referencia), pero escribir la fecha en el
+      // CALENDARIO manual no: el recuadro se quedaba con el veredicto de la fecha anterior
+      // hasta que el médico pulsara Confirmar. Aquí la fecha escrita (≈45 días) deja vencer
+      // la creatinina (vence a los 27), así que el recuadro TIENE que aparecer ya, sin
+      // ningún clic de chip de por medio.
+      t.cierto(!vencaviso.classList.contains("vgl-d-none"),
+        "v18.14.13: escribir la fecha en el calendario manual de la toma repinta el aviso de vencimiento, sin esperar a Confirmar");
       const labChips = modal.querySelector("#vgl-lab-day-chips");
       disparar(labChips.children[labChips.children.length - 1], "click");
       await esperar(80);

@@ -14466,6 +14466,12 @@ pestaña» del dock es hoy inalcanzable (el botón navega y, si Everest ignora e
 La corrección aquí (v18.14.8) compara por VALOR y sí dispara — está probada por la mutación M5.
 El defecto del dock queda anotado para que lo decida el médico.
 
+**→ ESTE HALLAZGO QUEDÓ SIN OBJETO EN v18.14.12.** El médico rechazó la propuesta de terminarlos y
+ordenó **eliminar definitivamente** los dos botones del dock (`bImp`/`bCond`), junto con su compuerta
+de visibilidad. El código con la comparación por identidad ya **no existe** en el archivo: no hay
+nada que arreglar ni que decidir. Se deja escrito para que nadie lo «redescubra» y lo reporte como
+defecto vivo leyendo una entrada vieja de este informe. Ver la sección «v18.14.12».
+
 ---
 
 ## v18.14.9 — El aviso «Everest no responde» deja de salir por contar clics y exige evidencia de bloqueo
@@ -14573,6 +14579,10 @@ CALENDARIO manual de la toma, `_pintarAvisoVencimiento()` no se repinta (el mane
 `#vgl-agm-lab-manual-fecha` no lo llama, a diferencia del clic en un chip de toma). El aviso se
 recalcula igual al pulsar Confirmar —que es donde el médico decide—, así que no se pierde la
 seguridad; solo el recuadro del paso 2 puede quedar un instante desactualizado.
+
+**→ CERRADO EN v18.14.13.** El manejador del calendario manual ahora llama al mismo par
+(`_vencAceptado = false; _pintarAvisoVencimiento();`) que la rama del chip, al final del handler y
+después de que el render haya fijado `selectedLabDateInfo`. Ver la sección «v18.14.13».
 
 **Consecuencia declarada de la orden (no es un defecto, es la decisión):** con la toma congelada, si
 el médico mueve el control ANTES de la toma congelada, la línea del plan puede mostrar una toma
@@ -14731,5 +14741,66 @@ otro botón, porque la orden fue retirarlos.
 **Regresión de la entrega:** `node tests/runner.js` → **3.840 pasan, EXIT 0** (baja de 3.849 a 3.840 por
 los 10 casos retirados y sube 1 con el guardián nuevo); `node tools/compat-check.js` → **COMPATIBLE**
 (`@version` 18.14.12 sincronizada en los 4 puntos). La mutación de arriba, roja y restaurada.
+
+---
+
+## v18.14.13 — La casilla PyM en Psicología/Odontología, y el aviso de vencimiento al mover la toma con el calendario
+
+Cierre de los tres pendientes que el médico eligió al terminar v18.14.12: repintar el aviso de
+vencimiento al mover la toma con el calendario manual (hallazgo no tocado de v18.14.10), decidir qué
+debe pasar con la casilla PyM en Psicología/Odontología, y anotar que el hallazgo del dock quedó sin
+objeto (hecho arriba, en la sección «v18.14.8» — solo nota, cero cambio de código).
+
+### 1. La casilla PyM con Psicología y Odontología
+
+`#vgl-agm-pym-chk` («¿Es cita para actividades del programa RCV / Prevención?») nace **marcada** en el
+HTML del paso 3. Con la especialidad fijada en Psicología (46) u Odontología (14) —que v18.14.11 dejó
+como cita de REMISIÓN, sin control ni toma—, esa casilla seguía marcada: una remisión al especialista
+quedaba registrada como actividad de PyM.
+
+**Alcance real, medido antes de tocar nada.** `esRCV` (`esMedicoRCVActivo()`) es **true** para todo
+médico que pueda abrir el modal, porque `accesoPerfil()` resuelve COMPLETO y `agendar_control` solo lo
+concede COMPLETO. La ÚNICA vía por la que el checkbox es una elección de verdad es un médico COMPLETO
+con la capacidad `rcv` **revocada** en `vgl_permisos_locales` (`off: ["rcv"]`, v18.8.1). Es exactamente
+el caso que describe la nota de v14.2.0 («seguía mostrándose como un control editable»), y es el que
+usa el caso nuevo para poder medir algo.
+
+**Decisión (el asistente decidió, por encargo del médico):** con Psicología u Odontología la casilla se
+**desmarca y se deshabilita**, con una nota que lo explica, y al volver a Medicina General se le
+devuelve al médico **lo que él tenía** —si la había desmarcado a mano, sigue desmarcada—. El caso
+`esRCV` manda y no se pisa: ahí la casilla ya viene marcada, deshabilitada y con su propio aviso («no se
+puede desmarcar»). Todo se gobierna desde `_pintarTiposSegunEsp()`, que ya era el único punto de
+decisión por especialidad — sin una segunda ruta con lógica distinta.
+
+### 2. El aviso de vencimiento al mover la toma con el calendario manual
+
+El manejador `change` de `#vgl-agm-lab-manual-fecha` fijaba la fecha de la toma (vía
+`renderLabDayChips`) pero **no** repintaba `#vgl-agm-vencaviso`; el chip de toma sí lo hacía. Se añade
+el mismo par de llamadas que la rama del chip, al final del handler, cuando el render ya dejó
+`selectedLabDateInfo` fijado.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js manejador `change` de `#vgl-agm-lab-manual-fecha` (~L31800) — el repintado | comentado `try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}` (vuelve el defecto de v18.14.10: el recuadro del paso 2 se queda con el veredicto anterior) | NO | suite_15, aserción nueva dentro del ciclo de vencimiento: «v18.14.13: escribir la fecha en el calendario manual de la toma repinta el aviso de vencimiento, sin esperar a Confirmar» (obtuvo false). EXIT 1 (286 ok, 1 fallan). Restaurado 287 ok EXIT=0 |
+| user.js `_pintarTiposSegunEsp` — el desmarcado y el bloqueo | comentadas `pymChk.checked = false;` y `pymChk.disabled = true;` (la casilla se queda marcada y editable con Psicología/Odontología: el defecto reportado) | NO | suite_15, caso nuevo: «Psicología desmarca la casilla: no es actividad de PyM», «y la deshabilita», «Odontología también la deja desmarcada», «y deshabilitada». EXIT 1 (286 ok, 1 fallan). Restaurado 287 ok EXIT=0 |
+| user.js `_pintarTiposSegunEsp` — lo que se devuelve al volver | `if (!pymChk.disabled) _pymRecordado = !!pymChk.checked;` → `_pymRecordado = true;` (al volver de Psicología se le REMARCA la casilla al médico aunque él la hubiera desmarcado) | NO | suite_15, caso nuevo: «v18.14.13: lo que el médico había desmarcado se respeta al volver (no se le remarca solo)» (esperaba false y obtuvo true). EXIT 1 (286 ok, 1 fallan). Restaurado 287 ok EXIT=0 |
+| user.js `#vgl-agm-pym-nota` — el `aria-live` | retirado `aria-live="polite"` de la nota nueva (un estado que muta deja de anunciarse a un lector de pantalla) | NO | suite_15 «v17.6.13: accesibilidad del modal — aria-live en los 6 estados que mutan…» («esperaba 6 y obtuvo 5»). EXIT 1 (286 ok, 1 fallan). Restaurado 287 ok EXIT=0 |
+| user.js `_pintarTiposSegunEsp` — el texto de la nota | `pymNota.innerHTML = "ℹ️ … RCV / Prevención…"` → `pymNota.innerHTML = "";` (la nota aparece vacía: el médico ve un hueco sin explicación) | NO | suite_15, caso nuevo: «la nota nombra el programa». EXIT 1 (286 ok, 1 fallan). Restaurado 287 ok EXIT=0 |
+
+**Pruebas ajustadas (no silenciadas).** `suite_15`: el caso de accesibilidad v17.6.13 pasa de 5 a 6
+estados `aria-live` (el sexto es `#vgl-agm-pym-nota`) y se renombra; la aserción nueva del aviso de
+vencimiento vive **dentro** del caso de v18.14.10, que es su mismo ciclo (montar el plan, mover la
+toma, ver el aviso) — no se duplicó el mock entero. Caso nuevo: la casilla PyM, con el médico
+`rcv`-revocado y con la comprobación de que se respeta lo que él había marcado.
+
+**Hallazgos NO tocados en esta entrega:** (a) `mtrVigenciaDias` sigue devolviendo 180 en el vector G4
+(testigo de una entrega anterior, fuera de alcance); (b) la consecuencia declarada de la toma congelada
+en v18.14.10 (la línea del plan puede mostrar una toma posterior al control si se mueve el control antes
+de la toma) sigue en pie: es la decisión, no un defecto.
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.841 pasan, EXIT 0** (sube de 3.840 a 3.841
+con el caso nuevo de la casilla PyM; dentro de casos existentes se añade 1 aserción);
+`node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.13 sincronizada en los 4 puntos).
+Las 5 mutaciones de arriba, rojas y restauradas.
 
 

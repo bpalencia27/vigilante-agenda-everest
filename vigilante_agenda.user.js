@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.12
+// @version      18.14.13
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.12";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.13";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30384,6 +30384,10 @@
                 <span>¿Es cita para actividades del programa RCV / Prevención?</span>
               </label>
               ${esRCV ? '<div class="vgl-agm-dinfo" style="margin-top:4px">Todas las citas de este médico se registran como RCV / Prevención — no se puede desmarcar.</div>' : ""}
+              <!-- v18.14.13 — aviso propio de la casilla PyM cuando la especialidad no es del
+                   programa (Psicología/Odontología). Vacío y oculto en el resto de los casos;
+                   lo gobierna _pintarTiposSegunEsp(), único punto de decisión por especialidad. -->
+              <div id="vgl-agm-pym-nota" class="vgl-agm-dinfo vgl-d-none" style="margin-top:4px" aria-live="polite"></div>
             </div>
 
             <div id="vgl-agm-sms-box" class="vgl-agm-cell vgl-agm-c6 vgl-agm-cell-sms">
@@ -30751,6 +30755,10 @@
     // lo llaman el clic de especialidad, la aplicación de la preferencia recordada y la
     // apertura del modal — nunca hay dos rutas con lógica distinta.
     // `aviso` solo controla la nota informativa del paso 1 (no el filtrado).
+    // v18.14.13 — lo que el médico tenía marcado en la casilla PyM ANTES de que la
+    // especialidad la forzara. Se devuelve tal cual al volver a Medicina General: la
+    // casilla del médico es sagrada, no se le vuelve a marcar por su cuenta.
+    let _pymRecordado = true;
     function _pintarTiposSegunEsp(aviso) {
       const grid = modal.querySelector("#vgl-agm-que");
       const lbl = modal.querySelector("#vgl-agm-que-lbl");
@@ -30797,6 +30805,33 @@
         } else {
           nota.innerHTML = aviso ? "ℹ️ " + escapeHtml(selectedEspName) + " vuelve a ofrecer los tipos del programa de control." : "";
           nota.classList.add("vgl-d-none");
+        }
+      }
+      // 6) v18.14.13 — LA CASILLA PyM. Psicología y Odontología no son actividades del
+      //    programa RCV / Prevención: dejarla marcada registraba una REMISIÓN como actividad
+      //    de PyM. Se desmarca y se deshabilita mientras dure esa especialidad, con una nota
+      //    que lo dice, y se restituye al volver a Medicina General. El caso `esRCV` manda:
+      //    si el médico entero es RCV la casilla ya viene marcada, deshabilitada y con su
+      //    propio aviso («no se puede desmarcar»), así que no se pisa.
+      const pymChk = modal.querySelector("#vgl-agm-pym-chk");
+      const pymNota = modal.querySelector("#vgl-agm-pym-nota");
+      if (pymChk && !esRCV) {
+        if (soloRemision) {
+          if (!pymChk.disabled) _pymRecordado = !!pymChk.checked;
+          pymChk.checked = false;
+          pymChk.disabled = true;
+        } else if (pymChk.disabled) {
+          pymChk.disabled = false;
+          pymChk.checked = _pymRecordado;
+        }
+      }
+      if (pymNota) {
+        if (soloRemision && !esRCV) {
+          pymNota.innerHTML = "ℹ️ " + escapeHtml(selectedEspName) + " no es actividad del programa RCV / Prevención: la cita se registra sin marcar esa casilla.";
+          pymNota.classList.remove("vgl-d-none");
+        } else {
+          pymNota.innerHTML = "";
+          pymNota.classList.add("vgl-d-none");
         }
       }
     }
@@ -31756,6 +31791,13 @@
           const labLbl = modal.querySelector("#vgl-lab-date-lbl");
           if (labLbl && selectedLabDateInfo) labLbl.textContent = `${selectedLabDateInfo.fmt} (${selectedLabDateInfo.lbl})`;
         } catch (e) {}
+        // v18.14.13 — HALLAZGO NO TOCADO de v18.14.10, cerrado. El clic en un chip de toma
+        // repintaba el recuadro de vencimiento (la toma es su referencia), pero escribir la
+        // fecha en el CALENDARIO manual no lo hacía: el recuadro del paso 2 se quedaba con el
+        // veredicto de la fecha anterior hasta que el médico pulsara Confirmar. Mismo par de
+        // llamadas que la rama del chip, y en el mismo orden: primero se fija la fecha (el
+        // render de arriba ya dejó `selectedLabDateInfo`) y después se repinta con ella.
+        try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}
       });
     }
     // v15.7.0 — modo manual: calendario nativo, sin sugerencias, ±7 días hábiles.
