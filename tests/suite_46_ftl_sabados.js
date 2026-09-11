@@ -41,6 +41,7 @@ module.exports = {
   nombre: "Vigencias corregidas, FTL, sábados del médico y lectura del DOM",
   cubre: [
     "mtrVigenciaDiasNorma", "mtrColapsarVigencia", "mtrEstadoAnalito", "mtrPlanParaclinicos",
+    "mtrPuedeFijarLaToma",   // v18.14.14 — quién puede fijar la próxima fecha de laboratorio
     "mtrOrdinalSabadoDelMes", "mtrGrupoDeEsteSabado", "mtrMedicoTrabajaSabado",
     "mtrDeducirGrupoSabado", "mtrDiaValidoParaControlConSabado", "mtrFechaControlSugerida",
     "mtrLeerRadioSiNo", "mtrLeerCampoNumerico", "mtrLeerFactoresRcvDelDom",
@@ -840,7 +841,146 @@ module.exports = {
       // Y no manda sobre la fecha: la hemoglobina está ausente pero su piso de
       // 14 días no puede haber empujado la toma más allá de la creatinina.
       const creat = plan.drivers.find((a) => a.clave === "CREATININA");
-      if (creat && creat.vence) t.cierto(plan.ftl <= creat.vence, "un pasajero no puede retrasar la toma");
+      // v18.14.14 — la guarda deja de poder saltarse en silencio: si algún día el testigo
+      // no trae vencimiento, la comparación de abajo no mediría nada y esta prueba lo dice.
+      t.cierto(!!(creat && creat.vence), "el testigo (creatinina) trae vencimiento: sin él la comparación no mediría nada");
+      t.cierto(plan.ftl <= creat.vence, "un pasajero no puede retrasar la toma");
+    });
+
+    // =================================================================================
+    //  v18.14.14 — QUIÉN PUEDE FIJAR LA PRÓXIMA FECHA DE LABORATORIO
+    //
+    //  Encargo del médico: los 4 marcadores de acompañamiento (hemoglobina, PTH, fósforo,
+    //  albúmina) son PASAJEROS —no pueden generar por sí mismos una cita de laboratorio—,
+    //  los otros 9 sí fijan la fecha, y la HbA1c solo la fija en un paciente con DM2.
+    //
+    //  La clase de cada examen se declara en UNA tabla (MTR_CLASE_ANALITO) y el motor la
+    //  consulta donde decide la fecha (mtrPuedeFijarLaToma). Estas pruebas miden las dos
+    //  cosas: la clasificación declarada, y que la fecha de toma y la de control NO se
+    //  muevan cuando lo único que cambia es un pasajero.
+    // =================================================================================
+    const _HOY_FIJADORES = "2026-08-16";
+    const _CLAVES_FIJA = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
+      "GLUCOSA", "UROANALISIS", "CREATININA", "RAC"];
+    const _CLAVES_ENGANCHE = ["HEMOGLOBINA", "PTH", "FOSFORO", "ALBUMINA"];
+    // Todo con resultado reciente: nada pendiente y nada vencido. Es la referencia contra la
+    // que se mide si un pasajero mueve algo — el resto de exámenes tiene que quedarse igual.
+    const _ultimosFrescos = () => {
+      const u = {};
+      _CLAVES_FIJA.concat(["HBA1C"], _CLAVES_ENGANCHE).forEach((k) => { u[k] = { fecha: "2026-08-10", valor: 1 }; });
+      return u;
+    };
+    const _ctxFijadores = (extra) => Object.assign({
+      hoyIso: _HOY_FIJADORES, programa: "ERC", estadioAdministrativo: "G3b",
+      esDm2: false, edad: 60, rac: 12, ultimos: _ultimosFrescos(),
+    }, extra || {});
+
+    t.caso("v18.14.14 (fuente): la fecha de la toma se decide sobre los que pueden fijarla, nunca sobre la lista cruda de drivers", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const ini = src.indexOf("function mtrPlanParaclinicos(");
+      t.cierto(ini > 0, "se localiza mtrPlanParaclinicos");
+      const fin = src.indexOf("\n  function ", ini + 10);
+      const cuerpo = src.slice(ini, fin > ini ? fin : ini + 60000);
+      t.cierto(/const fijadores = drivers\.filter\(\(a\) => mtrPuedeFijarLaToma\(a\.clave, c\.esDm2\)\)/.test(cuerpo),
+        "los candidatos a fijar la fecha se derivan del predicado, no de la lista cruda");
+      t.cierto(/const conVencimiento = fijadores\.filter\(/.test(cuerpo), "el próximo vencimiento sale de `fijadores`");
+      t.cierto(/const hayEstadoA = fijadores\.some\(/.test(cuerpo), "y la urgencia de Estado A también");
+      t.cierto(/for \(const a of fijadores\) \{/.test(cuerpo), "y la cosecha de la toma, también");
+      t.falso(/const conVencimiento = drivers\.filter\(/.test(cuerpo), "no queda ningún punto que decida la fecha sobre `drivers`");
+      t.falso(/const hayEstadoA = drivers\.some\(/.test(cuerpo), "ni sobre la lista cruda");
+      t.falso(/for \(const a of drivers\) \{/.test(cuerpo), "ni la cosecha");
+    });
+
+    t.caso("v18.14.14: la clase de cada examen está declarada — 8 fijan la fecha, la HbA1c solo en DM2 y 4 son pasajeros", () => {
+      _CLAVES_FIJA.forEach((k) => {
+        t.cierto(api.mtrPuedeFijarLaToma(k, false), k + " fija la próxima fecha sin ninguna condición del paciente");
+        t.cierto(api.mtrPuedeFijarLaToma(k, true), k + " la sigue fijando en un paciente diabético");
+      });
+      t.falso(api.mtrPuedeFijarLaToma("HBA1C", false), "la HbA1c NO fija la fecha en un paciente sin DM2");
+      t.cierto(api.mtrPuedeFijarLaToma("HBA1C", true), "y sí la fija en un paciente con DM2");
+      _CLAVES_ENGANCHE.forEach((k) => {
+        t.falso(api.mtrPuedeFijarLaToma(k, false), k + " es pasajero: no fija la fecha");
+        t.falso(api.mtrPuedeFijarLaToma(k, true), k + " tampoco la fija en un paciente diabético");
+      });
+      t.falso(api.mtrPuedeFijarLaToma("FERRITINA", true), "una clave que nadie clasificó no inventa una cita");
+      t.falso(api.mtrPuedeFijarLaToma(null, true), "ni una clave vacía");
+      t.falso(api.mtrPuedeFijarLaToma(undefined, undefined), "ni undefined");
+    });
+
+    t.caso("v18.14.14: ningún pasajero genera una cita por su cuenta — ni faltante, ni vencido, ni sin fecha, en ningún programa", () => {
+      const PROGRAMAS = [
+        { programa: "ERC", estadioAdministrativo: "G1", esDm2: false, rac: 12 },
+        { programa: "ERC", estadioAdministrativo: "G3b", esDm2: false, rac: 12 },
+        { programa: "ERC", estadioAdministrativo: "G4", esDm2: true, rac: 45 },
+        { programa: "DM2", estadioAdministrativo: null, esDm2: true, rac: 12 },
+        { programa: "HTA", estadioAdministrativo: null, esDm2: false, rac: 12 },
+      ];
+      // Los tres modos en que un examen puede estar pendiente: nunca tomado (faltante),
+      // tomado hace años (vencido) y tomado sin fecha registrada (sin_fecha).
+      const ESTADOS = [
+        ["faltante", undefined],
+        ["vencido", { fecha: "2020-01-01", valor: 1 }],
+        ["sin fecha", { valor: 1 }],
+      ];
+      PROGRAMAS.forEach((p) => {
+        const ref = api.mtrPlanParaclinicos(_ctxFijadores(p));
+        t.cierto(!!(ref && ref.ftl && ref.control), "la referencia tiene toma y control: " + p.programa + " " + (p.estadioAdministrativo || "—"));
+        _CLAVES_ENGANCHE.forEach((k) => {
+          ESTADOS.forEach((par) => {
+            const etiqueta = par[0];
+            const ultimo = par[1];
+            const ultimos = _ultimosFrescos();
+            if (ultimo === undefined) delete ultimos[k]; else ultimos[k] = ultimo;
+            const plan = api.mtrPlanParaclinicos(_ctxFijadores(Object.assign({}, p, { ultimos: ultimos })));
+            t.igual(plan.ftl, ref.ftl, k + " (" + etiqueta + ") no puede mover la fecha de toma en " + p.programa + " " + (p.estadioAdministrativo || "—"));
+            t.igual(plan.control && plan.control.fecha, ref.control && ref.control.fecha,
+              k + " (" + etiqueta + ") tampoco mueve la fecha de control en " + p.programa + " " + (p.estadioAdministrativo || "—"));
+            t.falso(plan.cosechados.some((a) => a.clave === k), k + " (" + etiqueta + ") no puede entrar a la cosecha de la toma");
+            t.falso(plan.diferidos.some((a) => a.clave === k), k + " (" + etiqueta + ") ni quedar diferido como si fijara agenda");
+          });
+        });
+      });
+    });
+
+    t.caso("v18.14.14: el pasajero faltante SÍ se ordena en la toma que fijó otro examen (se engancha, no la fija)", () => {
+      const ultimos = _ultimosFrescos();
+      delete ultimos.HEMOGLOBINA;
+      const ref = api.mtrPlanParaclinicos(_ctxFijadores());
+      const plan = api.mtrPlanParaclinicos(_ctxFijadores({ ultimos: ultimos }));
+      t.cierto(plan.ordenar.some((a) => a.clave === "HEMOGLOBINA"), "la hemoglobina faltante va en la orden de esta visita");
+      t.igual(plan.ftl, ref.ftl, "pero no mueve la fecha de toma");
+      t.falso(/hemoglobina/i.test(plan.motivoFtl), "y el motivo de la fecha no la nombra: " + plan.motivoFtl);
+    });
+
+    t.caso("v18.14.14: la HbA1c solo manda sobre la fecha del paciente DM2", () => {
+      const conHba1cVieja = _ultimosFrescos();
+      conHba1cVieja.HBA1C = { fecha: "2020-01-01", valor: 9 };
+      const sinDm2Fresca = api.mtrPlanParaclinicos(_ctxFijadores({ esDm2: false }));
+      const sinDm2Vieja = api.mtrPlanParaclinicos(_ctxFijadores({ esDm2: false, ultimos: conHba1cVieja }));
+      const conDm2Vieja = api.mtrPlanParaclinicos(_ctxFijadores({ esDm2: true, ultimos: conHba1cVieja }));
+      t.falso(sinDm2Vieja.ordenar.some((a) => a.clave === "HBA1C"), "sin DM2 la HbA1c no se ordena");
+      t.falso(sinDm2Vieja.vencidos.some((a) => a.clave === "HBA1C"), "ni aparece como vencida");
+      t.igual(sinDm2Vieja.ftl, sinDm2Fresca.ftl, "y una HbA1c vencida hace años NO mueve la fecha de un paciente sin DM2");
+      t.cierto(conDm2Vieja.ordenar.some((a) => a.clave === "HBA1C"), "en un DM2 la misma HbA1c se ordena en esta visita");
+      t.cierto(conDm2Vieja.ftl < sinDm2Vieja.ftl,
+        "y SÍ adelanta la toma: " + conDm2Vieja.ftl + " contra " + sinDm2Vieja.ftl);
+    });
+
+    t.caso("v18.14.14: un examen que no aplica al programa tampoco fija la fecha (HbA1c en HTA, PTH/albúmina en G1)", () => {
+      const hta = api.mtrPlanParaclinicos(_ctxFijadores({ programa: "HTA", estadioAdministrativo: null, esDm2: true }));
+      t.falso(hta.ordenar.some((a) => a.clave === "HBA1C"), "la tabla de HTA no contempla la HbA1c: no se ordena ni fija nada");
+      t.cierto(hta.noAplican.some((a) => a.clave === "HBA1C"), "y se declara como NO_APLICA, no se omite en silencio");
+      const ercG1 = api.mtrPlanParaclinicos(_ctxFijadores({ estadioAdministrativo: "G1", esDm2: false }));
+      ["PTH", "FOSFORO", "ALBUMINA"].forEach((k) => {
+        t.cierto(ercG1.bloqueados.some((a) => a.clave === k), k + " está bloqueada en G1 y se declara como tal");
+        t.falso(ercG1.ordenar.some((a) => a.clave === k), k + " bloqueada no se ordena");
+      });
+      const ercG4 = api.mtrPlanParaclinicos(_ctxFijadores({ estadioAdministrativo: "G4", esDm2: false }));
+      const pthG4 = ercG4.pasajeros.find((a) => a.clave === "PTH");
+      t.cierto(!!pthG4, "en G4 la PTH ya aplica: se evalúa con su propia vigencia, no desaparece");
+      t.igual(pthG4.estado, "D", "y sale vigente, no bloqueada como en G1");
+      t.cierto(typeof pthG4.vigenciaDias === "number" && pthG4.vigenciaDias > 0, "con vigencia real: " + pthG4.vigenciaDias);
+      t.cierto(!!ercG4.ftl, "y el plan sigue teniendo toma: la PTH vigente no la mueve, solo deja de estar bloqueada");
     });
 
     // ============ SÁBADOS DEL MÉDICO ============

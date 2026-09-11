@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.13
+// @version      18.14.14
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.13";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.14";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -47303,11 +47303,59 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
   //  QUÉ EXÁMENES LE FALTAN A ESTE PACIENTE
   // =====================================================================
   //
-  // DRIVERS: fijan la fecha de toma. PASAJEROS: no la fijan, se enganchan a
-  // ella (así el paciente no hace un viaje aparte por una hemoglobina).
-  const MTR_DRIVERS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
-    "GLUCOSA", "UROANALISIS", "CREATININA", "RAC", "HBA1C"];
-  const MTR_PASAJEROS = ["HEMOGLOBINA", "PTH", "FOSFORO", "ALBUMINA"];
+  // v18.14.14 — QUÉ EXAMEN PUEDE FIJAR LA PRÓXIMA FECHA DE LABORATORIO.
+  // Dos clases, y la diferencia es lo que decide la agenda del paciente:
+  //
+  //   "fija"     — puede fijar por sí solo la próxima fecha de laboratorio.
+  //   "engancha" — PASAJERO: no fija ninguna fecha. Se engancha a la toma que
+  //                fijó otro examen, para que el paciente no haga un viaje
+  //                aparte por una hemoglobina o una PTH.
+  //
+  // Los 4 pasajeros son hemoglobina, PTH, fósforo y albúmina: los cuatro son
+  // marcadores que solo tienen sentido junto al panel que los acompaña, y
+  // ninguno justifica por sí mismo una cita de laboratorio.
+  //
+  // La HbA1c es el ÚNICO examen cuya capacidad de fijar la fecha depende del
+  // paciente: fija la toma en un paciente con DM2 y en ningún otro. En los
+  // demás programas no llega a tener fecha de vencimiento propia — la norma la
+  // bloquea (MTR_ERC_SOLO_DM2, ERC G1-G4 sin DM2) o no la contempla (HTA) —,
+  // así que no puede empujar la agenda. La compuerta se vuelve a afirmar en el
+  // punto donde la fecha se decide (mtrPlanParaclinicos, vía
+  // mtrPuedeFijarLaToma): la tabla dice lo que dice la norma y el motor
+  // reafirma la regla, para que una edición futura de la tabla no pueda dejar
+  // que una HbA1c de un no diabético mueva la cita de un paciente.
+  //
+  // ESTA TABLA ES EL ÚNICO SITIO donde se declara la clase. MTR_DRIVERS y
+  // MTR_PASAJEROS se derivan de ella, así que no puede existir un examen que
+  // sea pasajero en una lista y fijador en la otra.
+  const MTR_CLASE_ANALITO = {
+    COLESTEROL_TOTAL: "fija",
+    COLESTEROL_HDL: "fija",
+    COLESTEROL_LDL: "fija",
+    TRIGLICERIDOS: "fija",
+    GLUCOSA: "fija",
+    UROANALISIS: "fija",
+    CREATININA: "fija",
+    RAC: "fija",
+    HBA1C: "fija_solo_dm2",
+    HEMOGLOBINA: "engancha",
+    PTH: "engancha",
+    FOSFORO: "engancha",
+    ALBUMINA: "engancha",
+  };
+  const MTR_DRIVERS = Object.keys(MTR_CLASE_ANALITO).filter((k) => MTR_CLASE_ANALITO[k] !== "engancha");
+  const MTR_PASAJEROS = Object.keys(MTR_CLASE_ANALITO).filter((k) => MTR_CLASE_ANALITO[k] === "engancha");
+
+  // ¿Puede ESTE examen fijar por sí mismo la próxima fecha de laboratorio de
+  // ESTE paciente? `esDm2` es la condición del paciente (la única que hoy
+  // cambia una respuesta). Una clave desconocida devuelve false: ante la duda,
+  // no se le inventa una cita al paciente.
+  function mtrPuedeFijarLaToma(clave, esDm2) {
+    const clase = MTR_CLASE_ANALITO[clave];
+    if (clase === "fija") return true;
+    if (clase === "fija_solo_dm2") return !!esDm2;
+    return false;
+  }
 
   // Clave del analito -> nombre de fila en la tabla de vigencias.
   const MTR_CLAVE_A_ANALITO = {
@@ -47646,6 +47694,14 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     const drivers = evaluar(MTR_DRIVERS);
     const pasajeros = evaluar(MTR_PASAJEROS);
     const todos = drivers.concat(pasajeros);
+    // v18.14.14 — LA FECHA LA FIJAN SOLO LOS QUE PUEDEN FIJARLA. `drivers` es la lista de
+    // analitos que la norma contempla para este programa; `fijadores` es la de los que,
+    // ADEMÁS, pueden mandar sobre la agenda de ESTE paciente — hoy el único que depende de
+    // una condición suya es la HbA1c (solo DM2). Todo lo que decide la toma sale de aquí:
+    // el próximo vencimiento, la urgencia de Estado A y lo que se cosecha para esa misma
+    // toma. Un pasajero no está en `fijadores` ni puede estarlo: se engancha a la fecha que
+    // fijó otro, nunca la produce.
+    const fijadores = drivers.filter((a) => mtrPuedeFijarLaToma(a.clave, c.esDm2));
 
     // v17.6.87 — "sin_fecha" (hay resultado pero sin fecha) se suma aquí: es un subestado
     // NUEVO que antes venía dentro de "sin_historial", así que sin esta línea el examen
@@ -47669,8 +47725,8 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
     // `ftlCruda` — justo lo que CERO VENCIDOS prohíbe. Mismo trato que el Estado A
     // normal (que también queda fuera de este filtro): la urgencia se resuelve con
     // `hayEstadoA` y el piso/techo de abajo, nunca con una fecha ya vencida.
-    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
-    const hayEstadoA = drivers.some((a) => a.estado === "A" || a.vencidoBase);
+    const conVencimiento = fijadores.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
+    const hayEstadoA = fijadores.some((a) => a.estado === "A" || a.vencidoBase);
 
     let ftlCruda = null;
     let motivoFtl = "";
@@ -47827,7 +47883,7 @@ por una prueba automática del proyecto que se rompe si el comportamiento cambia
         : null;
       cosechados.push(Object.assign({}, a, { motivoCosecha: motivo, adelantoDias: adelanto }));
     };
-    for (const a of drivers) {
+    for (const a of fijadores) {
       if (a.estado !== "D" && a.estado !== "R") continue;
       // v17.6.75 — un RAC≥30 vencido (`vencidoBase`) ya está en `vencidos` arriba, con
       // urgencia de Estado A: no se vuelve a evaluar aquí (su `.vence` es una fecha

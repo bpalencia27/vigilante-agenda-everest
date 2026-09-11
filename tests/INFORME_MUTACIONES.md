@@ -14803,4 +14803,87 @@ con el caso nuevo de la casilla PyM; dentro de casos existentes se añade 1 aser
 `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.13 sincronizada en los 4 puntos).
 Las 5 mutaciones de arriba, rojas y restauradas.
 
+---
+
+## v18.14.14 — Qué examen puede fijar la próxima fecha de laboratorio (pasajeros y HbA1c solo en DM2)
+
+Encargo del médico: los 4 marcadores de acompañamiento —**hemoglobina, PTH, fósforo y albúmina**— son
+**pasajeros** y no pueden generar por sí mismos una cita de laboratorio; los otros 9 —**colesterol
+total, HDL, LDL, triglicéridos, glicemia, uroanálisis, RAC, creatinina sérica y HbA1c**— sí fijan la
+fecha, y **la HbA1c solo en pacientes con DM2**.
+
+**Lo que se encontró al medirlo, antes de escribir nada.** La CONDUCTA ya era la pedida: `mtrPlanParaclinicos`
+calculaba el próximo vencimiento (`conVencimiento`), la urgencia de Estado A (`hayEstadoA`) y el bucle de
+cosecha sobre `drivers`, y los pasajeros solo entraban a `ordenar` cuando estaban en estado A (eso es
+engancharse). La HbA1c ya quedaba fuera en el no diabético porque la norma la bloquea
+(`MTR_ERC_SOLO_DM2` → BLOQ en ERC G1-G4) o su programa no la contempla (HTA). Lo que NO existía era la
+**codificación de la regla**: la clase de cada examen estaba repartida entre dos listas literales y
+varias tablas, y **ninguna prueba la fijaba** — el único caso que la rozaba (`suite_46`, «los pasajeros
+se enganchan a la toma sin fijarla») tenía la comprobación envuelta en `if (creat && creat.vence)`, o
+sea que podía saltarse en silencio y dar verde sin medir nada.
+
+**La corrección, en tres piezas.**
+1. `MTR_CLASE_ANALITO` — UNA tabla con los 13 exámenes y su clase (`fija` / `fija_solo_dm2` / `engancha`),
+   documentada con el porqué de cada grupo. `MTR_DRIVERS` y `MTR_PASAJEROS` se **derivan** de ella (mismo
+   orden que las listas viejas, verificado): ya no puede existir un examen que sea pasajero en una lista
+   y fijador en la otra.
+2. `mtrPuedeFijarLaToma(clave, esDm2)` — el predicado, con la compuerta de DM2 de la HbA1c declarada aquí.
+   Una clave desconocida devuelve `false`: ante la duda no se le inventa una cita al paciente.
+3. En `mtrPlanParaclinicos`, los TRES puntos que deciden la toma pasan de `drivers` a
+   `fijadores = drivers.filter((a) => mtrPuedeFijarLaToma(a.clave, c.esDm2))`: `conVencimiento`,
+   `hayEstadoA` y el bucle de cosecha. Sin cambio de comportamiento hoy (por construcción la HbA1c del no
+   diabético ya era BLOQ/NO_APLICA), pero la regla queda afirmada donde se decide, y no solo deducida de
+   la tabla de vigencias.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `MTR_CLASE_ANALITO` — la clase de la hemoglobina | `HEMOGLOBINA: "engancha"` → `"fija"` (un pasajero pasa a fijar la agenda) | NO | **8 casos rojos** de los 96 de suite_46 (suite 88 ok / 8 FALLAN), entre ellos los tres nuevos: «la clase de cada examen está declarada», «ningún pasajero genera una cita por su cuenta» y «el pasajero faltante SÍ se ordena…». Restaurado 96 ok EXIT=0 |
+| user.js `MTR_CLASE_ANALITO` — la compuerta DM2 de la HbA1c | `HBA1C: "fija_solo_dm2"` → `"fija"` (la HbA1c podría fijar la fecha de un paciente sin DM2) | NO | **1 caso rojo** (suite 95 ok / 1 FALLAN): «la clase de cada examen está declarada», en la aserción «la HbA1c NO fija la fecha en un paciente sin DM2». Restaurado 96 ok EXIT=0. NOTA MEDIDA: los casos de COMPORTAMIENTO no se pusieron rojos, y es correcto — la tabla de la norma (`MTR_ERC_SOLO_DM2`) sigue bloqueando la HbA1c del no diabético, así que el extremo a extremo está protegido por su propio camino (con vectores dorados). La compuerta declarada es la que necesita su prueba directa, y la tiene |
+| user.js `mtrPuedeFijarLaToma` — la clave desconocida | `return false;` → `return true;` (cualquier clave nueva pasaría a fijar la fecha) | NO | **1 caso rojo** (95 ok / 1 FALLAN): las tres aserciones de clave desconocida de «la clase de cada examen está declarada» — el caso cae en la primera. Restaurado 96 ok EXIT=0 |
+| user.js `mtrPlanParaclinicos` — el próximo vencimiento | `const conVencimiento = fijadores.filter(…)` → `drivers.filter(…)` | NO | **1 caso rojo** (95 ok / 1 FALLAN): suite_46 «v18.14.14 (fuente)…», en «no queda ningún punto que decida la fecha sobre `drivers`». Restaurado 96 ok EXIT=0 |
+| user.js `mtrPlanParaclinicos` — la urgencia de Estado A | `const hayEstadoA = fijadores.some(…)` → `drivers.some(…)` | NO | **1 caso rojo** (95 ok / 1 FALLAN): el mismo caso de fuente, en «y la urgencia de Estado A también». Restaurado 96 ok EXIT=0 |
+| user.js `mtrPlanParaclinicos` — el bucle de cosecha | `for (const a of fijadores)` → `for (const a of drivers)` | NO | **1 caso rojo** (95 ok / 1 FALLAN): el mismo caso de fuente, en «y la cosecha de la toma, también». Restaurado 96 ok EXIT=0 |
+| user.js `MTR_DRIVERS`/`MTR_PASAJEROS` — la derivación desde la tabla | los dos filtros invertidos (`!== "fija"` / `=== "fija"`: las listas quedan cruzadas) | NO | **34 casos rojos** de 96 (62 ok / 34 FALLAN), los 5 nuevos entre ellos. Restaurado 96 ok EXIT=0 |
+
+**Pruebas nuevas (`suite_46`, 6 casos hermanos; +6 al banco).**
+1. **La clase de cada examen está declarada** — los 8 fijadores fijan con y sin diabetes; la HbA1c solo
+   con DM2; los 4 pasajeros nunca; y una clave desconocida tampoco.
+2. **Ningún pasajero genera una cita por su cuenta** — EXHAUSTIVO: 4 pasajeros × 5 programas (ERC G1,
+   ERC G3b, ERC G4, DM2, HTA) × 3 modos de estar pendiente (faltante, vencido, sin fecha) = 60 escenarios.
+   En cada uno se compara contra la referencia con todo fresco y se exige que **`ftl` y `control.fecha`
+   sean idénticos**, y que el pasajero no entre a `cosechados` ni a `diferidos`. La referencia se comprueba
+   primero (`t.cierto(!!(ref && ref.ftl && ref.control))`) para que ninguna comparación pueda medir contra
+   `undefined`. (Nota de alcance: el runner corta un caso en su PRIMERA aserción fallida, así que un
+   escenario roto esconde los demás de ese mismo caso — por eso la mutación de la hemoglobina enrojece
+   8 casos y no solo el exhaustivo.)
+3. **El pasajero faltante SÍ se ordena** (se engancha) pero no mueve la fecha ni aparece en `motivoFtl`.
+4. **La HbA1c solo manda en el DM2** — con la HbA1c vencida hace años: sin DM2 no se ordena, no sale como
+   vencida y `ftl` no se mueve; con DM2 se ordena y la toma se adelanta (`conDm2Vieja.ftl < sinDm2Vieja.ftl`).
+5. **Un examen que no aplica al programa tampoco fija la fecha** — HbA1c en HTA (NO_APLICA declarado),
+   PTH/fósforo/albúmina bloqueadas en G1, y la PTH evaluada con vigencia real en G4.
+6. **Guarda de fuente** — los tres puntos que deciden la toma leen `fijadores`, y no queda ningún
+   `conVencimiento`/`hayEstadoA`/bucle sobre `drivers` dentro de `mtrPlanParaclinicos`.
+
+**Prueba arreglada (no silenciada).** El caso preexistente «los pasajeros se enganchan a la toma sin
+fijarla» tenía la comprobación final dentro de `if (creat && creat.vence)`: si el testigo dejaba de traer
+vencimiento, la prueba daba verde sin haber medido nada. Ahora se comprueba primero el testigo
+(`t.cierto(!!(creat && creat.vence), …)`) y después la comparación.
+
+**Nota de proceso (importa para la próxima sesión).** Dos veces durante esta entrega una edición se perdió
+en silencio: cuando se lanzan **dos ediciones al MISMO archivo en un mismo lote**, la segunda escritura
+pisa a la primera y ambas reportan éxito con su diff. Se detectó porque `compat-check` avisó
+(`header=18.14.13 const=18.14.14`) y porque el banco enrojeció con una aserción que no correspondía a la
+mutación que se creía puesta. **Una mutación de la fila 5 (Estado A) quedó sin restaurar** por ese mismo
+motivo y se depuró como si fuera un fallo del código — exactamente el incidente que el proyecto ya tiene
+documentado. Regla adoptada: **una edición por archivo y por lote, y verificar el estado del archivo
+(grep de `MUTACION`) antes de dar por buena una restauración.**
+
+**Hallazgos NO tocados:** (a) `ecg` y `ecocardiograma` viven en `MTR_HTA` pero no están en ninguna de las
+dos listas: no se evalúan en este motor y esta entrega no los incorpora; (b) `mtrVigenciaDias` sigue
+devolviendo 180 en el vector G4 (testigo de una entrega anterior, fuera de alcance).
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.847 pasan, EXIT 0** (sube de 3.841 a 3.847 con
+los 6 casos nuevos de `suite_46`); `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.14
+sincronizada en los 4 puntos). Las 7 mutaciones de arriba, rojas y restauradas.
+
 

@@ -4,6 +4,31 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.14] — 2026-09-11 (Qué examen decide la próxima fecha de laboratorio, y la HbA1c solo en DM2)
+
+**La próxima cita de laboratorio la fija una lista corta y explícita de exámenes, y los demás
+se enganchan a ella.** La hemoglobina, la PTH, el fósforo y la albúmina son exámenes **pasajeros**:
+se toman junto al panel que los acompaña, pero **no pueden generar por sí mismos una cita de
+laboratorio**. Los que sí la fijan son colesterol total, HDL, LDL, triglicéridos, glicemia,
+uroanálisis, RAC, creatinina sérica y **HbA1c — esta última solo en pacientes con DM2**: en
+cualquier otro paciente la HbA1c queda bloqueada por la norma o no aplica a su programa, y el motor
+lo vuelve a comprobar antes de dejar que mueva una fecha.
+
+Esta clasificación estaba repartida entre dos listas y varias tablas de vigencias, y no tenía una
+prueba que la fijara. Ahora se declara en **un solo sitio**, con su nombre y su porqué, y el motor
+la consulta justo donde decide la fecha de toma: el próximo vencimiento, la urgencia de los
+exámenes por pedir y lo que se agrupa en esa misma toma salen de ahí. Un pasajero puede seguir
+apareciendo en la lista de «qué ordenar» de esa visita —eso es engancharse—, pero no puede mover
+la fecha de la toma ni la del control.
+
+Verificación: banco de pruebas completo en verde (3.847 comprobaciones), con seis casos nuevos que
+fijan la clasificación de los 13 exámenes, recorren los 4 pasajeros en los 5 programas y en los
+tres modos de estar pendiente (nunca tomado, vencido y sin fecha registrada) comprobando que ni la
+fecha de toma ni la de control se mueven, y fijan la condición de DM2 de la HbA1c. Las mutaciones
+de control están documentadas en `tests/INFORME_MUTACIONES.md` (sección «v18.14.14»).
+
+---
+
 ## [Versión 18.14.13] — 2026-09-11 (La casilla de programa RCV/PyM y el aviso de vencimiento, en Agendar)
 
 **Dos arreglos pequeños y honestos en el módulo de Agendar.**
