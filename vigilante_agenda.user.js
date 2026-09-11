@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.10
+// @version      18.14.11
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.11";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -20666,6 +20666,17 @@
          ===================================================================== */
       #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-card,#vgl-ordenar-modal .vgl-agm-card,#vgl-labs-modal .vgl-agm-card{color:var(--fg) !important}
+      /* v18.14.11 — CONTRASTE WCAG AA (reporte del médico: «textos blancos sobre fondo blanco»).
+         Medido en Chromium real con el HTML del modal y la hoja de buildOverlay() y el Everest
+         agresivo: las TRES tarjetas de tipo de cita (Paso 1) quedaban en 1.16:1 en tema claro y
+         1.02:1 en tema oscuro. Causa: .vgl-tc-ico (el icono de cada tarjeta) se pinta con
+         color:inherit !important (lista de ~13770), es decir NO tiene color propio — y su
+         PADRE es el <button class="vgl-type-card">, que tampoco declaraba color. El inherit
+         copiaba el color que Everest le hubiera puesto al botón (su button{color:…}), no el
+         del modal. Se blinda el PADRE con la especificidad del trío (id+clase): así el inherit
+         del icono y el de cualquier texto suelto de la tarjeta resuelven contra --fg y la
+         tarjeta queda inmune al CSS del host en los dos temas. */
+      #vgl-agendar-modal .vgl-type-card{color:var(--fg) !important}
       #vgl-agendar-modal .vgl-agm-kicker{color:var(--c-azul) !important}
       #vgl-ordenar-modal .vgl-agm-kicker{color:var(--c-morado) !important}
       #vgl-labs-modal .vgl-labs-kicker{color:var(--c-labs) !important}
@@ -22097,6 +22108,20 @@
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido{
         background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar) !important;border-color:rgba(var(--rgb-ambar),.55)
+      }
+      /* v18.14.11 — CONTRASTE WCAG AA. La regla de arriba (id+2 clases) también le ganaba a
+         .vgl-agm-sbtn.active (2 clases) en el COLOR, así que el turno SUGERIDO ya elegido
+         se quedaba con el ámbar de «sin elegir» (#92400e) encima del fondo verde que sí le pone
+         .active: medido 4.06:1 en tema claro, por debajo del mínimo 4.5:1. En tema oscuro no
+         pasaba (allí .active ganaba). Se restituye el verde del estado elegido SOLO para la
+         combinación sugerido+elegido: el fondo verde no se toca (es una decisión de diseño
+         documentada en v12.10.8 — «si el médico la elige, .active debe ganar»). */
+      #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active,
+      #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active,
+      #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active{
+        color:var(--c-verde) !important;
+        background:rgba(var(--rgb-verde),.20) !important;
+        border-color:rgba(var(--rgb-verde),.60) !important
       }
       /* v14.0.0 — La FRANJA recomendada completa, no solo la hora elegida como sugerida.
          El encargo del médico pedía las dos cosas ("se deben repintar de otro color Y
@@ -30255,7 +30280,7 @@
   // especialidad de la última cita creada y abre directamente en el paso 2, con un chip «como la
   // última vez … cambiar» que devuelve al paso 1. Solo se guarda cuando la cita se creó de verdad.
   const AGM_PREF_KEY = "vgl_agm_pref";
-  const AGM_PREF_TIPOS = ["control_lab", "control"];
+  const AGM_PREF_TIPOS = ["control_lab", "control", "remision"];
   function _agmPrefLeer() {
     try {
       const p = readJSON(AGM_PREF_KEY, null);
@@ -30305,7 +30330,17 @@
 
     let selectedEspId = 12; // 12: Med General (Control) por defecto
     let selectedEspName = "Medicina General (Control)";
-    let tipoCitaElegido = "control_lab"; // "control_lab", "control", "lab"
+    let tipoCitaElegido = "control_lab"; // "control_lab", "control", "lab", "remision"
+    // v18.14.11 — Psicología (46) y Odontología (14) NO pertenecen al programa de control
+    // (PyM): sus tres tarjetas de tipo de cita («Control Médico + Toma de Labs», «SOLO
+    // Control Médico», «SOLO Laboratorios») son de Medicina General y no deben poder
+    // elegirse. Para esas dos profesiones la cita es una REMISIÓN al especialista — es lo
+    // que el propio módulo ya escribe en la observación al confirmar («REMISION A …»,
+    // ~L32679) —, sin control médico ni toma de muestras. El paso 1 oculta la cuadrícula
+    // entera y el tipo queda fijo; la especialidad manda sobre el tipo, en un solo sitio.
+    const TIPO_REMISION = "remision";
+    const ESP_SOLO_REMISION = [14, 46]; // Odontología, Psicología
+    const _espSoloRemision = (id) => ESP_SOLO_REMISION.indexOf(parseInt(id, 10)) >= 0;
 
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
@@ -30352,7 +30387,7 @@
                y estos rótulos numeraban otra vez por su cuenta, con números que no casaban: dentro
                del paso 2 convivían una insignia «2» y una «3». Una sola numeración en pantalla, la
                de la barra; aquí queda el marcador neutro que ya usaban los otros dos rótulos. -->
-          <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Seleccione el tipo de cita a programar:</label>
+          <label class="vgl-agm-lbl" id="vgl-agm-que-lbl"><span class="vgl-agm-step">➔</span>Seleccione el tipo de cita a programar:</label>
           
           <div class="vgl-type-cards-grid" id="vgl-agm-que">
             <button type="button" class="vgl-type-card active" data-que="control_lab">
@@ -30373,6 +30408,10 @@
               <div class="vgl-tc-desc">Agenda exclusivamente el turno de toma de muestras en AppCita sin crear cita médica.</div>
             </button>
           </div>
+          <!-- v18.14.11 — Nota del filtrado por especialidad: dice POR QUÉ no hay tipos que
+               elegir cuando la profesión no es del programa de control. Vacía (y oculta) para
+               Medicina General. Su color lo fija .vgl-agm-dinfo, que ya lleva !important. -->
+          <div id="vgl-agm-esp-nota" class="vgl-agm-dinfo vgl-d-none" aria-live="polite"></div>
 
           <div style="margin-top:14px">
             <label class="vgl-agm-lbl"><span class="vgl-agm-step">➔</span>Especialidad o servicio a agendar / remitir:</label>
@@ -30822,6 +30861,63 @@
         }
       });
     });
+
+    // v18.14.11 — FILTRADO DEL PASO 1 POR ESPECIALIDAD. Reporte del médico: al elegir
+    // Psicología (46) u Odontología (14) seguían ofreciéndose las tres tarjetas de tipo de
+    // cita, que son del programa de control y solo aplican a Medicina General. La
+    // ESPECIALIDAD manda sobre el tipo y este es el ÚNICO sitio que decide qué se ve:
+    // lo llaman el clic de especialidad, la aplicación de la preferencia recordada y la
+    // apertura del modal — nunca hay dos rutas con lógica distinta.
+    // `aviso` solo controla la nota informativa del paso 1 (no el filtrado).
+    function _pintarTiposSegunEsp(aviso) {
+      const grid = modal.querySelector("#vgl-agm-que");
+      const lbl = modal.querySelector("#vgl-agm-que-lbl");
+      const nota = modal.querySelector("#vgl-agm-esp-nota");
+      const labBox = modal.querySelector(".vgl-lab-box");
+      const soloRemision = _espSoloRemision(selectedEspId);
+      // 1) La cuadrícula de tipos y su rótulo se OCULTAN por completo (no se deshabilitan):
+      //    para esas dos profesiones no hay ningún tipo que elegir. aria-hidden para que un
+      //    lector de pantalla no anuncie tarjetas que ya no están.
+      [grid, lbl].forEach((n) => {
+        if (!n) return;
+        if (soloRemision) { n.classList.add("vgl-d-none"); n.setAttribute("aria-hidden", "true"); }
+        else { n.classList.remove("vgl-d-none"); n.removeAttribute("aria-hidden"); }
+      });
+      // 2) El tipo: reparación en silencio (decisión del médico). Con Psicología u
+      //    Odontología queda fijo en remisión y ninguna tarjeta marcada — no hay tarjeta
+      //    que marcar. Al volver a Medicina General se restituye el tipo por defecto.
+      if (soloRemision) {
+        tipoCitaElegido = TIPO_REMISION;
+        modal.querySelectorAll(".vgl-type-card").forEach((c) => c.classList.remove("active"));
+      } else if (tipoCitaElegido === TIPO_REMISION) {
+        tipoCitaElegido = "control_lab";
+        modal.querySelectorAll(".vgl-type-card").forEach((c) => {
+          if (c.getAttribute("data-que") === "control_lab") c.classList.add("active");
+          else c.classList.remove("active");
+        });
+      }
+      // 3) La caja de la toma de muestras solo existe en «Control Médico + Toma de Labs».
+      //    Su estado por defecto en el HTML es VISIBLE y solo la apagaba el clic en una
+      //    tarjeta: sin tarjetas que pulsar, hay que apagarla aquí o un psicólogo acabaría
+      //    con la toma de muestras en pantalla.
+      if (labBox) labBox.style.display = tipoCitaElegido === "control_lab" ? "block" : "none";
+      // 4) El rótulo del botón de paso 1, con la misma regla que el clic de tarjeta.
+      if (step1Next) {
+        step1Next.textContent = tipoCitaElegido === "lab"
+          ? "Siguiente: Agendar Laboratorio ➔"
+          : "Siguiente: Elegir Fecha y Turno ➔";
+      }
+      // 5) La nota: sin ella, el paso 1 aparecería sin tipos y sin decir por qué.
+      if (nota) {
+        if (soloRemision) {
+          nota.innerHTML = "ℹ️ " + escapeHtml(selectedEspName) + " se agenda como cita de remisión al especialista: sin control médico y sin toma de muestras. Esas opciones son del programa de control de Medicina General.";
+          nota.classList.remove("vgl-d-none");
+        } else {
+          nota.innerHTML = aviso ? "ℹ️ " + escapeHtml(selectedEspName) + " vuelve a ofrecer los tipos del programa de control." : "";
+          nota.classList.add("vgl-d-none");
+        }
+      }
+    }
 
     function _agendasPropias(agendasDelDia, nombreMedico) {
       const normMedDoc = stripAccents(String(nombreMedico || "").toLowerCase()).trim();
@@ -31731,6 +31827,9 @@
         eb.classList.add("active");
         selectedEspId = parseInt(eb.getAttribute("data-esp") || "12", 10);
         selectedEspName = eb.getAttribute("data-name") || "Especialidad";
+        // v18.14.11 — la especialidad manda: Psicología y Odontología ocultan la cuadrícula
+        // de tipos del programa de control y dejan el tipo fijo en remisión.
+        _pintarTiposSegunEsp(true);
         // v18.0.131 (barrido por recorridos, hallazgo 11) — el veredicto de «sin agenda ese
         // día» (disabled + clase + title) queda escrito en el DOM del chip de la especialidad
         // ANTERIOR; solo renderDayChips() lo limpia (recrea los botones desde cero), y esta
@@ -32861,11 +32960,15 @@
           selectedEspId = _pref.esp;
           selectedEspName = eb.getAttribute("data-name") || _pref.espName || selectedEspName;
         }
+        // v18.14.11 — una preferencia guardada ANTES de este arreglo puede traer
+        // Psicología/Odontología con «control_lab»: el filtro la repara aquí, antes de que
+        // el médico vea el paso 1, y apaga la caja de la toma de muestras.
+        _pintarTiposSegunEsp(false);
         const chip = modal.querySelector("#vgl-agm-pref-chip");
         if (chip) {
           chip.classList.remove("vgl-d-none");
           const t = chip.querySelector(".vgl-agm-pref-txt");
-          if (t) t.textContent = "Como la última vez: " + (tipoCitaElegido === "control" ? "solo control médico" : "control + toma de labs") + " · " + selectedEspName + " · ";
+          if (t) t.textContent = "Como la última vez: " + (tipoCitaElegido === "control" ? "solo control médico" : (tipoCitaElegido === TIPO_REMISION ? "cita de remisión" : "control + toma de labs")) + " · " + selectedEspName + " · ";
         }
         irAPaso(2);
         try { uxTrack("agendar.pref.aplicada"); } catch (e) {}

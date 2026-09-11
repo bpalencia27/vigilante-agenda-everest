@@ -169,7 +169,16 @@ module.exports = {
         t.igual(dias.filter((d) => d.classList.contains("active")).length, 1, etiqueta + ": exactamente un día activo");
       }
       t.igual(qsa("#vgl-esp-presets .active").length, 1, etiqueta + ": exactamente una especialidad activa");
-      t.igual(qsa("#vgl-agm-que .vgl-type-card.active").length, 1, etiqueta + ": exactamente un tipo de cita activo");
+      // v18.14.11 — Psicología (46) y Odontología (14) no tienen tipos de cita que elegir:
+      // su cuadrícula se oculta y el tipo queda fijo en remisión, así que ahí la invariante
+      // correcta es CERO tarjetas activas, no una. Las dos ramas comprueban algo concreto.
+      const gridTipos = modal.querySelector("#vgl-agm-que");
+      const tiposOcultos = !!(gridTipos && gridTipos.classList.contains("vgl-d-none"));
+      if (tiposOcultos) {
+        t.igual(qsa("#vgl-agm-que .vgl-type-card.active").length, 0, etiqueta + ": sin tipos que elegir (remisión) no puede quedar ninguna tarjeta activa");
+      } else {
+        t.igual(qsa("#vgl-agm-que .vgl-type-card.active").length, 1, etiqueta + ": exactamente un tipo de cita activo");
+      }
       const slotsAct = qsa("#vgl-agm-slots .vgl-agm-sbtn.active");
       t.cierto(slotsAct.length <= 1, etiqueta + ": a lo sumo un turno activo (hubo " + slotsAct.length + ")");
       const tomasAct = qsa("#vgl-lab-day-chips .vgl-agm-pbtn.active");

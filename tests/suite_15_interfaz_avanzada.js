@@ -5488,11 +5488,14 @@ module.exports = {
       t.cierto(notaSms.textContent.includes("no se pudo verificar"), "la nota dice qué pasó");
     });
 
-    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 4 estados que mutan y aria-current en el stepper", () => {
+    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 5 estados que mutan y aria-current en el stepper", () => {
       const { c } = _mockAgendaComun();
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const vivas = (modal.innerHTML.match(/aria-live="polite"/g) || []).length;
-      t.igual(vivas, 4, "pc-est, sugerida, vencaviso y date-info anuncian sus cambios");
+      // v18.14.11 — el 5.º es #vgl-agm-esp-nota: la nota que aparece en el paso 1 cuando la
+      // especialidad elegida (Psicología/Odontología) no tiene tipos de cita que ofrecer.
+      // Es un estado que muta con un clic, así que se anuncia igual que los otros cuatro.
+      t.igual(vivas, 5, "pc-est, sugerida, vencaviso, date-info y la nota del filtro por especialidad anuncian sus cambios");
       t.cierto(modal.innerHTML.includes('id="vgl-step-ind-1" role="listitem" aria-current="step"'), "el paso 1 arranca marcado como paso en curso");
       const ind2 = modal.querySelector("#vgl-step-ind-2");
       t.noLanza(() => disparar(modal.querySelector("#vgl-step-1-next"), "click"));
@@ -6336,7 +6339,10 @@ module.exports = {
       t.cierto(modal.querySelector("#vgl-step-view-2").style.display !== "block", "sin recuerdo: no se salta al paso 2 (irAPaso(2) no corre)");
       t.igual(modal.querySelector("#vgl-agm-pref-chip").querySelector(".vgl-agm-pref-txt").textContent, "", "y el chip queda sin texto (no se aplicó ningún recuerdo)");
       // se guarda SOLO con la cita creada de verdad: lo hace el camino de confirmación; aquí se simula el registro
-      t.cierto(c.api._agmPrefGuardar("control", 46, "Psicología"), "se guarda el recuerdo");
+      // v18.14.11 — el recuerdo se prueba con Medicina General (Control), que es la única
+      // especialidad de la lista con tipos de cita propios. Psicología/Odontología dejaron
+      // de admitir «control» (ver el caso del filtro por especialidad, más abajo).
+      t.cierto(c.api._agmPrefGuardar("control", 12, "Medicina General (Control)"), "se guarda el recuerdo");
       t.falso(c.api._agmPrefGuardar("lab", 46, "x"), "«solo laboratorios» no se recuerda (va a otro cuadro)");
       urls.length = 0;
       const c2 = cargar({ silencioso: true, almacen: c.env.almacen, fetch: async (url) => { const u = String(url); urls.push(u); if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } }); if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } }); return respuestaJson({ agendas: [] }); } });
@@ -6347,12 +6353,106 @@ module.exports = {
       t.igual(modal.querySelector("#vgl-step-view-2").style.display, "block", "con recuerdo: abre en el paso 2");
       const chip = modal.querySelector("#vgl-agm-pref-chip");
       t.cierto((chip.classList._s ? !chip.classList._s.has("vgl-d-none") : true), "el chip se ve (se le quitó vgl-d-none)");
-      t.cierto(/Como la última vez: solo control médico · Psicología/.test(chip.querySelector(".vgl-agm-pref-txt").textContent), "y dice qué se recordó: " + chip.querySelector(".vgl-agm-pref-txt").textContent);
-      t.cierto(urls.some((u) => u.includes("BuscarCitasDisponibles") && /EspecialidadId=46/.test(u)), "la primera carga de horas ya sale con la especialidad recordada (46): " + (urls.find((u) => u.includes("BuscarCitasDisponibles")) || "sin llamada"));
+      t.cierto(/Como la última vez: solo control médico · Medicina General \(Control\)/.test(chip.querySelector(".vgl-agm-pref-txt").textContent), "y dice qué se recordó: " + chip.querySelector(".vgl-agm-pref-txt").textContent);
+      t.cierto(urls.some((u) => u.includes("BuscarCitasDisponibles") && /EspecialidadId=12/.test(u)), "la primera carga de horas ya sale con la especialidad recordada (12): " + (urls.find((u) => u.includes("BuscarCitasDisponibles")) || "sin llamada"));
       (modal.querySelector("#vgl-agm-pref-cambiar")._listeners.click || []).forEach((f) => f({}));
       t.igual(modal.querySelector("#vgl-step-view-1").style.display, "block", "«cambiar» vuelve al paso 1");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/_agmPrefGuardar\(tipoCitaElegido, selectedEspId, selectedEspName\);[^\n]*\n\s*markCitaAgendadaHoy\(apt\.doc_id, fechaElegida\.iso/.test(src), "el recuerdo se guarda en el camino de la cita creada de verdad, justo antes de la marca del día");
+    });
+
+    // =====================================================================
+    // v18.14.11 — FILTRADO DEL PASO 1 POR ESPECIALIDAD (reporte del médico, 10-sep):
+    // al elegir Psicología (46) u Odontología (14) seguían ofreciéndose las tres
+    // tarjetas de tipo de cita («Control Médico + Toma de Labs», «SOLO Control Médico»,
+    // «SOLO Laboratorios»), que son del programa de control y solo aplican a Medicina
+    // General. La ESPECIALIDAD manda sobre el tipo: esas dos profesiones ocultan la
+    // cuadrícula entera, el tipo queda fijo en remisión y la caja de la toma de
+    // muestras se apaga. Al volver a Medicina General todo se restituye.
+    // =====================================================================
+    await t.casoAsync("v18.14.11: Psicología y Odontología ocultan la cuadrícula de tipos de cita y dejan el tipo en remisión", async () => {
+      const { instalarDomEnriquecido } = require("./harness");
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        const u = String(url);
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+        if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+        return respuestaJson({ agendas: [] });
+      } });
+      instalarDomEnriquecido(c.env.doc);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "424243", nombre: "PACIENTE PRUEBA" });
+      await esperar(40);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!modal, "el modal quedó montado");
+      if (!modal) return;
+      const grid = modal.querySelector("#vgl-agm-que");
+      const lbl = modal.querySelector("#vgl-agm-que-lbl");
+      const nota = modal.querySelector("#vgl-agm-esp-nota");
+      const labBox = modal.querySelector(".vgl-lab-box");
+      t.cierto(!!(grid && lbl && nota && labBox), "el paso 1 trae la cuadrícula, su rótulo, la nota del filtro y la caja de la toma");
+      if (!(grid && lbl && nota && labBox)) return;
+      const pbtn = (esp) => modal.querySelector('#vgl-esp-presets .vgl-agm-pbtn[data-esp="' + esp + '"]');
+      // Sin selector compuesto (.a.b): el enriquecedor local de esta suite no lo soporta y
+      // devolvería siempre 0 — mediría nada y daría verde en falso.
+      const activos = () => [...modal.querySelectorAll("#vgl-agm-que .vgl-type-card")].filter((b) => b.classList.contains("active")).length;
+
+      // Punto de partida: Medicina General, con tipos que elegir y con la toma disponible.
+      t.falso(grid.classList.contains("vgl-d-none"), "con Med. General la cuadrícula de tipos se ve");
+      t.igual(activos(), 1, "y hay exactamente un tipo activo (Control + Toma de Labs)");
+
+      disparar(pbtn(46), "click");
+      await esperar(60);
+      t.cierto(grid.classList.contains("vgl-d-none"), "Psicología oculta la cuadrícula de tipos");
+      t.cierto(lbl.classList.contains("vgl-d-none"), "y también su rótulo («Seleccione el tipo de cita a programar»)");
+      t.igual(grid.getAttribute("aria-hidden"), "true", "con aria-hidden para que no se anuncie lo que ya no está");
+      t.igual(activos(), 0, "no queda ninguna tarjeta de tipo activa");
+      t.falso(nota.classList.contains("vgl-d-none"), "y aparece la nota que explica por qué no hay tipos");
+      t.cierto((nota.innerHTML || "").includes("remisión"), "la nota dice que la cita es de remisión: " + nota.innerHTML);
+      t.igual(labBox.style.display, "none", "la caja de la toma de muestras se apaga (no es un control)");
+
+      disparar(pbtn(14), "click");
+      await esperar(60);
+      t.cierto(grid.classList.contains("vgl-d-none"), "Odontología también oculta la cuadrícula");
+      t.igual(activos(), 0, "y tampoco deja tarjeta de tipo activa");
+      t.igual(labBox.style.display, "none", "ni enciende la toma de muestras");
+
+      disparar(pbtn(12), "click");
+      await esperar(60);
+      t.falso(grid.classList.contains("vgl-d-none"), "al volver a Med. General la cuadrícula reaparece");
+      t.igual(activos(), 1, "y se restituye un tipo activo");
+      t.cierto(nota.classList.contains("vgl-d-none"), "la nota de remisión desaparece");
+      t.igual(labBox.style.display, "block", "y la toma de muestras vuelve a ofrecerse");
+    });
+
+    await t.casoAsync("v18.14.11: un recuerdo guardado antes del arreglo (Psicología + control) se repara al abrir", async () => {
+      const { instalarDomEnriquecido } = require("./harness");
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        const u = String(url);
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+        if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+        return respuestaJson({ agendas: [] });
+      } });
+      instalarDomEnriquecido(c.env.doc);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      // Recuerdo imposible según la regla nueva: Psicología con «control médico».
+      t.cierto(c.api._agmPrefGuardar("control", 46, "Psicología"), "se guarda el recuerdo viejo");
+      const c2 = cargar({ silencioso: true, almacen: c.env.almacen, fetch: async (url) => {
+        const u = String(url);
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+        if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+        return respuestaJson({ agendas: [] });
+      } });
+      instalarDomEnriquecido(c2.env.doc);
+      c2.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c2.api.openAgendamientoModal({ doc_id: "424242", nombre: "PACIENTE PRUEBA" });
+      await esperar(60);
+      const modal = c2.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!modal, "el modal quedó montado");
+      if (!modal) return;
+      t.cierto(modal.querySelector("#vgl-agm-que").classList.contains("vgl-d-none"), "la cuadrícula de tipos queda oculta ya en la apertura");
+      t.igual(modal.querySelectorAll("#vgl-agm-que .vgl-type-card.active").length, 0, "sin ninguna tarjeta de tipo activa");
+      t.igual(modal.querySelector(".vgl-lab-box").style.display, "none", "y con la toma de muestras apagada");
+      t.cierto(/Como la última vez: cita de remisión · Psicología/.test(modal.querySelector("#vgl-agm-pref-chip").querySelector(".vgl-agm-pref-txt").textContent), "el chip del recuerdo ya dice «cita de remisión»: " + modal.querySelector("#vgl-agm-pref-chip").querySelector(".vgl-agm-pref-txt").textContent);
     });
 
     // =====================================================================

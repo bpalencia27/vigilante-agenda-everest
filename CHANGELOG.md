@@ -4,6 +4,34 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.11] — 2026-09-10 (Textos legibles en Agendar, y Psicología/Odontología ya no ofrecen control médico ni laboratorios)
+
+**Dos correcciones en el módulo de Agendar.**
+
+**1. Legibilidad de los textos.** Las tres tarjetas del paso 1 («Control Médico + Toma de Labs»,
+«SOLO Control Médico», «SOLO Laboratorios») podían quedar con su texto **blanco sobre fondo blanco**
+en el tema claro: el icono de cada tarjeta no tenía color propio, así que heredaba el que le impusiera
+la página de Everest. Se midió con un navegador real (no leyendo el código), sobre el HTML y el CSS de
+verdad, en escritorio, tablet y móvil y en los dos temas: los tres iconos estaban en **1.16:1** y el
+turno marcado como SUGERIDO, ya elegido, en **4.06:1** — los dos por debajo del mínimo de **4.5:1** que
+exige la norma WCAG 2.1 AA. Corregido: ahora los textos y los iconos de esas tarjetas llevan su color
+propio en los dos temas, y el turno SUGERIDO ya elegido vuelve a pintarse en verde sobre su fondo
+verde. Después del arreglo, **0 textos por debajo del mínimo** en los 22 escenarios medidos.
+
+**2. Psicología y Odontología ya no ofrecen los tipos de cita del programa de control.** Esas dos
+profesiones no pertenecen al programa de control (PyM), que es de Medicina General, pero el paso 1 les
+seguía ofreciendo las tres tarjetas. Ahora, al elegir **Psicología** u **Odontología**, la cuadrícula
+de tipos **desaparece** y el paso 1 pide únicamente la especialidad: la cita se registra como la
+remisión al especialista que el módulo ya escribía. Al volver a Medicina General, las tres tarjetas
+reaparecen. Una nota breve explica por qué no hay tipos que elegir, y si por casualidad hubiera
+guardado un recuerdo anterior de Psicología con «control médico», se corrige solo al abrir.
+
+Verificación: banco de pruebas completo en verde (3.849 comprobaciones), con dos casos nuevos que
+fijan el filtrado y la reparación del recuerdo, y las mutaciones de control documentadas en
+`tests/INFORME_MUTACIONES.md` (sección «v18.14.11»).
+
+---
+
 ## [Versión 18.14.10] — 2026-09-10 (En Agendar, la fecha del control y la de la toma ya no se mueven la una a la otra)
 
 **Dos fechas, dos decisiones independientes.** Al preseleccionar una fecha para el control médico y

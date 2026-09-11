@@ -14584,4 +14584,107 @@ y se corrige tocando la toma (o con el botón 🎯, que devuelve las dos a la su
 `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.10 sincronizada en los 4 puntos).
 Las 5 mutaciones de arriba, rojas y restauradas.
 
+---
+
+## v18.14.11 — Contraste WCAG AA en «Agendar» y filtrado del tipo de cita por especialidad
+
+Dos encargos del médico (10-sep-2026), en el mismo módulo:
+1. «los textos se muestran en color blanco sobre un fondo blanco… garantizar una relación de
+   contraste mínimo de 4.5:1 según los estándares WCAG 2.1».
+2. «cuando un usuario selecciona las especialidades Psicología u Odontología, siguen apareciendo
+   disponibles las opciones de tipo de cita “Control Médico + Laboratorios”, “Solo Control Médico”
+   y “Solo Laboratorios”, cuando ambas especialidades no deberían tener habilitadas estas opciones».
+Sesión TRAE-debugger, bitácora `debug-agendar-contraste-y-tipos.md`.
+
+**Instrumento de contraste (no una prueba de texto fuente).** Chromium real (Playwright, build 1234)
+con el **HTML real** que produce `openAgendamientoModal`/`openLabSoloModal` sobre el arnés
+(`instalarDomEnriquecido` + sincronización de `classList` al atributo `class`, porque el serializador
+del arnés solo lee `attributes`) y el **CSS real** extraído de `buildOverlay()`. Everest hostil:
+`body{background:#fff !important}` + `div,span,p,b,small,label,li,td,th,button,a,option{color:#111827}`
+y, para reproducir el reporte, la misma lista con `color:#ffffff !important`. Contraste efectivo
+compuesto alfa sobre el fondo de página, umbral 4.5:1 (3:1 si el texto es grande), a 1366/1024/768/360 px
+y en los dos temas. Dos artefactos del propio instrumento se detectaron y corrigieron antes de medir:
+el HTML no incluía el nodo raíz (medía 0 textos) y las transiciones de color devolvían el color
+interpolado (41 falsos positivos) — se apagan con `transition:none !important;animation:none !important`.
+
+**Medición pre-fix (22 escenarios × 108/19 textos):**
+
+| Escenario | Textos medidos | Por debajo de 4.5:1 |
+|---|---|---|
+| Agendar · Everest blanco, tema oscuro, 4 anchos | 108 | 3 — `div.vgl-tc-ico` **1.02:1** (`color rgb(17,24,39)` sobre `rgb(20,22,28)`) |
+| Agendar · Everest blanco, tema claro, 1366 px | 108 | 1 — `button.vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active` **4.06:1** |
+| Agendar · Everest **texto blanco `!important`**, tema claro, 4 anchos | 108 | 4 — los mismos 3 `div.vgl-tc-ico` ahora en **1.16:1** (`rgb(255,255,255)` sobre `rgb(237,238,243)`) + el mismo botón 4.06:1 |
+| Agendar · Everest texto blanco `!important`, tema oscuro | 108 | 0 |
+| Agendar · Everest oscuro, tema oscuro | 108 | 0 |
+| Agendar-laboratorio (`openLabSoloModal`) · los 6 escenarios | 19 | 0 |
+
+Lectura: el «blanco sobre blanco» del reporte se reproduce **en tema claro** sobre las tres tarjetas
+de tipo de cita. Causa: `.vgl-tc-ico` (el icono de cada tarjeta) se pinta con `color:inherit !important`
+(lista de ~L20204), o sea **sin color propio**, y su PADRE es el `<button class="vgl-type-card">`, que
+tampoco declaraba color: el `inherit` copiaba el color que Everest le hubiera puesto al botón. En tema
+oscuro el mismo hueco daba 1.02:1 (texto oscuro de Everest sobre la tarjeta oscura). El punto flojo del
+tema claro era además el turno SUGERIDO ya elegido: la regla de v12.10.9 (id+2 clases) le ganaba a
+`.vgl-agm-sbtn.active` (2 clases) **en el color**, dejando el ámbar de «sin elegir» (#92400e) encima del
+fondo verde que sí pone `.active` → 4.06:1.
+
+**Corrección.**
+1. `#vgl-agendar-modal .vgl-type-card{color:var(--fg) !important}` — se blinda el PADRE (id+clase, la
+   especificidad del trío), así el `inherit` del icono y el de cualquier texto suelto de la tarjeta
+   resuelven contra `--fg` y la tarjeta queda inmune al CSS del host en los dos temas.
+2. `#vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active` (+ sus gemelas de
+   `#vgl-ordenar-modal` y `#vgl-labs-modal`): restituye color/background/border-color del estado
+   ELEGIDO (verde). El fondo verde no cambia — es la decisión de diseño de v12.10.8 («si el médico la
+   elige, .active debe ganar»); lo que se arregla es que el texto vuelva a ser verde sobre ese fondo.
+
+**Filtrado por especialidad (decisión del médico, `AskUserQuestion`): «Sin tarjetas: solo la
+especialidad» + «Reparar en silencio al tipo válido».** Psicología (46) y Odontología (14) no son del
+programa de control: sus tres tarjetas son de Medicina General. Ahora la ESPECIALIDAD manda sobre el
+tipo y `_pintarTiposSegunEsp()` es el ÚNICO sitio que decide (lo llaman el clic de especialidad, la
+aplicación de la preferencia recordada y la apertura del modal):
+- la cuadrícula `#vgl-agm-que` y su rótulo se OCULTAN (`vgl-d-none` + `aria-hidden="true"`), no se
+  deshabilitan: para esas dos profesiones no hay ningún tipo que elegir;
+- `tipoCitaElegido` queda fijo en `"remision"` (el valor que el propio módulo ya escribe en la
+  observación al confirmar: «REMISION A …») y ninguna tarjeta queda marcada; al volver a Medicina
+  General se restituye `control_lab`;
+- la caja de la toma de muestras (`.vgl-lab-box`, visible por defecto en el HTML) se apaga;
+- una nota en el paso 1 (`#vgl-agm-esp-nota`, `aria-live="polite"`) dice por qué no hay tipos;
+- `"remision"` se añade a `AGM_PREF_TIPOS` para que el recuerdo del tipo siga funcionando y para que
+  un recuerdo guardado ANTES del arreglo (Psicología + «control») se repare al abrir.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `_pintarTiposSegunEsp` — el ocultamiento | `n.classList.add("vgl-d-none")` retirado de la rama `soloRemision` (la cuadrícula de tipos vuelve a verse con Psicología/Odontología) | NO | Lo cazan DOS aserciones en DOS casos de suite_15: «Psicología oculta la cuadrícula de tipos» y «la cuadrícula de tipos queda oculta ya en la apertura». EXIT 1 (284 ok, 2 fallan). Restaurado 286 ok EXIT=0 |
+| user.js `_pintarTiposSegunEsp` — el tipo de remisión | `tipoCitaElegido = TIPO_REMISION;` → `= "control";` (el filtro deja de reparar el tipo) | NO | Lo cazan DOS aserciones: «y se restituye un tipo activo» (el tipo deja de volver a `control_lab` al regresar a Med. General) y «el chip del recuerdo ya dice «cita de remisión»» (sale «solo control médico · Psicología»). EXIT 1 (284 ok, 2 fallan). Restaurado 286 ok EXIT=0 |
+| user.js `_pintarTiposSegunEsp` — la caja de la toma | `labBox.style.display = tipoCitaElegido === "control_lab" ? "block" : "none"` → `= "block"` (la toma de muestras vuelve a ofrecerse a un psicólogo) | NO | Lo cazan DOS aserciones: «la caja de la toma de muestras se apaga (no es un control)» y «y con la toma de muestras apagada». EXIT 1 (284 ok, 2 fallan). Restaurado 286 ok EXIT=0 |
+| user.js L20680 — el blindaje de la tarjeta de tipo | selector `#vgl-agendar-modal .vgl-type-card` → `.vgl-type-card-mutado` (la regla deja de casar) | NO | Lo caza el instrumento de Chromium (no una prueba de texto fuente, que para color no demuestra nada): vuelven los `div.vgl-tc-ico` a **1.02:1** en tema oscuro y **1.16:1** en tema claro con Everest de texto blanco. Restaurado → **0 textos por debajo** en los 22 escenarios |
+| user.js L22120 — el turno SUGERIDO elegido en tema claro | selector `.vgl-agm-sbtn-sugerido.active` → `.vgl-agm-sbtn-sugerido.active-mutado` | NO | Lo caza el instrumento: vuelve `button.vgl-agm-sbtn.vgl-agm-sbtn-sugerido.active` a **4.06:1** (`rgb(146,64,14)` sobre `rgb(184,199,199)`) en tema claro a los 4 anchos → TOTAL 5 por debajo. Restaurado → **0** |
+
+**Pruebas ajustadas (no silenciadas) por el cambio de contrato.** Tres suites codificaban el contrato
+anterior y se actualizaron con su motivo escrito al lado: suite_15 «aria-live en los 4 estados» → **5**
+(el 5.º es la nota del filtro, un estado que muta con un clic); suite_15 «C17: Agendar recuerda tipo y
+especialidad» → el recuerdo se prueba ahora con Medicina General (12), la única especialidad de la
+lista con tipos propios, y el caso nuevo cubre la reparación de un recuerdo viejo de Psicología;
+suite_73 `estadoCoherente` → la invariante «exactamente un tipo activo» pasa a ser condicional: 0
+tarjetas cuando la cuadrícula está oculta (remisión), 1 cuando se ve — las dos ramas comprueban algo
+concreto, ninguna se salta en silencio. En suite_25 se subió el censo de `!important` de 688 a **693**
+con el desglose (1 declaración + 1 mención en comentario del blindaje de la tarjeta + las 3 del turno
+SUGERIDO elegido, que la Regla C exige explícitas).
+
+**Hallazgos NO tocados (reportados, fuera del alcance de estos dos encargos):**
+- `#vgl-agm-pym-chk` («¿Es cita para actividades del programa RCV / Prevención?») sigue **premarcado**
+  en el paso 3 también para Psicología y Odontología, aunque el programa PyM sea de Medicina General.
+  Es una casilla clínica, no una opción de tipo de cita: cambiarla por defecto es una decisión del
+  médico, no un efecto colateral del filtrado.
+- El tema claro del modal sobre el Everest blanco tiene 0 textos por debajo del mínimo **con el CSS
+  hostil probado**; si el Everest real ataca con un selector más específico que los genéricos usados
+  aquí (`div,span,p,b,small,label,li,td,th,button,a,option`), el blindaje de la tarjeta (id+clase con
+  `!important`) sigue ganando por especificidad, pero no se ha podido verificar contra el CSS real de
+  producción (no está en este repo).
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.849 pasan, EXIT 0** (sube de 3.847 a 3.849:
++2 casos en `suite_15`; dentro de casos existentes se refuerzan además 12 aserciones); instrumento de
+contraste → **0 textos por debajo de 4.5:1** en los 22 escenarios; `node tools/compat-check.js` →
+**COMPATIBLE** (`@version` 18.14.11 sincronizada en los 4 puntos). Las 5 mutaciones de arriba, rojas y
+restauradas.
+
 
