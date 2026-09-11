@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.11
+// @version      18.14.12
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.11";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.12";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8683,43 +8683,6 @@
     } catch (e) {}
   }
 
-  // =====================================================================
-  //  v18.14.7 — ACCESO GRANULAR A LAS PESTAÑAS EN DESARROLLO
-  //  ------------------------------------------------------------------
-  //  Las dos pestañas de la HC que aún NO están terminadas —«Impresión Diagnóstica» y
-  //  «Conducta»— no se le muestran a ningún médico en producción. Aparecen solo cuando se
-  //  cumplen DOS condiciones a la vez, y ninguna de las dos es «estar en el padrón»:
-  //
-  //    1. MODO PROGRAMADOR encendido en ESTA pestaña (Ctrl+Shift+D, `_vglProgOn`, que no se
-  //       persiste a propósito: al recargar vuelve a quedar oculto). Es la misma compuerta
-  //       que ya gobierna el resto de lo técnico, así que no se inventa un segundo «modo».
-  //    2. IDENTIDAD: el único perfil autorizado a verlas mientras están a medio hacer.
-  //
-  //  Por qué las dos y no solo la identidad: el modo programador es un atajo de teclado que
-  //  cualquiera puede teclear, y la identidad sola dejaría los botones a la vista de ese
-  //  perfil en su jornada normal — que es justo lo que se pidió evitar. Y por qué no solo el
-  //  modo: sin la segunda condición, cualquier compañero que descubriera el atajo vería dos
-  //  botones que no debe usar.
-  //
-  //  El nombre se compara por PALABRAS (BRANDON + PALENCIA) sobre el nombre sin tildes y en
-  //  mayúsculas, no por uid: el uid del perfil no está confirmado en el repo, y un uid
-  //  equivocado habría dejado esto abierto o cerrado para siempre sin que nada lo delatara.
-  //  `state.activeDoctor` lo llena el propio Everest (captureDoctorInfo), nunca un literal.
-  const VGL_DEV_TABS_NOMBRES = ["BRANDON", "PALENCIA"];
-  function _vglEsPerfilDeDesarrollo() {
-    try {
-      const d = (state && state.activeDoctor) || null;
-      if (!d) return false;
-      const bruto = String(d.name || "") + " " + String(d.nombre || "");
-      if (!bruto.trim()) return false;
-      const plano = (typeof stripAccents === "function" ? stripAccents(bruto) : bruto).toUpperCase();
-      return VGL_DEV_TABS_NOMBRES.every((pal) => new RegExp("\\b" + pal + "\\b").test(plano));
-    } catch (e) { return false; }
-  }
-  function _vglPestanasEnDesarrolloVisibles() {
-    return !!(typeof _vglProgOn !== "undefined" && _vglProgOn) && _vglEsPerfilDeDesarrollo();
-  }
-
   function createAccionesDockUI() {
     // v17.6.71 — se lee y se comprueba el cruce de pacientes ANTES de cualquier retorno
     // temprano (módulo distinto, o historia cerrada): son EXACTAMENTE los dos casos
@@ -8787,18 +8750,13 @@
     const _pendDock = (typeof _pendientesUniversales === "function") ? _pendientesUniversales(docId) : null;
     const _nPendientesDock = (_pendDock && _pendDock.n) || 0;
 
-    // v18.7.0 (M2) — «pestañas de impresión diagnóstica y conducta» (pedido del
-    // médico): los dos accesos directos SOLO se ofrecen si la pestaña ya está
-    // montada en el DOM de la historia — el dock nace antes que el editor de la
-    // nota, así que su presencia entra en la firma y el dock se repinta solo
-    // cuando aparecen. Búsqueda acotada y anclada a la barra principal (mismo
-    // coste que el resto de lecturas del tick, suite_94 lo vigila).
-    const _tabImp = _vglClicablePestana("impresion diagnostica");
-    const _tabCond = _vglClicablePestana("conducta");
-    // v18.14.7 — las dos pestañas están a medio hacer: se OCULTAN por completo en producción
-    // y solo existen con Modo programador + el perfil de desarrollo (ver el bloque de
-    // _vglPestanasEnDesarrolloVisibles, arriba). Se lee UNA vez y la firma usa el mismo valor.
-    const _devTabs = _vglPestanasEnDesarrolloVisibles();
+    // v18.14.11 — RETIRADOS los dos accesos directos a las pestañas «Impresión Diagnóstica» y
+    // «Conducta» del dock (orden del médico, 10-sep-2026): la propuesta de terminarlos se
+    // rechaza y los botones se eliminan DEFINITIVAMENTE. Con ellos se va su compuerta de
+    // visibilidad (Modo programador × perfil de desarrollo, v18.14.7) y su parte de la firma
+    // del dock. Las pestañas siguen existiendo en Everest y el redactor de texto libre sigue
+    // resolviéndolas con _vglClicablePestana (VGL_PESTANAS.impresion/.conducta), que NO se
+    // toca; el cuadro de «Faltan antecedentes» conserva su «Ir a …» con el mismo resolutor.
 
     // v14.2.0 (auditoría de rendimiento) — guarda de firma. Antes se tiraba y rearmaba el
     // subárbol de ~5 botones (con sus listeners) en CADA tick aunque nada hubiera cambiado,
@@ -8830,13 +8788,7 @@
       // v18.0.118 (UI/UX #5) — el estado «leyendo» depende de que HAYA resumen, no solo de que el
       // Panel esté bloqueado: sin esto el botón «Panel del paciente · leyendo…» se quedaba puesto
       // cuando el resumen llegaba y los factores seguían incompletos (misma firma, sin repintado).
-      _resumenListoParaGate ? "RS" : "rs",
-      // v18.7.0 (M2) — presencia de las dos pestañas de impresión en la firma:
-      // sin esto los botones no aparecerían hasta que otra pieza repintara.
-      // v18.14.7 — y la firma lleva la compuerta COMPLETA (pestaña presente × acceso), no
-      // solo la presencia: encender o apagar el Modo programador tiene que repintar el dock
-      // en el acto, no en el siguiente tick.
-      (_tabImp && _devTabs) ? "TI" : "ti", (_tabCond && _devTabs) ? "TC" : "tc"].join("|");   // v18.0.112 (C7, C12)
+      _resumenListoParaGate ? "RS" : "rs"].join("|");   // v18.0.112 (C7, C12)
     if (dock.dataset) dock.dataset.vglDoc = String(docId);   // v15.6.0 — la guía paso a paso lee de aquí quién está en pantalla
     if (!esNuevo && dock.dataset && dock.dataset.sig === _sigDock) return;
     if (dock.dataset) dock.dataset.sig = _sigDock;
@@ -9103,81 +9055,11 @@
       btns.appendChild(bA5);
     }
 
-    // v18.7.0 (M2) — «pestañas de impresión diagnóstica y conducta» (pedido del
-    // médico): acceso directo a las DOS pestañas que se imprimen al cerrar la
-    // consulta. El gesto es el clic del propio enlace de pestaña de Everest
-    // (anclas reales de VGL_PESTANAS) — ni red ni escritura propias; si la
-    // pestaña ya no está (pantalla distinta), aviso ámbar y nada más.
-    // v18.14.1 — El gesto caía en el CONTENEDOR, no en el enlace. El resolutor del nodo
-    // navegable real (_vglNodoNavegable) se subió a nivel de módulo en v18.14.8: ahora lo
-    // comparten estos dos botones y el «Ir a …» del cuadro de «Faltan antecedentes». Su
-    // comentario largo vive allí, junto a la función.
-    if (_tabImp && _devTabs) {
-      const bImp = document.createElement("button");
-      bImp.className = "vgl-dock-btn";
-      bImp.setAttribute("data-accion", "pestana-impresion");
-      bImp.setAttribute("aria-label", "Ir a la pestaña Impresión Diagnóstica");
-      bImp.title = "🖨 Salta a la pestaña «Impresión Diagnóstica» (la vista de impresión del diagnóstico).";
-      _vglDockRotulo(bImp, "🖨", "Impresión Diagnóstica");
-      bImp.addEventListener("click", (e) => {
-        e.stopPropagation();
-        uxTrack("hc.pestana.impresion.clic");
-        const tab = _vglNodoNavegable(_vglClicablePestana("impresion diagnostica"));
-        if (!tab || typeof tab.click !== "function") {
-          uxTrack("hc.pestana.impresion.sin_pestana");
-          showToast("AMBAR", "🖨 Impresión Diagnóstica", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
-          return;
-        }
-        const antesImp = (() => { try { return _vglPestanaActiva() || null; } catch (e) { return null; } })();
-        try { tab.click(); uxTrack("hc.pestana.impresion.ok"); } catch (e2) {}
-        // Si el clic no movió la pestaña activa, el médico no puede quedarse sin saberlo.
-        // Fail-open: si no hay forma de leer la pestaña activa, no se inventa un aviso.
-        try {
-          if (antesImp) setTimeout(() => {
-            try {
-              const desp = _vglPestanaActiva() || null;
-              if (desp && desp === antesImp) {
-                uxTrack("hc.pestana.impresion.sin_pestana");
-                showToast("AMBAR", "🖨 Impresión Diagnóstica", "El asistente no logró abrir la pestaña: ábrala desde el editor de la nota.");
-              }
-            } catch (e3) {}
-          }, 300);
-        } catch (e4) {}
-      });
-      btns.appendChild(bImp);
-    }
-    if (_tabCond && _devTabs) {
-      const bCond = document.createElement("button");
-      bCond.className = "vgl-dock-btn";
-      bCond.setAttribute("data-accion", "pestana-conducta");
-      bCond.setAttribute("aria-label", "Ir a la pestaña Conducta");
-      bCond.title = "📋 Salta a la pestaña «Conducta» de la historia.";
-      _vglDockRotulo(bCond, "📋", "Conducta");
-      bCond.addEventListener("click", (e) => {
-        e.stopPropagation();
-        uxTrack("hc.pestana.conducta.clic");
-        const tab = _vglNodoNavegable(_vglClicablePestana("conducta"));
-        if (!tab || typeof tab.click !== "function") {
-          uxTrack("hc.pestana.conducta.sin_pestana");
-          showToast("AMBAR", "📋 Conducta", "La pestaña no está en esta pantalla de la historia: ábrala desde el editor de la nota.");
-          return;
-        }
-        const antesCond = (() => { try { return _vglPestanaActiva() || null; } catch (e) { return null; } })();
-        try { tab.click(); uxTrack("hc.pestana.conducta.ok"); } catch (e2) {}
-        try {
-          if (antesCond) setTimeout(() => {
-            try {
-              const desp = _vglPestanaActiva() || null;
-              if (desp && desp === antesCond) {
-                uxTrack("hc.pestana.conducta.sin_pestana");
-                showToast("AMBAR", "📋 Conducta", "El asistente no logró abrir la pestaña: ábrala desde el editor de la nota.");
-              }
-            } catch (e3) {}
-          }, 300);
-        } catch (e4) {}
-      });
-      btns.appendChild(bCond);
-    }
+    // v18.14.11 — AQUÍ VIVÍAN los dos accesos directos «🖨 Impresión Diagnóstica» y
+    // «📋 Conducta» del dock (v18.7.0, M2). Se retiran DEFINITIVAMENTE por orden del médico
+    // (10-sep-2026), junto con su compuerta de visibilidad de v18.14.7. El «Ir a …» del
+    // cuadro de «Faltan antecedentes» sigue usando el mismo resolutor de ancla
+    // (_vglNodoNavegable + _vglIrAPestanaDirecta), así que ese camino no se toca.
 
     // v18.5.0 — RETIRADA la pastilla «👤 Nuevos (N)» (v18.1.0, B5): la pastilla y su
     // toast-resumen recordaban la MEMORIA de 90 días del médico, que es justo lo que

@@ -14687,4 +14687,49 @@ contraste → **0 textos por debajo de 4.5:1** en los 22 escenarios; `node tools
 **COMPATIBLE** (`@version` 18.14.11 sincronizada en los 4 puntos). Las 5 mutaciones de arriba, rojas y
 restauradas.
 
+---
+
+## v18.14.12 — Retirados definitivamente los dos accesos directos del dock («Impresión Diagnóstica» y «Conducta»)
+
+Orden del médico (10-sep-2026): la propuesta `docs/PROPUESTA_PESTANAS_EN_DESARROLLO.md` se **rechaza** y
+los dos botones se **eliminan definitivamente**. No es una regresión de v18.7.0 ni un «apagado»: el
+código se va.
+
+**Qué se retira, exactamente.**
+1. Los dos bloques de botón de `createAccionesDockUI` (~L9106-9180): el `data-accion="pestana-impresion"`
+   y el `data-accion="pestana-conducta"`, con sus dos ramas de degradación AMBAR y su verificación de
+   300 ms. Con ellos se van sus telemetrías `hc.pestana.impresion.*` y `hc.pestana.conducta.*`.
+2. La compuerta de visibilidad de v18.14.7 completa: `VGL_DEV_TABS_NOMBRES`, `_vglEsPerfilDeDesarrollo()`
+   y `_vglPestanasEnDesarrolloVisibles()` — las dos últimas no tenían ningún otro consumidor.
+3. Sus lecturas por tick (`_tabImp`, `_tabCond`) y sus dos segmentos de la firma del dock
+   (`TI/ti`, `TC/tc`), que quedaba como única cola de la lista.
+
+**Qué NO se toca (verificado por grep, no por suposición).** `VGL_PESTANAS.impresion` y
+`VGL_PESTANAS.conducta` siguen **vivos y en uso**: el redactor de texto libre los resuelve por
+`_vglEnPestana` (L6958, L7020, L7676) y `VGL_IA_INJECTORES[].pestana = "impresion"` (L9699) los sigue
+necesitando; `_vglClicablePestana`, `_vglNodoNavegable` y `_vglIrAPestanaDirecta` siguen sirviendo al
+«Ir a …» del cuadro de «Faltan antecedentes». El Modo programador (`_vglProgOn`) tampoco se toca: sigue
+gobernando la tabla de telemetría y las opciones técnicas de Ajustes.
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `createAccionesDockUI` — el botón retirado | reinsertado un bloque mínimo que vuelve a pintar `data-accion="pestana-impresion"` en el dock | NO | Lo cazan CINCO aserciones en DOS suites: el caso nuevo de suite_98 («el acceso a «Impresión Diagnóstica» ya no existe», «no queda el botón de impresión en el fuente») y CUATRO aserciones PREEXISTENTES de suite_15 que listan el juego exacto de botones del dock (`["agendar","ordenar","labs","ficha-leyendo","redactar","control"]` — L1844, L1869, L1880 y la del recorrido de L2024). EXIT 1 (3835 ok, 5 fallan; suite_15 282 ok/4 fallan, suite_98 6 ok/1 fallan). Restaurado 3840 ok EXIT=0 |
+| user.js `createAccionesDockUI` — la firma del dock | (no se mutó por separado) el segmento `TI/ti` y `TC/tc` desaparece con los botones: la firma termina ahora en `_resumenListoParaGate ? "RS" : "rs"` | NO | Lo caza la aserción de suite_15 «v18.0.118 (UI/UX #5)», que exige que el estado del resumen esté en la firma: con el texto viejo (`RS/rs,` seguido de los segmentos de M2) la prueba se puso roja al retirar los botones — fue el único rojo de la retirada y se corrigió ajustando la aserción al contrato nuevo, no el contrato a la prueba |
+
+**Pruebas ajustadas (no silenciadas) por la retirada.** `suite_98`: se retiraron sus **10** casos del
+bloque M2 (nacimiento, compuerta ×3, firma, clic real, fail-closed, ancla `<li>`, guarda estructural) y
+los dos ayudantes que solo ellos usaban (`identidadDesarrollo`, `montarPestanas`); la suite se renombró a
+lo que de verdad mide desde v18.14.8 y su `cubre` pasó a nombrar `_vglNodoNavegable`. `suite_15`: la
+aserción de la firma del dock (arriba). Nada se dejó en verde por omisión: el caso nuevo es el que
+sostiene la retirada.
+
+**Hallazgo NO tocado:** los dos botones retirados eran los únicos que ofrecían un atajo de un clic a esas
+pestañas. Quien las use a diario tendrá que abrirlas desde el editor de la nota de Everest, como
+cualquier otra pestaña; el script ya no ofrece ninguna puerta propia. Se reporta y no se compensa con
+otro botón, porque la orden fue retirarlos.
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.840 pasan, EXIT 0** (baja de 3.849 a 3.840 por
+los 10 casos retirados y sube 1 con el guardián nuevo); `node tools/compat-check.js` → **COMPATIBLE**
+(`@version` 18.14.12 sincronizada en los 4 puntos). La mutación de arriba, roja y restaurada.
+
 

@@ -6867,12 +6867,11 @@ module.exports = {
       btns = dock.children.find((n) => n.className === "vgl-dock-btns");
       t.igual(btns.children.filter((b) => b.getAttribute("data-accion") === "ficha-leyendo").length, 0, "«leyendo» desaparece en cuanto hay resumen: el dock se repinta");
       const src = require("fs").readFileSync(require("path").join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      // v18.7.0 (M2) — la firma creció: después del estado del resumen vienen los
-      // segmentos de las pestañas de impresión/conducta (TI/ti, TC/tc) antes del join.
-      // v18.14.7 — y esos segmentos llevan la compuerta COMPLETA (pestaña presente × acceso),
-      // no solo la presencia: encender el Modo programador tiene que repintar el dock.
-      t.cierto(/_resumenListoParaGate \? "RS" : "rs",[\s\S]{0,600}\(_tabImp && _devTabs\) \? "TI" : "ti", \(_tabCond && _devTabs\) \? "TC" : "tc"\]\.join\("\|"\)/.test(src),
-        "y ese estado entra en la firma del dock (con los segmentos de pestañas de M2): sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
+      // v18.14.11 — la firma termina en el estado del resumen: los segmentos de las pestañas
+      // de impresión/conducta (TI/ti, TC/tc) que v18.7.0 había metido aquí se retiraron con
+      // esos dos botones del dock.
+      t.cierto(/_resumenListoParaGate \? "RS" : "rs"\]\.join\("\|"\);/.test(src),
+        "y ese estado entra en la firma del dock, que es su última pieza: sin él, «leyendo» se quedaba puesto cuando el resumen llegaba con los factores aún incompletos (lo destapó esta prueba)");
     });
 
     await t.casoAsync("v18.0.118 (UI/UX #6): sin resumen, «Próximo control» dice que está leyendo y «Reintentar ahora» lo resuelve en el sitio", async () => {

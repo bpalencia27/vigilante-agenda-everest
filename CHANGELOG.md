@@ -4,6 +4,27 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.12] — 2026-09-10 (Retirados los dos botones «Impresión Diagnóstica» y «Conducta» del dock)
+
+**Se eliminan definitivamente los dos accesos directos** del widget lateral de la historia clínica que
+llevaban a las pestañas «Impresión Diagnóstica» y «Conducta». La propuesta de terminarlos se rechazó:
+no se implementa nada de lo que proponía y los botones se retiran del todo, junto con la compuerta que
+en la versión anterior los ocultaba en producción (el atajo de Modo programador y la lista de perfiles
+autorizados). El dock vuelve a tener solo lo que usted usa.
+
+**Lo que NO cambia:** las dos pestañas siguen existiendo en Everest tal cual, y el asistente sigue
+llegando a ellas donde ya lo hacía: el redactor de texto libre sigue reconociéndolas para sus modos
+«Análisis y plan» y «Recomendaciones», y el cuadro de «📝 Faltan antecedentes» conserva su botón «Ir a
+Antecedentes / Hábitos» con el mismo mecanismo de clic sobre la pestaña real. Ninguna otra función del
+dock se toca.
+
+Verificación: banco de pruebas completo en verde (3.840 comprobaciones), con un caso nuevo que fija la
+retirada —se arma el dock con el atajo encendido y con el perfil que antes los autorizaba, y los dos
+botones no deben existir— y la mutación de control documentada en `tests/INFORME_MUTACIONES.md`
+(sección «v18.14.12»).
+
+---
+
 ## [Versión 18.14.11] — 2026-09-10 (Textos legibles en Agendar, y Psicología/Odontología ya no ofrecen control médico ni laboratorios)
 
 **Dos correcciones en el módulo de Agendar.**
