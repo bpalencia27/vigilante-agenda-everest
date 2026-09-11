@@ -3139,8 +3139,13 @@ module.exports = {
       const _finCargarHoras = src.indexOf("async function cargarHorasLab(");
       t.cierto(_iniCargarHoras > 0 && _finCargarHoras > _iniCargarHoras, "se pudo delimitar cargarHoras() por inspección de fuente");
       const zonaCargarHoras = src.slice(_iniCargarHoras, _finCargarHoras);
-      t.cierto(/if \(!_labsPrimero && !_labFechaTomaElegidaManual\) \{/.test(zonaCargarHoras),
-        "no se afina en modo labs-primero (ese modo ya se afina con _afinarLabsPrimeroConCupos) ni si el médico ya eligió a mano");
+      t.cierto(/if \(!_labsPrimero && !_tomaCongelada\) \{/.test(zonaCargarHoras),
+        "no se afina en modo labs-primero (ese modo ya se afina con _afinarLabsPrimeroConCupos) ni cuando la fecha de toma ya existe: v18.14.10 la congela, y volver a afinarla la movería");
+      // v18.14.10 — el congelamiento de la toma (fechas independientes, orden del médico).
+      t.cierto(/const _tomaCongelada = !!selectedLabDateInfo;/.test(zonaCargarHoras),
+        "la propuesta de toma se calcula UNA vez y luego queda congelada: mover el control ya no la recalcula");
+      t.cierto(/const suggestedLab = _tomaCongelada \? selectedLabDateInfo : calcBusinessDaysBefore\(selectedDateInfo\.iso, 5\);/.test(zonaCargarHoras),
+        "y la propuesta solo se calcula cuando todavía no hay ninguna");
       const zonaAfinar = src.slice(src.indexOf("async function _afinarTomaControlPrimeroConCupos("), src.indexOf("async function _afinarTomaControlPrimeroConCupos(") + 1500);
       t.cierto(/mtrBuscarCupoLaboratorio\(\s*idealIso, todayStamp\(\), idealIso, 5,/.test(zonaAfinar),
         "piso=hoy, techo=el propio ideal: nunca se sugiere una toma después de los 5 días hábiles antes del control (regla 2 y 3 del médico)");
@@ -6583,12 +6588,22 @@ module.exports = {
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const vencaviso = modal.querySelector("#vgl-agm-vencaviso");
       t.cierto(vencaviso.classList.contains("vgl-d-none"), "al abrir, con la sugerida preseleccionada no hay nada que avisar");
-      // El médico se va al ÚLTIMO día sondeado (~7 hábiles después del centro): la toma
-      // (5 hábiles antes de esa fecha) cae después del vencimiento → el aviso aparece.
-      const chips = modal.querySelector("#vgl-day-chips");
-      disparar(chips.children[chips.children.length - 1], "click");
+      // v18.14.10 — EL AVISO DE VENCIMIENTO SE ANCLA A LA TOMA, y desde esta versión la toma
+      // ya NO sigue al control (fechas independientes, orden del médico del 10-sep). Así que
+      // el escenario «la toma cae después del vencimiento» se arma moviendo LA TOMA —que es
+      // de lo que el aviso depende— y no el control. El control queda de testigo: si se mueve
+      // solo al tocar la toma, esta prueba lo caza.
+      const ctrlAntes = String(modal.querySelector("#vgl-agm-date-info").innerHTML || "");
+      const labManual = modal.querySelector("#vgl-agm-lab-manual-fecha");
+      labManual.value = sumarDias(45);
+      disparar(labManual, "change");
       await esperar(80);
-      t.cierto(!vencaviso.classList.contains("vgl-d-none"), "al elegir una fecha tardía el aviso de vencimiento se ve");
+      const labChips = modal.querySelector("#vgl-lab-day-chips");
+      disparar(labChips.children[labChips.children.length - 1], "click");
+      await esperar(80);
+      t.igual(String(modal.querySelector("#vgl-agm-date-info").innerHTML || ""), ctrlAntes,
+        "v18.14.10: mover la toma NO mueve la fecha de control (el vínculo toma→control ya no es automático)");
+      t.cierto(!vencaviso.classList.contains("vgl-d-none"), "al elegir una toma tardía el aviso de vencimiento se ve");
       t.cierto(/vgl-agm-venc-fix/.test(vencaviso.innerHTML), "con su botón «🎯 Pasar a la fecha sugerida»");
       disparar(modal.querySelector("#vgl-agm-slots").children[0], "click");
       const confirmar = modal.querySelector("#vgl-agm-confirm");
@@ -6614,6 +6629,123 @@ module.exports = {
       disparar(confirmar, "click");
       await esperar(120);
       t.igual(urls.filter((u) => u.includes("AsignarTurno")).length, 1, "la cita se crea: el modal ya no se queda abierto");
+    });
+
+    // =====================================================================
+    // v18.14.10 — FECHAS INDEPENDIENTES EN «AGENDAR» (orden del médico, 10-sep-2026).
+    // Reporte: «después de preseleccionar y confirmar una fecha para el control médico, al
+    // modificar la fecha en la Agenda de Laboratorios, la fecha del control se actualiza
+    // sola». Causa MEDIDA con el driver del arnés (sesión `agendar-fechas-cruzadas`): el clic
+    // en un chip de toma recalculaba el control y lo aplicaba cuando `_controlElegidoManual`
+    // era false — y ese flag no se ponía al adoptar un plazo ni cuando la fecha a la vista
+    // era la sugerida. 2 de 5 gestos reales movían la fecha que el médico tenía delante.
+    // Estas pruebas usan el DOM enriquecido del arnés (parser y selectores reales), que es el
+    // instrumento con el que se midió el defecto.
+    // =====================================================================
+    const montarAgendarConSugerencia = () => {
+      const { instalarDomEnriquecido } = require("./harness");
+      const p2 = (n) => String(n).padStart(2, "0");
+      const sumar = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); };
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso.split("-").reverse().join("/"), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("sin AppCita en la prueba"); },
+      });
+      instalarDomEnriquecido(c.env.doc);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      // Estado de consultorio: el asistente YA analizó al paciente y dejó su sugerencia.
+      c.api.mtrCacheResumenGuardar("555111", {
+        programa: "HTA",
+        plan: { control: { fecha: sumar(30) }, ftl: null, vencidos: [], faltantes: [], drivers: [], pasajeros: [] },
+      });
+      return c;
+    };
+    const abrirPaso2De = async (c) => {
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "PACIENTE SINTETICO" });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const q = (id) => modal.querySelector("#" + id);
+      disparar(q("vgl-step-1-next"), "click");
+      await esperar(180);
+      return q;
+    };
+    const fechaDeseada = (q) => (String(q("vgl-agm-date-info").innerHTML || "").match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1];
+    const fechaToma = (q) => String(q("vgl-lab-date-lbl").textContent || "").split(" (")[0];
+    const chipLibreDe = (cont) => (cont && cont.children ? [...cont.children].find((b) => b && b.classList && !b.classList.contains("active")) : null);
+
+    await t.casoAsync("v18.14.10: mover la fecha de la TOMA no mueve la de CONTROL — se ofrece con un botón, no se aplica sola", async () => {
+      const c = montarAgendarConSugerencia();
+      const q = await abrirPaso2De(c);
+      const ctrlAntes = fechaDeseada(q);
+      t.cierto(!!ctrlAntes, "el control arranca con una fecha preseleccionada (" + ctrlAntes + ")");
+      const chipToma = chipLibreDe(q("vgl-lab-day-chips"));
+      t.cierto(!!chipToma, "hay un chip de toma distinto del central para pulsar");
+      disparar(chipToma, "click");
+      await esperar(250);
+      t.igual(fechaDeseada(q), ctrlAntes, "el CONTROL sigue donde estaba: el vínculo toma→control ya no se aplica solo");
+      t.falso(fechaToma(q) === "", "la toma sí cambió: era el gesto del médico");
+      t.cierto(/vgl-agm-mover-ctrl/.test(String(q("vgl-agm-sugerida").innerHTML || "")),
+        "y el asistente OFRECE el control ligado con su botón «Mover control a esa fecha»");
+    });
+
+    await t.casoAsync("v18.14.10: el botón «Mover control a esa fecha» es la ÚNICA vía por la que el control se mueve", async () => {
+      const c = montarAgendarConSugerencia();
+      const q = await abrirPaso2De(c);
+      const ctrlAntes = fechaDeseada(q);
+      const chipToma = chipLibreDe(q("vgl-lab-day-chips"));
+      t.cierto(!!chipToma, "hay un chip de toma para pulsar");
+      disparar(chipToma, "click");
+      await esperar(250);
+      t.igual(fechaDeseada(q), ctrlAntes, "sin pulsar el botón, el control no se ha movido");
+      const banner = q("vgl-agm-sugerida");
+      const mover = banner.querySelector("#vgl-agm-mover-ctrl");
+      t.cierto(!!mover, "la nota trae el botón (mtrPegarNotaTomaQuedo)");
+      disparar(mover, "click");
+      await esperar(250);
+      t.falso(fechaDeseada(q) === ctrlAntes, "al pulsarlo SÍ se mueve: la decisión es del médico");
+    });
+
+    await t.casoAsync("v18.14.10: mover el CONTROL no recalcula la fecha de TOMA (la propuesta queda congelada)", async () => {
+      const c = montarAgendarConSugerencia();
+      const q = await abrirPaso2De(c);
+      const tomaAntes = fechaToma(q);
+      t.cierto(!!tomaAntes, "la toma arranca con una fecha propuesta (" + tomaAntes + ")");
+      const chipControl = chipLibreDe(q("vgl-day-chips"));
+      t.cierto(!!chipControl, "hay un chip de control distinto del central para pulsar");
+      disparar(chipControl, "click");
+      await esperar(250);
+      t.falso(fechaDeseada(q) === "", "el control sí se movió: era el gesto del médico");
+      t.igual(fechaToma(q), tomaAntes, "y la toma NO lo siguió: la propuesta está congelada hasta que él la toque");
+    });
+
+    t.caso("v18.14.10 (fuente): el clic en un chip de toma ya no aplica el control, y la toma se calcula una sola vez", () => {
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const iChip = src.indexOf("v18.14.10 — FECHAS INDEPENDIENTES");
+      t.cierto(iChip > 0, "el bloque del clic de toma está marcado con la versión");
+      const zonaChip = src.slice(iChip, iChip + 2200);
+      t.falso(/if \(!_controlElegidoManual\) \{\s*_sugeridaControl\.iso = nuevoControl;/.test(zonaChip),
+        "ya NO existe la rama que aplicaba el control en automático");
+      t.cierto(/mtrPegarNotaTomaQuedo\(_bannerSug\.innerHTML, item\.iso, nuevoControl\)/.test(zonaChip),
+        "la nota con el control ligado se sigue pegando (la oferta sobrevive)");
+      t.falso(/_sugeridaControl\.ftl = item\.iso;/.test(zonaChip),
+        "el clic del médico no reescribe la toma SUGERIDA: el botón 🎯 tiene que poder volver a ella");
+      const iVenc = src.indexOf("v18.14.10 — LA TOMA ES LA REFERENCIA DEL AVISO DE VENCIMIENTO");
+      t.cierto(iVenc > 0, "el botón 🎯 devuelve TAMBIÉN la toma a la sugerida (si no, no resolvería el aviso)");
+      t.cierto(/selectedTimeframe = \{ m, d \};[\s\S]{0,700}_controlElegidoManual = true;/.test(src),
+        "elegir un PLAZO marca la fecha de control como elección del médico: antes solo lo hacían el chip de día y el calendario manual, y por eso la fecha recién adoptada seguía siendo movible");
+      t.cierto(/usar\.addEventListener\("click", \(\) => \{[\s\S]{0,300}_controlElegidoManual = true;/.test(src),
+        "y «Usar esta fecha» también: adoptar la sugerencia es una elección suya");
     });
 
     t.caso("v18.0.118 (UI/UX #5): sin resumen calculado, el dock muestra «Panel del paciente · leyendo…» deshabilitado en vez de un hueco", () => {

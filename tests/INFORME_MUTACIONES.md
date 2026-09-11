@@ -14518,4 +14518,70 @@ lenta» solo se podría probar simulando una lectura real de 6 s contra un `fetc
 3.843: +6 casos en `suite_110`); `node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.9
 sincronizada en los 4 puntos). Las 5 mutaciones de arriba, rojas y restauradas.
 
+---
+
+## v18.14.10 — Fechas independientes en «Agendar»: mover la toma ya no mueve el control
+
+Orden del médico (10-sep-2026): «después de preseleccionar y confirmar una fecha para el control
+médico, al modificar la fecha en la Agenda de Laboratorios, la fecha del control se actualiza sola».
+Sesión TRAE-debugger, bitácora `debug-agendar-fechas-cruzadas.md`.
+
+**Causa medida (driver del arnés, evidencia pre-fix).** El clic en un chip de la toma recalculaba la
+fecha de control y **la aplicaba** cuando `_controlElegidoManual` era false. Ese flag solo lo ponían
+el chip de día de control y el calendario manual: no lo ponían el chip de PLAZO ni el botón «Usar
+esta fecha», ni cuando la fecha a la vista era la sugerida ya marcada. Medido en 5 gestos reales de
+consultorio: **2 movían la fecha de control que el médico tenía delante** (C1: fecha sugerida a la
+vista; C5: plazo «1 mes» recién adoptado). El modo normal (control-primero) declara el contrato
+contrario en su propio código: «el CONTROL ya está fijo… y solo se mueve la TOMA, nunca al revés».
+
+| Escenario (pre-fix) | Modo | CONTROL antes → después | ¿Se movió solo? |
+|---|---|---|---|
+| C1 fecha sugerida a la vista · clic en chip de toma | normal | 09/10/2026 → 06/10/2026 | **SÍ (bug)** |
+| C5 plazo «1 mes» adoptado · clic en chip de toma | normal | 09/10/2026 → 06/10/2026 | **SÍ (bug)** |
+| C2 control elegido con un chip a mano | normal | 30/09/2026 → 30/09/2026 | no |
+| C3 control por el calendario manual | normal | 08/01/2027 → 08/01/2027 | no |
+| C4 toma por el calendario manual | normal | 09/10/2026 → 09/10/2026 | no |
+| D1-D3 sin sugerencia del asistente | normal | — | no |
+| F1 fecha derivada de la toma | labs-primero | 24/09/2026 → 21/09/2026 | sí (por diseño) |
+| E1 el médico mueve el control a mano | normal | 06/10/2026 → 25/09/2026 | sí (correcto) |
+
+**Corrección (orden del médico: «nunca automático», en los dos sentidos).**
+1. El clic en un chip de toma **ya no aplica** el control: solo pega la nota con el control ligado y
+   su botón «Mover control a esa fecha» (la oferta que ya existía). El botón sí lo mueve, y al
+   pulsarlo la fecha queda marcada como elección del médico.
+2. `_tomaCongelada` en `cargarHoras`: la propuesta de toma (5 días hábiles antes del control) se
+   calcula **una sola vez**, cuando todavía no hay ninguna; después queda congelada. Mover el control
+   ya no recalcula la toma.
+3. El chip de PLAZO y «Usar esta fecha» marcan `_controlElegidoManual = true` (+ token del afinado):
+   la fecha que el médico acaba de adoptar deja de ser movible por una ronda en vuelo.
+4. El botón «🎯 Pasar a la fecha sugerida» devuelve **también la toma** a la sugerida (con respaldo
+   calculado si el plan no trae `ftl`): como la toma es la referencia del aviso de vencimiento, sin
+   esto el botón movería el control y el aviso seguiría en pie — dejaría de resolver lo que promete.
+   Además el clic de toma **ya no reescribe** `_sugeridaControl.ftl` (es la toma que sugiere el
+   asistente; pisarla dejaba al botón 🎯 sin a dónde volver).
+
+| Línea/Ubicación | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante / Guardián |
+|---|---|---|---|
+| user.js `renderLabDayChips` — manejador del chip de TOMA, rama automática | reinsertado `if (!_controlElegidoManual) { _sugeridaControl.iso = nuevoControl; _pintarBannerSugerida(); renderDayChips(0, 0, nuevoControl); }` (vuelve el defecto reportado) | NO | Lo cazan CUATRO aserciones en CUATRO casos: el control testigo del ciclo 🎯 de suite_15 («v18.14.10: mover la toma NO mueve la fecha de control»), «el CONTROL sigue donde estaba» y «sin pulsar el botón, el control no se ha movido» (los dos casos nuevos) y la estructural «ya NO existe la rama que aplicaba el control en automático». EXIT 1 (280 ok, 4 fallan). Restaurado 284 ok EXIT=0 |
+| user.js `cargarHoras` — el congelamiento de la toma | `const _tomaCongelada = !!selectedLabDateInfo;` → `= false;` (la toma vuelve a recalcularse en cada cambio de control) | NO | Lo cazan TRES aserciones en TRES casos, una de ellas PREEXISTENTE (v17.6.53): «tras cambiar la fecha de control, la fecha de TOMA elegida a mano no debe cambiar», «la propuesta de toma se calcula UNA vez…» (estructural) y «y la toma NO lo siguió: la propuesta está congelada» (caso nuevo). EXIT 1 (281 ok, 3 fallan). Restaurado 284 ok EXIT=0 |
+| user.js clic de chip de TOMA — la toma SUGERIDA | reinsertado `_sugeridaControl.ftl = item.iso;` (el clic del médico reescribe la sugerencia del asistente) | NO | Lo cazan DOS aserciones: la estructural «el clic del médico no reescribe la toma SUGERIDA» y el ciclo end-to-end 🎯 de suite_15 («y con la fecha sugerida el vencimiento queda resuelto»). EXIT 1 (282 ok, 2 fallan). Restaurado 284 ok EXIT=0 |
+| user.js botón 🎯 — la toma que devuelve | `const _labSugerida = (_labsPrimero…)\|…\|calcBusinessDaysBefore(…).iso` → `const _labSugerida = "";` (el botón vuelve a mover solo el control) | NO | suite_15 «v18.14.0 (c)»: «y con la fecha sugerida el vencimiento queda resuelto: el aviso se autooculta» (el aviso sigue en pie porque su referencia es la toma). EXIT 1 (283 ok, 1 fallan). Restaurado 284 ok EXIT=0. NOTA: el guardián es end-to-end; la aserción estructural de esta pieza solo comprueba que el bloque existe, así que por sí sola no bastaría |
+| user.js chip de PLAZO — la marca de elección | retirados `_controlElegidoManual = true;` y `_tomaControlAfinarToken++;` del manejador del plazo | NO | suite_15 «v18.14.10 (fuente)»: «elegir un PLAZO marca la fecha de control como elección del médico». EXIT 1 (283 ok, 1 fallan). Restaurado 284 ok EXIT=0. NOTA: el guardián es estructural — observar el efecto real exige que el afinado de cupos esté en vuelo justo cuando el médico toca el plazo, que el arnés no puede provocar de forma determinista |
+
+**Hallazgo NO tocado (reportado, no arreglado por no ser de esta tarea):** al cambiar la fecha del
+CALENDARIO manual de la toma, `_pintarAvisoVencimiento()` no se repinta (el manejador de
+`#vgl-agm-lab-manual-fecha` no lo llama, a diferencia del clic en un chip de toma). El aviso se
+recalcula igual al pulsar Confirmar —que es donde el médico decide—, así que no se pierde la
+seguridad; solo el recuadro del paso 2 puede quedar un instante desactualizado.
+
+**Consecuencia declarada de la orden (no es un defecto, es la decisión):** con la toma congelada, si
+el médico mueve el control ANTES de la toma congelada, la línea del plan puede mostrar una toma
+posterior al control. Es el resultado directo de «la propuesta se congela hasta que usted la toque»
+y se corrige tocando la toma (o con el botón 🎯, que devuelve las dos a la sugerida).
+
+**Regresión de la entrega:** `node tests/runner.js` → **3.847 pasan, EXIT 0** (sube de 3.843 a
+3.847: +4 casos en `suite_15`; dentro de casos existentes se refuerzan además 4 aserciones);
+`node tools/compat-check.js` → **COMPATIBLE** (`@version` 18.14.10 sincronizada en los 4 puntos).
+Las 5 mutaciones de arriba, rojas y restauradas.
+
 

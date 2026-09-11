@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      18.14.9
+// @version      18.14.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Centinela — asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest (Viva 1A IPS).
@@ -1039,7 +1039,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "18.14.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30938,22 +30938,26 @@
       _agmOcultarAvisoConfirmar();   // v18.0.118 (UI/UX #4): un aviso de otra fecha ya no aplica
       if (step2Next) step2Next.disabled = true;
       dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span class="vgl-agm-fecha-lbl">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
-      const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
+      // v18.14.10 — LA TOMA NO SIGUE AL CONTROL (orden del médico, 10-sep-2026). Antes esta
+      // línea recalculaba la propuesta (5 días hábiles antes del control) en CADA cambio del
+      // control, así que mover el control movía la toma aunque él no la hubiera tocado — el
+      // otro sentido del vínculo indebido. Ahora la propuesta se calcula UNA sola vez, cuando
+      // todavía no hay ninguna, y a partir de ahí queda congelada: la fecha de toma solo
+      // cambia si el médico la toca. (`_labFechaTomaElegidaManual` sigue significando «esta
+      // elección es suya»; esto es más amplio: «esta fecha ya existe y no se recalcula».)
+      const _tomaCongelada = !!selectedLabDateInfo;
+      const suggestedLab = _tomaCongelada ? selectedLabDateInfo : calcBusinessDaysBefore(selectedDateInfo.iso, 5);
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
-      // v17.6.53 (1.9) — mismo bug, segundo punto: esta etiqueta se pisaba con la fecha
-      // RECIÉN sugerida sin pasar por renderLabDayChips (que sí respeta la elección
-      // manual) — el chip activo quedaba bien pero el texto visible mostraba otra fecha.
       if (labLbl) {
-        labLbl.textContent = (_labFechaTomaElegidaManual && selectedLabDateInfo)
-          ? `${selectedLabDateInfo.fmt} (${selectedLabDateInfo.lbl})`
-          : `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
+        labLbl.textContent = `${suggestedLab.fmt} (${suggestedLab.lbl || suggestedLab.dayLbl || ""})`;
       }
 
       renderLabDayChips(suggestedLab.iso);
       try { _pintarAvisoVencimiento(); } catch (e) {}   // v15.9.0 — al elegir el día
       // v18.0.78 — el modo labs-primero ya se afina por su cuenta (_afinarLabsPrimeroConCupos);
-      // aquí solo se afina el modo normal, y solo si el médico no eligió ya su propia fecha.
-      if (!_labsPrimero && !_labFechaTomaElegidaManual) {
+      // aquí solo se afina el modo normal, y solo la PRIMERA vez que aparece la toma: con la
+      // fecha ya congelada, volver a afinarla la movería.
+      if (!_labsPrimero && !_tomaCongelada) {
         const _miTokenToma = ++_tomaControlAfinarToken;
         try { _afinarTomaControlPrimeroConCupos(suggestedLab.iso, _miTokenToma); } catch (e) {}
       }
@@ -31560,27 +31564,31 @@
           if (labLblEl) labLblEl.textContent = `${item.fmt} (${item.lbl})`;
           cargarHorasLab();
           try { _vencAceptado = false; _pintarAvisoVencimiento(); } catch (e) {}   // v15.9.0 — la toma es la referencia del aviso
-          // v15.4.0 — FECHAS LIGADAS (decisión del médico): mover la toma recalcula la
-          // fecha de control (+7 días, hábil siguiente). Si el médico ya había fijado el
-          // control a mano, no se le pisa: se le ofrece moverlo con un clic.
+          // v18.14.10 — FECHAS INDEPENDIENTES (orden del médico, 10-sep-2026): el CONTROL
+          // nunca se mueve solo porque él toque la toma. Antes esta rama lo movía en
+          // automático cuando `_controlElegidoManual` era false, y ese flag no se ponía al
+          // adoptar un plazo ni cuando la fecha ya estaba a la vista marcada como elegida
+          // (la sugerida): medido con el driver del arnés, 2 de 5 gestos reales movían la
+          // fecha de control que el médico tenía delante. El vínculo clínico (+7 días
+          // hábiles) sobrevive como OFERTA: la nota dice cuál sería y el botón «Mover
+          // control a esa fecha» lo aplica solo si él lo pulsa.
           try {
             if (typeof mtrControlDesdeLabs === "function") {
               const nuevoControl = mtrControlDesdeLabs(item.iso);
-              if (nuevoControl && _sugeridaControl) {
-                _sugeridaControl.ftl = item.iso;
-                if (!_controlElegidoManual) {
-                  _sugeridaControl.iso = nuevoControl;
-                  _pintarBannerSugerida();
-                  renderDayChips(0, 0, nuevoControl);
-                } else if (_bannerSug) {
-                  // v17.6.3 — BUG 3 (reporte del médico): antes era `innerHTML += …` y cada
-                  // clic en un chip de día apilaba OTRA nota «toma quedó» (duplicada y en
-                  // orden de clic, no de fecha). Ahora la nota se REEMPLAZA por id fijo:
-                  // una sola, siempre con la fecha del último clic (ver mtrPegarNotaTomaQuedo).
-                  _bannerSug.innerHTML = mtrPegarNotaTomaQuedo(_bannerSug.innerHTML, item.iso, nuevoControl);
-                  const mv = _bannerSug.querySelector("#vgl-agm-mover-ctrl");
-                  if (mv) mv.addEventListener("click", () => { _controlElegidoManual = false; _sugeridaControl.iso = nuevoControl; _pintarBannerSugerida(); renderDayChips(0, 0, nuevoControl); });
-                }
+              if (nuevoControl && _sugeridaControl && _bannerSug) {
+                // OJO: aquí NO se reescribe `_sugeridaControl.ftl`. Ese campo es la fecha de
+                // toma que SUGIERE el asistente (la que el botón «🎯 Pasar a la fecha
+                // sugerida» devuelve); si el clic del médico lo pisara, el botón dejaría de
+                // tener a dónde volver. La fecha que él eligió viaja explícita en la nota.
+                // v17.6.3 — antes era `innerHTML += …` y cada clic en un chip de día
+                // apilaba OTRA nota «toma quedó» (duplicada y en orden de clic, no de
+                // fecha). Ahora la nota se REEMPLAZA por id fijo: una sola, siempre con
+                // la fecha del último clic (ver mtrPegarNotaTomaQuedo).
+                _bannerSug.innerHTML = mtrPegarNotaTomaQuedo(_bannerSug.innerHTML, item.iso, nuevoControl);
+                const mv = _bannerSug.querySelector("#vgl-agm-mover-ctrl");
+                // El botón SÍ mueve el control, y al pulsarlo la fecha pasa a ser elección
+                // del médico: queda protegida como cualquier otra elección suya.
+                if (mv) mv.addEventListener("click", () => { _controlElegidoManual = true; _sugeridaControl.iso = nuevoControl; _pintarBannerSugerida(); renderDayChips(0, 0, nuevoControl); });
               }
             }
           } catch (e) {}
@@ -31938,7 +31946,14 @@
         const d = parseInt(pb.getAttribute("data-d") || "0", 10);
         selectedTimeframe = { m, d };
         _plazoTocado = true;
+        // v18.14.10 — el plazo ES una elección del médico sobre la fecha de control: se marca
+        // como tal para que ninguna ronda en vuelo (el afinado de cupos de laboratorio) vuelva
+        // a moverla por su cuenta. Antes este flag solo lo ponían el chip de día y el
+        // calendario manual, y por eso la fecha que él acababa de adoptar con un plazo seguía
+        // siendo movible.
+        _controlElegidoManual = true;
         _labsAfinarToken++;   // v17.0.3 — el médico ya eligió: cualquier sondeo viejo en curso queda obsoleto
+        _tomaControlAfinarToken++;   // v18.14.10 — y el afinado de la toma tampoco puede repintar el control
         try { _pcCancelar(); } catch (e) {}
         // v15.8.0 (N3) — la elección del médico manda, y el sistema la revisa contra
         // las vigencias de sus exámenes antes de proponer la fecha final.
@@ -32259,8 +32274,24 @@
         { const e2 = modal.querySelector("#vgl-agm-manual-est"); if (e2 && e2.classList) e2.classList.add("vgl-d-none"); }
         { const v2 = modal.querySelector("#vgl-agm-manual-volver"); if (v2 && v2.classList) v2.classList.add("vgl-d-none"); }
         try { _marcarPlazoSegunSugerida(); } catch (e) {}
-        if (_labsPrimero && _labsPrimero.labIso) { try { renderLabDayChips(_labsPrimero.labIso); } catch (e) {} }
-        else if (_sugeridaControl && _sugeridaControl.ftl) { try { renderLabDayChips(_sugeridaControl.ftl); } catch (e) {} }
+        // v18.14.10 — LA TOMA ES LA REFERENCIA DEL AVISO DE VENCIMIENTO y ya no sigue al
+        // control (ver la nota de `_tomaCongelada` en cargarHoras). Así que «pasar a la fecha
+        // sugerida» tiene que devolver TAMBIÉN la toma a la sugerida: si solo moviera el
+        // control, el aviso seguiría en pie y el botón dejaría de resolver lo que promete.
+        // Si el plan no trae `ftl`, se calcula la que corresponde al control sugerido.
+        const _labSugerida = (_labsPrimero && _labsPrimero.labIso) ? _labsPrimero.labIso
+          : (_sugeridaControl && _sugeridaControl.ftl) ? _sugeridaControl.ftl
+          : (_sugeridaControl && _sugeridaControl.iso) ? calcBusinessDaysBefore(_sugeridaControl.iso, 5).iso
+          : "";
+        if (_labSugerida) {
+          // Se suelta la elección manual de la toma antes de repintar: si no, renderLabDayChips
+          // re-centraría los chips en la fecha que el médico acaba de abandonar.
+          _labFechaTomaElegidaManual = false;
+          selectedLabDateInfo = null;
+          try { renderLabDayChips(_labSugerida); } catch (e) {}
+          const _labLblFix = modal.querySelector("#vgl-lab-date-lbl");
+          if (_labLblFix && selectedLabDateInfo) _labLblFix.textContent = `${selectedLabDateInfo.fmt} (${selectedLabDateInfo.lbl || ""})`;
+        }
         if (_sugeridaControl && _sugeridaControl.iso) renderDayChips(0, 0, _sugeridaControl.iso);
         // v18.0.140 (c) — AUDITORÍA DEL CABLEADO DEL 🎯 (reporte del 04-sep: «no se
         // cierra el modal»). Se probó a cerrar aquí a mano el recuadro de decisión,
@@ -32467,6 +32498,10 @@
             usar.type = "button"; usar.id = "vgl-agm-sug-usar"; usar.className = "vgl-agm-pbtn vgl-sm";
             usar.textContent = "Usar esta fecha";
             usar.addEventListener("click", () => {
+              // v18.14.10 — adoptar la sugerencia es una elección del médico: la fecha queda
+              // protegida y el afinado de cupos ya no puede moverla por su cuenta.
+              _controlElegidoManual = true;
+              _tomaControlAfinarToken++;
               const p = _marcarPlazoSegunSugerida();
               if (p) _aplicarPlazoElegido(p.m, p.d);
               else if (_sugeridaControl && _sugeridaControl.iso) renderDayChips(0, 0, _sugeridaControl.iso);

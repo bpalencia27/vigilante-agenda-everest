@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 18.14.10] — 2026-09-10 (En Agendar, la fecha del control y la de la toma ya no se mueven la una a la otra)
+
+**Dos fechas, dos decisiones independientes.** Al preseleccionar una fecha para el control médico y
+luego cambiar la fecha de la toma en la Agenda de Laboratorios, la del control se movía sola — sin
+que usted lo hubiera pedido. La revisión midió cinco gestos reales de consultorio y encontró que dos
+de ellos movían la fecha que usted tenía delante: cuando la fecha sugerida ya estaba marcada y
+cuando usted acababa de elegir un plazo como «1 mes».
+
+Ahora, en Agendar:
+
+- **Tocar la fecha de la toma NO mueve la del control.** El asistente le dice cuál sería el control
+  ligado y le ofrece un botón, «Mover control a esa fecha»: se mueve solo si usted lo pulsa.
+- **Tocar la fecha del control NO recalcula la de la toma.** La propuesta de toma aparece una vez y
+  se queda quieta; solo cambia si usted la toca.
+- Las dos fechas siguen siendo editables a mano, con los chips de día o con el calendario.
+
+Y el botón «🎯 Pasar a la fecha sugerida» del aviso de vencimiento devuelve ahora **las dos** fechas a
+la sugerida, que es lo que promete: antes movía el control pero dejaba la toma donde estaba, así que
+el aviso seguía en pie.
+
+Verificación: banco de pruebas completo en verde (3.847 comprobaciones), con cuatro comprobaciones
+nuevas que fijan la independencia en los dos sentidos, y las mutaciones de control documentadas en
+`tests/INFORME_MUTACIONES.md` (sección «v18.14.10»).
+
+---
+
 ## [Versión 18.14.9] — 2026-09-10 (El aviso «Everest no responde» deja de salir cuando no hay motivo)
 
 **El aviso azul que decía «Everest no responde — lleva tres o más clics seguidos…» aparecía
